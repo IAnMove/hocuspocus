@@ -1,27 +1,36 @@
 """Standalone MMAudio sound-effect generation.
 
-Launch keeps the name the worker calls. ``wgp``, ``os``, ``time``, ``copy``,
-``traceback``, the cancel and job helpers, and the sidecar publisher are
-read from launch's globals at call time, so a test that patches them is
-seen. ``check_sfx_models(globals(), variant)`` therefore sees this module's
-``wgp``, which is that same launch object.
+Launch keeps the name the worker calls. Launch hands this module its
+``wgp``, its task registry and its sidecar publisher once, through
+:func:`bind`. ``check_sfx_models(globals(), variant)`` reads ``wgp`` from
+this module's globals, which is that same launch object.
 """
-from __future__ import annotations
+import copy
+import os
+import time
+import traceback
 
-from services.generation_launch_binding import bindable
+from services.job_lifecycle import (
+    finish_job,
+    is_cancel_requested,
+    new_media_files,
+    record_job_outputs,
+    update_job,
+)
 
-wgp = bindable("wgp")
-os = bindable("os")
-time = bindable("time")
-copy = bindable("copy")
-traceback = bindable("traceback")
-is_cancel_requested = bindable("is_cancel_requested")
-update_job = bindable("update_job")
-finish_job = bindable("finish_job")
-new_media_files = bindable("new_media_files")
-record_job_outputs = bindable("record_job_outputs")
-_task_registry = bindable("_task_registry")
-_publish_generation_sidecar_for_studio_job = bindable("_publish_generation_sidecar_for_studio_job")
+# Bound by bind(); None until the full server binds them.
+wgp = None
+_task_registry = None
+_publish_generation_sidecar_for_studio_job = None
+
+
+def bind(*, wgp, task_registry, publish_generation_sidecar_for_studio_job):
+    """Take the launch objects this module reads. Launch calls this once, after it defines them."""
+    globals().update(
+        wgp=wgp,
+        _task_registry=task_registry,
+        _publish_generation_sidecar_for_studio_job=publish_generation_sidecar_for_studio_job,
+    )
 
 
 def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):

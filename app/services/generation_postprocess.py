@@ -1,19 +1,23 @@
 """Film grain and spatial upsampling of an already-saved video.
 
-Launch keeps the names the worker calls. ``wgp``, ``os``, ``time``,
-``is_cancel_requested`` and ``_chunked_flashvsr_upscale`` are read from
-launch's globals at call time. A test that patches any of those names on
-the launch module is seen.
+Launch keeps the names the worker calls. Spatial upsampling runs the
+chunked FlashVSR upscale from ``services.generation_flashvsr``, the same
+function launch exports. Launch hands this module its ``wgp`` once,
+through :func:`bind`.
 """
-from __future__ import annotations
+import os
+import time
 
-from services.generation_launch_binding import bindable
+from services.generation_flashvsr import _chunked_flashvsr_upscale
+from services.job_lifecycle import is_cancel_requested
 
-wgp = bindable("wgp")
-os = bindable("os")
-time = bindable("time")
-is_cancel_requested = bindable("is_cancel_requested")
-_chunked_flashvsr_upscale = bindable("_chunked_flashvsr_upscale")
+# Bound by bind(); None until the full server binds it.
+wgp = None
+
+
+def bind(*, wgp):
+    """Take the WanGP module launch imported. Launch calls this once."""
+    globals().update(wgp=wgp)
 
 
 def _apply_film_grain_to_file(video_path: str, intensity: float, saturation: float):

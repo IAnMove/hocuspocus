@@ -2,16 +2,21 @@
 
 The number lives on ``wgp.args``, the one WanGP args object. Tightening it
 for one job and restoring the base afterwards both write that same object.
-The hardware probe cache stays in the launch module; this module calls
-``_get_cached_hardware`` there, so a test that replaces the cache is seen.
+The hardware probe and its cache stay in the launch module. Launch hands
+this module its ``wgp`` and its ``_get_cached_hardware`` once, through
+:func:`bind`; that function reads launch's cache when it is called, so a
+test that replaces the cache is seen.
 """
-from __future__ import annotations
+import os
 
-from services.generation_launch_binding import bindable
+# Bound by bind(); None until the full server binds them.
+wgp = None
+_get_cached_hardware = None
 
-wgp = bindable("wgp")
-os = bindable("os")
-_get_cached_hardware = bindable("_get_cached_hardware")
+
+def bind(*, wgp, get_cached_hardware):
+    """Take the launch objects this module reads. Launch calls this once, after it defines them."""
+    globals().update(wgp=wgp, _get_cached_hardware=get_cached_hardware)
 
 
 # ── Per-job VRAM coefficient adjustment ────────────────────────────

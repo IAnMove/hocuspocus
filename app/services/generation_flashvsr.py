@@ -1,17 +1,20 @@
 """Chunked FlashVSR upscale of an already-saved video.
 
-Launch keeps the name the worker and the tools router call. ``wgp``, ``os``
-and ``update_job`` are read from launch's globals at call time, so a test
-that patches them on the launch module is seen. The tools router receives
-this function object.
+Launch keeps the name the worker calls and hands this same function object
+to the tools router. Launch hands this module its ``wgp`` once, through
+:func:`bind`.
 """
-from __future__ import annotations
+import os
 
-from services.generation_launch_binding import bindable
+from services.job_lifecycle import update_job
 
-wgp = bindable("wgp")
-os = bindable("os")
-update_job = bindable("update_job")
+# Bound by bind(); None until the full server binds it.
+wgp = None
+
+
+def bind(*, wgp):
+    """Take the WanGP module the full server imported. Launch calls this once."""
+    globals().update(wgp=wgp)
 
 
 def _chunked_flashvsr_upscale(video_path: str, method: str, *, job: dict = None, abort_check=None, progress_callback=None):

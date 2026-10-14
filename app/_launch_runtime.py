@@ -14186,15 +14186,6 @@ api.include_router(create_studio_inpaint_router(
 from services.studio_edit_requests import inpaint_endpoint
 
 
-from services.generation_launch_binding import bind_server_globals
-from services.generation_postprocess import (
-    _apply_film_grain_to_file,
-    _apply_spatial_upsampling_to_file,
-)
-
-bind_server_globals(globals())
-
-
 # The hardware probe (for total VRAM) is cached at module level — the
 # answer doesn't change at runtime and detect_hardware() touches torch
 # which we'd rather not call per-job.
@@ -14213,25 +14204,30 @@ def _get_cached_hardware() -> dict:
     return _cached_hardware
 
 
-from services.generation_launch_binding import bind_server_globals
+# Post-processing passes the generation worker calls by these names: the per-job
+# VRAM coefficient, film grain, spatial upsampling, chunked FlashVSR and sound
+# effects. Each module receives the launch objects it reads once, here.
 from services.generation_coefficients import (
     _apply_per_job_coefficient,
     _restore_base_coefficient,
+    bind as _bind_generation_coefficients,
 )
+from services.generation_flashvsr import _chunked_flashvsr_upscale, bind as _bind_generation_flashvsr
+from services.generation_postprocess import (
+    _apply_film_grain_to_file,
+    _apply_spatial_upsampling_to_file,
+    bind as _bind_generation_postprocess,
+)
+from services.generation_sfx import _run_sfx_generation, bind as _bind_generation_sfx
 
-bind_server_globals(globals())
-
-
-from services.generation_launch_binding import bind_server_globals
-from services.generation_sfx import _run_sfx_generation
-
-bind_server_globals(globals())
-
-
-from services.generation_launch_binding import bind_server_globals
-from services.generation_flashvsr import _chunked_flashvsr_upscale
-
-bind_server_globals(globals())
+_bind_generation_coefficients(wgp=wgp, get_cached_hardware=_get_cached_hardware)
+_bind_generation_flashvsr(wgp=wgp)
+_bind_generation_postprocess(wgp=wgp)
+_bind_generation_sfx(
+    wgp=wgp,
+    task_registry=_task_registry,
+    publish_generation_sidecar_for_studio_job=_publish_generation_sidecar_for_studio_job,
+)
 
 
 # ============================================================================

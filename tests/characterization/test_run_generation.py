@@ -100,6 +100,21 @@ def worker_module():
     return sys.modules["_launch_runtime"]
 
 
+# The post-processing passes the worker calls by their launch names (C4), and the launch functions each module took.
+POSTFX_MODULES = {
+    "services.generation_coefficients": ("_apply_per_job_coefficient", "_restore_base_coefficient"),
+    "services.generation_postprocess": ("_apply_film_grain_to_file", "_apply_spatial_upsampling_to_file"),
+    "services.generation_flashvsr": ("_chunked_flashvsr_upscale",),
+    "services.generation_sfx": ("_run_sfx_generation",),
+}
+
+
+def worker_modules() -> list:
+    """The modules whose globals the worker and its post-processing passes read: the full server module, and each
+    module the passes moved to once it exists. A name the passes read is an attribute of every module that reads it."""
+    return [worker_module(), *[sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]]
+
+
 @dataclass
 class Rig:
     """One test's server, scripted engine and the lifecycle events of its jobs."""
@@ -118,7 +133,10 @@ class Rig:
         return worker_module()
 
     def patch(self, name: str, value: Any) -> None:
-        self.monkeypatch.setattr(worker_module(), name, value)
+        holders = [module for module in worker_modules() if hasattr(module, name)]
+        assert holders, f"no worker module has a global named {name!r}"
+        for module in holders:
+            self.monkeypatch.setattr(module, name, value)
 
     def event(self) -> threading.Event:
         """An event the engine script waits on; the fixture sets it at teardown so a failed test never hangs."""
@@ -1943,3 +1961,61 @@ def test_chunked_flashvsr_upscale_forwards_progress_and_cleans_up_a_failure(rig,
         })
     finally:
         _clear_flash_keys(config)
+
+
+# -- the wiring the C4 move added (C4 review) ------------------------------------------------------------------------
+# Each pass module imports the standard library and the job lifecycle itself and receives the launch objects it reads
+# (wgp, the hardware probe, the task registry, the sidecar publisher) from one ``bind`` call that launch makes when it
+# defines them. A slot left at None, bound to a copy or to another function, or a pass that reads a name its module
+# does not have would only show on the branch that reads it, so every global each moved function reads is compared
+# here with the object the same name holds in launch, where the function read it before the move.
+def _global_reads(function) -> set[str]:
+    import inspect
+    import symtable
+    import textwrap
+
+    names: set[str] = set()
+
+    def walk(scope) -> None:
+        names.update(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_global() and symbol.is_referenced())
+        for child in scope.get_children():
+            walk(child)
+
+    walk(symtable.symtable(textwrap.dedent(inspect.getsource(function)), "<pass>", "exec"))
+    return names
+
+
+def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkeypatch) -> None:
+    import builtins
+    import importlib
+    import inspect
+
+    launch = worker_module()
+    compared: set[str] = set()
+    for module_name, exported in POSTFX_MODULES.items():
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        for name in exported:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        own = {name for name, value in namespace.items()
+               if inspect.isfunction(value) and value.__module__ == module_name}
+        for function_name in sorted(own - {"bind"}):
+            for name in sorted(_global_reads(namespace[function_name])):
+                if name in own:
+                    continue  # a helper that moved with the pass
+                if name not in namespace:
+                    assert hasattr(builtins, name), f"{module_name}.{function_name} reads {name}, which is not defined"
+                    continue
+                assert namespace[name] is vars(launch)[name], f"{module_name}.{name} is not launch.{name}"
+                compared.add(name)
+    assert {"wgp", "os", "time", "copy", "traceback", "update_job", "finish_job", "is_cancel_requested",
+            "new_media_files", "record_job_outputs", "_task_registry", "_publish_generation_sidecar_for_studio_job",
+            "_get_cached_hardware", "_chunked_flashvsr_upscale"} == compared
+
+    import routers.tools as tools
+
+    assert tools._chunked_flashvsr_upscale is launch._chunked_flashvsr_upscale
+    # The probe stays in launch and reads launch's cache when the coefficient pass calls it.
+    coefficients = importlib.import_module("services.generation_coefficients")
+    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
+    assert coefficients._get_cached_hardware() == {"gpu_vram_gb": 7.0}
