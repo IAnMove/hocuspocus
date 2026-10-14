@@ -5543,6 +5543,1102 @@
     },
     "status": 200
   },
+  "recast edges the first cases let through": {
+    "body": {
+      "a 0.1 s trim is cut": {
+        "answer": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 1,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Recast Fast",
+            "model_type": "scail2_14B_recast_fast",
+            "prompt": "a calm lake",
+            "resolution": "704x480",
+            "seed": 3,
+            "simulated": false,
+            "steps": 8
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 8,
+          "person_count": 1,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person",
+          "task_id": "task-generation-<JOB>"
+        },
+        "built": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<STATE>/uploads/recast_trim_<ID>.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": ""
+          },
+          "edit_end_time": 0.6,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "recast-1",
+              "ref_image_path": "<STATE>/uploads/hero.png",
+              "reference_aligned_to_source": false,
+              "target": "person"
+            }
+          ],
+          "edit_recast_conditioning": "native_replace_fast",
+          "edit_recast_conditioning_people": 1,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            704,
+            480
+          ],
+          "edit_recast_person_count": 1,
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "a calm lake",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero.png",
+          "edit_recast_resolution_profile": "480p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_target": "person",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.5,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 1,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_recast_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "prompt": "a calm lake",
+          "resolution": "704x480",
+          "sample_solver": "unipc",
+          "seed": 3,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<STATE>/uploads/recast_trim_<ID>.mp4",
+          "video_length": 17,
+          "video_prompt_type": "V01AI"
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", [\"person\"], {\"color_palette\": [[0, 0, 255]], \"colorize_objects\": true, \"max_colored_objects\": 1, \"no_hole\": true}]",
+          "[\"_recast_probe_needs_bystander_tracking\", [{\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}, {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 1566720}, 1], {}]",
+          "[\"_prepare_recast_reference_conditioning\", [[\"recast-1\"], {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 1566720}, \"<STATE>/uploads\", \"<JOB>\"], {\"auto_face_detail\": true, \"isolate_reference\": true, \"mapping_anchors\": null, \"reference_canvas\": [704, 480], \"selected_count\": 1, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]",
+          "[\"generate_video_mask\", [\"recast_trim_<ID>.mp4\", \"person\"], {\"background_color\": [255, 255, 255], \"color_palette\": [[0, 0, 255]], \"colorize_objects\": true, \"max_colored_objects\": 1}]",
+          "[\"_enable_recast_dynamic_source_scene_reference\", [[\"_duration_seconds\", \"_execution_mode\", \"_recast_protect_bystanders\", \"_recast_source_video\", \"activated_loras\", \"audio_prompt_type\", \"custom_settings\", \"edit_end_time\", \"edit_recast_auto_face_detail\", \"edit_recast_auto_face_detail_refs\", \"edit_recast_bystander_tracking\", \"edit_recast_character_mappings\", \"edit_recast_clip_identity_ref\", \"edit_recast_conditioning\", \"edit_recast_conditioning_people\", \"edit_recast_enhance_prompt\", \"edit_recast_isolate_reference\", \"edit_recast_output_resolution\", \"edit_recast_person_count\", \"edit_recast_prepared_refs\", \"edit_recast_preserve_bystanders\", \"edit_recast_protect_bystanders\", \"edit_recast_raw_prompt\", \"edit_recast_ref_aligned\", \"edit_recast_ref_path\", \"edit_recast_reference_canvas\", \"edit_recast_resolution_profile\", \"edit_recast_sliding_window_size\", \"edit_recast_target\", \"edit_recast_use_relighting\", \"edit_recast_warmup_frames\", \"edit_start_time\", \"edit_sub_mode\", \"edit_video_path\", \"flow_shift\", \"force_fps\", \"generation_mode\", \"guidance_scale\", \"image_prompt_type\", \"image_refs\", \"loras_multipliers\", \"model_type\", \"negative_prompt\", \"num_inference_steps\", \"prompt\", \"resolution\", \"sample_solver\", \"seed\", \"settings_version\", \"sliding_window_overlap\", \"sliding_window_size\", \"video_guide\", \"video_length\", \"video_mask\", \"video_prompt_type\"], {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}, {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 1566720}, 1, \"<STATE>/uploads\", \"<JOB>\"], {}]"
+        ],
+        "ffmpeg": [
+          [
+            "ffmpeg",
+            "-y",
+            "-i",
+            "recast-source.mp4",
+            "-ss",
+            "0.500",
+            "-to",
+            "0.600",
+            "-c:v",
+            "libx264",
+            "-crf",
+            "18",
+            "-preset",
+            "fast",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "192k",
+            "recast_trim_<ID>.mp4"
+          ]
+        ],
+        "job": {
+          "engine_inputs": [
+            "{\"activated_loras\": [], \"audio_prompt_type\": \"R\", \"custom_settings\": {\"image_ref_keyword_content\": \"human character\", \"scail2_additional_reference_mask_paths\": [], \"scail2_animate_preprocessing\": \"raw\", \"scail2_clip_reference_path\": \"<STATE>/uploads/hero.png\", \"scail2_identity_latent_isolation\": true, \"scail2_identity_latent_reference_index\": 0, \"scail2_isolate_reference_background\": false, \"scail2_primary_only_continuations\": true, \"scail2_primary_reference_people\": 1, \"scail2_recast_conditioning\": \"native_replace\", \"scail2_recast_warmup_frames\": 8, \"scail2_reference_alpha_path\": \"\", \"scail2_reference_expected_colors\": [[0, 0, 255]], \"scail2_reference_mask_path\": \"<STATE>/uploads/hero.png\"}, \"flow_shift\": 1, \"force_fps\": \"control\", \"guidance_scale\": 1.0, \"image_prompt_type\": \"\", \"image_refs\": [\"<STATE>/uploads/hero.png\"], \"loras_multipliers\": \"\", \"mode\": \"\", \"model_type\": \"scail2_14B_recast_fast\", \"negative_prompt\": \"\", \"num_inference_steps\": 8, \"plugin_data\": {}, \"prompt\": \"a calm lake\", \"resolution\": \"704x480\", \"sample_solver\": \"unipc\", \"seed\": 3, \"sliding_window_overlap\": 5, \"sliding_window_size\": 81, \"video_guide\": \"<STATE>/uploads/recast_trim_<ID>.mp4\", \"video_length\": 17, \"video_mask\": \"<STATE>/uploads/recast-mask.mp4\", \"video_prompt_type\": \"V01AI\"}"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "params": {
+            "<removed>": [],
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_additional_reference_mask_paths": [],
+              "scail2_animate_preprocessing": "raw",
+              "scail2_clip_reference_path": "<STATE>/uploads/hero.png",
+              "scail2_identity_latent_isolation": true,
+              "scail2_identity_latent_reference_index": 0,
+              "scail2_isolate_reference_background": false,
+              "scail2_primary_only_continuations": true,
+              "scail2_primary_reference_people": 1,
+              "scail2_recast_conditioning": "native_replace",
+              "scail2_recast_warmup_frames": 8,
+              "scail2_reference_alpha_path": "",
+              "scail2_reference_expected_colors": [
+                [
+                  0,
+                  0,
+                  255
+                ]
+              ],
+              "scail2_reference_mask_path": "<STATE>/uploads/hero.png"
+            },
+            "edit_recast_auto_face_detail_refs": [],
+            "edit_recast_bystander_tracking": "not_needed",
+            "edit_recast_clip_identity_ref": "<STATE>/uploads/hero.png",
+            "edit_recast_prepared_refs": [
+              "<STATE>/uploads/hero.png"
+            ],
+            "edit_recast_reference_canvas": [
+              96,
+              64
+            ],
+            "edit_recast_source_scene_reference_reason": "no separate bystander pass needed",
+            "video_mask": "<STATE>/uploads/recast-mask.mp4"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed3_a_calm_lake.mp4"
+            ]
+          },
+          "returned": true,
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed3_a_calm_lake.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "transitions": [
+            "running | phase 'Detecting target' | \"Finding 1 'person' subject in the video...\" | 0% | step 0/0 | outputs 0",
+            "running | phase 'Preparing references' | 'Preparing exact SCAIL-2 reference crops and masks...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking targets' | \"Tracking 'person' across 17 frames...\" | 0% | step 0/0 | outputs 0",
+            "queued | phase '' | 'Queued (recast)' | 0% | step 0/0 | outputs 0",
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200,
+        "tracebacks": 0
+      },
+      "a cancel during tracking prints no traceback": {
+        "answer": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 1,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Recast Fast",
+            "model_type": "scail2_14B_recast_fast",
+            "prompt": "two knights",
+            "resolution": "704x480",
+            "seed": 5,
+            "simulated": false,
+            "steps": 8
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 8,
+          "person_count": 2,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person 1",
+          "task_id": "task-generation-<JOB>"
+        },
+        "built": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": ""
+          },
+          "edit_end_time": 2.125,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "cast-1",
+              "ref_image_path": "<STATE>/uploads/hero-1.png",
+              "reference_aligned_to_source": false,
+              "target": "person 1"
+            },
+            {
+              "additional_ref_image_paths": [],
+              "id": "cast-2",
+              "ref_image_path": "<STATE>/uploads/hero-2.png",
+              "reference_aligned_to_source": false,
+              "target": "person 2"
+            }
+          ],
+          "edit_recast_conditioning": "native_replace_fast",
+          "edit_recast_conditioning_people": 2,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            704,
+            480
+          ],
+          "edit_recast_person_count": 2,
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "two knights",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero-1.png",
+          "edit_recast_resolution_profile": "480p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_target": "person 1",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 1,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero-1.png",
+            "<STATE>/uploads/hero-2.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_recast_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "prompt": "two knights",
+          "resolution": "704x480",
+          "sample_solver": "unipc",
+          "seed": 5,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<OUTPUTS>/recast-source.mp4",
+          "video_length": 17,
+          "video_prompt_type": "V02AI"
+        },
+        "calls": [
+          "[\"_build_recast_character_mask\", [\"recast-source.mp4\", [\"cast-1\", \"cast-2\"], \"<STATE>/uploads\"], {}]"
+        ],
+        "ffmpeg": [],
+        "job": {
+          "engine_inputs": [],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "params": {
+            "<removed>": []
+          },
+          "record": {
+            "acquired_resources": [],
+            "cancel_requested": true
+          },
+          "returned": null,
+          "status": {
+            "error": null,
+            "message": "Cancelled",
+            "oom_info": null,
+            "output_files": [],
+            "phase": "cancelled",
+            "progress": 0,
+            "queue_position": null,
+            "status": "cancelled",
+            "step": 0,
+            "total_steps": 0
+          },
+          "transitions": [
+            "running | phase 'Detecting target' | \"Finding 2 'person 1' subjects in the video...\" | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 0%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 25%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 75%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 100%' | 0% | step 0/0 | outputs 0",
+            "cancelling | phase 'cancelling' | 'Cancelling…' | 0% | step 0/0 | outputs 0",
+            "cancelled | phase 'cancelled' | 'Cancelled' | 0% | step 0/0 | outputs 0"
+          ]
+        },
+        "status": 200,
+        "tracebacks": 0
+      },
+      "a cast change in a 40 fps tracking is held for eight frames": {
+        "answer": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 1,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Recast Fast",
+            "model_type": "scail2_14B_recast_fast",
+            "prompt": "two knights",
+            "resolution": "704x480",
+            "seed": 5,
+            "simulated": false,
+            "steps": 8
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 8,
+          "person_count": 2,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person 1",
+          "task_id": "task-generation-<JOB>"
+        },
+        "built": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": ""
+          },
+          "edit_end_time": 2.125,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "cast-1",
+              "ref_image_path": "<STATE>/uploads/hero-1.png",
+              "reference_aligned_to_source": false,
+              "target": "person 1"
+            },
+            {
+              "additional_ref_image_paths": [],
+              "id": "cast-2",
+              "ref_image_path": "<STATE>/uploads/hero-2.png",
+              "reference_aligned_to_source": false,
+              "target": "person 2"
+            }
+          ],
+          "edit_recast_conditioning": "native_replace_fast",
+          "edit_recast_conditioning_people": 2,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            704,
+            480
+          ],
+          "edit_recast_person_count": 2,
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "two knights",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero-1.png",
+          "edit_recast_resolution_profile": "480p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_target": "person 1",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 1,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero-1.png",
+            "<STATE>/uploads/hero-2.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_recast_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "prompt": "two knights",
+          "resolution": "704x480",
+          "sample_solver": "unipc",
+          "seed": 5,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<OUTPUTS>/recast-source.mp4",
+          "video_length": 17,
+          "video_prompt_type": "V02AI"
+        },
+        "calls": [
+          "[\"_build_recast_character_mask\", [\"recast-source.mp4\", [\"cast-1\", \"cast-2\"], \"<STATE>/uploads\"], {}]",
+          "[\"_plan_recast_shot_segments\", [[\"<mapping masks>\"], [[0, 17]]], {\"min_cast_run_frames\": 8, \"split_cast_transitions\": true}]",
+          "[\"_prepare_recast_reference_conditioning\", [[\"cast-1\", \"cast-2\"], {\"first\": 100, \"shape\": [64, 96, 3], \"sum\": 1843200}, \"<STATE>/uploads\", \"<JOB>\"], {\"auto_face_detail\": true, \"isolate_reference\": true, \"mapping_anchors\": [{\"frame_index\": 2, \"source_frame\": {\"first\": 2, \"shape\": [64, 96, 3], \"sum\": 36864}, \"source_mask\": {\"first\": 102, \"shape\": [64, 96, 3], \"sum\": 1880064}}, {\"frame_index\": 3, \"source_frame\": {\"first\": 3, \"shape\": [64, 96, 3], \"sum\": 55296}, \"source_mask\": {\"first\": 103, \"shape\": [64, 96, 3], \"sum\": 1898496}}], \"reference_canvas\": [704, 480], \"selected_count\": 2, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]",
+          "[\"_build_recast_target_group_reference\", [[\"additional_masks\", \"auto_face_detail_refs\", \"clip_identity_ref\", \"expected_colors\", \"image_refs\", \"previews\", \"primary_mask\", \"primary_target_refs\", \"reference_canvas\"], \"<STATE>/uploads\", \"<JOB>\", 2], {\"shared_semantic_mask\": {\"first\": 100, \"shape\": [64, 96, 3], \"sum\": 1843200}, \"shared_source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]",
+          "[\"_enable_recast_dynamic_source_scene_reference\", [[\"_duration_seconds\", \"_execution_mode\", \"_recast_protect_bystanders\", \"_recast_source_video\", \"activated_loras\", \"audio_prompt_type\", \"custom_settings\", \"edit_end_time\", \"edit_recast_auto_face_detail\", \"edit_recast_auto_face_detail_refs\", \"edit_recast_bystander_tracking\", \"edit_recast_cast_mask\", \"edit_recast_cast_mode\", \"edit_recast_cast_reference\", \"edit_recast_cast_transition_count\", \"edit_recast_character_mappings\", \"edit_recast_clip_identity_ref\", \"edit_recast_common_frame_index\", \"edit_recast_conditioning\", \"edit_recast_conditioning_people\", \"edit_recast_enhance_prompt\", \"edit_recast_isolate_reference\", \"edit_recast_output_resolution\", \"edit_recast_person_count\", \"edit_recast_prepared_refs\", \"edit_recast_preserve_bystanders\", \"edit_recast_protect_bystanders\", \"edit_recast_raw_prompt\", \"edit_recast_recovered_shots\", \"edit_recast_ref_aligned\", \"edit_recast_ref_path\", \"edit_recast_reference_canvas\", \"edit_recast_resolution_profile\", \"edit_recast_shot_count\", \"edit_recast_shot_ranges\", \"edit_recast_sliding_window_size\", \"edit_recast_target\", \"edit_recast_timeline_anchors\", \"edit_recast_timeline_aware\", \"edit_recast_use_relighting\", \"edit_recast_warmup_frames\", \"edit_start_time\", \"edit_sub_mode\", \"edit_video_path\", \"flow_shift\", \"force_fps\", \"generation_mode\", \"guidance_scale\", \"image_prompt_type\", \"image_refs\", \"loras_multipliers\", \"model_type\", \"negative_prompt\", \"num_inference_steps\", \"prompt\", \"resolution\", \"sample_solver\", \"seed\", \"settings_version\", \"sliding_window_overlap\", \"sliding_window_size\", \"video_guide\", \"video_length\", \"video_mask\", \"video_prompt_type\"], {\"first\": 4, \"shape\": [64, 96, 3], \"sum\": 73728}, {\"first\": 104, \"shape\": [64, 96, 3], \"sum\": 1916928}, 2, \"<STATE>/uploads\", \"<JOB>\"], {}]",
+          "[\"_build_recast_shot_manifest\", [[\"_duration_seconds\", \"_execution_mode\", \"_recast_protect_bystanders\", \"_recast_source_video\", \"activated_loras\", \"audio_prompt_type\", \"custom_settings\", \"edit_end_time\", \"edit_recast_auto_face_detail\", \"edit_recast_auto_face_detail_refs\", \"edit_recast_bystander_tracking\", \"edit_recast_cast_mask\", \"edit_recast_cast_mode\", \"edit_recast_cast_reference\", \"edit_recast_cast_transition_count\", \"edit_recast_character_mappings\", \"edit_recast_clip_identity_ref\", \"edit_recast_common_frame_index\", \"edit_recast_conditioning\", \"edit_recast_conditioning_people\", \"edit_recast_enhance_prompt\", \"edit_recast_isolate_reference\", \"edit_recast_output_resolution\", \"edit_recast_person_count\", \"edit_recast_prepared_refs\", \"edit_recast_preserve_bystanders\", \"edit_recast_protect_bystanders\", \"edit_recast_raw_prompt\", \"edit_recast_recovered_shots\", \"edit_recast_ref_aligned\", \"edit_recast_ref_path\", \"edit_recast_reference_canvas\", \"edit_recast_resolution_profile\", \"edit_recast_shot_count\", \"edit_recast_shot_ranges\", \"edit_recast_sliding_window_size\", \"edit_recast_source_scene_reference_reason\", \"edit_recast_target\", \"edit_recast_timeline_anchors\", \"edit_recast_timeline_aware\", \"edit_recast_use_relighting\", \"edit_recast_warmup_frames\", \"edit_start_time\", \"edit_sub_mode\", \"edit_video_path\", \"flow_shift\", \"force_fps\", \"generation_mode\", \"guidance_scale\", \"image_prompt_type\", \"image_refs\", \"loras_multipliers\", \"model_type\", \"negative_prompt\", \"num_inference_steps\", \"prompt\", \"resolution\", \"sample_solver\", \"seed\", \"settings_version\", \"sliding_window_overlap\", \"sliding_window_size\", \"video_guide\", \"video_length\", \"video_mask\", \"video_prompt_type\"], [\"common_frame_index\", \"fps\", \"mapping_masks\", \"mapping_summaries\", \"mask_frames\", \"recovered_shots\", \"scene_anchor_index\", \"shot_count\", \"shot_ranges\", \"source_frames\", \"timeline_aware\", \"video_mask\"], [\"additional_masks\", \"auto_face_detail_refs\", \"clip_identity_ref\", \"expected_colors\", \"image_refs\", \"previews\", \"primary_mask\", \"primary_target_refs\", \"reference_canvas\"], \"maestro-recast-shots-1\", \"<JOB>\"], {\"generation_fps\": 40.0, \"latent_size\": 4, \"minimum_frames\": 5, \"reference_canvas\": [704, 480], \"target_frame_count\": 17}]",
+          "[\"_run_recast_shot_generation\", [\"<JOB>\", \"maestro-recast-shots-1\", [\"_defer_output_publication\", \"_duration_seconds\", \"_execution_mode\", \"_recast_final_out_dir\", \"_recast_protect_bystanders\", \"_recast_shot_bundle\", \"_recast_shot_manifest\", \"_recast_shot_temp_dir\", \"_recast_source_video\"]], {}]"
+        ],
+        "ffmpeg": [],
+        "job": {
+          "engine_inputs": [],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "params": {
+            "<removed>": [],
+            "_defer_output_publication": true,
+            "_recast_final_out_dir": "<OUTPUTS>",
+            "_recast_shot_bundle": {
+              "camera_shot_count": 1,
+              "cast_transition_count": 1,
+              "fps": 8.0,
+              "frame_count": 17,
+              "published_shots": [
+                {
+                  "index": 0
+                },
+                {
+                  "index": 1
+                }
+              ],
+              "resolved_seed": 5,
+              "shots": [
+                {
+                  "mode": "generate"
+                },
+                {
+                  "mode": "passthrough"
+                }
+              ]
+            },
+            "_recast_shot_manifest": [
+              {
+                "prompt": "shot one"
+              }
+            ],
+            "_recast_shot_temp_dir": "<STATE>/shot-tmp/maestro-recast-shots-1",
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_additional_reference_mask_paths": [
+                "<STATE>/uploads/hero-1.png",
+                "mask-cast-2"
+              ],
+              "scail2_animate_preprocessing": "raw",
+              "scail2_clip_reference_path": "<STATE>/uploads/hero-1.png",
+              "scail2_identity_latent_isolation": true,
+              "scail2_identity_latent_reference_index": 1,
+              "scail2_isolate_reference_background": false,
+              "scail2_primary_only_continuations": true,
+              "scail2_primary_reference_people": 2,
+              "scail2_recast_conditioning": "native_replace",
+              "scail2_recast_warmup_frames": 8,
+              "scail2_reference_alpha_path": "",
+              "scail2_reference_expected_colors": [
+                null,
+                [
+                  0,
+                  0,
+                  255
+                ],
+                [
+                  0,
+                  0,
+                  255
+                ]
+              ],
+              "scail2_reference_mask_path": "<STATE>/uploads/cast-mask.png"
+            },
+            "edit_recast_auto_face_detail_refs": [],
+            "edit_recast_bystander_tracking": "timeline_scene",
+            "edit_recast_cast_mask": "<STATE>/uploads/cast-mask.png",
+            "edit_recast_cast_mode": "shared_frame",
+            "edit_recast_cast_reference": "<STATE>/uploads/cast.png",
+            "edit_recast_cast_transition_count": 1,
+            "edit_recast_clip_identity_ref": "<STATE>/uploads/hero-1.png",
+            "edit_recast_common_frame_index": 0,
+            "edit_recast_prepared_refs": [
+              "<STATE>/uploads/hero-1.png",
+              "<STATE>/uploads/hero-2.png"
+            ],
+            "edit_recast_recovered_shots": [
+              {
+                "mapping_id": "cast-1",
+                "shot_index": 1
+              }
+            ],
+            "edit_recast_reference_canvas": [
+              96,
+              64
+            ],
+            "edit_recast_shot_aware": true,
+            "edit_recast_shot_count": 1,
+            "edit_recast_shot_plan": [
+              {
+                "index": 0
+              },
+              {
+                "index": 1
+              }
+            ],
+            "edit_recast_shot_ranges": [
+              [
+                0,
+                17
+              ]
+            ],
+            "edit_recast_source_scene_reference_reason": "no separate bystander pass needed",
+            "edit_recast_timeline_anchors": [
+              {
+                "anchor_frame_index": 2,
+                "id": "cast-1"
+              },
+              {
+                "anchor_frame_index": 3,
+                "id": "cast-2"
+              }
+            ],
+            "edit_recast_timeline_aware": false,
+            "image_refs": [
+              "<STATE>/uploads/cast.png",
+              "<STATE>/uploads/hero-1.png",
+              "<STATE>/uploads/hero-2.png"
+            ],
+            "video_mask": "<STATE>/uploads/mapped-mask.mp4"
+          },
+          "record": {
+            "acquired_resources": []
+          },
+          "returned": null,
+          "status": {
+            "error": null,
+            "message": "Shots joined",
+            "oom_info": null,
+            "output_files": [],
+            "phase": "Joining shots",
+            "progress": 0,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "transitions": [
+            "running | phase 'Detecting target' | \"Finding 2 'person 1' subjects in the video...\" | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 0%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 25%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 75%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 100%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Preparing references' | 'Preparing exact SCAIL-2 reference crops and masks...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Preparing cast-aware segments' | 'Preparing shot and cast-specific character references...' | 0% | step 0/0 | outputs 0",
+            "queued | phase '' | 'Queued (recast)' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Joining shots' | 'Joining shots...' | 0% | step 0/0 | outputs 0",
+            "completed | phase 'Joining shots' | 'Shots joined' | 0% | step 0/0 | outputs 0"
+          ]
+        },
+        "status": 200,
+        "tracebacks": 0
+      },
+      "tracking and bystander progress every 5%": {
+        "answer": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 1,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Recast Fast",
+            "model_type": "scail2_14B_recast_fast",
+            "prompt": "two knights",
+            "resolution": "704x480",
+            "seed": 5,
+            "simulated": false,
+            "steps": 8
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 8,
+          "person_count": 2,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person 1",
+          "task_id": "task-generation-<JOB>"
+        },
+        "built": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": ""
+          },
+          "edit_end_time": 2.125,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "cast-1",
+              "ref_image_path": "<STATE>/uploads/hero-1.png",
+              "reference_aligned_to_source": false,
+              "target": "person 1"
+            },
+            {
+              "additional_ref_image_paths": [],
+              "id": "cast-2",
+              "ref_image_path": "<STATE>/uploads/hero-2.png",
+              "reference_aligned_to_source": false,
+              "target": "person 2"
+            }
+          ],
+          "edit_recast_conditioning": "native_replace_fast",
+          "edit_recast_conditioning_people": 2,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            704,
+            480
+          ],
+          "edit_recast_person_count": 2,
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "two knights",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero-1.png",
+          "edit_recast_resolution_profile": "480p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_target": "person 1",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 1,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero-1.png",
+            "<STATE>/uploads/hero-2.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_recast_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "prompt": "two knights",
+          "resolution": "704x480",
+          "sample_solver": "unipc",
+          "seed": 5,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<OUTPUTS>/recast-source.mp4",
+          "video_length": 17,
+          "video_prompt_type": "V02AI"
+        },
+        "calls": [
+          "[\"_build_recast_character_mask\", [\"recast-source.mp4\", [\"cast-1\", \"cast-2\"], \"<STATE>/uploads\"], {}]",
+          "[\"_plan_recast_shot_segments\", [[\"<mapping masks>\"], [[0, 17]]], {\"min_cast_run_frames\": 4, \"split_cast_transitions\": true}]",
+          "[\"_recast_probe_needs_bystander_tracking\", [{\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}, {\"first\": 100, \"shape\": [64, 96, 3], \"sum\": 1843200}, 2], {}]",
+          "[\"_prepare_recast_reference_conditioning\", [[\"cast-1\", \"cast-2\"], {\"first\": 100, \"shape\": [64, 96, 3], \"sum\": 1843200}, \"<STATE>/uploads\", \"<JOB>\"], {\"auto_face_detail\": true, \"isolate_reference\": true, \"mapping_anchors\": [{\"frame_index\": 2, \"source_frame\": {\"first\": 2, \"shape\": [64, 96, 3], \"sum\": 36864}, \"source_mask\": {\"first\": 102, \"shape\": [64, 96, 3], \"sum\": 1880064}}, {\"frame_index\": 3, \"source_frame\": {\"first\": 3, \"shape\": [64, 96, 3], \"sum\": 55296}, \"source_mask\": {\"first\": 103, \"shape\": [64, 96, 3], \"sum\": 1898496}}], \"reference_canvas\": [704, 480], \"selected_count\": 2, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]",
+          "[\"_build_recast_target_group_reference\", [[\"additional_masks\", \"auto_face_detail_refs\", \"clip_identity_ref\", \"expected_colors\", \"image_refs\", \"previews\", \"primary_mask\", \"primary_target_refs\", \"reference_canvas\"], \"<STATE>/uploads\", \"<JOB>\", 2], {\"shared_semantic_mask\": {\"first\": 100, \"shape\": [64, 96, 3], \"sum\": 1843200}, \"shared_source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]",
+          "[\"_build_recast_native_people_conditioning\", [\"recast-source.mp4\", \"mapped-mask.mp4\", 2, \"<STATE>/uploads\", \"<JOB>\"], {\"progress_callback\": \"<callable>\", \"reference_frame_index\": 0, \"target_references\": [\"<STATE>/uploads/hero-1.png\"]}]"
+        ],
+        "ffmpeg": [],
+        "job": {
+          "engine_inputs": [
+            "{\"activated_loras\": [], \"audio_prompt_type\": \"R\", \"custom_settings\": {\"image_ref_keyword_content\": \"human character\", \"scail2_additional_reference_mask_paths\": [\"<STATE>/uploads/hero-1.png\", \"mask-cast-2\"], \"scail2_animate_preprocessing\": \"raw\", \"scail2_clip_reference_path\": \"<STATE>/uploads/hero-1.png\", \"scail2_identity_latent_isolation\": true, \"scail2_identity_latent_reference_index\": 1, \"scail2_isolate_reference_background\": false, \"scail2_primary_only_continuations\": true, \"scail2_primary_reference_people\": 4, \"scail2_recast_conditioning\": \"native_replace\", \"scail2_recast_warmup_frames\": 8, \"scail2_reference_alpha_path\": \"\", \"scail2_reference_expected_colors\": [null, [0, 0, 255], [0, 0, 255]], \"scail2_reference_mask_path\": \"<STATE>/uploads/group-mask.png\"}, \"flow_shift\": 1, \"force_fps\": \"control\", \"guidance_scale\": 1.0, \"image_prompt_type\": \"\", \"image_refs\": [\"<STATE>/uploads/group.png\", \"<STATE>/uploads/hero-1.png\", \"<STATE>/uploads/hero-2.png\"], \"loras_multipliers\": \"\", \"mode\": \"\", \"model_type\": \"scail2_14B_recast_fast\", \"negative_prompt\": \"\", \"num_inference_steps\": 8, \"plugin_data\": {}, \"prompt\": \"two knights\", \"resolution\": \"704x480\", \"sample_solver\": \"unipc\", \"seed\": 5, \"sliding_window_overlap\": 5, \"sliding_window_size\": 81, \"video_guide\": \"<OUTPUTS>/recast-source.mp4\", \"video_length\": 17, \"video_mask\": \"<STATE>/uploads/group-mask.mp4\", \"video_prompt_type\": \"V04AI\"}"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "params": {
+            "<removed>": [],
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_additional_reference_mask_paths": [
+                "<STATE>/uploads/hero-1.png",
+                "mask-cast-2"
+              ],
+              "scail2_animate_preprocessing": "raw",
+              "scail2_clip_reference_path": "<STATE>/uploads/hero-1.png",
+              "scail2_identity_latent_isolation": true,
+              "scail2_identity_latent_reference_index": 1,
+              "scail2_isolate_reference_background": false,
+              "scail2_primary_only_continuations": true,
+              "scail2_primary_reference_people": 4,
+              "scail2_recast_conditioning": "native_replace",
+              "scail2_recast_warmup_frames": 8,
+              "scail2_reference_alpha_path": "",
+              "scail2_reference_expected_colors": [
+                null,
+                [
+                  0,
+                  0,
+                  255
+                ],
+                [
+                  0,
+                  0,
+                  255
+                ]
+              ],
+              "scail2_reference_mask_path": "<STATE>/uploads/group-mask.png"
+            },
+            "edit_recast_auto_face_detail_refs": [],
+            "edit_recast_bystander_tracking": "full",
+            "edit_recast_cast_mask": "<STATE>/uploads/cast-mask.png",
+            "edit_recast_cast_mode": "shared_frame",
+            "edit_recast_cast_reference": "<STATE>/uploads/cast.png",
+            "edit_recast_cast_transition_count": 0,
+            "edit_recast_clip_identity_ref": "<STATE>/uploads/hero-1.png",
+            "edit_recast_common_frame_index": 0,
+            "edit_recast_conditioning_people": 4,
+            "edit_recast_group_mask": "<STATE>/uploads/group-mask.png",
+            "edit_recast_group_reference": "<STATE>/uploads/group.png",
+            "edit_recast_prepared_refs": [
+              "<STATE>/uploads/hero-1.png",
+              "<STATE>/uploads/hero-2.png"
+            ],
+            "edit_recast_recovered_shots": [
+              {
+                "mapping_id": "cast-1",
+                "shot_index": 1
+              }
+            ],
+            "edit_recast_reference_canvas": [
+              96,
+              64
+            ],
+            "edit_recast_shot_count": 1,
+            "edit_recast_shot_ranges": [
+              [
+                0,
+                17
+              ]
+            ],
+            "edit_recast_timeline_anchors": [
+              {
+                "anchor_frame_index": 2,
+                "id": "cast-1"
+              },
+              {
+                "anchor_frame_index": 3,
+                "id": "cast-2"
+              }
+            ],
+            "edit_recast_timeline_aware": false,
+            "image_refs": [
+              "<STATE>/uploads/group.png",
+              "<STATE>/uploads/hero-1.png",
+              "<STATE>/uploads/hero-2.png"
+            ],
+            "video_mask": "<STATE>/uploads/group-mask.mp4",
+            "video_prompt_type": "V04AI"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed5_two_knights.mp4"
+            ]
+          },
+          "returned": true,
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed5_two_knights.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "transitions": [
+            "running | phase 'Detecting target' | \"Finding 2 'person 1' subjects in the video...\" | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 0%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 5%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 10%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Tracking timeline' | 'Finding mapped characters across shots... 100%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Preparing references' | 'Preparing exact SCAIL-2 reference crops and masks...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Mapping surrounding people' | 'Mapping the other people for native preservation...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Mapping surrounding people' | 'Mapping the other people... 0%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Mapping surrounding people' | 'Mapping the other people... 5%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Mapping surrounding people' | 'Mapping the other people... 10%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Mapping surrounding people' | 'Mapping the other people... 15%' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Mapping surrounding people' | 'Mapping the other people... 100%' | 0% | step 0/0 | outputs 0",
+            "queued | phase '' | 'Queued (recast)' | 0% | step 0/0 | outputs 0",
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200,
+        "tracebacks": 0
+      },
+      "two people asked and one found": {
+        "answer": {
+          "frames": 17,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 1,
+            "frames": 17,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Recast Fast",
+            "model_type": "scail2_14B_recast_fast",
+            "prompt": "a calm lake",
+            "resolution": "704x480",
+            "seed": 3,
+            "simulated": false,
+            "steps": 8
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 8,
+          "person_count": 2,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "target": "person",
+          "task_id": "task-generation-<JOB>"
+        },
+        "built": {
+          "_duration_seconds": 2.125,
+          "_execution_mode": "real",
+          "_recast_protect_bystanders": false,
+          "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "human character",
+            "scail2_animate_preprocessing": "raw",
+            "scail2_clip_reference_path": "",
+            "scail2_identity_latent_isolation": true,
+            "scail2_identity_latent_reference_index": 0,
+            "scail2_isolate_reference_background": false,
+            "scail2_primary_only_continuations": true,
+            "scail2_primary_reference_people": 1,
+            "scail2_recast_conditioning": "native_replace",
+            "scail2_recast_warmup_frames": 8,
+            "scail2_reference_alpha_path": ""
+          },
+          "edit_end_time": 2.125,
+          "edit_recast_auto_face_detail": true,
+          "edit_recast_character_mappings": [
+            {
+              "additional_ref_image_paths": [],
+              "id": "recast-1",
+              "ref_image_path": "<STATE>/uploads/hero.png",
+              "reference_aligned_to_source": false,
+              "target": "person"
+            }
+          ],
+          "edit_recast_conditioning": "native_replace_fast",
+          "edit_recast_conditioning_people": 2,
+          "edit_recast_enhance_prompt": false,
+          "edit_recast_isolate_reference": true,
+          "edit_recast_output_resolution": [
+            704,
+            480
+          ],
+          "edit_recast_person_count": 2,
+          "edit_recast_preserve_bystanders": true,
+          "edit_recast_protect_bystanders": false,
+          "edit_recast_raw_prompt": "a calm lake",
+          "edit_recast_ref_aligned": false,
+          "edit_recast_ref_path": "<STATE>/uploads/hero.png",
+          "edit_recast_resolution_profile": "480p",
+          "edit_recast_sliding_window_size": 81,
+          "edit_recast_target": "person",
+          "edit_recast_use_relighting": false,
+          "edit_recast_warmup_frames": 8,
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "recast",
+          "edit_video_path": "<OUTPUTS>/recast-source.mp4",
+          "flow_shift": 1,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "",
+          "image_refs": [
+            "<STATE>/uploads/hero.png"
+          ],
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_recast_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 8,
+          "prompt": "a calm lake",
+          "resolution": "704x480",
+          "sample_solver": "unipc",
+          "seed": 3,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "<OUTPUTS>/recast-source.mp4",
+          "video_length": 17,
+          "video_prompt_type": "V02AI"
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", [\"person\"], {\"color_palette\": [[0, 0, 255], [255, 0, 0]], \"colorize_objects\": true, \"max_colored_objects\": 2, \"no_hole\": true}]"
+        ],
+        "ffmpeg": [],
+        "job": {
+          "engine_inputs": [],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "params": {
+            "<removed>": []
+          },
+          "record": {
+            "acquired_resources": []
+          },
+          "returned": null,
+          "status": {
+            "error": "Found 1 of 2 requested 'person' subjects in the first frame. Try another description, lower the person count, or adjust the trim start.",
+            "message": "Not enough targets found",
+            "oom_info": null,
+            "output_files": [],
+            "phase": "Detecting target",
+            "progress": 0,
+            "queue_position": null,
+            "status": "failed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "transitions": [
+            "running | phase 'Detecting target' | \"Finding 2 'person' subjects in the video...\" | 0% | step 0/0 | outputs 0",
+            "failed | phase 'Detecting target' | 'Not enough targets found' | 0% | step 0/0 | outputs 0"
+          ]
+        },
+        "status": 200,
+        "tracebacks": 0
+      }
+    },
+    "status": 200
+  },
   "recast finds nobody": {
     "body": {
       "answer": {
@@ -9257,6 +10353,305 @@
           "timeline_end_seconds": 2.125,
           "timeline_start_seconds": 0.0
         },
+        "status": 200
+      }
+    },
+    "status": 200
+  },
+  "recast preview edges the first cases let through": {
+    "body": {
+      "a reference and nobody found": {
+        "body": {
+          "found": false,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": null,
+              "anchor_time_seconds": null,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": null,
+              "first_time_seconds": null,
+              "found": false,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "nobody"
+            }
+          ],
+          "matched_people": 0,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "reference_previews": [],
+          "requested_people": 1,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 1,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", \"nobody\", [[0, 0, 255]], 1, 0, [1, 64, 96, 3]]",
+          "[\"Image.fromarray\", [64, 96, 3], \"uint8\", \"f7b586904e3678145aa47e4232587c913139cef0102d6d8e9276fc80c35cbad3\", [0, 0, 0, 0, 0, 0]]"
+        ],
+        "status": 200
+      },
+      "a timeline whose end equals its start": {
+        "body": {
+          "found": true,
+          "frame_index": 8,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 8,
+              "anchor_time_seconds": 1.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 8,
+              "first_time_seconds": 1.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            }
+          ],
+          "matched_people": 1,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "reference_previews": [],
+          "requested_people": 1,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 1,
+          "time_seconds": 1.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 1.0
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", \"person\", [[0, 0, 255]], 1, 0, [1, 64, 96, 3]]",
+          "[\"Image.fromarray\", [64, 96, 3], \"uint8\", \"8fe8d2062a8c1efd3b8fe8b43ddd6553df6e8300893e192ef10a5fa85e2563a9\", [0, 0, 140, 0, 0, 140]]"
+        ],
+        "status": 200
+      },
+      "one person with a reference, defaults": {
+        "body": {
+          "found": true,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            }
+          ],
+          "matched_people": 1,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "reference_previews": [
+            {
+              "kind": "primary",
+              "mappings": 1
+            }
+          ],
+          "requested_people": 1,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 1,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", \"person\", [[0, 0, 255]], 1, 0, [1, 64, 96, 3]]",
+          "[\"Image.fromarray\", [64, 96, 3], \"uint8\", \"8fe8d2062a8c1efd3b8fe8b43ddd6553df6e8300893e192ef10a5fa85e2563a9\", [0, 0, 140, 0, 0, 140]]",
+          "[\"_prepare_recast_reference_conditioning\", [\"hero.png\"], {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 783360}, true, \"preview\", {\"auto_face_detail\": true, \"isolate_reference\": true, \"mapping_anchors\": null, \"reference_canvas\": [704, 480], \"selected_count\": 1, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]"
+        ],
+        "status": 200
+      },
+      "two mappings, both found, with references": {
+        "body": {
+          "found": true,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 0,
+              "anchor_sample_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            },
+            {
+              "anchor_frame_index": 0,
+              "anchor_sample_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                255,
+                0,
+                0
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 1,
+              "overlap_fraction": 0.0,
+              "target": "the knight"
+            }
+          ],
+          "matched_people": 2,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              192,
+              88
+            ]
+          },
+          "reference_previews": [
+            {
+              "kind": "primary",
+              "mappings": 2
+            }
+          ],
+          "requested_people": 2,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 17,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", \"person\", [[0, 0, 255]], 1, 17, [17, 64, 96, 3]]",
+          "[\"generate_keyword_masks\", \"the knight\", [[255, 0, 0]], 1, 17, [17, 64, 96, 3]]",
+          "[\"Image.fromarray\", [64, 96, 3], \"uint8\", \"8fe8d2062a8c1efd3b8fe8b43ddd6553df6e8300893e192ef10a5fa85e2563a9\", [0, 0, 140, 0, 0, 140]]",
+          "[\"Image.fromarray\", [64, 96, 3], \"uint8\", \"ab82adc887aff0bd63eb8352ffdc1f2b47ccf8e0cebe07622b33408c4dc78db1\", [0, 0, 0, 0, 0, 0]]",
+          "[\"_prepare_recast_reference_conditioning\", [\"hero.png\", \"villain.png\"], {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 1566720}, true, \"preview\", {\"auto_face_detail\": true, \"isolate_reference\": true, \"mapping_anchors\": [{\"frame_index\": 0, \"mapping_mask\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 783360}, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}, \"source_mask\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 1566720}}, {\"frame_index\": 0, \"mapping_mask\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 783360}, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}, \"source_mask\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 1566720}}], \"reference_canvas\": [704, 480], \"selected_count\": 2, \"source_frame\": {\"first\": 0, \"shape\": [64, 96, 3], \"sum\": 0}}]"
+        ],
+        "status": 200
+      },
+      "two mappings, one found": {
+        "body": {
+          "found": false,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "anchor_frame_index": 0,
+              "anchor_sample_index": 0,
+              "anchor_time_seconds": 0.0,
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "first_frame_index": 0,
+              "first_time_seconds": 0.0,
+              "found": true,
+              "mapping_index": 0,
+              "overlap_fraction": 0.0,
+              "target": "person"
+            },
+            {
+              "anchor_frame_index": null,
+              "anchor_sample_index": null,
+              "anchor_time_seconds": null,
+              "color": [
+                255,
+                0,
+                0
+              ],
+              "first_frame_index": null,
+              "first_time_seconds": null,
+              "found": false,
+              "mapping_index": 1,
+              "overlap_fraction": 0.0,
+              "target": "the villain"
+            }
+          ],
+          "matched_people": 1,
+          "output_resolution": [
+            704,
+            480
+          ],
+          "preview": {
+            "format": "JPEG",
+            "jpeg_data_url": true,
+            "mode": "RGB",
+            "size": [
+              96,
+              88
+            ]
+          },
+          "reference_previews": [],
+          "requested_people": 2,
+          "resolution_profile": "480p",
+          "sampled_frame_count": 17,
+          "time_seconds": 0.0,
+          "timeline_end_seconds": 2.125,
+          "timeline_start_seconds": 0.0
+        },
+        "calls": [
+          "[\"generate_keyword_masks\", \"person\", [[0, 0, 255]], 1, 17, [17, 64, 96, 3]]",
+          "[\"generate_keyword_masks\", \"the villain\", [[255, 0, 0]], 1, 17, [17, 64, 96, 3]]",
+          "[\"Image.fromarray\", [64, 96, 3], \"uint8\", \"8fe8d2062a8c1efd3b8fe8b43ddd6553df6e8300893e192ef10a5fa85e2563a9\", [0, 0, 140, 0, 0, 140]]"
+        ],
         "status": 200
       }
     },
