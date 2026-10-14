@@ -557,6 +557,23 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 404, missing.text)
         self.assertEqual(audio.status_code, 400, audio.text)
 
+    def test_core_gallery_answers_400_for_a_bad_workspace_name_on_every_route(self):
+        """The thumbnail route has no ValueError mapping of its own (the full server's lookup raises a 400 itself)."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            answers = {
+                (route, workspace): self.client.get(route, params={"workspace": workspace})
+                for route in ("/api/v1/outputs/thumbnail/still.png", "/api/v1/file/still.png", "/api/v1/outputs")
+                for workspace in ("../outside", "bad name", "")
+                if (route, workspace) != ("/api/v1/outputs", "")  # an empty name lists the active workspace
+            }
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        for (route, workspace), response in answers.items():
+            self.assertEqual(response.status_code, 400, f"{route} workspace={workspace!r}: {response.text}")
+            self.assertEqual(response.json(), {"detail": "Invalid workspace name"})
+
     def test_core_thumbnail_binding_leaves_the_other_output_ops_slots_alone(self):
         """Both servers can be imported in one process; core binds only safe_join, never the full server's slots."""
         from services import output_ops

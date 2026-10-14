@@ -17,7 +17,8 @@ from services import core_workspace as core, output_listing, output_ops
 
 
 def _gallery_workspace_dir(workspace: str | None = None) -> str:
-    return core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace)
+    # A bad name is a 400 here, as the full server's lookup raises it: the thumbnail route does not map ValueError.
+    return core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir_or_400(workspace)
 
 
 def create_core_gallery_router() -> APIRouter:
