@@ -357,3 +357,21 @@ def test_repaint_modules_read_the_objects_launch_gave_them(full_server, monkeypa
     with pytest.raises(RuntimeError, match="already bound"):
         planning.bind_repaint_planning({})
     assert planning._NAMESPACE[0] is vars(launch)
+
+    run = next(module for module in modules if module.__name__ == "services.repaint_run")
+    for name in (
+        "bind_repaint_run",
+        "_write_repaint_shot_aware_sidecar",
+        "_run_repaint_shot_generation",
+    ):
+        assert getattr(launch, name) is getattr(run, name), name
+
+    def _generation(*args, **kwargs):
+        return ("generation", args, kwargs)
+
+    monkeypatch.setattr(launch, "_run_generation", _generation)
+    assert run._run_generation("job", finalize=False) == ("generation", ("job",), {"finalize": False})
+    assert run._run_generation.__name__ == "_generation"
+    with pytest.raises(RuntimeError, match="already bound"):
+        run.bind_repaint_run({})
+    assert run._NAMESPACE[0] is vars(launch)

@@ -347,6 +347,9 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
 ):
     artifact = tmp_path / "clip.mp4"
     artifact.write_bytes(b"video")
+    relative = "app/_launch_runtime.py"
+    if writer_name == "_write_repaint_shot_aware_sidecar":
+        relative = "app/services/repaint_run.py"
     write = _load_launch_function(
         writer_name,
         {
@@ -354,6 +357,7 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
             "time": time,
             "publish_generation_sidecar": publish_generation_sidecar,
         },
+        relative=relative,
     )
     job = {
         "id": f"{tool}-job",
@@ -565,12 +569,21 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_write_output_sidecars",
         "_run_sfx_generation",
         "_write_recast_shot_aware_sidecar",
-        "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
     ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    repaint_run_source = (
+        Path(__file__).parents[1] / "app" / "services" / "repaint_run.py"
+    ).read_text(encoding="utf-8")
+    repaint_sidecar = function_source(
+        "_write_repaint_shot_aware_sidecar",
+        repaint_run_source,
+        ast.parse(repaint_run_source),
+    )
+    assert "publish_generation_sidecar" in repaint_sidecar
+    assert "json.dump" not in repaint_sidecar
     animatic_source = (
         Path(__file__).parents[1] / "app" / "services" / "comic_animatic.py"
     ).read_text(encoding="utf-8")

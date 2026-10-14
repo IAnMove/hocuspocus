@@ -23,6 +23,7 @@ _requires_torch = unittest.skipUnless(
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
 _REPAINT_PLANNING_PATH = os.path.join(_ROOT, "app", "services", "repaint_planning.py")
+_REPAINT_RUN_PATH = os.path.join(_ROOT, "app", "services", "repaint_run.py")
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
@@ -2450,7 +2451,7 @@ class TestMultiPersonRecast(unittest.TestCase):
                 concatenate_multi_clip_videos=fake_concat,
             )
             run = _load_functions(
-                _LAUNCH_PATH,
+                _REPAINT_RUN_PATH,
                 ("_run_repaint_shot_generation",),
                 {
                     "os": os,
@@ -4323,6 +4324,7 @@ class TestMultiPersonRecast(unittest.TestCase):
     def test_repaint_semantic_masks_use_native_opposite_backgrounds(self):
         launch = _read(_LAUNCH_PATH)
         planning = _read(_REPAINT_PLANNING_PATH)
+        run = _read(_REPAINT_RUN_PATH)
         self.assertIn(
             "def _build_repaint_shot_manifest(",
             planning,
@@ -4354,7 +4356,11 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn(
             "def _run_repaint_shot_generation(",
-            launch,
+            run,
+        )
+        self.assertIn(
+            "Repaint camera-shot assembly changed the timeline length",
+            run,
         )
         self.assertIn(
             '"_repaint_shot_manifest"',
@@ -4370,10 +4376,6 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn(
             "tracking_segments=shot_ranges",
-            launch,
-        )
-        self.assertIn(
-            "Repaint camera-shot assembly changed the timeline length",
             launch,
         )
 
