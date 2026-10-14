@@ -14,7 +14,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a silent episode cut no longer stops the Series Lab from loading.** A cut with no sound stored a loudness of minus infinity, which the library saved as `-Infinity`; from then on every Series read of that workspace answered 500. The loudness is now stored as null, a non-finite number is repaired when the library is written, and a library saved by an older version loads again.
 
-**Fixed: a Series render that a restart interrupted is shown as interrupted.** Its checkpoint kept saying running, so the recovery list showed it running and a new render of the episode was refused. It is now settled as interrupted (once), and resuming it gives each unfinished shot a new attempt.
+**Fixed: a Series render that a restart interrupted is shown as interrupted.** Its checkpoint kept saying running, so the recovery list showed it running and the series and its episode could not be deleted. It is now settled as interrupted (once). It still owns its episode: resume it (each unfinished shot gets a new attempt), or cancel or discard it, before rendering that episode again.
 
 **Fixed: a known-series bible whose ids collide still ends as a draft you can review.** A small model that reuses one id for a character, a location and a fact made the ten-minute job fail while applying its own draft. Repeated ids now get distinct ones, and if the library still refuses the draft the job completes with `autoApplied: false`, the reason in `applyError` and the proposal kept.
 
