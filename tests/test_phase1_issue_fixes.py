@@ -2680,7 +2680,7 @@ class TestModelVisibilityPersistence(unittest.TestCase):
     def setUpClass(cls):
         cls.normalize = staticmethod(
             _load_functions(
-                _LAUNCH_PATH,
+                os.path.join(_ROOT, "app", "services", "model_visibility.py"),
                 ("_normalize_model_visibility_ids",),
             )["_normalize_model_visibility_ids"]
         )
@@ -2703,14 +2703,15 @@ class TestModelVisibilityPersistence(unittest.TestCase):
             self.normalize([123])
 
     def test_server_and_frontend_use_durable_visibility(self):
-        launch = _read(_LAUNCH_PATH)
+        service = _read(os.path.join(_ROOT, "app", "services", "model_visibility.py"))
+        router = _read(os.path.join(_ROOT, "app", "routers", "model_preferences.py"))
         client = api_client_source()
         store = _read(_STORE_PATH)
         models = _read(_MODELS_PATH)
         visibility = _read(_VISIBILITY_PATH)
-        self.assertIn('@api.get("/api/v1/model-visibility")', launch)
-        self.assertIn('@api.put("/api/v1/model-visibility")', launch)
-        self.assertIn("os.replace(temp_path, config_path)", launch)
+        self.assertIn('@router.get("/api/v1/model-visibility")', router)
+        self.assertIn('@router.put("/api/v1/model-visibility")', router)
+        self.assertIn("os.replace(temp_path, config_path)", service)
         self.assertIn("fetchModelVisibility", client)
         self.assertIn("updateModelVisibility", client)
         self.assertIn("api.fetchModelVisibility()", models)
