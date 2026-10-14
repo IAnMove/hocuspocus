@@ -1,6 +1,7 @@
-"""Story Lab cheap reads: an empty library, and the validation and missing-job answers.
+"""Story Lab: an empty library, the validation and missing-job answers, and the job life cycle.
 
-Success paths that call an LLM, analyze a real image, or translate lyrics are not recorded here.
+The life cycle runs with a fake writing provider. A real LLM, real images and a real lyrics
+translation are not exercised here.
 """
 from __future__ import annotations
 
