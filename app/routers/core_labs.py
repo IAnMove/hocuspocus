@@ -124,4 +124,31 @@ def create_core_labs_router() -> APIRouter:
     router.include_router(create_series_shot_duration_router())
     router.include_router(create_series_attempt_approval_router())
     router.include_router(create_series_attempt_reject_router())
+
+    from routers.series_plan import (
+        _bind_series_plan_runtime,
+        create_series_plan_apply_router,
+        create_series_plan_router,
+    )
+    from services.core_canonical_tasks import (
+        publish_series_plan_activity,
+        reset_series_plan_task_for_resume,
+    )
+    from services.core_production import comic_writing_llm, ensure_llm_loaded
+
+    _bind_series_plan_runtime(
+        resolve_workspace=_series_workspace,
+        library_lock=_LOCK,
+        read_library=_read_series,
+        write_library=_write_series,
+        project_or_404=_series_or_404,
+        workspace_dir=core.workspace_dir,
+        list_workspaces=core.list_workspaces,
+        ensure_llm_loaded=ensure_llm_loaded,
+        writing_override=comic_writing_llm,
+        publish_task=publish_series_plan_activity,
+        reset_task=reset_series_plan_task_for_resume,
+    )
+    router.include_router(create_series_plan_router())
+    router.include_router(create_series_plan_apply_router())
     return router

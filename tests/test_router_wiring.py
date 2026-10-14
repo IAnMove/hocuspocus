@@ -32,7 +32,6 @@ PENDING = "Pending owner decision (2026-10-13): neither wired nor deleted."
 CORE_SERVER_ONLY = {
     "core_labs:create_core_labs_router": "Core server only: the main server serves these Labs routes itself.",
     "core_remote:create_core_remote_router": "Core server only: remote generation routes without a local engine.",
-    "core_series_plan:create_core_series_plan_router": "Core server only: the main server plans Series itself.",
 }
 NOT_MOUNTED_IN_MAIN = {
     **CORE_SERVER_ONLY,
