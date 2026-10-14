@@ -1,51 +1,25 @@
 """Model-free regression coverage for observable audio-analysis jobs."""
 from __future__ import annotations
 
-import ast
 import asyncio
 import copy
 from contextlib import contextmanager
-import os
-import re
 import threading
 import time
-import traceback
-import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from services import audio_analysis
+from services import audio_jobs
 from services.resource_scheduler import ResourceAcquireCancelled
+import routers.audio as audio_routes
 
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
-TREE = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-
-
-def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
-    for node in TREE.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
-            clone = copy.deepcopy(node)
-            clone.decorator_list = []
-            return clone
-    raise AssertionError(f"Function {name!r} not found")
-
-
-def _load(*names: str, namespace: dict) -> dict:
-    module = ast.Module(body=[_function(name) for name in names], type_ignores=[])
-    ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
-    return namespace
-
-
-class _HTTPException(Exception):
-    def __init__(self, *, status_code: int, detail: str):
-        super().__init__(detail)
-        self.status_code = status_code
-        self.detail = detail
 
 
 class _DeferredThread:
@@ -99,36 +73,24 @@ def _job(*, status: str = "queued", workspace: str = "default") -> dict:
     }
 
 
-def _namespace(job: dict, acquire, published: list[dict]) -> dict:
-    return {
-        "_jobs": {job["id"]: job},
-        "_audio_analysis_jobs_lock": threading.RLock(),
-        "_AUDIO_ANALYSIS_ACTIVE": {"queued", "waiting_resource", "running", "cancelling"},
-        "_AUDIO_ANALYSIS_TERMINAL": {"completed", "failed", "cancelled"},
-        "_AUDIO_ANALYSIS_STEPS": {
-            "loading_audio": 1,
-            "transcribing": 6,
-            "finalizing": 9,
-        },
-        "copy": copy,
-        "snapshot_job": copy.deepcopy,
-        "resource_scheduler": _resource_scheduler(acquire),
-        "threading": threading,
-        "time": time,
-        "traceback": traceback,
-        "_publish_audio_analysis_job": lambda snapshot: published.append(
-            copy.deepcopy(snapshot)
-        ),
-    }
+def _bind(monkeypatch, jobs: dict, lock: threading.RLock) -> None:
+    """Point both modules at one registry and one lock, the launch arrangement."""
+    monkeypatch.setattr(audio_jobs, "_jobs", jobs)
+    monkeypatch.setattr(audio_routes, "_jobs", jobs)
+    monkeypatch.setattr(audio_jobs, "_audio_analysis_jobs_lock", lock)
+    monkeypatch.setattr(audio_routes, "_audio_analysis_jobs_lock", lock)
 
 
-def test_cancel_wins_atomically_over_a_late_completed_update():
+def test_cancel_wins_atomically_over_a_late_completed_update(monkeypatch):
     job = _job(status="running")
     published: list[dict] = []
-    namespace = _namespace(job, lambda *_args, **_kwargs: None, published)
-    update = _load("_audio_analysis_job_update", namespace=namespace)[
-        "_audio_analysis_job_update"
-    ]
+    _bind(monkeypatch, {job["id"]: job}, threading.RLock())
+    monkeypatch.setattr(
+        audio_jobs,
+        "_publish_audio_analysis_job",
+        lambda snapshot: published.append(copy.deepcopy(snapshot)),
+    )
+    update = audio_jobs._audio_analysis_job_update
 
     job["_cancel_requested"] = True
     update(job["id"], status="cancelling", phase="cancelling")
@@ -157,13 +119,8 @@ def test_precancelled_job_never_acquires_a_resource_or_runs_analysis(monkeypatch
         acquired.append(True)
         raise AssertionError("cancelled job acquired a resource")
 
-    published: list[dict] = []
-    namespace = _namespace(job, acquire, published)
-    _load(
-        "_audio_analysis_job_update",
-        "_run_audio_analysis_job",
-        namespace=namespace,
-    )
+    _bind(monkeypatch, {job["id"]: job}, threading.RLock())
+    monkeypatch.setattr(audio_jobs, "resource_scheduler", _resource_scheduler(acquire))
     monkeypatch.setattr(
         audio_analysis,
         "analyze",
@@ -172,7 +129,7 @@ def test_precancelled_job_never_acquires_a_resource_or_runs_analysis(monkeypatch
         ),
     )
 
-    namespace["_run_audio_analysis_job"](job["id"], {
+    audio_jobs._run_audio_analysis_job(job["id"], {
         "audio_path": "/unused.wav",
         "transcribe": True,
     })
@@ -191,11 +148,12 @@ def test_worker_publishes_waiting_acquired_and_terminal_resource_states(monkeypa
         yield
 
     published: list[dict] = []
-    namespace = _namespace(job, acquire, published)
-    _load(
-        "_audio_analysis_job_update",
-        "_run_audio_analysis_job",
-        namespace=namespace,
+    _bind(monkeypatch, {job["id"]: job}, threading.RLock())
+    monkeypatch.setattr(audio_jobs, "resource_scheduler", _resource_scheduler(acquire))
+    monkeypatch.setattr(
+        audio_jobs,
+        "_publish_audio_analysis_job",
+        lambda snapshot: published.append(copy.deepcopy(snapshot)),
     )
     callback = {"value": None}
     monkeypatch.setattr(
@@ -209,7 +167,7 @@ def test_worker_publishes_waiting_acquired_and_terminal_resource_states(monkeypa
         return {"duration": 12}
 
     monkeypatch.setattr(audio_analysis, "analyze", analyze)
-    namespace["_run_audio_analysis_job"](job["id"], {
+    audio_jobs._run_audio_analysis_job(job["id"], {
         "audio_path": "/unused.wav",
         "transcribe": True,
     })
@@ -224,7 +182,7 @@ def test_worker_publishes_waiting_acquired_and_terminal_resource_states(monkeypa
     assert terminal["acquired_resources"] == []
 
 
-def test_prepare_hook_failure_finishes_the_job_instead_of_leaving_it_waiting():
+def test_prepare_hook_failure_finishes_the_job_instead_of_leaving_it_waiting(monkeypatch):
     job = _job()
 
     class BrokenLease:
@@ -234,15 +192,14 @@ def test_prepare_hook_failure_finishes_the_job_instead_of_leaving_it_waiting():
         def __exit__(self, *_args):
             return False
 
-    published: list[dict] = []
-    namespace = _namespace(job, lambda *_args, **_kwargs: BrokenLease(), published)
-    _load(
-        "_audio_analysis_job_update",
-        "_run_audio_analysis_job",
-        namespace=namespace,
+    _bind(monkeypatch, {job["id"]: job}, threading.RLock())
+    monkeypatch.setattr(
+        audio_jobs,
+        "resource_scheduler",
+        _resource_scheduler(lambda *_args, **_kwargs: BrokenLease()),
     )
 
-    namespace["_run_audio_analysis_job"](job["id"], {
+    audio_jobs._run_audio_analysis_job(job["id"], {
         "audio_path": "/unused.wav",
         "transcribe": False,
     })
@@ -253,34 +210,31 @@ def test_prepare_hook_failure_finishes_the_job_instead_of_leaving_it_waiting():
     assert job["acquired_resources"] == []
 
 
-def test_start_preserves_workspace_and_supplied_task_hierarchy(tmp_path):
+def test_start_preserves_workspace_and_supplied_task_hierarchy(tmp_path, monkeypatch):
     audio_path = tmp_path / "song.wav"
     audio_path.write_bytes(b"RIFF")
     published = []
     resolved = []
-    namespace = {
-        "HTTPException": _HTTPException,
-        "_jobs": {},
-        "_audio_analysis_jobs_lock": threading.RLock(),
-        "_get_active_workspace": lambda: "default",
-        "_workspace_dir": lambda workspace=None: str(tmp_path / str(workspace or "default")),
-        "_resolve_request_media_path": lambda value, **kwargs: (
-            resolved.append((value, kwargs["workspace"])) or value
-        ),
-        "_publish_audio_analysis_job": lambda job: published.append(copy.deepcopy(job)),
-        "_run_audio_analysis_job": lambda *_args: None,
-        "resource_scheduler": _resource_scheduler(lambda *_args, **_kwargs: None),
-        "os": os,
-        "re": re,
-        "threading": SimpleNamespace(Thread=_DeferredThread),
-        "time": time,
-        "uuid": uuid,
-    }
-    start = _load("start_audio_analysis_job", namespace=namespace)[
-        "start_audio_analysis_job"
-    ]
+    jobs: dict = {}
+    _bind(monkeypatch, jobs, threading.RLock())
+    monkeypatch.setattr(audio_routes, "_get_active_workspace", lambda: "default")
+    monkeypatch.setattr(
+        audio_routes,
+        "_resolve_request_media_path",
+        lambda value, **kwargs: resolved.append((value, kwargs["workspace"])) or value,
+    )
+    monkeypatch.setattr(
+        audio_routes,
+        "_publish_audio_analysis_job",
+        lambda job: published.append(copy.deepcopy(job)),
+    )
+    monkeypatch.setattr(audio_routes, "_run_audio_analysis_job", lambda *_args: None)
+    monkeypatch.setattr(
+        audio_routes, "resource_scheduler", _resource_scheduler(lambda *_args, **_kwargs: None),
+    )
+    monkeypatch.setattr(audio_routes, "threading", SimpleNamespace(Thread=_DeferredThread))
 
-    result = asyncio.run(start(_Request({
+    result = asyncio.run(audio_routes.start_audio_analysis_job(_Request({
         "audio_path": str(audio_path),
         "workspace": "project-a",
         "task_id": "task-audio-child",
@@ -290,7 +244,7 @@ def test_start_preserves_workspace_and_supplied_task_hierarchy(tmp_path):
         "transcribe": True,
     })))
 
-    job = namespace["_jobs"][result["job_id"]]
+    job = jobs[result["job_id"]]
     assert result["task_id"] == "task-audio-child"
     assert result["root_task_id"] == "task-director-root"
     assert job["parent_task_id"] == "task-director-root"
@@ -300,27 +254,17 @@ def test_start_preserves_workspace_and_supplied_task_hierarchy(tmp_path):
     assert published[0]["resource_lane"] == "local_gpu:0"
 
 
-def test_get_and_cancel_do_not_cross_workspace_boundaries():
+def test_get_and_cancel_do_not_cross_workspace_boundaries(monkeypatch):
     job = _job(workspace="project-a")
-    published: list[dict] = []
-    namespace = _namespace(job, lambda *_args, **_kwargs: None, published)
-    namespace.update({
-        "HTTPException": _HTTPException,
-        "_get_active_workspace": lambda: "project-a",
-        "_workspace_dir": lambda workspace=None: str(workspace or "project-a"),
-    })
-    _load(
-        "_audio_analysis_job_update",
-        "get_audio_analysis_job",
-        "cancel_audio_analysis_job",
-        namespace=namespace,
-    )
+    _bind(monkeypatch, {job["id"]: job}, threading.RLock())
+    monkeypatch.setattr(audio_routes, "_get_active_workspace", lambda: "project-a")
+    monkeypatch.setattr(audio_routes, "_workspace_dir", lambda workspace=None: str(workspace or "project-a"))
 
-    with pytest.raises(_HTTPException) as error:
-        namespace["get_audio_analysis_job"](job["id"], "project-b")
+    with pytest.raises(HTTPException) as error:
+        audio_routes.get_audio_analysis_job(job["id"], "project-b")
     assert error.value.status_code == 404
 
-    result = namespace["cancel_audio_analysis_job"](job["id"], "project-a")
+    result = audio_routes.cancel_audio_analysis_job(job["id"], "project-a")
     assert result["status"] == "cancelled"
     assert job["_cancel_requested"] is True
 

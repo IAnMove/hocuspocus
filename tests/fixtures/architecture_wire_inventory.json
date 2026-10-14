@@ -34,8 +34,8 @@
     {
       "file": "tests/test_audio_analysis_jobs.py",
       "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
       "file": "tests/test_cancellable_model_downloads.py",
@@ -75,12 +75,6 @@
     },
     {
       "file": "tests/test_comic_story_reference.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_custom_character_voice.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
