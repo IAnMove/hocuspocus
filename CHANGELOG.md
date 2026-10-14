@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**CivitAI browsing, CivitAI downloads, and checkpoint import left the launch module.** The filter list, the architecture picker, a cached search, a cached model, a refused download, and an empty download list still answer the same way. Installed checkpoints, an update check on an empty folder, and a guide for an unknown checkpoint still answer the same way. The download registry and the CivitAI response cache stay one object each.
+
 **LoRA guide generation left the launch module.** Asking for a guide, starting a scan, and reading a scan that does not exist still answer the same way. Generating a guide still needs a loaded language model. The scan registry stays one object.
 
 **The LoRA library left the launch module.** The directory list, the installed LoRAs, a model's LoRA list and details, deleting a file, and the NSFW override still answer the same way. The update manifest still answers the same way.

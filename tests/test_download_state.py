@@ -18,6 +18,7 @@ from services.kernel.paths import PathPolicy
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_DOWNLOADS_PATH = os.path.join(_ROOT, "app", "services", "civitai_downloads.py")
 _GUIDES_PATH = os.path.join(_ROOT, "app", "services", "lora_guides.py")
 _UI_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "civitaiSlice.ts")
 _MODEL_DETAIL_PATH = os.path.join(
@@ -25,10 +26,18 @@ _MODEL_DETAIL_PATH = os.path.join(
 )
 
 
-def _parse_launch() -> tuple[ast.Module, str]:
-    with open(_LAUNCH_PATH, "r", encoding="utf-8") as handle:
+def _parse_source(path: str, filename: str) -> tuple[ast.Module, str]:
+    with open(path, "r", encoding="utf-8") as handle:
         source = handle.read()
-    return ast.parse(source, filename="app/_launch_runtime.py"), source
+    return ast.parse(source, filename=filename), source
+
+
+def _parse_launch() -> tuple[ast.Module, str]:
+    return _parse_source(_LAUNCH_PATH, "app/_launch_runtime.py")
+
+
+def _parse_downloads() -> tuple[ast.Module, str]:
+    return _parse_source(_DOWNLOADS_PATH, "app/services/civitai_downloads.py")
 
 
 def _parse_guides() -> tuple[ast.Module, str]:
@@ -79,11 +88,12 @@ class TestDownloadState(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tree, cls.source = _parse_launch()
+        cls.downloads_tree, cls.downloads_source = _parse_downloads()
         cls.guides_tree, cls.guides_source = _parse_guides()
 
     def test_common_record_and_serialization_contract(self):
         helpers = _load_helpers(
-            self.tree,
+            self.downloads_tree,
             (
                 "_new_download_record",
                 "_safe_download_number",
@@ -140,7 +150,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_terminal_helpers_set_completed_at_under_registry_lock(self):
         helpers = _load_helpers(
-            self.tree,
+            self.downloads_tree,
             (
                 "_new_download_record",
                 "_update_download_record",
@@ -163,7 +173,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_hf_progress_uses_zero_to_one_hundred_scale(self):
         helpers = _load_helpers(
-            self.tree,
+            self.downloads_tree,
             (
                 "_response_content_length",
                 "_download_progress_percent",
@@ -219,7 +229,7 @@ class TestDownloadState(unittest.TestCase):
         self.assertIn("_response_content_length", calls)
 
     def test_path_components_reject_traversal_and_endpoint_wiring(self):
-        helpers = _load_helpers(self.tree, ("_is_safe_path_component",))
+        helpers = _load_helpers(self.downloads_tree, ("_is_safe_path_component",))
         is_safe = helpers["_is_safe_path_component"]
         for value in ("model.safetensors", "flux2_klein_9b", "name-with dots"):
             with self.subTest(value=value):
@@ -236,7 +246,7 @@ class TestDownloadState(unittest.TestCase):
                 self.assertFalse(is_safe(value))
 
         civitai_endpoint = _source_segment(
-            self.tree, self.source, "civitai_download",
+            self.downloads_tree, self.downloads_source, "civitai_download",
         )
         self.assertIn("_is_safe_path_component(filename)", civitai_endpoint)
         self.assertIn("_is_safe_path_component(target_arch)", civitai_endpoint)
@@ -250,14 +260,14 @@ class TestDownloadState(unittest.TestCase):
         self.assertIn("_is_safe_path_component(disk_filename)", hf_endpoint)
 
         civitai_worker = _source_segment(
-            self.tree, self.source, "_run_civitai_download",
+            self.downloads_tree, self.downloads_source, "_run_civitai_download",
         )
         self.assertIn("os.path.basename", civitai_worker)
         self.assertIn("_is_safe_path_component(remote_filename)", civitai_worker)
 
     def test_target_reservation_is_normalized_and_single_flight(self):
         helpers = _load_helpers(
-            self.tree,
+            self.downloads_tree,
             (
                 "_normalize_download_target",
                 "_reserve_download_target",
@@ -340,7 +350,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_status_feed_serializes_instead_of_indexing_internal_records(self):
         status_source = _source_segment(
-            self.tree, self.source, "civitai_downloads_status",
+            self.downloads_tree, self.downloads_source, "civitai_downloads_status",
         )
         self.assertIn("_serialize_download_record", status_source)
         for required_key in (
@@ -350,7 +360,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_completion_follows_provider_postprocessing(self):
         civitai = _source_segment(
-            self.tree, self.source, "_run_civitai_download",
+            self.downloads_tree, self.downloads_source, "_run_civitai_download",
         )
         civitai_complete = civitai.rindex("_complete_download_record")
         self.assertGreater(
@@ -375,7 +385,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_civitai_archive_members_are_validated_and_published_atomically(self):
         helpers = _load_helpers(
-            self.tree,
+            self.downloads_tree,
             (
                 "_is_safe_path_component",
                 "_normalize_download_target",
@@ -443,7 +453,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_civitai_archive_failure_keeps_archive_and_rejects_duplicates(self):
         helpers = _load_helpers(
-            self.tree,
+            self.downloads_tree,
             (
                 "_is_safe_path_component",
                 "_normalize_download_target",
@@ -549,7 +559,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_provider_streams_publish_atomically_and_clean_partials(self):
         civitai = _source_segment(
-            self.tree, self.source, "_run_civitai_download",
+            self.downloads_tree, self.downloads_source, "_run_civitai_download",
         )
         hf_import = _function(self.tree, "hf_import_lora")
         hf_worker = _function(hf_import, "_do_download")
@@ -582,7 +592,7 @@ class TestDownloadState(unittest.TestCase):
         )
 
         archive_source = _source_segment(
-            self.tree, self.source, "_extract_civitai_archive",
+            self.downloads_tree, self.downloads_source, "_extract_civitai_archive",
         )
         for wiring in (
             "_zip_member_target",

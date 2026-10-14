@@ -746,12 +746,11 @@ def test_civitai_download_rejects_a_bad_target(server, golden) -> None:
 
 def test_checkpoints_installed_on_a_temp_tree(server, golden, monkeypatch, tmp_path) -> None:
     """Installed checkpoints come from a temp finetunes folder, including an empty one."""
-    import sys
+    import services.checkpoints as checkpoints
 
     finetunes = tmp_path / "finetunes"
     finetunes.mkdir()
-    launch = sys.modules["_launch_runtime"]
-    monkeypatch.setattr(launch, "_FINETUNES_DIR", str(finetunes))
+    monkeypatch.setattr(checkpoints, "_FINETUNES_DIR", str(finetunes))
     server.check(golden, "checkpoints installed empty", "GET", "/api/v1/checkpoints/installed")
     server.check(golden, "checkpoints check updates empty", "POST", "/api/v1/checkpoints/check-updates")
     (finetunes / "example_checkpoint.json").write_text(
