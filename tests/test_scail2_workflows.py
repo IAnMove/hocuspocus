@@ -3686,8 +3686,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('preserve_bystanders = True', launch)
         self.assertIn("_build_recast_native_people_conditioning(", launch)
         self.assertIn("_compose_recast_group_reference_frame(", launch)
-        self.assertIn("recast_group_ref_", launch)
-        self.assertIn("recast_group_mask_", launch)
+        compose = _read(os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"))
+        self.assertIn("recast_group_ref_", compose)
+        self.assertIn("recast_group_mask_", compose)
         self.assertIn('"scail2_primary_reference_people": 1', launch)
         self.assertIn('"scail2_additional_reference_mask_paths"', launch)
         self.assertIn('job["params"]["image_refs"] = [', launch)
@@ -3705,12 +3706,12 @@ class TestMultiPersonRecast(unittest.TestCase):
             "_enable_recast_dynamic_source_scene_reference(",
             launch,
         )
-        self.assertIn("recast_source_scene_ref_", launch)
-        self.assertIn("recast_source_scene_mask_", launch)
+        self.assertIn("recast_source_scene_ref_", compose)
+        self.assertIn("recast_source_scene_mask_", compose)
         self.assertIn("_ensure_source_scene_reference(", launch)
         self.assertIn(
             '"edit_recast_source_scene_reference"',
-            launch,
+            compose,
         )
         self.assertIn(
             '"scail2_dynamic_source_scene_reference"',
@@ -3786,9 +3787,10 @@ class TestMultiPersonRecast(unittest.TestCase):
             "propagation_plan = _sam3_segment_propagation_plan(",
             sam3,
         )
+        compose = _read(os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"))
         self.assertIn(
             "def _build_recast_target_group_reference(",
-            launch,
+            compose,
         )
         self.assertIn(
             '"scail2_reference_expected_colors"\n                    ] = [\n                        None,',

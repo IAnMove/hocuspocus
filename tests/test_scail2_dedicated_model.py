@@ -171,9 +171,14 @@ class TestDedicatedScail2Model(unittest.TestCase):
             "def _load_static_source_scene_reference",
             scail2_source,
         )
+        compose_path = os.path.join(
+            _APP, "services", "recast_reference_compose.py",
+        )
+        with open(compose_path, "r", encoding="utf-8") as handle:
+            compose_source = handle.read()
         self.assertIn(
             '"stable_official_reference"',
-            launch_source,
+            compose_source,
         )
 
     def test_dedicated_model_skips_legacy_identity_reinforcement(self):
