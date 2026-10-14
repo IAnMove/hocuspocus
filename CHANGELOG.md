@@ -6,6 +6,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Generation job status, cancel and the job list left the main server file.** GET /api/v1/status/{job_id}, POST /api/v1/cancel/{job_id} and GET /api/v1/jobs still answer the same way. The core server keeps its own copies of these routes.
+
+**Generation queue recovery left the main server file.** GET /api/v1/jobs/recovery, POST /api/v1/jobs/recovery/resume and POST /api/v1/jobs/recovery/discard still answer the same way. A recovered job still starts again from the beginning. Leftover files are still prepared, started or discarded the same way, and intermediate files are still released when the server starts.
+
+**Generation preparation and the simulated run left the main server file.** A job still prepares the same way before the worker runs. A simulated job still walks the same steps. The local GPU owner is still prepared the same way. The worker still receives those same functions.
+
+**The H3 idle-release timer and the hardware probe left the main server file.** A native H3 model still stays loaded while another H3 job is waiting and still releases after the same idle wait. The legacy H3 release and the Wan interrupt are the same functions. The hardware probe still runs once and still reports no VRAM when the probe fails. The coefficient pass and the director pipeline still call that same probe.
+
 **The generation worker left the main server file, split into small steps (no behaviour change).** One function used to run every picture, video, speech and sound job on the full server, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits into `app/services/generation_worker/`, so a job does the same things in the same order and ends the same way on a cancel or an error, and every route that starts a job still calls the same `_run_generation`. The main server file is about 1,800 lines shorter. The server hands the new package its own objects once, at start-up.
 
 **Sound-effect generation left the launch module.** A sound-effect job still prepares MMAudio, writes the clip, and publishes the same sidecar.
