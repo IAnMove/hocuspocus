@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a Video 2D (scene2d) shot is exported again when a set or a model it names was remade.** A scene2d shot whose background or cast slot names a set (`scene2d.background: "alley"`) or a model that the run made did not notice when that set or model was redrawn, so the old MP4 stayed. The re-export key now includes the named sets and models. A shot that names none keeps the key it had.
+
 **Fixed: re-doing a Video 2D (scene2d) shot no longer trusts a leftover H3 clip.** A scene2d shot that still carried an old H3 take used that take's file name to decide whether its scene was up to date, so a new cut-out or a new background was not exported again on resume. The scene now compares what the card is really made from (its drawn frame and cut-outs).
 
 **Fixed: a resumed production redoes exactly what an edit changed, and nothing else.** Changing a shot's image model or steps, the start-frame size (`resolution.frames`), the video look (`style.video`), the clip size (`resolution.clips`) or the audio window of a shot now draws the frame, shoots the clip and exports the scene that depend on it, each as a new job. Naming the default size is not a change, and small moves of a shot's window add up instead of being forgotten on every resume. A production made before this was recorded keeps all its pictures and clips when you resume it with the same spec: nothing is drawn or shot again until you change something.

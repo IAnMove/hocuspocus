@@ -320,7 +320,7 @@
       "id": "python-b",
       "job": "python-tests-b",
       "name": "Python tests B",
-      "weight": 4572,
+      "weight": 4574,
       "paths": [
         "tests/characterization/test_models_and_config.py",
         "tests/characterization/test_model3d_rig.py",

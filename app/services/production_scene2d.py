@@ -293,14 +293,24 @@ def _media_frame(production: Any, shot: dict) -> str | None:
     return (production.state.get("frames") or {}).get(shot["key"]) if draws_frame(shot) else None
 
 
+def _source_names(shot: dict) -> set[str]:
+    """Cast, background and still names the shot may resolve through production media."""
+    return {value for value in (*(shot["scene2d"].get("cast") or {}).values(),
+                                shot["scene2d"].get("background"), shot.get("still"))
+            if isinstance(value, str) and value}
+
+
 def scene_inputs(state: dict, shot: dict) -> str | None:
-    """What a scene2d scene is made from besides its spec (its drawn frame, the cutouts): a re-export key."""
+    """What a scene2d scene is made from besides its spec: drawn frame, cutouts, and a remade set or model."""
     if not is_scene2d(shot):
         return None
-    played = set((shot["scene2d"].get("cast") or {}).values())
-    cutouts = {cid: (entry or {}).get("url") for cid, entry in (state.get("cast_cutouts") or {}).items() if cid in played}
+    names = _source_names(shot)
+    cutouts = {cid: (entry or {}).get("url") for cid, entry in (state.get("cast_cutouts") or {}).items() if cid in names}
     frame = (state.get("frames") or {}).get(shot.get("key")) if draws_frame(shot) else None
-    return "scene2d:" + hashlib.sha256(json.dumps([frame, cutouts], sort_keys=True).encode()).hexdigest()[:16]
+    media = {"sets": {name: url for name, url in _made(state, "sets", "url").items() if name in names},
+             "models": {name: file for name, file in _made(state, "models", "file").items() if name in names}}
+    payload = [frame, cutouts, media] if any(media.values()) else [frame, cutouts]
+    return "scene2d:" + hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def resume_clip(state: dict, shot: dict, clips: dict | None = None) -> str | None:
