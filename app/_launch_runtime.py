@@ -20868,6 +20868,21 @@ def _run_simulated_generation(job: dict, *, finalize: bool) -> bool:
     )
 
 
+class _GenerationRun:
+    """The locals of one `_run_generation` call that cross from one phase function to the next.
+
+    `_run_generation` keeps the slot, try, except and finally frame; the phases chain by tail
+    calls (`return _run_generation_<next>(st)`), so every early `return False` of a phase is still
+    the return of the whole call. A phase starts by reading the locals it needs from `st` and
+    ends by writing the ones later phases read. Fields are set by the phase that assigns them.
+    """
+
+    def __init__(self, job_id, job, finalize, AsyncStream, async_run, inspect):
+        self.job_id, self.job, self.finalize = job_id, job, finalize
+        self.AsyncStream, self.async_run, self.inspect = AsyncStream, async_run, inspect
+        self.active_task_timer = self.abort_state = None
+
+
 def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
     """Build and run a job, optionally deferring success finalization."""
     from shared.utils.thread_utils import AsyncStream, async_run
@@ -20877,6 +20892,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
     start_time = None
     active_task_timer = None
     abort_state = None
+    st = _GenerationRun(job_id, job, finalize, AsyncStream, async_run, inspect)
 
     with _coordinated_generation_slot(job) as acquired:
         if not acquired:
@@ -22576,37 +22592,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 # therefore must never be published as gallery artifacts.
                 if not defer_output_publication:
                     _write_output_sidecars(new_files)
-
-            if success and not finalize:
-                deferred_updates = {}
-                if defer_output_publication:
-                    deferred_updates.update({
-                        "_internal_output_files": list(new_files),
-                        "_internal_clip_output_files": dict(
-                            clip_output_files,
-                        ),
-                        "_internal_join_output_file": join_output_file,
-                    })
-                return update_job(
-                    job,
-                    progress=99,
-                    step=0,
-                    total_steps=0,
-                    phase="Finalizing",
-                    message="Finalizing...",
-                    **deferred_updates,
-                )
-
-            finish_job(
-                job,
-                "completed" if success else "failed",
-                progress=100 if success else 0,
-                step=0,
-                total_steps=0,
-                phase="",
-                message="Done" if success else (job.get("error") or "Generation failed"),
-            )
-            return success and job.get("status") == "completed"
+            st.clip_output_files = clip_output_files
+            st.defer_output_publication = defer_output_publication
+            st.join_output_file, st.new_files, st.success = join_output_file, new_files, success
+            return _run_generation_finish(st)
 
         except Exception as e:
             if active_task_timer is not None:
@@ -22663,6 +22652,43 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_finish(st):
+    """Hand the job over: Finalizing for a deferred caller, else completed or failed."""
+    clip_output_files, defer_output_publication = st.clip_output_files, st.defer_output_publication
+    finalize, job, join_output_file = st.finalize, st.job, st.join_output_file
+    new_files, success = st.new_files, st.success
+    if success and not finalize:
+        deferred_updates = {}
+        if defer_output_publication:
+            deferred_updates.update({
+                "_internal_output_files": list(new_files),
+                "_internal_clip_output_files": dict(
+                    clip_output_files,
+                ),
+                "_internal_join_output_file": join_output_file,
+            })
+        return update_job(
+            job,
+            progress=99,
+            step=0,
+            total_steps=0,
+            phase="Finalizing",
+            message="Finalizing...",
+            **deferred_updates,
+        )
+
+    finish_job(
+        job,
+        "completed" if success else "failed",
+        progress=100 if success else 0,
+        step=0,
+        total_steps=0,
+        phase="",
+        message="Done" if success else (job.get("error") or "Generation failed"),
+    )
+    return success and job.get("status") == "completed"
 
 
 def _recast_video_frame_count(video_path):
