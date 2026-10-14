@@ -18,7 +18,12 @@ def create_image_generation_commands(runtime):
                                   name=f"command-generation-{job['id']}", daemon=False)
         try:
             runtime["_jobs"][job["id"]] = job
-            register_generation_job(runtime["_gen_lock"], job)
+            params = job.get("params") if isinstance(job.get("params"), dict) else {}
+            # Studio generate and recovery leave a pending H3 window plan off
+            # the GPU FIFO so LLM planning does not block later jobs. Command
+            # admission also uses generate(), which can set this marker.
+            if not isinstance(params.get("_h3_window_plan_pending"), dict):
+                register_generation_job(runtime["_gen_lock"], job)
             runtime["_cancel_h3_idle_release"]()
             thread.start()
         except Exception:

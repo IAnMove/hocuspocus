@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: an H3 video started by a command no longer holds the GPU queue while its prompts are being planned.** When a video asked for through the Wizard or MCP still had to have its window prompts written by the language model, the job took the head of the GPU queue at once and made every later Studio job wait on an idle GPU. It now stays off the queue while the prompts are planned, like a job started from the Studio, and joins the queue when they are ready.
+
 **Fixed: joining two clips with a generated transition (Blend) works again on ffmpeg 6.x.** The final join used the `-/filter_complex` option, which only exists in ffmpeg 7 and later, so every real join failed on ffmpeg 6.1 (the version Ubuntu 24.04 and the CI image ship). It now uses `-filter_complex_script`, which works on 4.x to 8.x.
 
 **Fixed: Meshy and Hi3D no longer start a paid new model when asked to retexture a GLB.** Those two providers only generate a new mesh, so a "Retexture" request used to ignore the source GLB and quietly queue a generation. The 3D panel now disables the Retexture button for them, and a retexture request sent through the API, the Wizard or MCP is refused with a clear message (retexture a GLB with local Hunyuan3D instead).

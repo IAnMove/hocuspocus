@@ -129,6 +129,41 @@ def test_a_command_job_is_registered_and_started_on_the_servers_real_globals(rig
     assert job["status"] == "queued"
 
 
+def test_a_command_job_still_planning_its_h3_windows_stays_off_the_gpu_queue(rig, monkeypatch) -> None:
+    """Studio generate and recovery leave a job whose H3 window prompts are still to be planned off the GPU FIFO:
+    the planner is an LLM call that needs no GPU, and a registered job would sit at the queue head and hold every
+    later Studio job back while the GPU is idle. A command admission reaches the same worker (``generate()`` sets
+    ``_h3_window_plan_pending``), so ``dispatch`` must start it unregistered too. The job joins the queue by itself
+    when its prompts are ready (``acquire_generation_slot``)."""
+    from services import image_generation_runtime, job_lifecycle
+
+    launch = rig.launch
+    started = []
+
+    class RecordingThread:
+        def __init__(self, *, target, args, name, daemon):
+            self.target, self.args, self.name, self.daemon, self.ident = target, args, name, daemon, None
+
+        def start(self):
+            self.ident = 1
+            started.append(self)
+
+    monkeypatch.setattr(image_generation_runtime, "threading", SimpleNamespace(Thread=RecordingThread))
+    job = launch._new_generation_job(
+        {"model_type": "fake_t2v", "prompt": "a calm lake",
+         "_h3_window_plan_pending": {"expected_count": 2, "window_frames": 81}},
+        "default", job_id="dispatch-h3-preplan", reserve_generation=False, publish_task=True,
+    )
+
+    launch._image_generation_commands.dispatch(job)
+
+    assert launch._jobs["dispatch-h3-preplan"] is job
+    assert "_generation_queue_token" not in job
+    assert [entry[2] for entry in job_lifecycle._generation_queues.get(id(launch._gen_lock), ())] == []
+    assert [thread.args for thread in started] == [("dispatch-h3-preplan",)]
+    assert job["status"] == "queued"
+
+
 # One bind() per moved service. The injected names come from each module's source.
 BOUND_SERVICES = (
     "services.generation_jobs",

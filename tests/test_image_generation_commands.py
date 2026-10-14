@@ -420,6 +420,55 @@ def test_native_thread_start_failure_removes_job_and_marks_task_interrupted(tmp_
     assert task["phase"] == "dispatch_failed"
 
 
+def test_dispatch_leaves_a_pending_h3_window_plan_off_the_gpu_fifo(tmp_path, monkeypatch):
+    """Studio generate and recovery skip FIFO reservation while H3 window prompts
+    are still being planned. Command dispatch must do the same: ``generate()`` sets
+    ``_h3_window_plan_pending`` before the admission callback, and registering here
+    would park that planner at the queue head so later Studio jobs wait on an idle GPU."""
+    jobs = {}
+    registered = []
+    started = []
+
+    class RecordingThread:
+        ident = None
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def start(self):
+            self.ident = 1
+            started.append(True)
+
+    monkeypatch.setattr("services.image_generation_runtime.threading.Thread", RecordingThread)
+    monkeypatch.setattr("services.image_generation_runtime.register_generation_job",
+                        lambda _lock, current: registered.append(current))
+    service = create_image_generation_commands({
+        "_durable_generation_queue": object(),
+        "_run_generation_with_preparation": lambda _job_id: None,
+        "_jobs": jobs,
+        "_gen_lock": object(),
+        "_cancel_h3_idle_release": lambda: None,
+        "_active_gen_states": {},
+        "_task_registry": lambda _workspace: None,
+        "generate": None,
+        "_new_generation_job": None,
+        "_generation_task_fields": None,
+    })
+    job = {
+        "id": "h3-preplan-command",
+        "task_id": "task-h3-preplan-command",
+        "workspace": "workspace-a",
+        "status": "queued",
+        "params": {"_h3_window_plan_pending": {"expected_count": 2, "window_frames": 81}},
+    }
+
+    service.dispatch(job)
+
+    assert registered == []
+    assert started == [True]
+    assert jobs["h3-preplan-command"] is job
+
+
 def test_restart_marks_queued_task_interrupted_and_projects_recovery_without_starting(tmp_path):
     native = FakeNative(tmp_path)
     command = _command("restart-recovery")
