@@ -12474,7 +12474,7 @@
       },
       "trim of a file ffmpeg cannot read": {
         "body": {
-          "detail": "Could not prepare the selected Repaint range: e    62.  3.102 / 62.  3.102\n  libavfilter    11. 14.102 / 11. 14.102\n  libswscale      9.  5.102 /  9.  5.102\n  libswresample   6.  3.102 /  6.  3.102\n[in#0 @ 0x<ADDR>] Format mov,mp4,m4a,3gp,3g2,mj2 detected only with low score of 1, misdetection possible!\n[in#0 @ 0x<ADDR>] moov atom not found\n[in#0 @ 0x<ADDR>] Error opening input: Invalid data found when processing input\nError opening input file source.mp4.\nError opening input files: Invalid data found when processing input\n"
+          "detail": "Could not prepare the selected Repaint range: <ffmpeg stderr>"
         },
         "status": 500
       },

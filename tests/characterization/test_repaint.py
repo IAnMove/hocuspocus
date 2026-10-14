@@ -117,9 +117,12 @@ def test_repaint_rejects_incomplete_requests(server, golden, tmp_path) -> None:
     def post(case: str, body: dict) -> None:
         response = server.client.post("/api/v1/repaint", json=body)
         answer = response.json()
-        # ffmpeg's own stderr carries allocator addresses. The sentences do not.
+        # ffmpeg's own stderr (its version banner, its probe messages and allocator addresses) differs between ffmpeg
+        # builds: the route's own sentence does not, so the golden keeps the sentence and not the stderr.
         if isinstance(answer, dict) and isinstance(answer.get("detail"), str):
-            answer = {**answer, "detail": re.sub(r"0x[0-9a-fA-F]+", "0x<ADDR>", answer["detail"])}
+            detail = re.sub(r"(Could not prepare the selected Repaint range:).*", r"\1 <ffmpeg stderr>", answer["detail"],
+                            flags=re.S)
+            answer = {**answer, "detail": re.sub(r"0x[0-9a-fA-F]+", "0x<ADDR>", detail)}
         answers[case] = {"status": response.status_code, "body": answer}
 
     post("missing video", {})
