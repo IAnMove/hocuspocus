@@ -22418,133 +22418,140 @@ def _run_generation_finalize(st):
                         print(f"  [Outpaint {op_str}] Original mp4 locked ({last_err}); promoted post copy → {final_basename}")
                     except Exception as outpaint_post_err:
                         print(f"  [Outpaint] Post-process error (non-fatal): {outpaint_post_err}")
+        st.new_files = new_files
+        return _run_generation_recast(st)
+    return _run_generation_finish(st)
 
-        # Recast target lock: SCAIL-2 regenerates the full frame even
-        # in Replace mode, so a strong identity can leak into a nearby
-        # person. Trace the actual generated replacement, match it to
-        # the approved source target by overlap, and restore the source
-        # everywhere outside the union of the old and new silhouettes.
-        if success and raw_params.get("_recast_protect_bystanders"):
-            source_video = raw_params.get("_recast_source_video")
-            mask_video = raw_params.get("video_mask")
-            video_exts = {".mp4", ".webm", ".mkv", ".mov"}
-            candidates = [
-                name for name in new_files
-                if os.path.splitext(name)[1].lower() in video_exts
-            ]
-            if source_video and mask_video and candidates:
-                fname = candidates[-1]
-                generated_video = os.path.join(out_dir, fname)
-                protected_path = None
-                adaptive_mask_dir = None
-                try:
+
+def _run_generation_recast(st):
+    """Recast pass: protect the people around the replaced target."""
+    job, new_files, out_dir, raw_params = st.job, st.new_files, st.out_dir, st.raw_params
+    success = st.success
+    # Recast target lock: SCAIL-2 regenerates the full frame even
+    # in Replace mode, so a strong identity can leak into a nearby
+    # person. Trace the actual generated replacement, match it to
+    # the approved source target by overlap, and restore the source
+    # everywhere outside the union of the old and new silhouettes.
+    if success and raw_params.get("_recast_protect_bystanders"):
+        source_video = raw_params.get("_recast_source_video")
+        mask_video = raw_params.get("video_mask")
+        video_exts = {".mp4", ".webm", ".mkv", ".mov"}
+        candidates = [
+            name for name in new_files
+            if os.path.splitext(name)[1].lower() in video_exts
+        ]
+        if source_video and mask_video and candidates:
+            fname = candidates[-1]
+            generated_video = os.path.join(out_dir, fname)
+            protected_path = None
+            adaptive_mask_dir = None
+            try:
+                if not update_job(
+                    job,
+                    message="Preparing adaptive Recast protection...",
+                    phase="Tracing generated replacement",
+                ):
+                    return False
+
+                # SAM3 needs its own CUDA headroom. Recast is
+                # already rendered, so release the generation model
+                # before tracing the finished replacement. The next
+                # generation reloads it normally.
+                if (
+                    getattr(wgp, "wan_model", None) is not None
+                    or getattr(wgp, "offloadobj", None) is not None
+                ):
+                    print("  [Recast] Releasing generation model for adaptive protection")
+                    wgp.release_model()
+
+                import tempfile
+                adaptive_mask_dir = tempfile.mkdtemp(
+                    prefix="maestro-recast-protect-",
+                )
+                protection_progress = {"bucket": -1}
+
+                def _adaptive_protection_progress(done, total):
+                    percent = min(
+                        100,
+                        max(0, int(round(100 * float(done) / max(1, total)))),
+                    )
+                    bucket = percent // 5
+                    if bucket == protection_progress["bucket"]:
+                        return
+                    protection_progress["bucket"] = bucket
                     if not update_job(
                         job,
-                        message="Preparing adaptive Recast protection...",
+                        message=f"Tracing generated replacement... {percent}%",
                         phase="Tracing generated replacement",
                     ):
-                        return False
+                        raise InterruptedError("Recast protection was cancelled")
 
-                    # SAM3 needs its own CUDA headroom. Recast is
-                    # already rendered, so release the generation model
-                    # before tracing the finished replacement. The next
-                    # generation reloads it normally.
-                    if (
-                        getattr(wgp, "wan_model", None) is not None
-                        or getattr(wgp, "offloadobj", None) is not None
-                    ):
-                        print("  [Recast] Releasing generation model for adaptive protection")
-                        wgp.release_model()
-
-                    import tempfile
-                    adaptive_mask_dir = tempfile.mkdtemp(
-                        prefix="maestro-recast-protect-",
-                    )
-                    protection_progress = {"bucket": -1}
-
-                    def _adaptive_protection_progress(done, total):
-                        percent = min(
-                            100,
-                            max(0, int(round(100 * float(done) / max(1, total)))),
-                        )
-                        bucket = percent // 5
-                        if bucket == protection_progress["bucket"]:
-                            return
-                        protection_progress["bucket"] = bucket
-                        if not update_job(
-                            job,
-                            message=f"Tracing generated replacement... {percent}%",
-                            phase="Tracing generated replacement",
-                        ):
-                            raise InterruptedError("Recast protection was cancelled")
-
-                    adaptive_mask = _build_recast_adaptive_mask(
-                        generated_video,
-                        mask_video,
-                        raw_params.get("edit_recast_person_count", 1),
-                        adaptive_mask_dir,
-                        progress_callback=_adaptive_protection_progress,
-                    )
-                    if not update_job(
-                        job,
-                        message="Protecting people outside the generated replacement...",
-                        phase="Protecting surrounding people",
-                    ):
-                        return False
-                    protected_path = _render_recast_mask_locked_video(
-                        source_video, adaptive_mask, generated_video,
-                    )
-                    replaced = False
-                    last_error = None
-                    for _retry in range(15):
-                        try:
-                            os.replace(protected_path, generated_video)
-                            replaced = True
-                            break
-                        except PermissionError as exc:
-                            last_error = exc
-                            gc.collect()
-                            time.sleep(1)
-                    if replaced:
-                        print(f"  [Recast] Protected non-target pixels in {fname}")
-                    else:
-                        stem, extension = os.path.splitext(generated_video)
-                        final_path = f"{stem}_target_locked{extension}"
-                        os.replace(protected_path, final_path)
-                        protected_path = None
-                        final_name = os.path.basename(final_path)
-                        new_files = [
-                            final_name if name == fname else name
-                            for name in new_files
-                        ]
-                        record_job_outputs(job, new_files)
-                        if not update_job(job, output_files=new_files):
-                            return False
-                        print(
-                            "  [Recast] Original output was locked "
-                            f"({last_error}); published {final_name}"
-                        )
-                except InterruptedError as recast_protect_cancelled:
-                    print(f"  [Recast] {recast_protect_cancelled}")
+                adaptive_mask = _build_recast_adaptive_mask(
+                    generated_video,
+                    mask_video,
+                    raw_params.get("edit_recast_person_count", 1),
+                    adaptive_mask_dir,
+                    progress_callback=_adaptive_protection_progress,
+                )
+                if not update_job(
+                    job,
+                    message="Protecting people outside the generated replacement...",
+                    phase="Protecting surrounding people",
+                ):
                     return False
-                except Exception as recast_protect_error:
+                protected_path = _render_recast_mask_locked_video(
+                    source_video, adaptive_mask, generated_video,
+                )
+                replaced = False
+                last_error = None
+                for _retry in range(15):
+                    try:
+                        os.replace(protected_path, generated_video)
+                        replaced = True
+                        break
+                    except PermissionError as exc:
+                        last_error = exc
+                        gc.collect()
+                        time.sleep(1)
+                if replaced:
+                    print(f"  [Recast] Protected non-target pixels in {fname}")
+                else:
+                    stem, extension = os.path.splitext(generated_video)
+                    final_path = f"{stem}_target_locked{extension}"
+                    os.replace(protected_path, final_path)
+                    protected_path = None
+                    final_name = os.path.basename(final_path)
+                    new_files = [
+                        final_name if name == fname else name
+                        for name in new_files
+                    ]
+                    record_job_outputs(job, new_files)
+                    if not update_job(job, output_files=new_files):
+                        return False
                     print(
-                        "  [Recast] Warning: target-mask protection "
-                        f"failed; keeping generated frame: {recast_protect_error}"
+                        "  [Recast] Original output was locked "
+                        f"({last_error}); published {final_name}"
                     )
-                    traceback.print_exc()
-                finally:
-                    if protected_path and os.path.isfile(protected_path):
-                        try:
-                            os.remove(protected_path)
-                        except OSError:
-                            pass
-                    if adaptive_mask_dir:
-                        import shutil
-                        shutil.rmtree(adaptive_mask_dir, ignore_errors=True)
-        st.new_files = new_files
-        return _run_generation_video_passes(st)
-    return _run_generation_finish(st)
+            except InterruptedError as recast_protect_cancelled:
+                print(f"  [Recast] {recast_protect_cancelled}")
+                return False
+            except Exception as recast_protect_error:
+                print(
+                    "  [Recast] Warning: target-mask protection "
+                    f"failed; keeping generated frame: {recast_protect_error}"
+                )
+                traceback.print_exc()
+            finally:
+                if protected_path and os.path.isfile(protected_path):
+                    try:
+                        os.remove(protected_path)
+                    except OSError:
+                        pass
+                if adaptive_mask_dir:
+                    import shutil
+                    shutil.rmtree(adaptive_mask_dir, ignore_errors=True)
+    st.new_files = new_files
+    return _run_generation_video_passes(st)
 
 
 def _run_generation_video_passes(st):
