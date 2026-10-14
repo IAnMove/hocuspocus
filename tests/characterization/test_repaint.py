@@ -732,3 +732,26 @@ def test_a_launch_name_the_rig_patches_reaches_the_repaint_route(rig, monkeypatc
     _join_repaint_workers()
     assert status == 200, answer
     assert rig.launch._jobs[answer["job_id"]]["workspace"] == "patched-workspace"
+
+
+def test_standard_library_names_the_rig_patches_reach_every_repaint_module(rig, monkeypatch) -> None:
+    """The Repaint modules import ``uuid`` and ``time`` themselves. A rig patch of those launch names still reaches the
+    route (the job id), the planning module (the reference mask's name) and the shot worker (the joined file's name),
+    as it did when the code lived in launch."""
+    import itertools
+    import time as real_time
+    import uuid as real_uuid
+
+    counter = itertools.count(1)
+    fake_uuid = SimpleNamespace(uuid4=lambda: SimpleNamespace(hex=f"{next(counter):032x}"), UUID=real_uuid.UUID)
+    fake_time = SimpleNamespace(**{name: getattr(real_time, name) for name in dir(real_time) if not name.startswith("_")})
+    fake_time.strftime = lambda *_args: "stamped"
+    rig.patch("uuid", fake_uuid)
+    rig.patch("time", fake_time)
+    painter = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one"}, cuts=(24,))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one"))
+    job = rig.launch._jobs[observed["answer"]["job_id"]]
+    assert re.fullmatch(r"0{5}[0-9a-f]{3}", observed["answer"]["job_id"]), observed["answer"]["job_id"]
+    assert re.search(r"repaint_reference_mask_0{5}[0-9a-f]{3}\.png$", job["params"]["edit_repaint_reference_mask"])
+    assert observed["joined"][0]["output"] == "stamped_seed7_repaint_shot_aware.mp4", observed["joined"]
+    assert job["status"] == "completed", job.get("error")
