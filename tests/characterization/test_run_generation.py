@@ -134,6 +134,41 @@ class Rig:
             thread.join(timeout)
             assert not thread.is_alive(), "the generation worker did not finish"
 
+    def call_worker(self, job_id: str, *, finalize: bool = True, timeout: float = 60.0) -> bool:
+        """Run ``_run_generation`` for a job :meth:`direct_job` built. It runs in a daemon thread with a deadline, so a
+        worker that never returns fails this test instead of blocking the session."""
+        outcome: dict[str, Any] = {}
+
+        def run() -> None:
+            try:
+                outcome["returned"] = self.launch._run_generation(job_id, finalize=finalize)
+            except BaseException as error:  # handed to the test thread below
+                outcome["error"] = error
+
+        thread = threading.Thread(target=run, name=f"golden-direct-worker {job_id}", daemon=True)
+        thread.start()
+        thread.join(timeout)
+        assert not thread.is_alive(), f"_run_generation({job_id!r}) did not return within {timeout:.0f}s"
+        if "error" in outcome:
+            raise outcome["error"]
+        return outcome["returned"]
+
+    def settle(self) -> None:
+        """Teardown: every worker must have finished. One that has not is cancelled and given ten more seconds, so a
+        broken worker fails its own test; one that still runs is left to the session guard in ``conftest.py``."""
+        alive = [thread for thread in self.workers() if (thread.join(30) or thread.is_alive())]
+        if not alive:
+            return
+        launch = self.launch
+        for job_id in self.job_ids:
+            if job_id in launch._jobs:
+                launch.request_cancel(launch._jobs[job_id], job_id=job_id, active_states=launch._active_gen_states)
+        for abort_state in list(launch._active_gen_states.values()):
+            abort_state["abort"] = True
+        still = [thread.name for thread in alive if (thread.join(10) or thread.is_alive())]
+        raise AssertionError(f"generation workers never finished: {[thread.name for thread in alive]}; "
+                             f"still running after a cancel: {still}")
+
     def wait_until(self, condition: Callable[[], bool], what: str) -> None:
         deadline = time.monotonic() + 10
         while not condition():
@@ -298,13 +333,15 @@ def rig(server, clip, tmp_path, monkeypatch):
     clear_queue()
     job_lifecycle.set_job_state_observer(record)
     yield state
-    for released in state.releases:
-        released.set()
-    state.join()
-    job_lifecycle.set_job_state_observer(launch._observe_generation_job_state)
-    for job_id in set(launch._jobs) - known:
-        launch._jobs.pop(job_id, None)
-    clear_queue()
+    try:
+        for released in state.releases:
+            released.set()
+        state.settle()
+    finally:
+        job_lifecycle.set_job_state_observer(launch._observe_generation_job_state)
+        for job_id in set(launch._jobs) - known:
+            launch._jobs.pop(job_id, None)
+        clear_queue()
 
 
 def hold_then(finish: Callable[[Any], None] | None = None, *, release: threading.Event, ignore_abort: bool = False):
@@ -473,7 +510,7 @@ def test_a_failing_preparation_step_fails_the_job_before_any_model_work(rig, gol
     if stage == "h3_lora":
         base = rig.server.wgp.get_model_def
         rig.set_wgp("get_model_def", lambda model_type: {**(base(model_type) or {}), "architecture": "minimax_h3_fake"})
-    rig.launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, f"preparation fails: {stage}", {**rig.observe(job_id), "h3 runtime release asked for": released})
 
 
@@ -564,7 +601,7 @@ def test_oddity_a_cancel_between_start_and_abort_registration_leaves_the_job_can
         launch.request_cancel(job, job_id=job_id, active_states=launch._active_gen_states)
 
     rig.patch("_apply_per_job_coefficient", cancel_during_preparation)
-    launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "cancel before abort registration", rig.observe(job_id))
 
 
@@ -581,7 +618,7 @@ def test_a_job_cancelled_after_taking_the_slot_never_starts(rig, golden) -> None
         yield True
 
     rig.patch("_coordinated_generation_slot", slot_taken)
-    launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "cancelled after slot", rig.observe(job_id))
 
 
@@ -652,7 +689,7 @@ def test_shot_manifests_become_deferred_clips(rig, golden, workflow) -> None:
     shots = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}},
              {"shot_index": 1, "params": {"prompt": "shot one", "video_length": 25}}, {"params": "ignored"}, "ignored"]
     job_id = rig.direct_job({**BODY, workflow: shots, "_defer_output_publication": True})
-    rig.launch._run_generation(job_id, finalize=False)
+    rig.call_worker(job_id, finalize=False)
     rig.check(golden, f"shot manifest: {workflow}", rig.observe(job_id))
 
 
@@ -661,14 +698,14 @@ def test_shot_manifests_become_deferred_clips(rig, golden, workflow) -> None:
                                                ("_outpaint_shot_manifest", [])])
 def test_a_shot_manifest_that_is_not_usable_fails_the_job(rig, golden, workflow, manifest) -> None:
     job_id = rig.direct_job({**BODY, workflow: manifest})
-    rig.launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, f"unusable shot manifest: {workflow}", rig.observe(job_id))
 
 
 # -- finalization -------------------------------------------------------------------------------------------------
 def test_a_caller_that_finishes_the_job_itself_gets_it_at_ninety_nine_percent(rig, golden) -> None:
     job_id = rig.direct_job(BODY)
-    rig.launch._run_generation(job_id, finalize=False)
+    rig.call_worker(job_id, finalize=False)
     rig.check(golden, "finalize false", rig.observe(job_id))
 
 
@@ -680,7 +717,7 @@ def test_oddity_deferred_output_publication_over_http_publishes_nothing(rig, gol
 
 def test_deferred_output_publication_keeps_the_files_for_the_caller(rig, golden) -> None:
     job_id = rig.direct_job({**BODY, "_defer_output_publication": True})
-    rig.launch._run_generation(job_id, finalize=False)
+    rig.call_worker(job_id, finalize=False)
     rig.check(golden, "deferred publication, not finalized", rig.observe(job_id))
 
 
@@ -694,13 +731,13 @@ def test_an_output_the_engine_did_not_register_is_claimed_when_it_is_the_only_ne
 def test_a_director_job_never_claims_an_output_the_engine_did_not_register(rig, golden) -> None:
     rig.engine.script = lambda call: call.save(register=False)
     job_id = rig.direct_job({**BODY, "_director_pipeline_id": "pipeline-golden"})
-    rig.launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "unregistered output of a director job", rig.observe(job_id))
 
 
 def test_a_recovered_job_says_it_restarts_from_the_beginning(rig, golden) -> None:
     job_id = rig.direct_job(BODY, recovered=True)
-    rig.launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "recovered job", rig.observe(job_id))
 
 
@@ -802,7 +839,7 @@ def test_the_legacy_h3_route_runs_its_isolated_runtime(rig, golden, tmp_path) ->
     rig.monkeypatch.setattr(minimax_h3_service, "generate", generate)
     rig.patch("_release_legacy_h3_when_queue_allows", lambda job_id: calls.append(["release when idle", job_id]))
     job_id = rig.direct_job({**BODY, "model_type": minimax_h3_service.MODEL_ID, "_director_pipeline_id": ""})
-    launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "legacy h3", {**rig.observe(job_id, full=True), "service calls": calls})
 
 
@@ -816,7 +853,7 @@ def test_simulated_execution_replaces_only_the_inference(rig, golden) -> None:
     rig.patch("execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")))
     rig.patch("_run_simulated_generation", simulated)
     job_id = rig.direct_job(BODY)
-    rig.launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "simulated", {**rig.observe(job_id), "simulated calls": seen})
 
 
@@ -831,5 +868,5 @@ def test_a_cancelled_simulated_job_is_settled_by_the_worker(rig, golden) -> None
     rig.patch("execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")))
     rig.patch("_run_simulated_generation", cancelled_executor)
     job_id = rig.direct_job(BODY)
-    launch._run_generation(job_id)
+    rig.call_worker(job_id)
     rig.check(golden, "simulated and cancelled", rig.observe(job_id))
