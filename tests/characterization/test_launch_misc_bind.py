@@ -230,3 +230,222 @@ def test_lan_auth_runs_before_the_trace_and_the_trace_before_the_origin_check(
         ("request", "POST", "/api/v1/__guard_probe__/lan-token", None),
         ("response", "POST", "/api/v1/__guard_probe__/lan-token", 403),
     ]
+
+
+def _trace_records(trace_dir: Path) -> list[dict]:
+    import json
+
+    records = []
+    for file in sorted(trace_dir.glob("*.jsonl")):
+        records.extend(json.loads(line) for line in file.read_text(encoding="utf-8").splitlines())
+    return records
+
+
+def _enable_trace(full_server, monkeypatch, trace_dir: Path) -> None:
+    from services import debug_trace
+
+    monkeypatch.setattr(debug_trace, "_log_dir", lambda: str(trace_dir))
+    monkeypatch.setitem(full_server.wgp.server_config, "services", {
+        **full_server.wgp.server_config.get("services", {}), "debug_trace_enabled": True,
+    })
+
+
+def test_the_trace_records_each_mutation_with_its_body_and_outcome(full_server, monkeypatch, tmp_path) -> None:
+    """Every mutating method is traced (request, then response or error); reads and the UI-action route are not."""
+    from fastapi.testclient import TestClient
+
+    trace_dir = tmp_path / "trace"
+    _enable_trace(full_server, monkeypatch, trace_dir)
+    client = TestClient(full_server.api, raise_server_exceptions=False)
+    probe = "/api/v1/__guard_probe__"
+    assert client.put(f"{probe}/put?token=abc&x=1", json={"api_key": "secret", "prompt": "hi"}).status_code == 404
+    assert client.patch(f"{probe}/patch", content=b"hello", headers={"content-type": "text/plain"}).status_code == 404
+    assert client.delete(f"{probe}/delete").status_code == 404
+    assert client.get(f"{probe}/get").status_code == 404
+    assert client.options(f"{probe}/options").status_code == 404
+    assert client.post("/api/v1/debug/user-action", json={"control": "probe"}).json() == {"status": "ok"}
+    # The reclaim route reads its JSON body without a guard: a broken body is an unhandled error (a 500).
+    broken = client.post("/api/v1/storage/duplicates/reclaim", content=b"{broken",
+                         headers={"content-type": "application/json"})
+    assert (broken.status_code, broken.text) == (500, "Internal Server Error")
+
+    rows = []
+    for record in _trace_records(trace_dir):
+        if record.get("action") == "ui_control":
+            rows.append(("ui_control", record["control"]))
+        elif record.get("action") == "api_request":
+            detail = {"request": lambda r: (r["query"], r["body"]), "response": lambda r: r["status_code"],
+                      "error": lambda r: r["error"]["type"]}[record["phase"]](record)
+            rows.append((record["phase"], record["method"], record["path"], detail))
+    assert rows == [
+        ("request", "PUT", f"{probe}/put", ({"token": "<redacted>", "x": "1"},
+                                            {"api_key": "<redacted>", "prompt": "hi"})),
+        ("response", "PUT", f"{probe}/put", 404),
+        ("request", "PATCH", f"{probe}/patch", ({}, "<text/plain; body omitted>")),
+        ("response", "PATCH", f"{probe}/patch", 404),
+        ("request", "DELETE", f"{probe}/delete", ({}, None)),
+        ("response", "DELETE", f"{probe}/delete", 404),
+        ("ui_control", "probe"),
+        ("request", "POST", "/api/v1/storage/duplicates/reclaim",
+         ({}, {"parse_error": "Expecting property name enclosed in double quotes: line 1 column 2 (char 1)"})),
+        ("error", "POST", "/api/v1/storage/duplicates/reclaim", "JSONDecodeError"),
+    ]
+
+
+def test_a_request_carries_its_trace_id_in_the_debug_context_only_while_tracing(
+    full_server, monkeypatch, tmp_path,
+) -> None:
+    """Operation logs merge ``debug_trace.current_context()``: a request id appears there only when tracing is on."""
+    from types import SimpleNamespace
+
+    from fastapi.testclient import TestClient
+    from services import debug_trace
+
+    seen = []
+    target = tmp_path / "probe.safetensors"
+    target.write_bytes(b"x")
+
+    def protected(_path):
+        seen.append(debug_trace.current_context())
+        return True
+
+    monkeypatch.setattr(full_server.wgp, "fl", SimpleNamespace(is_protected_path=protected), raising=False)
+    client = TestClient(full_server.api, raise_server_exceptions=False)
+    route = "/api/v1/storage/duplicates/reclaim"
+    assert client.post(route, json={"path": str(target)}).status_code == 403
+    trace_dir = tmp_path / "trace"
+    _enable_trace(full_server, monkeypatch, trace_dir)
+    assert client.post(route, json={"path": str(target)}).status_code == 403
+    [request_record, _response] = [r for r in _trace_records(trace_dir) if r.get("action") == "api_request"]
+    off, on = ({key: context.get(key) for key in ("request_id", "http_method", "http_path")} for context in seen)
+    assert off == {"request_id": None, "http_method": "POST", "http_path": route}
+    assert on == {"request_id": request_record["event_id"], "http_method": "POST", "http_path": route}
+
+
+def test_a_policy_refusal_reaching_the_server_is_a_409_with_its_message(full_server, monkeypatch) -> None:
+    """Comic MiniMax generation lets ExecutionModeError through; the server's handler answers it."""
+    from fastapi.testclient import TestClient
+    from services import execution_mode
+
+    def refuse(workspace, provider):
+        raise execution_mode.ExecutionModeError(f"probe refusal for {workspace} via {provider}")
+
+    monkeypatch.setattr(execution_mode, "validate_remote_provider", refuse)
+    response = TestClient(full_server.api, raise_server_exceptions=False).post(
+        "/api/v1/comics/generate/minimax", json={"workspace": "default", "prompt": "a panel"},
+    )
+    assert (response.status_code, response.json()) == (
+        409, {"detail": "probe refusal for default via minimax-image"},
+    )
+
+
+def test_the_prompt_type_helpers_the_server_exports_strip_flags_without_their_input(full_server) -> None:
+    launch = importlib.import_module("_launch_runtime")
+    video = launch._normalize_video_prompt_type
+    image = launch._normalize_image_prompt_type
+    cases = [
+        (video, {"video_prompt_type": "IV"}, "V"),
+        (video, {"video_prompt_type": "IV", "image_refs": None}, "V"),
+        (video, {"video_prompt_type": "IV", "image_refs": []}, "V"),
+        (video, {"video_prompt_type": "IV", "image_refs": ()}, "V"),
+        (video, {"video_prompt_type": "IV", "image_refs": ""}, "V"),
+        (video, {"video_prompt_type": "IV", "image_refs": ["ref.png"]}, "IV"),
+        (video, {"video_prompt_type": "V"}, "V"),
+        (image, {"image_prompt_type": "SE"}, ""),
+        (image, {"image_prompt_type": "SE", "image_start": "start.png"}, "S"),
+        (image, {"image_prompt_type": "SE", "image_end": "end.png"}, "E"),
+        (image, {"image_prompt_type": "SE", "image_start": [], "image_end": ()}, ""),
+        (image, {"image_prompt_type": "SE", "image_start": ["a"], "image_end": "b"}, "SE"),
+        (image, {"image_prompt_type": "T"}, "T"),
+    ]
+    for normalize, body, expected in cases:
+        key = "video_prompt_type" if normalize is video else "image_prompt_type"
+        changed = dict(body)
+        normalize(changed)
+        assert changed[key] == expected, (body, changed)
+        assert {k: v for k, v in changed.items() if k != key} == {k: v for k, v in body.items() if k != key}
+    for untouched in ({}, {"video_prompt_type": ""}, {"video_prompt_type": 5}, {"image_prompt_type": None}):
+        body = dict(untouched)
+        video(body)
+        image(body)
+        assert body == untouched
+
+
+_HF = "https://huggingface.co/acme/probe/resolve/main/"
+_PROBE_MODELS = {
+    "probe_img": {
+        "name": "Probe Image", "image_outputs": True,
+        "URLs": [_HF + "probe_bf16.safetensors", {"url": _HF + "probe_fp8.safetensors"}],
+        "modules": [[_HF + "te_bf16.safetensors", _HF + "te_int8.safetensors"], {"URLs": [_HF + "vae.safetensors"]},
+                    {"URLs": []}, "named_module"],
+        "required_model_assets": ["probe/tokenizer.json", "probe/tokenizer.json"],
+        "vision_encoder_filename": "probe/vision.safetensors",
+        "loras": [_HF + "accel.safetensors"],
+    },
+    "probe_img_ft": {"name": "Probe Finetune", "image_outputs": True, "URLs": "probe_img"},
+}
+
+
+def _probe_catalog(full_server, monkeypatch) -> None:
+    from types import SimpleNamespace
+
+    def recursive(model_type, prop="URLs", sub_prop_name=None, return_list=True, stack=()):
+        value = _PROBE_MODELS[model_type].get(prop)
+        if isinstance(value, str) and value in _PROBE_MODELS:
+            return recursive(value, prop)
+        return [] if value is None else value
+
+    present = {"te_int8.safetensors"}
+    fake = full_server.wgp
+    monkeypatch.setattr(fake, "get_model_def", lambda model_type: _PROBE_MODELS.get(model_type))
+    monkeypatch.setattr(fake, "get_model_recursive_prop", recursive, raising=False)
+    monkeypatch.setattr(fake, "fl", SimpleNamespace(
+        locate_file=lambda name, error_if_none=True: f"/probe/{name}" if name in present else None,
+    ), raising=False)
+    monkeypatch.setattr(fake, "resolve_lora_path", lambda model_type, name: f"/nowhere/{name}", raising=False)
+
+
+def test_an_image_command_names_the_missing_model_files(full_server, monkeypatch) -> None:
+    """The image command runtime reads ``_missing_image_model_files`` from the server's globals by name."""
+    from fastapi.testclient import TestClient
+
+    _probe_catalog(full_server, monkeypatch)
+    client = TestClient(full_server.api, raise_server_exceptions=False)
+
+    def submit(model_type: str) -> tuple:
+        response = client.post("/api/v1/generation/commands", json={
+            "version": 1, "operation": "generation.image", "intent_id": f"probe-readiness-{model_type}",
+            "input": {"workspace": "default", "model_type": model_type, "prompt": "p", "resolution": "512x512",
+                      "num_inference_steps": 1, "seed": -1, "guidance_scale": 1.0},
+        })
+        detail = response.json()["detail"]
+        return response.status_code, detail.get("code"), detail.get("missing_files")
+
+    # One variant of a group is enough (te_int8 is present); dict entries, dict modules, required assets
+    # (once), the vision encoder and the model's LoRAs all count.
+    assert submit("probe_img") == (409, "model_unavailable", [
+        "probe_bf16.safetensors or probe_fp8.safetensors", "vae.safetensors", "probe/tokenizer.json",
+        "probe/vision.safetensors", "accel.safetensors",
+    ])
+    # A finetune that points at its base needs the base's weights.
+    assert submit("probe_img_ft") == (409, "model_unavailable", ["probe_bf16.safetensors or probe_fp8.safetensors"])
+    launch = importlib.import_module("_launch_runtime")
+    assert launch._model_weight_groups("probe_img_ft", owned_only=True) == []
+    assert launch._model_weight_groups("probe_img_ft") == [_PROBE_MODELS["probe_img"]["URLs"]]
+
+
+def test_the_mcp_model_list_answers_summaries_details_or_one_model(full_server, monkeypatch) -> None:
+    from services.model_downloads import list_models
+    from services.model_options import get_model_options
+    from tests.support.fake_wgp import catalog_attributes
+
+    for name, value in catalog_attributes().items():
+        monkeypatch.setattr(full_server.wgp, name, value, raising=False)
+    launch = importlib.import_module("_launch_runtime")
+    summaries, details = list_models(detail=False), list_models(detail=True)
+    assert summaries != details
+    assert launch.mcp_model_list({}) == summaries
+    assert launch.mcp_model_list("not a dict") == summaries
+    assert launch.mcp_model_list({"detail": "yes", "model_type": "  "}) == summaries
+    assert launch.mcp_model_list({"detail": True}) == details
+    assert launch.mcp_model_list({"model_type": "fake_i2v", "detail": True}) == get_model_options("fake_i2v")

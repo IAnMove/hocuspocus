@@ -1081,9 +1081,9 @@ class TestManagedLoraDownload(unittest.TestCase):
 
     def test_it_waits_for_the_same_file_downloading_elsewhere_instead_of_racing_it(self):
         self._spec()
-        # A finished record for the same name comes first; the in-flight one is the one waited on.
-        self.registry["d0"] = {"filename": self.base, "status": "completed", "progress": 100}
+        # A finished record for the same name comes after the in-flight one; the in-flight one is waited on.
         self.registry["d1"] = {"filename": os.path.join("x", self.base), "status": "downloading", "progress": 40}
+        self.registry["d0"] = {"filename": self.base, "status": "completed", "progress": 100}
 
         def finish_elsewhere(count):
             os.makedirs(self.lora_dir, exist_ok=True)
