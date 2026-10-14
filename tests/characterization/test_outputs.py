@@ -147,6 +147,7 @@ def test_output_thumbnail(server, golden) -> None:
     preview = server.client.get("/api/v1/outputs/thumbnail/plain.png")
     assert preview.status_code == 200
     assert preview.headers["content-type"] in {"image/jpeg", "image/webp"}
+    assert preview.headers["cache-control"] == "public, max-age=31536000, immutable"
     assert preview.content
     server.check(golden, "thumbnail missing", "GET", "/api/v1/outputs/thumbnail/missing.png")
     server.check(golden, "thumbnail not media", "GET", "/api/v1/outputs/thumbnail/notes.txt")
@@ -305,3 +306,83 @@ def test_alternative_song_validation(server, golden) -> None:
         "/api/v1/outputs/mix.mp4/alternative-songs/song-missing/mount",
         json={},
     )
+
+
+def _favorite_names(server) -> list[str]:
+    """The stored favorites of the active workspace, including names whose file is gone."""
+    return server.client.get("/api/v1/favorites").json()["favorites"]
+
+
+def test_delete_and_move_clean_up_sidecars_and_favorites(server) -> None:
+    """Delete removes the sidecar and the 3D preview and un-favorites the file. Move un-favorites it too."""
+    folder = server.outputs
+    for name in ("trash.png", "travel.png"):
+        media.image(folder / name)
+        media.sidecar(folder / name, {"params": {"prompt": name}})
+        server.client.post(f"/api/v1/favorites/{name}")
+    (folder / "trash.preview.png").write_bytes(b"preview")
+    assert sorted(_favorite_names(server)) == ["trash.png", "travel.png"]
+
+    assert server.client.delete("/api/v1/outputs/trash.png").json() == {"deleted": "trash.png"}
+    assert not (folder / "trash.png").exists()
+    assert not (folder / "trash.meta.json").exists()
+    assert not (folder / "trash.preview.png").exists()
+    assert _favorite_names(server) == ["travel.png"]
+
+    moved = server.client.post("/api/v1/outputs/travel.png/move", json={"workspace": "archive"})
+    assert moved.json() == {"moved": "travel.png", "to": "archive"}
+    assert (folder / "archive" / "travel.png").is_file()
+    assert (folder / "archive" / "travel.meta.json").is_file()
+    assert not (folder / "travel.meta.json").exists()
+    assert _favorite_names(server) == []
+
+
+def test_listing_songs_releases_a_mount_that_has_no_worker(server) -> None:
+    """A persisted "mounting" record whose job is gone goes back to "attached" when the songs are listed."""
+    media.need_ffmpeg()
+    folder = server.outputs
+    media.video(folder / "mix.mp4")
+    media.sound(folder / "song.wav")
+    attached = server.client.post(
+        "/api/v1/outputs/mix.mp4/alternative-songs", json={"audio_name": "song.wav"},
+    ).json()
+    song_id = attached["song"]["id"]
+    sidecar_path = folder / "mix.meta.json"
+    sidecar = json.loads(sidecar_path.read_text(encoding="utf-8"))
+    record = sidecar["params"]["alternative_songs"][0]
+    record["status"] = "mounting"
+    record["job_id"] = "alt-song-000000000000"
+    sidecar_path.write_text(json.dumps(sidecar), encoding="utf-8")
+
+    listed = server.client.get("/api/v1/outputs/mix.mp4/alternative-songs").json()
+    assert [(song["id"], song["status"], song["job_id"]) for song in listed["songs"]] == [(song_id, "attached", None)]
+    stored = json.loads(sidecar_path.read_text(encoding="utf-8"))["params"]["alternative_songs"][0]
+    assert (stored["status"], stored["job_id"]) == ("attached", None)
+
+
+# The first sentence of each handler's docstring is the route's OpenAPI description.
+_ROUTE_DESCRIPTIONS = {
+    ("get", "/api/v1/outputs/thumbnail/{filename}"): "Lazily create one small static preview",
+    ("get", "/api/v1/outputs/{name}/metadata"): "Get metadata for an output file.",
+    ("get", "/api/v1/outputs/{name}/extra-info"): "Return cached publishing copy",
+    ("post", "/api/v1/outputs/{name}/extra-info"): "Generate and persist platform copy",
+    ("post", "/api/v1/outputs/rejoin"): "Re-concatenate clips from a multi-clip group.",
+    ("get", "/api/v1/outputs/group/{group_id}"): "Get all clip files belonging to a multi-clip group.",
+    ("post", "/api/v1/outputs/{name}/move"): "Move an output file and its sidecar metadata",
+    ("delete", "/api/v1/outputs/{name}"): "Delete an output file and its sidecar metadata.",
+    ("get", "/api/v1/outputs/{name}/alternative-songs"): "List songs attached to an assembled videoclip",
+    ("post", "/api/v1/outputs/{name}/alternative-songs"): "Attach an existing audio output as an alternative song.",
+    ("post", "/api/v1/outputs/{name}/alternative-songs/{song_id}/mount"): "Remount the videoclip with an attached alternative song",
+}
+
+
+def test_gallery_output_routes_keep_their_openapi_text(server) -> None:
+    """The routes got their description from the handler docstring when they lived in one file. They still do."""
+    paths = server.client.app.openapi()["paths"]
+    for (method, path), start in _ROUTE_DESCRIPTIONS.items():
+        operation = paths[path][method]
+        assert operation["description"].startswith(start), (method, path, operation.get("description"))
+    # The handler without a docstring has no description. The mount answers 202.
+    assert "description" not in paths["/api/v1/outputs/{name}/alternative-songs/{song_id}"]["delete"]
+    mount = paths["/api/v1/outputs/{name}/alternative-songs/{song_id}/mount"]["post"]
+    assert "202" in mount["responses"] and "200" not in mount["responses"]

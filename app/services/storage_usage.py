@@ -175,4 +175,3 @@ def storage_usage():
         "workspaces": workspaces,
         "scanned_sidecars": sidecars,
     }
-

@@ -1,6 +1,7 @@
 """Workspaces: list, create, switch, delete (launch "Workspaces" section)."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import stat
@@ -201,11 +202,12 @@ def test_audio_upload_trim_mix_and_analysis_cheap_reads(server, golden) -> None:
     server.check(golden, "analyze a missing file", "POST", analyze, json={"audio_path": "missing.wav", "transcribe": False})
     server.check(golden, "analyze a traversal", "POST", analyze, json={"audio_path": "../escape.wav", "transcribe": False})
     server.check(golden, "analyze an invalid workspace", "POST", analyze, json={"audio_path": "trim_me.wav", "workspace": "../x", "transcribe": False})
-    server.check(
-        golden, "analyze a tiny wav", "POST", analyze,
-        json={"audio_path": "trim_me.wav", "transcribe": False},
-        mask=unstable,
-    )
+    if importlib.util.find_spec("librosa") is not None:  # the analysis needs librosa; the CI core install has none and answers 501
+        server.check(
+            golden, "analyze a tiny wav", "POST", analyze,
+            json={"audio_path": "trim_me.wav", "transcribe": False},
+            mask=unstable,
+        )
 
     jobs = "/api/v1/audio/analyze/jobs"
     server.check(golden, "queue analysis of a missing file", "POST", jobs, json={"audio_path": "missing.wav"})
