@@ -30,6 +30,8 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_DOWNLOADS_PATH = _APP / "services" / "model_downloads.py"
+_OPTIONS_PATH = _APP / "services" / "model_options.py"
 _SYSTEM_ROUTER_PATH = _APP / "routers" / "system.py"
 _LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
@@ -742,14 +744,15 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_resolution_and_encoder_capabilities_reach_the_ui_and_backend(self):
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_STORE_PATH)
         studio_configuration = _read(_STUDIO_CONFIGURATION_SLICE_PATH)
         presets = _read(_RESOLUTION_PRESETS_PATH)
         aspects = _read(_ASPECT_RATIO_GRID_PATH)
         self.assertIn("_recommended_minimax_h3_encoder", launch)
-        self.assertIn('"recommended": key == _h3_encoder_default', launch)
-        self.assertIn('"resolution_presets": md.get("resolution_presets")', launch)
+        self.assertIn('"recommended": key == _h3_encoder_default', options)
+        self.assertIn('"resolution_presets": md.get("resolution_presets")', options)
         self.assertIn("elif minimax_h3_references:", wgp)
         self.assertIn("_h3_auto_budgets", wgp)
         self.assertIn("_h3_auto_fallbacks", wgp)
@@ -855,10 +858,11 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertEqual(studio["model"]["audioIn"], "Audio In")
         self.assertNotIn("badges.push('Audio')", selector)
         self.assertIn("lora_compatibility_note", _read(_LORA_SELECTOR_PATH))
-        launch = _read(_LAUNCH_PATH)
-        self.assertIn('"selector_help": md.get("selector_help", "")', launch)
-        self.assertIn('"lora_compatibility_note": md.get("lora_compatibility_note", "")', launch)
-        self.assertIn('"director_memory_policy": md.get', launch)
+        downloads = _read(_DOWNLOADS_PATH)
+        options = _read(_OPTIONS_PATH)
+        self.assertIn('"selector_help": md.get("selector_help", "")', downloads)
+        self.assertIn('"lora_compatibility_note": md.get("lora_compatibility_note", "")', downloads)
+        self.assertIn('"director_memory_policy": md.get', options)
 
     def test_h3_reserves_transformer_activation_workspace(self):
         source = _read(_HANDLER_PATH)
@@ -868,6 +872,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_video_references_get_a_dedicated_memory_profile(self):
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         wgp = _read(_WGP_PATH)
         transformer = _read(_TRANSFORMER_PATH)
         self.assertIn("_h3_video_reference_count", launch)
@@ -880,7 +885,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("MINIMAX_H3_ACTIVATION_CHUNK_TOKENS", transformer)
         self.assertIn("from shared.attention import pay_attention", transformer)
         self.assertIn("[MiniMax H3 Perf]", _read(_MAIN_PATH))
-        self.assertIn('"first_block_cache": md.get', launch)
+        self.assertIn('"first_block_cache": md.get', options)
 
     def test_all_auxiliary_downloads_are_revision_pinned(self):
         downloads = self.handler.query_model_files(lambda item: [item], "minimax_h3")
@@ -908,6 +913,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         store = _read(_STORE_PATH)
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
         self.assertIn(
@@ -920,7 +926,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         helper = _read(_H3_DURATION_PATH)
         self.assertIn("if (!supportsSlidingWindows && maximumFrames != null)", helper)
         self.assertIn("delete params.sliding_window_size", store)
-        self.assertIn('"frames_maximum": md.get("frames_maximum")', launch)
+        self.assertIn('"frames_maximum": md.get("frames_maximum")', options)
         self.assertIn("sliding_window_memory_policy", duration)
         self.assertIn("s.params.resolution", duration)
         self.assertIn("safeWindowFrames", duration)
@@ -929,7 +935,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("sliding_window_memory_override", store)
         self.assertIn("t('duration.autoPaced')", duration)
         self.assertEqual(studio["duration"]["autoPaced"], "full prompt auto-paced")
-        self.assertIn('"sliding_window_memory_policy": md.get(', launch)
+        self.assertIn('"sliding_window_memory_policy": md.get(', options)
         self.assertIn('h3_window_adjustment.get("unsupported")', launch)
 
     def test_h3_is_enabled_for_existing_and_fresh_installs(self):
@@ -945,7 +951,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("7: ['minimax_h3_ref2va']", store)
         self.assertIn("8: ['minimax_h3_full', 'minimax_h3_ref2va_full']", store)
         self.assertIn("9: ['minimax_h3_legacy']", store)
-        self.assertIn('md.get("returns_audio", False)', _read(_LAUNCH_PATH))
+        self.assertIn('md.get("returns_audio", False)', _read(_OPTIONS_PATH))
 
     def test_h3_prompt_guides_cover_native_audio_and_director(self):
         shared = _read(_GUIDE_RESOLUTION_PATH)
@@ -1349,6 +1355,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
 
     def test_managed_turbo_choice_is_discoverable_for_full_and_pruned(self):
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         toggle = _read(_TURBO_TOGGLE_PATH)
         sidebar = _read(_SIDEBAR_PATH)
         advanced = _read(_ADVANCED_SETTINGS_PATH)
@@ -1358,8 +1365,8 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("def _minimax_h3_turbo_option", launch)
         self.assertIn('names.update(item["filename"]', launch)
         self.assertIn("MINIMAX_H3_TURBO_LORA_FILENAME: {", launch)
-        self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', launch)
-        self.assertIn('"minimax_h3_runtime_advisory":', launch)
+        self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', options)
+        self.assertIn('"minimax_h3_runtime_advisory":', options)
         self.assertIn("_minimax_h3_runtime_advisory", launch)
         self.assertIn("normalize_h3_runtime_request", launch)
         self.assertIn("<MiniMaxH3TurboToggle />", sidebar)

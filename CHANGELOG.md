@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Model visibility, selections, the production profile, the model catalog and model options left the launch module.** Showing or hiding a model, remembering the model chosen for each mode, and saving the production profile still answer the same way, including a list or a mode the server refuses. The catalog, a model's debug view, its defaults, its options, the resolution list, and the download status still answer the same way. Deleting a model that is not installed, or one that is in use, and downloading a model that does not exist, still answer the same way. The visibility write lock and the download map stay one object each. The core server keeps its own copies of these routes.
+
 **Alternative songs left the launch module.** Listing the songs on a videoclip, attaching one, deleting one, and refusing a mount that has no song still answer the same way. A remount still uses the video editor's job registry. A real FFmpeg remount was not run here.
 
 **Gallery thumbnails, metadata, extra info, rejoining clips, and moving or deleting an output left the launch module.** A still still gets a preview. A missing file is still not found. Metadata still comes from the sidecar, or from the file, or is empty. Extra info still reads the saved prompt and refuses a language it does not know. A group that is not on disk still has no clips. Rejoin still asks for a group and for two clips before it concatenates. Moving a file still stays inside the workspace, and deleting one still removes the file the gallery was listing.
