@@ -1737,6 +1737,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -2350,6 +2351,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -2960,6 +2962,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -3111,6 +3114,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -3249,6 +3253,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -3963,6 +3968,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -4677,6 +4683,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -5391,6 +5398,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -6019,6 +6027,7 @@
     "body": {
       "accepted": {
         "generation_details": {
+          "edit_sub_mode": "outpaint",
           "execution_mode": "real",
           "frames": 24,
           "generation_mode": "video",
@@ -6936,6 +6945,7 @@
       "13B at twenty steps": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7027,6 +7037,7 @@
       "a named workspace": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7118,6 +7129,7 @@
       "image, LTX (the official path is for video)": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7209,6 +7221,7 @@
       "image, four sides, 720p, LoRAs and clamps": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7310,6 +7323,7 @@
       "image, settings that cannot be read": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7401,6 +7415,7 @@
       "image, the default prompt, saved settings": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7492,6 +7507,7 @@
       "relative path found in uploads by its name": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7583,6 +7599,7 @@
       "relative path inside the workspace": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7674,6 +7691,7 @@
       "relative path that climbs out of the workspace": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 1,
             "generation_mode": "image",
@@ -7777,6 +7795,7 @@
       "video, LTX without mask preservation": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -7876,6 +7895,7 @@
       "video, legacy, nothing kept, no smear trim": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -7969,6 +7989,7 @@
       "video, legacy, pixels locked, audio kept, multi-window": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -8063,6 +8084,7 @@
       "video, legacy, window larger than the clip": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -8157,6 +8179,7 @@
       "video, official, a distilled request with Dev installed": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -8251,6 +8274,7 @@
       "video, official, a distilled request with nothing installed": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -8345,6 +8369,7 @@
       "video, official, huge canvas caps the window": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -8439,6 +8464,7 @@
       "video, official, simulated": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -8533,6 +8559,7 @@
       "video, official, small canvas keeps the window": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -9447,6 +9474,7 @@
         "a negative start": {
           "answer": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 24,
               "generation_mode": "video",
@@ -9543,6 +9571,7 @@
         "a range": {
           "answer": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 17,
               "generation_mode": "video",
@@ -9639,6 +9668,7 @@
         "a range too short": {
           "answer": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 24,
               "generation_mode": "video",
@@ -9735,6 +9765,7 @@
         "a text range": {
           "answer": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 24,
               "generation_mode": "video",
@@ -9831,6 +9862,7 @@
         "ffmpeg fails": {
           "answer": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 17,
               "generation_mode": "video",
@@ -9927,6 +9959,7 @@
         "only a start": {
           "answer": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 24,
               "generation_mode": "video",
