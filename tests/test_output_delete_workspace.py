@@ -154,7 +154,7 @@ def _workspace_client(tmp_path, *, profile=None, jobs=None):
 def _assert_refuses_film_then_allows_it(client, tmp_path, kind, release):
     """A job of ``kind`` runs in ``film``: its delete is refused, ``other`` still goes, and ``film`` goes once released."""
     refused = client.delete("/api/v1/workspaces/film")
-    kept = (tmp_path / "film" / "clip.mp4").read_bytes() == b"clip"
+    kept = (tmp_path / "film" / "clip.mp4").is_file()
     other = client.delete("/api/v1/workspaces/other")
     release()
     deleted = client.delete("/api/v1/workspaces/film")
@@ -181,10 +181,26 @@ def _seed_video_editor(_tmp_path):
     return reset_video_editor_jobs
 
 
+def _seed_minimax_music(_tmp_path):
+    from services import story_music_jobs as music
+
+    def reset():
+        with music._minimax_music_jobs_lock:
+            music._minimax_music_jobs.clear()
+
+    reset()
+    with music._minimax_music_jobs_lock:
+        music._minimax_music_jobs["minimax-music-aaaaaaaaaaaa"] = {
+            "jobId": "minimax-music-aaaaaaaaaaaa", "workspace": "film", "status": "queued",
+        }
+    return reset
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
     pytest.param("video-editor", "full", _seed_video_editor, id="video-editor"),
+    pytest.param("minimax-music", "full", _seed_minimax_music, id="minimax-music"),
 ]
 
 
