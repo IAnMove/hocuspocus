@@ -209,7 +209,7 @@ def test_a_series_lab_render_takes_the_shots_own_size():
 
 
 def test_the_series_lab_render_start_freezes_each_shots_own_size():
-    text = (Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py").read_text(encoding="utf-8")
+    text = (Path(__file__).resolve().parents[1] / "app" / "routers" / "series_render.py").read_text(encoding="utf-8")
     body = text.split("def start_series_episode_render", 1)[1].split("\ndef ", 1)[0]
     assert "**shot_render_settings(settings, shot)," in body
     assert body.index("normalize_series_resolution(") < body.index("shot_render_settings(settings, shot)")
