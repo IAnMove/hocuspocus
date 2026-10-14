@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Recast shot planning, the shot manifest and shot generation left the launch module.** Finding the camera shots, recovering a person the first pass missed, building each shot's prompt and reference, and joining the generated clips still work the same way. The assembler still calls the same generation worker. A cancel while the clips are joined still drops the unfinished file.
+
 **Recast masks, mattes, and reference pictures left the launch module.** A character mask, a mask-locked video, a cut-out reference, and the prepared reference a replacement uses are still built the same way. The background-removal model still loads once, on CPU, and its cache stays one object. The relighting LoRA is still the same file with the same hash, and a job still waits for that download.
 
 **SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.
