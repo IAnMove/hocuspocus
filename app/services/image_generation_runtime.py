@@ -4,7 +4,7 @@ import os
 import threading
 
 from services.image_generation_commands import ImageGenerationCommands, validate_image_model, command_error
-from services.job_lifecycle import request_cancel
+from services.job_lifecycle import register_generation_job, request_cancel
 
 
 def create_image_generation_commands(runtime):
@@ -18,7 +18,7 @@ def create_image_generation_commands(runtime):
                                   name=f"command-generation-{job['id']}", daemon=False)
         try:
             runtime["_jobs"][job["id"]] = job
-            runtime["register_generation_job"](runtime["_gen_lock"], job)
+            register_generation_job(runtime["_gen_lock"], job)
             runtime["_cancel_h3_idle_release"]()
             thread.start()
         except Exception:

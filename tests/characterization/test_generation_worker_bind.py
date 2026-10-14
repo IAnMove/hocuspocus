@@ -6,6 +6,10 @@ import builtins
 import importlib
 import symtable
 from pathlib import Path
+from types import SimpleNamespace
+
+# Fixtures, used by name: the C0 rig and its decodable clip.
+from tests.characterization.test_run_generation import clip, rig  # noqa: F401
 
 PACKAGE = Path(__file__).resolve().parents[2] / "app" / "services" / "generation_worker"
 
@@ -80,3 +84,46 @@ def test_every_injected_name_is_bound_to_the_servers_object(full_server, monkeyp
             )
             checked += 1
     assert checked > 0
+
+
+def test_a_command_job_is_registered_and_started_on_the_servers_real_globals(rig, monkeypatch) -> None:
+    """``create_image_generation_commands(globals())`` reads launch's own namespace. Its ``dispatch`` once read
+    ``register_generation_job`` there, the kernel PR (#1059) stopped defining that name in launch, and every job a
+    command admitted (image, speech, music, sfx, video) died with ``KeyError`` before its worker thread started.
+    Every test of ``dispatch`` used a hand-made runtime dict, so nothing noticed. This one runs it on the real one."""
+    from services import image_generation_runtime, job_lifecycle
+
+    launch = rig.launch
+    started = []
+
+    class RecordingThread:
+        """The worker thread, recorded and never run: no engine is scripted for this job."""
+
+        def __init__(self, *, target, args, name, daemon):
+            self.target, self.args, self.name, self.daemon, self.ident = target, args, name, daemon, None
+
+        def start(self):
+            self.ident = 1
+            started.append(self)
+
+    # Only this module's view of ``threading`` changes; patching ``threading.Thread`` would reach the whole process.
+    monkeypatch.setattr(image_generation_runtime, "threading", SimpleNamespace(Thread=RecordingThread))
+    job = launch._new_generation_job(
+        {"model_type": "fake_t2v", "prompt": "a calm lake"}, "default", job_id="dispatch-real-globals",
+        reserve_generation=False, publish_task=True,
+    )
+    assert "_generation_queue_token" not in job, "the job must start unregistered, as a command admission leaves it"
+
+    launch._image_generation_commands.dispatch(job)
+
+    assert launch._jobs["dispatch-real-globals"] is job
+    # register_generation_job ran, against the server's own GPU lock.
+    assert job["_generation_queue_lock_key"] == id(launch._gen_lock)
+    queue = job_lifecycle._generation_queues[id(launch._gen_lock)]
+    assert [entry[2] for entry in queue] == [job]
+    # The worker thread was handed the job's id and started once.
+    assert [(thread.target, thread.args, thread.name, thread.daemon) for thread in started] == [
+        (launch._run_generation_with_preparation, ("dispatch-real-globals",),
+         "command-generation-dispatch-real-globals", False),
+    ]
+    assert job["status"] == "queued"
