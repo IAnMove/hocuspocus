@@ -21083,83 +21083,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                     phase="",
                     message="Done",
                 )
-
-            # Inject progressive pipeline setting from services config (applies to all paths)
-            _services_cfg = wgp.server_config.get("services", {})
-            # ── SFX mode: standalone MMAudio generation ──────────────────
-            # When sfx_mode is set, bypass the normal video generation pipeline
-            # and run MMAudio directly (with or without a source video).
-            if raw_params.get("sfx_mode"):
-                _run_sfx_generation(job, raw_params, start_time)
-                return job.get("status") == "completed"
-
-            # Temporal-depth control has its own optional 458 MB / 1.54 GB
-            # preprocessor checkpoint. Provision it before wgp loads the much
-            # larger generation model; otherwise a fresh install spends
-            # minutes loading LTX and only then fails on the missing file.
-            try:
-                from services.managed_preprocessors import (
-                    ensure_video_depth_checkpoint,
-                    uses_temporal_depth,
-                )
-
-                if uses_temporal_depth(raw_params):
-                    ensure_video_depth_checkpoint(
-                        wgp.server_config.get(
-                            "depth_anything_v2_variant", "vitl"
-                        ),
-                        progress=lambda msg: update_job(job, message=msg),
-                    )
-                    update_job(job, message="Preparing temporal-depth control…")
-            except Exception as e:
-                finish_job(job, "failed", error=str(e), message=str(e))
-                return False
-
-            # H3 Full and Pruned checkpoints use different AdaLN widths. Any
-            # H3 LoRA may therefore need the small revision-pinned affine fit
-            # before MMGP preprocesses it. Provision both known compressed
-            # widths up front; this is a ~2 MB one-time setup and also covers
-            # manually imported/CivitAI adapters, not just managed Turbo.
-            try:
-                _h3_model_def = wgp.get_model_def(
-                    raw_params.get("model_type")
-                ) or {}
-                if (
-                    str(_h3_model_def.get("architecture") or "").startswith(
-                        "minimax_h3"
-                    )
-                    and raw_params.get("activated_loras")
-                ):
-                    from services.managed_preprocessors import (
-                        ensure_minimax_h3_lora_affine_maps,
-                    )
-
-                    ensure_minimax_h3_lora_affine_maps(
-                        "ref2va"
-                        if _h3_model_def.get("omni_reference")
-                        else "fl2va",
-                        progress=lambda msg: update_job(job, message=msg),
-                    )
-                    update_job(job, message="Preparing MiniMax H3 LoRAs…")
-            except Exception as e:
-                finish_job(job, "failed", error=str(e), message=str(e))
-                return False
-
-            # Safety net for managed auto-download LoRAs (e.g. Edit Anything):
-            # fetch the file on first use if the frontend's proactive download
-            # hasn't finished yet, so the user doesn't hit a "file not found"
-            # error. No-op (one dict lookup) for jobs without a managed LoRA.
-            try:
-                _ensure_managed_loras_present(
-                    raw_params.get("activated_loras"),
-                    raw_params.get("model_type"),
-                    progress=lambda msg: update_job(job, message=msg),
-                )
-            except Exception as e:
-                finish_job(job, "failed", error=str(e), message=str(e))
-                return False
             st.raw_params, st.start_time, st.state = raw_params, start_time, state
-            return _run_generation_manifest(st)
+            return _run_generation_configure(st)
 
         except Exception as e:
             active_task_timer = st.active_task_timer
@@ -21217,6 +21142,86 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_configure(st):
+    """Preflight: SFX shortcut and the downloads the model needs before it loads."""
+    job, raw_params, start_time = st.job, st.raw_params, st.start_time
+    # Inject progressive pipeline setting from services config (applies to all paths)
+    _services_cfg = wgp.server_config.get("services", {})
+    # ── SFX mode: standalone MMAudio generation ──────────────────
+    # When sfx_mode is set, bypass the normal video generation pipeline
+    # and run MMAudio directly (with or without a source video).
+    if raw_params.get("sfx_mode"):
+        _run_sfx_generation(job, raw_params, start_time)
+        return job.get("status") == "completed"
+
+    # Temporal-depth control has its own optional 458 MB / 1.54 GB
+    # preprocessor checkpoint. Provision it before wgp loads the much
+    # larger generation model; otherwise a fresh install spends
+    # minutes loading LTX and only then fails on the missing file.
+    try:
+        from services.managed_preprocessors import (
+            ensure_video_depth_checkpoint,
+            uses_temporal_depth,
+        )
+
+        if uses_temporal_depth(raw_params):
+            ensure_video_depth_checkpoint(
+                wgp.server_config.get(
+                    "depth_anything_v2_variant", "vitl"
+                ),
+                progress=lambda msg: update_job(job, message=msg),
+            )
+            update_job(job, message="Preparing temporal-depth control…")
+    except Exception as e:
+        finish_job(job, "failed", error=str(e), message=str(e))
+        return False
+
+    # H3 Full and Pruned checkpoints use different AdaLN widths. Any
+    # H3 LoRA may therefore need the small revision-pinned affine fit
+    # before MMGP preprocesses it. Provision both known compressed
+    # widths up front; this is a ~2 MB one-time setup and also covers
+    # manually imported/CivitAI adapters, not just managed Turbo.
+    try:
+        _h3_model_def = wgp.get_model_def(
+            raw_params.get("model_type")
+        ) or {}
+        if (
+            str(_h3_model_def.get("architecture") or "").startswith(
+                "minimax_h3"
+            )
+            and raw_params.get("activated_loras")
+        ):
+            from services.managed_preprocessors import (
+                ensure_minimax_h3_lora_affine_maps,
+            )
+
+            ensure_minimax_h3_lora_affine_maps(
+                "ref2va"
+                if _h3_model_def.get("omni_reference")
+                else "fl2va",
+                progress=lambda msg: update_job(job, message=msg),
+            )
+            update_job(job, message="Preparing MiniMax H3 LoRAs…")
+    except Exception as e:
+        finish_job(job, "failed", error=str(e), message=str(e))
+        return False
+
+    # Safety net for managed auto-download LoRAs (e.g. Edit Anything):
+    # fetch the file on first use if the frontend's proactive download
+    # hasn't finished yet, so the user doesn't hit a "file not found"
+    # error. No-op (one dict lookup) for jobs without a managed LoRA.
+    try:
+        _ensure_managed_loras_present(
+            raw_params.get("activated_loras"),
+            raw_params.get("model_type"),
+            progress=lambda msg: update_job(job, message=msg),
+        )
+    except Exception as e:
+        finish_job(job, "failed", error=str(e), message=str(e))
+        return False
+    return _run_generation_manifest(st)
 
 
 def _run_generation_manifest(st):
