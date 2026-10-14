@@ -1,0 +1,4346 @@
+{
+  "cancel a repair that is not running": {
+    "body": {
+      "error": "No active repair for this pipeline"
+    },
+    "status": 409
+  },
+  "classify with no sections": {
+    "body": {
+      "method": "heuristic",
+      "sections": []
+    },
+    "status": 200
+  },
+  "classify without analysis": {
+    "body": {
+      "detail": "analysis is required"
+    },
+    "status": 400
+  },
+  "continue a missing pipeline": {
+    "body": {
+      "detail": "Pipeline is not paused"
+    },
+    "status": 400
+  },
+  "delete a missing pipeline": {
+    "body": {
+      "detail": "Pipeline not found: missing"
+    },
+    "status": 404
+  },
+  "edit an unknown clip prompt": {
+    "body": {
+      "error": "Clip not found"
+    },
+    "status": 400
+  },
+  "lifecycle: Activity cancel": {
+    "body": {
+      "body": {
+        "result": {
+          "accepted": true,
+          "cancel_requested": false,
+          "cancelled": false,
+          "persisted": false,
+          "phase": "paused",
+          "status": "paused"
+        },
+        "task": {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "paused",
+          "cancelable": true,
+          "completed_at": null,
+          "created_at": "<TIME>",
+          "current": 2,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-director-paused",
+          "kind": "director",
+          "max_attempts": 1,
+          "message": "m",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "director",
+            "capability": null,
+            "command_id": null,
+            "generation_details": {},
+            "resource_schedule": {},
+            "run_id": null,
+            "tool": "director",
+            "workflow_id": null
+          },
+          "model": "",
+          "parent_id": null,
+          "phase": "paused",
+          "pipeline_id": "paused",
+          "progress": 0.4,
+          "project_id": "",
+          "provider": "",
+          "queued_at": null,
+          "recoverable": true,
+          "resource_requirements": [],
+          "result_refs": [],
+          "resumable": true,
+          "root_id": "task-director-paused",
+          "server_origin": "",
+          "started_at": null,
+          "status": "waiting_resource",
+          "title": "Music video",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 5,
+          "updated_at": "<TIME>",
+          "workflow": "director",
+          "workspace": "ws-a"
+        }
+      },
+      "calls": [
+        [
+          "stop_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: Activity resume": {
+    "body": {
+      "body": {
+        "result": {
+          "phase": "paused",
+          "pipeline_id": "paused",
+          "root_task_id": "task-director-paused",
+          "status": "paused",
+          "task_id": "task-director-paused"
+        },
+        "task": {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "paused",
+          "cancelable": true,
+          "completed_at": null,
+          "created_at": "<TIME>",
+          "current": 2,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-director-paused",
+          "kind": "director",
+          "max_attempts": 1,
+          "message": "m",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "director",
+            "capability": null,
+            "command_id": null,
+            "generation_details": {},
+            "resource_schedule": {},
+            "run_id": null,
+            "tool": "director",
+            "workflow_id": null
+          },
+          "model": "",
+          "parent_id": null,
+          "phase": "paused",
+          "pipeline_id": "paused",
+          "progress": 0.4,
+          "project_id": "",
+          "provider": "",
+          "queued_at": null,
+          "recoverable": true,
+          "resource_requirements": [],
+          "result_refs": [],
+          "resumable": true,
+          "root_id": "task-director-paused",
+          "server_origin": "",
+          "started_at": null,
+          "status": "waiting_resource",
+          "title": "Music video",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 5,
+          "updated_at": "<TIME>",
+          "workflow": "director",
+          "workspace": "ws-a"
+        }
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "paused",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: Activity retry": {
+    "body": {
+      "body": {
+        "result": {
+          "phase": "crashed",
+          "pipeline_id": "crashed",
+          "root_task_id": "task-director-crashed",
+          "status": "crashed",
+          "task_id": "task-director-crashed"
+        },
+        "task": {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "crashed",
+          "cancelable": false,
+          "completed_at": null,
+          "created_at": "<TIME>",
+          "current": 1,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-director-crashed",
+          "kind": "director",
+          "max_attempts": 1,
+          "message": "Resume requested",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "director",
+            "capability": null,
+            "command_id": null,
+            "generation_details": {},
+            "resource_schedule": {},
+            "run_id": null,
+            "tool": "director",
+            "workflow_id": null
+          },
+          "model": "",
+          "parent_id": null,
+          "phase": "queued",
+          "pipeline_id": "crashed",
+          "progress": 0.3333333333333333,
+          "project_id": "",
+          "provider": "",
+          "queued_at": "<TIME>",
+          "recoverable": true,
+          "resource_requirements": [],
+          "result_refs": [],
+          "resumable": true,
+          "root_id": "task-director-crashed",
+          "server_origin": "",
+          "started_at": null,
+          "status": "queued",
+          "title": "Director pipeline",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 3,
+          "updated_at": "<TIME>",
+          "workflow": "director",
+          "workspace": "ws-b"
+        }
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "crashed",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "crashed"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: cancel a repair that is not running": {
+    "body": {
+      "body": {
+        "error": "No active repair for this pipeline"
+      },
+      "calls": [
+        [
+          "cancel_pipeline_repair",
+          [
+            "<OUTPUTS>",
+            "p1"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: cancel a running repair": {
+    "body": {
+      "body": {
+        "pipeline_id": "repairing",
+        "repair": {
+          "phase": "cancelling"
+        }
+      },
+      "calls": [
+        [
+          "cancel_pipeline_repair",
+          [
+            "<OUTPUTS>",
+            "repairing"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify from the hint": {
+    "body": {
+      "body": {
+        "method": "lyrics_hint",
+        "sections": [
+          {
+            "replaced": 1
+          }
+        ],
+        "song_structure": [
+          {
+            "label": "chorus"
+          }
+        ]
+      },
+      "calls": [
+        [
+          "structure_from_aligned_lyrics",
+          [
+            []
+          ],
+          {}
+        ],
+        [
+          "structure_from_tagged_lyrics",
+          [
+            "TAGGED",
+            30
+          ],
+          {}
+        ],
+        [
+          "replace_sections_with_structure",
+          [
+            [
+              {
+                "label": "chorus"
+              }
+            ]
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify from the timeline": {
+    "body": {
+      "body": {
+        "method": "lyrics_timeline",
+        "sections": [
+          {
+            "replaced": 1
+          }
+        ],
+        "song_structure": [
+          {
+            "label": "intro"
+          }
+        ]
+      },
+      "calls": [
+        [
+          "structure_from_aligned_lyrics",
+          [
+            [
+              {
+                "t": 1
+              }
+            ]
+          ],
+          {}
+        ],
+        [
+          "replace_sections_with_structure",
+          [
+            [
+              {
+                "label": "intro"
+              }
+            ]
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify labels only": {
+    "body": {
+      "body": {
+        "method": "llm",
+        "sections": [
+          {
+            "labelled": [
+              "verse",
+              "verse"
+            ]
+          }
+        ],
+        "song_structure": []
+      },
+      "calls": [
+        [
+          "structure_from_aligned_lyrics",
+          [
+            []
+          ],
+          {}
+        ],
+        [
+          "structure_from_tagged_lyrics",
+          [
+            "",
+            0
+          ],
+          {}
+        ],
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "classify_song_sections",
+          [],
+          {
+            "duration": 0,
+            "lyrics": "NOSTRUCT",
+            "sections": [
+              {
+                "a": 1
+              },
+              {
+                "b": 2
+              }
+            ]
+          }
+        ],
+        [
+          "classify_sections_with_lyrics",
+          [
+            [
+              "verse",
+              "verse"
+            ]
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify when the model fails": {
+    "body": {
+      "body": {
+        "method": "heuristic",
+        "sections": [
+          {
+            "a": 1
+          }
+        ],
+        "song_structure": []
+      },
+      "calls": [
+        [
+          "structure_from_aligned_lyrics",
+          [
+            []
+          ],
+          {}
+        ],
+        [
+          "structure_from_tagged_lyrics",
+          [
+            "",
+            0
+          ],
+          {}
+        ],
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "classify_song_sections",
+          [],
+          {
+            "duration": 0,
+            "lyrics": "RAISE",
+            "sections": [
+              {
+                "a": 1
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify with the model": {
+    "body": {
+      "body": {
+        "method": "llm",
+        "sections": [
+          {
+            "replaced": 1
+          }
+        ],
+        "song_structure": [
+          {
+            "end": 1,
+            "label": "verse",
+            "start": 0
+          }
+        ]
+      },
+      "calls": [
+        [
+          "structure_from_aligned_lyrics",
+          [
+            []
+          ],
+          {}
+        ],
+        [
+          "structure_from_tagged_lyrics",
+          [
+            "",
+            12
+          ],
+          {}
+        ],
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "classify_song_sections",
+          [],
+          {
+            "duration": 12,
+            "lyrics": "words",
+            "sections": [
+              {
+                "a": 1
+              }
+            ]
+          }
+        ],
+        [
+          "replace_sections_with_structure",
+          [
+            [
+              {
+                "end": 1,
+                "label": "verse",
+                "start": 0
+              }
+            ]
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify without analysis": {
+    "body": {
+      "body": {
+        "detail": "analysis is required"
+      },
+      "calls": []
+    },
+    "status": 400
+  },
+  "lifecycle: classify without lyrics": {
+    "body": {
+      "body": {
+        "method": "heuristic",
+        "sections": [
+          {
+            "a": 1
+          }
+        ],
+        "song_structure": []
+      },
+      "calls": [
+        [
+          "structure_from_aligned_lyrics",
+          [
+            []
+          ],
+          {}
+        ],
+        [
+          "structure_from_tagged_lyrics",
+          [
+            "",
+            0
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: classify without sections": {
+    "body": {
+      "body": {
+        "method": "heuristic",
+        "sections": []
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: continue a paused pipeline": {
+    "body": {
+      "body": {
+        "status": "resumed"
+      },
+      "calls": [
+        [
+          "continue_pipeline",
+          [
+            "paused",
+            null
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: continue a pipeline that is not paused": {
+    "body": {
+      "body": {
+        "detail": "Pipeline is not paused"
+      },
+      "calls": [
+        [
+          "continue_pipeline",
+          [
+            "nope",
+            null
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: continue with new plans": {
+    "body": {
+      "body": {
+        "status": "resumed"
+      },
+      "calls": [
+        [
+          "continue_pipeline",
+          [
+            "paused",
+            {
+              "clip_plans": [
+                {
+                  "x": 1
+                }
+              ]
+            }
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: delete gone": {
+    "body": {
+      "body": {
+        "detail": "Pipeline not found: gone"
+      },
+      "calls": [
+        [
+          "delete_pipeline",
+          [
+            "<OUTPUTS>",
+            "gone"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 404
+  },
+  "lifecycle: delete locked": {
+    "body": {
+      "body": {
+        "detail": "Pipeline media was cleaned, but its state file is locked. Close any process using it and retry deletion."
+      },
+      "calls": [
+        [
+          "delete_pipeline",
+          [
+            "<OUTPUTS>",
+            "locked"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: delete media": {
+    "body": {
+      "body": {
+        "detail": "Some pipeline media is still in use. Close its preview or any process using it, then retry deletion."
+      },
+      "calls": [
+        [
+          "delete_pipeline",
+          [
+            "<OUTPUTS>",
+            "media"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: delete p1": {
+    "body": {
+      "body": {
+        "dir": "<OUTPUTS>/p1",
+        "media_deferred": 1,
+        "media_deleted": 3,
+        "ok": true
+      },
+      "calls": [
+        [
+          "delete_pipeline",
+          [
+            "<OUTPUTS>",
+            "p1"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: delete running": {
+    "body": {
+      "body": {
+        "detail": "This pipeline is still running. Stop it first, then delete."
+      },
+      "calls": [
+        [
+          "delete_pipeline",
+          [
+            "<OUTPUTS>",
+            "running"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: edit a prompt": {
+    "body": {
+      "body": {
+        "idx": 2,
+        "image_prompt": "i",
+        "soundtrack_drive": true,
+        "updated": "p1",
+        "video_prompt": "v"
+      },
+      "calls": [
+        [
+          "update_clip_prompts",
+          [
+            "<OUTPUTS>",
+            "p1",
+            2
+          ],
+          {
+            "image_prompt": "i",
+            "soundtrack_drive": true,
+            "video_prompt": "v"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: edit a prompt badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "update_clip_prompts",
+          [
+            "<OUTPUTS>",
+            "bad",
+            2
+          ],
+          {
+            "image_prompt": null,
+            "soundtrack_drive": null,
+            "video_prompt": null
+          }
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: edit a prompt while busy": {
+    "body": {
+      "body": {
+        "error": "busy now"
+      },
+      "calls": [
+        [
+          "update_clip_prompts",
+          [
+            "<OUTPUTS>",
+            "busy",
+            2
+          ],
+          {
+            "image_prompt": null,
+            "soundtrack_drive": null,
+            "video_prompt": "v"
+          }
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: plan a short film script": {
+    "body": {
+      "body": {
+        "raw": false,
+        "scenes": [
+          {
+            "s": 1
+          }
+        ]
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_short_film_from_story",
+          [],
+          {
+            "allow_clip_text": false,
+            "character_ref_labels": null,
+            "character_ref_paths": null,
+            "character_visual_style": "",
+            "characters": null,
+            "fps": 24,
+            "frames_minimum": 5,
+            "frames_steps": 4,
+            "location_ref_labels": null,
+            "location_ref_paths": null,
+            "narrative_mode": true,
+            "preserve_visual_style": false,
+            "raw_prompts": false,
+            "reference_image_path": null,
+            "story_description": "a story",
+            "target_duration": 20,
+            "target_scenes": null,
+            "visual_style": ""
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: plan a short film script fails": {
+    "body": {
+      "body": {
+        "detail": "story down"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_short_film_from_story",
+          [],
+          {
+            "allow_clip_text": false,
+            "character_ref_labels": null,
+            "character_ref_paths": null,
+            "character_visual_style": "",
+            "characters": null,
+            "fps": 24,
+            "frames_minimum": 5,
+            "frames_steps": 4,
+            "location_ref_labels": null,
+            "location_ref_paths": null,
+            "narrative_mode": true,
+            "preserve_visual_style": false,
+            "raw_prompts": false,
+            "reference_image_path": null,
+            "story_description": "RAISE",
+            "target_duration": 30,
+            "target_scenes": null,
+            "visual_style": ""
+          }
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: plan a short film script with raw prompts": {
+    "body": {
+      "body": {
+        "raw": true,
+        "scenes": [
+          {
+            "s": 1
+          }
+        ]
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_short_film_from_story",
+          [],
+          {
+            "allow_clip_text": false,
+            "character_ref_labels": null,
+            "character_ref_paths": null,
+            "character_visual_style": "",
+            "characters": null,
+            "fps": 24,
+            "frames_minimum": 5,
+            "frames_steps": 4,
+            "location_ref_labels": null,
+            "location_ref_paths": null,
+            "narrative_mode": true,
+            "preserve_visual_style": false,
+            "raw_prompts": true,
+            "reference_image_path": null,
+            "story_description": "a story",
+            "target_duration": 30,
+            "target_scenes": null,
+            "visual_style": ""
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: plan dialogue scenes": {
+    "body": {
+      "body": {
+        "clips": [
+          {
+            "clip": 1
+          }
+        ]
+      },
+      "calls": [
+        [
+          "plan_dialogue_scenes",
+          [],
+          {
+            "analysis": {
+              "x": 1
+            },
+            "fps": 16,
+            "frames_minimum": 5,
+            "frames_steps": 4,
+            "pacing_bias": 2
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: plan prompts and images": {
+    "body": {
+      "body": {
+        "clip_plans": [
+          {
+            "clip_index": 0,
+            "duration": 5,
+            "image_prompt": "an i",
+            "video_prompt": "a v"
+          }
+        ]
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_clip_prompts_and_images",
+          [],
+          {
+            "bpm": 90,
+            "clips": [
+              {
+                "c": 1
+              }
+            ],
+            "existing_image_prompts": null,
+            "lyrics": "l",
+            "music_video_treatment": null,
+            "prompt_type": "both",
+            "reference_image_path": null,
+            "scene_description": "scene",
+            "speaker_mappings": null,
+            "video_model": ""
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: plan prompts and images fails": {
+    "body": {
+      "body": {
+        "detail": "planner exploded"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_clip_prompts_and_images",
+          [],
+          {
+            "bpm": 120.0,
+            "clips": [
+              {
+                "c": 1
+              }
+            ],
+            "existing_image_prompts": null,
+            "lyrics": null,
+            "music_video_treatment": null,
+            "prompt_type": "both",
+            "reference_image_path": null,
+            "scene_description": "RAISE",
+            "speaker_mappings": null,
+            "video_model": ""
+          }
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: plan prompts and images for H3": {
+    "body": {
+      "body": {
+        "clip_plans": [
+          {
+            "_director_audio_plan": {
+              "h3_audio_policy": "native"
+            },
+            "_director_h3_compiled_prompt": "<long text>",
+            "_director_h3_source_prompt": "a v",
+            "clip_index": 0,
+            "duration": 5,
+            "image_prompt": "an i",
+            "video_prompt": "<long text>"
+          }
+        ]
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_clip_prompts_and_images",
+          [],
+          {
+            "bpm": 120.0,
+            "clips": [
+              {
+                "c": 1
+              }
+            ],
+            "existing_image_prompts": null,
+            "lyrics": null,
+            "music_video_treatment": null,
+            "prompt_type": "both",
+            "reference_image_path": null,
+            "scene_description": "scene",
+            "speaker_mappings": null,
+            "video_model": "minimax_h3_i2v"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: plan short film prompts": {
+    "body": {
+      "body": {
+        "clip_plans": [
+          {
+            "clip_index": 0,
+            "duration": 5,
+            "image_prompt": "sf i",
+            "video_prompt": "sf v"
+          }
+        ]
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_short_film_prompts",
+          [],
+          {
+            "character_ref_labels": null,
+            "character_ref_paths": null,
+            "characters": [
+              {
+                "n": "a"
+              }
+            ],
+            "clips": [
+              {
+                "c": 1
+              }
+            ],
+            "existing_image_prompts": null,
+            "location_ref_labels": null,
+            "location_ref_paths": null,
+            "lyrics": null,
+            "prompt_type": "both",
+            "reference_image_path": null,
+            "scene_description": "s",
+            "speaker_mappings": null
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: plan short film prompts for H3": {
+    "body": {
+      "body": {
+        "clip_plans": [
+          {
+            "_director_audio_plan": {
+              "h3_audio_policy": "native"
+            },
+            "_director_h3_compiled_prompt": "<long text>",
+            "_director_h3_source_prompt": "sf v",
+            "clip_index": 0,
+            "duration": 5,
+            "image_prompt": "sf i",
+            "video_prompt": "<long text>"
+          }
+        ]
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "plan_short_film_prompts",
+          [],
+          {
+            "character_ref_labels": null,
+            "character_ref_paths": null,
+            "characters": null,
+            "clips": [
+              {
+                "c": 1
+              }
+            ],
+            "existing_image_prompts": null,
+            "location_ref_labels": null,
+            "location_ref_paths": null,
+            "lyrics": null,
+            "prompt_type": "both",
+            "reference_image_path": null,
+            "scene_description": "s",
+            "speaker_mappings": null
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: preview already running": {
+    "body": {
+      "body": {
+        "clip_index": null,
+        "clip_indices": null,
+        "pipeline_id": "child-0",
+        "reused": true,
+        "run_type": null,
+        "source_preview_pipeline_id": "running",
+        "status": "started"
+      },
+      "calls": [
+        [
+          "start_preview_generation",
+          [
+            "running",
+            null,
+            "<OUTPUTS>"
+          ],
+          {
+            "clip_indices": null,
+            "expected_fingerprint": null,
+            "run_type": null
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: preview refused": {
+    "body": {
+      "body": {
+        "detail": "preview refused"
+      },
+      "calls": [
+        [
+          "start_preview_generation",
+          [
+            "nope",
+            2,
+            "<OUTPUTS>"
+          ],
+          {
+            "clip_indices": null,
+            "expected_fingerprint": null,
+            "run_type": null
+          }
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: preview started": {
+    "body": {
+      "body": {
+        "clip_index": 1,
+        "clip_indices": [
+          1,
+          2
+        ],
+        "pipeline_id": "child-1",
+        "reused": false,
+        "run_type": "test",
+        "source_preview_pipeline_id": "preview",
+        "status": "started"
+      },
+      "calls": [
+        [
+          "start_preview_generation",
+          [
+            "preview",
+            1,
+            "<OUTPUTS>"
+          ],
+          {
+            "clip_indices": [
+              1,
+              2
+            ],
+            "expected_fingerprint": "fp1",
+            "run_type": "test"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rejoin": {
+    "body": {
+      "body": {
+        "rejoined": "p1"
+      },
+      "calls": [
+        [
+          "rejoin_clips",
+          [
+            "<OUTPUTS>",
+            "p1"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rejoin badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "rejoin_clips",
+          [
+            "<OUTPUTS>",
+            "bad"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: rejoin fails": {
+    "body": {
+      "body": {
+        "error": "boom!"
+      },
+      "calls": [
+        [
+          "rejoin_clips",
+          [
+            "<OUTPUTS>",
+            "boom"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: rejoin while busy": {
+    "body": {
+      "body": {
+        "error": "busy now"
+      },
+      "calls": [
+        [
+          "rejoin_clips",
+          [
+            "<OUTPUTS>",
+            "busy"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: repair": {
+    "body": {
+      "body": {
+        "pid": "p1",
+        "repair": "started"
+      },
+      "calls": [
+        [
+          "start_pipeline_repair",
+          [
+            "<OUTPUTS>",
+            "p1"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 202
+  },
+  "lifecycle: repair badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "start_pipeline_repair",
+          [
+            "<OUTPUTS>",
+            "bad"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: repair fails": {
+    "body": {
+      "body": {
+        "error": "boom!"
+      },
+      "calls": [
+        [
+          "start_pipeline_repair",
+          [
+            "<OUTPUTS>",
+            "boom"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: repair while busy": {
+    "body": {
+      "body": {
+        "error": "busy now"
+      },
+      "calls": [
+        [
+          "start_pipeline_repair",
+          [
+            "<OUTPUTS>",
+            "busy"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: rerun a segment": {
+    "body": {
+      "body": {
+        "cascade": false,
+        "clip": 1,
+        "prompt": "seg",
+        "seg": 2
+      },
+      "calls": [
+        [
+          "rerun_h3_segment",
+          [
+            "<OUTPUTS>",
+            "p1",
+            1,
+            2
+          ],
+          {
+            "cascade": false,
+            "prompt_override": "seg"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rerun a segment badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "rerun_h3_segment",
+          [
+            "<OUTPUTS>",
+            "bad",
+            1,
+            2
+          ],
+          {
+            "cascade": true,
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: rerun a segment fails": {
+    "body": {
+      "body": {
+        "error": "boom!"
+      },
+      "calls": [
+        [
+          "rerun_h3_segment",
+          [
+            "<OUTPUTS>",
+            "boom",
+            1,
+            2
+          ],
+          {
+            "cascade": true,
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: rerun a segment with the default cascade": {
+    "body": {
+      "body": {
+        "cascade": true,
+        "clip": 1,
+        "prompt": null,
+        "seg": 2
+      },
+      "calls": [
+        [
+          "rerun_h3_segment",
+          [
+            "<OUTPUTS>",
+            "p1",
+            1,
+            2
+          ],
+          {
+            "cascade": true,
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rerun-image": {
+    "body": {
+      "body": {
+        "idx": 3,
+        "image": "p1",
+        "prompt": "new"
+      },
+      "calls": [
+        [
+          "rerun_clip_image",
+          [
+            "<OUTPUTS>",
+            "p1",
+            3
+          ],
+          {
+            "prompt_override": "new"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rerun-image badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "rerun_clip_image",
+          [
+            "<OUTPUTS>",
+            "bad",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: rerun-image cancelled": {
+    "body": {
+      "body": {
+        "cancelled": true,
+        "error": "Re-run cancelled",
+        "output_files": [
+          "x.png",
+          "y.png"
+        ]
+      },
+      "calls": [
+        [
+          "rerun_clip_image",
+          [
+            "<OUTPUTS>",
+            "cancelled",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: rerun-image fails": {
+    "body": {
+      "body": {
+        "error": "boom!"
+      },
+      "calls": [
+        [
+          "rerun_clip_image",
+          [
+            "<OUTPUTS>",
+            "boom",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: rerun-image in a workspace": {
+    "body": {
+      "body": {
+        "idx": 3,
+        "image": "p1",
+        "prompt": "new"
+      },
+      "calls": [
+        [
+          "rerun_clip_image",
+          [
+            "<OUTPUTS>",
+            "p1",
+            3
+          ],
+          {
+            "prompt_override": "new"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rerun-image while busy": {
+    "body": {
+      "body": {
+        "error": "busy now"
+      },
+      "calls": [
+        [
+          "rerun_clip_image",
+          [
+            "<OUTPUTS>",
+            "busy",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: rerun-video": {
+    "body": {
+      "body": {
+        "idx": 3,
+        "prompt": "new",
+        "video": "p1"
+      },
+      "calls": [
+        [
+          "rerun_clip_video",
+          [
+            "<OUTPUTS>",
+            "p1",
+            3
+          ],
+          {
+            "prompt_override": "new"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rerun-video badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "rerun_clip_video",
+          [
+            "<OUTPUTS>",
+            "bad",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: rerun-video cancelled": {
+    "body": {
+      "body": {
+        "cancelled": true,
+        "error": "Re-run cancelled",
+        "output_files": [
+          "x.png",
+          "y.png"
+        ]
+      },
+      "calls": [
+        [
+          "rerun_clip_video",
+          [
+            "<OUTPUTS>",
+            "cancelled",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: rerun-video fails": {
+    "body": {
+      "body": {
+        "error": "boom!"
+      },
+      "calls": [
+        [
+          "rerun_clip_video",
+          [
+            "<OUTPUTS>",
+            "boom",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: rerun-video in a workspace": {
+    "body": {
+      "body": {
+        "idx": 3,
+        "prompt": "new",
+        "video": "p1"
+      },
+      "calls": [
+        [
+          "rerun_clip_video",
+          [
+            "<OUTPUTS>/ws-a",
+            "p1",
+            3
+          ],
+          {
+            "prompt_override": "new"
+          }
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: rerun-video while busy": {
+    "body": {
+      "body": {
+        "error": "busy now"
+      },
+      "calls": [
+        [
+          "rerun_clip_video",
+          [
+            "<OUTPUTS>",
+            "busy",
+            3
+          ],
+          {
+            "prompt_override": null
+          }
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: rerun-video with a bad shared review": {
+    "body": {
+      "body": {
+        "detail": {
+          "code": "invalid_request"
+        }
+      },
+      "calls": []
+    },
+    "status": 422
+  },
+  "lifecycle: resume a crashed pipeline": {
+    "body": {
+      "body": {
+        "phase": "crashed",
+        "pipeline_id": "crashed",
+        "root_task_id": "task-director-crashed",
+        "status": "crashed",
+        "task_id": "task-director-crashed"
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "crashed",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "crashed"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: resume a failed pipeline": {
+    "body": {
+      "body": {
+        "phase": "failed",
+        "pipeline_id": "failedpipe",
+        "root_task_id": "task-director-failedpipe",
+        "status": "failed",
+        "task_id": "task-director-failedpipe"
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "failedpipe",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "failedpipe"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: resume a failed pipeline again": {
+    "body": {
+      "body": {
+        "phase": "failed",
+        "pipeline_id": "failedpipe",
+        "root_task_id": "task-director-failedpipe",
+        "status": "failed",
+        "task_id": "task-director-failedpipe"
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "failedpipe",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "failedpipe"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: resume a paused pipeline": {
+    "body": {
+      "body": {
+        "phase": "paused",
+        "pipeline_id": "paused",
+        "root_task_id": "task-director-paused",
+        "status": "paused",
+        "task_id": "task-director-paused"
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "paused",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: resume a pipeline without a workspace": {
+    "body": {
+      "body": {
+        "phase": "resumed",
+        "pipeline_id": "noworkspace",
+        "root_task_id": "task-director-noworkspace",
+        "status": "failed",
+        "task_id": "task-director-noworkspace"
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "noworkspace",
+            "<OUTPUTS>"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "noworkspace"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: resume an unknown pipeline": {
+    "body": {
+      "body": {
+        "detail": "cannot resume"
+      },
+      "calls": [
+        [
+          "resume_pipeline",
+          [
+            "nope",
+            "<OUTPUTS>"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: select a video": {
+    "body": {
+      "body": {
+        "idx": 2,
+        "selected": "v.mp4"
+      },
+      "calls": [
+        [
+          "select_clip_video_attempt",
+          [
+            "<OUTPUTS>",
+            "p1",
+            2,
+            "v.mp4"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: select a video badly": {
+    "body": {
+      "body": {
+        "error": "bad value"
+      },
+      "calls": [
+        [
+          "select_clip_video_attempt",
+          [
+            "<OUTPUTS>",
+            "bad",
+            2,
+            null
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: select a video while busy": {
+    "body": {
+      "body": {
+        "error": "busy now"
+      },
+      "calls": [
+        [
+          "select_clip_video_attempt",
+          [
+            "<OUTPUTS>",
+            "busy",
+            2,
+            "v.mp4"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: start": {
+    "body": {
+      "body": {
+        "pipeline_id": "pipe-1",
+        "root_task_id": "task-director-pipe-1",
+        "task_id": "task-director-pipe-1"
+      },
+      "calls": [
+        [
+          "start_pipeline",
+          [
+            {
+              "clips": [
+                {
+                  "c": 1
+                }
+              ],
+              "provenance": {
+                "actor": "user",
+                "command": {},
+                "tool": "studio"
+              },
+              "workspace": "ws-a"
+            }
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "pipe-1"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: start in the active workspace": {
+    "body": {
+      "body": {
+        "pipeline_id": "pipe-1",
+        "root_task_id": "task-director-pipe-1",
+        "task_id": "task-director-pipe-1"
+      },
+      "calls": [
+        [
+          "start_pipeline",
+          [
+            {
+              "clips": [],
+              "provenance": {
+                "actor": "unknown",
+                "command": {},
+                "tool": "studio"
+              },
+              "workspace": "default"
+            }
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "pipe-1"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: start refused by the execution mode": {
+    "body": {
+      "body": {
+        "detail": "simulated refusal for ws-z"
+      },
+      "calls": []
+    },
+    "status": 409
+  },
+  "lifecycle: start with an unknown collection": {
+    "body": {
+      "body": {
+        "detail": "Unknown Workspace collection"
+      },
+      "calls": []
+    },
+    "status": 400
+  },
+  "lifecycle: start with bad parameters": {
+    "body": {
+      "body": {
+        "detail": "bad start params"
+      },
+      "calls": [
+        [
+          "start_pipeline",
+          [
+            {
+              "fail": "value",
+              "provenance": {
+                "actor": "unknown",
+                "command": {},
+                "tool": "studio"
+              },
+              "workspace": "default"
+            }
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: stop a paused pipeline": {
+    "body": {
+      "body": {
+        "accepted": true,
+        "cancel_requested": false,
+        "cancelled": false,
+        "persisted": false,
+        "phase": "paused",
+        "status": "paused"
+      },
+      "calls": [
+        [
+          "stop_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: stop known pipeline": {
+    "body": {
+      "body": {
+        "accepted": true,
+        "cancel_requested": false,
+        "cancelled": false,
+        "persisted": false,
+        "phase": "paused",
+        "status": "paused"
+      },
+      "calls": [
+        [
+          "stop_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "paused"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: stop unknown pipeline": {
+    "body": {
+      "body": {
+        "detail": "Pipeline not found"
+      },
+      "calls": [
+        [
+          "stop_pipeline",
+          [
+            "nope"
+          ],
+          {}
+        ],
+        [
+          "get_pipeline",
+          [
+            "nope"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 404
+  },
+  "lifecycle: tag a busy pipeline": {
+    "body": {
+      "body": {
+        "error": "busy tag"
+      },
+      "calls": [
+        [
+          "update_clip_tag",
+          [
+            "<OUTPUTS>",
+            "busy",
+            2,
+            "good"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 409
+  },
+  "lifecycle: tag a clip": {
+    "body": {
+      "body": {
+        "status": "ok"
+      },
+      "calls": [
+        [
+          "update_clip_tag",
+          [
+            "<OUTPUTS>",
+            "p1",
+            0,
+            "good"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: tag a clip needs work": {
+    "body": {
+      "body": {
+        "status": "ok"
+      },
+      "calls": [
+        [
+          "update_clip_tag",
+          [
+            "<OUTPUTS>",
+            "p1",
+            2,
+            "needs_work"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: tag a missing pipeline": {
+    "body": {
+      "body": {
+        "error": "Pipeline or clip not found"
+      },
+      "calls": [
+        [
+          "update_clip_tag",
+          [
+            "<OUTPUTS>",
+            "nopipe",
+            2,
+            null
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 404
+  },
+  "lifecycle: task events of the reopened task": {
+    "body": {
+      "body": {
+        "events": [
+          {
+            "changes": {
+              "acquired_resources": [],
+              "attempt": 1,
+              "backend_job_id": "failedpipe",
+              "cancelable": false,
+              "completed_at": "<TIME>",
+              "created_at": "<TIME>",
+              "current": 0,
+              "detail": "",
+              "detail_current": 0,
+              "detail_total": 0,
+              "entity_id": "",
+              "entity_type": "",
+              "error": {
+                "message": "gpu fell over",
+                "retryable": true
+              },
+              "external_request_id": "",
+              "id": "task-director-failedpipe",
+              "kind": "director",
+              "max_attempts": 1,
+              "message": "gpu fell over",
+              "metadata": {
+                "actor": "unknown",
+                "adapter": "director",
+                "capability": null,
+                "command_id": null,
+                "generation_details": {},
+                "resource_schedule": {},
+                "run_id": null,
+                "tool": "director",
+                "workflow_id": null
+              },
+              "model": "",
+              "parent_id": null,
+              "phase": "failed",
+              "pipeline_id": "failedpipe",
+              "progress": 0.0,
+              "project_id": "",
+              "provider": "",
+              "queued_at": null,
+              "recoverable": true,
+              "resource_requirements": [],
+              "result_refs": [],
+              "resumable": true,
+              "root_id": "task-director-failedpipe",
+              "server_origin": "",
+              "started_at": null,
+              "status": "failed",
+              "title": "Director pipeline",
+              "token_usage": {
+                "calls": 0,
+                "completion": 0,
+                "prompt": 0,
+                "total": 0
+              },
+              "total": 0,
+              "updated_at": "<TIME>",
+              "workflow": "director",
+              "workspace": "ws-c"
+            },
+            "context": {},
+            "event_id": 1,
+            "root_id": "task-director-failedpipe",
+            "sequence": 1,
+            "task_id": "task-director-failedpipe",
+            "timestamp": "<TIME>",
+            "type": "task.created"
+          },
+          {
+            "changes": {
+              "completed_at": null,
+              "error": null,
+              "message": "Resume requested",
+              "phase": "queued",
+              "queued_at": "<TIME>",
+              "status": "queued"
+            },
+            "context": {},
+            "event_id": 2,
+            "root_id": "task-director-failedpipe",
+            "sequence": 2,
+            "task_id": "task-director-failedpipe",
+            "timestamp": "<TIME>",
+            "type": "task.resume_requested"
+          },
+          {
+            "changes": {
+              "completed_at": "<TIME>",
+              "error": {
+                "message": "gpu fell over",
+                "retryable": true
+              },
+              "message": "gpu fell over",
+              "phase": "failed",
+              "status": "failed"
+            },
+            "context": {},
+            "event_id": 3,
+            "root_id": "task-director-failedpipe",
+            "sequence": 3,
+            "task_id": "task-director-failedpipe",
+            "timestamp": "<TIME>",
+            "type": "adapter.synced"
+          }
+        ],
+        "resync_required": false
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: task of a resumed pipeline": {
+    "body": {
+      "body": {
+        "children": [],
+        "task": {
+          "acquired_resources": [],
+          "attempt": 1,
+          "backend_job_id": "crashed",
+          "cancelable": false,
+          "completed_at": "<TIME>",
+          "created_at": "<TIME>",
+          "current": 1,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-director-crashed",
+          "kind": "director",
+          "max_attempts": 1,
+          "message": "Director is working…",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "director",
+            "capability": null,
+            "command_id": null,
+            "generation_details": {},
+            "resource_schedule": {},
+            "run_id": null,
+            "tool": "director",
+            "workflow_id": null
+          },
+          "model": "",
+          "parent_id": null,
+          "phase": "crashed",
+          "pipeline_id": "crashed",
+          "progress": 0.3333333333333333,
+          "project_id": "",
+          "provider": "",
+          "queued_at": null,
+          "recoverable": true,
+          "resource_requirements": [],
+          "result_refs": [],
+          "resumable": true,
+          "root_id": "task-director-crashed",
+          "server_origin": "",
+          "started_at": null,
+          "status": "interrupted",
+          "title": "Director pipeline",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 3,
+          "updated_at": "<TIME>",
+          "workflow": "director",
+          "workspace": "ws-b"
+        }
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: update a preview": {
+    "body": {
+      "body": {
+        "message": "preview saved",
+        "preview_approved": true,
+        "preview_clips": [
+          {
+            "i": 1
+          }
+        ],
+        "preview_fingerprint": "fp1",
+        "quality_gate": {
+          "ok": true
+        },
+        "status": "preview_ready"
+      },
+      "calls": [
+        [
+          "update_comic_preview",
+          [
+            "preview",
+            [
+              {
+                "c": 1
+              }
+            ],
+            "<OUTPUTS>"
+          ],
+          {
+            "accept_quality_test": false,
+            "acceptance_note": "",
+            "accepted_by": "me",
+            "accepted_via": "",
+            "approve_preview": true,
+            "expected_fingerprint": null,
+            "quality_waiver": true,
+            "waiver_reason": "ok"
+          }
+        ],
+        [
+          "get_pipeline",
+          [
+            "preview"
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: update an unknown preview": {
+    "body": {
+      "body": {
+        "detail": "no such preview"
+      },
+      "calls": [
+        [
+          "update_comic_preview",
+          [
+            "nope",
+            [],
+            "<OUTPUTS>"
+          ],
+          {
+            "accept_quality_test": false,
+            "acceptance_note": "",
+            "accepted_by": "",
+            "accepted_via": "",
+            "approve_preview": false,
+            "expected_fingerprint": null,
+            "quality_waiver": false,
+            "waiver_reason": ""
+          }
+        ]
+      ]
+    },
+    "status": 400
+  },
+  "lifecycle: v2 NSFW with a public provider": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1
+          ],
+          "count": 2,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "production_plan": {
+          "kind": "podcast",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            }
+          ]
+        },
+        "skill_type": "podcast"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "openai"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "podcast"
+          ],
+          {
+            "nsfw": false,
+            "transcript": "t"
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ],
+        [
+          "polish_third_pass",
+          [
+            "",
+            "",
+            false,
+            []
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 direct video plan for H3": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1
+          ],
+          "count": 2,
+          "keys": [
+            "_director_h3_source_prompt",
+            "clip_index",
+            "duration",
+            "h3_segment_prompts",
+            "image_prompt",
+            "image_source",
+            "keyframe_prompts",
+            "metadata",
+            "video_prompt"
+          ]
+        },
+        "production_plan": {
+          "kind": "short_film",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            }
+          ]
+        },
+        "skill_type": "short_film"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "short_film"
+          ],
+          {
+            "music_video_treatment": {
+              "camera_language": "controlled cinematic movement with energetic chorus coverage",
+              "chorus_signature": "return to the main performance set with the boldest lighting and direct-to-camera delivery",
+              "direct_video_master_prompt": "a master prompt",
+              "forbidden_elements": "",
+              "generation_mode": "direct_video",
+              "lip_sync": "frequent",
+              "mode": "hybrid",
+              "palette": "",
+              "performer_presence": 60,
+              "recurring_motif": "",
+              "recurring_sets": [
+                "main performance set",
+                "story world",
+                "contrast set"
+              ],
+              "surrealism": 35,
+              "wardrobe": ""
+            },
+            "nsfw": false,
+            "story_description": "s",
+            "target_scenes": 2,
+            "video_model": "minimax_h3_i2v"
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "video",
+            false
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 failed job": {
+    "body": {
+      "body": {
+        "activeBatch": [],
+        "calls": 2,
+        "completedBatches": [
+          {
+            "completedAt": "<TIME>",
+            "indices": [
+              1,
+              2
+            ]
+          }
+        ],
+        "completedIndices": [
+          1,
+          2
+        ],
+        "createdAt": "<TIME>",
+        "error": "provider stopped at batch 1",
+        "finishedAt": "<TIME>",
+        "jobId": "director-plan-<ID>",
+        "message": "Music-video planning stopped; completed batches are recoverable",
+        "missingIndices": [
+          3,
+          4,
+          5
+        ],
+        "phase": "failed",
+        "result": null,
+        "skillType": "music_video",
+        "status": "failed",
+        "total": 5,
+        "updatedAt": "<TIME>",
+        "usage": {
+          "calls": 0,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "total_tokens": 0
+        },
+        "workspace": "default"
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 job": {
+    "body": {
+      "body": {
+        "activeBatch": [],
+        "calls": 2,
+        "completedBatches": [
+          {
+            "completedAt": "<TIME>",
+            "indices": [
+              1,
+              2
+            ]
+          },
+          {
+            "completedAt": "<TIME>",
+            "indices": [
+              3
+            ]
+          }
+        ],
+        "completedIndices": [
+          1,
+          2,
+          3
+        ],
+        "createdAt": "<TIME>",
+        "error": null,
+        "finishedAt": "<TIME>",
+        "jobId": "director-plan-<ID>",
+        "message": "3 visual shot plans ready for review",
+        "missingIndices": [],
+        "phase": "completed",
+        "result": {
+          "clip_plans": [
+            {
+              "clip_index": 0,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            },
+            {
+              "clip_index": 1,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            },
+            {
+              "clip_index": 2,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            }
+          ],
+          "plan_job_id": "director-plan-<ID>",
+          "production_plan": {
+            "kind": "music_video",
+            "shots": [
+              {
+                "i": 0
+              },
+              {
+                "i": 1
+              },
+              {
+                "i": 2
+              }
+            ]
+          },
+          "skill_type": "music_video"
+        },
+        "skillType": "music_video",
+        "status": "completed",
+        "total": 3,
+        "updatedAt": "<TIME>",
+        "usage": {
+          "calls": 0,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "total_tokens": 0
+        },
+        "workspace": "default"
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 job after the resume": {
+    "body": {
+      "body": {
+        "activeBatch": [],
+        "calls": 4,
+        "completedBatches": [
+          {
+            "completedAt": "<TIME>",
+            "indices": [
+              1,
+              2
+            ]
+          },
+          {
+            "completedAt": "<TIME>",
+            "indices": [
+              3,
+              4
+            ]
+          },
+          {
+            "completedAt": "<TIME>",
+            "indices": [
+              5
+            ]
+          }
+        ],
+        "completedIndices": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "createdAt": "<TIME>",
+        "error": null,
+        "finishedAt": "<TIME>",
+        "jobId": "director-plan-<ID>",
+        "message": "5 visual shot plans ready for review",
+        "missingIndices": [],
+        "phase": "completed",
+        "result": {
+          "clip_plans": [
+            {
+              "clip_index": 0,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            },
+            {
+              "clip_index": 1,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            },
+            {
+              "clip_index": 2,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            },
+            {
+              "clip_index": 3,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            },
+            {
+              "clip_index": 4,
+              "duration": 5,
+              "image_prompt": "<long text>",
+              "video_prompt": "<long text>"
+            }
+          ],
+          "plan_job_id": "director-plan-<ID>",
+          "production_plan": {
+            "kind": "music_video",
+            "shots": [
+              {
+                "i": 0
+              },
+              {
+                "i": 1
+              },
+              {
+                "i": 2
+              },
+              {
+                "i": 3
+              },
+              {
+                "i": 4
+              }
+            ]
+          },
+          "skill_type": "music_video"
+        },
+        "skillType": "music_video",
+        "status": "completed",
+        "total": 5,
+        "updatedAt": "<TIME>",
+        "usage": {
+          "calls": 0,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "total_tokens": 0
+        },
+        "workspace": "default"
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 job of another workspace": {
+    "body": {
+      "body": {
+        "detail": "Director plan job not found"
+      },
+      "calls": []
+    },
+    "status": 404
+  },
+  "lifecycle: v2 jobs": {
+    "body": {
+      "body": {
+        "jobs": [
+          {
+            "activeBatch": [],
+            "calls": 2,
+            "completedBatches": [
+              {
+                "completedAt": "<TIME>",
+                "indices": [
+                  1,
+                  2
+                ]
+              },
+              {
+                "completedAt": "<TIME>",
+                "indices": [
+                  3
+                ]
+              }
+            ],
+            "completedIndices": [
+              1,
+              2,
+              3
+            ],
+            "createdAt": "<TIME>",
+            "error": null,
+            "finishedAt": "<TIME>",
+            "jobId": "director-plan-<ID>",
+            "message": "3 visual shot plans ready for review",
+            "missingIndices": [],
+            "phase": "completed",
+            "result": {
+              "clip_plans": [
+                {
+                  "clip_index": 0,
+                  "duration": 5,
+                  "image_prompt": "<long text>",
+                  "video_prompt": "<long text>"
+                },
+                {
+                  "clip_index": 1,
+                  "duration": 5,
+                  "image_prompt": "<long text>",
+                  "video_prompt": "<long text>"
+                },
+                {
+                  "clip_index": 2,
+                  "duration": 5,
+                  "image_prompt": "<long text>",
+                  "video_prompt": "<long text>"
+                }
+              ],
+              "plan_job_id": "director-plan-<ID>",
+              "production_plan": {
+                "kind": "music_video",
+                "shots": [
+                  {
+                    "i": 0
+                  },
+                  {
+                    "i": 1
+                  },
+                  {
+                    "i": 2
+                  }
+                ]
+              },
+              "skill_type": "music_video"
+            },
+            "skillType": "music_video",
+            "status": "completed",
+            "total": 3,
+            "updatedAt": "<TIME>",
+            "usage": {
+              "calls": 0,
+              "completion_tokens": 0,
+              "prompt_tokens": 0,
+              "total_tokens": 0
+            },
+            "workspace": "default"
+          }
+        ]
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 jobs after the failure": {
+    "body": {
+      "body": {
+        "jobs": [
+          {
+            "activeBatch": [],
+            "calls": 2,
+            "completedBatches": [
+              {
+                "completedAt": "<TIME>",
+                "indices": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "completedIndices": [
+              1,
+              2
+            ],
+            "createdAt": "<TIME>",
+            "error": "provider stopped at batch 1",
+            "finishedAt": "<TIME>",
+            "jobId": "director-plan-<ID>",
+            "message": "Music-video planning stopped; completed batches are recoverable",
+            "missingIndices": [
+              3,
+              4,
+              5
+            ],
+            "phase": "failed",
+            "result": null,
+            "skillType": "music_video",
+            "status": "failed",
+            "total": 5,
+            "updatedAt": "<TIME>",
+            "usage": {
+              "calls": 0,
+              "completion_tokens": 0,
+              "prompt_tokens": 0,
+              "total_tokens": 0
+            },
+            "workspace": "default"
+          },
+          {
+            "activeBatch": [],
+            "calls": 2,
+            "completedBatches": [
+              {
+                "completedAt": "<TIME>",
+                "indices": [
+                  1,
+                  2
+                ]
+              },
+              {
+                "completedAt": "<TIME>",
+                "indices": [
+                  3
+                ]
+              }
+            ],
+            "completedIndices": [
+              1,
+              2,
+              3
+            ],
+            "createdAt": "<TIME>",
+            "error": null,
+            "finishedAt": "<TIME>",
+            "jobId": "director-plan-<ID>",
+            "message": "3 visual shot plans ready for review",
+            "missingIndices": [],
+            "phase": "completed",
+            "result": {
+              "clip_plans": [
+                {
+                  "clip_index": 0,
+                  "duration": 5,
+                  "image_prompt": "<long text>",
+                  "video_prompt": "<long text>"
+                },
+                {
+                  "clip_index": 1,
+                  "duration": 5,
+                  "image_prompt": "<long text>",
+                  "video_prompt": "<long text>"
+                },
+                {
+                  "clip_index": 2,
+                  "duration": 5,
+                  "image_prompt": "<long text>",
+                  "video_prompt": "<long text>"
+                }
+              ],
+              "plan_job_id": "director-plan-<ID>",
+              "production_plan": {
+                "kind": "music_video",
+                "shots": [
+                  {
+                    "i": 0
+                  },
+                  {
+                    "i": 1
+                  },
+                  {
+                    "i": 2
+                  }
+                ]
+              },
+              "skill_type": "music_video"
+            },
+            "skillType": "music_video",
+            "status": "completed",
+            "total": 3,
+            "updatedAt": "<TIME>",
+            "usage": {
+              "calls": 0,
+              "completion_tokens": 0,
+              "prompt_tokens": 0,
+              "total_tokens": 0
+            },
+            "workspace": "default"
+          }
+        ]
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 missing job": {
+    "body": {
+      "body": {
+        "detail": "Director plan job not found"
+      },
+      "calls": []
+    },
+    "status": 404
+  },
+  "lifecycle: v2 music video plan": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1,
+            2
+          ],
+          "count": 3,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "plan_job_id": "director-plan-<ID>",
+        "production_plan": {
+          "kind": "music_video",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            },
+            {
+              "i": 2
+            }
+          ]
+        },
+        "skill_type": "music_video"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "music_video"
+          ],
+          {
+            "batch_checkpoint": "<callback>",
+            "clips": [
+              {
+                "c": 0
+              },
+              {
+                "c": 1
+              },
+              {
+                "c": 2
+              }
+            ],
+            "completed_shot_plans": [],
+            "music_video_treatment": {
+              "camera_language": "controlled cinematic movement with energetic chorus coverage",
+              "chorus_signature": "return to the main performance set with the boldest lighting and direct-to-camera delivery",
+              "direct_video_master_prompt": "<long text>",
+              "forbidden_elements": "",
+              "generation_mode": "image_guided",
+              "lip_sync": "frequent",
+              "mode": "hybrid",
+              "palette": "",
+              "performer_presence": 60,
+              "recurring_motif": "",
+              "recurring_sets": [
+                "main performance set",
+                "story world",
+                "contrast set"
+              ],
+              "surrealism": 35,
+              "wardrobe": ""
+            },
+            "nsfw": false,
+            "scene_description": "scene",
+            "video_model": "wan"
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 music video plan that stops half way": {
+    "body": {
+      "body": {
+        "detail": {
+          "code": "director_plan_incomplete",
+          "imagesQueued": false,
+          "job": {
+            "activeBatch": [],
+            "calls": 2,
+            "completedBatches": [
+              {
+                "completedAt": "<TIME>",
+                "indices": [
+                  1,
+                  2
+                ]
+              }
+            ],
+            "completedIndices": [
+              1,
+              2
+            ],
+            "createdAt": "<TIME>",
+            "error": "provider stopped at batch 1",
+            "finishedAt": "<TIME>",
+            "jobId": "director-plan-<ID>",
+            "message": "Music-video planning stopped; completed batches are recoverable",
+            "missingIndices": [
+              3,
+              4,
+              5
+            ],
+            "phase": "failed",
+            "result": null,
+            "skillType": "music_video",
+            "status": "failed",
+            "total": 5,
+            "updatedAt": "<TIME>",
+            "usage": {
+              "calls": 0,
+              "completion_tokens": 0,
+              "prompt_tokens": 0,
+              "total_tokens": 0
+            },
+            "workspace": "default"
+          },
+          "message": "provider stopped at batch 1",
+          "resume": {
+            "action": "resume_missing",
+            "method": "POST",
+            "path": "/api/v1/director/v2/plan/jobs/director-plan-<ID>/resume?workspace=default"
+          }
+        }
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "music_video"
+          ],
+          {
+            "batch_checkpoint": "<callback>",
+            "clips": [
+              {
+                "c": 0
+              },
+              {
+                "c": 1
+              },
+              {
+                "c": 2
+              },
+              {
+                "c": 3
+              },
+              {
+                "c": 4
+              }
+            ],
+            "completed_shot_plans": [],
+            "music_video_treatment": {
+              "camera_language": "controlled cinematic movement with energetic chorus coverage",
+              "chorus_signature": "return to the main performance set with the boldest lighting and direct-to-camera delivery",
+              "direct_video_master_prompt": "<long text>",
+              "forbidden_elements": "",
+              "generation_mode": "image_guided",
+              "lip_sync": "frequent",
+              "mode": "hybrid",
+              "palette": "",
+              "performer_presence": 60,
+              "recurring_motif": "",
+              "recurring_sets": [
+                "main performance set",
+                "story world",
+                "contrast set"
+              ],
+              "surrealism": 35,
+              "wardrobe": ""
+            },
+            "nsfw": false,
+            "scene_description": "scene",
+            "video_model": "wan"
+          }
+        ]
+      ]
+    },
+    "status": 500
+  },
+  "lifecycle: v2 plan for another skill with the job id": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1
+          ],
+          "count": 2,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "production_plan": {
+          "kind": "short_film",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            }
+          ]
+        },
+        "skill_type": "short_film"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "short_film"
+          ],
+          {
+            "nsfw": false
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 plan that is not an object": {
+    "body": {
+      "body": {
+        "detail": "Director plan request must be an object"
+      },
+      "calls": []
+    },
+    "status": 422
+  },
+  "lifecycle: v2 plan with a completed job id": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "count": 5,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "plan_job_id": "director-plan-<ID>",
+        "production_plan": {
+          "kind": "music_video",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            },
+            {
+              "i": 2
+            },
+            {
+              "i": 3
+            },
+            {
+              "i": 4
+            }
+          ]
+        },
+        "skill_type": "music_video"
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 plan with an unknown job id": {
+    "body": {
+      "body": {
+        "detail": "Director plan job not found"
+      },
+      "calls": []
+    },
+    "status": 404
+  },
+  "lifecycle: v2 plan with the job id of another workspace": {
+    "body": {
+      "body": {
+        "detail": "Director plan job not found"
+      },
+      "calls": []
+    },
+    "status": 404
+  },
+  "lifecycle: v2 progress after the plan": {
+    "body": {
+      "body": {
+        "current": 3,
+        "detail": "3 visual shot plans ready for review.",
+        "id": "act-1",
+        "phase": "completed",
+        "status": "completed",
+        "total": 3,
+        "updated_at": "<TIME>",
+        "usage": {
+          "calls": 0,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "total_tokens": 0
+        }
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 progress of an unknown activity": {
+    "body": {
+      "body": {
+        "detail": "Planning activity not found"
+      },
+      "calls": []
+    },
+    "status": 404
+  },
+  "lifecycle: v2 progress of the failed plan": {
+    "body": {
+      "body": {
+        "current": 2,
+        "detail": "provider stopped at batch 1",
+        "error": "provider stopped at batch 1",
+        "id": "act-2",
+        "phase": "planning_planning",
+        "status": "failed",
+        "total": 5,
+        "updated_at": "<TIME>",
+        "usage": {
+          "calls": 0,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "total_tokens": 0
+        }
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 progress of the short film plan": {
+    "body": {
+      "body": {
+        "current": 2,
+        "detail": "2 visual shot plans ready for review.",
+        "id": "act-3",
+        "phase": "completed",
+        "status": "completed",
+        "total": 2,
+        "updated_at": "<TIME>",
+        "usage": {
+          "calls": 0,
+          "completion_tokens": 0,
+          "prompt_tokens": 0,
+          "total_tokens": 0
+        }
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 raw prompts": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1
+          ],
+          "count": 2,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "production_plan": {
+          "kind": "viral_video",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            }
+          ]
+        },
+        "skill_type": "viral_video"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": true,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "viral_video"
+          ],
+          {
+            "nsfw": true,
+            "scene_description": "x"
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 resume a completed job": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1,
+            2
+          ],
+          "count": 3,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "plan_job_id": "director-plan-<ID>",
+        "production_plan": {
+          "kind": "music_video",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            },
+            {
+              "i": 2
+            }
+          ]
+        },
+        "skill_type": "music_video"
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 resume a missing job": {
+    "body": {
+      "body": {
+        "detail": "Director plan job not found"
+      },
+      "calls": []
+    },
+    "status": 404
+  },
+  "lifecycle: v2 resume it again": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "count": 5,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "plan_job_id": "director-plan-<ID>",
+        "production_plan": {
+          "kind": "music_video",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            },
+            {
+              "i": 2
+            },
+            {
+              "i": 3
+            },
+            {
+              "i": 4
+            }
+          ]
+        },
+        "skill_type": "music_video"
+      },
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle: v2 resume the failed job": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ],
+          "count": 5,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "plan_job_id": "director-plan-<ID>",
+        "production_plan": {
+          "kind": "music_video",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            },
+            {
+              "i": 2
+            },
+            {
+              "i": 3
+            },
+            {
+              "i": 4
+            }
+          ]
+        },
+        "skill_type": "music_video"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "music_video"
+          ],
+          {
+            "batch_checkpoint": "<callback>",
+            "clips": [
+              {
+                "c": 0
+              },
+              {
+                "c": 1
+              },
+              {
+                "c": 2
+              },
+              {
+                "c": 3
+              },
+              {
+                "c": 4
+              }
+            ],
+            "completed_shot_plans": [
+              {
+                "clip_index": 1,
+                "text": "shot 1"
+              },
+              {
+                "clip_index": 2,
+                "text": "shot 2"
+              }
+            ],
+            "music_video_treatment": {
+              "camera_language": "controlled cinematic movement with energetic chorus coverage",
+              "chorus_signature": "return to the main performance set with the boldest lighting and direct-to-camera delivery",
+              "direct_video_master_prompt": "<long text>",
+              "forbidden_elements": "",
+              "generation_mode": "image_guided",
+              "lip_sync": "frequent",
+              "mode": "hybrid",
+              "palette": "",
+              "performer_presence": 60,
+              "recurring_motif": "",
+              "recurring_sets": [
+                "main performance set",
+                "story world",
+                "contrast set"
+              ],
+              "surrealism": 35,
+              "wardrobe": ""
+            },
+            "nsfw": false,
+            "scene_description": "scene",
+            "video_model": "wan"
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 short film plan": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1
+          ],
+          "count": 2,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "production_plan": {
+          "kind": "short_film",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            }
+          ]
+        },
+        "skill_type": "short_film"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "short_film"
+          ],
+          {
+            "nsfw": false,
+            "story_description": "story",
+            "target_scenes": 3
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle: v2 third pass with NSFW on a local model": {
+    "body": {
+      "body": {
+        "clip_plans": {
+          "clip_indexes": [
+            0,
+            1
+          ],
+          "count": 2,
+          "keys": [
+            "clip_index",
+            "duration",
+            "image_prompt",
+            "video_prompt"
+          ]
+        },
+        "production_plan": {
+          "kind": "podcast",
+          "shots": [
+            {
+              "i": 0
+            },
+            {
+              "i": 1
+            }
+          ]
+        },
+        "skill_type": "podcast"
+      },
+      "calls": [
+        [
+          "ensure_llm_loaded",
+          [],
+          {
+            "provider": "local"
+          }
+        ],
+        [
+          "orchestrator",
+          [],
+          {
+            "generate": true,
+            "raw_prompts": false,
+            "streaming": true
+          }
+        ],
+        [
+          "plan",
+          [
+            "podcast"
+          ],
+          {
+            "characters": [
+              {
+                "name": "A"
+              }
+            ],
+            "image_model": "i1",
+            "nsfw": true,
+            "transcript": "t",
+            "video_model": "m1"
+          }
+        ],
+        [
+          "render_plan",
+          [
+            "both",
+            false
+          ],
+          {}
+        ],
+        [
+          "polish_third_pass",
+          [
+            "m1",
+            "i1",
+            true,
+            [
+              {
+                "name": "A"
+              }
+            ]
+          ],
+          {}
+        ]
+      ]
+    },
+    "status": 200
+  },
+  "patch a missing preview": {
+    "body": {
+      "detail": "No saved state found for this pipeline."
+    },
+    "status": 400
+  },
+  "plan dialogue without analysis": {
+    "body": {
+      "detail": "analysis is required"
+    },
+    "status": 400
+  },
+  "plan prompts without a scene": {
+    "body": {
+      "detail": "scene_description is required"
+    },
+    "status": 400
+  },
+  "plan prompts without clips": {
+    "body": {
+      "detail": "clips is required"
+    },
+    "status": 400
+  },
+  "plan short film prompts without a scene": {
+    "body": {
+      "detail": "scene_description is required"
+    },
+    "status": 400
+  },
+  "plan short film prompts without clips": {
+    "body": {
+      "detail": "clips is required"
+    },
+    "status": 400
+  },
+  "plan short film script without a story": {
+    "body": {
+      "detail": "story_description is required"
+    },
+    "status": 400
+  },
+  "preview a missing pipeline": {
+    "body": {
+      "detail": "No saved state found for this pipeline."
+    },
+    "status": 400
+  },
+  "rejoin a missing pipeline": {
+    "body": {
+      "error": "Pipeline missing not found"
+    },
+    "status": 400
+  },
+  "repair a missing pipeline": {
+    "body": {
+      "error": "Pipeline missing not found"
+    },
+    "status": 400
+  },
+  "rerun an unknown clip image": {
+    "body": {
+      "error": "Clip index 9 out of range (0-0)"
+    },
+    "status": 400
+  },
+  "rerun an unknown clip video": {
+    "body": {
+      "error": "Clip index 9 out of range (0-0)"
+    },
+    "status": 400
+  },
+  "rerun an unknown segment": {
+    "body": {
+      "error": "This operation requires a saved MiniMax H3 production"
+    },
+    "status": 400
+  },
+  "resume a missing pipeline": {
+    "body": {
+      "detail": "No saved state found for this pipeline."
+    },
+    "status": 400
+  },
+  "resume a v2 plan job that does not exist": {
+    "body": {
+      "detail": "Director plan job not found"
+    },
+    "status": 404
+  },
+  "select a video for an unknown clip": {
+    "body": {
+      "error": "Select one valid video filename from this workspace"
+    },
+    "status": 400
+  },
+  "start with an unknown collection": {
+    "body": {
+      "detail": "Unknown Workspace collection"
+    },
+    "status": 400
+  },
+  "stop a missing pipeline": {
+    "body": {
+      "detail": "Pipeline not found"
+    },
+    "status": 404
+  },
+  "tag an unknown clip": {
+    "body": {
+      "error": "Pipeline or clip not found"
+    },
+    "status": 404
+  },
+  "v2 plan job that does not exist": {
+    "body": {
+      "detail": "Director plan job not found"
+    },
+    "status": 404
+  },
+  "v2 plan jobs for an empty workspace": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "v2 plan progress for a missing activity": {
+    "body": {
+      "detail": "Planning activity not found"
+    },
+    "status": 404
+  },
+  "v2 plan with a bad body": {
+    "body": {
+      "detail": "Director plan request must be an object"
+    },
+    "status": 422
+  }
+}

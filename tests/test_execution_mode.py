@@ -484,6 +484,8 @@ def test_editor_gallery_sidecar_publishes_canonical_manifest_without_invented_ac
     write = getattr(editor_router, writer_name, None)
     if write is None and writer_name == "_write_scene_recording_sidecar":
         from services.scene_save import _write_scene_recording_sidecar as write
+    elif write is None and writer_name == "_write_comic_animatic_sidecar":
+        from services.comic_animatic import _write_comic_animatic_sidecar as write
     elif write is None:
         write = _load_launch_function(
             writer_name,
@@ -564,7 +566,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
-        "_write_comic_animatic_sidecar",
     ):
         body = function_source(name)
         assert "publish_generation_sidecar" in body
@@ -574,6 +575,17 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     sfx_body = function_source("_run_sfx_generation", sfx_text, ast.parse(sfx_text))
     assert "publish_generation_sidecar" in sfx_body
     assert "json.dump" not in sfx_body
+    animatic_source = (
+        Path(__file__).parents[1] / "app" / "services" / "comic_animatic.py"
+    ).read_text(encoding="utf-8")
+    animatic_tree = ast.parse(animatic_source)
+    animatic_node = next(
+        item for item in animatic_tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == "_write_comic_animatic_sidecar"
+    )
+    animatic_body = ast.get_source_segment(animatic_source, animatic_node)
+    assert "publish_generation_sidecar" in animatic_body
+    assert "json.dump" not in animatic_body
     tools_tree = ast.parse(tools_source)
     sidecar = function_source("_write_tool_sidecar", tools_source, tools_tree)
     assert "publish_generation_sidecar" in sidecar

@@ -171,13 +171,13 @@ class TestQwenImage21Definitions(unittest.TestCase):
 
     def test_studio_image_generation_unlocks_2_1_features(self):
         root = _ROOT
-        launch = _read(root / "app" / "_launch_runtime.py")
+        options = _read(root / "app" / "services" / "model_options.py")
         types_source = _read(root / "ui" / "src" / "types" / "index.ts")
         sidebar = _read(root / "ui" / "src" / "components" / "Sidebar" / "Sidebar.tsx")
         image_gen = _read(root / "ui" / "src" / "lib" / "imageGeneration.ts")
         store = _read(root / "ui" / "src" / "stores" / "modelVisibility.ts")
-        self.assertIn('"inpaint_support": bool(md.get("inpaint_support", False))', launch)
-        self.assertIn('"native_rgba": bool(md.get("native_rgba", False))', launch)
+        self.assertIn('"inpaint_support": bool(md.get("inpaint_support", False))', options)
+        self.assertIn('"native_rgba": bool(md.get("native_rgba", False))', options)
         from services.image_edit_workflow import image_edit_capabilities
         self.assertTrue(image_edit_capabilities(self.handler.query_model_def("qwen_image_21", {}))["outpaint_support"])
         self.assertTrue(image_edit_capabilities(self.handler.query_model_def("qwen_image_edit_20B", {}))["outpaint_support"])

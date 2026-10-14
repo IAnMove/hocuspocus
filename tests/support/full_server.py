@@ -23,7 +23,7 @@ Two known differences from a real boot:
   import prints a warning and a traceback, and the table has no Gradio
   ``/classic`` mount (``scripts/boot_smoke.py`` ignores mounts too);
 - the server keeps media thumbnails in ``<repo>/cache/media-thumbnails``.
-  :func:`_keep_media_cache_in` repoints the launch module and
+  :func:`_keep_media_cache_in` repoints the launch alias, ``output_ops`` and
   ``media_dimensions`` after the import, but the video editor router took the
   folder when it was included, so a test that makes video editor thumbnails
   writes them under the repo's ``cache/`` (ignored by git).
@@ -110,10 +110,15 @@ def _keep_temp_files_in(folder: Path) -> None:
 def _keep_media_cache_in(folder: Path) -> None:
     """The server caches media facts and thumbnails in <repo>/cache; tests keep theirs in the state folder."""
     from services import media_dimensions
+    from services import output_ops
 
     folder.mkdir(parents=True, exist_ok=True)
-    sys.modules["_launch_runtime"]._MEDIA_THUMBNAIL_CACHE_DIR = str(folder)
-    media_dimensions.configure(str(folder))
+    path = str(folder)
+    # The launch name is the alias the video editor already captured. Thumbnails
+    # read the service global at request time, so both names move together.
+    sys.modules["_launch_runtime"]._MEDIA_THUMBNAIL_CACHE_DIR = path
+    output_ops._MEDIA_THUMBNAIL_CACHE_DIR = path
+    media_dimensions.configure(path)
 
 
 def _source_of(endpoint: Any) -> str | None:

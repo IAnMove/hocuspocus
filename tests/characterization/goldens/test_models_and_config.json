@@ -1,15 +1,84 @@
 {
+  "active downloads": {
+    "body": {
+      "downloads": []
+    },
+    "status": 200
+  },
+  "debug text to video": {
+    "body": {
+      "ckpts_dir": "unknown",
+      "is_downloaded": false,
+      "keys": {
+        "URLs": "[list len=1] ['ckpts/fake_t2v.safetensors']",
+        "description": "A model that exists only in tests.",
+        "fps": 16,
+        "image_prompt_types_allowed": "",
+        "name": "Fake Text to Video"
+      },
+      "model_type": "fake_t2v"
+    },
+    "status": 200
+  },
+  "debug unknown": {
+    "body": {
+      "error": "Model not found"
+    },
+    "status": 200
+  },
   "debug user action": {
     "body": {
       "status": "disabled"
     },
     "status": 200
   },
+  "defaults text to video": {
+    "body": {},
+    "status": 200
+  },
+  "defaults unknown": {
+    "body": {
+      "detail": "Unknown model: not_a_model"
+    },
+    "status": 404
+  },
+  "delete nothing on disk": {
+    "body": {
+      "deleted": [],
+      "model_type": "fake_t2v",
+      "skipped_linked": []
+    },
+    "status": 200
+  },
+  "delete unknown": {
+    "body": {
+      "error": "Model not found"
+    },
+    "status": 404
+  },
+  "delete while generating": {
+    "body": {
+      "detail": "Cannot delete fake_i2v while generation job(s) golden-delete are active or queued. Cancel them and wait for shutdown first."
+    },
+    "status": 409
+  },
   "describe refs missing images": {
     "body": {
       "detail": "image_paths is required"
     },
     "status": 400
+  },
+  "download unknown": {
+    "body": {
+      "error": "Model not found"
+    },
+    "status": 404
+  },
+  "downloads status": {
+    "body": {
+      "downloads": {}
+    },
+    "status": 200
   },
   "generate music empty": {
     "body": {
@@ -35,6 +104,1011 @@
       "remote_url": ""
     },
     "status": 200
+  },
+  "lora delete bad extension": {
+    "body": {
+      "detail": "Not a LoRA file."
+    },
+    "status": 400
+  },
+  "lora delete bundled": {
+    "body": {
+      "detail": "This LoRA is bundled with a model (a distill/accelerator) and would just re-download on next use. Delete the model instead."
+    },
+    "status": 409
+  },
+  "lora delete file": {
+    "body": {
+      "deferred": false,
+      "deleted": "gone.safetensors",
+      "extras_removed": [
+        "gone.civitai.json",
+        "gone.guide.md",
+        "gone_preview1.png"
+      ],
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "lora delete invalid directory": {
+    "body": {
+      "detail": "Invalid path."
+    },
+    "status": 400
+  },
+  "lora delete linked copy": {
+    "body": {
+      "detail": "This LoRA lives in a linked model folder, which is read-only. Delete it from that install instead."
+    },
+    "status": 403
+  },
+  "lora delete missing file": {
+    "body": {
+      "detail": "LoRA not found: missing.safetensors"
+    },
+    "status": 404
+  },
+  "lora delete missing params": {
+    "body": {
+      "detail": [
+        {
+          "input": null,
+          "loc": [
+            "query",
+            "directory"
+          ],
+          "msg": "Field required",
+          "type": "missing"
+        },
+        {
+          "input": null,
+          "loc": [
+            "query",
+            "filename"
+          ],
+          "msg": "Field required",
+          "type": "missing"
+        }
+      ]
+    },
+    "status": 422
+  },
+  "lora delete no root": {
+    "body": {
+      "detail": "LoRA folder not found."
+    },
+    "status": 500
+  },
+  "lora delete traversal name": {
+    "body": {
+      "detail": "Not a LoRA file."
+    },
+    "status": 400
+  },
+  "lora details after update check": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": [
+        {
+          "civitai_model_id": 333,
+          "current_version_id": 2,
+          "downloaded_at": "<TIME>",
+          "filename": "bundle.safetensors",
+          "has_guide": false,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 3,
+          "lora_id": "civitai:333",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": null,
+          "trained_words": [],
+          "update_status": "current"
+        },
+        {
+          "civitai_model_id": 444,
+          "current_version_id": 1,
+          "downloaded_at": "<TIME>",
+          "filename": "ltx-2-19b-distilled-lora-384.safetensors",
+          "has_guide": false,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "lora_id": "civitai:444",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": null,
+          "trained_words": [],
+          "update_status": "current"
+        },
+        {
+          "civitai_model_id": 555,
+          "current_version_id": 7,
+          "downloaded_at": "<TIME>",
+          "filename": "newer_v1.safetensors",
+          "has_guide": false,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 9,
+          "lora_id": "civitai:555",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": null,
+          "trained_words": [],
+          "update_status": "current"
+        },
+        {
+          "civitai_model_id": 555,
+          "current_version_id": 8,
+          "downloaded_at": "<TIME>",
+          "filename": "newer_v2.safetensors",
+          "has_guide": false,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 9,
+          "lora_id": "civitai:555",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": null,
+          "trained_words": [],
+          "update_status": "available"
+        },
+        {
+          "civitai_model_id": 111,
+          "current_version_id": 5,
+          "downloaded_at": "<TIME>",
+          "filename": "old.safetensors",
+          "has_guide": false,
+          "latest_changelog": "Fixed hands",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 6,
+          "lora_id": "civitai:111",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": "<TIME>",
+          "trained_words": [],
+          "update_status": "available"
+        },
+        {
+          "civitai_model_id": 222,
+          "current_version_id": 1,
+          "downloaded_at": "<TIME>",
+          "filename": "removed.safetensors",
+          "has_guide": false,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "lora_id": "civitai:222",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": null,
+          "trained_words": [],
+          "update_status": "removed"
+        },
+        {
+          "civitai_model_id": 12345,
+          "current_version_id": 99,
+          "downloaded_at": "<TIME>",
+          "filename": "style.safetensors",
+          "guide": "Use the trigger word styleword for a calm look.",
+          "has_guide": true,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 99,
+          "lora_id": "civitai:12345",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": "<TIME>",
+          "trained_words": [
+            "styleword"
+          ],
+          "update_status": "current"
+        }
+      ],
+      "manifest_last_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "lora details for 3d model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "lora details for legacy h3": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "lora details for model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": [
+        {
+          "civitai_model_id": 12345,
+          "current_version_id": 99,
+          "downloaded_at": "<TIME>",
+          "filename": "style.safetensors",
+          "guide": "Use the trigger word styleword for a calm look.",
+          "has_guide": true,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "lora_id": "civitai:12345",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "recommended_weights": null,
+          "released_at": "<TIME>",
+          "trained_words": [
+            "styleword"
+          ],
+          "update_status": "unknown"
+        }
+      ],
+      "manifest_last_check_at": null
+    },
+    "status": 200
+  },
+  "lora details unknown model": {
+    "body": {
+      "detail": "Unknown model: not_a_real_model"
+    },
+    "status": 404
+  },
+  "lora directories": {
+    "body": {
+      "directories": [
+        "flux",
+        "wan"
+      ]
+    },
+    "status": 200
+  },
+  "lora guide after generate": {
+    "body": {
+      "guide": "Use the trigger word."
+    },
+    "status": 200
+  },
+  "lora guide files after generate": {
+    "body": {
+      "wan/empty.civitai.json": "{\"name\": \"Empty\", \"baseModel\": \"Wan Video\", \"description\": \"A calm cinematic style that shifts colours towards teal and orange with soft contrast. A calm cinematic style that shifts colours towards teal and orange with soft contrast. \", \"trainedWords\": [\"trigger\"], \"modelId\": 3, \"versionId\": 1}",
+      "wan/plain.civitai.json": "{\"name\": \"Plain\", \"baseModel\": \"Wan Video\", \"description\": \"A calm cinematic style that shifts colours towards teal and orange with soft contrast. A calm cinematic style that shifts colours towards teal and orange with soft contrast. \", \"trainedWords\": [\"trigger\"], \"modelId\": 2, \"versionId\": 1}",
+      "wan/plain.guide.md": "Just write the guide as plain text.",
+      "wan/short.civitai.json": "{\"name\": \"Short\", \"baseModel\": \"Wan Video\", \"description\": \"\", \"trainedWords\": [\"trigger\"], \"modelId\": 4, \"versionId\": 1}",
+      "wan/style.civitai.json": "{\"modelId\": 12345, \"versionId\": 99, \"name\": \"Style LoRA\", \"baseModel\": \"Wan Video\", \"trainedWords\": [\"styleword\"], \"nsfw\": false, \"downloadedAt\": \"<TIME>\", \"publishedAt\": \"<TIME>\", \"tags\": [\"cinematic\"], \"description\": \"A calm style.\", \"images\": []}",
+      "wan/style.guide.md": "Use the trigger word styleword for a calm look.\n",
+      "wan/target.civitai.json": "{\n  \"name\": \"Target\",\n  \"baseModel\": \"Wan Video\",\n  \"description\": \"A calm cinematic style that shifts colours towards teal and orange with soft contrast. A calm cinematic style that shifts colours towards teal and orange with soft contrast. \",\n  \"trainedWords\": [\n    \"trigger\"\n  ],\n  \"modelId\": 1,\n  \"versionId\": 1,\n  \"recommendedWeights\": {\n    \"source\": \"civitai\",\n    \"default\": 0.7,\n    \"min\": 0.5,\n    \"max\": 1.0\n  }\n}",
+      "wan/target.guide.md": "Use the trigger word."
+    },
+    "status": 200
+  },
+  "lora guide generate": {
+    "body": {
+      "guide": "Use the trigger word.",
+      "recommended_weights": {
+        "default": 0.7,
+        "max": 1.0,
+        "min": 0.5,
+        "source": "civitai"
+      }
+    },
+    "status": 200
+  },
+  "lora guide generate empty answer": {
+    "body": {
+      "detail": "LLM returned empty guide"
+    },
+    "status": 500
+  },
+  "lora guide generate missing fields": {
+    "body": {
+      "detail": "model_type and filename required"
+    },
+    "status": 400
+  },
+  "lora guide generate missing file": {
+    "body": {
+      "detail": "LoRA file not found"
+    },
+    "status": 404
+  },
+  "lora guide generate no sidecar": {
+    "body": {
+      "detail": "No CivitAI metadata found. Download this LoRA from the browser first."
+    },
+    "status": 404
+  },
+  "lora guide generate plain text": {
+    "body": {
+      "guide": "Just write the guide as plain text.",
+      "recommended_weights": null
+    },
+    "status": 200
+  },
+  "lora guide generate too little metadata": {
+    "body": {
+      "detail": "LLM returned empty guide"
+    },
+    "status": 500
+  },
+  "lora guide generate unknown model": {
+    "body": {
+      "detail": "Unknown model type"
+    },
+    "status": 404
+  },
+  "lora guide missing": {
+    "body": {
+      "guide": null
+    },
+    "status": 200
+  },
+  "lora guide present": {
+    "body": {
+      "guide": "Use the trigger word styleword for a calm look.\n"
+    },
+    "status": 200
+  },
+  "lora guide unknown model": {
+    "body": {
+      "detail": "Unknown model type"
+    },
+    "status": 404
+  },
+  "lora nsfw override bad flag": {
+    "body": {
+      "detail": "nsfw must be true, false, or null"
+    },
+    "status": 400
+  },
+  "lora nsfw override clear": {
+    "body": {
+      "filename": "plain.safetensors",
+      "nsfw": false,
+      "nsfw_overridden": false
+    },
+    "status": 200
+  },
+  "lora nsfw override missing file": {
+    "body": {
+      "detail": "LoRA not found: missing.safetensors"
+    },
+    "status": 404
+  },
+  "lora nsfw override missing filename": {
+    "body": {
+      "detail": "filename is required"
+    },
+    "status": 400
+  },
+  "lora nsfw override no root": {
+    "body": {
+      "detail": "LoRA root not found"
+    },
+    "status": 500
+  },
+  "lora nsfw override set": {
+    "body": {
+      "filename": "plain.safetensors",
+      "nsfw": true,
+      "nsfw_overridden": true
+    },
+    "status": 200
+  },
+  "lora nsfw override traversal": {
+    "body": {
+      "detail": "filename must be a basename, not a path"
+    },
+    "status": 400
+  },
+  "lora preview invalid name": {
+    "body": {
+      "detail": "Invalid filename"
+    },
+    "status": 400
+  },
+  "lora preview missing": {
+    "body": {
+      "error": "Preview not found"
+    },
+    "status": 404
+  },
+  "lora scan again final": {
+    "body": {
+      "current": 3,
+      "message": "Done: processed 3 LoRAs",
+      "results": [
+        {
+          "filename": "empty.safetensors",
+          "guide": "empty"
+        },
+        {
+          "filename": "no_sidecar.safetensors",
+          "metadata": "not_found"
+        },
+        {
+          "filename": "short.safetensors",
+          "guide": "empty"
+        }
+      ],
+      "status": "complete",
+      "total": 3
+    },
+    "status": 200
+  },
+  "lora scan again start": {
+    "body": {
+      "scan_id": "<MASKED>",
+      "status": "running",
+      "total": 3
+    },
+    "status": 200
+  },
+  "lora scan files": {
+    "body": {
+      "wan/empty.civitai.json": "{\"name\": \"Empty\", \"baseModel\": \"Wan Video\", \"description\": \"A calm cinematic style that shifts colours towards teal and orange with soft contrast. A calm cinematic style that shifts colours towards teal and orange with soft contrast. \", \"trainedWords\": [\"trigger\"], \"modelId\": 3, \"versionId\": 1}",
+      "wan/plain.civitai.json": "{\"name\": \"Plain\", \"baseModel\": \"Wan Video\", \"description\": \"A calm cinematic style that shifts colours towards teal and orange with soft contrast. A calm cinematic style that shifts colours towards teal and orange with soft contrast. \", \"trainedWords\": [\"trigger\"], \"modelId\": 2, \"versionId\": 1}",
+      "wan/plain.guide.md": "Just write the guide as plain text.",
+      "wan/scan_new.civitai.json": "{\n  \"modelId\": 9001,\n  \"versionId\": 9002,\n  \"name\": \"Scanned\",\n  \"baseModel\": \"Wan Video\",\n  \"trainedWords\": [\n    \"scanword\"\n  ],\n  \"description\": \"Scanned description\",\n  \"examplePrompts\": [\n    \"a prompt\"\n  ],\n  \"tags\": [\n    \"scan-tag\"\n  ],\n  \"images\": [\n    {\n      \"url\": \"https://images.invalid/a.png\"\n    }\n  ],\n  \"downloadedAt\": \"<TIME>\",\n  \"recommendedWeights\": {\n    \"source\": \"civitai\",\n    \"default\": 0.7,\n    \"min\": 0.5,\n    \"max\": 1.0\n  }\n}",
+      "wan/scan_new.guide.md": "Use the trigger word.",
+      "wan/short.civitai.json": "{\"name\": \"Short\", \"baseModel\": \"Wan Video\", \"description\": \"\", \"trainedWords\": [\"trigger\"], \"modelId\": 4, \"versionId\": 1}",
+      "wan/style.civitai.json": "{\"modelId\": 12345, \"versionId\": 99, \"name\": \"Style LoRA\", \"baseModel\": \"Wan Video\", \"trainedWords\": [\"styleword\"], \"nsfw\": false, \"downloadedAt\": \"<TIME>\", \"publishedAt\": \"<TIME>\", \"tags\": [\"cinematic\"], \"description\": \"A calm style.\", \"images\": []}",
+      "wan/style.guide.md": "Use the trigger word styleword for a calm look.\n",
+      "wan/target.civitai.json": "{\n  \"name\": \"Target\",\n  \"baseModel\": \"Wan Video\",\n  \"description\": \"A calm cinematic style that shifts colours towards teal and orange with soft contrast. A calm cinematic style that shifts colours towards teal and orange with soft contrast. \",\n  \"trainedWords\": [\n    \"trigger\"\n  ],\n  \"modelId\": 1,\n  \"versionId\": 1,\n  \"recommendedWeights\": {\n    \"source\": \"civitai\",\n    \"default\": 0.7,\n    \"min\": 0.5,\n    \"max\": 1.0\n  }\n}",
+      "wan/target.guide.md": "Use the trigger word."
+    },
+    "status": 200
+  },
+  "lora scan final": {
+    "body": {
+      "current": 4,
+      "message": "Done: processed 4 LoRAs",
+      "results": [
+        {
+          "filename": "empty.safetensors",
+          "guide": "empty"
+        },
+        {
+          "filename": "no_sidecar.safetensors",
+          "metadata": "not_found"
+        },
+        {
+          "filename": "scan_new.safetensors",
+          "guide": "generated"
+        },
+        {
+          "filename": "scan_new.safetensors",
+          "metadata": "fetched"
+        },
+        {
+          "filename": "short.safetensors",
+          "guide": "empty"
+        }
+      ],
+      "status": "complete",
+      "total": 4
+    },
+    "status": 200
+  },
+  "lora scan forced final": {
+    "body": {
+      "current": 7,
+      "message": "Done: processed 7 LoRAs",
+      "results": [
+        {
+          "filename": "empty.safetensors",
+          "guide": "empty"
+        },
+        {
+          "filename": "no_sidecar.safetensors",
+          "metadata": "not_found"
+        },
+        {
+          "filename": "plain.safetensors",
+          "guide": "generated"
+        },
+        {
+          "filename": "scan_new.safetensors",
+          "guide": "generated"
+        },
+        {
+          "filename": "short.safetensors",
+          "guide": "empty"
+        },
+        {
+          "filename": "style.safetensors",
+          "guide": "empty"
+        },
+        {
+          "filename": "target.safetensors",
+          "guide": "generated"
+        }
+      ],
+      "status": "complete",
+      "total": 7
+    },
+    "status": 200
+  },
+  "lora scan forced start": {
+    "body": {
+      "scan_id": "<MASKED>",
+      "status": "running",
+      "total": 7
+    },
+    "status": 200
+  },
+  "lora scan missing": {
+    "body": {
+      "detail": "Scan not found"
+    },
+    "status": 404
+  },
+  "lora scan requests": {
+    "body": [
+      "model-versions/by-hash/871d2ec3c2ac11a5b965c9f4ed9762c471c582f78f3c9b58ba27791a81b35496",
+      "model-versions/by-hash/<HASH>",
+      "models/9001"
+    ],
+    "status": 200
+  },
+  "lora scan start": {
+    "body": {
+      "scan_id": "<MASKED>",
+      "status": "running",
+      "total": 4
+    },
+    "status": 200
+  },
+  "lora sidecar published date": {
+    "body": {
+      "baseModel": "Wan Video",
+      "downloadedAt": "<TIME>",
+      "modelId": 111,
+      "name": "old.safetensors",
+      "nsfw": false,
+      "publishedAt": "<TIME>",
+      "versionId": 5
+    },
+    "status": 200
+  },
+  "lora update check": {
+    "body": {
+      "checked": 5,
+      "errors": [],
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 3
+    },
+    "status": 200
+  },
+  "lora update check forced": {
+    "body": {
+      "checked": 5,
+      "errors": [],
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 3
+    },
+    "status": 200
+  },
+  "lora update check fresh": {
+    "body": {
+      "checked": 5,
+      "errors": [],
+      "last_full_check_at": "<TIME>",
+      "reason": "fresh",
+      "skipped": true,
+      "updates_available": 3
+    },
+    "status": 200
+  },
+  "lora update check offline": {
+    "body": {
+      "checked": 5,
+      "errors": [
+        "Aborted after 5 consecutive CivitAI failures"
+      ],
+      "last_full_check_at": "<TIME>",
+      "skipped": false,
+      "updates_available": 3
+    },
+    "status": 200
+  },
+  "lora update manifest after offline": {
+    "body": {
+      "_version": 1,
+      "entries": {
+        "civitai:111": {
+          "civitai_model_type": "LORA",
+          "current_version_id": 5,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": "Fixed hands",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 6,
+          "model_id": 111,
+          "status": "available"
+        },
+        "civitai:12345": {
+          "civitai_model_type": "LORA",
+          "current_version_id": 99,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 99,
+          "model_id": 12345,
+          "status": "current"
+        },
+        "civitai:222": {
+          "civitai_model_type": null,
+          "current_version_id": 1,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_id": 222,
+          "status": "removed"
+        },
+        "civitai:333": {
+          "civitai_model_type": "Checkpoint",
+          "current_version_id": 2,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 3,
+          "model_id": 333,
+          "status": "available"
+        },
+        "civitai:555": {
+          "civitai_model_type": "LORA",
+          "current_version_id": 8,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 9,
+          "model_id": 555,
+          "status": "available"
+        }
+      },
+      "last_full_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "lora update manifest empty": {
+    "body": {
+      "detail": "Unknown model: update-manifest"
+    },
+    "status": 404
+  },
+  "lora update manifest file": {
+    "body": {
+      "_version": 1,
+      "entries": {
+        "civitai:111": {
+          "civitai_model_type": "LORA",
+          "current_version_id": 5,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": "Fixed hands",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 6,
+          "model_id": 111,
+          "status": "available"
+        },
+        "civitai:12345": {
+          "civitai_model_type": "LORA",
+          "current_version_id": 99,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 99,
+          "model_id": 12345,
+          "status": "current"
+        },
+        "civitai:222": {
+          "civitai_model_type": null,
+          "current_version_id": 1,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "model_id": 222,
+          "status": "removed"
+        },
+        "civitai:333": {
+          "civitai_model_type": "Checkpoint",
+          "current_version_id": 2,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 3,
+          "model_id": 333,
+          "status": "available"
+        },
+        "civitai:555": {
+          "civitai_model_type": "LORA",
+          "current_version_id": 8,
+          "last_checked_at": "<TIME>",
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 9,
+          "model_id": 555,
+          "status": "available"
+        }
+      },
+      "last_full_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "lora update requests": {
+    "body": [
+      "models/111",
+      "models/12345",
+      "models/222",
+      "models/333",
+      "models/555"
+    ],
+    "status": 200
+  },
+  "lora update requests forced": {
+    "body": [
+      "models/111",
+      "models/12345",
+      "models/222",
+      "models/333",
+      "models/555"
+    ],
+    "status": 200
+  },
+  "loras for 3d model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "loras for legacy h3": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": []
+    },
+    "status": 200
+  },
+  "loras for model": {
+    "body": {
+      "guidance_max_phases": 1,
+      "loras": [
+        "style.safetensors"
+      ]
+    },
+    "status": 200
+  },
+  "loras installed": {
+    "body": {
+      "loras": [
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 12345,
+          "current_version_id": 99,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "style.safetensors",
+          "has_guide": true,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "linked": false,
+          "lora_id": "civitai:12345",
+          "name": "Style LoRA",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": "<TIME>",
+          "size_bytes": 11,
+          "trained_words": [
+            "styleword"
+          ],
+          "update_status": "unknown"
+        }
+      ],
+      "manifest_last_check_at": null
+    },
+    "status": 200
+  },
+  "loras installed after update check": {
+    "body": {
+      "loras": [
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 333,
+          "current_version_id": 2,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "bundle.safetensors",
+          "has_guide": false,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 3,
+          "linked": false,
+          "lora_id": "civitai:333",
+          "name": "bundle.safetensors",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": null,
+          "size_bytes": 26,
+          "trained_words": [],
+          "update_status": "current"
+        },
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 444,
+          "current_version_id": 1,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "ltx-2-19b-distilled-lora-384.safetensors",
+          "has_guide": false,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "linked": false,
+          "lora_id": "civitai:444",
+          "name": "ltx-2-19b-distilled-lora-384.safetensors",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": null,
+          "size_bytes": 48,
+          "trained_words": [],
+          "update_status": "current"
+        },
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 555,
+          "current_version_id": 7,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "newer_v1.safetensors",
+          "has_guide": false,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 9,
+          "linked": false,
+          "lora_id": "civitai:555",
+          "name": "newer_v1.safetensors",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": null,
+          "size_bytes": 28,
+          "trained_words": [],
+          "update_status": "current"
+        },
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 555,
+          "current_version_id": 8,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "newer_v2.safetensors",
+          "has_guide": false,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 9,
+          "linked": false,
+          "lora_id": "civitai:555",
+          "name": "newer_v2.safetensors",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": null,
+          "size_bytes": 28,
+          "trained_words": [],
+          "update_status": "available"
+        },
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 111,
+          "current_version_id": 5,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "old.safetensors",
+          "has_guide": false,
+          "hf_repo_id": null,
+          "latest_changelog": "Fixed hands",
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 6,
+          "linked": false,
+          "lora_id": "civitai:111",
+          "name": "old.safetensors",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": "<TIME>",
+          "size_bytes": 23,
+          "trained_words": [],
+          "update_status": "available"
+        },
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 222,
+          "current_version_id": 1,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "removed.safetensors",
+          "has_guide": false,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": null,
+          "latest_version_id": null,
+          "linked": false,
+          "lora_id": "civitai:222",
+          "name": "removed.safetensors",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": null,
+          "size_bytes": 27,
+          "trained_words": [],
+          "update_status": "removed"
+        },
+        {
+          "base_model": "Wan Video",
+          "civitai_model_id": 12345,
+          "current_version_id": 99,
+          "directory": "wan",
+          "downloaded_at": "<TIME>",
+          "filename": "style.safetensors",
+          "has_guide": true,
+          "hf_repo_id": null,
+          "latest_changelog": null,
+          "latest_published_at": "<TIME>",
+          "latest_version_id": 99,
+          "linked": false,
+          "lora_id": "civitai:12345",
+          "name": "Style LoRA",
+          "nsfw": false,
+          "nsfw_overridden": false,
+          "preview_url": null,
+          "released_at": "<TIME>",
+          "size_bytes": 11,
+          "trained_words": [
+            "styleword"
+          ],
+          "update_status": "current"
+        }
+      ],
+      "manifest_last_check_at": "<TIME>"
+    },
+    "status": 200
+  },
+  "loras unknown model": {
+    "body": {
+      "detail": "Unknown model: not_a_real_model"
+    },
+    "status": 404
   },
   "mcp alias get": {
     "body": {
@@ -621,6 +1695,343 @@
     },
     "status": 200
   },
+  "options image": {
+    "body": {
+      "adaptive_projected_guidance": false,
+      "any_audio_prompt": false,
+      "architecture": "fake_image",
+      "audio_guidance": false,
+      "audio_mode_from_voice_count": false,
+      "audio_only": false,
+      "audio_prompt_type_sources": null,
+      "audio_scale_name": "",
+      "background_removal_label": null,
+      "cfg_star": false,
+      "custom_settings_def": null,
+      "default_flow_shift": null,
+      "default_guidance_scale": null,
+      "default_num_inference_steps": null,
+      "default_skip_steps_multiplier": 0.08,
+      "default_skip_steps_start_step_perc": 25,
+      "director_memory_policy": null,
+      "duration_slider": null,
+      "first_block_cache": false,
+      "flow_shift": false,
+      "fps": 0,
+      "frame_alignment_mode": "floor",
+      "frame_alignment_modulus": 0,
+      "frame_alignment_remainder": 1,
+      "frames_maximum": null,
+      "frames_minimum": 5,
+      "frames_steps": 4,
+      "guidance_max_phases": 1,
+      "guide_custom_choices": null,
+      "guide_preprocessing": {
+        "default": "",
+        "labels": {
+          "": "None",
+          "PV": "Transfer Pose"
+        },
+        "selection": [
+          "",
+          "PV"
+        ]
+      },
+      "hide_resolution_presets": false,
+      "i2v_class": false,
+      "image_conditioning_required": false,
+      "image_edit_modes": null,
+      "image_layer_count": null,
+      "image_outputs": true,
+      "image_prompt_types_allowed": "",
+      "image_ref_choices": null,
+      "image_ref_inpaint": false,
+      "image_source_required": false,
+      "image_source_support": true,
+      "inference_steps_max": 50,
+      "inference_steps_min": 1,
+      "inpaint_support": true,
+      "input_video_strength_label": "",
+      "lock_guidance_phases": false,
+      "lock_guidance_scale": false,
+      "lock_inference_steps": false,
+      "max_image_refs": null,
+      "max_voice_count": null,
+      "minimax_h3_fused_turbo": false,
+      "minimax_h3_runtime_advisory": null,
+      "minimax_h3_semantic_bridge": false,
+      "minimax_h3_text_encoder_choices": null,
+      "minimax_h3_text_encoder_default": null,
+      "minimax_h3_turbo": null,
+      "model_name": "Fake Image",
+      "model_type": "fake_image",
+      "motion_amplitude": false,
+      "native_rgba": true,
+      "no_negative_prompt": false,
+      "omni_reference": false,
+      "omni_reference_detail_choices": null,
+      "omni_reference_detail_default": "match",
+      "omni_reference_limits": null,
+      "outpaint_support": false,
+      "pause_between_sentences": false,
+      "perturbation": false,
+      "reference_pipeline": false,
+      "resolution_preset_order": null,
+      "resolution_presets": null,
+      "returns_audio": false,
+      "sample_solvers": [
+        [
+          "UniPC",
+          "unipc"
+        ],
+        [
+          "Euler",
+          "euler"
+        ]
+      ],
+      "selectors": {
+        "sample_solver": {
+          "allowed": [
+            "unipc",
+            "euler"
+          ],
+          "fields": [
+            "sample_solver"
+          ]
+        }
+      },
+      "self_refiner": false,
+      "self_refiner_max_plans": 1,
+      "skip_steps_multiplier_choices": null,
+      "skip_steps_multiplier_label": "Cache Strength",
+      "sliding_window": false,
+      "sliding_window_auto_prompt_pacing": false,
+      "sliding_window_defaults": null,
+      "sliding_window_memory_policy": null,
+      "supports_auto_aspect": false,
+      "supports_end_frame": false,
+      "t2v_class": false,
+      "tea_cache": false,
+      "temperature_enabled": false,
+      "vae_upsampler_modes": [],
+      "video_continuation": false,
+      "video_guide_label": null,
+      "wangp_1272": false,
+      "wangp_1272_capabilities": {}
+    },
+    "status": 200
+  },
+  "options image to video": {
+    "body": {
+      "adaptive_projected_guidance": false,
+      "any_audio_prompt": false,
+      "architecture": "fake_i2v",
+      "audio_guidance": false,
+      "audio_mode_from_voice_count": false,
+      "audio_only": false,
+      "audio_prompt_type_sources": null,
+      "audio_scale_name": "",
+      "background_removal_label": null,
+      "cfg_star": false,
+      "custom_settings_def": null,
+      "default_flow_shift": null,
+      "default_guidance_scale": null,
+      "default_num_inference_steps": null,
+      "default_skip_steps_multiplier": 0.08,
+      "default_skip_steps_start_step_perc": 25,
+      "director_memory_policy": null,
+      "duration_slider": null,
+      "first_block_cache": false,
+      "flow_shift": false,
+      "fps": 24,
+      "frame_alignment_mode": "floor",
+      "frame_alignment_modulus": 0,
+      "frame_alignment_remainder": 1,
+      "frames_maximum": null,
+      "frames_minimum": 5,
+      "frames_steps": 4,
+      "guidance_max_phases": 1,
+      "guide_custom_choices": null,
+      "guide_preprocessing": null,
+      "hide_resolution_presets": false,
+      "i2v_class": false,
+      "image_conditioning_required": false,
+      "image_edit_modes": null,
+      "image_layer_count": null,
+      "image_outputs": false,
+      "image_prompt_types_allowed": "SE",
+      "image_ref_choices": null,
+      "image_ref_inpaint": false,
+      "image_source_required": false,
+      "image_source_support": false,
+      "inference_steps_max": 50,
+      "inference_steps_min": 1,
+      "inpaint_support": false,
+      "input_video_strength_label": "",
+      "lock_guidance_phases": false,
+      "lock_guidance_scale": false,
+      "lock_inference_steps": false,
+      "max_image_refs": null,
+      "max_voice_count": null,
+      "minimax_h3_fused_turbo": false,
+      "minimax_h3_runtime_advisory": null,
+      "minimax_h3_semantic_bridge": false,
+      "minimax_h3_text_encoder_choices": null,
+      "minimax_h3_text_encoder_default": null,
+      "minimax_h3_turbo": null,
+      "model_name": "Fake Image to Video",
+      "model_type": "fake_i2v",
+      "motion_amplitude": false,
+      "native_rgba": false,
+      "no_negative_prompt": false,
+      "omni_reference": false,
+      "omni_reference_detail_choices": null,
+      "omni_reference_detail_default": "match",
+      "omni_reference_limits": null,
+      "outpaint_support": false,
+      "pause_between_sentences": false,
+      "perturbation": false,
+      "reference_pipeline": false,
+      "resolution_preset_order": null,
+      "resolution_presets": null,
+      "returns_audio": false,
+      "sample_solvers": null,
+      "selectors": {
+        "conditioning": {
+          "image_end": {
+            "requires": "E",
+            "selector": "image_prompt_type"
+          },
+          "image_start": {
+            "requires": "S",
+            "selector": "image_prompt_type"
+          }
+        }
+      },
+      "self_refiner": false,
+      "self_refiner_max_plans": 1,
+      "skip_steps_multiplier_choices": null,
+      "skip_steps_multiplier_label": "Cache Strength",
+      "sliding_window": false,
+      "sliding_window_auto_prompt_pacing": false,
+      "sliding_window_defaults": null,
+      "sliding_window_memory_policy": null,
+      "supports_auto_aspect": false,
+      "supports_end_frame": true,
+      "t2v_class": false,
+      "tea_cache": false,
+      "temperature_enabled": false,
+      "vae_upsampler_modes": [],
+      "video_continuation": false,
+      "video_guide_label": null,
+      "wangp_1272": false,
+      "wangp_1272_capabilities": {}
+    },
+    "status": 200
+  },
+  "options text to video": {
+    "body": {
+      "adaptive_projected_guidance": false,
+      "any_audio_prompt": false,
+      "architecture": "fake_t2v",
+      "audio_guidance": false,
+      "audio_mode_from_voice_count": false,
+      "audio_only": false,
+      "audio_prompt_type_sources": null,
+      "audio_scale_name": "",
+      "background_removal_label": null,
+      "cfg_star": false,
+      "custom_settings_def": null,
+      "default_flow_shift": null,
+      "default_guidance_scale": null,
+      "default_num_inference_steps": null,
+      "default_skip_steps_multiplier": 0.08,
+      "default_skip_steps_start_step_perc": 25,
+      "director_memory_policy": null,
+      "duration_slider": null,
+      "first_block_cache": false,
+      "flow_shift": false,
+      "fps": 16,
+      "frame_alignment_mode": "floor",
+      "frame_alignment_modulus": 0,
+      "frame_alignment_remainder": 1,
+      "frames_maximum": null,
+      "frames_minimum": 5,
+      "frames_steps": 4,
+      "guidance_max_phases": 1,
+      "guide_custom_choices": null,
+      "guide_preprocessing": null,
+      "hide_resolution_presets": false,
+      "i2v_class": false,
+      "image_conditioning_required": false,
+      "image_edit_modes": null,
+      "image_layer_count": null,
+      "image_outputs": false,
+      "image_prompt_types_allowed": "",
+      "image_ref_choices": null,
+      "image_ref_inpaint": false,
+      "image_source_required": false,
+      "image_source_support": false,
+      "inference_steps_max": 50,
+      "inference_steps_min": 1,
+      "inpaint_support": false,
+      "input_video_strength_label": "",
+      "lock_guidance_phases": false,
+      "lock_guidance_scale": false,
+      "lock_inference_steps": false,
+      "max_image_refs": null,
+      "max_voice_count": null,
+      "minimax_h3_fused_turbo": false,
+      "minimax_h3_runtime_advisory": null,
+      "minimax_h3_semantic_bridge": false,
+      "minimax_h3_text_encoder_choices": null,
+      "minimax_h3_text_encoder_default": null,
+      "minimax_h3_turbo": null,
+      "model_name": "Fake Text to Video",
+      "model_type": "fake_t2v",
+      "motion_amplitude": false,
+      "native_rgba": false,
+      "no_negative_prompt": false,
+      "omni_reference": false,
+      "omni_reference_detail_choices": null,
+      "omni_reference_detail_default": "match",
+      "omni_reference_limits": null,
+      "outpaint_support": false,
+      "pause_between_sentences": false,
+      "perturbation": false,
+      "reference_pipeline": false,
+      "resolution_preset_order": null,
+      "resolution_presets": null,
+      "returns_audio": false,
+      "sample_solvers": null,
+      "selectors": {},
+      "self_refiner": false,
+      "self_refiner_max_plans": 1,
+      "skip_steps_multiplier_choices": null,
+      "skip_steps_multiplier_label": "Cache Strength",
+      "sliding_window": false,
+      "sliding_window_auto_prompt_pacing": false,
+      "sliding_window_defaults": null,
+      "sliding_window_memory_policy": null,
+      "supports_auto_aspect": false,
+      "supports_end_frame": false,
+      "t2v_class": false,
+      "tea_cache": false,
+      "temperature_enabled": false,
+      "vae_upsampler_modes": [],
+      "video_continuation": false,
+      "video_guide_label": null,
+      "wangp_1272": false,
+      "wangp_1272_capabilities": {}
+    },
+    "status": 200
+  },
+  "options unknown": {
+    "body": {
+      "detail": "Unknown model: not_a_model"
+    },
+    "status": 404
+  },
   "presets": {
     "body": {
       "presets": []
@@ -668,6 +2079,18 @@
       }
     },
     "status": 200
+  },
+  "production profile missing sections": {
+    "body": {
+      "detail": "Production profile needs text, image, music and video sections."
+    },
+    "status": 400
+  },
+  "production profile not an object": {
+    "body": {
+      "detail": "Production profile must be an object."
+    },
+    "status": 400
   },
   "production profile save": {
     "body": {
@@ -722,9 +2145,66 @@
     },
     "status": 200
   },
+  "reload definitions": {
+    "body": {
+      "added": [],
+      "model_count": 2,
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "resolutions": {
+    "body": {
+      "resolutions": [
+        {
+          "label": "480p",
+          "value": "832x480"
+        },
+        {
+          "label": "720p",
+          "value": "1280x720"
+        }
+      ]
+    },
+    "status": 200
+  },
   "revoice missing source": {
     "body": {
       "detail": "Source format is not supported"
+    },
+    "status": 400
+  },
+  "selections not an object": {
+    "body": {
+      "detail": "Model selection payload must be an object."
+    },
+    "status": 400
+  },
+  "selections save": {
+    "body": {
+      "configured": true,
+      "selected_models": {
+        "audio": "fake_i2v",
+        "image": "minimax:image-01",
+        "video": "fake_t2v"
+      },
+      "sources": {
+        "audio": "override",
+        "image": "global",
+        "video": "override"
+      }
+    },
+    "status": 200
+  },
+  "selections unknown mode": {
+    "body": {
+      "detail": "Unknown generation mode: nope."
+    },
+    "status": 400
+  },
+  "selections value not a string": {
+    "body": {
+      "detail": "Every model selection must be a string."
     },
     "status": 400
   },
@@ -831,5 +2311,37 @@
       "detail": "Unsupported upscale method"
     },
     "status": 400
+  },
+  "visibility id not a string": {
+    "body": {
+      "detail": "Model visibility entries must be strings."
+    },
+    "status": 400
+  },
+  "visibility ids not a list": {
+    "body": {
+      "detail": "Model visibility must be a list."
+    },
+    "status": 400
+  },
+  "visibility not an object": {
+    "body": {
+      "detail": "Model visibility payload must be an object."
+    },
+    "status": 400
+  },
+  "visibility save": {
+    "body": {
+      "configured": true,
+      "defaults_version": 3,
+      "enabled_models": [
+        "fake_t2v",
+        "fake_i2v"
+      ],
+      "initialized_mature_models": [
+        "fake_i2v"
+      ]
+    },
+    "status": 200
   }
 }
