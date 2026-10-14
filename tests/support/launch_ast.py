@@ -53,3 +53,8 @@ def generation_source() -> str:
         ast.get_source_segment(source, node)
         for source, tree in _parsed() for node in tree.body if _is_phase(node)
     )
+
+
+def launch_and_worker_source(launch_source: str) -> str:
+    """What the launch module's text was before the worker moved out of it: its source plus the worker's functions."""
+    return launch_source + "\n\n" + generation_source()

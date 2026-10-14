@@ -12,6 +12,7 @@ import unittest
 import numpy as np
 
 from tests.api_client_source import api_client_source
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _requires_torch = unittest.skipUnless(
@@ -3626,7 +3627,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('background_color=(255, 255, 255)', source)
 
     def test_strict_pixel_lock_is_an_opt_in_fallback(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -3717,7 +3718,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
 
     def test_recast_discovers_mappings_across_the_selected_timeline(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -4109,7 +4110,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("m.model_type === 'scail2_14B'", form)
 
     def test_recast_postprocess_preserves_and_recovers_resolved_seed(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         self.assertIn('"-map_metadata", "2"', launch)
         self.assertIn('file_sidecar["params"]["seed"] = resolved_seed', launch)
         # The post-processing read of the filename seed is the launch line
