@@ -271,6 +271,17 @@ def test_mask_locked_render_writes_the_protected_sibling_and_drops_a_failed_one(
     assert not (tmp_path / "shot.recast-protected.mp4").exists()
 
 
+class _U2NetState:
+    """The same shape as the service holder, injected into the exec'd helpers."""
+
+    def __init__(self) -> None:
+        self.session = None
+        self.session_lock = threading.Lock()
+        self.run_lock = threading.Lock()
+        self.cache_lock = threading.Lock()
+        self.cache = {}
+
+
 def test_u2net_session_loads_once_on_cpu_without_a_network_call(tmp_path, monkeypatch):
     import services.rembg_adapter as rembg
 
@@ -283,11 +294,11 @@ def test_u2net_session_loads_once_on_cpu_without_a_network_call(tmp_path, monkey
     monkeypatch.setattr(rembg, "background_session", fake_session)
     _block_network(monkeypatch)
     previous_home = os.environ.pop("U2NET_HOME", None)
+    state = _U2NetState()
     namespace = {
         "os": os,
         "_app_dir": str(tmp_path),
-        "_recast_u2net_session": None,
-        "_recast_u2net_session_lock": threading.Lock(),
+        "_recast_u2net": state,
     }
     try:
         get_session = _load(("_get_recast_u2net_session",), namespace)["_get_recast_u2net_session"]
@@ -302,9 +313,7 @@ def test_u2net_session_loads_once_on_cpu_without_a_network_call(tmp_path, monkey
     assert first is second
     assert first == {"model": "u2net"}
     assert calls == [("u2net", True)]
-    # ``global`` stores the session on the function's module, which is the exec
-    # namespace while the helper still lives in launch.
-    assert get_session.__globals__["_recast_u2net_session"] is first
+    assert state.session is first
     assert (tmp_path / "ckpts" / "rembg").is_dir()
 
 
@@ -330,13 +339,11 @@ def test_u2net_matte_caches_one_cutout_and_evicts_the_oldest(tmp_path, monkeypat
     second_path = tmp_path / "two.png"
     first_path.write_bytes(b"one")
     second_path.write_bytes(b"two")
-    cache = {}
+    state = _U2NetState()
     namespace = {
         "os": os,
         "_get_recast_u2net_session": lambda: "session",
-        "_recast_u2net_cache": cache,
-        "_recast_u2net_cache_lock": threading.Lock(),
-        "_recast_u2net_run_lock": threading.Lock(),
+        "_recast_u2net": state,
         "_RECAST_U2NET_CACHE_LIMIT": 1,
     }
     run = _load(("_run_recast_u2net_matte",), namespace)["_run_recast_u2net_matte"]
@@ -349,10 +356,10 @@ def test_u2net_matte_caches_one_cutout_and_evicts_the_oldest(tmp_path, monkeypat
     assert alpha.shape == (4, 6)
     assert float(alpha[0, 0]) == 1.0
     assert not np.shares_memory(foreground, again_fg)
-    assert len(cache) == 1
+    assert len(state.cache) == 1
 
     run(frame, str(second_path))
-    assert len(cache) == 1
+    assert len(state.cache) == 1
     assert calls[-1][1] == "session"
     # The first file's pixels changed, so the cached key no longer matches.
     first_path.write_bytes(b"one-changed")
