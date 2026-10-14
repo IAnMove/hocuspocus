@@ -22,7 +22,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from routers.llm import create_llm_router
-from services import core_series_plan, llm_service, minors_rule
+from services import comic_director_json, llm_service, minors_rule
 from services.director import image_prompt_rules, nsfw_guidance
 from services.director.planners.base import BasePlanner
 from services.director.planners.music_video import MusicVideoPlanner
@@ -324,10 +324,10 @@ def test_scoped_writing_requests_carry_the_rule(sent, schema):
 
 def test_series_planning_carries_the_rule(sent):
     with pytest.raises(Exception):
-        core_series_plan._generate_json(
+        comic_director_json._generate_comic_director_json(
             prompt="Plan the episode.", system_prompt="You plan a series.", schema={"type": "object"},
-            max_new_tokens=64,
-            override={"model": "deepseek-v4-flash", "base_url": "https://api.deepseek.com", "api_key": "key"},
+            max_new_tokens=64, stage="episode plan",
+            llm_override={"model": "deepseek-v4-flash", "base_url": "https://api.deepseek.com", "api_key": "key"},
         )
     assert "\n\n".join(_system_texts(sent[0])).count(RULE) == 1
 

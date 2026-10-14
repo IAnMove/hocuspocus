@@ -280,3 +280,131 @@ def test_a_job_added_through_the_context_is_seen_by_the_routes(server, monkeypat
     assert answer.status_code == 200 and answer.json()["job_id"] == "ctx-manual"
     assert server.client.post("/api/v1/cancel/ctx-manual").json()["status"] == "cancelled"
     assert job["status"] == "cancelled"
+
+
+def test_audio_analysis_jobs_are_registry_entries_that_either_cancel_route_ends(server, monkeypatch) -> None:
+    """An analysis job is an ``audio-analysis-*`` entry of the shared job registry.
+
+    The worker is stubbed (no librosa, no model). The generic ``/cancel`` route hands
+    these ids to the audio cancel, a job that waits for the audio lane is cancelled
+    at once, and a running one is cancelled after the current phase.
+    """
+    import threading
+    import time
+
+    from services import audio_analysis
+    from tests.characterization import media
+
+    registry = server.client.app.state.runtime.jobs.registry
+    gate = threading.Event()
+    reached_beats = threading.Event()
+
+    def analyze(audio_path, transcribe=False, extract_vocals_for_transcription=True, lyrics_hint=None):
+        # The progress callback writes the job on this thread before it returns, so the event below says the
+        # job already shows the phase. ``running`` alone does not: it is written first, still in ``loading_audio``.
+        audio_analysis._set_progress("detecting_beats", "beats")
+        reached_beats.set()
+        gate.wait(20)
+        return {"duration": 1.0}
+
+    monkeypatch.setattr(audio_analysis, "analyze", analyze)
+    media.sound(server.outputs / "first.wav", seconds=1.0)
+    media.sound(server.outputs / "second.wav", seconds=1.0)
+    jobs = "/api/v1/audio/analyze/jobs"
+    started: list[str] = []
+
+    def read(job_id: str) -> dict:
+        return server.client.get(f"{jobs}/{job_id}").json()
+
+    def wait_for(job_id: str, states: set[str]) -> dict:
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            job = read(job_id)
+            if job["status"] in states:
+                return job
+            time.sleep(0.05)
+        return read(job_id)
+
+    try:
+        first = server.client.post(jobs, json={"audio_path": "first.wav", "task_id": "task-mine", "root_task_id": "task-root"})
+        assert first.status_code == 200
+        first_id = first.json()["job_id"]
+        started.append(first_id)
+        assert first_id.startswith("audio-analysis-")
+        assert first.json() == {
+            "job_id": first_id, "task_id": "task-mine", "root_task_id": "task-root",
+            "parent_task_id": None, "status": "queued",
+        }
+        assert registry[first_id]["id"] == first_id and registry[first_id]["task_id"] == "task-mine"
+
+        assert reached_beats.wait(15), "the first analysis never reached its beat detection"
+        running = read(first_id)
+        assert (running["status"], running["phase"], running["step"], running["progress"]) == ("running", "detecting_beats", 2, 20)
+
+        second = server.client.post(jobs, json={"audio_path": "second.wav"})
+        second_id = second.json()["job_id"]
+        started.append(second_id)
+        waiting = wait_for(second_id, {"waiting_resource"})
+        assert waiting["status"] == "waiting_resource" and waiting["message"] == "Waiting for audio CPU worker"
+        cancelled = server.client.post(f"{jobs}/{second_id}/cancel")
+        assert cancelled.json()["status"] == "cancelled"
+        assert read(second_id)["message"] == "Cancelled before analysis started"
+        assert registry[second_id]["_cancel_requested"] is True
+
+        generic = server.client.post(f"/api/v1/cancel/{first_id}")
+        assert (generic.status_code, generic.json()["status"]) == (200, "cancelling")
+        after = read(first_id)
+        assert (after["status"], after["phase"]) == ("cancelling", "cancelling")
+        assert after["message"] == "Cancelling after the current analysis phase…"
+        assert registry[first_id]["_cancel_requested"] is True
+
+        gate.set()
+        final = wait_for(first_id, {"cancelled", "completed", "failed"})
+        assert (final["status"], final["message"], final["result"]) == ("cancelled", "Cancelled", None)
+        again = server.client.post(f"{jobs}/{first_id}/cancel")
+        assert again.json() == {"job_id": first_id, "status": "cancelled"}
+        assert server.client.get(f"{jobs}/{first_id}", params={"workspace": "elsewhere"}).status_code == 404
+        assert server.client.post(f"{jobs}/{first_id}/cancel", params={"workspace": "elsewhere"}).status_code == 404
+    finally:
+        gate.set()
+        time.sleep(0.2)
+        for job_id in started:
+            registry.pop(job_id, None)
+        assert not [key for key in registry if key.startswith("audio-analysis-")]
+
+
+def test_the_audio_and_scene_modules_hold_the_objects_launch_names(full_server) -> None:
+    """Late binding: what launch assigns to the moved modules is the object launch itself holds.
+
+    The audio routes read ``_jobs`` and the lock; the worker publishes through the task
+    publisher launch defines late; the recording route reads the gallery scan cache, which
+    launch creates after the scene routes are included; the scene helpers read the kit
+    library launch imports last. A name still ``None`` here would fail on the first request.
+    """
+    import routers.audio as audio
+    import routers.scenes_favorites as scenes
+    import services.audio_jobs as audio_jobs
+    import services.output_listing as listing
+    import services.scene_favorites as favorites
+
+    runtime = _launch()
+    registry = full_server.api.state.runtime.jobs.registry
+    assert audio._jobs is registry and audio_jobs._jobs is registry and runtime._jobs is registry
+    assert audio._audio_analysis_jobs_lock is audio_jobs._audio_analysis_jobs_lock
+    assert not hasattr(runtime, "_audio_analysis_jobs_lock")
+    assert audio_jobs._publish_generic_legacy_task is runtime._publish_generic_legacy_task
+    assert runtime.cancel_audio_analysis_job is audio.cancel_audio_analysis_job
+    assert audio._stream_upload is runtime._stream_upload and audio._transcode_upload is runtime._transcode_upload
+    assert audio._get_active_workspace == runtime._get_active_workspace
+    assert audio._resolve_request_media_path == runtime._resolve_request_media_path
+    assert audio._safe_join == runtime._safe_join and audio._workspace_dir == runtime._workspace_dir
+    assert audio.wgp is runtime.wgp
+    assert scenes._workspace_dir == runtime._workspace_dir and scenes._safe_join == runtime._safe_join
+    assert scenes._stream_upload is runtime._stream_upload
+    assert scenes._UPLOAD_TRANSCODE_SLOTS is runtime._UPLOAD_TRANSCODE_SLOTS
+    assert scenes._output_scan_cache is listing._output_scan_cache and scenes._output_scan_cache is runtime._output_scan_cache
+    assert scenes._output_scan_cache_lock is listing._output_scan_cache_lock
+    assert favorites._workspace_dir == runtime._workspace_dir
+    assert favorites._get_active_workspace == runtime._get_active_workspace
+    assert favorites._read_kit_library is runtime._read_kit_library
+    assert runtime._load_favorites is favorites._load_favorites and listing._load_favorites is favorites._load_favorites

@@ -2,25 +2,9 @@
 
 from __future__ import annotations
 
-import ast
-import copy
 import unittest
-from pathlib import Path
 
-
-def _load_function(name: str):
-    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = [
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == name
-    ]
-    namespace = {"copy": copy}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
-    return namespace[name]
-
-
-_story_resume_request = _load_function("_story_resume_request")
+from services.story_lab_schema import _story_resume_request
 
 
 class TestStoryLabResumeProvider(unittest.TestCase):

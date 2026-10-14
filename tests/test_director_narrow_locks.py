@@ -26,7 +26,7 @@ LYRIC = "Despierta dentro de mí"
 LETTERING = f"The singer raises one hand. Text overlays: '{LYRIC}'. The camera pushes in."
 STYLE = "black and white hand-drawn pencil sketch"
 PREFIX = f"Maintain the same {STYLE} art style. "
-RUNTIME = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+RUNTIME = Path(__file__).resolve().parents[1] / "app" / "services" / "director_v2_plan.py"
 
 
 def _wgp(**extra):

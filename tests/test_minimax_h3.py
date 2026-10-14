@@ -45,6 +45,10 @@ _REF2VA_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va.json"
 _FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_full.json"
 _REF2VA_FULL_DEFAULT_PATH = _APP / "defaults" / "minimax_h3_ref2va_full.json"
 _STORE_PATH = _ROOT / "ui" / "src" / "stores" / "useStore.ts"
+_GENERATION_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "generationSlice.ts"
+_OUTPUT_RESTORE_SLICE_PATH = (
+    _ROOT / "ui" / "src" / "features" / "studio" / "store" / "outputRestoreSlice.ts"
+)
 _MODEL_OPTIONS_SLICE_PATH = _ROOT / "ui" / "src" / "stores" / "modelOptionsSlice.ts"
 _MODEL_VISIBILITY_PATH = _ROOT / "ui" / "src" / "stores" / "modelVisibility.ts"
 _H3_DURATION_PATH = _ROOT / "ui" / "src" / "lib" / "h3ExtendedDuration.ts"
@@ -304,7 +308,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_series_and_manual_release_drop_the_isolated_h3_runtime(self):
         launch = _read(_LAUNCH_PATH)
-        series_worker = launch.split(
+        series_worker = _read(_APP / "services" / "series_render_jobs.py").split(
             "def _run_series_render_job(job_id: str) -> None:", 1,
         )[1].split("def _series_render_candidates", 1)[0]
         system_router = _read(_SYSTEM_ROUTER_PATH)
@@ -770,7 +774,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         )
         self.assertIn(
             "findResolutionSelection(res, get().modelOptions)",
-            store,
+            _read(_OUTPUT_RESTORE_SLICE_PATH),
         )
         self.assertIn("modelOptions?.resolution_preset_order", presets)
         self.assertIn("modelOptions?.supports_auto_aspect", aspects)
@@ -915,7 +919,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
     def test_studio_h3_duration_and_window_controls_are_model_aware(self):
         duration = _read(_DURATION_SLIDER_PATH)
         advanced = _read(_ADVANCED_SETTINGS_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_GENERATION_SLICE_PATH)
         launch = _read(_LAUNCH_PATH)
         options = _read(_OPTIONS_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
@@ -1027,7 +1031,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         launch = _read(_LAUNCH_PATH)
         main = _read(_MAIN_PATH)
         wgp = _read(_WGP_PATH)
-        store = _read(_STORE_PATH)
+        store = _read(_GENERATION_SLICE_PATH)
         llm_slice = _read(_LLM_SLICE_PATH)
         section = _read(_OMNI_REFERENCE_SECTION_PATH)
         generate_button = _read(_GENERATE_BUTTON_PATH)
@@ -1213,7 +1217,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertEqual(align(120, legacy), 117)
         self.assertEqual(align(120, legacy, for_generation=True), 121)
 
-        store = _read(_STORE_PATH)
+        store = _read(_GENERATION_SLICE_PATH)
         self.assertIn("params.video_length = requestedVideoFrames(", store)
         self.assertIn("h3AlignmentOptions", _read(_MODEL_OPTIONS_SLICE_PATH))
         helper = _read(_H3_DURATION_PATH)

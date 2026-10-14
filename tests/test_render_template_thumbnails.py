@@ -32,6 +32,27 @@ CARDS = [_card("a-scene"), _card("b-cached"), _card("c-flaky"), _card("d-broken"
          _card("stage-bar", "stage"), _card("user-mine", personal=True)]
 
 
+# The script refuses its live ports, and 42072 is a live instance too. All three lie in the OS's ephemeral range.
+RESERVED_PORTS = prewarm.LIVE_PORTS | {42072}
+
+
+def _bind_beyond_reserved_ports(handler):
+    """Serve ``handler`` on a port the OS picks, never a reserved one (a free port that the script would refuse).
+
+    A refused server stays open until a good one is bound: closed at once, the OS could offer the same port again.
+    """
+    refused = []
+    try:
+        while True:
+            server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+            if server.server_port not in RESERVED_PORTS:
+                return server
+            refused.append(server)
+    finally:
+        for server in refused:
+            server.server_close()
+
+
 class FakeServer:
     """The two routes the script uses: the card list (paged) and each card's thumbnail."""
 
@@ -77,7 +98,7 @@ class FakeServer:
             def log_message(self, *_args):
                 pass
 
-        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.server = _bind_beyond_reserved_ports(Handler)
         self.url = f"http://127.0.0.1:{self.server.server_port}"
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
 
@@ -139,6 +160,35 @@ def test_live_instances_are_refused_unless_asked(capsys):
     assert prewarm.check_target("http://127.0.0.1:42003/", allow_live=True) == "http://127.0.0.1:42003"
     with pytest.raises(ValueError):
         prewarm.check_target("127.0.0.1:42017", allow_live=False)
+
+
+def test_the_fake_server_never_takes_a_port_the_script_refuses_as_live(monkeypatch):
+    """The OS may offer a live port (42003, 42042, 42072 are in the ephemeral range); the fake server must skip it.
+
+    The offered ports are scripted here, so the case that failed one run in a few thousand happens on every run.
+    """
+    class Offered:
+        """Stands in for ThreadingHTTPServer: the OS "gives" it the next port of the script."""
+        ports = [42003, 42042, 42072, 42003, 51234]
+        opened = []
+
+        def __init__(self, address, handler):
+            self.server_port = self.ports.pop(0)
+            self.closed = False
+            self.open_when_made = [other.server_port for other in self.opened if not other.closed]
+            self.opened.append(self)
+
+        def serve_forever(self):
+            pass
+
+        def server_close(self):
+            self.closed = True
+
+    monkeypatch.setattr(sys.modules[__name__], "ThreadingHTTPServer", Offered)
+    fake = FakeServer()
+    assert fake.server.server_port == 51234 and fake.url == "http://127.0.0.1:51234"
+    assert fake.server.open_when_made == [42003, 42042, 42072, 42003], "a refused port stays held, so the OS cannot offer it again"
+    assert [server.closed for server in Offered.opened] == [True, True, True, True, False], "only the refused ones are released"
 
 
 def test_an_unreachable_server_fails_before_any_card(capsys):
