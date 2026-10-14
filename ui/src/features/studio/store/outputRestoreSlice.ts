@@ -25,6 +25,13 @@ import { audioSubModeForModel, captureVideoSubModeStash } from './studioFormHelp
 
 type OutpaintAspect = 'source' | '16:9' | '9:16' | '1:1' | '4:3' | '3:4'
 
+/** Video/H3 form keys the restore always writes, even for a Speech, Music or SFX sidecar. */
+const AUDIO_RESTORE_VIDEO_RESIDUE = [
+  'minimax_h3_extended_duration', 'minimax_h3_planning_style', 'minimax_h3_audio_policy',
+  'minimax_h3_semantic_bridge_alpha', 'minimax_h3_semantic_bridge_magnitude',
+  'frames_positions', 'image_start', 'image_end',
+] as const
+
 const _OUTPAINT_ASPECT_RATIOS: Array<[Exclude<OutpaintAspect, 'source'>, number]> = [
   ['16:9', 16 / 9],
   ['9:16', 9 / 16],
@@ -359,6 +366,14 @@ export const createOutputRestoreSlice: SliceCreator<OutputRestoreSlice, OutputRe
     }
     if (newParams.image_end === undefined) {
       newParams.image_end = p.image_end ? (p.image_end as string) : ''
+    }
+    // An audio restore must not leave the video/H3 "inactive" sentinels written
+    // above ('' / false / 'faithful' / 'native' / 'per_token'). The closed
+    // generation.speech and generation.music builders refuse them, so every
+    // Speech/Music reroll and pencil + Generate failed before posting anything.
+    // `undefined` is how the form itself clears these keys.
+    if (get().generationMode === 'audio') {
+      for (const key of AUDIO_RESTORE_VIDEO_RESIDUE) (newParams as Record<string, unknown>)[key] = undefined
     }
 
     // Rebuild lora weights from multipliers string
