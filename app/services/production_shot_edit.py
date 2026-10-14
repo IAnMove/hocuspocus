@@ -13,9 +13,10 @@ from typing import Any
 
 from services.production_control import sleep_until
 from services.production_package import (
-    clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, workspace_url, write_manifest,
+    clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows,
+    montage_owned_by_other, workspace_url, write_manifest,
 )
-from services.production_scene2d import scene_inputs
+from services.production_scene2d import note_tempo, resume_clip
 from services.production_scene_retry import finish_scene_exports
 
 
@@ -137,6 +138,9 @@ def replace_montage_clip(production: Any, key: str, video_file: str, expected_re
         raise ShotEditError("montage_missing", "this production has no montage yet")
     current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": montage_file}}).get("result") or {})
     montage = current.get("montage") or current
+    if montage_owned_by_other(montage, production.id):
+        raise ShotEditError("montage_foreign", "this production's montage_file points at another production's timeline: "
+                                               "run the montage stage again to create its own")
     found = False
     for clip in montage.get("clips") or []:
         if clip.get("id") == key:
@@ -216,7 +220,8 @@ def _publish(production: Any, spec: dict, key: str, expected_revision: int | Non
     lyric = lyric_for(score.get("lines") or [], start, end)
     scene = save_scene_revision(production, key, document, lyric, _note(shot))
     # The same record export_scenes writes, so a resume does not export this scene again.
-    video = export_scene(production, key, document, dur, clip_file or scene_inputs(production.state, shot), fingerprint)
+    video = export_scene(production, key, document, dur, resume_clip(production.state, shot), fingerprint)
+    note_tempo((production.state.get("scenes") or {}).get(key) or {}, shot, score.get("bpm"))
     replace_montage_clip(production, key, video, expected_revision)
     rewrite_manifest(production, spec)
     production.save()
@@ -250,7 +255,7 @@ def adopt_take(production: Any, key: str, take_file: str) -> None:
     if not (production.root / take_file).is_file():
         raise ShotEditError("take_not_found", f"take {take_file} is not in the workspace")
     _path, url = production.upload(take_file)
-    shot_with = {name: take[name] for name in ("model", "steps") if name in take}      # what spec.video compares on the next run
+    shot_with = {name: take[name] for name in ("model", "steps", "window") if name in take}      # what spec.video and the audio window compare on the next run
     production.state.setdefault("clips", {})[key] = {"file": take_file, "qa": _qa(take), "url": url, **shot_with}
 
 

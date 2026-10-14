@@ -510,15 +510,29 @@ async def start_audio_analysis_job(request: Request):
         "status": "queued",
     }
 
-def get_audio_analysis_job(job_id: str, workspace: str | None = None):
-    target_workspace = _get_active_workspace() if workspace is None else workspace
-    _workspace_dir(target_workspace)
+def _audio_analysis_job(job_id: str, workspace: str | None = None, *, snapshot: bool = False):
+    """Look up one analysis job. An omitted workspace means the id is enough.
+
+    Director polls and ``POST /api/v1/cancel/{job_id}`` never send a workspace.
+    The job still carries the song's origin workspace, which is often not the
+    server's active one (an adopted track from another project). Treating a
+    missing query as the active workspace 404'd those callers and left Whisper
+    running. An explicit workspace still has to match.
+    """
+    if workspace is not None:
+        _workspace_dir(workspace)
     with _audio_analysis_jobs_lock:
-        job = snapshot_job(_jobs.get(job_id)) if _jobs.get(job_id) else None
+        raw = _jobs.get(job_id)
+        job = snapshot_job(raw) if snapshot and raw else raw
     if not job or not job_id.startswith("audio-analysis-"):
         raise HTTPException(status_code=404, detail="Audio analysis job not found")
-    if str(job.get("workspace") or "default") != str(target_workspace):
+    if workspace is not None and str(job.get("workspace") or "default") != str(workspace):
         raise HTTPException(status_code=404, detail="Audio analysis job not found")
+    return job
+
+
+def get_audio_analysis_job(job_id: str, workspace: str | None = None):
+    job = _audio_analysis_job(job_id, workspace, snapshot=True)
     return {
         "job_id": job_id,
         "task_id": job.get("task_id"),
@@ -534,14 +548,7 @@ def get_audio_analysis_job(job_id: str, workspace: str | None = None):
     }
 
 def cancel_audio_analysis_job(job_id: str, workspace: str | None = None):
-    target_workspace = _get_active_workspace() if workspace is None else workspace
-    _workspace_dir(target_workspace)
-    with _audio_analysis_jobs_lock:
-        job = _jobs.get(job_id)
-    if not job or not job_id.startswith("audio-analysis-"):
-        raise HTTPException(status_code=404, detail="Audio analysis job not found")
-    if str(job.get("workspace") or "default") != str(target_workspace):
-        raise HTTPException(status_code=404, detail="Audio analysis job not found")
+    job = _audio_analysis_job(job_id, workspace)
     if job["status"] not in _AUDIO_ANALYSIS_ACTIVE:
         return {"job_id": job_id, "status": job["status"]}
     with _audio_analysis_jobs_lock:

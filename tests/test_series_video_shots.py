@@ -17,11 +17,20 @@ from services.series_produce import ProduceDeps, SeriesProduce
 from services.series_review import content_digest
 from services.series_script import ScriptError, apply_script
 from services.series_video_shots import (
-    STYLE_DRIFT_THRESHOLD, import_generated_take, style_distance,
+    STYLE_DRIFT_THRESHOLD, _request_digest, _take_matches, digest_request, import_generated_take, normalize_video,
+    style_distance, video_preset,
 )
 from tests.test_series_script_produce import FILES, KITS, Series, finished
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
+
+
+@pytest.fixture(autouse=True)
+def _unbound_series_router(monkeypatch):
+    """A repaired approval is written through the series router's lock once a test has built that router. Unbind it, so
+    nothing here reaches another test's library."""
+    from routers import series_library as routes
+    monkeypatch.setattr(routes, "_library_lock", None, raising=False)
 
 
 def _script(**video):
@@ -361,6 +370,233 @@ def test_a_changed_prompt_is_a_new_take_not_a_conflict(tmp_path):
     # The same request again replays its take instead of paying for a second clip.
     assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
     assert _intents(tools)[2] == intents[1] and len(tools.clips) == 2
+
+
+def _legacy_digest(series, shot):
+    """The ``videoRequest`` a take stored before ``videoInputs`` existed."""
+    return _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
+
+
+def _attach_take(series, shot, metadata, *, attempt="att-1"):
+    """The library state a real import leaves, so the next produce can skip a matching take."""
+    shot["attempts"] = [{"id": attempt, "status": "completed", "outputAssetIds": ["asset_1"]}]
+    shot["approvedAttemptId"] = attempt
+    series["assets"] = {**(series.get("assets") or {}),
+                        "asset_1": {"id": "asset_1", "kind": "video", "uri": "outputs/old.mp4", "metadata": metadata}}
+
+
+def test_a_take_records_the_inputs_it_was_made_from_next_to_its_request(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    metadata = tools.imports[0]["metadata"]
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    assert metadata["videoRequest"] == _legacy_digest(series, shot), "the request digest is the one it always was"
+    assert isinstance(metadata["videoInputs"], str) and len(metadata["videoInputs"]) == 12
+    _attach_take(series, shot, metadata)
+    assert _take_matches(series, shot)
+
+
+def test_a_changed_plan_plate_is_a_new_take(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    kits, root = _pose_kits(tmp_path, "ana"), str(tmp_path)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    service = _kit_produce(tmp_path, tools, library, kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    _attach_take(series, shot, first)
+    assert _take_matches(series, shot, root=root, kits=kits)
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 70}]}
+    assert not _take_matches(series, shot, root=root, kits=kits), "the composed start plate changed; the old clip does not fit"
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert len(set(_intents(tools))) == 2, "a new clip, not the first one replayed"
+    second = tools.imports[1]["metadata"]
+    assert second["videoInputs"] != first["videoInputs"] and second["videoRequest"] == first["videoRequest"]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    assert _take_matches(series, shot, root=root, kits=kits), "the first take fits again; it was kept as an attempt"
+
+
+def test_a_changed_location_plate_is_a_new_take(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["locations"] = [{"id": "garage", "layout2d": {"plateAssetId": "plate_1"}}]
+    series["assets"] = {"plate_1": {"id": "plate_1", "uri": "assets/garage.png"}}
+    shot["locationId"] = "garage"
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    _attach_take(series, shot, first)
+    series["assets"]["plate_1"]["uri"] = "assets/garage-v2.png"
+    assert not _take_matches(series, shot)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert len(_video_calls(tools, "generation.video")) == 2
+    assert tools.imports[1]["metadata"]["videoInputs"] != first["videoInputs"]
+
+
+def test_a_take_with_no_plan_inputs_still_notices_a_cast_added_later(tmp_path):
+    """A take made after the upgrade always keeps its inputs, also when none applied: absent means legacy only."""
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    kits, root = _pose_kits(tmp_path, "ana"), str(tmp_path)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    service = _kit_produce(tmp_path, tools, library, kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    assert _take_matches(series, shot, root=root, kits=kits)
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    assert not _take_matches(series, shot, root=root, kits=kits)
+
+
+def _pose_kits(tmp_path, *names):
+    """Kits whose ``wave`` pose is a workspace file, as a real kit stores it; ``names`` are the images that exist."""
+    for name in names:
+        _png(tmp_path / f"{name}-wave.png", (30, 20, 10) if name == "ana" else (90, 20, 10))
+    return {f"kit-{name}": {"poses": {"wave": {"source": f"/api/v1/file/{name}-wave.png?workspace=cast"}}}
+            for name in ("ana", "bea")}
+
+
+def _kit_produce(tmp_path, tools, library, kits):
+    return SeriesProduce(ProduceDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: library,
+                                     read_kits=lambda _ws: kits, import_take=tools.imports.append,
+                                     sleep=lambda _s: None, poll_seconds=0))
+
+
+def test_a_plan_start_follows_the_pose_files_its_plate_is_composed_from(tmp_path):
+    """The start plate is composed from the image each cast member's kit gives (``_plan_layers``): a character given
+    another kit is a new plate and a new clip; a pose image that appears after a clip made on the flat plate too."""
+    kits = _pose_kits(tmp_path, "ana", "bea")
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _kit_produce(tmp_path, tools, library, kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    root = str(tmp_path)
+    assert _take_matches(series, shot, root=root, kits=kits)
+    series["characters"][0]["voiceProfile"]["characterKitRef"]["id"] = "kit-bea"
+    assert not _take_matches(series, shot, root=root, kits=kits), "another kit draws her: the old clip does not fit"
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first, second = _intents(tools)
+    assert first != second, "a new plate is a new clip, not the old one replayed"
+
+
+def test_a_pose_image_that_appears_after_the_flat_plate_is_a_new_take(tmp_path):
+    kits = _pose_kits(tmp_path)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _kit_produce(tmp_path, tools, library, kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert _video_calls(tools, "media.compose")[0]["input"]["layers"][0]["x"] == 50, "no image yet: the flat plate"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    root = str(tmp_path)
+    shot["layout2d"]["cast"][0]["x"] = 70
+    assert _take_matches(series, shot, root=root, kits=kits), "moving a member with no image changes no plate"
+    _pose_kits(tmp_path, "ana")
+    assert not _take_matches(series, shot, root=root, kits=kits), "her image exists now: the plate has her"
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first, second = _intents(tools)
+    assert first != second
+
+
+def test_a_take_made_before_video_inputs_existed_is_not_made_again(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    _attach_take(series, shot, {"videoRequest": _legacy_digest(series, shot)})
+    assert _take_matches(series, shot), "an old take without videoInputs still matches"
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == []
+
+
+def _named_start(tmp_path, start="start.png"):
+    return _png(tmp_path / "start.png", (10, 20, 30)), _request(start=start)
+
+
+def test_replacing_a_named_start_image_is_a_new_take(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    _named_start(tmp_path)
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request(start="start.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first = tools.imports[0]["metadata"]
+    _attach_take(series, shot, first)
+    assert _take_matches(series, shot, root=str(tmp_path))
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 1, "the same start image is the same take"
+    _png(tmp_path / "start.png", (200, 10, 10))
+    assert not _take_matches(series, shot, root=str(tmp_path))
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 2
+    assert tools.imports[1]["metadata"]["videoInputs"] != first["videoInputs"]
+
+
+def test_a_named_start_take_made_before_video_inputs_existed_is_not_made_again(tmp_path):
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    _named_start(tmp_path)
+    tools = _Server(tmp_path, clip)
+    library, episode = _episode(_request(start="start.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    _attach_take(series, shot, {"videoRequest": _legacy_digest(series, shot)})
+    _png(tmp_path / "start.png", (200, 10, 10))
+    service = _produce(tmp_path, tools, library)
+    done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert done["status"] == "completed", done
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == []
+
+
+def test_remaking_the_pose_start_is_a_new_take(tmp_path):
+    _png(tmp_path / "hero-wave.png", (10, 20, 30))
+    library, episode = _episode(_request(start="pose:hero/wave"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "hero", "voiceProfile": {"characterKitRef": {"id": "kit-hero"}}}]
+    kits = {"kit-hero": {"poses": {"wave": {"source": "hero-wave.png"}}}}
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = SeriesProduce(ProduceDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: library,
+                                        read_kits=lambda _ws: kits, import_take=tools.imports.append,
+                                        sleep=lambda _s: None, poll_seconds=0))
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    assert _take_matches(series, shot, root=str(tmp_path), kits=kits)
+    _png(tmp_path / "hero-wave.png", (200, 10, 10))
+    assert not _take_matches(series, shot, root=str(tmp_path), kits=kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 2
+
+
+def test_a_named_start_that_cannot_be_read_does_not_make_the_clip_again(tmp_path):
+    """Remaking on a read that failed would spend a generation for nothing: the take is compared on its request."""
+    _named_start(tmp_path)
+    library, episode = _episode(_request(start="start.png"))
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    os.replace(tmp_path / "start.png", tmp_path / "moved.png")
+    assert _take_matches(series, shot, root=str(tmp_path))
 
 
 def _editor_series(shot):

@@ -73,6 +73,30 @@ def test_a_story_with_only_a_saved_intent_keeps_its_language_when_imported():
     assert import_story_project({"title": "Sin nada"})["language"] == "English"
 
 
+def test_story_import_keeps_protected_verbatim_segments():
+    library = normalize_story_library({
+        "revision": 0, "activeId": "story-1",
+        "projects": {"story-1": {
+            "id": "story-1", "title": "Letras",
+            "languageIntent": {
+                "contentLanguage": "Español",
+                "spokenLanguage": "Español de España",
+                "verbatimSegments": [
+                    {"kind": "lyrics", "text": "¡No me mires así!", "language": "es"},
+                    {"kind": "dialogue", "text": "Hasta la vista", "language": "es", "speaker": "Ada"},
+                ],
+            },
+        }},
+    })
+    series = import_story_project(library["projects"]["story-1"])
+    assert series["language"] == "Español"
+    assert series["spokenLanguage"] == "Español de España"
+    assert series["languageIntent"]["verbatimSegments"] == [
+        {"kind": "lyrics", "text": "¡No me mires así!", "language": "es"},
+        {"kind": "dialogue", "text": "Hasta la vista", "language": "es", "speaker": "Ada"},
+    ]
+
+
 def test_series_creation_and_normalization_always_return_language_intent():
     created = create_series_project()
     assert created["language"] == "English"

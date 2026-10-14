@@ -11,7 +11,8 @@
     "cameraContract": "Multiview no disponible en esta integración: Pixal3D requiere cámaras calibradas y pesos específicos, no las cuatro vistas de Hunyuan.",
     "singleImage": "La selección no admite multiview. Sólo se envía la imagen frontal; las demás vistas se conservan deshabilitadas.",
     "imageOnly": "Se requiere una imagen. Este motor no utiliza prompts de texto.",
-    "hunyuanOnly": "Presets y parámetros avanzados de Hunyuan deshabilitados; utiliza los controles del motor."
+    "hunyuanOnly": "Presets y parámetros avanzados de Hunyuan deshabilitados; utiliza los controles del motor.",
+    "remoteNoRetexture": "Meshy y Hi3D generan un modelo nuevo. Retexturiza un GLB con Hunyuan3D local."
   },
   "views": {
     "front": "Frontal",

@@ -6,9 +6,23 @@ import {
   normalizeStoryMusicModel,
   songWriteTarget,
   storyMusicReadyMessageKey,
+  storyPaidMusicModel,
+  storyUsesLocalMusicGeneration,
 } from '../src/features/stories/musicModel.ts'
 import { LOCAL_PROMPT_LIMIT, REMOTE_PROMPT_LIMIT } from '../src/lib/musicGenerationSpec.ts'
 import { compiledMusicCuePrompt, miniMaxCuePayload, musicCueBlock, musicPromptLimit, musicRequiresLyricSections } from '../src/features/stories/storyLabMusic.ts'
+
+test('cover never uses the local Generate shortcut, even with a local model', () => {
+  for (const model of [ACE_STEP_MUSIC_MODEL, MINIMAX_MUSIC3_LOCAL_MODEL] as const) {
+    assert.equal(storyUsesLocalMusicGeneration({ model, mode: 'original' }), true)
+    assert.equal(storyUsesLocalMusicGeneration({ model, mode: 'cover' }), false)
+    assert.equal(storyPaidMusicModel({ model, mode: 'cover' }), 'music-cover')
+  }
+  assert.equal(storyUsesLocalMusicGeneration({ model: 'music-3.0', mode: 'original' }), false)
+  assert.equal(storyUsesLocalMusicGeneration({ model: 'music-3.0', mode: 'cover' }), false)
+  assert.equal(storyPaidMusicModel({ model: 'music-3.0', mode: 'original' }), 'music-3.0')
+  assert.equal(storyPaidMusicModel({ model: 'music-3.0', mode: 'cover' }), 'music-cover')
+})
 
 test('new stories default to ACE-Step and keep MiniMax only when chosen', () => {
   assert.equal(normalizeStoryMusicModel(''), ACE_STEP_MUSIC_MODEL)
@@ -27,6 +41,8 @@ test('ready copy names ACE, MiniMax local and MiniMax API separately', () => {
   assert.equal(storyMusicReadyMessageKey(MINIMAX_MUSIC3_LOCAL_MODEL, false), 'music.minimaxLocalReady')
   assert.equal(storyMusicReadyMessageKey('music-3.0', true), 'music.minimaxReady')
   assert.equal(storyMusicReadyMessageKey('music-3.0', false), 'music.minimaxMissing')
+  assert.equal(storyMusicReadyMessageKey(ACE_STEP_MUSIC_MODEL, false, 'cover'), 'music.minimaxMissing')
+  assert.equal(storyMusicReadyMessageKey(ACE_STEP_MUSIC_MODEL, true, 'cover'), 'music.minimaxReady')
 })
 
 test('prompt limits come from the adapter catalog and ACE is not sliced to 300', () => {

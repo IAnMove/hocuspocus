@@ -734,10 +734,10 @@ def test_a_cancel_between_two_clips_stops_before_the_next_task(rig, golden, monk
     rig.check(golden, "cancel between clips", rig.observe(job_id))
 
 
-def test_oddity_a_cancel_between_start_and_abort_registration_leaves_the_job_cancelling(rig, golden) -> None:
-    """The job is cancelled after it started but before it registered its abort state. The worker returns, and
-    nothing ever settles the job, because the ``finally`` block only acknowledges a job that never created its
-    abort state."""
+def test_a_cancel_between_start_and_abort_registration_settles_the_job(rig, golden) -> None:
+    """A cancel that lands after ``try_start`` and before ``register_abort_state`` is
+    acknowledged in ``finally``: the worker never owned the abort dict, so it
+    calls ``acknowledge_cancel`` instead of unregistering a no-op."""
     launch = rig.launch
     job_id = rig.direct_job(BODY)
 
@@ -746,7 +746,40 @@ def test_oddity_a_cancel_between_start_and_abort_registration_leaves_the_job_can
 
     rig.patch("_apply_per_job_coefficient", cancel_during_preparation)
     rig.call_worker(job_id)
-    rig.check(golden, "cancel before abort registration", rig.observe(job_id))
+    observed = rig.observe(job_id)
+    assert observed["status"]["status"] == "cancelled"
+    rig.check(golden, "cancel before abort registration", observed)
+
+
+def test_two_cancels_before_abort_registration_settle_once_and_free_the_gpu_for_the_next_job(rig) -> None:
+    """A second Cancel in the same window changes nothing (the job is already cancelling); the job still settles to
+    cancelled, no abort registration is left behind, and the next queued job gets the GPU and runs."""
+    from services import job_lifecycle
+
+    launch = rig.launch
+    job_id = rig.direct_job(BODY)
+    answers = []
+
+    def cancel_twice(job) -> None:
+        for _ in range(2):
+            answers.append(launch.request_cancel(job, job_id=job_id, active_states=launch._active_gen_states))
+
+    rig.patch("_apply_per_job_coefficient", cancel_twice)
+    assert rig.call_worker(job_id) is False
+    assert [(answer.changed, answer.was_running) for answer in answers] == [(True, True), (False, False)]
+    record = launch._jobs[job_id]
+    assert (record["status"], record["phase"], record["message"]) == ("cancelled", "cancelled", "Cancelled")
+    assert rig.transitions(job_id)[-2:] == [
+        "cancelling | phase 'cancelling' | 'Cancelling…' | 0% | step 0/0 | outputs 0",
+        "cancelled | phase 'cancelled' | 'Cancelled' | 0% | step 0/0 | outputs 0",
+    ]
+    assert job_id not in job_lifecycle._registrations and job_id not in launch._active_gen_states
+    assert rig.left_behind()["durable_queue"] == []
+
+    rig.patch("_apply_per_job_coefficient", lambda job: None)
+    next_id = rig.direct_job(BODY, job_id="golden-direct-next")
+    assert rig.call_worker(next_id) is True
+    assert launch._jobs[next_id]["status"] == "completed"
 
 
 def test_a_job_cancelled_after_taking_the_slot_never_starts(rig, golden) -> None:

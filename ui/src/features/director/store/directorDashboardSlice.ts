@@ -82,6 +82,7 @@ export type DirectorDashboardSliceHost = DirectorDashboardSlice & Pick<DirectorS
   pipelineId: string | null
   pipelineStatus: api.PipelineStatus | null
   pipelinePolling: boolean
+  directorEditorDetached: boolean
   pollPipelineStatus: () => void
   sidebarMode: 'director' | 'studio'
 }
@@ -440,6 +441,7 @@ export const createDirectorDashboardSlice: SliceCreator<DirectorDashboardSlice, 
       pipelineId: pid,
       pipelineStatus: null,
       pipelinePolling: true,
+      directorEditorDetached: false,
       directorLoading: true,
       directorError: null,
     })

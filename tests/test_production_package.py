@@ -164,6 +164,26 @@ def test_repackage_does_not_complete_a_failed_retake_from_a_leftover_final(tmp_p
     assert (tmp_path / "p.shots.json").exists()
 
 
+def test_repackage_does_not_stamp_origins_on_another_productions_montage(tmp_path):
+    calls: list = []
+    production = _repackage_mcp(_production(tmp_path, calls), calls)
+    real = production.mcp
+
+    def mcp(tool, arguments):
+        if tool == "montages.get":
+            return {"result": {"revision": 3, "montage": {"clips": [
+                {"id": "a", "name": "a", "origin": {"kind": "scene2d", "productionId": "other"}},
+            ]}}}
+        return real(tool, arguments)
+
+    production.mcp = mcp
+    production.state.update(status="completed", final="v.mp4", montage_file="song.montage.json")
+    production.repackage({**SPEC, "shots": [{"key": "a", "kind": "h3", "line": 0, "frame": "wide", "action": "moves"}]})
+    assert not any(tool == "montages.save" for tool, _ in calls)
+    assert production.state["status"] == "completed"
+    assert any("another production owns it" in line for line in production.state.get("log") or [])
+
+
 def test_repackage_never_writes_running_so_auto_resume_cannot_rerun_the_gpu(tmp_path):
     """A crash mid-package used to leave status=running. auto_resume would then
     start production.run and regenerate a finished video."""

@@ -2773,6 +2773,12 @@
     },
     "status": 200
   },
+  "lora guide generate absolute": {
+    "body": {
+      "detail": "Invalid filename"
+    },
+    "status": 400
+  },
   "lora guide generate empty answer": {
     "body": {
       "detail": "LLM returned empty guide"
@@ -2810,9 +2816,21 @@
     },
     "status": 500
   },
+  "lora guide generate traversal": {
+    "body": {
+      "detail": "Invalid filename"
+    },
+    "status": 400
+  },
   "lora guide generate unknown model": {
     "body": {
       "detail": "Unknown model type"
+    },
+    "status": 404
+  },
+  "lora guide get traversal": {
+    "body": {
+      "detail": "Not Found"
     },
     "status": 404
   },

@@ -44,3 +44,20 @@ test('Hunyuan multiview and retexture retain their input requirements', () => {
   assert.equal(model3dInputState({ ...input, model: local, operation: 'retexture' }).hasInput, false)
   assert.equal(model3dInputState({ ...input, model: local, operation: 'retexture', hasSource: true }).hasInput, true)
 })
+
+test('Meshy and Hi3D cannot retexture a GLB', () => {
+  for (const provider of ['meshy', 'hi3d'] as const) {
+    const state = model3dInputState({
+      ...input, provider, operation: 'retexture', hasSource: true, hasFront: true,
+    })
+    assert.equal(state.remote3d, true)
+    assert.equal(state.supportsRetexture, false)
+    assert.equal(state.canRun, false)
+  }
+  const local = model3dInputState({
+    ...input, model: { ...model, engine: 'v2' as const },
+    operation: 'retexture', hasSource: true, hasFront: true,
+  })
+  assert.equal(local.supportsRetexture, true)
+  assert.equal(local.canRun, true)
+})

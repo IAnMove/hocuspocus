@@ -1,0 +1,74 @@
+"""Which running work each server lets stop a workspace delete.
+
+``services/workspace_busy.py`` is the registry; this is the list of what goes into it.
+It sits in the router layer because two job owners are routers (``routers/video_editor.py``)
+and because a router may import both layers while a service may not import a router.
+
+Each family module exposes one function, ``busy_jobs(workspace, workspace_dir)``, that
+returns its live jobs (see the rules in ``services/workspace_busy.py``). A profile is the
+list of families one server runs, so a server only imports and checks what it mounts:
+core never loads ``model3d_service`` or the Series render queue just to be asked about them.
+
+Families whose state lives in an object the server builds (the game and Series produce,
+native render and voice services, the World3D and Video 2D export services, and the tables
+the Series assembly and Quick Video batch routers keep) cannot be named here.
+The router factory that receives the object registers its probe itself, which is why
+those kinds are in :data:`REGISTERED_BY_THE_ROUTER` and not in a profile.
+"""
+from __future__ import annotations
+
+import importlib
+
+from services import workspace_busy
+
+PROBE_FUNCTION = "busy_jobs"
+
+# Run by both servers.
+COMMON: tuple[tuple[str, str], ...] = (
+    ("video-editor", "routers.video_editor"),
+    ("minimax-music", "services.story_music_jobs"),
+    ("minimax-image", "routers.comics"),
+    ("rig", "services.rig_service"),
+    ("series-plan", "services.series_plan_jobs"),
+    ("music-production", "services.production_commands"),
+)
+# The full server (NVIDIA / WanGP) only.
+FULL_ONLY: tuple[tuple[str, str], ...] = (
+    ("model3d", "services.model3d_service"),
+    ("story-plan", "services.story_lab_jobs"),
+    ("comic-plan", "services.director_comic_jobs"),
+    ("director-plan", "services.director_plan_jobs"),
+    ("series-render", "services.series_render_jobs"),
+)
+# The core server (Apple Silicon / remote providers) only.
+CORE_ONLY: tuple[tuple[str, str], ...] = (
+    ("core-3d", "services.core_remote_3d"),
+    ("core-image", "services.core_remote_image"),
+)
+
+PROFILES: dict[str, tuple[tuple[str, str], ...]] = {
+    "full": COMMON + FULL_ONLY,
+    "core": COMMON + CORE_ONLY,
+}
+
+# kind -> the router module whose factory registers it with the object it was given.
+REGISTERED_BY_THE_ROUTER: dict[str, str] = {
+    "game-produce": "routers.game_produce",
+    "series-produce": "routers.series_produce",
+    "series-native": "routers.series_native_render",
+    "series-voice": "routers.series_shot_inspector",
+    "series-assembly": "routers.series_assembly",
+    "quick-video-batch": "routers.quick_video_batches",
+    "world3d-export": "routers.world3d_export",
+    "scene2d-export": "routers.scene2d_export",
+}
+
+
+def register_profile(name: str) -> None:
+    """Register the probes of one server profile (``"full"`` or ``"core"``). Safe to call again."""
+    try:
+        families = PROFILES[name]
+    except KeyError:
+        raise ValueError(f"Unknown workspace busy profile: {name!r}") from None
+    for kind, module in families:
+        workspace_busy.register(kind, getattr(importlib.import_module(module), PROBE_FUNCTION))

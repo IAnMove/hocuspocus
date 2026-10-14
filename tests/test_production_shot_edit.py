@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from services.music_production import Production, segments
-from services.production_shot_edit import ShotEditError, update_shot, use_take
+from services.production_shot_edit import ShotEditError, adopt_take, update_shot, use_take
 from services.production_shot_review import record_decision
 
 
@@ -106,6 +106,36 @@ def test_use_take_replaces_one_montage_clip_and_keeps_the_rest(tmp_path: Path):
     manifest = json.loads((root / "show.shots.json").read_text(encoding="utf-8"))
     by_key = {row["key"]: row for row in manifest["shots"]}
     assert by_key["s0"]["clip"] == "take-b.mp4"
+
+
+def test_use_take_refuses_another_productions_montage(tmp_path: Path):
+    production, spec, root, saved, _edits = _build(tmp_path)
+    inner = production.mcp
+
+    def foreign(tool: str, arguments: dict) -> dict:
+        if tool == "montages.get":
+            return {"result": {"revision": 4, "montage": {"revision": 4, "clips": [
+                {"id": "s0", "source": "/api/v1/file/old-s0.mp4?workspace=film",
+                 "origin": {"kind": "scene2d", "productionId": "someone-else", "scene": "old.scene.json"}},
+            ]}}}
+        return inner(tool, arguments)
+
+    production.mcp = foreign
+    with pytest.raises(ShotEditError) as caught:
+        use_take(production, spec, "s0", "take-b.mp4")
+    assert caught.value.code == "montage_foreign"
+    assert saved == []
+    assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+
+
+def test_an_adopted_take_keeps_the_audio_window_it_was_shot_against(tmp_path: Path):
+    production, _spec, _root, _saved, _edits = _build(tmp_path)
+    production.state["takes"]["s0"][1]["window"] = [1.0, 3.0]
+    production.upload = lambda name: (name, "/u/" + name)
+    adopt_take(production, "s0", "take-b.mp4")
+    assert production.state["clips"]["s0"]["window"] == [1.0, 3.0]
+    adopt_take(production, "s0", "take-a.mp4")
+    assert "window" not in production.state["clips"]["s0"], "a take made before the window was recorded stays unknown"
 
 
 def test_use_take_exports_the_chosen_scene_once(tmp_path: Path):

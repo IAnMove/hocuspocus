@@ -55,17 +55,35 @@ export function clampStoryMusicDuration(value: unknown, model?: string): number 
   return Math.max(STORY_MUSIC_DURATION_MIN, Math.min(storyMusicDurationMax(model), seconds))
 }
 
+/** The Manual song Generate button runs a local model only for original songs: cover always goes through MiniMax `music-cover`. */
+export function storyUsesLocalMusicGeneration(
+  music: { model?: string; mode?: string } | undefined,
+): boolean {
+  return music?.mode !== 'cover' && isLocalMusicModel(music?.model)
+}
+
+/** The paid MiniMax model a Generate click would ask for: cover mode always uses `music-cover`. */
+export function storyPaidMusicModel(
+  music: Pick<StoryMusicDraft, 'model' | 'mode'>,
+): 'music-cover' | StoryMusicModel {
+  return music.mode === 'cover' ? 'music-cover' : music.model
+}
+
 export function storyMusicGenerationReady(
   model: string | undefined,
   minimaxConfigured: boolean,
+  mode?: string,
 ): boolean {
+  if (mode === 'cover') return minimaxConfigured
   return isLocalMusicModel(model) || minimaxConfigured
 }
 
 export function storyMusicReadyMessageKey(
   model: string | undefined,
   minimaxConfigured: boolean,
+  mode?: string,
 ): 'music.aceLocalReady' | 'music.minimaxLocalReady' | 'music.minimaxReady' | 'music.minimaxMissing' {
+  if (mode === 'cover') return minimaxConfigured ? 'music.minimaxReady' : 'music.minimaxMissing'
   if (isAceStepMusicModel(model)) return 'music.aceLocalReady'
   if (String(model || '') === MINIMAX_MUSIC3_LOCAL_MODEL) return 'music.minimaxLocalReady'
   return minimaxConfigured ? 'music.minimaxReady' : 'music.minimaxMissing'

@@ -11,8 +11,10 @@ import os
 import re
 
 from fastapi import APIRouter, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
-from services import output_listing
+from routers import workspace_busy_probes
+from services import output_listing, workspace_busy
 from services import storage_usage as storage_usage_service
 
 
@@ -23,12 +25,21 @@ def create_workspace_router(
     persist_active,
     workspace_dir,
     generation_idle,
-    jobs,
     safe_join,
     save_path,
+    jobs=None,
+    busy_profile=None,
 ):
-    """The full server's workspace routes. Each server passes its own workspace service."""
+    """The full server's workspace routes. Each server passes its own workspace service.
+
+    ``busy_profile`` names the server ("full" or "core"): the delete route refuses while a
+    family of that profile has work running in the workspace (``workspace_busy_probes``).
+    ``None`` registers nothing, which is what a test that supplies its own probes wants.
+    """
     router = APIRouter()
+    if busy_profile:
+        workspace_busy_probes.register_profile(busy_profile)
+    jobs = jobs or (lambda: ())
 
     @router.get("/api/v1/workspaces")
     def list_workspaces_endpoint():
@@ -117,6 +128,12 @@ def create_workspace_router(
                 raise HTTPException(status_code=409, detail="A Director pipeline is running or paused. Stop it before deleting a workspace.")
         except ImportError:
             pass
+        # Every other family of long jobs (editor exports, music, comics, rig and 3D, planners,
+        # Series, game produce) registers with the busy registry. Unlike the two checks above,
+        # which are global on purpose, these refuse only the workspace the job writes into.
+        blocking = workspace_busy.blocking(name, ws_dir)
+        if blocking:
+            return JSONResponse(status_code=409, content=workspace_busy.refusal(name, blocking))
 
         # Deleting the active workspace switches to default first. Safe to write
         # wgp.save_path directly here: nothing is generating (guards above).
@@ -126,8 +143,12 @@ def create_workspace_router(
             switched = True
             print("[Workspace] Active workspace deleted — switched to default")
 
+        from services.task_manager import forget_task_registry
         from services.win_safe_files import safe_delete_dir
         result = safe_delete_dir(ws_dir)
+        # The folder held the workspace's task database. A cached registry would keep using its
+        # path, and a workspace created again under the same name would fail with "no such table".
+        forget_task_registry(ws_dir)
         print(f"[Workspace] Deleted '{name}': {result['files_deleted']} files removed, "
               f"{result['files_deferred']} deferred, dir_removed={result['removed']}")
         return {

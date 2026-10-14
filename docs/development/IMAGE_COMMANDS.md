@@ -7,10 +7,12 @@ including references, LoRAs and advanced options. Version 1 remains available
 for small text-to-image clients. Audio, Tools, editorial domains and
 workflow execution are not covered by this slice.
 
-`generation.video` version 2 remains the closed Wan 2.1 Text2Video command.
-Version 3 types MiniMax H3 FL2VA, Ref2VA, and wired LTX-2.3 frames plus
-driving audio. `validate: true` on version 3 builds the generate payload and
-does not enqueue. H3 Advanced is a separate family and is not part of version 3.
+`generation.video` is a published sibling operation of the full server. Version 2 remains the
+closed Wan 2.1 Text2Video command. Version 3 types MiniMax H3 FL2VA, Ref2VA,
+and wired LTX-2.3 frames plus driving audio. `validate: true` on version 3
+builds the generate payload and does not enqueue. H3 Advanced is a separate
+family and is not part of version 3. Full envelope, lattices and job follow-up:
+[VIDEO_COMMANDS](VIDEO_COMMANDS.md).
 
 ## Contract and discovery
 
@@ -83,13 +85,17 @@ white=change mask, `video_prompt_type` containing `VAG` (and `I`/`KI` when
 identity refs are also attached), and optional `video_guide_outpainting`
 as `"top bottom left right"` percents. Native 2K is `2048x2048`.
 
-Shipped 2.1 ids: `qwen_image_21` (INT8 ConvRot), `qwen_image_21_bf16`,
-`qwen_image_21_gguf_q8_0` / `_q5_0` / `_q4_k`, and uncensored
-`qwen_image_21_uncensored_gguf_q4_k_m` / `_q5_k_m` / `_q6_k`. Uncensored
-GGUFs are local image weights with **no Mature Mode gate** (that gate is
-the Wizard LLM). Q8_0 from the uncensored pack is not shipped (upstream
-shape mismatch). Operator intents, tab-local `local-edit:` tokens, and
-Auto→pixel mapping are [Image Studio HOWUSEIT](../image-studio/HOWUSEIT.md).
+Shipped 2.1 ids: `qwen_image_21` (INT8 ConvRot, the default),
+`qwen_image_21_turbo` (official eight-step checkpoint, CFG 1, not the Viggle
+six-step LoRA), `qwen_image_21_bf16`, `qwen_image_21_gguf_q8_0` / `_q5_0` /
+`_q4_k`, and uncensored `qwen_image_21_uncensored_gguf_q4_k_m` / `_q5_k_m` /
+`_q6_k`. Turbo is optional: local 1K pairs were ~3× faster on an RTX 4090
+and are not a quality claim versus the 40-step base. See
+[QWEN21_TURBO](QWEN21_TURBO.md). Uncensored GGUFs are local image weights
+with **no Mature Mode gate** (that gate is the Wizard LLM). Q8_0 from the
+uncensored pack is not shipped (upstream shape mismatch). Operator intents,
+tab-local `local-edit:` tokens, and Auto→pixel mapping are
+[Image Studio HOWUSEIT](../image-studio/HOWUSEIT.md).
 
 `resolution` on this command must be explicit `WxH`. Studio maps `auto` /
 `auto_*` in `concreteImageResolution` before POST (`auto` → `1024x1024`; Qwen 2.1 uses

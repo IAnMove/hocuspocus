@@ -15,9 +15,10 @@ from typing import Any
 from services.production_camera import background_ops
 from services.production_control import sleep_until
 from services.production_package import (
-    attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, write_manifest,
+    attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for,
+    manifest_rows, montage_made_by, montage_owned_by_other, write_manifest,
 )
-from services.production_scene2d import scene2d_document, scene_inputs
+from services.production_scene2d import keeps_tempo, note_tempo, resume_clip, scene2d_document
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.video2d_edit import MAX_OPERATIONS
 
@@ -92,12 +93,11 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
         if is_locked(production, shot["key"]) and (done.get(shot["key"]) or {}).get("file"):
             continue
         dur = round(end - start, 3)
-        used = (clips.get(shot["key"]) or (clips.get(shot.get("clip")) if shot["kind"] == "clip" else None) or {}).get("file") \
-            or scene_inputs(production.state, shot)
+        used = resume_clip(production.state, shot, clips)
         prior = done.get(shot["key"], {})
         fingerprint = host.scene_fingerprint(shot, style, stills, score, start, end)
         if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
-                and prior.get("fingerprint") == fingerprint):
+                and prior.get("fingerprint") == fingerprint and keeps_tempo(prior, shot, score.get("bpm"))):
             continue
         doc = production.scene_document(shot, start, end, score, clips, style, stills)
         docs[shot["key"]] = doc
@@ -105,6 +105,7 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
                                                "input": {"workspace": production.ws, "document": doc}})
         done[shot["key"]] = {"intent": (reply.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
                               "fingerprint": fingerprint, "file": None}
+        note_tempo(done[shot["key"]], shot, score.get("bpm"))
         production.save()
     failed = finish_scene_exports(
         production.mcp, production.ws, production.id, done, docs,
@@ -188,7 +189,9 @@ def repackage(production: Any, spec: dict) -> None:
         if file:
             current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": file}}).get("result") or {})
             montage = current.get("montage") or current
-            if attach_origins(montage, production.state.get("scene_docs") or {}, production.id) and montage.get("clips"):
+            if montage_owned_by_other(montage, production.id):
+                production.log(f"package: left {file} (another production owns it)")
+            elif attach_origins(montage, production.state.get("scene_docs") or {}, production.id) and montage.get("clips"):
                 revision = current.get("revision") or montage.get("revision")
                 saved = production.mcp("montages.save", {"version": 1, "intent_id": f"{production.id}-origins-{int(host.time.time())}",
                                                    "input": {"workspace": production.ws, "montage": montage, "file": file, "expected_revision": revision}})
@@ -200,18 +203,13 @@ def repackage(production: Any, spec: dict) -> None:
     production._finish_package(previous, previous_error, None)
 
 
-def _made_by(document: dict, production_id: str) -> bool:
-    """Every clip origin that names a production names this one (``attach_origins`` writes them)."""
-    owners = {(clip.get("origin") or {}).get("productionId") for clip in document.get("clips") or [] if isinstance(clip, dict)}
-    return owners - {None} == {production_id}
-
-
 def owned_montage(production: Any) -> tuple[str, int | None]:
     """The montage file this production saves, and the revision to update (None: a new file).
 
     The state's file first, then ``<production_id>.montage.json``: a title is not unique in a workspace, an id is.
-    An existing file is updated when the state names it or its clips come from this production; one that belongs to
-    another production moves the name on to ``-2``, ``-3``… The store keeps montages in the workspace folder."""
+    An existing file is updated when its clips come from this production, or when the state names a file that
+    nobody else owns (an older montage with no ``productionId``). A stale ``montage_file`` that points at another
+    production's clips moves on to ``-2``, ``-3``… The store keeps montages in the workspace folder."""
     from services.montage_documents import SUFFIX, slug_file
     named = production.state.get("montage_file")
     stem = slug_file(production.id)[: -len(SUFFIX)]
@@ -223,7 +221,7 @@ def owned_montage(production: Any) -> tuple[str, int | None]:
             current = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if file == named or _made_by(current, production.id):
+        if montage_made_by(current, production.id) or (file == named and not montage_owned_by_other(current, production.id)):
             return file, int(current.get("revision", 1))
     raise _host().ProductionError("montage_failed", f"no free montage name for {production.id}")
 

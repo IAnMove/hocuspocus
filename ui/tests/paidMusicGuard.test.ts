@@ -7,7 +7,10 @@ import {
   ACE_STEP_MUSIC_MODEL,
   normalizeStoryMusicChoice,
   resolveStoryMusicModel,
+  storyMusicGenerationReady,
   storyMusicSelection,
+  storyPaidMusicModel,
+  storyUsesLocalMusicGeneration,
 } from '../src/features/stories/musicModel.ts'
 import { createStoryProject, normalizeStoryProject } from '../src/features/stories/model.ts'
 import { confirmPaidStoryMusic } from '../src/features/stories/paidMusicConfirm.ts'
@@ -73,6 +76,81 @@ test('a paid model picked in the Story Lab selector stays chosen', () => {
   assert.equal(project.music.model, 'music-2.6')
   assert.equal(project.music.paidModelChosen, true)
   assert.equal(project.music.replacedPaidModel, undefined)
+})
+
+test('a cover story saved with an unchosen music-3.0 is remapped to ACE and still routes to music-cover', () => {
+  const base = createStoryProject('music_video')
+  const saved = {
+    ...base,
+    music: {
+      ...base.music,
+      mode: 'cover' as const,
+      model: 'music-3.0',
+      coverReferenceFilename: 'ref.mp3',
+    },
+  }
+  const project = normalizeStoryProject(saved)
+  // The unchosen paid id is not kept in cover mode: it reads as the local default and says so.
+  assert.equal(project.music.mode, 'cover')
+  assert.equal(project.music.model, ACE_STEP_MUSIC_MODEL)
+  assert.equal(project.music.paidModelChosen, undefined)
+  assert.equal(project.music.replacedPaidModel, 'music-3.0')
+  // Generate still reads the cover route, never the local one, and asks for music-cover.
+  assert.equal(storyUsesLocalMusicGeneration(project.music), false)
+  assert.equal(storyPaidMusicModel(project.music), 'music-cover')
+  assert.equal(storyMusicGenerationReady(project.music.model, false, project.music.mode), false)
+  assert.equal(storyMusicGenerationReady(project.music.model, true, project.music.mode), true)
+})
+
+test('cover mode never takes the local ACE path even after a remapped model', () => {
+  assert.equal(storyUsesLocalMusicGeneration({ model: ACE_STEP_MUSIC_MODEL, mode: 'original' }), true)
+  assert.equal(storyUsesLocalMusicGeneration({ model: ACE_STEP_MUSIC_MODEL, mode: 'cover' }), false)
+  assert.equal(storyPaidMusicModel({ model: ACE_STEP_MUSIC_MODEL, mode: 'cover' }), 'music-cover')
+  assert.equal(storyMusicGenerationReady(ACE_STEP_MUSIC_MODEL, false, 'cover'), false)
+})
+
+async function manualGenerateButton(mode: 'original' | 'cover', minimaxConfigured: boolean): Promise<string> {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { ManualSongPanel } = await import('../src/features/stories/ManualSongPanel.tsx')
+  const base = createStoryProject('music_video')
+  const html = renderToStaticMarkup(createElement(ManualSongPanel, {
+    project: { ...base, music: { ...base.music, mode } },
+    patch: () => {}, productionBusy: null, minimaxConfigured, workspace: 'default',
+    musicVersionStyle: {}, musicVersionLanguage: {}, lyricsTranslationLanguage: {},
+  } as never))
+  const button = html.match(/<button[^>]*>(?:(?!<\/button>).)*Generate manual candidates<\/button>/)
+  assert.ok(button, 'the Manual song Generate button renders')
+  return button[0]
+}
+
+test('Manual song Generate needs the MiniMax key in cover mode even on the local default model', async () => {
+  const base = createStoryProject('music_video')
+  assert.equal(base.music.model, ACE_STEP_MUSIC_MODEL)
+  assert.match(await manualGenerateButton('cover', false), /disabled=""/)
+  assert.doesNotMatch(await manualGenerateButton('cover', true), /disabled=""/)
+  // An original song on the local default needs no key.
+  assert.doesNotMatch(await manualGenerateButton('original', false), /disabled=""/)
+})
+
+async function musicReadinessLine(mode: 'original' | 'cover', minimaxConfigured: boolean): Promise<string> {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { StoryMusicSettingsBar } = await import('../src/features/stories/StoryMusicSettingsBar.tsx')
+  const base = createStoryProject('music_video')
+  return renderToStaticMarkup(createElement(StoryMusicSettingsBar, {
+    project: { ...base, music: { ...base.music, mode } },
+    patch: () => {}, busy: null, musicQueue: null, musicCueBusy: false, minimaxConfigured,
+    musicVersionStyle: {}, musicVersionLanguage: {},
+  } as never))
+}
+
+test('the music readiness line names MiniMax in cover mode and ACE only for an original song', async () => {
+  const coverNoKey = await musicReadinessLine('cover', false)
+  assert.match(coverNoKey, /Configure the shared MiniMax key/)
+  assert.doesNotMatch(coverNoKey, /Local ACE-Step selected/)
+  assert.match(await musicReadinessLine('cover', true), /MiniMax is configured/)
+  assert.match(await musicReadinessLine('original', false), /Local ACE-Step selected/)
 })
 
 test('Story Lab asks before a paid MiniMax request and never for a local one', () => {

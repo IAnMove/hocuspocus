@@ -763,6 +763,7 @@ class World3DExportService:
         self.owner = uuid.uuid4().hex
         self._lock = threading.RLock()
         self._workers: dict[str, threading.Thread] = {}
+        self._worker_workspaces: dict[str, str] = {}
 
     def capabilities(self) -> dict:
         return export_capabilities(self.app_url)
@@ -863,7 +864,16 @@ class World3DExportService:
                 name=f"{self.slug}-{intent_id[:12]}", daemon=True,
             )
             self._workers[intent_id] = thread
+            self._worker_workspaces[intent_id] = task["workspace"]
             thread.start()
+
+    def live_jobs(self) -> list[dict]:
+        """Exports whose worker is alive (``services.workspace_busy`` probe): it renders frames into the workspace."""
+        with self._lock:
+            return [
+                {"jobId": intent_id, "status": "running", "workspace": self._worker_workspaces.get(intent_id)}
+                for intent_id, thread in self._workers.items() if thread.is_alive()
+            ]
 
     def receipt(self, workspace: str, intent_id: str) -> dict:
         if not isinstance(intent_id, str) or not 1 <= len(intent_id) <= 160:

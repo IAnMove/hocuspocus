@@ -24,7 +24,8 @@ from services.game_generators.base import GenContext, attempt_seed
 from services.game_inputs import asset_inputs
 from services.game_jobs import GameJobStore
 from services.game_library import add_attempt, read_library, stamp_attempt, write_library
-from services.game_tools import GameToolError
+from services.game_tools import GameToolError, root_file_name
+from services.output_siblings import sidecar_names
 
 ACTIVE = ("queued", "running", "cancelling")
 _OPEN = {"pending", "rejected", "failed"}
@@ -67,30 +68,40 @@ def public_job(job: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in job.items() if key != "workspace"}
 
 
-def _owns(name: str, asset_id: str, others: list[str]) -> bool:
-    """True when the file belongs to this asset and not to a longer sibling id."""
-    if not name.startswith(f"{asset_id}-"):
-        return False
-    return not any(len(other) > len(asset_id) and name.startswith(f"{other}-") for other in others)
+def leftover_root_files(provenance: dict | None) -> list[str]:
+    """Root leftovers this attempt's tools recorded on their provenance steps."""
+    names: list[str] = []
+    for step in (provenance or {}).get("steps") or []:
+        if not isinstance(step, dict):
+            continue
+        for item in step.get("leftovers") or []:
+            if isinstance(item, str) and item and item not in names:
+                names.append(item)
+    return names
 
 
-def archive_raw_outputs(workspace: str, game: dict[str, Any], asset_id: str, attempt_id: str) -> list[str]:
-    """Move ``<asset-id>-*`` files from the workspace root into the attempt's ``raw/``.
+def archive_raw_outputs(workspace: str, game: dict[str, Any], asset_id: str, attempt_id: str,
+                        leftovers: list[str] | None = None) -> list[str]:
+    """Move this attempt's leftover root files into ``raw/``, each with its metadata and preview sidecars.
 
-    A longer id wins: ``heroe-idle-still.png`` stays when the asset is ``heroe``
-    and ``heroe-idle`` is also in the game. Files stay put until the asset succeeds.
+    Only names the tools wrote (``leftovers`` / provenance) are moved, so a produce of ``heroe`` leaves
+    ``heroe-portrait.png`` from another job alone. Files already in a folder stay put, and so do the leftovers of
+    an attempt that failed: they are not known to belong to the take that won.
     """
     root = Path(workspace)
-    if not root.is_dir():
+    if not root.is_dir() or not leftovers:
         return []
-    others = [str(item.get("id")) for item in game.get("assets") or [] if item.get("id") and item.get("id") != asset_id]
     dest = root / "game" / str(game.get("id") or "game") / asset_id / attempt_id / "raw"
-    moved = []
-    for path in list(root.iterdir()):
-        if path.is_file() and _owns(path.name, asset_id, others):
-            dest.mkdir(parents=True, exist_ok=True)
-            path.replace(dest / path.name)
-            moved.append(path.name)
+    moved: list[str] = []
+    for value in leftovers:
+        name = root_file_name(value, root)
+        if name is None or name in moved or not (root / name).is_file():
+            continue
+        for each in (name, *sidecar_names(name)):
+            if (root / each).is_file():
+                dest.mkdir(parents=True, exist_ok=True)
+                (root / each).replace(dest / each)
+                moved.append(each)
     return moved
 
 
@@ -178,12 +189,28 @@ class GameProduce:
             if asset is not None and asset.get("status") == "generating":
                 self._release(job, step)
 
+    def _alive(self, job_id: str) -> bool:
+        """Whether a worker thread of this service still owns the job (one that has not started yet counts)."""
+        thread = self._threads.get(job_id)
+        return thread is not None and (thread.ident is None or thread.is_alive())
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The jobs in this folder that a worker of this service is running (``services.workspace_busy`` probe).
+
+        Reads only. A checkpoint that says running without a thread was cut by a restart: it is not
+        busy, and ``jobs()`` turns it into ``interrupted`` the next time something reads it.
+        """
+        return [
+            {"jobId": job["jobId"], "status": job["status"], "workspace": job.get("workspace")}
+            for job in GameJobStore(workspace_dir).list()
+            if job.get("status") in ACTIVE and self._alive(str(job.get("jobId") or ""))
+        ]
+
     def _reconcile(self, workspace: str, job: dict) -> dict:
         """A job that says it is running without a live thread was cut by a restart."""
         if job.get("status") not in ACTIVE:
             return job
-        thread = self._threads.get(job["jobId"])
-        if thread is not None and (thread.ident is None or thread.is_alive()):
+        if self._alive(job["jobId"]):
             return job
         self._interrupt(workspace, job)
         return job
@@ -358,7 +385,10 @@ class GameProduce:
             self._stamp_style(job, game, asset, attempt)
         _record_elapsed(self.deps.workspace_dir(job["workspace"]), game, asset, job.get("candidates"), elapsed)
         try:
-            archive_raw_outputs(self.deps.workspace_dir(job["workspace"]), game, asset["id"], step["attemptId"])
+            archive_raw_outputs(
+                self.deps.workspace_dir(job["workspace"]), game, asset["id"], step["attemptId"],
+                leftover_root_files(provenance),
+            )
         except OSError as error:
             step["archiveWarning"] = str(error)[:300]
             self._save(job)
