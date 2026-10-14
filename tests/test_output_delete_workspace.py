@@ -563,6 +563,20 @@ def test_busy_registry_filters_by_workspace_and_blocks_jobs_that_name_none():
     assert all(item["kind"] == "things" for item in film)
 
 
+def test_a_job_that_names_its_workspace_in_another_case_still_blocks_it():
+    """Windows (full server) and macOS (core) folders ignore case: a job started for "Film" writes into "film"."""
+    from services import workspace_busy
+
+    jobs = [{"jobId": "mixed", "status": "running", "workspace": "Film"}]
+    with workspace_busy.isolated():
+        workspace_busy.register("things", lambda _workspace, _folder: jobs)
+        film = workspace_busy.blocking("film", "/x/film")
+        other = workspace_busy.blocking("other", "/x/other")
+
+    assert [item["jobId"] for item in film] == ["mixed"]
+    assert other == []
+
+
 def test_busy_registry_registers_replaces_and_isolates():
     from services import workspace_busy
 

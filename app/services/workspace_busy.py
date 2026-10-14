@@ -14,7 +14,8 @@ Rules every probe follows (the review criteria, each with a test):
   has no worker is a lie left by a crash; it must not block deletes for ever.
 * Only the positive :data:`ACTIVE_STATUSES` block, never "anything not terminal".
 * A job carries the workspace it writes into, and the registry drops the jobs of
-  other workspaces, so one running job does not freeze every other folder. A job that
+  other workspaces (names compared without case, as Windows and macOS folders are),
+  so one running job does not freeze every other folder. A job that
   does not say which workspace it belongs to blocks all of them (fail closed).
 * A probe uses the ``workspace_dir`` it is given. It never calls ``workspace_dir(name)``
   itself, which would create the folder.
@@ -147,6 +148,9 @@ def blocking(workspace: str, workspace_dir: str) -> list[dict[str, str]]:
     """
     with _lock:
         probes = list(_probes.items())
+    # Windows and macOS folders ignore case, so a job started for "Film" writes into "film".
+    # Comparing without case can only refuse more (two folders that differ by case on Linux).
+    names = ("", workspace.casefold())
     found: list[dict[str, str]] = []
     for kind, probe in probes:
         try:
@@ -155,7 +159,7 @@ def blocking(workspace: str, workspace_dir: str) -> list[dict[str, str]]:
             log.warning("workspace busy probe %r failed: %s", kind, error)
             found.append({"kind": kind, "jobId": "", "status": PROBE_ERROR, "workspace": workspace})
             continue
-        found.extend(job for job in jobs if job["workspace"] in ("", workspace))
+        found.extend(job for job in jobs if job["workspace"].casefold() in names)
     return found
 
 
