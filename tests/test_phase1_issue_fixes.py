@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from tests.api_client_source import api_client_source
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -2452,7 +2453,7 @@ class TestOutpaintShotAwarePlanning(unittest.TestCase):
         )
 
     def test_endpoint_and_task_engine_dispatch_shot_aware_outpaint(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         self.assertIn("_prepare_and_run_outpaint", launch)
         self.assertIn('"_outpaint_shot_manifest"', launch)
         self.assertIn("_run_outpaint_shot_generation(job_id)", launch)

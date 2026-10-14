@@ -1,6 +1,8 @@
 """Recast reference composition: group, cast, native people, and source scene.
 
-Function bodies are the launch module's, moved verbatim.
+Function bodies are the launch module's, moved verbatim. Nothing here reads a
+launch name: the colors, regions, person count and subject crop it uses moved
+with this slice and are imported from their modules at the bottom of this file.
 """
 
 import os
@@ -1071,7 +1073,9 @@ def _fit_recast_reference_layers(
     mask_canvas.paste(mask_image, offset)
     return rgb_canvas, mask_canvas
 
-# --- collaborators ---
+# --- helpers that moved with this slice ---
+# Imported last: these modules import this one back, and every name they take
+# from here is defined above by then.
 from services.recast_masks import (
     _RECAST_MASK_COLORS,
     _RECAST_PROTECTION_COLORS,

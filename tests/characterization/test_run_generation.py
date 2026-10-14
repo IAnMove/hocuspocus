@@ -14,11 +14,18 @@ the model is the legacy H3 route, the slot is taken a moment before a cancel).
 Those tests build the job with the server's own factory and call
 ``_run_generation`` directly, with the collaborators that need a GPU stubbed.
 Every stub goes through :meth:`Rig.patch`, so a PR that moves the worker only
-repoints ``worker_module``.
+repoints ``worker_modules``.
 
 The goldens pin today's behaviour, including its oddities. Tests whose names
 start with ``test_oddity_`` pin behaviour that looks unintended; a refactor must
 keep it, and a fix is its own PR that re-records the golden.
+
+Film grain, the chunked FlashVSR upscale and the spatial-upsampling pass are
+not reached from the worker tests: those tests replace film grain and spatial
+upsampling, and nothing calls the chunked upscale. The tests at the bottom of
+this module call the three functions and record what they do to a file. Torch,
+decord, the grain kernel, the FlashVSR model and ffmpeg are stubbed: grain is
+random, and FlashVSR needs a GPU this suite does not have.
 """
 from __future__ import annotations
 
@@ -28,6 +35,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import types
@@ -88,12 +96,32 @@ def _install_fake_decord(monkeypatch) -> list:
 
 
 def worker_module():
-    """The module whose globals ``_run_generation`` reads. A move PR repoints this one function."""
+    """The full server module: the jobs, the locks and ``request_cancel`` the worker and the tests share live here."""
     return sys.modules["_launch_runtime"]
 
 
-# Recast shot modules the assembler reads (C8a). A name patched on launch is patched on each of
-# these too, once the server has imported it, so a stub reaches the moved function.
+# The modules of the generation worker package, in the order the worker runs them.
+WORKER_PACKAGE = ("prepare", "tasks", "finalize")
+
+# The post-processing passes the worker calls by their launch names (C4), and the launch functions each module took.
+POSTFX_MODULES = {
+    "services.generation_coefficients": ("_apply_per_job_coefficient", "_restore_base_coefficient"),
+    "services.generation_postprocess": ("_apply_film_grain_to_file", "_apply_spatial_upsampling_to_file"),
+    "services.generation_flashvsr": ("_chunked_flashvsr_upscale",),
+    "services.generation_sfx": ("_run_sfx_generation",),
+}
+
+# The Recast helper modules (C7). The worker's bystander protection calls two of their functions by their launch
+# names, and the helpers call each other through each module's own globals.
+RECAST_MODULES = (
+    "services.recast_masks",
+    "services.recast_matte",
+    "services.recast_reference_compose",
+    "services.recast_reference_prepare",
+)
+
+# The Recast shot modules (C8a). The shot assembler reads its collaborators (the audio probe, the frame count, the
+# worker) through its own module's globals, and the manifest and planning functions call each other the same way.
 SHOT_MODULES = (
     "services.recast_shot_planning",
     "services.recast_shot_manifest",
@@ -106,11 +134,27 @@ ROUTE_MODULES = (
     "services.recast_endpoint",
 )
 
+# Repaint (C6): the modules that took their launch objects, which they read under the launch names.
+REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
+
 
 def worker_modules() -> list:
-    """Launch, plus each moved recast module already imported. Each reads its own globals."""
-    names = (*SHOT_MODULES, *ROUTE_MODULES)
-    return [worker_module(), *[sys.modules[name] for name in names if name in sys.modules]]
+    """The modules whose globals the worker functions, the post-processing passes, the Recast code and the Repaint
+    and Recast routes that start the worker read. A move PR repoints this one function.
+
+    That is the full server module while any worker function or pass is still in it, each module of
+    ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
+    Recast shot module (C8a), each Repaint module (C6) and each Recast route module (C8b). A name they read is an
+    attribute of every module that reads it.
+    """
+    package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
+               if f"services.generation_worker.{name}" in sys.modules]
+    passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
+    recast = [sys.modules[name] for name in RECAST_MODULES if name in sys.modules]
+    shots = [sys.modules[name] for name in SHOT_MODULES if name in sys.modules]
+    repaint = [sys.modules[name] for name in REPAINT_MODULES if name in sys.modules]
+    routes = [sys.modules[name] for name in ROUTE_MODULES if name in sys.modules]
+    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *routes]
 
 
 @dataclass
@@ -467,6 +511,35 @@ def test_the_vram_coefficient_is_tightened_for_the_job_and_restored(rig, golden,
     observed["coefficient"] = {"adjusted_keys": sorted(adjustment), "applied_during_the_job": during == adjustment["effective_coef"],
                                "tighter_than_base": during < 0.8, "restored_after": observed["left_behind"]["vram_coefficient"] == 0.8}
     rig.check(golden, "vram coefficient", observed)
+
+
+def test_a_native_job_starts_up_in_a_fixed_order_before_its_abort_handle_is_registered(rig, monkeypatch) -> None:
+    """Between taking the slot and reaching the engine, a native (WanGP) job cancels a pending H3 idle release, stops
+    the isolated H3 runtime, tightens its VRAM coefficient and only then registers its abort handle. The first two
+    recorded steps belong to the GPU slot's hand-off (``_coordinated_generation_slot``), not to the worker: a change
+    to that hand-off moves them."""
+    from services import minimax_h3_service
+
+    launch = rig.launch
+    steps: list = []
+    real_coefficient, real_register = launch._apply_per_job_coefficient, launch.register_abort_state
+
+    def register(*args, **kwargs):
+        steps.append("register abort state")
+        return real_register(*args, **kwargs)
+
+    rig.patch("_cancel_h3_idle_release", lambda: steps.append("cancel H3 idle release"))
+    monkeypatch.setattr(minimax_h3_service, "stop_runtime", lambda *args, **kwargs: steps.append("stop H3 runtime"))
+    monkeypatch.setattr(minimax_h3_service, "cancel_idle_shutdown",
+                        lambda *args, **kwargs: steps.append("keep H3 runtime"))
+    rig.patch("_apply_per_job_coefficient", lambda job: (steps.append("VRAM coefficient"), real_coefficient(job))[1])
+    rig.patch("register_abort_state", register)
+    rig.engine.script = lambda call: (steps.append("engine"), call.save())
+    job_id = rig.direct_job(BODY)
+    assert rig.call_worker(job_id) is True
+    # The first two are the GPU slot's hand-off from an isolated H3 runtime, before the worker's own steps.
+    assert steps == ["keep H3 runtime", "stop H3 runtime", "cancel H3 idle release", "stop H3 runtime",
+                     "VRAM coefficient", "register abort state", "engine"]
 
 
 # -- a job that fails ---------------------------------------------------------------------------------
@@ -1136,6 +1209,49 @@ def test_a_cancel_during_post_processing_stops_the_remaining_passes(rig, golden)
     rig.check(golden, "cancel during post-processing", {**rig.observe(job_id), "order": order})
 
 
+def test_a_failed_job_runs_no_finishing_pass_on_the_outputs_it_keeps(rig, clip, tmp_path, monkeypatch) -> None:
+    """The engine saves a video and a sound, then fails: the job fails (it is not cancelled) and keeps both files.
+    Every finishing pass (outpaint, Recast protection, FlashVSR, film grain, voice clone, audio normalisation) runs
+    only for a job that succeeded, so none of them touches the kept files."""
+    media.sound(tmp_path / "uploads" / "audio" / "voice.wav")
+    source = tmp_path / "finishing-source.mp4"
+    shutil.copyfile(clip, source)
+    ran: list = []
+
+    def script(call) -> None:
+        call.save()
+        call.save("audio", suffix="_soundtrack")
+        raise RuntimeError("fake engine died after saving")
+
+    real_run = subprocess.run
+
+    def media_tools(command, *args, **kwargs):
+        if list(command)[0] in ("ffmpeg", "ffprobe"):
+            ran.append(list(command)[0])
+            return subprocess.CompletedProcess(command, 1, "", "the test runs no media tool")
+        return real_run(command, *args, **kwargs)
+
+    rig.engine.script = script
+    monkeypatch.setattr(subprocess, "run", media_tools)
+    rig.set_wgp("wan_model", SimpleNamespace(name="resident model"))
+    rig.set_wgp("release_model", lambda: ran.append("release model"))
+    rig.patch("_build_recast_adaptive_mask", lambda *args, **kwargs: ran.append("trace"))
+    rig.patch("_render_recast_mask_locked_video", lambda *args, **kwargs: ran.append("render"))
+    rig.patch("_apply_spatial_upsampling_to_file", lambda path, method, job=None: ran.append("upscale"))
+    rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: ran.append("film grain"))
+    _voice_clone_stub(monkeypatch, ran)
+    job_id = rig.direct_job({**BODY, "_outpaint_source_video": str(source), "_outpaint_preserve_audio": True,
+                             "_recast_protect_bystanders": True, "_recast_source_video": str(source),
+                             "video_mask": "uploads/recast-mask.mp4", "spatial_upsampling": "flashvsr_x2",
+                             "film_grain_intensity": 0.4, "voice_clone_enabled": True,
+                             "voice_clone_refs": ["audio/voice.wav"], "tts_dynaudnorm": True})
+    assert rig.call_worker(job_id) is False
+    job = rig.launch._jobs[job_id]
+    assert job["status"] == "failed" and not job.get("cancel_requested")
+    assert len(job["output_files"]) == 2
+    assert ran == []
+
+
 def _instant_retries(rig) -> None:
     """The worker retries a file Windows holds open 15 times, a second apart; the test does not wait for them."""
     real = rig.launch.time
@@ -1332,6 +1448,708 @@ def test_oddity_the_sound_effect_sidecar_reads_a_job_id_key_jobs_do_not_have(rig
     assert sidecar["job_id"] == job_id
 
 
+# -- post-processing passes the worker tests never enter -------------------------------------------------------------
+def _masked_argv(command) -> list[str]:
+    """Flags stay; absolute paths do not, so a golden does not carry this machine's temp directory."""
+    return ["<PATH>" if os.path.isabs(str(part)) else str(part) for part in command]
+
+
+def _file_mark(path: Path) -> str:
+    return {
+        b"ORIGINAL": "original",
+        b"SOURCE": "source",
+        b"GRAIN": "grain",
+        b"MUXED": "muxed",
+        b"SEGMENT": "segment",
+        b"JOINED": "joined",
+    }.get(path.read_bytes(), f"other:{path.stat().st_size}")
+
+
+def _extras(folder: Path, source: Path) -> list[str]:
+    return sorted(path.name for path in folder.iterdir() if path.name != source.name)
+
+
+_FLASH_KEYS = ("flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend", "flashvsr_persistence")
+
+
+def _prepare_flashvsr(rig, monkeypatch, *, fps: float, width: int, height: int, frames: int,
+                      variant: str, expect_ffmpeg: bool, stop_at: str | None) -> dict:
+    """Stub everything ``_chunked_flashvsr_upscale`` touches except its own chunking and persistence.
+
+    ``get_video_info`` reports ``width`` x ``height`` so the chunk-size formula runs for real, while the
+    frames handed back are 2x2. A long 4000-pixel ``tiny`` clip therefore still chunks, without allocating
+    the output buffer the formula is there to avoid.
+    """
+    import torch
+    from shared.utils import utils as video_utils
+
+    try:
+        import postprocessing.flashvsr.runtime  # noqa: F401
+    except ModuleNotFoundError:
+        # The CI core install has no easydict, which the real runtime imports through models.wan. The function
+        # under test reads one constant from that module (the overlap), so a stand-in with the same value is enough.
+        monkeypatch.setitem(
+            sys.modules, "postprocessing.flashvsr.runtime", SimpleNamespace(FLASHVSR_CONTINUE_CACHE_FRAMES=11)
+        )
+
+    notes: dict = {"reads": [], "saves": [], "upscales": [], "messages": [], "commands": [], "releases": 0,
+                   "persistence_during": []}
+
+    monkeypatch.setattr(video_utils, "get_video_info", lambda _path: (fps, width, height, frames))
+
+    def get_resampled_video(_path, start, count, got_fps):
+        notes["reads"].append({"start": start, "count": count, "fps": got_fps})
+        take = min(int(count), max(0, frames - int(start)))
+        if take <= 0:
+            return None
+        return torch.zeros((take, 2, 2, 3), dtype=torch.uint8)
+
+    def save_video(**kwargs):
+        tensor = kwargs["tensor"]
+        Path(kwargs["save_file"]).write_bytes(b"SEGMENT")
+        notes["saves"].append({
+            "file": Path(kwargs["save_file"]).name,
+            "fps": kwargs["fps"],
+            "nrow": kwargs["nrow"],
+            "normalize": kwargs["normalize"],
+            "value_range": list(kwargs["value_range"]) if "value_range" in kwargs else None,
+            "codec_type": kwargs["codec_type"],
+            "container": kwargs["container"],
+            "shape": list(tensor.shape),
+            "dtype": str(tensor.dtype),
+        })
+
+    def upscale(seg, method, **kwargs):
+        notes["persistence_during"].append(rig.server.wgp.server_config.get("flashvsr_persistence"))
+        notes["upscales"].append({
+            "method": method,
+            "frames": int(seg.shape[1]),
+            "in_shape": list(seg.shape),
+            "in_dtype": str(seg.dtype),
+            "continue_cache": kwargs.get("continue_cache") is not None,
+            "return_continue_cache": kwargs.get("return_continue_cache"),
+            "profile": kwargs.get("profile"),
+            "seed": kwargs.get("seed"),
+            "still_image": kwargs.get("still_image"),
+            "process_files": kwargs.get("process_files"),
+            "vae_config": kwargs.get("vae_config"),
+            "init_pipe": kwargs.get("init_pipe"),
+        })
+        produced = int(seg.shape[1])
+        return torch.zeros((3, produced, 2, 2), dtype=torch.float32), {"n": len(notes["upscales"])}
+
+    def run(command, *args, **kwargs):
+        argv = _masked_argv(command)
+        notes["commands"].append(argv)
+        if not expect_ffmpeg:
+            raise AssertionError(f"ffmpeg was called: {argv}")
+        if argv[0] != "ffmpeg":
+            raise AssertionError(argv[0])
+        Path(list(command)[-1]).write_bytes(b"JOINED")
+        return subprocess.CompletedProcess(list(command), 0, "", "")
+
+    # A class body does not see this function's locals, so the callable is attached afterwards.
+    flash = SimpleNamespace(
+        PERSIST_RAM=2, PERSIST_UNLOAD=1,
+        scale_for_upsampling=lambda _method: 2.0,
+        settings=lambda: (True, variant, 1),
+        upscale=upscale,
+    )
+    rig.set_wgp("flashvsr", flash)
+    rig.set_wgp("get_resampled_video", get_resampled_video)
+    rig.set_wgp("save_video", save_video)
+    rig.set_wgp("loaded_profile", 4)
+    rig.set_wgp("process_files_def", "process-files")
+    rig.set_wgp("vae_config", {"tile": 0})
+    rig.set_wgp("init_pipe", "init-pipe")
+    rig.set_wgp("release_flashvsr_vram", lambda: notes.__setitem__("releases", notes["releases"] + 1))
+    monkeypatch.setattr(subprocess, "run", run)
+
+    def update_job(_job, **changes):
+        message = changes.get("message")
+        notes["messages"].append(message)
+        if stop_at and isinstance(message, str) and message.startswith(stop_at):
+            return False
+        return True
+
+    rig.patch("update_job", update_job)
+    services = dict(rig.server.wgp.server_config.get("services") or {})
+    services.update(flashvsr_mode=3, flashvsr_topk_ratio=1.5, flashvsr_backend="sparge")
+    monkeypatch.setitem(rig.server.wgp.server_config, "services", services)
+    return notes
+
+
+def _clear_flash_keys(config: dict) -> None:
+    """The upscale copies settings onto the shared fake and forces persistence; leave neither behind."""
+    for key in _FLASH_KEYS:
+        config.pop(key, None)
+
+
+_FILM_GRAIN = ["silent rewrite", "audio mux", "cuda oom fallback", "unreadable video"]
+
+
+@pytest.mark.parametrize("case", _FILM_GRAIN)
+def test_film_grain_rewrites_the_file_and_restores_the_decord_bridge(rig, golden, tmp_path, monkeypatch, case) -> None:
+    """The real grain pass re-encodes in place, muxes audio back when the source has it, falls back to CPU on
+    a CUDA out-of-memory, and puts decord's bridge back to ``native`` even when the reader cannot open the file."""
+    import torch
+
+    assert not torch.cuda.is_available()
+    folder = tmp_path / "grain"
+    folder.mkdir()
+    source = folder / "clip.mp4"
+    source.write_bytes(b"ORIGINAL")
+    bridge_calls: list[str] = []
+    grain: list[dict] = []
+    saves: list[dict] = []
+    commands: list[list[str]] = []
+
+    class _Bridge:
+        current = "native"
+
+        def set_bridge(self, name: str) -> None:
+            bridge_calls.append(name)
+            self.current = name
+
+    class _Reader:
+        def __init__(self, _path: str) -> None:
+            if case == "unreadable video":
+                raise RuntimeError("cannot open this video")
+
+        def get_avg_fps(self) -> float:
+            return 23.6
+
+        def __len__(self) -> int:
+            return 2
+
+        def get_batch(self, _index):
+            return torch.zeros((2, 4, 6, 3), dtype=torch.uint8)
+
+    bridge = _Bridge()
+    monkeypatch.setitem(sys.modules, "decord", SimpleNamespace(bridge=bridge, VideoReader=_Reader))
+    monkeypatch.setattr(tempfile, "mktemp", lambda suffix="": str(folder / f"extracted{suffix}"))
+
+    def add_film_grain(frames, intensity, saturation):
+        grain.append({
+            "device": str(frames.device),
+            "dtype": str(frames.dtype),
+            "shape": list(frames.shape),
+            "intensity": intensity,
+            "saturation": saturation,
+        })
+        if case == "cuda oom fallback" and len(grain) == 1:
+            raise torch.cuda.OutOfMemoryError("out of memory")
+        return torch.full_like(frames, 7)
+
+    def save_video(**kwargs):
+        tensor = kwargs["tensor"]
+        Path(kwargs["save_file"]).write_bytes(b"GRAIN")
+        saves.append({
+            "file": Path(kwargs["save_file"]).name,
+            "fps": kwargs["fps"],
+            "nrow": kwargs["nrow"],
+            "normalize": kwargs["normalize"],
+            "codec_type": kwargs["codec_type"],
+            "container": kwargs["container"],
+            "shape": list(tensor.shape),
+            "dtype": str(tensor.dtype),
+        })
+
+    def run(command, *args, **kwargs):
+        argv = list(command)
+        commands.append(_masked_argv(argv))
+        if argv[0] == "ffprobe":
+            stdout = "audio\n" if case == "audio mux" else ""
+            return subprocess.CompletedProcess(argv, 0, stdout, "")
+        if argv[0] == "ffmpeg":
+            Path(argv[-1]).write_bytes(b"MUXED" if "-c:a" in argv else b"AAC")
+            return subprocess.CompletedProcess(argv, 0, "", "")
+        raise AssertionError(argv[0])
+
+    monkeypatch.setattr("postprocessing.film_grain.add_film_grain", add_film_grain)
+    monkeypatch.setattr("shared.utils.audio_video.save_video", save_video)
+    monkeypatch.setattr(subprocess, "run", run)
+
+    returned = None
+    error = None
+    try:
+        returned = rig.launch._apply_film_grain_to_file(str(source), 0.4, 0.7)
+    except RuntimeError as exc:
+        error = str(exc)
+
+    if case == "unreadable video":
+        assert error == "cannot open this video" and grain == [] and saves == []
+        assert _file_mark(source) == "original"
+    elif case == "cuda oom fallback":
+        assert error is None and returned is None and len(grain) == 2
+        assert [item["device"] for item in grain] == ["cpu", "cpu"]
+        assert _file_mark(source) == "grain"
+    elif case == "audio mux":
+        assert error is None and _file_mark(source) == "muxed" and len(commands) == 3
+        assert commands[1][commands[1].index("-vn") + 1:commands[1].index("-vn") + 3] == ["-acodec", "copy"]
+        assert "-shortest" in commands[2] and commands[2][commands[2].index("-c:a") + 1] == "aac"
+    else:
+        assert error is None and _file_mark(source) == "grain" and len(grain) == 1 and len(commands) == 1
+    assert bridge_calls == ["torch", "native"] and bridge.current == "native" and _extras(folder, source) == []
+    if saves:
+        assert saves[0]["fps"] == 24 and saves[0]["codec_type"] == "libx264_8" and saves[0]["container"] == "mp4"
+        assert saves[0]["normalize"] is False and saves[0]["shape"] == [1, 3, 2, 4, 6]
+    rig.check(golden, f"film grain: {case}", {
+        "bridge": bridge_calls,
+        "bridge_after": bridge.current,
+        "grain": grain,
+        "saves": saves,
+        "commands": commands,
+        "file": _file_mark(source),
+        "leftovers": _extras(folder, source),
+        "error": error,
+        "returned": returned,
+    })
+
+
+_FLASH_CASES = ["three chunks", "persistence already resident", "aborted before the first frame",
+                "stopped on the second chunk"]
+
+
+@pytest.mark.parametrize("case", _FLASH_CASES)
+def test_chunked_flashvsr_upscale_chunks_a_long_clip_and_restores_persistence(rig, golden, tmp_path, monkeypatch,
+                                                                             case) -> None:
+    """A 100-frame 4000-pixel ``tiny`` clip is three 49-frame chunks with an 11-frame overlap, joined by ffmpeg.
+    Persistence is forced to resident for the call and put back afterwards, and an abort leaves no segment files."""
+    folder = tmp_path / "flash"
+    folder.mkdir()
+    source = folder / "long.mp4"
+    source.write_bytes(b"SOURCE")
+    config = rig.server.wgp.server_config
+    notes = _prepare_flashvsr(
+        rig, monkeypatch, fps=8.9, width=4000, height=4000, frames=100, variant="tiny",
+        expect_ffmpeg=case in ("three chunks", "persistence already resident"),
+        stop_at="Upscaling chunk 2/" if case == "stopped on the second chunk" else None,
+    )
+    if case == "persistence already resident":
+        monkeypatch.setitem(config, "flashvsr_persistence", rig.server.wgp.flashvsr.PERSIST_RAM)
+    try:
+        result = rig.launch._chunked_flashvsr_upscale(
+            str(source), "flashvsr2", job={"id": "flash-job"},
+            abort_check=(lambda: True) if case == "aborted before the first frame" else None,
+        )
+        copied = {key: config.get(key) for key in ("flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend")}
+        persistence_after = config.get("flashvsr_persistence")
+        if case in ("three chunks", "persistence already resident"):
+            assert notes["reads"] == [
+                {"start": 0, "count": 49, "fps": 8.9},
+                {"start": 38, "count": 60, "fps": 8.9},
+                {"start": 87, "count": 60, "fps": 8.9},
+            ]
+            assert [item["frames"] for item in notes["upscales"]] == [49, 60, 13]
+            assert [item["return_continue_cache"] for item in notes["upscales"]] == [True, True, False]
+            assert notes["persistence_during"] == [2, 2, 2]
+            assert _file_mark(Path(result)) == "joined" and _file_mark(source) == "source"
+            assert len(notes["commands"]) == 1 and notes["commands"][0][1:8] == ["-y", "-f", "concat", "-safe", "0", "-i", "<PATH>"]
+        elif case == "aborted before the first frame":
+            assert result is None and notes["reads"] == [] and notes["upscales"] == [] and _extras(folder, source) == []
+        else:
+            assert result is None and len(notes["reads"]) == 2 and len(notes["upscales"]) == 1
+            assert notes["messages"] == [
+                "Upscaling chunk 1/3 (FlashVSR)...",
+                "Upscaling chunk 2/3 (FlashVSR)...",
+            ]
+            assert _extras(folder, source) == []
+        if case == "persistence already resident":
+            assert notes["releases"] == 0 and persistence_after == 2
+        else:
+            assert notes["releases"] == 1 and persistence_after == 1
+        assert copied == {"flashvsr_mode": 3, "flashvsr_topk_ratio": 1.5, "flashvsr_backend": "sparge"}
+        rig.check(golden, f"flashvsr chunks: {case}", {
+            "reads": notes["reads"],
+            "upscales": notes["upscales"],
+            "saves": notes["saves"],
+            "messages": notes["messages"],
+            "commands": notes["commands"],
+            "persistence_during": notes["persistence_during"],
+            "persistence_after": persistence_after,
+            "released": notes["releases"],
+            "settings_copied": copied,
+            "returned": None if result is None else Path(result).name,
+            "returned_bytes": None if result is None else _file_mark(Path(result)),
+            "source": _file_mark(source),
+            "leftovers": _extras(folder, source),
+        })
+    finally:
+        _clear_flash_keys(config)
+
+
+_SPATIAL_CASES = ["keeps the audio", "silent clip", "cancelled before upscale"]
+
+
+@pytest.mark.parametrize("case", _SPATIAL_CASES)
+def test_spatial_upsampling_replaces_the_file_and_keeps_its_audio(rig, golden, tmp_path, monkeypatch, case) -> None:
+    """The real spatial pass upscales through the chunked function, muxes the original audio back, and replaces
+    the file. A cancel before the first frame leaves the file untouched and still cleans the extracted tracks."""
+    folder = tmp_path / "spatial"
+    folder.mkdir()
+    source = folder / "spatial.mp4"
+    source.write_bytes(b"ORIGINAL")
+    config = rig.server.wgp.server_config
+    notes = _prepare_flashvsr(
+        rig, monkeypatch, fps=8.9, width=16, height=16, frames=8, variant="tiny",
+        expect_ffmpeg=False, stop_at=None,
+    )
+    audio = case != "silent clip"
+    extracted: list = []
+
+    def extract_audio_tracks(_path):
+        extracted.append(Path(_path).name)
+        if audio:
+            return ["guide.aac"], {"codec": "aac"}
+        return [], None
+
+    def combine_video_with_audio_tracks(_video, tracks, dest, audio_metadata=None):
+        notes.setdefault("combine", []).append({"tracks": list(tracks), "metadata": audio_metadata})
+        Path(dest).write_bytes(b"MUXED")
+
+    def cleanup_temp_audio_files(tracks):
+        notes.setdefault("cleaned", []).append(list(tracks) if tracks else [])
+
+    rig.set_wgp("extract_audio_tracks", extract_audio_tracks)
+    rig.set_wgp("combine_video_with_audio_tracks", combine_video_with_audio_tracks)
+    rig.set_wgp("cleanup_temp_audio_files", cleanup_temp_audio_files)
+    job = {"id": "spatial-job", "status": "running", "cancel_requested": case == "cancelled before upscale"}
+    try:
+        error = None
+        try:
+            rig.launch._apply_spatial_upsampling_to_file(str(source), "flashvsr2", job)
+        except RuntimeError as exc:
+            error = str(exc)
+        if case == "keeps the audio":
+            assert error is None and _file_mark(source) == "muxed" and notes["combine"] == [
+                {"tracks": ["guide.aac"], "metadata": {"codec": "aac"}},
+            ]
+        elif case == "silent clip":
+            assert error is None and _file_mark(source) == "segment" and "combine" not in notes
+        else:
+            assert error == "FlashVSR upscale was aborted" and _file_mark(source) == "original"
+            assert notes["reads"] == [] and "combine" not in notes
+        assert extracted == ["spatial.mp4"]
+        assert notes["cleaned"] == [["guide.aac"] if audio else []]
+        assert _extras(folder, source) == []
+        assert notes["releases"] == 1 and config.get("flashvsr_persistence") == 1
+        rig.check(golden, f"spatial upsampling: {case}", {
+            "error": error,
+            "file": _file_mark(source),
+            "extracted": extracted,
+            "combine": notes.get("combine", []),
+            "cleaned": notes["cleaned"],
+            "reads": notes["reads"],
+            "upscales": notes["upscales"],
+            "saves": notes["saves"],
+            "commands": notes["commands"],
+            "messages": notes["messages"],
+            "persistence_after": config.get("flashvsr_persistence"),
+            "released": notes["releases"],
+            "leftovers": _extras(folder, source),
+        })
+    finally:
+        _clear_flash_keys(config)
+
+
+# -- the per-job VRAM coefficient, value by value (C4 review) ------------------------------------------------------
+# The worker test above pins that the coefficient is applied for the job and put back, not the value. These call the
+# launch name with one job at a time and record every number it computes, the reason lines it prints and what it
+# leaves on the engine, then put the base back as the worker's ``finally`` block does.
+_LORA_SIZES = {"style.safetensors": 1_610_612_736, "detail.safetensors": 402_653_184}
+_VIDEO = {"model_type": "fake_t2v", "resolution": "1280x720", "video_length": 241}
+_H3_OMNI = {"architecture": "minimax_h3_fake", "omni_reference": True, "minimax_h3_transformer_working_vram_gb": 6.0}
+_H3_REFERENCES = [{"type": "video"}, {"kind": "Video"}, {"type": "image"}, "not a dict"]
+_COEFFICIENT_CASES = {
+    "loras and a progressive pipeline": {
+        "params": {**_VIDEO, "activated_loras": [*_LORA_SIZES, "missing.safetensors", ""], "progressive_pipeline": True}},
+    "image mode": {"params": {"model_type": "fake_t2v", "image_mode": 1, "resolution": "1024x1024", "video_length": 1}},
+    "outpaint refine": {"params": {**_VIDEO, "outpaint_full_resolution_refine": True, "single_stage_pipeline": True}},
+    "single stage": {"params": {**_VIDEO, "single_stage_pipeline": True}},
+    "sliding window clamp": {"params": {**_VIDEO, "video_length": 5400, "sliding_window_size": 241}},
+    "unreadable lengths": {"params": {**_VIDEO, "video_length": "long", "sliding_window_size": "wide"}},
+    "engine lookups fail": {"params": _VIDEO, "engine_fails": True},
+    "scail2 dedicated": {"params": {**_VIDEO, "resolution": "848x480", "video_length": 81}, "base_model": "scail2_14B"},
+    "scail2 shared, unreadable resolution": {"params": {**_VIDEO, "resolution": "widexhigh", "video_length": 81},
+                                             "base_model": "scail2_1.3B", "dedicated": "off"},
+    "h3 video references reload the profile": {
+        "params": {**_VIDEO, "resolution": "960x544", "video_length": 345, "activated_loras": ["style.safetensors"],
+                   "minimax_h3_references": _H3_REFERENCES},
+        "model_def": _H3_OMNI, "loaded": 0.95},
+    "h3 already loaded tighter": {"params": {**_VIDEO, "resolution": "960x544", "video_length": 97},
+                                  "model_def": {"architecture": "minimax_h3_fake"}, "loaded": 0.05},
+    "h3 with no model loaded": {"params": {**_VIDEO, "resolution": "640x352", "video_length": 49},
+                                "model_def": {"architecture": "minimax_h3_fake"}},
+    # No size, no LoRA, one stage, a base under the H3 cap: the value equals the base and is still written for H3.
+    "h3 at the base value still applies and reloads": {"params": {"model_type": "fake_t2v"}, "base": 0.45,
+                                                       "model_def": {"architecture": "minimax_h3_fake"}, "loaded": 0.6},
+    "sound effect": {"params": {**_VIDEO, "sfx_mode": True}},
+    "no gpu": {"params": _VIDEO, "vram": 0.0},
+    "unreadable probe": {"params": _VIDEO, "vram": "unknown"},
+    "small card": {"params": {**_VIDEO, "resolution": "1920x1088"}, "vram": 8.0},
+    "base not a number": {"params": _VIDEO, "base": "eighty"},
+}
+
+
+@pytest.mark.parametrize("case", list(_COEFFICIENT_CASES))
+def test_the_per_job_coefficient_value_for_each_kind_of_job(rig, golden, tmp_path, monkeypatch, capsys, case) -> None:
+    spec = _COEFFICIENT_CASES[case]
+    wgp = rig.server.wgp
+    loras = tmp_path / "loras"
+    loras.mkdir()
+    for name, size in _LORA_SIZES.items():
+        with open(loras / name, "wb") as handle:
+            handle.truncate(size)  # sparse: the size is what the coefficient reads
+    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": spec.get("vram", 24.0)})
+    monkeypatch.setitem(wgp.server_config, "vram_safety_coefficient", spec.get("base", 0.85))
+    if spec.get("dedicated"):
+        monkeypatch.setenv("MAESTRO_SCAIL2_DEDICATED_MODEL", spec["dedicated"])
+    else:
+        monkeypatch.delenv("MAESTRO_SCAIL2_DEDICATED_MODEL", raising=False)
+    rig.set_wgp("reload_needed", False)
+    if spec.get("engine_fails"):
+        def fail(*_args, **_kwargs):
+            raise RuntimeError("engine lookup failed")
+
+        for name in ("get_lora_dir", "get_base_model_type", "get_model_def"):
+            rig.set_wgp(name, fail)
+    else:
+        rig.set_wgp("get_lora_dir", lambda *_args, **_kwargs: str(loras))
+        rig.set_wgp("get_base_model_type", lambda model_type: spec.get("base_model", model_type))
+        rig.set_wgp("get_model_def", lambda _model_type: dict(spec.get("model_def", {})))
+    if "loaded" in spec:
+        rig.set_wgp("wan_model", SimpleNamespace(_maestro_profile_vram_coefficient=spec["loaded"]))
+    job = {"id": "coefficient-job", "params": dict(spec["params"])}
+    capsys.readouterr()
+    returned = rig.launch._apply_per_job_coefficient(job)
+    applied = wgp.args.vram_safety_coefficient
+    rig.launch._restore_base_coefficient()
+    printed = [line for line in capsys.readouterr().out.splitlines() if line.startswith("[VRAM]")]
+    rig.check(golden, f"vram coefficient value: {case}", {
+        "returned": returned,
+        "adjustment": job.get("vram_adjustment"),
+        "applied": applied,
+        "reload_needed": wgp.reload_needed,
+        "restored": wgp.args.vram_safety_coefficient,
+        "printed": printed,
+    })
+
+
+def test_consecutive_jobs_each_start_from_the_saved_base_coefficient(rig, golden, monkeypatch) -> None:
+    """One coefficient on ``wgp.args`` for the whole process: a heavy job tightens it, the worker puts the saved base
+    back, a light job computes its own value from that base, a sound effect leaves it alone, and the same heavy job
+    gets the same value again."""
+    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.85)
+    seen = _stub_mmaudio(rig, monkeypatch)
+    heavy = {**BODY, "resolution": "1280x720", "video_length": 241}
+    sequence = []
+    for label, body in (("heavy video", heavy),
+                        ("light image", {**BODY, "prompt": "a small still", "generation_mode": "image",
+                                         "video_length": 1, "resolution": "512x512"}),
+                        ("sound effect", SFX_BODY),
+                        ("heavy video again", {**heavy, "prompt": "the lake again"})):
+        engine_calls = len(rig.engine.calls)
+        before = rig.server.wgp.args.vram_safety_coefficient
+        job_id = rig.run(body)
+        record = rig.launch.snapshot_job(rig.launch._jobs[job_id])
+        sequence.append({
+            "job": label,
+            "status": record.get("status"),
+            "before": before,
+            "during": [call["vram_safety_coefficient"] for call in rig.engine.calls[engine_calls:]],
+            "adjustment": record.get("vram_adjustment"),
+            "after": rig.server.wgp.args.vram_safety_coefficient,
+        })
+    rig.check(golden, "vram coefficient across consecutive jobs", {
+        "sequence": sequence, "audio model": seen, "base kept": rig.server.wgp.server_config["vram_safety_coefficient"]})
+
+
+# -- sound-effect paths the Studio job does not take (C4 review) ---------------------------------------------------
+_SFX_CASES = ["video guide sets the duration", "unreadable video guide keeps the asked duration",
+              "missing video guide falls back to text", "out of memory is tagged"]
+
+
+@pytest.mark.parametrize("case", _SFX_CASES)
+def test_sound_effect_paths_through_the_worker(rig, golden, tmp_path, monkeypatch, case) -> None:
+    """A legacy video-guided request reads the guide's duration with decord and remuxes onto it; a guide that is not
+    there falls back to text; an audio model that runs out of memory fails the job with the OOM tag."""
+    seen = _stub_mmaudio(rig, monkeypatch)
+    guide = tmp_path / "guide.mp4"
+    guide.write_bytes(b"GUIDE")
+
+    class _Reader:
+        def __init__(self, path: str) -> None:
+            if case.startswith("unreadable"):
+                raise RuntimeError("cannot decode the guide")
+            seen.setdefault("decoded", []).append(Path(path).name)
+
+        def get_avg_fps(self) -> float:
+            return 24.0
+
+        def __len__(self) -> int:
+            return 60
+
+    monkeypatch.setitem(sys.modules, "decord", SimpleNamespace(VideoReader=_Reader))
+    params = dict(SFX_BODY)
+    if case in ("video guide sets the duration", "unreadable video guide keeps the asked duration"):
+        params["video_guide"] = str(guide)
+    elif case == "missing video guide falls back to text":
+        params["video_guide"] = "never-uploaded-guide.mp4"
+    else:
+        def video_to_audio(**_kwargs) -> None:
+            raise RuntimeError("CUDA out of memory. Tried to allocate 2.00 GiB")
+
+        monkeypatch.setitem(sys.modules, "postprocessing.mmaudio.mmaudio", SimpleNamespace(video_to_audio=video_to_audio))
+    job_id = rig.direct_job(params, job_id="golden-sfx")
+    returned = rig.call_worker(job_id)
+    rig.check(golden, f"sound effect path: {case}", {**rig.observe(job_id), "audio model": seen, "returned": returned})
+
+
+# -- FlashVSR progress and failures (C4 review) --------------------------------------------------------------------
+_FLASH_EDGE_CASES = ["progress reaches the job", "progress goes to the caller", "no frames back", "concat fails",
+                     "full variant keeps uint8", "tiny-long sizes its chunks for uint8", "full sizes its chunks for uint8"]
+
+
+@pytest.mark.parametrize("case", _FLASH_EDGE_CASES)
+def test_chunked_flashvsr_upscale_forwards_progress_and_cleans_up_a_failure(rig, golden, tmp_path, monkeypatch,
+                                                                           case) -> None:
+    """The model's progress callback becomes job progress (or goes to the caller's callback), a model that returns
+    nothing or a failed concat raises after the persistence is put back and every segment is deleted, and the full
+    variant's uint8 frames are saved without normalising."""
+    import torch
+
+    folder = tmp_path / "flash-edge"
+    folder.mkdir()
+    source = folder / "long.mp4"
+    source.write_bytes(b"SOURCE")
+    config = rig.server.wgp.server_config
+    # A 1000-pixel 400-frame clip is one tiny-long or full chunk (uint8 output) but three plain tiny chunks (float32).
+    sized = case.endswith("sizes its chunks for uint8")
+    notes = _prepare_flashvsr(
+        rig, monkeypatch, fps=8.9, width=1000 if sized else 4000, height=1000 if sized else 4000,
+        frames=400 if sized else 100,
+        variant=case.split()[0] if sized else "full" if case == "full variant keeps uint8" else "tiny",
+        expect_ffmpeg=not sized and case != "no frames back", stop_at=None,
+    )
+    flash = rig.server.wgp.flashvsr
+    model = flash.upscale
+    changes: list = []
+    received: list = []
+
+    def update_job(_job, **kwargs):
+        changes.append(kwargs)
+        return True
+
+    rig.patch("update_job", update_job)
+
+    def upscale(seg, method, **kwargs):
+        if case.startswith("progress"):
+            kwargs["progress_callback"]("Denoising", 1, 4)
+            kwargs["progress_callback"]("", None, None)
+            kwargs["progress_callback"]("Decoding", "x", 5)
+        if case == "no frames back":
+            return None, None
+        out, cache = model(seg, method, **kwargs)
+        if case.startswith("full"):
+            out = out.to(torch.uint8)
+        return out, cache
+
+    flash.upscale = upscale
+    if case == "concat fails":
+        def run(command, *args, **kwargs):
+            notes["commands"].append(_masked_argv(command))
+            return subprocess.CompletedProcess(list(command), 1, "", "concat: invalid data")
+
+        monkeypatch.setattr(subprocess, "run", run)
+    try:
+        error = None
+        result = None
+        try:
+            result = rig.launch._chunked_flashvsr_upscale(
+                str(source), "flashvsr2", job={"id": "flash-edge-job"},
+                progress_callback=(lambda *values: received.append(list(values)))
+                if case == "progress goes to the caller" else None,
+            )
+        except RuntimeError as exc:
+            error = str(exc)
+        rig.check(golden, f"flashvsr edge: {case}", {
+            "error": error,
+            "returned": None if result is None else Path(result).name,
+            "reads": notes["reads"],
+            "upscales": notes["upscales"],
+            "saves": notes["saves"],
+            "job_updates": changes,
+            "caller_progress": received,
+            "commands": notes["commands"],
+            "persistence_after": config.get("flashvsr_persistence"),
+            "released": notes["releases"],
+            "leftovers": _extras(folder, source) if result is None else sorted(
+                name for name in _extras(folder, source) if name != Path(result).name),
+        })
+    finally:
+        _clear_flash_keys(config)
+
+
+# -- the wiring the C4 move added (C4 review) ------------------------------------------------------------------------
+# Each pass module imports the standard library and the job lifecycle itself and receives the launch objects it reads
+# (wgp, the hardware probe, the task registry, the sidecar publisher) from one ``bind`` call that launch makes when it
+# defines them. A slot left at None, bound to a copy or to another function, or a pass that reads a name its module
+# does not have would only show on the branch that reads it, so every global each moved function reads is compared
+# here with the object the same name holds in launch, where the function read it before the move.
+def _global_reads(function) -> set[str]:
+    import inspect
+    import symtable
+    import textwrap
+
+    names: set[str] = set()
+
+    def walk(scope) -> None:
+        names.update(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_global() and symbol.is_referenced())
+        for child in scope.get_children():
+            walk(child)
+
+    walk(symtable.symtable(textwrap.dedent(inspect.getsource(function)), "<pass>", "exec"))
+    return names
+
+
+def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkeypatch) -> None:
+    import builtins
+    import importlib
+    import inspect
+
+    launch = worker_module()
+    compared: set[str] = set()
+    for module_name, exported in POSTFX_MODULES.items():
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        for name in exported:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        own = {name for name, value in namespace.items()
+               if inspect.isfunction(value) and value.__module__ == module_name}
+        for function_name in sorted(own - {"bind"}):
+            for name in sorted(_global_reads(namespace[function_name])):
+                if name in own:
+                    continue  # a helper that moved with the pass
+                if name not in namespace:
+                    assert hasattr(builtins, name), f"{module_name}.{function_name} reads {name}, which is not defined"
+                    continue
+                assert namespace[name] is vars(launch)[name], f"{module_name}.{name} is not launch.{name}"
+                compared.add(name)
+    assert {"wgp", "os", "time", "copy", "traceback", "update_job", "finish_job", "is_cancel_requested",
+            "new_media_files", "record_job_outputs", "_task_registry", "_publish_generation_sidecar_for_studio_job",
+            "_get_cached_hardware", "_chunked_flashvsr_upscale"} == compared
+
+    import routers.tools as tools
+
+    assert tools._chunked_flashvsr_upscale is launch._chunked_flashvsr_upscale
+    # The probe stays in launch and reads launch's cache when the coefficient pass calls it.
+    coefficients = importlib.import_module("services.generation_coefficients")
+    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
+    assert coefficients._get_cached_hardware() == {"gpu_vram_gb": 7.0}
+
+
 # -- recast shot assembly (recorded before the helpers leave launch) --------------------------------
 def _refuse_remote_network(monkeypatch) -> None:
     """The shot assembler must not download a model. Localhost stays open for the test client."""
@@ -1459,3 +2277,125 @@ def test_recast_shot_generation_joins_the_worker_clips(rig, golden, clip, monkey
         "shot_plan": kept.get("edit_recast_shot_plan"),
         "temp_removed": not temp.exists(),
     })
+
+
+# -- recast shot assembly: the paths the seven cases above do not take (C8a review) ---------------------------------
+@pytest.mark.parametrize("case", [
+    "three shots in order",
+    "no segments",
+    "audio probe fails",
+    "join fails",
+    "frame probe fails",
+    "cancelled after the join",
+    "join longer than the timeline",
+])
+def test_recast_shot_generation_other_paths(rig, golden, clip, monkeypatch, case) -> None:
+    """More assembler paths, recorded while ``_run_recast_shot_generation`` still lived in launch (C7 head e393f5746).
+
+    Three shots join in timeline order, the passthrough between the two generated clips; an empty shot list, a failed
+    audio probe, a failed join and a failed frame count each end the job their own way; a cancel that lands after the
+    join leaves no final file and no sidecar behind; a join one frame longer than the timeline fails like a shorter
+    one.
+    """
+    _refuse_remote_network(monkeypatch)
+    launch = rig.launch
+    temp = rig.server.outputs / "maestro-recast-shots-golden"
+    temp.mkdir()
+    source = rig.server.outputs / "recast-source.mp4"
+    shutil.copyfile(clip, source)
+    manifest: Any = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+    shots: list = [{"shot_index": 0, "mode": "generate"}]
+    if case == "three shots in order":
+        manifest = [{"shot_index": 2, "params": {"prompt": "shot two", "video_length": 17}},
+                    {"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+        shots = [{"shot_index": 0, "mode": "generate"},
+                 {"shot_index": 1, "mode": "passthrough", "passthrough_path": str(source)},
+                 {"shot_index": 2, "mode": "generate"}]
+    elif case == "no segments":
+        shots = []
+    bundle = {
+        "shots": shots,
+        "published_shots": [{"id": f"s{shot['shot_index']}"} for shot in shots],
+        "frame_count": 8,
+        "fps": 8,
+        "resolved_seed": 42,
+    }
+    params = {
+        **BODY,
+        "_defer_output_publication": True,
+        "_recast_shot_manifest": manifest,
+        "_recast_shot_temp_dir": str(temp),
+        "_recast_final_out_dir": str(rig.server.outputs),
+        "_recast_shot_bundle": bundle,
+        "_recast_source_video": str(source),
+    }
+    job_id = rig.direct_job(params)
+    launch._jobs[job_id]["out_dir"] = str(temp)
+
+    probes: list = []
+    assembly: list = []
+    finals: list = []
+
+    def has_audio(path: str) -> bool:
+        probes.append(["audio", Path(path).name])
+        if case == "audio probe fails":
+            raise RuntimeError("ffprobe is not here")
+        return True
+
+    def frame_count(path: str) -> int:
+        probes.append(["frames", Path(path).name])
+        if case == "frame probe fails":
+            raise RuntimeError("decord is not here")
+        if case == "cancelled after the join":
+            launch._jobs[job_id]["cancel_requested"] = True
+        return 9 if case == "join longer than the timeline" else 8
+
+    def concatenate(clip_paths, output_path, audio_path=None, audio_start_sec=0.0, abort_callback=None,
+                    pad_audio=False, audio_duration_sec=None):
+        assembly.append({
+            "clips": [Path(path).name for path in clip_paths],
+            "audio": None if audio_path is None else Path(audio_path).name,
+            "audio_duration_sec": audio_duration_sec,
+        })
+        finals.append(Path(output_path))
+        if case == "join fails":
+            return False
+        shutil.copyfile(clip_paths[0], output_path)
+        # The real join can leave a metadata sibling next to its output; cleanup must take it too.
+        Path(output_path).with_suffix(".meta.json").write_text("{}", encoding="utf-8")
+        return True
+
+    rig.patch("_recast_video_has_audio", has_audio)
+    rig.patch("_recast_video_frame_count", frame_count)
+    rig.set_wgp("concatenate_multi_clip_videos", concatenate)
+    _call_recast_shot_generation(rig, job_id)
+    kept = launch._jobs[job_id].get("params") or {}
+    rig.check(golden, f"recast shot generation, other paths: {case}", {
+        **rig.observe(job_id),
+        "assembly": assembly,
+        "probes": probes,
+        "final_left": [path.exists() for path in finals],
+        "final_meta_left": [path.with_suffix(".meta.json").exists() for path in finals],
+        "private_left": sorted(
+            key for key in kept
+            if key.startswith("_recast") or key == "_defer_output_publication"
+        ),
+        "shot_aware": kept.get("edit_recast_shot_aware"),
+        "shot_plan": kept.get("edit_recast_shot_plan"),
+        "temp_removed": not temp.exists(),
+    })
+
+
+def test_a_rig_patch_reaches_every_recast_module(full_server) -> None:
+    """``Rig.patch`` writes a name on every module of ``worker_modules()`` that holds it. Each Recast service module
+    reads its collaborators through its own globals, so each one must be in that list, or a stub would miss the
+    module that calls it (C8a review: dropping a shot module from the list left every golden green)."""
+    import importlib
+
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    stems = sorted(path.stem for path in services.glob("recast_*.py"))
+    assert "recast_masks" in stems
+    for stem in stems:
+        importlib.import_module(f"services.{stem}")
+    held = {module.__name__ for module in worker_modules()}
+    assert {f"services.{stem}" for stem in stems} <= held

@@ -1,12 +1,13 @@
 """Recast masks: palette colors, character masks, and the mask-locked video.
 
-Function bodies are the launch module's, moved verbatim. A name that still
-lives in launch is read through the launch binding when the function runs.
+Function bodies are the launch module's, moved verbatim. They read no launch
+name. The helpers they call moved too (this slice, and the Recast shot helpers
+in :mod:`services.recast_shot_planning`) and are imported from their modules at
+the bottom of this file.
 """
 
 import os
 
-from services.recast_launch_binding import bindable
 
 # --- moved verbatim ---
 _RECAST_MASK_COLORS = [
@@ -733,14 +734,18 @@ def _recolor_recast_reference_mask(
     output[region] = local_color
     return output
 
-# --- collaborators ---
-_detect_recast_shot_ranges = bindable("_detect_recast_shot_ranges")
-_find_recast_unmapped_shots = bindable("_find_recast_unmapped_shots")
-_normalize_recast_tracking_target = bindable("_normalize_recast_tracking_target")
-_recover_recast_unmapped_shots = bindable("_recover_recast_unmapped_shots")
-_select_recast_timeline_anchor = bindable("_select_recast_timeline_anchor")
-_summarize_recast_mapping_mask = bindable("_summarize_recast_mapping_mask")
+# --- helpers that moved with this slice ---
+# Imported last: recast_reference_prepare imports this module back, and every
+# name it takes from here is defined above by then.
 from services.recast_reference_prepare import (
     _resolve_recast_media,
     _recast_video_has_audio,
+)
+from services.recast_shot_planning import (
+    _detect_recast_shot_ranges,
+    _find_recast_unmapped_shots,
+    _normalize_recast_tracking_target,
+    _recover_recast_unmapped_shots,
+    _select_recast_timeline_anchor,
+    _summarize_recast_mapping_mask,
 )
