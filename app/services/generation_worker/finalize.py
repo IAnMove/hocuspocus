@@ -87,7 +87,6 @@ def _run_generation_outpaint(st):
         src_video = raw_params.get("_outpaint_source_video")
         if src_video and os.path.isfile(src_video):
             _candidates = _run_generation_outpaint_candidates(new_files)
-                # Allow the surrounding 'if' chain to fall through
             # Process only the final (latest-timestamp) canonical save.
             # Iterate the single-element list so the existing per-fname logic
             # (ffmpeg, os.replace, fallback) below still runs as written.
@@ -212,6 +211,7 @@ def _run_generation_outpaint_candidates(new_files):
         _candidates.append(fname)
     if not _candidates:
         print(f"  [Outpaint] No canonical video output to post-process")
+        # Allow the surrounding 'if' chain to fall through
     return _candidates
 
 
