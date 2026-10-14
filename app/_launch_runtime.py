@@ -12781,108 +12781,18 @@ bind_generation_jobs(
 api.include_router(create_generation_jobs_router())
 
 
-def _recovery_job_summary(record: dict) -> dict:
-    params = record.get("params") if isinstance(record.get("params"), dict) else {}
-    prompt = str(params.get("prompt") or params.get("lyrics") or "").strip()
-    return {
-        "job_id": str(record.get("id") or ""),
-        "previous_status": str(record.get("status") or "queued"),
-        "created_at": float(record.get("created_at") or 0),
-        "workspace": str(record.get("workspace") or "default"),
-        "model_type": str(params.get("model_type") or ""),
-        "generation_mode": str(params.get("generation_mode") or ""),
-        "prompt_preview": prompt[:240],
-    }
+from services.generation_recovery import (
+    _discard_generation_leftover,
+    _prepare_generation_leftovers,
+    _queue_recovered_generation,
+    _recovery_job_summary,
+    _release_intermediates_at_startup,
+    _start_recovered_generation,
+    bind as bind_generation_recovery,
+)
+from routers.generation_jobs import create_generation_recovery_router
 
-
-@api.get("/api/v1/jobs/recovery")
-def get_generation_queue_recovery():
-    """Return crash leftovers that are not active in this server process."""
-    with _queue_recovery_lock:
-        _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-        candidates = _image_generation_commands.filter_recovery(
-            _durable_generation_queue.list(exclude_ids=_jobs.keys()))
-    return {"jobs": [_recovery_job_summary(record) for record in candidates]}
-
-
-def _queue_recovered_generation(record: dict):
-    """Put one durable leftover back on the live queue without starting it.
-
-    Returns ``(job, created)``. ``created`` is false when that id is already
-    live, so resume cannot start a second worker for the same leftover.
-    """
-    job_id = str(record.get("id") or "").strip()
-    params = record.get("params")
-    if not job_id or not isinstance(params, dict) or not params.get("model_type"):
-        if job_id:
-            _durable_generation_queue.remove(job_id)
-        return None, False
-    existing = _jobs.get(job_id)
-    if existing is not None:
-        return existing, False
-    workspace = str(record.get("workspace") or "default")
-    _reset_canonical_task_for_resume(
-        workspace,
-        f"task-generation-{job_id}",
-    )
-    job = _new_generation_job(
-        params,
-        workspace,
-        job_id=job_id,
-        created_at=float(record.get("created_at") or time.time()),
-        recovered=True,
-        reserve_generation=not isinstance(
-            params.get("_h3_window_plan_pending"), dict,
-        ),
-        provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
-    )
-    _jobs[job_id] = job
-    _persist_generation_job(job)
-    _cancel_h3_idle_release()
-    return job, True
-
-
-@api.post("/api/v1/jobs/recovery/resume")
-def resume_generation_queue():
-    """Requeue persisted requests in their original submission order.
-
-    An interrupted running request restarts from its beginning: model runtimes
-    do not expose a portable mid-diffusion checkpoint.
-    """
-    resumed: list[dict] = []
-    threads: list[threading.Thread] = []
-    with _queue_recovery_lock:
-        _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-        candidates = _image_generation_commands.filter_recovery(
-            _durable_generation_queue.list(exclude_ids=_jobs.keys()))
-        for record in candidates:
-            job, created = _queue_recovered_generation(record)
-            if not created or job is None:
-                continue
-            threads.append(threading.Thread(
-                target=_run_generation_with_preparation,
-                args=(job["id"],),
-                name=f"recovered-generation-{job['id']}",
-                daemon=False,
-            ))
-            resumed.append(_recovery_job_summary(record))
-
-        # Populate the complete in-memory queue before any worker can finish,
-        # then start in saved order so the existing GPU mutex serialises it.
-        for thread in threads:
-            thread.start()
-    return {"resumed": resumed, "count": len(resumed)}
-
-
-@api.post("/api/v1/jobs/recovery/discard")
-def discard_generation_queue():
-    """Clear only inactive recovery candidates; never cancel live work."""
-    with _queue_recovery_lock:
-        _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-        _image_generation_commands.discard_recovery(
-            _durable_generation_queue.list(exclude_ids=_jobs.keys()))
-        removed = _durable_generation_queue.discard(exclude_ids=_jobs.keys())
-    return {"discarded": removed}
+api.include_router(create_generation_recovery_router())
 
 
 # ============================================================================
@@ -14515,25 +14425,6 @@ from services.montage_preview import command_handlers as montage_preview_handler
 _montage_preview_handlers = montage_preview_handlers(_montage_store, lambda: _scene2d_export.app_url)
 
 
-def _prepare_generation_leftovers(records):
-    _image_generation_commands.restore_recovery(item["name"] for item in _list_workspaces())
-    return _image_generation_commands.filter_recovery(records)
-
-
-def _start_recovered_generation(job):
-    threading.Thread(
-        target=_run_generation_with_preparation,
-        args=(job["id"],),
-        name=f"recovered-generation-{job['id']}",
-        daemon=False,
-    ).start()
-
-
-def _discard_generation_leftover(record):
-    _image_generation_commands.discard_recovery([record])
-    _durable_generation_queue.remove(str(record.get("id") or ""))
-
-
 from services.scene_export_leftovers import SceneExportLeftovers
 
 _job_leftovers = JobLeftovers(
@@ -14556,13 +14447,23 @@ import services.generation_jobs as _generation_jobs
 _generation_jobs._job_leftovers = _job_leftovers
 
 
-def _release_intermediates_at_startup() -> None:
-    """Frames of published exports, raw voice takes and stale temp folders go; live and resumable work is kept."""
-    from services.workspace_cleanup import startup_cleanup
-    from services.world3d_export import staging_token
-    names = [item.get("name") for item in _list_workspaces() if isinstance(item, dict) and item.get("name")]
-    startup_cleanup(names, _workspace_dir, _task_registry, {_world3d_export.operation, _scene2d_export.operation}, staging_token)
-
+bind_generation_recovery(
+    _cancel_h3_idle_release=_cancel_h3_idle_release,
+    _durable_generation_queue=_durable_generation_queue,
+    _image_generation_commands=_image_generation_commands,
+    _jobs=_jobs,
+    _list_workspaces=_list_workspaces,
+    _new_generation_job=_new_generation_job,
+    _persist_generation_job=_persist_generation_job,
+    _queue_recovery_lock=_queue_recovery_lock,
+    # Tests replace this name on the server module after import.
+    _reset_canonical_task_for_resume=lambda *args, **kwargs: _reset_canonical_task_for_resume(*args, **kwargs),
+    _run_generation_with_preparation=_run_generation_with_preparation,
+    _scene2d_export=_scene2d_export,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+    _world3d_export=_world3d_export,
+)
 
 threading.Thread(target=_release_intermediates_at_startup, name="workspace-cleanup", daemon=True).start()
 _job_leftover_handlers = job_leftover_handlers(_job_leftovers)

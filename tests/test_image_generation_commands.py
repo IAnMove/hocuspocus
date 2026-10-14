@@ -513,18 +513,20 @@ def test_malformed_leftover_metadata_does_not_block_valid_legacy_rows(tmp_path, 
 
 
 def _recovery_http_app(service, queue, workspaces=None):
-    """Execute the actual route so storage failure cannot fall through to discard."""
-    source = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+    """Execute the actual route bodies so storage failure cannot fall through to discard."""
+    source = Path(__file__).resolve().parents[1] / "app" / "services" / "generation_recovery.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
     names = {"_recovery_job_summary", "get_generation_queue_recovery", "discard_generation_queue"}
     app = FastAPI()
     listed = workspaces if workspaces is not None else [{"name": "workspace-a"}]
-    namespace = {"api": app, "_queue_recovery_lock": threading.Lock(), "_jobs": {},
+    namespace = {"_queue_recovery_lock": threading.Lock(), "_jobs": {},
                  "_image_generation_commands": service, "_durable_generation_queue": queue,
                  "_list_workspaces": lambda: listed}
     selected = ast.Module(body=[node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in names],
                           type_ignores=[])
     exec(compile(selected, str(source), "exec"), namespace)
+    app.add_api_route("/api/v1/jobs/recovery", namespace["get_generation_queue_recovery"], methods=["GET"])
+    app.add_api_route("/api/v1/jobs/recovery/discard", namespace["discard_generation_queue"], methods=["POST"])
     return app
 
 

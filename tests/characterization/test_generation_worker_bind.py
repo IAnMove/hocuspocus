@@ -83,7 +83,7 @@ def test_every_injected_name_is_bound_to_the_servers_object(full_server, monkeyp
 
 
 # One bind() per moved service. The injected names come from each module's source.
-BOUND_SERVICES = ("services.generation_jobs",)
+BOUND_SERVICES = ("services.generation_jobs", "services.generation_recovery")
 
 
 def test_every_bound_service_name_is_the_servers_object(full_server, monkeypatch) -> None:

@@ -33,6 +33,7 @@ ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
 GENERATE = ROOT / "app" / "services" / "studio_generate.py"
 JOBS = ROOT / "app" / "services" / "generation_jobs.py"
+RECOVERY = ROOT / "app" / "services" / "generation_recovery.py"
 
 
 class _HTTPException(Exception):
@@ -453,8 +454,8 @@ def test_preplanner_exception_fails_without_leaking_a_fifo_ticket(
 
 
 def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
-    resume = _function("resume_generation_queue")
-    helper = _function("_queue_recovered_generation")
+    resume = _function("resume_generation_queue", RECOVERY)
+    helper = _function("_queue_recovered_generation", RECOVERY)
     targets = [
         keyword.value.id
         for call in ast.walk(resume)
