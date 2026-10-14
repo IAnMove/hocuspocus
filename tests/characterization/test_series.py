@@ -108,6 +108,61 @@ def test_series_duplicate_and_empty_episode_list(server, golden) -> None:
     )
 
 
+def test_series_render_routes_answer_the_recorded_errors(server, golden) -> None:
+    """Validation and missing-job answers for the Series render routes. No model runs."""
+    missing = "missing-series"
+    workspace = {"workspace": "default"}
+    server.check(
+        golden, "render start of a missing series", "POST",
+        f"/api/v1/series/{missing}/episodes/missing-episode/render/start", json=workspace,
+    )
+    job = "/api/v1/series/render/jobs/missing-job"
+    server.check(golden, "get missing render job", "GET", job)
+    server.check(golden, "cancel missing render job", "POST", f"{job}/cancel")
+    server.check(golden, "resume missing render job", "POST", f"{job}/resume")
+    server.check(golden, "discard missing render job", "DELETE", job)
+
+    created = server.client.post("/api/v1/series", json={"workspace": "default", "title": "Golden series"})
+    assert created.status_code == 200, created.text
+    series_id = created.json()["id"]
+    server.check(
+        golden, "render start of a missing episode", "POST",
+        f"/api/v1/series/{series_id}/episodes/missing-episode/render/start", json=workspace,
+    )
+    saved = server.client.put(
+        f"/api/v1/series/{series_id}",
+        json={
+            "workspace": "default",
+            "baseRevision": created.json().get("revision", 1),
+            "series": {
+                "canon": {"worldSummary": "A harbour that keeps its own time."},
+                "characters": [{"id": "mara", "name": "Mara"}],
+                "locations": [{"id": "harbour", "name": "Harbour"}],
+            },
+        },
+    )
+    assert saved.status_code == 200, saved.text
+    project = saved.json()
+    approved = server.client.post(
+        f"/api/v1/series/{series_id}/canon/approve",
+        json={"workspace": "default", "baseRevision": project["canon"]["revision"]},
+    )
+    assert approved.status_code == 200, approved.text
+    episode = server.client.post(
+        f"/api/v1/series/{series_id}/episodes",
+        json={"workspace": "default", "title": "Pilot"},
+    )
+    assert episode.status_code == 200, episode.text
+    start = f"/api/v1/series/{series_id}/episodes/{episode.json()['id']}/render/start"
+    server.check(
+        golden, "render start with an unknown mode", "POST", start,
+        json={**workspace, "mode": "not-a-mode"},
+    )
+    server.check(
+        golden, "render start with no generated shots", "POST", start, json=workspace,
+    )
+
+
 def test_series_plan_routes_answer_the_recorded_errors(server, golden) -> None:
     """Validation and missing-job answers for the routes step 0.13 moves. No LLM call."""
     missing = "missing-series"
