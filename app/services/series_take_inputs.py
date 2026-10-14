@@ -18,8 +18,11 @@ keeps the digest it had, and turning the series to portrait (or back) is a new p
 (``spoken``) only when its speaker's pronunciation dictionary changes it, as the text sent to the voice, so a
 dictionary entry no line uses renders nothing again. A line's ``castIndex`` (which copy of a kit speaks) counts only
 when the line names one.
-A take saved before an input joined the fingerprint (``renderInputsVersion`` below ``INPUTS_VERSION``) is compared
-with the digest of the version it was saved at, so adding an input never marks an existing production out of date.
+The spoken text and ``castIndex`` are additions like the ones above: absent unless a line has one, at every version,
+so a take saved before they counted keeps its digest while its lines have none and sees one set since; a take whose
+line already had one renders once. The portrait frame is different: every take of a vertical series has it, so it
+counts only for takes saved at version 3 or later (``renderInputsVersion``); an older take is compared with the digest
+of the version it was saved at and never sees the frame.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
 """
 from __future__ import annotations
@@ -45,13 +48,12 @@ _SHOT_INPUTS = ("productionMethod", "layout2d", "locationId", "locationVariantId
 _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance", "revision")
 # Version 2 hashes the number of frames the planner will render for a silent shot.
 # Version 1 stored the raw ``durationSeconds``, which the render then rewrote, so the next pass looked stale.
-# Version 3 adds the series frame when it is portrait, the spoken text of the lines a pronunciation dictionary
-# rewrites and a line's ``castIndex``. A take saved at version 2 or 1 never recorded them, so it is read as it was
-# saved: ``_legacy_inputs`` offers its older digests.
+# Version 3 adds the series frame when it is portrait. A take saved at version 2 or 1 never recorded it, so it is read
+# as it was saved: ``_legacy_inputs`` offers its older digests.
 INPUTS_VERSION = 3
 _PLANNED_LENGTH_VERSION = 2
-# The inputs below are hashed only from this version on; an older take never recorded them.
-_EXTRA_INPUTS_VERSION = 3
+# The portrait frame is hashed only from this version on.
+_FRAME_VERSION = 3
 # A version-1 take asked for a length on this step; the planner moves it by under one frame.
 _DURATION_STEP = 0.05
 
@@ -64,9 +66,8 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
     ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches. A portrait
-    series frame, the spoken text and a line's ``castIndex`` are part of the digest from version 3 on; versions 1 and 2
-    never hashed them."""
-    beats = [_beat_row(beat, version) for beat in shot.get("dialogueBeats") or []]
+    series frame is part of the digest from version 3 on; versions 1 and 2 never hashed it."""
+    beats = [_beat_row(beat) for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
     characters = {item.get("id"): item for item in series.get("characters") or []}
     kit_ids = {cid: (kit_ref(series, cid) or {}).get("id") for cid in people}
@@ -85,14 +86,15 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
-def _beat_row(beat: dict[str, Any], version: int) -> list[Any]:
-    """Id, speaker, text, emotion, delivery and, from version 3, ``castIndex`` when the line names a copy.
+def _beat_row(beat: dict[str, Any]) -> list[Any]:
+    """Id, speaker, text, emotion, delivery and ``castIndex`` when the line names a copy.
 
     ``castIndex`` picks which on-screen copy of a kit moves its mouth (``series_shot_plan._speaker_index``). Only a
-    whole number counts (a bool does not, as there), so a line that never named a copy keeps its digest."""
+    whole number counts (a bool does not, as there), so a line that never named a copy keeps its digest, also on a
+    take saved before it counted."""
     row = [beat.get("id"), beat.get("characterId"), beat.get("text"), beat.get("emotion"), beat.get("delivery")]
     index = beat.get("castIndex")
-    if version >= _EXTRA_INPUTS_VERSION and type(index) is int:
+    if type(index) is int:
         row.append(index)
     return row
 
@@ -108,9 +110,7 @@ def _shot_inputs(shot: dict[str, Any]) -> dict[str, Any]:
 
 def _extra_inputs(series: dict, shot: dict, root: str | None, version: int = INPUTS_VERSION) -> dict:
     """Omit absent additions so existing dry, unpaused 2D takes keep their fingerprints."""
-    payload = {}
-    if version >= _EXTRA_INPUTS_VERSION:
-        payload.update(_version_three_inputs(series, shot))
+    payload = _frame_and_speech(series, shot, version)
     rooms = line_rooms(series, shot)
     if rooms:
         payload["room"] = {"version": ROOM_VERSION, "lines": rooms}
@@ -129,10 +129,11 @@ def _extra_inputs(series: dict, shot: dict, root: str | None, version: int = INP
     return payload
 
 
-def _version_three_inputs(series: dict, shot: dict) -> dict:
-    """What a take saved at version 2 never recorded: the portrait frame and the lines the dictionary rewrites."""
+def _frame_and_speech(series: dict, shot: dict, version: int) -> dict:
+    """The portrait frame, from version 3 on (a take saved before never recorded it), and the lines a dictionary
+    rewrites, at every version (absent while no line is rewritten, like the other additions)."""
     payload = {}
-    if _portrait(series):
+    if version >= _FRAME_VERSION and _portrait(series):
         payload["orientation"] = "portrait"
     spoken = _spoken_lines(series, shot)
     if spoken:
@@ -198,7 +199,7 @@ def _duration_input(shot: dict[str, Any], beats: list[list[Any]], version: int) 
 def _legacy_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None) -> list[str]:
     """Digests an older take can carry: the raw length, or the length that was asked before the render wrote the
     planner's length back (the planned one snapped to 0.05 s), both version 1; and the version-2 digest, which has
-    the planned frame count and never saw the series frame."""
+    the planned frame count and never saw the series frame. Each holds today's spoken text and ``castIndex``."""
     found = [render_inputs(series, shot, kits, root, version=1),
              render_inputs(series, shot, kits, root, version=_PLANNED_LENGTH_VERSION)]
     planned = _planned_length(shot)

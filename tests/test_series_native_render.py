@@ -666,15 +666,22 @@ def test_a_pronunciation_dictionary_entry_that_changes_a_line_makes_the_shot_sta
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
 
 
-def test_a_take_saved_before_the_dictionary_counted_stays_current():
-    """Version 2 never hashed the spoken text; a take that old is read as it was saved, not as out of date."""
+# What development 844565b83 stored (version 2) for ``_dictionary_shot`` and ``_cast_index_shot`` as they are built.
+DEV_DICTIONARY_SHOT, DEV_CAST_INDEX_SHOT = "b37a0e7d71fdde59", "a916c5df6d6ba572"
+
+
+def test_a_take_saved_before_the_dictionary_counted_sees_an_entry_added_since():
+    """A take from before the update whose line no dictionary rewrote keeps its digest; an entry added since that
+    changes its line renders it again, as on a take made after the update."""
     from services.series_take_inputs import render_inputs, stale_shot_ids
     series, shot = _dictionary_series(), _dictionary_shot()
-    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
-    saved = render_inputs(series, shot, {}, version=2)
-    assert saved != render_inputs(series, shot, {})
-    _approve(series, shot, saved, 2)
+    assert render_inputs(series, shot, {}, version=2) == DEV_DICTIONARY_SHOT
+    _approve(series, shot, DEV_DICTIONARY_SHOT, 2)
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Renault": "Reno"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == [], "an entry no word of the line uses changes nothing"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
 
 
 def test_a_spanish_short_line_may_miss_one_word_but_a_one_word_line_may_not(tmp_path):
@@ -925,29 +932,32 @@ def test_a_line_cast_index_change_makes_the_shot_stale():
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
 
 
-def test_a_take_saved_before_the_cast_index_counted_stays_current():
-    """Version 2 never hashed ``castIndex``; a line that already names a copy keeps the take it has."""
+def test_a_take_saved_before_the_cast_index_counted_sees_one_set_since():
+    """A take from before the update whose line named no copy keeps its digest; naming a copy since renders it again."""
     from services.series_take_inputs import render_inputs, stale_shot_ids
     series, shot = _cast_index_series(), _cast_index_shot()
-    shot["dialogueBeats"][0]["castIndex"] = 1
-    saved = render_inputs(series, shot, {}, version=2)
-    assert saved != render_inputs(series, shot, {})
-    assert saved == render_inputs(series, {**shot, "dialogueBeats": [{**shot["dialogueBeats"][0], "castIndex": 0}]}, {}, version=2)
-    _approve(series, shot, saved, 2)
+    assert render_inputs(series, shot, {}, version=2) == DEV_CAST_INDEX_SHOT
+    _approve(series, shot, DEV_CAST_INDEX_SHOT, 2)
     assert stale_shot_ids(series, {"shots": [shot]}, {}) == []
+    shot["dialogueBeats"][0]["castIndex"] = True
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == [], "a bool is no index"
+    shot["dialogueBeats"][0]["castIndex"] = 1
+    assert stale_shot_ids(series, {"shots": [shot]}, {}) == ["s1"]
 
 
 # Digests development 844565b83 stored for the three shots of ``_legacy_episode`` (version 2): a portrait series, a
-# pronunciation dictionary the first line uses and a line that names the second copy of a kit.
+# speaker with a pronunciation dictionary, a shot with two copies of one kit and a silent shot. Development hashed
+# neither the dictionary nor ``castIndex``, so the digests are the same with or without them.
 LEGACY_2D_DIGESTS = {"s1": "d202e66790420803", "s2": "77dcb82034c4195b", "s3": "41f745cd0c56ab11"}
 
 
-def _legacy_episode():
+def _legacy_episode(dictionary=None, cast_index=None):
+    """``dictionary`` is the speaker's (default: an entry no line uses); ``cast_index`` the second shot's line's."""
     series = {
         "spokenLanguage": "Español de España", "provider": {"videoSettings": {"orientation": "portrait"}},
         "characters": [
             {"id": "gary", "voiceProfile": {"characterKitRef": {"id": "kit-gary"},
-                                            "pronunciationDictionary": {"Peugeot": "Pejó"}}},
+                                            "pronunciationDictionary": dictionary or {"Renault": "Reno"}}},
             {"id": "kevin", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
             {"id": "kevin-b", "voiceProfile": {"characterKitRef": {"id": "kit-kevin"}}},
         ],
@@ -957,7 +967,8 @@ def _legacy_episode():
         {"id": "s1", "order": 0, "productionMethod": "animation_2d", "visibleCharacterIds": ["gary"],
          "dialogueBeats": [{"id": "s1_d0", "characterId": "gary", "text": "El Peugeot espera."}], "layout2d": {}},
         {"id": "s2", "order": 1, "productionMethod": "animation_2d", "visibleCharacterIds": ["kevin", "kevin-b"],
-         "dialogueBeats": [{"id": "s2_d0", "characterId": "kevin", "text": "Hola.", "castIndex": 1}],
+         "dialogueBeats": [{"id": "s2_d0", "characterId": "kevin", "text": "Hola.",
+                            **({} if cast_index is None else {"castIndex": cast_index})}],
          "layout2d": {"cast": [{"characterId": "kevin"}, {"characterId": "kevin-b"}]}},
         {"id": "s3", "order": 2, "productionMethod": "animation_2d", "durationSeconds": 4.2, "dialogueBeats": [],
          "layout2d": {}},
@@ -971,16 +982,33 @@ def _legacy_episode():
 
 
 def test_an_episode_rendered_before_the_new_inputs_renders_nothing_again():
-    """First produce after the upgrade: a portrait series with a dictionary and a cast index has 0 stale shots."""
+    """First produce after the upgrade: a portrait series whose lines no dictionary rewrites and name no copy has 0
+    stale shots. A dictionary entry or a cast index set since is seen on those old takes; the portrait frame is not
+    (only takes rendered after the update know it)."""
     from services.series_take_inputs import accepted_inputs, render_inputs, stale_shot_ids
     series, episode = _legacy_episode()
     assert {shot["id"]: render_inputs(series, shot, {}, version=2) for shot in episode["shots"]} == LEGACY_2D_DIGESTS
     assert {shot["id"]: render_inputs(series, shot, {}) for shot in episode["shots"]} != LEGACY_2D_DIGESTS
     assert stale_shot_ids(series, episode, {}) == []
     assert {shot["id"]: accepted_inputs(series, shot, {}) for shot in episode["shots"]} == LEGACY_2D_DIGESTS
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Peugeot": "Pejó"}
+    assert stale_shot_ids(series, episode, {}) == ["s1"], "an entry added since changes the first line"
+    series["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Renault": "Reno"}
+    episode["shots"][1]["dialogueBeats"][0]["castIndex"] = 1
+    assert stale_shot_ids(series, episode, {}) == ["s2"], "the second copy speaks now"
+    episode["shots"][1]["dialogueBeats"][0].pop("castIndex")
     # A shot that changes is still seen: an old take is current only while it matches what it was saved from.
     episode["shots"][0]["dialogueBeats"][0]["text"] = "El Renault espera."
     assert stale_shot_ids(series, episode, {}) == ["s1"]
+
+
+def test_an_old_take_whose_line_a_dictionary_or_a_cast_index_already_changed_renders_once():
+    """The stated cost of seeing those two on old takes: a take saved before the update whose line the dictionary
+    already rewrote, or that already named a copy, never hashed it, so it renders once (its recording is reused: the
+    spoken text did not change). None of the 17 libraries on disk on 2026-10-14 had such a take."""
+    from services.series_take_inputs import stale_shot_ids
+    series, episode = _legacy_episode({"Peugeot": "Pejó"}, 1)
+    assert stale_shot_ids(series, episode, {}) == ["s1", "s2"]
 
 
 def test_a_series_3d_export_uses_the_episode_frame():
