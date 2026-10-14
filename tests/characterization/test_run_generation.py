@@ -23,12 +23,14 @@ keep it, and a fix is its own PR that re-records the golden.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
 import threading
 import time
+import types
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
@@ -820,17 +822,15 @@ def test_a_sound_effect_job_fails_when_the_audio_model_is_off(rig, golden, monke
     rig.check(golden, "sound effect disabled", {**rig.observe(job_id), "audio model": seen})
 
 
-def test_the_legacy_h3_route_runs_its_isolated_runtime(rig, golden, tmp_path) -> None:
+def _stub_legacy_h3(rig, calls: list, *, output: str = "legacy_h3_clip.mp4"):
+    """The isolated Comfy runtime of the legacy H3 route, recording every call; returns the service module."""
     from services import minimax_h3_service
-
-    launch = rig.launch
-    calls: list = []
 
     def generate(params, job_id, out_dir, progress, cancelled, keep_runtime=False):
         calls.append(["generate", sorted(params), job_id, cancelled(), keep_runtime])
         progress("Sampling window", 40, 3, 8)
         progress("Almost done", 100)
-        path = Path(out_dir) / "legacy_h3_clip.mp4"
+        path = Path(out_dir) / output
         rig.engine.write_media(str(path), "video")
         return [str(path)]
 
@@ -838,9 +838,34 @@ def test_the_legacy_h3_route_runs_its_isolated_runtime(rig, golden, tmp_path) ->
         rig.monkeypatch.setattr(minimax_h3_service, name, lambda *a, _name=name, **k: calls.append([_name]))
     rig.monkeypatch.setattr(minimax_h3_service, "generate", generate)
     rig.patch("_release_legacy_h3_when_queue_allows", lambda job_id: calls.append(["release when idle", job_id]))
-    job_id = rig.direct_job({**BODY, "model_type": minimax_h3_service.MODEL_ID, "_director_pipeline_id": ""})
+    return minimax_h3_service
+
+
+def test_the_legacy_h3_route_runs_its_isolated_runtime(rig, golden, tmp_path) -> None:
+    calls: list = []
+    service = _stub_legacy_h3(rig, calls)
+    job_id = rig.direct_job({**BODY, "model_type": service.MODEL_ID, "_director_pipeline_id": ""})
     rig.call_worker(job_id)
     rig.check(golden, "legacy h3", {**rig.observe(job_id, full=True), "service calls": calls})
+
+
+def test_the_legacy_h3_route_extends_a_source_video_for_a_caller_that_finalizes_it(rig, golden) -> None:
+    """A Director job (pipeline id) extends a source video: the worker anchors on the source's last frame, keeps
+    the anchored params as the job's params, stops at 99% and leaves the runtime release to the Director."""
+    calls: list = []
+    service = _stub_legacy_h3(rig, calls, output="legacy_h3_extend.mp4")
+
+    def prepare_extend_anchor(params, job_id, source_path, uploads_dir):
+        calls.append(["extend anchor", job_id, source_path, Path(uploads_dir).name])
+        params["image_start"] = "uploads/anchor-frame.png"
+        return {"ignored_references": 2, "time": 3.25, "path": "uploads/anchor-frame.png"}
+
+    rig.monkeypatch.setattr(service, "prepare_extend_anchor", prepare_extend_anchor)
+    rig.patch("_resolve_video_editor_source", lambda value: f"resolved/{value}")
+    job_id = rig.direct_job({**BODY, "model_type": service.MODEL_ID, "video_source": "uploads/source.mp4",
+                             "_director_pipeline_id": "pipeline-legacy"})
+    rig.call_worker(job_id, finalize=False)
+    rig.check(golden, "legacy h3 extend, not finalized", {**rig.observe(job_id, full=True), "service calls": calls})
 
 
 def test_simulated_execution_replaces_only_the_inference(rig, golden) -> None:
@@ -870,3 +895,377 @@ def test_a_cancelled_simulated_job_is_settled_by_the_worker(rig, golden) -> None
     job_id = rig.direct_job(BODY)
     rig.call_worker(job_id)
     rig.check(golden, "simulated and cancelled", rig.observe(job_id))
+
+
+# -- the abort flag reaches the engine --------------------------------------------------------------------------------
+def test_a_cancel_reaches_the_engine_through_the_abort_flag_and_interrupts_the_model(rig, golden) -> None:
+    """The registered abort state is the engine's own generation state: a denoising loop that watches the flag stops
+    by itself (this engine does not ignore it, unlike the cancel tests above), and the native model interrupt runs."""
+    interrupts: list = []
+    stopped: list = []
+    rig.patch("_interrupt_wan_model", lambda: interrupts.append("interrupt"))
+
+    def script(call) -> None:
+        call.send("progress", [(1, 2), "Sampling | 1/2"])
+        stopped.append(call.hold(rig.event(), timeout=10))
+        if not stopped[-1]:
+            call.save()
+
+    rig.engine.script = script
+    job_id = rig.post(BODY)["job_id"]
+    assert rig.engine.entered.wait(10)
+    rig.wait_for(job_id, message="Sampling | 1/2")
+    cancelled = rig.cancel(job_id)
+    rig.join()
+    rig.check(golden, "cancel stops the engine", {"cancel": cancelled, "engine stopped by the abort flag": stopped,
+                                                  "model interrupts": interrupts, **rig.observe(job_id)})
+
+
+# -- manifests the first scenarios did not build ----------------------------------------------------------------------
+BOUNDARY = "\n---CLIP_BOUNDARY---\n"
+
+
+def _bounded_model(rig) -> None:
+    """fake_t2v as a bounded start/end Director model: a 9..33 frame lattice in steps of 8."""
+    base = rig.server.wgp.get_model_def
+    bounded = {"director_video_strategy": "bounded_start_end", "frames_minimum": 9, "frames_steps": 8,
+               "frames_maximum": 33}
+    rig.set_wgp("get_model_def", lambda model_type: {**(base(model_type) or {}), **bounded}
+                if model_type == "fake_t2v" else base(model_type))
+
+
+def test_a_bounded_director_job_continues_only_the_clips_that_ask_for_it(rig, golden, monkeypatch) -> None:
+    """A bounded model checks each clip against its frame lattice, continues a clip from the true last frame only
+    when the clip asks for it, keeps the visible SE duration when asked, and carries per-clip keyframes and H3
+    references. The prompt splits on the Director's clip boundary; a bad seed or audio offset falls back."""
+    reads = _install_fake_decord(monkeypatch)
+    _bounded_model(rig)
+    job_id = rig.run({
+        **BODY, "multi_prompts_gen_type": 3, "video_prompt_type": "V",
+        "prompt": BOUNDARY.join(["open on the pier", "a gull lands\nthe gull looks up", "close on the sea"]),
+        "image_start": "start.png", "image_end": ["", "end-b.png", ""], "per_clip_frames": [17, 25, 9],
+        "per_clip_seeds": [1, "not a seed", 3], "per_clip_keyframes": [None, ["kf-1.png", "kf-2.png"], []],
+        "per_clip_minimax_h3_references": [{"refs": ["a"]}, {"refs": ["b"]}, {"refs": []}],
+        "per_clip_continue_from_previous": [False, False, True], "_se_preserve_duration_per_clip": True,
+        "audio_frame_offset": "not a number",
+    })
+    rig.check(golden, "multi clip, bounded director", {**rig.observe(job_id), "decord reads": reads})
+
+
+def test_a_bounded_clip_off_the_models_frame_lattice_fails_the_job_before_any_model_work(rig, golden) -> None:
+    _bounded_model(rig)
+    job_id = rig.run({**BODY, "multi_prompts_gen_type": 3, "prompt": "one\ntwo", "per_clip_frames": [17, 20]})
+    rig.check(golden, "multi clip, off the frame lattice", rig.observe(job_id))
+
+
+def test_a_single_clip_with_an_end_image_trims_its_tail_and_names_its_uploads(rig, golden) -> None:
+    job_id = rig.run({**BODY, "image_start": "uploads/start.png", "image_end": "uploads/end.png",
+                      "image_prompt_type": "SE"})
+    rig.check(golden, "single clip with an end image", rig.observe(job_id))
+
+
+def test_a_shot_manifest_keeps_its_own_shot_indexes_and_hands_back_the_joined_file(rig, golden) -> None:
+    def script(call) -> None:
+        call.save()
+        if call.index == 1:
+            call.save(suffix="_multiclip")
+
+    rig.engine.script = script
+    shots = [{"shot_index": 3, "params": {"prompt": "shot three"}}, {"shot_index": 7, "params": {"prompt": "shot seven"}}]
+    job_id = rig.direct_job({**BODY, "_repaint_shot_manifest": shots, "_defer_output_publication": True})
+    rig.call_worker(job_id, finalize=False)
+    rig.check(golden, "shot manifest with its own indexes and a joined file", rig.observe(job_id))
+
+
+# -- outputs and sidecars ---------------------------------------------------------------------------------------------
+def test_a_director_clip_sidecar_names_its_pipeline_and_the_prompts_the_model_saw(rig, golden) -> None:
+    def script(call) -> None:
+        call.gen["model_prompts"] = {"0": "a calm lake, window one"}
+        call.save()
+
+    rig.engine.script = script
+    job_id = rig.direct_job({**BODY, "_director_pipeline_id": "pipeline-golden"})
+    rig.call_worker(job_id)
+    rig.check(golden, "director clip with model prompts", rig.observe(job_id))
+
+
+def test_the_legacy_fallback_does_not_claim_a_file_that_was_there_before_the_job(rig, golden, clip) -> None:
+    shutil.copyfile(clip, rig.server.outputs / "older_render.mp4")
+    rig.engine.script = lambda call: call.save(register=False)
+    job_id = rig.run(BODY)
+    rig.check(golden, "unregistered output beside an older file", rig.observe(job_id))
+
+
+def test_a_failed_clip_is_failed_even_when_the_caller_finalizes_the_job_itself(rig, golden) -> None:
+    def script(call) -> None:
+        raise RuntimeError("the clip failed")
+
+    rig.engine.script = script
+    job_id = rig.direct_job(BODY)
+    rig.call_worker(job_id, finalize=False)
+    rig.check(golden, "failed clip, not finalized", rig.observe(job_id))
+
+
+# -- finishing passes -------------------------------------------------------------------------------------------------
+def _voice_clone_stub(monkeypatch, seen: list, *, fail: bool = False) -> None:
+    def voice_clone(video_path, voice_ref_paths, mode):
+        seen.append(["voice clone", Path(video_path).name, [Path(ref).name for ref in voice_ref_paths], mode])
+        if fail:
+            raise RuntimeError("no voice in this clip")
+
+    monkeypatch.setitem(sys.modules, "postprocessing.voice_clone", SimpleNamespace(apply_voice_clone_to_file=voice_clone))
+
+
+def test_voice_clone_references_resolve_in_the_jobs_own_workspace(rig, golden, monkeypatch) -> None:
+    assert rig.server.client.post("/api/v1/workspaces", json={"name": "golden-ws"}).status_code == 200
+    media.sound(rig.server.outputs / "golden-ws" / "narrator.wav")
+    seen: list = []
+    _voice_clone_stub(monkeypatch, seen)
+    job_id = rig.run({**BODY, "workspace": "golden-ws", "voice_clone_enabled": True, "voice_clone_refs": ["narrator.wav"]})
+    rig.check(golden, "voice clone with a workspace reference",
+              {**rig.observe(job_id, workspace="golden-ws"), "voice clone": seen})
+
+
+def test_post_processing_visits_every_video_and_survives_a_failing_pass(rig, golden, tmp_path, monkeypatch) -> None:
+    """Two videos and a sound: each video pass skips the sound, the audio pass skips the videos, and a pass that
+    raises (or an ffmpeg that fails) leaves that file as it was and the job completed."""
+    media.sound(tmp_path / "uploads" / "audio" / "voice.wav")
+    order: list = []
+
+    def script(call) -> None:
+        call.save()
+        call.save()
+        call.save("audio", suffix="_soundtrack")  # its own stem: a sidecar is named after the media file's stem
+
+    def upscale(path, method, job=None):
+        order.append(["upscale", Path(path).name, method, job["id"] if job else None])
+        if "(2)" in Path(path).name:
+            raise RuntimeError("upscaler out of memory")
+
+    rig.engine.script = script
+    rig.patch("_apply_spatial_upsampling_to_file", upscale)
+    rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: order.append(["film grain", Path(path).name]))
+    _voice_clone_stub(monkeypatch, order, fail=True)
+    commands: list = []
+    real_run = subprocess.run
+
+    def failing_ffmpeg(command, *args, **kwargs):
+        if "-af" in command:
+            commands.append(list(command))
+            return subprocess.CompletedProcess(command, 1, "", "fake ffmpeg: no acompressor")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", failing_ffmpeg)
+    job_id = rig.run({**BODY, "film_grain_intensity": 0.4, "spatial_upsampling": "flashvsr_x2", "voice_clone_enabled": True,
+                      "voice_clone_refs": ["audio/voice.wav"], "tts_dynaudnorm": True})
+    rig.check(golden, "post-processing on several outputs", {**rig.observe(job_id), "order": order, "ffmpeg": commands})
+
+
+def test_a_cancel_during_post_processing_stops_the_remaining_passes(rig, golden) -> None:
+    launch = rig.launch
+    order: list = []
+
+    def upscale(path, method, job=None):
+        order.append(["upscale", Path(path).name])
+        launch.request_cancel(job, job_id=job["id"], active_states=launch._active_gen_states)
+
+    rig.patch("_apply_spatial_upsampling_to_file", upscale)
+    rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: order.append(["film grain", Path(path).name]))
+    job_id = rig.run({**BODY, "repeat_generation": 2, "spatial_upsampling": "flashvsr_x2", "film_grain_intensity": 0.4})
+    rig.check(golden, "cancel during post-processing", {**rig.observe(job_id), "order": order})
+
+
+def _instant_retries(rig) -> None:
+    """The worker retries a file Windows holds open 15 times, a second apart; the test does not wait for them."""
+    real = rig.launch.time
+    proxy = types.ModuleType("time")
+    proxy.__dict__.update({name: getattr(real, name) for name in dir(real) if not name.startswith("__")})
+    proxy.sleep = lambda _seconds: None
+    rig.patch("time", proxy)
+
+
+def _locked_destination(monkeypatch, source_end: str, fallback_end: str) -> list:
+    """``os.replace`` of a file ending in ``source_end`` fails as on Windows when the UI streams the destination,
+    except into the worker's fallback name (ending in ``fallback_end``). Returns the refused destinations."""
+    refused: list = []
+    real = os.replace
+
+    def replace(source, destination, *args, **kwargs):
+        if str(source).endswith(source_end) and not str(destination).endswith(fallback_end):
+            refused.append(Path(destination).name)
+            raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+        return real(source, destination, *args, **kwargs)
+
+    monkeypatch.setattr(os, "replace", replace)
+    return refused
+
+
+def _outpaint_tools(monkeypatch, source: Path, *, source_audio: bool, mux_ok: bool) -> list:
+    """ffprobe and ffmpeg for the outpaint pass (the commands are the worker's contract, the encoders are not);
+    every other command runs for real. Returns the commands the pass ran."""
+    commands: list = []
+    real_run = subprocess.run
+
+    def run(command, *args, **kwargs):
+        command = list(command)
+        if command[0] == "ffprobe" and str(source) in command:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, "audio\n" if source_audio else "", "")
+        if command[0] == "ffprobe" and "stream=r_frame_rate" in command:
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, "8/1\n", "")
+        if command[0] == "ffmpeg" and str(source) in command:
+            commands.append(command)
+            if not mux_ok:
+                return subprocess.CompletedProcess(command, 1, "", "fake ffmpeg: unknown encoder")
+            shutil.copyfile(command[3], command[-1])
+            return subprocess.CompletedProcess(command, 0, "", "")
+        return real_run(command, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", run)
+    return commands
+
+
+OUTPAINT_CASES = {
+    "source audio": {"_outpaint_preserve_audio": True},
+    "smear trim": {"_outpaint_preserve_audio": True, "_outpaint_trim_smear": True, "_outpaint_smear_boundary_frame": 5,
+                   "_outpaint_smear_count": 3},
+    "feathered overlay": {"_outpaint_lock_source_pixels": True, "_outpaint_overlay_x": 8, "_outpaint_overlay_w": 48,
+                          "_outpaint_overlay_h": 36, "_outpaint_canvas_w": 64, "_outpaint_canvas_h": 36},
+    "full-frame overlay": {"_outpaint_lock_source_pixels": True, "_outpaint_overlay_w": 64, "_outpaint_overlay_h": 36},
+    "nothing to do": {"_outpaint_preserve_audio": True, "_outpaint_lock_source_pixels": True},
+    "ffmpeg fails": {"_outpaint_preserve_audio": True},
+    "output locked": {"_outpaint_preserve_audio": True, "film_grain_intensity": 0.4},
+}
+
+
+@pytest.mark.parametrize("case", list(OUTPAINT_CASES))
+def test_the_outpaint_finishing_pass_runs_once_on_the_last_video(rig, golden, clip, tmp_path, monkeypatch, case) -> None:
+    """Source-audio mux, smear trim and source-pixel overlay are one ffmpeg call on the last canonical video. When
+    Windows holds the output open, the post-processed copy is published under a new name, and the later passes and
+    sidecars follow that name."""
+    source = tmp_path / "outpaint-source.mp4"
+    shutil.copyfile(clip, source)
+    tools = _outpaint_tools(monkeypatch, source, source_audio=case != "nothing to do", mux_ok=case != "ffmpeg fails")
+    refused: list = []
+    graded: list = []
+    if case == "output locked":
+        _instant_retries(rig)
+        refused = _locked_destination(monkeypatch, "_post.mp4", "_with_source_audio.mp4")
+        rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: graded.append(Path(path).name))
+    job_id = rig.direct_job({**BODY, "repeat_generation": 2, "_outpaint_source_video": str(source),
+                             **OUTPAINT_CASES[case]})
+    rig.call_worker(job_id)
+    rig.check(golden, f"outpaint finishing pass: {case}", {**rig.observe(job_id), "tools": tools,
+                                                           "locked replace attempts": len(refused), "film grain": graded})
+
+
+@pytest.mark.parametrize("case", ["protected", "output locked", "cancelled", "tracing fails"])
+def test_recast_protection_restores_the_people_outside_the_replacement(rig, golden, clip, tmp_path, monkeypatch,
+                                                                       case) -> None:
+    """After a Recast the worker frees the resident model, traces the generated replacement (SAM3, stubbed), renders
+    the source back outside it and swaps the result in. A lock publishes it under a new name, a cancel stops it, and
+    a tracing failure keeps the generated video."""
+    launch = rig.launch
+    source = tmp_path / "recast-source.mp4"
+    shutil.copyfile(clip, source)
+    calls: list = []
+    job_id = rig.direct_job({**BODY, "repeat_generation": 2, "_recast_protect_bystanders": True,
+                             "_recast_source_video": str(source), "video_mask": "uploads/recast-mask.mp4",
+                             "edit_recast_person_count": 2})
+    rig.set_wgp("wan_model", SimpleNamespace(name="resident model"))
+    rig.set_wgp("release_model", lambda: calls.append(["release model"]))
+
+    def trace(generated_video, mask_video, person_count, out_dir, progress_callback=None):
+        calls.append(["trace", Path(generated_video).name, mask_video, person_count,
+                      Path(out_dir).name.startswith("maestro-recast-protect-")])
+        if case == "tracing fails":
+            raise RuntimeError("SAM3 found nobody to trace")
+        if case == "cancelled":
+            launch.request_cancel(launch._jobs[job_id], job_id=job_id, active_states=launch._active_gen_states)
+        for done in (1, 2, 2, 4):
+            progress_callback(done, 4)
+        return str(Path(out_dir) / "adaptive-mask.mp4")
+
+    def render(source_video, adaptive_mask, generated_video):
+        calls.append(["render", Path(source_video).name, Path(adaptive_mask).name, Path(generated_video).name])
+        protected = Path(generated_video).with_name("protected-render.mp4")
+        protected.write_bytes(b"protected")
+        return str(protected)
+
+    rig.patch("_build_recast_adaptive_mask", trace)
+    rig.patch("_render_recast_mask_locked_video", render)
+    refused: list = []
+    if case == "output locked":
+        _instant_retries(rig)
+        refused = _locked_destination(monkeypatch, "protected-render.mp4", "_target_locked.mp4")
+    rig.call_worker(job_id)
+    rig.check(golden, f"recast protection: {case}", {**rig.observe(job_id), "calls": calls,
+                                                     "locked replace attempts": len(refused)})
+
+
+# -- oddities the goldens above already pin, one fact each ------------------------------------------------------------
+def test_oddity_a_finished_job_leaves_the_audio_save_path_in_its_workspace(rig) -> None:
+    """The ``finally`` block points ``save_path`` and ``image_save_path`` back at the active workspace but leaves
+    ``audio_save_path`` at the last job's folder."""
+    assert rig.server.client.post("/api/v1/workspaces", json={"name": "golden-ws"}).status_code == 200
+    rig.run({**BODY, "workspace": "golden-ws"})
+    wgp, outputs = rig.server.wgp, str(rig.server.outputs)
+    assert (wgp.save_path, wgp.image_save_path, wgp.audio_save_path) == (outputs, outputs, str(rig.server.outputs / "golden-ws"))
+
+
+def test_oddity_a_cancelled_task_keeps_its_timer_running(rig) -> None:
+    """The task loop breaks out on a cancel before it finishes the task's timer, so the timer still reads running."""
+    release = rig.event()
+    rig.engine.script = hold_then(release=release, ignore_abort=True)
+    job_id = rig.post(BODY)["job_id"]
+    assert rig.engine.entered.wait(10)
+    rig.wait_for(job_id, message="Sampling | 1/2")
+    rig.cancel(job_id)
+    release.set()
+    rig.join()
+    status = rig.get(f"/api/v1/status/{job_id}")
+    assert status["status"] == "cancelled"
+    assert [timer["status"] for timer in status["task_timings"]] == ["running"]
+
+
+def test_oddity_tts_seconds_progress_is_overwritten_by_the_step_ratio(rig) -> None:
+    """``12/600 s`` is parsed into "Generating audio... 12s" at 36%, and then the step/total branch below it
+    overwrites that: the job shows the tuple's own step (1/10, 10%) and the model's message."""
+    rig.engine.script = lambda call: (call.send("progress", [(1, 10), "Generating | 12/600 s"]), call.save())
+    job_id = rig.run(BODY)
+    writes = [event for event in rig.events if event.get("id") == job_id]
+    progress = next(event for event in writes if event.get("message") == "Generating | 12/600 s")
+    assert (progress["progress"], progress["step"], progress["total_steps"]) == (10, 1, 10)
+    assert not any("Generating audio" in str(event.get("message")) for event in writes)
+
+
+def _recording_publisher(rig) -> list:
+    handed: list = []
+    real = rig.launch._publish_generation_sidecar_for_studio_job
+
+    def publish(job, output_path, sidecar, **kwargs):
+        handed.append({"file": Path(output_path).name, "job_id": sidecar.get("job_id")})
+        return real(job, output_path, sidecar, **kwargs)
+
+    rig.patch("_publish_generation_sidecar_for_studio_job", publish)
+    return handed
+
+
+def test_oddity_a_successful_job_publishes_each_sidecar_twice(rig) -> None:
+    """Once when the outputs are recorded and again after the (here empty) post-processing passes."""
+    handed = _recording_publisher(rig)
+    job_id = rig.run(BODY)
+    assert [item["job_id"] for item in handed] == [job_id, job_id]
+    assert len({item["file"] for item in handed}) == 1
+
+
+def test_oddity_the_sound_effect_sidecar_reads_a_job_id_key_jobs_do_not_have(rig, monkeypatch) -> None:
+    """``_run_sfx_generation`` puts ``job.get("job_id", "")`` in the sidecar, but jobs keep their id under ``id``:
+    the publisher receives an empty id and fills it in."""
+    _stub_mmaudio(rig, monkeypatch)
+    handed = _recording_publisher(rig)
+    job_id = rig.run(SFX_BODY)
+    assert [item["job_id"] for item in handed] == [""]
+    (sidecar,) = rig.sidecars().values()
+    assert sidecar["job_id"] == job_id

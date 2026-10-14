@@ -808,6 +808,176 @@
     },
     "status": 200
   },
+  "cancel during post-processing": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "order": [
+        [
+          "upscale",
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "cancel_requested": true,
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": false,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "spatial_upsampling": "flashvsr_x2",
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "spatial_upsampling": "flashvsr_x2",
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Cancelled",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "cancelled",
+        "progress": 100,
+        "queue_position": null,
+        "status": "cancelled",
+        "step": 2,
+        "total_steps": 2
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Cancelled",
+        "phase": "cancelled",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "cancelled"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Upscaling' | 'Upscaling <TIME>_seed42_a_calm_lake.mp4 (FlashVSR)...' | 100% | step 2/2 | outputs 2",
+        "cancelling | phase 'cancelling' | 'Cancelling…' | 100% | step 2/2 | outputs 2",
+        "cancelled | phase 'cancelled' | 'Cancelled' | 100% | step 2/2 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
   "cancel during run": {
     "body": {
       "accepted": {
@@ -1058,6 +1228,112 @@
           "total_steps": 2
         }
       }
+    },
+    "status": 200
+  },
+  "cancel stops the engine": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "cancel": {
+        "job_id": "<JOB>",
+        "status": "cancelling",
+        "was_running": true
+      },
+      "engine stopped by the abort flag": [
+        true
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "model interrupts": [
+        "interrupt"
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "cancel_requested": true,
+        "clip_output_files": [
+          null
+        ],
+        "recovered": false
+      },
+      "returned": false,
+      "sidecars": {},
+      "status": {
+        "error": null,
+        "message": "Cancelled",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "cancelled",
+        "progress": 50,
+        "queue_position": null,
+        "status": "cancelled",
+        "step": 1,
+        "total_steps": 2
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Cancelled",
+        "phase": "cancelled",
+        "progress": 0.5,
+        "result_refs": [],
+        "status": "cancelled"
+      },
+      "timers": [
+        "running"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "cancelling | phase 'cancelling' | 'Cancelling…' | 50% | step 1/2 | outputs 0",
+        "cancelling | phase 'cancelling' | 'Cancelling…' | 50% | step 1/2 | outputs 0",
+        "cancelled | phase 'cancelled' | 'Cancelled' | 50% | step 1/2 | outputs 0"
+      ]
     },
     "status": 200
   },
@@ -1378,6 +1654,126 @@
         "running | phase 'Denoising | 2/3' | 'Denoising | 2/3' | 66% | step 2/3 | outputs 0",
         "running | phase 'Denoising | 3/3' | 'Denoising | 3/3' | 100% | step 3/3 | outputs 0",
         "running | phase 'Denoising | 3/3' | 'Denoising | 3/3' | 100% | step 3/3 | outputs 1",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "director clip with model prompts": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_director_pipeline_id": "pipeline-golden",
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "director_pipeline_id": "pipeline-golden",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "model_prompts": {
+            "0": "a calm lake, window one"
+          },
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_director_pipeline_id": "pipeline-golden",
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-director-pipeline-golden",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 1",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
       ]
     },
@@ -1848,6 +2244,96 @@
         "running | phase '' | 'Error: fake engine died after saving' | 0% | step 0/0 | outputs 0",
         "running | phase '' | 'Error: fake engine died after saving' | 0% | step 0/0 | outputs 1",
         "failed | phase '' | 'fake engine died after saving' | 0% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "failed clip, not finalized": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          null
+        ],
+        "recovered": false
+      },
+      "returned": false,
+      "sidecars": {},
+      "status": {
+        "error": "the clip failed",
+        "message": "the clip failed",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "",
+        "progress": 0,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "the clip failed",
+          "retryable": true
+        },
+        "message": "the clip failed",
+        "phase": "failed",
+        "progress": 0.0,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "timers": [
+        "failed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase '' | 'Error: the clip failed' | 0% | step 0/0 | outputs 0",
+        "running | phase '' | 'Error: the clip failed' | 0% | step 0/0 | outputs 0",
+        "failed | phase '' | 'the clip failed' | 0% | step 0/0 | outputs 0"
       ]
     },
     "status": 200
@@ -2429,6 +2915,236 @@
         "running | phase '' | 'Almost done' | 100% | step 0/0 | outputs 0",
         "running | phase '' | 'Almost done' | 100% | step 0/0 | outputs 1",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "legacy h3 extend, not finalized": {
+    "body": {
+      "engine_calls": [],
+      "files": [
+        "legacy_h3_extend.meta.json",
+        "legacy_h3_extend.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [
+        "golden-direct"
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "service calls": [
+        [
+          "cancel_idle_shutdown"
+        ],
+        [
+          "extend anchor",
+          "golden-direct",
+          "resolved/uploads/source.mp4",
+          "uploads"
+        ],
+        [
+          "cancel_idle_shutdown"
+        ],
+        [
+          "generate",
+          [
+            "_director_pipeline_id",
+            "_execution_mode",
+            "generation_mode",
+            "image_start",
+            "model_type",
+            "prompt",
+            "resolution",
+            "seed",
+            "video_length",
+            "video_source"
+          ],
+          "golden-direct",
+          false,
+          true
+        ]
+      ],
+      "sidecars": {
+        "legacy_h3_extend.meta.json": {
+          "created_at": 1700000000.0,
+          "director_pipeline_id": "pipeline-legacy",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "legacy_h3_extend.mp4",
+          "params": {
+            "_director_pipeline_id": "pipeline-legacy",
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "image_start": "uploads/anchor-frame.png",
+            "model_type": "minimax_h3_legacy",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_source": "uploads/source.mp4"
+          },
+          "root_task_id": "task-director-pipeline-legacy",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {
+            "image_start": "anchor-frame.png",
+            "video_source": "source.mp4"
+          }
+        }
+      },
+      "status": {
+        "asset_id": "asset_<ID>",
+        "canonical_url": "/api/v1/file/legacy_h3_extend.mp4?workspace=default",
+        "created_at": 1700000000.0,
+        "error": null,
+        "finished_at": null,
+        "generation_details": {
+          "cache": false,
+          "execution_mode": "real",
+          "frames": 17,
+          "generation_mode": "video",
+          "lora_count": 0,
+          "model_name": "MiniMax H3 Legacy Quality — ConvRot",
+          "model_type": "minimax_h3_legacy",
+          "prompt": "a calm lake",
+          "resolution": "64x64",
+          "seed": 42,
+          "simulated": false
+        },
+        "h3_window_plan": null,
+        "job_id": "golden-direct",
+        "message": "Finalizing...",
+        "oom_info": null,
+        "output_files": [
+          "legacy_h3_extend.mp4"
+        ],
+        "outputs": [
+          {
+            "asset_id": "asset_<ID>",
+            "canonical_url": "/api/v1/file/legacy_h3_extend.mp4?workspace=default",
+            "path": "legacy_h3_extend.mp4"
+          }
+        ],
+        "path": "legacy_h3_extend.mp4",
+        "phase": "Finalizing",
+        "processing_time_sec": "<MASKED>",
+        "progress": 99,
+        "queue_position": null,
+        "root_task_id": "task-director-pipeline-legacy",
+        "started_at": "<TIME>",
+        "status": "running",
+        "step": 0,
+        "task_id": "task-generation-golden-direct",
+        "task_timings": [],
+        "token_usage": null,
+        "token_usage_source": "not_measured",
+        "total_steps": 0
+      },
+      "task": {
+        "children": [],
+        "task": {
+          "acquired_resources": [
+            "local_gpu:0"
+          ],
+          "attempt": 1,
+          "backend_job_id": "golden-direct",
+          "cancelable": true,
+          "completed_at": null,
+          "created_at": 1700000000.0,
+          "current": 0,
+          "detail": "",
+          "detail_current": 0,
+          "detail_total": 0,
+          "entity_id": "",
+          "entity_type": "",
+          "error": null,
+          "external_request_id": "",
+          "id": "task-generation-golden-direct",
+          "kind": "video",
+          "max_attempts": 1,
+          "message": "Finalizing...",
+          "metadata": {
+            "actor": "unknown",
+            "adapter": "generation",
+            "capability": null,
+            "command_id": null,
+            "display_prompt": "a calm lake",
+            "generation_details": {
+              "cache": false,
+              "execution_mode": "real",
+              "frames": 17,
+              "generation_mode": "video",
+              "lora_count": 0,
+              "model_name": "MiniMax H3 Legacy Quality — ConvRot",
+              "model_type": "minimax_h3_legacy",
+              "resolution": "64x64",
+              "seed": 42,
+              "simulated": false
+            },
+            "inference_start_step": null,
+            "inference_started_at": null,
+            "output_name_requested": null,
+            "owner_pipeline_id": "pipeline-legacy",
+            "reference_images": [],
+            "run_id": null,
+            "tool": "studio",
+            "workflow_id": null
+          },
+          "model": "MiniMax H3 Legacy Quality — ConvRot",
+          "parent_id": "task-director-pipeline-legacy",
+          "phase": "Finalizing",
+          "pipeline_id": "pipeline-legacy",
+          "progress": 0.99,
+          "project_id": "",
+          "provider": "local",
+          "queued_at": "<TIME>",
+          "recoverable": false,
+          "resource_requirements": [
+            "local_gpu:0"
+          ],
+          "result_refs": [
+            "legacy_h3_extend.mp4"
+          ],
+          "resumable": false,
+          "root_id": "task-director-pipeline-legacy",
+          "server_origin": "local",
+          "started_at": "<TIME>",
+          "status": "running",
+          "title": "Video generation",
+          "token_usage": {
+            "calls": 0,
+            "completion": 0,
+            "prompt": 0,
+            "total": 0
+          },
+          "total": 0,
+          "updated_at": "<TIME>",
+          "workflow": "generation",
+          "workspace": "default"
+        }
+      },
+      "timers": [],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Preparing' | \"Capturing the source video's final frame…\" | 0% | step 0/0 | outputs 0",
+        "running | phase 'H3 Legacy sampling' | 'Sampling window' | 40% | step 3/8 | outputs 0",
+        "running | phase '' | 'Almost done' | 100% | step 0/0 | outputs 0",
+        "running | phase '' | 'Almost done' | 100% | step 0/0 | outputs 1",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 1"
       ]
     },
     "status": 200
@@ -4182,6 +4898,609 @@
     },
     "status": 200
   },
+  "multi clip, bounded director": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "decord reads": [
+        [
+          "open",
+          "<TIME>_seed42_a_gull_lands_the_gull_lo.mp4"
+        ],
+        [
+          "frame",
+          23
+        ]
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 0,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "start.png",
+            "minimax_h3_references": {
+              "refs": [
+                "a"
+              ]
+            },
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "open on the pier",
+            "resolution": "64x64",
+            "seed": 1,
+            "trim_tail_frames": 0,
+            "video_length": 17,
+            "video_prompt_type": "V"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 0,
+            "generation_mode": "video",
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "start.png",
+            "minimax_h3_references": {
+              "refs": [
+                "a"
+              ]
+            },
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 0,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "open on the pier",
+            "resolution": "64x64",
+            "seed": 1,
+            "trim_tail_frames": 0,
+            "video_length": 17,
+            "video_prompt_type": "V"
+          },
+          "prompt": "open on the pier",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 17,
+            "frames_positions": "L L",
+            "image_end": "end-b.png",
+            "image_prompt_type": "E",
+            "image_refs": [
+              "kf-1.png",
+              "kf-2.png"
+            ],
+            "image_start": null,
+            "minimax_h3_references": {
+              "refs": [
+                "b"
+              ]
+            },
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 1,
+            "plugin_data": {},
+            "prompt": "a gull lands\nthe gull looks up",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 8,
+            "video_length": 33,
+            "video_prompt_type": "VKFI"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 17,
+            "frames_positions": "L L",
+            "generation_mode": "video",
+            "image_end": "end-b.png",
+            "image_prompt_type": "E",
+            "image_refs": [
+              "kf-1.png",
+              "kf-2.png"
+            ],
+            "image_start": null,
+            "minimax_h3_references": {
+              "refs": [
+                "b"
+              ]
+            },
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 1,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 1,
+            "prompt": "a gull lands\nthe gull looks up",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 8,
+            "video_length": 33,
+            "video_prompt_type": "VKFI"
+          },
+          "prompt": "a gull lands\nthe gull looks up",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 2,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "audio_frame_offset": 42,
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_2.png",
+            "minimax_h3_references": {
+              "refs": []
+            },
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "close on the sea",
+            "resolution": "64x64",
+            "seed": 3,
+            "trim_tail_frames": 0,
+            "video_length": 9,
+            "video_prompt_type": "V"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "audio_frame_offset": 42,
+            "generation_mode": "video",
+            "image_end": null,
+            "image_prompt_type": "S",
+            "image_start": "<OUTPUTS>/_continuation_2.png",
+            "minimax_h3_references": {
+              "refs": []
+            },
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "audio_start_sec": 0.0,
+              "concat_audio_path": null,
+              "cumulative_offset": true,
+              "group_id": "mc_<EPOCH>_42",
+              "index": 2,
+              "total": 3
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "close on the sea",
+            "resolution": "64x64",
+            "seed": 3,
+            "trim_tail_frames": 0,
+            "video_length": 9,
+            "video_prompt_type": "V"
+          },
+          "prompt": "close on the sea",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 3,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed1_open_on_the_pier.meta.json",
+        "<TIME>_seed1_open_on_the_pier.mp4",
+        "<TIME>_seed3_close_on_the_sea.meta.json",
+        "<TIME>_seed3_close_on_the_sea.mp4",
+        "<TIME>_seed42_a_gull_lands_the_gull_lo.meta.json",
+        "<TIME>_seed42_a_gull_lands_the_gull_lo.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": {
+          "0": "<TIME>_seed1_open_on_the_pier.mp4",
+          "1": "<TIME>_seed42_a_gull_lands_the_gull_lo.mp4",
+          "2": "<TIME>_seed3_close_on_the_sea.mp4"
+        },
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed1_open_on_the_pier.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed1_open_on_the_pier.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_se_preserve_duration_per_clip": true,
+            "audio_frame_offset": "not a number",
+            "generation_mode": "video",
+            "image_end": [
+              "",
+              "end-b.png",
+              ""
+            ],
+            "image_start": "start.png",
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_continue_from_previous": [
+              false,
+              false,
+              true
+            ],
+            "per_clip_frames": [
+              17,
+              25,
+              9
+            ],
+            "per_clip_keyframes": [
+              null,
+              [
+                "kf-1.png",
+                "kf-2.png"
+              ],
+              []
+            ],
+            "per_clip_minimax_h3_references": [
+              {
+                "refs": [
+                  "a"
+                ]
+              },
+              {
+                "refs": [
+                  "b"
+                ]
+              },
+              {
+                "refs": []
+              }
+            ],
+            "per_clip_seeds": [
+              1,
+              "not a seed",
+              3
+            ],
+            "prompt": "open on the pier\n---CLIP_BOUNDARY---\na gull lands\nthe gull looks up\n---CLIP_BOUNDARY---\nclose on the sea",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 1,
+            "video_length": 17,
+            "video_prompt_type": "V"
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {
+            "image_end": [
+              "",
+              "end-b.png",
+              ""
+            ],
+            "image_start": "start.png"
+          }
+        },
+        "<TIME>_seed3_close_on_the_sea.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 2,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed3_close_on_the_sea.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_se_preserve_duration_per_clip": true,
+            "audio_frame_offset": "not a number",
+            "generation_mode": "video",
+            "image_end": [
+              "",
+              "end-b.png",
+              ""
+            ],
+            "image_start": "start.png",
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_continue_from_previous": [
+              false,
+              false,
+              true
+            ],
+            "per_clip_frames": [
+              17,
+              25,
+              9
+            ],
+            "per_clip_keyframes": [
+              null,
+              [
+                "kf-1.png",
+                "kf-2.png"
+              ],
+              []
+            ],
+            "per_clip_minimax_h3_references": [
+              {
+                "refs": [
+                  "a"
+                ]
+              },
+              {
+                "refs": [
+                  "b"
+                ]
+              },
+              {
+                "refs": []
+              }
+            ],
+            "per_clip_seeds": [
+              1,
+              "not a seed",
+              3
+            ],
+            "prompt": "open on the pier\n---CLIP_BOUNDARY---\na gull lands\nthe gull looks up\n---CLIP_BOUNDARY---\nclose on the sea",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 3,
+            "video_length": 17,
+            "video_prompt_type": "V"
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {
+            "image_end": [
+              "",
+              "end-b.png",
+              ""
+            ],
+            "image_start": "start.png"
+          }
+        },
+        "<TIME>_seed42_a_gull_lands_the_gull_lo.meta.json": {
+          "created_at": "<TIME>",
+          "director_clip_index": 1,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_gull_lands_the_gull_lo.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_se_preserve_duration_per_clip": true,
+            "audio_frame_offset": "not a number",
+            "generation_mode": "video",
+            "image_end": [
+              "",
+              "end-b.png",
+              ""
+            ],
+            "image_start": "start.png",
+            "model_type": "fake_t2v",
+            "multi_prompts_gen_type": 3,
+            "per_clip_continue_from_previous": [
+              false,
+              false,
+              true
+            ],
+            "per_clip_frames": [
+              17,
+              25,
+              9
+            ],
+            "per_clip_keyframes": [
+              null,
+              [
+                "kf-1.png",
+                "kf-2.png"
+              ],
+              []
+            ],
+            "per_clip_minimax_h3_references": [
+              {
+                "refs": [
+                  "a"
+                ]
+              },
+              {
+                "refs": [
+                  "b"
+                ]
+              },
+              {
+                "refs": []
+              }
+            ],
+            "per_clip_seeds": [
+              1,
+              "not a seed",
+              3
+            ],
+            "prompt": "open on the pier\n---CLIP_BOUNDARY---\na gull lands\nthe gull looks up\n---CLIP_BOUNDARY---\nclose on the sea",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_prompt_type": "V"
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {
+            "image_end": [
+              "",
+              "end-b.png",
+              ""
+            ],
+            "image_start": "start.png"
+          }
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed1_open_on_the_pier.mp4",
+          "<TIME>_seed42_a_gull_lands_the_gull_lo.mp4",
+          "<TIME>_seed3_close_on_the_sea.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed1_open_on_the_pier.mp4",
+          "<TIME>_seed42_a_gull_lands_the_gull_lo.mp4",
+          "<TIME>_seed3_close_on_the_sea.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed",
+        "completed",
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 1/3' | 'Clip 1/3' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 1/3: Sampling | 1/2' | 'Clip 1/3: Sampling | 1/2' | 16% | step 1/2 | outputs 0",
+        "running | phase 'Clip 1/3: Sampling | 2/2' | 'Clip 1/3: Sampling | 2/2' | 33% | step 2/2 | outputs 0",
+        "running | phase 'Clip 2/3' | 'Clip 2/3' | 33% | step 2/2 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 2/3: Sampling | 1/2' | 'Clip 2/3: Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Clip 2/3: Sampling | 2/2' | 'Clip 2/3: Sampling | 2/2' | 66% | step 2/2 | outputs 0",
+        "running | phase 'Clip 3/3' | 'Clip 3/3' | 66% | step 2/2 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Clip 3/3: Sampling | 1/2' | 'Clip 3/3: Sampling | 1/2' | 83% | step 1/2 | outputs 0",
+        "running | phase 'Clip 3/3: Sampling | 2/2' | 'Clip 3/3: Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Clip 3/3: Sampling | 2/2' | 'Clip 3/3: Sampling | 2/2' | 100% | step 2/2 | outputs 3",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 3"
+      ]
+    },
+    "status": 200
+  },
+  "multi clip, off the frame lattice": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [],
+      "files": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "recovered": false
+      },
+      "returned": false,
+      "sidecars": {},
+      "status": {
+        "error": "Clip 2 has 20 frames, outside the selected model's 9-33 frame lattice (step 8).",
+        "message": "Error: Clip 2 has 20 frames, outside the selected model's 9-33 frame lattice (step 8).",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "",
+        "progress": 0,
+        "queue_position": null,
+        "status": "failed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": {
+          "message": "Clip 2 has 20 frames, outside the selected model's 9-33 frame lattice (step 8).",
+          "retryable": true
+        },
+        "message": "Error: Clip 2 has 20 frames, outside the selected model's 9-33 frame lattice (step 8).",
+        "phase": "failed",
+        "progress": 0.0,
+        "result_refs": [],
+        "status": "failed"
+      },
+      "timers": [],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "failed | phase '' | \"Error: Clip 2 has 20 frames, outside the selected model's 9-33 frame lattice (step 8).\" | 0% | step 0/0 | outputs 0"
+      ]
+    },
+    "status": 200
+  },
   "named workspace job": {
     "body": {
       "accepted": {
@@ -4421,6 +5740,1627 @@
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: feathered overlay": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 36,
+            "_outpaint_canvas_w": 64,
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 48,
+            "_outpaint_overlay_x": 8,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "film grain": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 36,
+            "_outpaint_canvas_w": 64,
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 48,
+            "_outpaint_overlay_x": 8,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_canvas_h": 36,
+            "_outpaint_canvas_w": 64,
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 48,
+            "_outpaint_overlay_x": 8,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4",
+          "-i",
+          "<STATE>/outpaint-source.mp4",
+          "-filter_complex",
+          "[1:v]scale=48:36:flags=lanczos,setsar=1,format=yuva420p,geq=lum='lum(X,Y)':cb='cb(X,Y)':cr='cr(X,Y)':a='if(gt(min(X,(W-X)),24),255,255*min(X,(W-X))/24)'[s];[0:v][s]overlay=8:0:shortest=1:format=auto[outv]",
+          "-map",
+          "[outv]",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "18",
+          "-preset",
+          "fast",
+          "-pix_fmt",
+          "yuv420p",
+          "-map",
+          "0:a?",
+          "-c:a",
+          "copy",
+          "-shortest",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: ffmpeg fails": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "film grain": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "a",
+          "-show_entries",
+          "stream=codec_type",
+          "-of",
+          "csv=p=0",
+          "<STATE>/outpaint-source.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4",
+          "-i",
+          "<STATE>/outpaint-source.mp4",
+          "-map",
+          "0:v:0",
+          "-c:v",
+          "copy",
+          "-map",
+          "1:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-shortest",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: full-frame overlay": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "film grain": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_w": 64,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4",
+          "-i",
+          "<STATE>/outpaint-source.mp4",
+          "-filter_complex",
+          "[1:v]scale=64:36:flags=lanczos,setsar=1[s];[0:v][s]overlay=0:0:shortest=1[outv]",
+          "-map",
+          "[outv]",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "18",
+          "-preset",
+          "fast",
+          "-pix_fmt",
+          "yuv420p",
+          "-map",
+          "0:a?",
+          "-c:a",
+          "copy",
+          "-shortest",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: nothing to do": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "film grain": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_lock_source_pixels": true,
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "a",
+          "-show_entries",
+          "stream=codec_type",
+          "-of",
+          "csv=p=0",
+          "<STATE>/outpaint-source.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: output locked": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake_with_source_audio.meta.json",
+        "<TIME>_seed42_a_calm_lake_with_source_audio.mp4"
+      ],
+      "film grain": [
+        "<TIME>_seed42_a_calm_lake_with_source_audio.mp4",
+        "<TIME>_seed42_a_calm_lake(2).mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 15,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake_with_source_audio.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake_with_source_audio.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake_with_source_audio.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake_with_source_audio.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "a",
+          "-show_entries",
+          "stream=codec_type",
+          "-of",
+          "csv=p=0",
+          "<STATE>/outpaint-source.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4",
+          "-i",
+          "<STATE>/outpaint-source.mp4",
+          "-map",
+          "0:v:0",
+          "-c:v",
+          "copy",
+          "-map",
+          "1:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-shortest",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 3",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Sampling | 2/2' | 'Applying film grain to <TIME>_seed42_a_calm_lake_with_source_audio.mp4...' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Sampling | 2/2' | 'Applying film grain to <TIME>_seed42_a_calm_lake(2).mp4...' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: smear trim": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_smear_boundary_frame": 5,
+            "_outpaint_smear_count": 3,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "_outpaint_trim_smear": true,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "film grain": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_smear_boundary_frame": 5,
+            "_outpaint_smear_count": 3,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "_outpaint_trim_smear": true,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_smear_boundary_frame": 5,
+            "_outpaint_smear_count": 3,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "_outpaint_trim_smear": true,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "a",
+          "-show_entries",
+          "stream=codec_type",
+          "-of",
+          "csv=p=0",
+          "<STATE>/outpaint-source.mp4"
+        ],
+        [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=r_frame_rate",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4",
+          "-i",
+          "<STATE>/outpaint-source.mp4",
+          "-filter_complex",
+          "[0:v]trim=0:0.625000,setpts=PTS-STARTPTS[v0];[0:v]trim=1.000000,setpts=PTS-STARTPTS[v1];[v0][v1]concat=n=2:v=1[outv]",
+          "-map",
+          "[outv]",
+          "-c:v",
+          "libx264",
+          "-crf",
+          "18",
+          "-preset",
+          "fast",
+          "-pix_fmt",
+          "yuv420p",
+          "-map",
+          "1:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-shortest",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "outpaint finishing pass: source audio": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "film grain": [],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_outpaint_preserve_audio": true,
+            "_outpaint_source_video": "<STATE>/outpaint-source.mp4",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "tools": [
+        [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "a",
+          "-show_entries",
+          "stream=codec_type",
+          "-of",
+          "csv=p=0",
+          "<STATE>/outpaint-source.mp4"
+        ],
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4",
+          "-i",
+          "<STATE>/outpaint-source.mp4",
+          "-map",
+          "0:v:0",
+          "-c:v",
+          "copy",
+          "-map",
+          "1:a:0",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-shortest",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
+        ]
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "post-processing on several outputs": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "tts_dynaudnorm": true,
+            "video_length": 17,
+            "wangp_processor_settings": {}
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "ffmpeg": [
+        [
+          "ffmpeg",
+          "-y",
+          "-i",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_soundtrack.wav",
+          "-af",
+          "acompressor=threshold=-25dB:ratio=3:attack=5:release=100:makeup=4,alimiter=limit=0.95",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake_soundtrack.wav.dynaudnorm.wav"
+        ]
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4",
+        "<TIME>_seed42_a_calm_lake_soundtrack.meta.json",
+        "<TIME>_seed42_a_calm_lake_soundtrack.wav"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "order": [
+        [
+          "upscale",
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "flashvsr_x2",
+          "<JOB>"
+        ],
+        [
+          "upscale",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "flashvsr_x2",
+          "<JOB>"
+        ],
+        [
+          "film grain",
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
+          "film grain",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        [
+          "voice clone",
+          "<TIME>_seed42_a_calm_lake.mp4",
+          [
+            "voice.wav"
+          ],
+          "single"
+        ],
+        [
+          "voice clone",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          [
+            "voice.wav"
+          ],
+          "single"
+        ]
+      ],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "spatial_upsampling": "flashvsr_x2",
+            "tts_dynaudnorm": true,
+            "video_length": 17,
+            "voice_clone_enabled": true,
+            "voice_clone_refs": [
+              "audio/voice.wav"
+            ],
+            "wangp_processor_settings": {}
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "spatial_upsampling": "flashvsr_x2",
+            "tts_dynaudnorm": true,
+            "video_length": 17,
+            "voice_clone_enabled": true,
+            "voice_clone_refs": [
+              "audio/voice.wav"
+            ],
+            "wangp_processor_settings": {}
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake_soundtrack.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake_soundtrack.wav",
+          "params": {
+            "_execution_mode": "real",
+            "film_grain_intensity": 0.4,
+            "film_grain_saturation": 0.5,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "spatial_upsampling": "flashvsr_x2",
+            "tts_dynaudnorm": true,
+            "video_length": 17,
+            "voice_clone_enabled": true,
+            "voice_clone_refs": [
+              "audio/voice.wav"
+            ],
+            "wangp_processor_settings": {}
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "<TIME>_seed42_a_calm_lake_soundtrack.wav"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "<TIME>_seed42_a_calm_lake_soundtrack.wav"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Upscaling <TIME>_seed42_a_calm_lake.mp4 (FlashVSR)...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Upscaling <TIME>_seed42_a_calm_lake(2).mp4 (FlashVSR)...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Applying film grain to <TIME>_seed42_a_calm_lake.mp4...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Applying film grain to <TIME>_seed42_a_calm_lake(2).mp4...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Voice cloning (single) on <TIME>_seed42_a_calm_lake.mp4...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Voice cloning (single) on <TIME>_seed42_a_calm_lake(2).mp4...' | 0% | step 0/0 | outputs 3",
+        "running | phase 'Upscaling' | 'Smoothing speaker volumes...' | 0% | step 0/0 | outputs 3",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 3"
       ]
     },
     "status": 200
@@ -5002,6 +7942,745 @@
     },
     "status": 200
   },
+  "recast protection: cancelled": {
+    "body": {
+      "calls": [
+        [
+          "release model"
+        ],
+        [
+          "trace",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "uploads/recast-mask.mp4",
+          2,
+          true
+        ]
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "cancel_requested": true,
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": false,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Cancelled",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "cancelled",
+        "progress": 100,
+        "queue_position": null,
+        "status": "cancelled",
+        "step": 2,
+        "total_steps": 2
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Cancelled",
+        "phase": "cancelled",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "cancelled"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Preparing adaptive Recast protection...' | 100% | step 2/2 | outputs 2",
+        "cancelling | phase 'cancelling' | 'Cancelling…' | 100% | step 2/2 | outputs 2",
+        "cancelled | phase 'cancelled' | 'Cancelled' | 100% | step 2/2 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "recast protection: output locked": {
+    "body": {
+      "calls": [
+        [
+          "release model"
+        ],
+        [
+          "trace",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "uploads/recast-mask.mp4",
+          2,
+          true
+        ],
+        [
+          "render",
+          "recast-source.mp4",
+          "adaptive-mask.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ]
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake(2)_target_locked.meta.json",
+        "<TIME>_seed42_a_calm_lake(2)_target_locked.mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 15,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake(2)_target_locked.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2)_target_locked.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2)_target_locked.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2)_target_locked.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Preparing adaptive Recast protection...' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Tracing generated replacement... 25%' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Tracing generated replacement... 50%' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Tracing generated replacement... 100%' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Protecting surrounding people' | 'Protecting people outside the generated replacement...' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Protecting surrounding people' | 'Protecting people outside the generated replacement...' | 100% | step 2/2 | outputs 3",
+        "running | phase 'Protecting surrounding people' | 'Protecting people outside the generated replacement...' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "recast protection: protected": {
+    "body": {
+      "calls": [
+        [
+          "release model"
+        ],
+        [
+          "trace",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "uploads/recast-mask.mp4",
+          2,
+          true
+        ],
+        [
+          "render",
+          "recast-source.mp4",
+          "adaptive-mask.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ]
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Preparing adaptive Recast protection...' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Tracing generated replacement... 25%' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Tracing generated replacement... 50%' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Tracing generated replacement... 100%' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Protecting surrounding people' | 'Protecting people outside the generated replacement...' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "recast protection: tracing fails": {
+    "body": {
+      "calls": [
+        [
+          "release model"
+        ],
+        [
+          "trace",
+          "<TIME>_seed42_a_calm_lake(2).mp4",
+          "uploads/recast-mask.mp4",
+          2,
+          true
+        ]
+      ],
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake(2).meta.json",
+        "<TIME>_seed42_a_calm_lake(2).mp4",
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "locked replace attempts": 0,
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake(2).meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake(2).mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        },
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": 1700000000.0,
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "golden-direct",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "_recast_protect_bystanders": true,
+            "_recast_source_video": "<STATE>/recast-source.mp4",
+            "edit_recast_person_count": 2,
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "repeat_generation": 2,
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "video_mask": "uploads/recast-mask.mp4"
+          },
+          "root_task_id": "task-generation-golden-direct",
+          "task_id": "task-generation-golden-direct",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4",
+          "<TIME>_seed42_a_calm_lake(2).mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
+        "running | phase 'Tracing generated replacement' | 'Preparing adaptive Recast protection...' | 100% | step 2/2 | outputs 2",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
   "recovered job": {
     "body": {
       "engine_calls": [
@@ -5266,6 +8945,173 @@
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 2",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 2"
+      ]
+    },
+    "status": 200
+  },
+  "shot manifest with its own indexes and a joined file": {
+    "body": {
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "repaint_shots_golden-direct",
+              "index": 3,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot three",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "repaint_shots_golden-direct",
+              "index": 3,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot three",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot three",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        },
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "repaint_shots_golden-direct",
+              "index": 7,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "plugin_data": {},
+            "prompt": "shot seven",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "multi_clip_info": {
+              "defer_concat": true,
+              "group_id": "repaint_shots_golden-direct",
+              "index": 7,
+              "progress_label": "Shot",
+              "total": 2
+            },
+            "multi_prompts_gen_type": 0,
+            "prompt": "shot seven",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "shot seven",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 2,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_shot_seven.mp4",
+        "<TIME>_seed42_shot_seven_multiclip.mp4",
+        "<TIME>_seed42_shot_three.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [
+        "golden-direct"
+      ],
+      "record": {
+        "_internal_clip_output_files": {
+          "3": "<TIME>_seed42_shot_three.mp4",
+          "7": "<TIME>_seed42_shot_seven.mp4"
+        },
+        "_internal_join_output_file": "<TIME>_seed42_shot_seven_multiclip.mp4",
+        "_internal_output_files": [
+          "<TIME>_seed42_shot_three.mp4",
+          "<TIME>_seed42_shot_seven.mp4",
+          "<TIME>_seed42_shot_seven_multiclip.mp4"
+        ],
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_shot_three.mp4",
+          "<TIME>_seed42_shot_seven.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {},
+      "status": {
+        "error": null,
+        "message": "Finalizing...",
+        "oom_info": null,
+        "output_files": [],
+        "phase": "Finalizing",
+        "progress": 99,
+        "queue_position": null,
+        "status": "running",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "cancelable": true,
+        "error": null,
+        "message": "Finalizing...",
+        "phase": "Finalizing",
+        "progress": 0.99,
+        "result_refs": [],
+        "status": "running"
+      },
+      "timers": [
+        "completed",
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 1/2' | 'Shot 1/2' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 2/2' | 'Shot 2/2' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Shot 2/2' | 'Shot 2/2' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Finalizing' | 'Finalizing...' | 99% | step 0/0 | outputs 0"
       ]
     },
     "status": 200
@@ -5903,6 +9749,143 @@
     },
     "status": 200
   },
+  "single clip with an end image": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "image_end": "uploads/end.png",
+            "image_prompt_type": "SE",
+            "image_start": "uploads/start.png",
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 4,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "image_end": "uploads/end.png",
+            "image_prompt_type": "SE",
+            "image_start": "uploads/start.png",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "trim_tail_frames": 4,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "image_end": "uploads/end.png",
+            "image_prompt_type": "SE",
+            "image_start": "uploads/start.png",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {
+            "image_end": "end.png",
+            "image_start": "start.png"
+          }
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
   "sound effect": {
     "body": {
       "accepted": {
@@ -6214,6 +10197,127 @@
       "files": [
         "<TIME>_seed42_a_calm_lake.meta.json",
         "<TIME>_seed42_a_calm_lake.mp4"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 1",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "unregistered output beside an older file": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>",
+          "image_save_path": "<OUTPUTS>",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4",
+        "older_render.mp4"
       ],
       "left_behind": {
         "abort_states": [],
@@ -6865,6 +10969,145 @@
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
         "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
         "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ]
+    },
+    "status": 200
+  },
+  "voice clone with a workspace reference": {
+    "body": {
+      "accepted": {
+        "job_id": "<JOB>",
+        "root_task_id": "task-generation-<JOB>",
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine_calls": [
+        {
+          "audio_save_path": "<OUTPUTS>/golden-ws",
+          "image_save_path": "<OUTPUTS>/golden-ws",
+          "kwargs": {
+            "mode": "",
+            "model_type": "fake_t2v",
+            "plugin_data": {},
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17
+          },
+          "prompt": "a calm lake",
+          "save_path": "<OUTPUTS>/golden-ws",
+          "state_is_the_task_state": true,
+          "task_id": 1,
+          "vram_safety_coefficient": 0.8
+        }
+      ],
+      "files": [
+        "<TIME>_seed42_a_calm_lake.meta.json",
+        "<TIME>_seed42_a_calm_lake.mp4",
+        "narrator.wav"
+      ],
+      "left_behind": {
+        "abort_states": [],
+        "audio_save_path": "<OUTPUTS>/golden-ws",
+        "durable_queue": [],
+        "gpu_lock_free": true,
+        "image_save_path": "<OUTPUTS>",
+        "save_path": "<OUTPUTS>",
+        "vram_coefficient": 0.8
+      },
+      "listed": [],
+      "record": {
+        "acquired_resources": [
+          "local_gpu:0"
+        ],
+        "clip_output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "recovered": false
+      },
+      "returned": true,
+      "sidecars": {
+        "<TIME>_seed42_a_calm_lake.meta.json": {
+          "created_at": "<TIME>",
+          "generation_mode": "video",
+          "generation_time": "<MASKED>",
+          "job_id": "<JOB>",
+          "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "params": {
+            "_execution_mode": "real",
+            "generation_mode": "video",
+            "model_type": "fake_t2v",
+            "prompt": "a calm lake",
+            "provider": "local",
+            "resolution": "64x64",
+            "seed": 42,
+            "video_length": 17,
+            "voice_clone_enabled": true,
+            "voice_clone_refs": [
+              "narrator.wav"
+            ]
+          },
+          "root_task_id": "task-generation-<JOB>",
+          "task_id": "task-generation-<JOB>",
+          "upload_filenames": {}
+        }
+      },
+      "status": {
+        "error": null,
+        "message": "Done",
+        "oom_info": null,
+        "output_files": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "phase": "",
+        "progress": 100,
+        "queue_position": null,
+        "status": "completed",
+        "step": 0,
+        "total_steps": 0
+      },
+      "task": {
+        "acquired_resources": [],
+        "cancelable": false,
+        "error": null,
+        "message": "Done",
+        "phase": "completed",
+        "progress": 1.0,
+        "result_refs": [
+          "<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        "status": "completed"
+      },
+      "timers": [
+        "completed"
+      ],
+      "transitions": [
+        "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+        "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+        "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+        "running | phase 'Sampling | 2/2' | 'Voice cloning (single) on <TIME>_seed42_a_calm_lake.mp4...' | 100% | step 2/2 | outputs 1",
+        "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+      ],
+      "voice clone": [
+        [
+          "voice clone",
+          "<TIME>_seed42_a_calm_lake.mp4",
+          [
+            "narrator.wav"
+          ],
+          "single"
+        ]
       ]
     },
     "status": 200
