@@ -155,7 +155,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         )
 
     def test_generate_and_submit_accept_optional_queue_priority(self):
-        generate = _function(self.launch, "generate")
+        generate = _function(_parse("app/services/studio_generate.py"), "generate")
         self.assertIn("ensure_generation_priority", _called_names(generate))
         commands = _parse("app/services/image_generation_commands.py")
         submit = _function(commands, "submit")

@@ -30,6 +30,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_GENERATE_PATH = _APP / "services" / "studio_generate.py"
 _SYSTEM_ROUTER_PATH = _APP / "routers" / "system.py"
 _LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
@@ -934,7 +935,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("t('duration.autoPaced')", duration)
         self.assertEqual(studio["duration"]["autoPaced"], "full prompt auto-paced")
         self.assertIn('"sliding_window_memory_policy": md.get(', launch)
-        self.assertIn('h3_window_adjustment.get("unsupported")', launch)
+        self.assertIn('h3_window_adjustment.get("unsupported")', _read(_GENERATE_PATH))
 
     def test_h3_is_enabled_for_existing_and_fresh_installs(self):
         store = _read(_MODEL_VISIBILITY_PATH)
@@ -1026,8 +1027,9 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         section = _read(_OMNI_REFERENCE_SECTION_PATH)
         generate_button = _read(_GENERATE_BUTTON_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
-        self.assertIn('if _generation_model_def.get("omni_reference"):', launch)
-        self.assertIn("validate_reference_manifest", launch)
+        generate = _read(_GENERATE_PATH)
+        self.assertIn('if _generation_model_def.get("omni_reference"):', generate)
+        self.assertIn("validate_reference_manifest", generate)
         self.assertIn("per_clip_minimax_h3_references", launch)
         self.assertIn("director_trim_end_frames", launch)
         self.assertIn('"minimax_h3_references": minimax_h3_references', wgp)
@@ -1365,7 +1367,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', launch)
         self.assertIn('"minimax_h3_runtime_advisory":', launch)
         self.assertIn("_minimax_h3_runtime_advisory", launch)
-        self.assertIn("normalize_h3_runtime_request", launch)
+        self.assertIn("normalize_h3_runtime_request", _read(_GENERATE_PATH))
         self.assertIn("<MiniMaxH3TurboToggle />", sidebar)
         self.assertIn("t('chrome.experimental')", toggle)
         self.assertIn("setParam('num_inference_steps', option.steps)", toggle)

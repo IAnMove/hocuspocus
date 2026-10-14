@@ -31,6 +31,7 @@ import services.generation_output_name  # noqa: E402,F401
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
+GENERATE = ROOT / "app" / "services" / "studio_generate.py"
 
 
 class _HTTPException(Exception):
@@ -69,23 +70,23 @@ class _DeferredThread:
         self.target(*self.args, **self.kwargs)
 
 
-def _tree() -> ast.Module:
-    return ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+def _tree(path: Path = LAUNCH) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
-def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
-    for node in _tree().body:
+def _function(name: str, path: Path = LAUNCH) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    for node in _tree(path).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             selected = copy.deepcopy(node)
             selected.decorator_list = []
             return selected
-    raise AssertionError(f"Function {name!r} not found in app/_launch_runtime.py")
+    raise AssertionError(f"Function {name!r} not found in {path}")
 
 
-def _load(*names: str, namespace: dict) -> dict:
-    module = ast.Module(body=[_function(name) for name in names], type_ignores=[])
+def _load(*names: str, namespace: dict, path: Path = LAUNCH) -> dict:
+    module = ast.Module(body=[_function(name, path) for name in names], type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(path), "exec"), namespace)
     return namespace
 
 
@@ -345,11 +346,8 @@ def _harness(
         cancel_legacy_h3=lambda: None,
         task_publisher=lambda: namespace["_publish_generation_task"],
     ).new_job
-    _load(
-        "_run_generation_with_preparation",
-        "generate",
-        namespace=namespace,
-    )
+    _load("_run_generation_with_preparation", namespace=namespace)
+    _load("generate", namespace=namespace, path=GENERATE)
 
     before = time.monotonic()
     result = asyncio.run(namespace["generate"](_Request(_base_body())))
@@ -484,5 +482,5 @@ def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
     }
     assert "_reset_canonical_task_for_resume" in calls
     assert calls["_reset_canonical_task_for_resume"] < calls["_new_generation_job"]
-    assert "duplicate_for_submit" in ast.unparse(_function("generate"))
+    assert "duplicate_for_submit" in ast.unparse(_function("generate", GENERATE))
     assert "status_for" in ast.unparse(_function("get_status"))
