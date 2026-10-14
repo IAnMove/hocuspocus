@@ -33,8 +33,30 @@ class ImmediateThread:
         self._target(*self._args)
 
 
+def _bind_core_video_editor_runtime():
+    """Bind the editor router's module runtime to core's wiring again (the same arguments core_runtime passes).
+
+    ``routers.video_editor._runtime`` is one module global that every ``create_video_editor_router`` call rebinds.
+    A test file that builds its own editor router earlier in the same process (tests/test_video_editor_router.py)
+    would otherwise leave core's export routes resolving clips through that test's folders.
+    """
+    from routers import video_editor
+    from services import core_workspace as core
+
+    video_editor._bind_video_editor_runtime(
+        workspace_dir=core.workspace_dir_or_400,
+        get_active_workspace=core.active_workspace,
+        resolve_input_path=core_runtime._resolve_editor_input,
+        publish_legacy_task=core_canonical_tasks.publish_video_editor_activity,
+        thumbnail_cache_dir=os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(core_runtime.__file__))), "cache", "media-thumbnails",
+        ),
+    )
+
+
 class CoreRuntimeTests(unittest.TestCase):
     def setUp(self):
+        _bind_core_video_editor_runtime()
         self.client = TestClient(api)
         self.patches = [
             patch("services.platform_capabilities.host_platform", return_value="darwin"),
