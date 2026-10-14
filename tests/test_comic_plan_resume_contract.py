@@ -2,34 +2,12 @@
 
 from __future__ import annotations
 
-import ast
-import copy
-from pathlib import Path
 import threading
 
 
-ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
-
-
-def _function(name: str):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
-            selected = copy.deepcopy(node)
-            selected.decorator_list = []
-            return selected
-    raise AssertionError(f"Function {name!r} not found")
-
-
-def _load(name: str, namespace: dict):
-    module = ast.Module(body=[_function(name)], type_ignores=[])
-    ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
-    return namespace[name]
-
-
 def test_stale_planning_checkpoint_resumes_when_no_worker_survived_restart():
+    import routers.director_comic as routes
+
     job_id = "comic-plan-job-123456abcdef"
     job = {
         "jobId": job_id,
@@ -52,18 +30,27 @@ def test_stale_planning_checkpoint_resumes_when_no_worker_survived_restart():
         active.add(_job_id)
         return True
 
-    resume = _load("resume_director_comic_plan", {
-        "_comic_plan_jobs_lock": threading.Lock(),
-        "_comic_plan_active_jobs": active,
-        "get_director_comic_plan_status": lambda _job_id: dict(job),
-        "_reset_canonical_task_for_resume": lambda workspace, task_id: resets.append(
-            (workspace, task_id)
-        ),
-        "_comic_plan_job_update": update,
-        "_start_comic_plan_worker": start,
-    })
-
-    response = resume(job_id)
+    originals = {
+        "_comic_plan_jobs_lock": routes._comic_plan_jobs_lock,
+        "_comic_plan_active_jobs": routes._comic_plan_active_jobs,
+        "get_director_comic_plan_status": routes.get_director_comic_plan_status,
+        "_reset_canonical_task_for_resume": routes._reset_canonical_task_for_resume,
+        "_comic_plan_job_update": routes._comic_plan_job_update,
+        "_start_comic_plan_worker": routes._start_comic_plan_worker,
+    }
+    routes._comic_plan_jobs_lock = threading.Lock()
+    routes._comic_plan_active_jobs = active
+    routes.get_director_comic_plan_status = lambda _job_id: dict(job)
+    routes._reset_canonical_task_for_resume = lambda workspace, task_id: resets.append(
+        (workspace, task_id)
+    )
+    routes._comic_plan_job_update = update
+    routes._start_comic_plan_worker = start
+    try:
+        response = routes.resume_director_comic_plan(job_id)
+    finally:
+        for name, value in originals.items():
+            setattr(routes, name, value)
 
     assert response["status"] == "queued"
     assert job["status"] == "queued"
@@ -73,6 +60,8 @@ def test_stale_planning_checkpoint_resumes_when_no_worker_survived_restart():
 
 
 def test_live_comic_worker_is_not_started_twice():
+    import routers.director_comic as routes
+
     job_id = "comic-plan-job-fedcba654321"
     active = {job_id}
     starts: list[str] = []
@@ -83,16 +72,25 @@ def test_live_comic_worker_is_not_started_twice():
         "message": "Still planning",
         "request": {"premise": "A live story"},
     }
-    resume = _load("resume_director_comic_plan", {
-        "_comic_plan_jobs_lock": threading.Lock(),
-        "_comic_plan_active_jobs": active,
-        "get_director_comic_plan_status": lambda _job_id: dict(job),
-        "_reset_canonical_task_for_resume": lambda *_args: resets.append("reset"),
-        "_comic_plan_job_update": lambda *_args, **_kwargs: None,
-        "_start_comic_plan_worker": lambda *_args, **_kwargs: starts.append("start"),
-    })
-
-    response = resume(job_id)
+    originals = {
+        "_comic_plan_jobs_lock": routes._comic_plan_jobs_lock,
+        "_comic_plan_active_jobs": routes._comic_plan_active_jobs,
+        "get_director_comic_plan_status": routes.get_director_comic_plan_status,
+        "_reset_canonical_task_for_resume": routes._reset_canonical_task_for_resume,
+        "_comic_plan_job_update": routes._comic_plan_job_update,
+        "_start_comic_plan_worker": routes._start_comic_plan_worker,
+    }
+    routes._comic_plan_jobs_lock = threading.Lock()
+    routes._comic_plan_active_jobs = active
+    routes.get_director_comic_plan_status = lambda _job_id: dict(job)
+    routes._reset_canonical_task_for_resume = lambda *_args: resets.append("reset")
+    routes._comic_plan_job_update = lambda *_args, **_kwargs: None
+    routes._start_comic_plan_worker = lambda *_args, **_kwargs: starts.append("start")
+    try:
+        response = routes.resume_director_comic_plan(job_id)
+    finally:
+        for name, value in originals.items():
+            setattr(routes, name, value)
 
     assert response["status"] == "planning"
     assert response["message"] == "Still planning"
@@ -101,6 +99,8 @@ def test_live_comic_worker_is_not_started_twice():
 
 
 def test_worker_claim_is_atomic_before_thread_start():
+    import services.director_comic_jobs as jobs
+
     started: list[object] = []
 
     class DeferredThread:
@@ -110,17 +110,23 @@ def test_worker_claim_is_atomic_before_thread_start():
         def start(self):
             started.append(self)
 
-    namespace = {
-        "threading": type("Threading", (), {"Thread": DeferredThread}),
-        "_comic_plan_jobs_lock": threading.Lock(),
-        "_comic_plan_active_jobs": set(),
-        "_run_comic_plan_job": lambda *_args: None,
+    originals = {
+        "threading": jobs.threading,
+        "_comic_plan_jobs_lock": jobs._comic_plan_jobs_lock,
+        "_comic_plan_active_jobs": jobs._comic_plan_active_jobs,
+        "_run_comic_plan_job": jobs._run_comic_plan_job,
     }
-    launch = _load("_start_comic_plan_worker", namespace)
-
-    assert launch("comic-plan-job-111111111111", {}, thread_name="first") is True
-    assert launch("comic-plan-job-111111111111", {}, thread_name="second") is False
-    assert len(started) == 1
+    jobs.threading = type("Threading", (), {"Thread": DeferredThread})
+    jobs._comic_plan_jobs_lock = threading.Lock()
+    jobs._comic_plan_active_jobs = set()
+    jobs._run_comic_plan_job = lambda *_args: None
+    try:
+        assert jobs._start_comic_plan_worker("comic-plan-job-111111111111", {}, thread_name="first") is True
+        assert jobs._start_comic_plan_worker("comic-plan-job-111111111111", {}, thread_name="second") is False
+        assert len(started) == 1
+    finally:
+        for name, value in originals.items():
+            setattr(jobs, name, value)
 
 
 # --- The writers do not invent a tone (glass wall 5) --------------------------------------------------
@@ -129,22 +135,6 @@ def test_worker_claim_is_atomic_before_thread_start():
 
 class _PromptCaptured(RuntimeError):
     """Raised by the fake provider call once it has seen the prompt."""
-
-
-def _writer_namespace(prompts: list[str], **extra) -> dict:
-    from fastapi import HTTPException
-
-    def capture(*, prompt: str, **_kwargs):
-        prompts.append(prompt)
-        raise _PromptCaptured("prompt captured")
-
-    return {
-        "HTTPException": HTTPException, "copy": copy, "json": __import__("json"),
-        "_comic_writing_llm": lambda _body: {"provider": "stub"},
-        "_ensure_llm_loaded": lambda: None,
-        "_generate_comic_director_json": capture,
-        **extra,
-    }
 
 
 def _story_writer_prompt(project: dict, body: dict | None = None) -> str:
@@ -184,13 +174,26 @@ def _story_writer_prompt(project: dict, body: dict | None = None) -> str:
 
 def _comic_planner_prompt(body: dict) -> str:
     prompts: list[str] = []
-    plan = _load("director_comic_plan", _writer_namespace(
-        prompts, _COMIC_BIBLE_SCHEMA={"properties": {"storyStructure": {}}},
-    ))
+    import routers.director_comic as routes
+
+    def capture(*, prompt: str, **_kwargs):
+        prompts.append(prompt)
+        raise _PromptCaptured("prompt captured")
+
+    originals = {
+        "_comic_writing_llm": routes._comic_writing_llm,
+        "_generate_comic_director_json": routes._generate_comic_director_json,
+    }
+    routes._comic_writing_llm = lambda _body: {"provider": "stub"}
+    routes._generate_comic_director_json = capture
     try:
-        plan({"premise": "A fox learns to whistle", "pageCount": 1, **body})
-    except Exception:
-        pass  # the fake provider call ends the run; only the prompt matters
+        try:
+            routes.director_comic_plan({"premise": "A fox learns to whistle", "pageCount": 1, **body})
+        except Exception:
+            pass  # the fake provider call ends the run; only the prompt matters
+    finally:
+        for name, value in originals.items():
+            setattr(routes, name, value)
     assert len(prompts) == 1
     return prompts[0]
 
@@ -219,3 +222,28 @@ def test_comic_planner_prompt_has_no_tone_line_when_the_tone_is_empty():
         assert "Genre: Adventure\nAudience: General\n" in prompt, body
     prompt = _comic_planner_prompt({"tone": "Warm"})
     assert "Genre: Adventure\nTone: Warm\nAudience: General\n" in prompt
+
+
+# --- The storyboard page check does not need the full server ------------------------------------------
+# The Story Lab storyboard check calls the comic page check. It used to be a placeholder that the full
+# server filled in at start-up, so the check failed with "'NoneType' object is not callable" anywhere else.
+
+
+def test_storyboard_page_check_works_without_the_full_server():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from services.comic_helpers import _comic_page_problem
+
+    app = str(Path(__file__).resolve().parents[1] / "app")
+    code = (
+        "import sys; sys.path.insert(0, sys.argv[1]); "
+        "from services.story_lab_schema import _storyboard_page_problem; "
+        "print(_storyboard_page_problem({}, 1))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code, app], capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr[-800:]
+    assert result.stdout.strip() == _comic_page_problem({}, 1) == "the panels field is not an array"

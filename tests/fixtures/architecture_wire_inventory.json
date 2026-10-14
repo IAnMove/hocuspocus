@@ -50,55 +50,13 @@
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
-      "file": "tests/test_comic_plan_resume_contract.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_comic_story_reference.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_director_model_compat.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_director_narrow_locks.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "architecture_rule",
-      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_director_raw_prompts.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "architecture_rule",
-      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_director_resume_endpoint.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_director_stop_endpoint.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_director_task_adapter.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_director_v2_story_refs.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
@@ -111,12 +69,6 @@
     },
     {
       "file": "tests/test_execution_mode.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "architecture_rule",
-      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_h3_policy_language_audio_creative.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
@@ -230,18 +182,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_output_delete_workspace.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_output_move_security.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_phase1_issue_fixes.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -252,12 +192,6 @@
       "target": "ui/src/stores/useStore.ts",
       "classification": "fragile_source",
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
-      "file": "tests/test_qwen_image_21.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
       "file": "tests/test_router_wiring.py",
@@ -357,12 +291,6 @@
     },
     {
       "file": "tests/test_video_editor_scheduler_jobs.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_voxcpm2_tts.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
