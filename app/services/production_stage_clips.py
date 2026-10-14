@@ -15,6 +15,7 @@ from typing import Any
 from services.production_control import checkpoint, sleep_until
 from services.production_disk import discard
 from services.production_seeds import default_seed
+from services.production_shot_sources import remember_window
 from services.production_takes import another_take, better_take, note_seconds, obsolete_clip, pending_windows, take_settled
 from services.production_video_model import model_changes, other_model, resolve_video, stamp
 
@@ -129,7 +130,7 @@ def judge_take(production: Any, window: dict, name: str | None, take: int, vocal
     production.log(f"clip {key} take {take} ({drive}): {qa.get('verdict')} r={qa.get('best_r')}")
     video = production.state.get("video_model") or resolve_video(None)
     production.state.setdefault("takes", {}).setdefault(key, []).append(
-        stamp({"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive}, video))
+        remember_window(stamp({"file": name, "take": take, "verdict": qa.get("verdict"), "r": qa.get("best_r"), "drive": drive}, video), window))
     best = clips.get(key)
     # Obsolete r was measured on the previous song; ranking it would keep the
     # old take and throw away the clip shot against the new window. A clip
@@ -139,7 +140,7 @@ def judge_take(production: Any, window: dict, name: str | None, take: int, vocal
     if not ranking or better_take(qa, (ranking.get("qa") or {})):
         if ranking and ranking.get("file") and ranking["file"] != name:
             discard(production.state, ranking["file"])
-        clips[key] = stamp({"file": name, "qa": qa, "url": production.upload(name)[1]}, video)
+        clips[key] = remember_window(stamp({"file": name, "qa": qa, "url": production.upload(name)[1]}, video), window)
     else:
         discard(production.state, name)
     return take_settled(qa, previous)

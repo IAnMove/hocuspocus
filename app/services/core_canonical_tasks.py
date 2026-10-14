@@ -1,7 +1,8 @@
 """Canonical Activity adapters for the Apple Silicon core/remote profile.
 
 NVIDIA launch injects GPU workers into ``create_canonical_tasks_router``.
-Core only has MiniMax jobs plus frontend Activity rows in TaskRegistry.
+Core has MiniMax image jobs, the jobs of the routers it mounts (their Cancel/Resume come from
+``services/task_controls.py``) and frontend Activity rows in TaskRegistry.
 """
 from __future__ import annotations
 
@@ -9,7 +10,7 @@ from typing import Any
 
 from fastapi import HTTPException
 
-from services import core_generation_commands, core_remote_image
+from services import core_generation_commands, core_remote_image, task_controls
 from services.canonical_task_helpers import task_status, upsert_canonical_task
 
 
@@ -254,6 +255,10 @@ def control_task(task: dict, action: str):
     workspace = str(task.get("workspace") or "default")
     task_id = str(task.get("id") or "")
     job_id = str(task.get("backend_job_id") or "")
+    # The router that owns the adapter registered what Cancel/Resume do for it (services/task_controls.py).
+    handler = task_controls.handler_for(str((task.get("metadata") or {}).get("adapter") or ""), action)
+    if handler is not None:
+        return handler(task)
     if action != "cancel":
         raise HTTPException(status_code=409, detail=f"Task does not support {action}")
     if job_id:

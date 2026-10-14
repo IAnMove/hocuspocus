@@ -8,9 +8,10 @@ Machine fixture: [`tests/fixtures/wizard_mcp_corpus.json`](../../tests/fixtures/
 Expect **actions and receipts**, never the exact wording of the language model.
 
 Related contracts: [SHARED_NATIVE_COMMANDS](SHARED_NATIVE_COMMANDS.md),
-[IMAGE_COMMANDS](IMAGE_COMMANDS.md), [SPEECH_COMMANDS](SPEECH_COMMANDS.md),
-[MUSIC_COMMANDS](MUSIC_COMMANDS.md), [SFX_COMMANDS](SFX_COMMANDS.md),
-[TOOLS_COMMANDS](TOOLS_COMMANDS.md), [WORKSPACE_COMMANDS](WORKSPACE_COMMANDS.md).
+[IMAGE_COMMANDS](IMAGE_COMMANDS.md), [VIDEO_COMMANDS](VIDEO_COMMANDS.md),
+[SPEECH_COMMANDS](SPEECH_COMMANDS.md), [MUSIC_COMMANDS](MUSIC_COMMANDS.md),
+[SFX_COMMANDS](SFX_COMMANDS.md), [TOOLS_COMMANDS](TOOLS_COMMANDS.md),
+[WORKSPACE_COMMANDS](WORKSPACE_COMMANDS.md).
 
 ---
 
@@ -56,8 +57,9 @@ or render a video. Creation receipts include the premises actually saved.
 
 | Operation | Who uses it | What success means |
 | --- | --- | --- |
-| `generation.image` | Studio Image, Wizard `prepare_image` + `start_generation`, MCP | Admission queued. Inspect the task. Qwen Image 2.1 (`qwen_image_21*`) is unified T2I+edit: Wizard `attach_studio_references` with `edit_source` / `edit_mask`, MCP v2 `image_guide` / `image_mask` / `image_refs`. |
-| `generation.speech` | Studio Audio → Speech, MCP | Same. Literal text is preserved. |
+| `generation.image` | Studio Image, Wizard `prepare_image` + `start_generation`, MCP | Admission queued. Inspect the task. Qwen Image 2.1 (`qwen_image_21*`, including `qwen_image_21_turbo`) is unified T2I+edit: Wizard `attach_studio_references` with `edit_source` / `edit_mask`, MCP v2 `image_guide` / `image_mask` / `image_refs`. |
+| `generation.video` | MCP on the full server (full catalog and `game` profile), the generation inspector's clone/retry, Series shots and game tools. Studio Video and the Wizard's `prepare_video` + `start_generation` do **not** use it (they post to `/api/v1/generate`). | Admission queued. Version 2 is Wan 2.1 `t2v` / `t2v_1.3B`. Version 3 types MiniMax H3 (FL2VA / Ref2VA) and LTX-2.3. `validate: true` on v3 checks the envelope, builds the payload and does not enqueue. See [VIDEO_COMMANDS](VIDEO_COMMANDS.md). |
+| `generation.speech` | Studio Audio → Speech, MCP | Same. Literal text is preserved. Studio's default engine is VoxCPM2 once installed (`voxcpm2_voicedesign`), otherwise KugelAudio; an MCP call always names its own `model_type`. |
 | `generation.music` | Studio Audio → Music, MCP | Lyrics and Music Caption stay distinct. |
 | `generation.sfx` | Studio Audio → SFX, MCP | Text or a canonical video guide. |
 | `tools.upscale` | Tools → Upscale, MCP | Exact source + method. |
@@ -66,10 +68,13 @@ or render a video. Creation receipts include the premises actually saved.
 Collections (`collections.create` / `update` / `get` / `list` / `commands.receipt`)
 are a separate catalog at `GET /api/v1/commands`.
 
-**Not published here:** `generation.video`. Asking MCP for that tool must fail
-without creating a task. Wizard can still fill Studio → Video through
-`prepare_video` (a UI action, not this native command). Native video is a
-different lane.
+The `series` MCP profile does **not** list `generation.video`; use the full
+`/api/v1/mcp` catalog or the `game` profile. The core server publishes only
+`generation.image` and `generation.receipt` as native commands. Wizard can
+still fill Studio → Video through `prepare_video` and start it with
+`start_generation`, but that is the Studio form, posted to
+`POST /api/v1/generate`, not this native command. H3 Advanced is a separate
+family and is not part of version 3.
 
 Legacy MCP names `generate` / `upscale` still exist. Do not mix their envelopes
 with the typed operations above.
@@ -94,16 +99,19 @@ with the typed operations above.
    actions. If its proposal puts start before preparation, validation rejects
    that start. A request to prepare for later must not launch work. Queued ≠
    completed.
-8. **Unpublished.** If the model proposes `generation_video` or another unknown
-   action, the panel lists **Actions not executed**. That is not success.
+8. **Unknown action.** If the model proposes `generation_video` (underscore)
+   or another name that is not an executable action, the panel lists **Actions
+   not executed**. That is not success. A typed capability for it exists in
+   `videoGenerationCapability.ts` but is not wired into the store; the MCP tool
+   is `generation.video`.
 
 Spanish equivalents are in the fixture (`es-negation-no-generes`,
 `es-how-to-image`, `es-workspace-change`, …).
 
 ### MCP client tour
 
-1. `initialize` then `tools/list`. Confirm the published names. `generation.video`
-   must be absent.
+1. `initialize` then `tools/list`. Confirm the published names, including
+   `generation.video`. Discovery is the authority for versions and parameters.
 2. Call `generation.image` with `version`, `intent_id`, and `input` (no
    `operation` field; the tool name carries it).
 3. Save `receipt.result.job_id` and `receipt.result.task_id`. Status is
@@ -111,7 +119,11 @@ Spanish equivalents are in the fixture (`es-negation-no-generes`,
 4. Repeat the **identical** call (lost HTTP response). `replayed: true` and the
    **same IDs**. Two clients must show that same id.
 5. `generation.receipt` with the original workspace + `intent_id`.
-6. Call `generation.video`. `isError: true`, **zero** tasks.
+6. Call `generation.video` with `version: 3` and `validate: true` for an H3 or
+   LTX-2.3 id. Expect a result (in `structuredContent`) with `validated: true`,
+   `enqueued: false` and the `payload`, and **zero** tasks. Validation does not
+   check that the model is installed. A bad
+   `video_length` returns `invalid_selector` and creates no job.
 7. Wrong Bearer token → `401`. Disabled MCP → `503`.
 
 Example image envelope (replace the model with an **installed** id):
@@ -142,7 +154,8 @@ retry.
 | --- | --- | --- |
 | “Don’t generate” / “cómo genero” | No task | Do not treat model prose as a receipt |
 | Extra/unknown fields | HTTP `422`, no admission | Do not reuse that payload |
-| Unpublished tool | MCP `isError`, Wizard rejection | Do not promise an MP4 |
+| Unknown tool name | MCP `isError`, Wizard rejection | Do not promise an MP4 |
+| `generation.video` `validate: true` | Payload, no task | Do not treat validate as a queued job |
 | Timeout after admit | Same job id on replay | Do not mint a new `intent_id` |
 | Receipt in another workspace | `404` | The physical output folder is part of identity |
 | Queued / running | Distinct labels | Do not say “finished” |
@@ -154,7 +167,7 @@ retry.
 | HTTP catalog | yes | yes | yes | read-only probe | not every model |
 | MCP `tools/list` | yes | yes | yes | no (token not read from the shared runtime) | live list |
 | image/speech/music/sfx/upscale admit+replay | yes | yes | yes | **no GPU job** | one small real generate |
-| `generation.video` | yes | **no** (H01) | unpublished error | n/a | native video command |
+| `generation.video` v2/v3 | yes | yes | by source and tests (`tests/test_video_generation_*.py`), not re-run for this cut | **no GPU job** | one small real admit |
 | Wizard EN/ES corpus | yes | yes | parser + e2e harness | no live LLM | paid/live Wizard |
 
 Local evidence (not in git): `outputs/wizard-mcp-corpus-20260911/`.
@@ -218,9 +231,13 @@ por sí solo no crea el episodio ni genera vídeos.
 
 ### Operaciones publicadas
 
-Las mismas de la tabla inglesa. **No está publicado** `generation.video`: una
-llamada MCP debe fallar sin crear tarea. El Wizard puede rellenar Studio →
-Vídeo con `prepare_video` (acción de UI, no este comando nativo).
+Las mismas de la tabla inglesa. **`generation.video` está publicado** (versiones
+2 y 3) en el servidor completo. El perfil MCP `series` no lo lista; usa el
+catálogo completo o el perfil `game`. `validate: true` en v3 valida el sobre,
+construye el payload y no encola. El Wizard rellena Studio → Vídeo con
+`prepare_video` y luego `start_generation`, pero eso es el formulario de
+Studio (`POST /api/v1/generate`), no este comando nativo.
+Contrato: [VIDEO_COMMANDS](VIDEO_COMMANDS.md).
 
 ### Recorrido Wizard
 
@@ -235,18 +252,20 @@ Vídeo con `prepare_video` (acción de UI, no este comando nativo).
 6. **Reintento.** Tras un timeout, la **misma** intención. No un segundo
    trabajo. `retry_task` usa el id exacto.
 7. **Compuesto.** Preparar y luego generar. En cola no es terminado.
-8. **No publicado.** Si propone `generation_video`, verás **Acciones no
-   ejecutadas**, no un MP4.
+8. **Acción desconocida.** Si propone `generation_video` (guion bajo) u otro
+   nombre que no sea una acción ejecutable, verás **Acciones no
+   ejecutadas**, no un MP4. La herramienta MCP es `generation.video`.
 
 ### Recorrido MCP
 
-1. `tools/list` sin `generation.video`.
+1. `tools/list` incluye `generation.video`.
 2. `generation.image` con `intent_id` estable.
 3. Guarda `job_id` / `task_id`. Estado **en cola**.
 4. Repite la llamada idéntica: mismos ids, `replayed: true`. Dos clientes
    muestran el mismo id.
 5. `generation.receipt` en el workspace original.
-6. `generation.video` → error, cero tareas.
+6. `generation.video` v3 con `validate: true` → payload, cero tareas; no
+   comprueba que el modelo esté instalado.
 7. Token incorrecto → `401`.
 
 Una segunda generación deliberada lleva **otro** `intent_id`. Cambiar el
@@ -256,6 +275,8 @@ contenido con el mismo id es un conflicto `409`.
 
 La matriz está arriba. Este corte **no** declara QA de toda la aplicación ni
 lanza inferencia en el runtime compartido aunque haya modelos instalados
-(`flux2_klein_4b`, `kugelaudio_0_open`, ACE-Step). La generación real queda
-**PENDING**. Fallos ajenos (vídeo nativo H01, frames del Video Editor H09) se
+(`flux2_klein_4b`, `kugelaudio_0_open`, ACE-Step). La generación
+real queda **PENDING**. El fixture `wizard_mcp_corpus.json` registra el corte
+H17 (septiembre 2026), cuando `generation.video` aún no estaba publicado; no
+lo uses como catálogo actual. Fallos ajenos (frames del Video Editor H09) se
 registran con reproducción; no se “arreglan” aquí.

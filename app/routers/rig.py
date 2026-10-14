@@ -12,6 +12,8 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from services import task_controls
+
 
 def create_rig_router(
     *,
@@ -98,4 +100,5 @@ def create_rig_router(
     globals()["generate_rig"] = generate_rig
     globals()["rig_job_status"] = rig_job_status
     globals()["cancel_rig_job"] = cancel_rig_job
+    task_controls.register("rig", "cancel", lambda task: cancel_rig_job(task_controls.job_id(task)))
     return router

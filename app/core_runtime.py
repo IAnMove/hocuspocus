@@ -294,15 +294,6 @@ def _core_persist_active(name, apply_save_paths=True):
     return path
 
 
-def _core_workspace_jobs():
-    """Image and 3D jobs that should keep a workspace from being deleted."""
-    from services import core_remote_3d, core_remote_image
-    return [
-        *core_remote_image.list_active(),
-        *(job for job in core_remote_3d._JOBS.values() if isinstance(job, dict)),
-    ]
-
-
 from types import SimpleNamespace
 
 from services.output_listing import _output_scan_cache, _output_scan_cache_lock, configure as _configure_output_listing, serve_file
@@ -324,9 +315,9 @@ api.include_router(create_workspace_router(
     persist_active=_core_persist_active,
     workspace_dir=core.workspace_dir,
     generation_idle=lambda: True,
-    jobs=_core_workspace_jobs,
     safe_join=core.safe_join,
     save_path=lambda: str(core.outputs_root()),
+    busy_profile="core",
 ))
 api.include_router(create_list_outputs_router())
 api.include_router(create_serve_file_router())

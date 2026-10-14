@@ -72,3 +72,31 @@ def test_an_older_production_keeps_the_title_named_file_its_state_points_to(tmp_
     older = _production(tmp_path, "pilot-v4", saves, montage_file="Pilot-v2.montage.json")
     older.montage(SPEC)
     assert older.state["montage_file"] == "Pilot-v2.montage.json" and _montage(tmp_path, "Pilot-v2.montage.json")["revision"] == 2
+
+
+def test_a_stale_pointer_does_not_overwrite_another_productions_montage(tmp_path):
+    """Two titles used to share Pilot-v2.montage.json. After A last wrote it, B still names that file."""
+    saves = []
+    store = MontageStore(lambda _ws: str(tmp_path))
+    clip = {"source": "/api/v1/file/x.mp4?workspace=ws", "trimEnd": 2, "origin": {"kind": "scene2d", "productionId": "pilot-a"}}
+    store.save("ws", {"version": 1, "name": "Pilot v2", "clips": [clip]}, file="Pilot-v2.montage.json")
+    other = _production(tmp_path, "pilot-b", saves, montage_file="Pilot-v2.montage.json")
+    other.montage(SPEC)
+    kept = _montage(tmp_path, "Pilot-v2.montage.json")
+    assert other.state["montage_file"] == "pilot-b.montage.json"
+    assert kept["name"] == "Pilot v2" and kept["clips"][0]["origin"]["productionId"] == "pilot-a"
+    assert kept["revision"] == 1
+
+
+def test_a_named_file_that_still_has_this_production_among_its_clips_is_kept(tmp_path):
+    saves = []
+    store = MontageStore(lambda _ws: str(tmp_path))
+    clips = [
+        {"source": "/api/v1/file/a.mp4?workspace=ws", "trimEnd": 2, "origin": {"kind": "scene2d", "productionId": "pilot-mix"}},
+        {"source": "/api/v1/file/b.mp4?workspace=ws", "trimEnd": 2, "origin": {"kind": "upload", "productionId": "someone"}},
+    ]
+    store.save("ws", {"version": 1, "name": "Mixed", "clips": clips}, file="kept.montage.json")
+    mixed = _production(tmp_path, "pilot-mix", saves, montage_file="kept.montage.json")
+    mixed.montage(SPEC)
+    assert mixed.state["montage_file"] == "kept.montage.json"
+    assert saves[-1]["file"] == "kept.montage.json" and saves[-1]["expected_revision"] == 1

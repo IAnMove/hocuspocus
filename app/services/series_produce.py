@@ -30,7 +30,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_language_versions import LANGUAGES
 from services.series_shot_plan import language_key
 
@@ -127,6 +127,10 @@ class SeriesProduce:
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The productions in this folder a thread of this service is running (``services.workspace_busy`` probe)."""
+        return live_checkpoints(workspace_dir, KIND, ACTIVE, lambda job_id: worker_alive(self._threads.get(job_id)))
 
     def status(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self._store(workspace).load(job_id)

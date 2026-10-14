@@ -6,11 +6,30 @@ import copy
 import json
 import os
 import uuid
+from collections.abc import Callable
 from typing import Any
 
 
 SERIES_JOBS_DIR = ".series-jobs-v1"
 KINDS = {"planning", "render", "assembly", "native", "produce", "voice"}
+
+
+def worker_alive(thread: Any) -> bool:
+    """Whether a worker thread still owns its job; a thread that has not started yet counts."""
+    return thread is not None and (thread.ident is None or thread.is_alive())
+
+
+def live_checkpoints(workspace_dir: str, kind: str, active: Any, is_alive: Callable[[str], bool]) -> list[dict]:
+    """The ``kind`` checkpoints in a folder whose status is in ``active`` and that a live worker owns.
+
+    Reads only (the services that own the threads reconcile a stale checkpoint when it is read).
+    A checkpoint that says running without a worker was cut by a restart and is not returned.
+    """
+    return [
+        {"jobId": job["jobId"], "status": job["status"], "workspace": job.get("workspace")}
+        for job in SeriesJobStore(workspace_dir, kind).list()
+        if job.get("status") in active and job.get("jobId") and is_alive(str(job["jobId"]))
+    ]
 
 
 class SeriesJobStore:

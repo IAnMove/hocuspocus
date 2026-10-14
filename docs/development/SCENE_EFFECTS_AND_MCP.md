@@ -224,7 +224,8 @@ auth is off; MCP uses its own token when shared-LAN protection is on. This does
 not unlock other API routes. Disabled MCP returns 503; missing/wrong keys 401.
 
 Enable/rotate requests are restricted to the application's own trusted origin
-and retain normal LAN authentication. Keys grant the tools advertised by this
+and retain normal LAN authentication on the full server (the core server has no
+LAN gate; see [LAN_AUTH](LAN_AUTH.md)). Keys grant the tools advertised by this
 app; keep them in the client configuration and out of screenshots or prompts.
 
 ## Acceptance run (10 September 2026)

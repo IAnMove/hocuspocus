@@ -16,12 +16,26 @@ import uuid
 from types import SimpleNamespace
 from typing import Any, Callable
 
-from services import resource_scheduler
+from services import resource_scheduler, workspace_busy
 
 
 _minimax_music_jobs: dict[str, dict] = {}
 _minimax_music_jobs_lock = threading.RLock()
 _MINIMAX_MUSIC_TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """MiniMax Music requests that still write into their workspace (``services.workspace_busy`` probe).
+
+    A checkpoint left by an earlier process is turned into ``interrupted`` the moment it is
+    loaded (``_load_minimax_music_job``), so a stale one never counts as running.
+    """
+    with _minimax_music_jobs_lock:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _minimax_music_jobs.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
 
 
 def _minimax_music_checkpoint_dir(workspace: str | None = None) -> str:

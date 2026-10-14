@@ -42,7 +42,7 @@ from services.audio_mix import track_source
 from services.character_speech_definition import is_reference_voice
 from services.production_control import Cancelled
 from services.production_resource_gate import ResourceUnavailable, guard_workspace_mcp
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_review import episode_mode
 from services.series_review_gate import actionable_shots, assembly_blockers, render_passes, video_promotion
@@ -248,6 +248,10 @@ class SeriesNativeRender:
 
     def _store(self, workspace: str) -> SeriesJobStore:
         return SeriesJobStore(self.deps.workspace_dir(workspace), KIND)
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The renders in this folder a thread of this service is running (``services.workspace_busy`` probe)."""
+        return live_checkpoints(workspace_dir, KIND, ACTIVE, lambda job_id: worker_alive(self._threads.get(job_id)))
 
     def _episode(self, workspace: str, series_id: str, episode_id: str, language: str | None = None) -> tuple[dict, dict]:
         series = (self.deps.read_library(workspace).get("seriesById") or {}).get(series_id)
@@ -525,7 +529,8 @@ class SeriesNativeRender:
         three_d = shot.get("productionMethod") == "animation_3d"
         for _attempt in range(EXPORT_RETRIES + 1):
             if item["stage"] == "scene":
-                item["inputs"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace))
+                # The version travels with the digest: a job resumed after an upgrade imports what it computed then.
+                item["inputs"], item["inputsVersion"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace)), INPUTS_VERSION
                 if three_d:
                     self._scene3d(workspace, job, item, series, episode, shot, kits)
                 else:
@@ -973,7 +978,7 @@ class SeriesNativeRender:
         self._set_length(workspace, job, item)
         metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
-                    **({"renderInputs": item["inputs"], "renderInputsVersion": INPUTS_VERSION} if item.get("inputs") else {}),
+                    **({"renderInputs": item["inputs"], "renderInputsVersion": item.get("inputsVersion")} if item.get("inputs") else {}),
                     **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {}),
                     **({"foley": {key: item["foley"][key] for key in ("prompt", "volume", "file")}} if item.get("foley") else {}),
                     **({"reviewStage": item["pass"]} if item.get("pass") in ("preview", "final") else {})}

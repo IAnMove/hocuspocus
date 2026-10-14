@@ -16,6 +16,7 @@ import uuid
 
 from fastapi import HTTPException
 
+from services import workspace_busy
 from services.comic_director_json import _generate_comic_director_json
 from services.series_plan_jobs import _llm_abort_outcome, _planning_cancel_message
 from services.story_lab_schema import (
@@ -29,6 +30,16 @@ from services.story_lab_schema import (
 _story_plan_jobs: dict[str, dict] = {}
 _story_plan_jobs_lock = threading.Lock()
 _story_plan_active_jobs: set[str] = set()
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Story Lab planners that are running now (``services.workspace_busy`` probe).
+
+    The claim set is the proof of life. A checkpoint a crashed process left as ``running`` is cached
+    here by a status poll (``_load_story_plan_job``), so its status says nothing about a worker.
+    """
+    with _story_plan_jobs_lock:
+        return workspace_busy.claimed(_story_plan_active_jobs, _story_plan_jobs)
 
 # Injected by _bind_story_lab_runtime. None until the full server binds them.
 _comic_writing_llm = None

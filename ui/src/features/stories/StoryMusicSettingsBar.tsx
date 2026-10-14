@@ -46,8 +46,8 @@ export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
           <PaidModelReplacedNotice project={project} patch={patch} />
         </label>
         <div className="text-[10px] text-text-muted">{t('music.oneResultHint')}</div>
-        <div className={`rounded-md border px-3 py-2 text-[10px] ${storyMusicGenerationReady(project.music.model, minimaxConfigured) ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
-          {t(storyMusicReadyMessageKey(project.music.model, minimaxConfigured))}
+        <div className={`rounded-md border px-3 py-2 text-[10px] ${storyMusicGenerationReady(project.music.model, minimaxConfigured, project.music.mode) ? 'border-emerald-500/30 text-emerald-300' : 'border-amber-500/40 text-amber-300'}`}>
+          {t(storyMusicReadyMessageKey(project.music.model, minimaxConfigured, project.music.mode))}
         </div>
       </div>
 

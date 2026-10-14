@@ -6,6 +6,7 @@ are the served endpoints, so the route table names this file.
 
 from fastapi import APIRouter, Request
 
+import services.studio_segmentation as _segmentation
 from services.studio_segmentation import (
     sam_status_endpoint as _sam_status_endpoint,
     segment_preview_endpoint as _segment_preview_endpoint,
@@ -28,8 +29,9 @@ async def segment_preview_endpoint(request: Request):
     return await _segment_preview_endpoint(request)
 
 
-def create_studio_segmentation_router():
+def create_studio_segmentation_router(*, get_active_workspace, workspace_dir):
     """Mount SAM status and segment preview in the order the launch server registered them."""
+    _segmentation.bind(get_active_workspace=get_active_workspace, workspace_dir=workspace_dir)
     router = APIRouter()
     router.add_api_route("/api/v1/sam/status", sam_status_endpoint, methods=["GET"])
     router.add_api_route("/api/v1/segment/preview", segment_preview_endpoint, methods=["POST"])

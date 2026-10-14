@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
+from services import task_controls
 from services.series_plan_jobs import (
     _apply_series_canon_proposal,
     _load_series_plan_job,
@@ -242,6 +243,12 @@ def resume_series_episode_plan(job_id: str, body: dict | None = None):
     threading.Thread(target=_run_series_plan_job, args=(job_id,), daemon=True).start()
     return {"jobId": job_id, "status": "queued", "message": "Episode planning resumed."}
 
+def _cancel_plan_task(task: dict):
+    return cancel_series_episode_plan(task_controls.job_id(task))
+
+def _resume_plan_task(task: dict):
+    return resume_series_episode_plan(task_controls.job_id(task))
+
 def apply_series_episode_plan(job_id: str, body: dict | None = None):
     job = _load_series_plan_job(job_id)
     if not job:
@@ -362,6 +369,8 @@ def _bind_series_plan_runtime(
 def create_series_plan_router() -> APIRouter:
     """Plan routes up to resume. Duration preview stays mounted between the two factories."""
     router = APIRouter()
+    task_controls.register("series-plan", "cancel", _cancel_plan_task)
+    task_controls.register("series-plan", "resume", _resume_plan_task)
     router.add_api_route("/api/v1/series/{series_id}/canon/prepare/start", start_series_canon_preparation, methods=["POST"])
     router.add_api_route("/api/v1/series/{series_id}/episodes/{episode_id}/plan/start", start_series_episode_plan, methods=["POST"])
     router.add_api_route("/api/v1/series/plan/jobs/{job_id}", get_series_episode_plan, methods=["GET"])

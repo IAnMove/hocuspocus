@@ -97,7 +97,7 @@ export function ManualSongPanel({
           </label>
           <p className="text-[9px] text-text-muted">{t('music.manualDurationHint')}</p>
           <button className={`${button} ${completeGenerationButton} w-full`}
-            disabled={productionBusy === 'music' || !storyMusicGenerationReady(project.music.model, minimaxConfigured)}
+            disabled={productionBusy === 'music' || !storyMusicGenerationReady(project.music.model, minimaxConfigured, project.music.mode)}
             onClick={() => void generateMinimaxSongs()}><Music size={13} /> {t('music.generateManual')}</button>
           {project.music.candidates.map(candidate => (
             <div key={candidate.id} className="rounded border border-border p-2 space-y-1.5">
