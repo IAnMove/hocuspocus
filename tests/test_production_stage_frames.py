@@ -300,8 +300,9 @@ class _Saved:
         (tmp_path / "p.montage.json").write_text(json.dumps(saved["montage"]))
         (tmp_path / "p.production.json").write_text(json.dumps(saved["state"]))
         self.raw, self.root, self.sent = saved["spec"], tmp_path, []
-        for module in ("services.production_stage_clips", "services.production_stage_scenes"):
-            monkeypatch.setattr(f"{module}.subprocess.run", lambda args, **_kwargs: None)
+        # ffmpeg writes its last argument (an audio slice, a contact sheet): a regression that shoots a clip again must
+        # reach the MCP and fail on "sent generate", not on a missing slice file.
+        monkeypatch.setattr("services.production_stage_clips.subprocess.run", lambda args, **_kwargs: Path(args[-1]).write_bytes(b"\0"))
         monkeypatch.setattr("services.production_clip_qa.clip_qa", lambda *args: {"verdict": "ok", "best_r": 0.7})
         monkeypatch.setattr("services.music_production.make_frames_sheet", lambda root, frames, name: name)
         monkeypatch.setattr("services.music_production.time.sleep", lambda _seconds: None)
