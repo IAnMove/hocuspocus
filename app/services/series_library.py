@@ -1291,9 +1291,12 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             (story.get("creativeBrief") or {}).get("durationSeconds")
             if isinstance(story.get("creativeBrief"), dict) else None, 75
         ))),
-        # A story that kept its language only in languageIntent keeps it here too.
+        # A story that kept its language only in languageIntent keeps it here too. The labels and the whole
+        # contract travel together: labels alone dropped ``verbatimSegments``, so quoted lyrics or dialogue
+        # the story had locked were no longer protected.
         "language": saved_language_labels(story)[0],
         "spokenLanguage": saved_language_labels(story)[1],
+        "languageIntent": story.get("languageIntent"),
         "genre": _text(story.get("genre")), "tone": _text(story.get("tone")),
         "audience": _text(story.get("audience"), "General"),
         "visualStyle": _text(story.get("visualStyle")),
