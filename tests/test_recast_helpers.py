@@ -217,10 +217,12 @@ def test_mask_lock_command_keeps_generated_audio_then_source_audio_then_none(tmp
     audio["generated"] = False
     audio["source"] = True
     with_source = build("source.mp4", "mask.mp4", "generated.mp4", output)
-    assert ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"] == [
+    # Re-encoded source audio is padded before ``-shortest`` so it can never cut the picture (edit-10).
+    assert ["-map", "0:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"] == [
         with_source[index]
-        for index in range(with_source.index("0:a:0") - 1, with_source.index("0:a:0") + 5)
+        for index in range(with_source.index("0:a:0") - 1, with_source.index("0:a:0") + 8)
     ]
+    assert "-shortest" not in silent and "-shortest" not in with_generated
 
     monkeypatch.setattr(
         __import__("subprocess"), "run",

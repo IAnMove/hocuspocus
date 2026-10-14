@@ -8187,7 +8187,6 @@
           "0:a?",
           "-c:a",
           "copy",
-          "-shortest",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -8370,6 +8369,8 @@
           "copy",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
@@ -8561,7 +8562,6 @@
           "0:a?",
           "-c:a",
           "copy",
-          "-shortest",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -8947,6 +8947,8 @@
           "copy",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
@@ -9167,6 +9169,8 @@
           "yuv420p",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
@@ -9354,6 +9358,8 @@
           "copy",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",

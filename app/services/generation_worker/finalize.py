@@ -21,6 +21,12 @@ _render_recast_mask_locked_video = None
 wgp = None
 
 
+# Source audio muxed into the finished Outpaint file. It is re-encoded, so it can
+# be shorter than the picture: pad it, and let ``-shortest`` bound only a longer
+# track. A bare ``-shortest`` cut the last frames of the picture instead.
+_OUTPAINT_SOURCE_AUDIO = ["-map", "1:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+
+
 def bind(**names):
     """Take the full server's objects this module uses (see bind_generation_worker)."""
     global _apply_film_grain_to_file, _apply_spatial_upsampling_to_file, _build_recast_adaptive_mask
@@ -267,8 +273,8 @@ def _run_generation_outpaint_command(
         cut_end = (_trim_boundary + _trim_count) / _fps
         # ffmpeg trim+concat: keep [0, cut_start) and [cut_end, end).
         # asetpts on source audio resets PTS so it starts at 0
-        # in the output timeline; -shortest will clamp the audio
-        # to the (now shorter by N frames) trimmed video duration.
+        # in the output timeline; the padded audio + -shortest clamp
+        # it to the (now shorter by N frames) trimmed video duration.
         filter_str = (
             f"[0:v]trim=0:{cut_start:.6f},setpts=PTS-STARTPTS[v0];"
             f"[0:v]trim={cut_end:.6f},setpts=PTS-STARTPTS[v1];"
@@ -277,7 +283,7 @@ def _run_generation_outpaint_command(
         cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
         if _do_audio and src_has_audio:
-            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+            cmd += _OUTPAINT_SOURCE_AUDIO
         else:
             cmd += ["-an"]  # drop audio if we can't replace it
     elif _do_overlay:
@@ -315,18 +321,21 @@ def _run_generation_outpaint_command(
         cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
         if _do_audio and src_has_audio:
-            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+            cmd += _OUTPAINT_SOURCE_AUDIO
         else:
             cmd += ["-map", "0:a?", "-c:a", "copy"]
     else:
         # Audio mux only — no video filter
         cmd += ["-map", "0:v:0", "-c:v", "copy"]
         if _do_audio and src_has_audio:
-            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+            cmd += _OUTPAINT_SOURCE_AUDIO
         else:
             cmd += ["-map", "0:a?", "-c:a", "copy"]
 
-    cmd += ["-shortest", muxed_path]
+    # No trailing ``-shortest``: it belongs only to the re-encoded source
+    # audio above (padded first). Copied audio keeps its own length and the
+    # picture must never be cut to it.
+    cmd += [muxed_path]
     return _do_overlay, cmd
 
 

@@ -81,12 +81,18 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
         "-pix_fmt", "yuv420p",
     ]
     if _recast_video_has_audio(generated_video):
+        # The generated clip's own audio is copied, so there is nothing to
+        # pad and nothing to cut: the protected file keeps exactly the
+        # generated picture. ``-shortest`` here dropped the last 1-6 frames
+        # whenever that audio ended a little before the picture.
         command += ["-map", "2:a:0", "-c:a", "copy"]
     elif _recast_video_has_audio(source_video):
-        command += ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"]
+        # Re-encoded source audio may be shorter than the picture: pad it,
+        # and let ``-shortest`` only bound a longer track to the picture.
+        command += ["-map", "0:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
     else:
         command += ["-an"]
-    return command + ["-shortest", "-movflags", "+faststart", output_path]
+    return command + ["-movflags", "+faststart", output_path]
 
 def _render_recast_mask_locked_video(source_video, mask_video, generated_video):
     """Render a protected sibling file and return its path."""
