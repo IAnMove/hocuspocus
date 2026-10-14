@@ -22149,8 +22149,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
 def _run_generation_finalize(st):
     """Post-process the produced files (outpaint, recast, upscale, grain, voice)."""
     _write_output_sidecars, clip_output_files = st._write_output_sidecars, st.clip_output_files
-    defer_output_publication, job, new_files = st.defer_output_publication, st.job, st.new_files
-    out_dir, pp_film_grain_intensity = st.out_dir, st.pp_film_grain_intensity
+    job, new_files, out_dir = st.job, st.new_files, st.out_dir
+    pp_film_grain_intensity = st.pp_film_grain_intensity
     pp_film_grain_saturation = st.pp_film_grain_saturation
     pp_spatial_upsampling = st.pp_spatial_upsampling
     pp_voice_clone_enabled, pp_voice_clone_mode = st.pp_voice_clone_enabled, st.pp_voice_clone_mode
@@ -22628,49 +22628,57 @@ def _run_generation_finalize(st):
                 except Exception as vc_err:
                     print(f"  [Voice Clone] Warning: failed on {fname}: {vc_err}")
                     traceback.print_exc()
+        st.new_files = new_files
+        return _run_generation_audio_and_sidecars(st)
+    return _run_generation_finish(st)
 
-        # Post-generation dynamic audio normalization (smooths speaker volume transitions)
-        if success and raw_params.get("tts_dynaudnorm"):
-            audio_exts = {".wav", ".mp3", ".flac", ".ogg"}
-            for fname in new_files:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in audio_exts:
-                    continue
-                audio_path = os.path.join(out_dir, fname)
-                try:
-                    if not update_job(
-                        job, message="Smoothing speaker volumes...",
-                    ):
-                        return False
-                    print(f"  [DynAudNorm] Applying to {fname}")
-                    tmp_path = audio_path + ".dynaudnorm.wav"
-                    import subprocess
-                    comp_threshold = raw_params.get("tts_comp_threshold", -25)
-                    comp_attack = raw_params.get("tts_comp_attack", 5)
-                    comp_release = raw_params.get("tts_comp_release", 100)
-                    comp_makeup = raw_params.get("tts_comp_makeup", 4)
-                    result = subprocess.run(
-                        ["ffmpeg", "-y", "-i", audio_path,
-                         "-af", f"acompressor=threshold={comp_threshold}dB:ratio=3:attack={comp_attack}:release={comp_release}:makeup={comp_makeup},alimiter=limit=0.95",
-                         tmp_path],
-                        capture_output=True, text=True, timeout=120,
-                    )
-                    if result.returncode == 0 and os.path.isfile(tmp_path):
-                        os.replace(tmp_path, audio_path)
-                        print(f"  [DynAudNorm] Done: {fname}")
-                    else:
-                        print(f"  [DynAudNorm] ffmpeg failed: {result.stderr[:200]}")
-                        if os.path.isfile(tmp_path):
-                            os.remove(tmp_path)
-                except Exception as dan_err:
-                    print(f"  [DynAudNorm] Warning: failed on {fname}: {dan_err}")
 
-        # Refresh sidecars after post-processing/renames. Internal
-        # shot clips are deleted after shot-aware edit assembly and
-        # therefore must never be published as gallery artifacts.
-        if not defer_output_publication:
-            _write_output_sidecars(new_files)
-    st.new_files = new_files
+def _run_generation_audio_and_sidecars(st):
+    """Dynamic audio normalisation, then refresh the sidecars."""
+    _write_output_sidecars = st._write_output_sidecars
+    defer_output_publication, job, new_files = st.defer_output_publication, st.job, st.new_files
+    out_dir, raw_params, success = st.out_dir, st.raw_params, st.success
+    # Post-generation dynamic audio normalization (smooths speaker volume transitions)
+    if success and raw_params.get("tts_dynaudnorm"):
+        audio_exts = {".wav", ".mp3", ".flac", ".ogg"}
+        for fname in new_files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in audio_exts:
+                continue
+            audio_path = os.path.join(out_dir, fname)
+            try:
+                if not update_job(
+                    job, message="Smoothing speaker volumes...",
+                ):
+                    return False
+                print(f"  [DynAudNorm] Applying to {fname}")
+                tmp_path = audio_path + ".dynaudnorm.wav"
+                import subprocess
+                comp_threshold = raw_params.get("tts_comp_threshold", -25)
+                comp_attack = raw_params.get("tts_comp_attack", 5)
+                comp_release = raw_params.get("tts_comp_release", 100)
+                comp_makeup = raw_params.get("tts_comp_makeup", 4)
+                result = subprocess.run(
+                    ["ffmpeg", "-y", "-i", audio_path,
+                     "-af", f"acompressor=threshold={comp_threshold}dB:ratio=3:attack={comp_attack}:release={comp_release}:makeup={comp_makeup},alimiter=limit=0.95",
+                     tmp_path],
+                    capture_output=True, text=True, timeout=120,
+                )
+                if result.returncode == 0 and os.path.isfile(tmp_path):
+                    os.replace(tmp_path, audio_path)
+                    print(f"  [DynAudNorm] Done: {fname}")
+                else:
+                    print(f"  [DynAudNorm] ffmpeg failed: {result.stderr[:200]}")
+                    if os.path.isfile(tmp_path):
+                        os.remove(tmp_path)
+            except Exception as dan_err:
+                print(f"  [DynAudNorm] Warning: failed on {fname}: {dan_err}")
+
+    # Refresh sidecars after post-processing/renames. Internal
+    # shot clips are deleted after shot-aware edit assembly and
+    # therefore must never be published as gallery artifacts.
+    if not defer_output_publication:
+        _write_output_sidecars(new_files)
     return _run_generation_finish(st)
 
 
