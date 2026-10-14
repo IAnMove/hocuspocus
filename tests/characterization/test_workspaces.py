@@ -25,6 +25,41 @@ def test_workspaces_lifecycle(server, golden) -> None:
     server.check(golden, "list after delete", "GET", "/api/v1/workspaces")
 
 
+def test_the_full_server_registers_the_busy_probes_of_every_family_it_runs(server) -> None:
+    """Booting the server wires the "full" profile (workspace router) and the probes the Series and game routers push."""
+    from services import workspace_busy
+
+    assert set(workspace_busy.registered()) == {
+        "video-editor", "minimax-music", "minimax-image", "rig", "series-plan",
+        "model3d", "story-plan", "comic-plan", "director-plan", "series-render",
+        "game-produce", "series-produce", "series-native", "series-voice", "series-assembly",
+    }
+
+
+def test_deleting_a_workspace_with_a_running_export_is_refused_and_leaves_other_workspaces_alone(server) -> None:
+    """A real DELETE on the full server: the refusal is readable text with a code, the folder survives, a free workspace goes."""
+    from routers.video_editor import _register_video_editor_job, reset_video_editor_jobs
+
+    (server.outputs / "golden-busy").mkdir()
+    (server.outputs / "golden-busy" / "clip.mp4").write_bytes(b"clip")
+    (server.outputs / "golden-free").mkdir()
+    reset_video_editor_jobs()
+    try:
+        _register_video_editor_job({"job_id": "golden-export", "workspace": "golden-busy", "status": "running"})
+        refused = server.client.delete("/api/v1/workspaces/golden-busy")
+        free = server.client.delete("/api/v1/workspaces/golden-free")
+    finally:
+        reset_video_editor_jobs()
+    deleted = server.client.delete("/api/v1/workspaces/golden-busy")
+
+    assert refused.status_code == 409
+    body = refused.json()
+    assert isinstance(body["detail"], str) and "video-editor golden-export (running)" in body["detail"]
+    assert body["code"] == "workspace_busy" and [item["kind"] for item in body["blocking"]] == ["video-editor"]
+    assert free.status_code == 200 and not (server.outputs / "golden-free").exists()
+    assert deleted.status_code == 200 and not (server.outputs / "golden-busy").exists()
+
+
 def test_wizard_persistence_round_trip(server, golden) -> None:
     server.check(golden, "wizard conversation empty", "GET", "/api/v1/wizard/conversations")
     server.check(golden, "wizard workflows empty", "GET", "/api/v1/wizard/workflows")
