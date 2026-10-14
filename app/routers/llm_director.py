@@ -10,6 +10,7 @@ assigns the workspace-collection registry after it builds that registry.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import os
 
 from fastapi import APIRouter, HTTPException, Request
@@ -385,7 +386,8 @@ def create_director_music_router(
     # that name local to this factory. Read the module handler first.
     _impl = globals()["director_generate_music"]
 
-    @router.post("/api/v1/director/generate-music")
+    # The wrapper has no docstring of its own; the OpenAPI text is the handler's.
+    @router.post("/api/v1/director/generate-music", description=inspect.cleandoc(_impl.__doc__))
     async def director_generate_music(request: Request):
         return await _impl(request)
 
@@ -401,7 +403,7 @@ def create_character_describe_router(*, _resolve_model3d_input_path):
     router = APIRouter()
     _impl = globals()["describe_character_refs"]
 
-    @router.post("/api/v1/characters/describe-refs")
+    @router.post("/api/v1/characters/describe-refs", description=inspect.cleandoc(_impl.__doc__))
     async def describe_character_refs(request: Request):
         return await _impl(request)
 
