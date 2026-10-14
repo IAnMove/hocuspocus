@@ -91,6 +91,15 @@ def test_every_injected_name_is_bound_to_the_servers_object(full_server, monkeyp
         for name in sorted(_read_globals(source) - set(injected)):
             if hasattr(builtins, name) or not hasattr(launch, name) or not hasattr(module, name):
                 continue
+            value = getattr(module, name)
+            if name == "__file__":
+                # managed_loras points __file__ at the full server so a relative loras_root
+                # still resolves under app/. The path is the server's file; the string is new.
+                assert Path(value).resolve() == Path(getattr(launch, name)).resolve(), (
+                    f"{path.stem}.__file__ is {value}, not the full server's file"
+                )
+                checked += 1
+                continue
             assert getattr(module, name) is getattr(launch, name), (
                 f"{path.stem}.{name} is not the object the full server binds to {name}"
             )

@@ -111,19 +111,26 @@ POSTFX_MODULES = {
     "services.generation_sfx": ("_run_sfx_generation",),
 }
 
+# Helpers the worker calls by the launch name that C9c moved. Included once the full server has imported them.
+MOVED_CALLEES = (
+    "services.managed_loras",
+    "services.generation_option_helpers",
+)
+
 
 def worker_modules() -> list:
     """The modules whose globals the worker functions and the post-processing passes read. A move PR repoints this one
     function.
 
     That is the full server module while any worker function or pass is still in it, each module of
-    ``services.generation_worker`` that exists, and each module a pass moved to (C4). A name the worker or the passes
-    read is an attribute of every module that reads it.
+    ``services.generation_worker`` that exists, each module a pass moved to (C4), and each helper module a moved
+    callee lives in (C9c). A name the worker or the passes read is an attribute of every module that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
     passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes]
+    callees = [sys.modules[name] for name in MOVED_CALLEES if name in sys.modules]
+    return [worker_module(), *package, *passes, *callees]
 
 
 @dataclass
