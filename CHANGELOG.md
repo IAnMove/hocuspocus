@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a Wizard or MCP MiniMax H3 video that still needs window-prompt planning no longer occupies the GPU queue while the planner runs.** Studio generate and crash recovery already left that job off the FIFO until planning finished. Command dispatch, after it started registering jobs again, put the planner at the queue head, so a later Studio picture or video waited on an idle GPU.
+
 **Fixed: a generation started by a command (picture, speech, music, sound effect or video, from the Studio, the Wizard or MCP) works again on the full server.** Since the generation job core moved into the kernel, such a job was cancelled and marked interrupted ("dispatch_failed") before its worker started. The job now joins the GPU queue and starts as before.
 
 **Generation job status, cancel and the job list left the main server file.** GET /api/v1/status/{job_id}, POST /api/v1/cancel/{job_id} and GET /api/v1/jobs still answer the same way. The core server keeps its own copies of these routes.
