@@ -168,6 +168,11 @@ class TestJobLifecycleWiring(unittest.TestCase):
         self.assertIn("register_generation_job", _called_names(new_job))
         manual_job = _function(queue, "register_manual_job")
         self.assertIn("register_generation_job", _called_names(manual_job))
+        sources = {
+            "tools_upscale": self.tools_router,
+            "tools_revoice": self.tools_router,
+            "retake_video_endpoint": _parse("app/services/studio_edit_requests.py"),
+        }
         for endpoint_name in (
             "retake_video_endpoint",
             "edit_anything_endpoint",
@@ -180,11 +185,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "tools_revoice",
         ):
             with self.subTest(endpoint=endpoint_name):
-                tree = (
-                    self.tools_router
-                    if endpoint_name in {"tools_upscale", "tools_revoice"}
-                    else self.launch
-                )
+                tree = sources.get(endpoint_name, self.launch)
                 self.assertIn(
                     "_register_manual_generation_job",
                     _called_names(_function(tree, endpoint_name)),

@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Retake and frame extraction left the launch module.** POST /api/v1/retake and POST /api/v1/extract-frames still answer the same way.
+
 **Submitting a generation left the launch module.** POST /api/v1/generate still answers the same way. A Viggle recast, a series shot and MCP still call that same function.
 
 **Favorites and scene save left the launch module.** Marking a clip as a favorite, saving a scene, and uploading a scene recording still answer the same way on the main server. The core server uses the same scene and recording routes, so it checks input the way the main server does. Saving a scene on core needs a JSON object sent with the JSON content type: a body that is not an object, a broken body, or JSON sent as plain text or with no content type is now rejected as invalid input (it used to be saved, or to fail with a server error). A core recording sent without a file is rejected as invalid input too, and one whose metadata field is far too large now gets a plain 400 instead of a server error. The web app always sends the right content type and a file, so it is not affected; a script that posts to core by hand must set `Content-Type: application/json`.

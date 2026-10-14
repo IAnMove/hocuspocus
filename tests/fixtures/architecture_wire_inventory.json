@@ -374,12 +374,6 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
-      "file": "tests/test_wangp_frame_extraction.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_wizard_workflow_executor.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
