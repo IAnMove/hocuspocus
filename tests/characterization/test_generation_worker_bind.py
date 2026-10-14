@@ -122,10 +122,15 @@ def test_the_hardware_probe_and_the_h3_lock_are_the_servers_objects(full_server)
     probe = importlib.import_module("services.hardware_probe")
     release = importlib.import_module("services.generation_h3_release")
     coefficients = importlib.import_module("services.generation_coefficients")
+    director_router = importlib.import_module("routers.director")
     director = importlib.import_module("services.director_pipeline")
     assert launch._get_cached_hardware is probe._get_cached_hardware
     assert coefficients._get_cached_hardware is probe._get_cached_hardware
-    assert director._get_cached_hardware is probe._get_cached_hardware
+    # The director router holds the probe from import and hands it to the pipeline when the pipeline first starts,
+    # which only an earlier director test (or request) does. Check the pipeline's copy once it exists.
+    assert director_router._get_cached_hardware is probe._get_cached_hardware
+    if director_router._pipeline_init_state.initialized:
+        assert director._get_cached_hardware is probe._get_cached_hardware
     assert launch._h3_idle_release_lock is release._h3_idle_release.lock
     assert launch._cancel_h3_idle_release is release._cancel_h3_idle_release
     assert launch._interrupt_wan_model is release._interrupt_wan_model
