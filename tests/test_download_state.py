@@ -18,6 +18,7 @@ from services.kernel.paths import PathPolicy
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_GUIDES_PATH = os.path.join(_ROOT, "app", "services", "lora_guides.py")
 _UI_STORE_PATH = os.path.join(_ROOT, "ui", "src", "stores", "civitaiSlice.ts")
 _MODEL_DETAIL_PATH = os.path.join(
     _ROOT, "ui", "src", "components", "LoraBrowser", "ModelDetail.tsx",
@@ -28,6 +29,12 @@ def _parse_launch() -> tuple[ast.Module, str]:
     with open(_LAUNCH_PATH, "r", encoding="utf-8") as handle:
         source = handle.read()
     return ast.parse(source, filename="app/_launch_runtime.py"), source
+
+
+def _parse_guides() -> tuple[ast.Module, str]:
+    with open(_GUIDES_PATH, "r", encoding="utf-8") as handle:
+        source = handle.read()
+    return ast.parse(source, filename="app/services/lora_guides.py"), source
 
 
 def _function(tree: ast.AST, name: str):
@@ -72,6 +79,7 @@ class TestDownloadState(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.tree, cls.source = _parse_launch()
+        cls.guides_tree, cls.guides_source = _parse_guides()
 
     def test_common_record_and_serialization_contract(self):
         helpers = _load_helpers(
@@ -274,10 +282,10 @@ class TestDownloadState(unittest.TestCase):
 
     def test_guide_scans_use_a_separate_registry(self):
         status_source = _source_segment(
-            self.tree, self.source, "scan_status",
+            self.guides_tree, self.guides_source, "scan_status",
         )
         start_source = _source_segment(
-            self.tree, self.source, "scan_and_generate_guides",
+            self.guides_tree, self.guides_source, "scan_and_generate_guides",
         )
         self.assertIn("_lora_guide_scans", status_source)
         for helper_name in (
@@ -291,7 +299,7 @@ class TestDownloadState(unittest.TestCase):
 
     def test_guide_scan_helpers_lock_updates_and_appends(self):
         helpers = _load_helpers(
-            self.tree,
+            self.guides_tree,
             (
                 "_register_lora_guide_scan",
                 "_update_lora_guide_scan",
@@ -326,7 +334,7 @@ class TestDownloadState(unittest.TestCase):
             "_append_lora_guide_scan_result",
         ):
             helper_source = _source_segment(
-                self.tree, self.source, helper_name,
+                self.guides_tree, self.guides_source, helper_name,
             )
             self.assertIn("with _lora_guide_scan_lock", helper_source)
 
