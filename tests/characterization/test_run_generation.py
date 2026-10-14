@@ -1416,6 +1416,11 @@ def _outpaint_tools(monkeypatch, source: Path, *, source_audio: bool, mux_ok: bo
         if command[0] == "ffprobe" and "stream=r_frame_rate" in command:
             commands.append(command)
             return subprocess.CompletedProcess(command, 0, "8/1\n", "")
+        if command[0] == "ffprobe" and "stream=duration" in command:
+            # The picture's length bounds the re-encoded source audio (``-t``); a fixed answer keeps the golden
+            # independent of the ffprobe that is installed.
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, "1.5\n", "")
         if command[0] == "ffmpeg" and str(source) in command:
             commands.append(command)
             if not mux_ok:

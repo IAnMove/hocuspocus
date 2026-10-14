@@ -21,10 +21,32 @@ _render_recast_mask_locked_video = None
 wgp = None
 
 
-# Source audio muxed into the finished Outpaint file. It is re-encoded, so it can
-# be shorter than the picture: pad it, and let ``-shortest`` bound only a longer
-# track. A bare ``-shortest`` cut the last frames of the picture instead.
-_OUTPAINT_SOURCE_AUDIO = ["-map", "1:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+def _source_audio_args(picture_seconds):
+    """Source audio muxed into the finished Outpaint file.
+
+    It is re-encoded, so it can be shorter than the picture: pad it, and let
+    ``-shortest`` bound only a longer track. A bare ``-shortest`` cut the last
+    frames of the picture instead. ``-t`` (the picture's length, when known)
+    makes that bound exact: with an endless pad ffmpeg 7+ lets the audio run on
+    for up to its 10 s ``-shortest`` buffer when the machine is busy.
+    """
+    args = ["-map", "1:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+    if picture_seconds > 0:
+        args += ["-t", f"{picture_seconds:.3f}"]
+    return args
+
+
+def _picture_seconds(subprocess, path):
+    """Length in seconds of the first video stream, 0 when it cannot be read."""
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=duration", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=10,
+        )
+        return max(0.0, float(str(probe.stdout).strip().split(",")[0]))
+    except Exception:
+        return 0.0
 
 
 def bind(**names):
@@ -283,7 +305,8 @@ def _run_generation_outpaint_command(
         cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
         if _do_audio and src_has_audio:
-            cmd += _OUTPAINT_SOURCE_AUDIO
+            _kept = _picture_seconds(subprocess, out_video)
+            cmd += _source_audio_args(_kept - _trim_count / _fps if _kept > 0 else 0)
         else:
             cmd += ["-an"]  # drop audio if we can't replace it
     elif _do_overlay:
@@ -321,14 +344,14 @@ def _run_generation_outpaint_command(
         cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
         if _do_audio and src_has_audio:
-            cmd += _OUTPAINT_SOURCE_AUDIO
+            cmd += _source_audio_args(_picture_seconds(subprocess, out_video))
         else:
             cmd += ["-map", "0:a?", "-c:a", "copy"]
     else:
         # Audio mux only — no video filter
         cmd += ["-map", "0:v:0", "-c:v", "copy"]
         if _do_audio and src_has_audio:
-            cmd += _OUTPAINT_SOURCE_AUDIO
+            cmd += _source_audio_args(_picture_seconds(subprocess, out_video))
         else:
             cmd += ["-map", "0:a?", "-c:a", "copy"]
 

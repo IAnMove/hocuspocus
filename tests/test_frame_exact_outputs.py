@@ -119,6 +119,8 @@ def test_recast_protection_command_uses_shortest_only_with_padded_source_audio(t
     reencoded = _build_recast_mask_lock_command(source, mask, silent, out)
     assert reencoded[reencoded.index("-af") + 1] == "apad"
     assert reencoded.index("-af") < reencoded.index("-shortest")
+    # The padded track is also cut at the generated picture's length (9 frames at 25 fps).
+    assert reencoded[reencoded.index("-t") + 1] == "0.360"
 
     plain = _build_recast_mask_lock_command(
         _make_clip(tmp_path / "mute-source.mp4", 9), mask, silent, out,
@@ -174,6 +176,9 @@ def test_outpaint_finishing_pass_uses_shortest_only_with_padded_source_audio(tmp
         command, _muxed = _outpaint_command(tmp_path, **kwargs)
         assert command[command.index("-af") + 1] == "apad"
         assert command.count("-shortest") == 1 and command.index("-af") < command.index("-shortest")
+        # ... and cut at the picture's length: 49 frames at 25 fps, minus the 5 trimmed frames in the trim case.
+        expected = "1.760" if kwargs.get("trim") else "1.960"
+        assert command[command.index("-t") + 1] == expected
     for kwargs in ({"audio": False}, {"overlay": True, "audio": False}):
         command, _muxed = _outpaint_command(tmp_path, **kwargs)
         assert "-shortest" not in command and "-af" not in command

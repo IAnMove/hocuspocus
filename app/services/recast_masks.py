@@ -45,7 +45,7 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
     probe = subprocess.run(
         [
             "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=width,height", "-of", "json",
+            "-show_entries", "stream=width,height,duration", "-of", "json",
             generated_video,
         ],
         capture_output=True,
@@ -59,6 +59,10 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
         width, height = 0, 0
     if width <= 0 or height <= 0:
         raise ValueError(f"Could not read generated Recast dimensions: {generated_video}")
+    try:
+        picture_seconds = float(stream.get("duration") or 0)
+    except (TypeError, ValueError):
+        picture_seconds = 0.0
     filter_graph = (
         f"[0:v]scale={width}:{height}:flags=lanczos,setsar=1,setpts=PTS-STARTPTS[base];"
         f"[1:v]scale={width}:{height}:flags=neighbor,format=rgba,"
@@ -89,7 +93,12 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
     elif _recast_video_has_audio(source_video):
         # Re-encoded source audio may be shorter than the picture: pad it,
         # and let ``-shortest`` only bound a longer track to the picture.
+        # ``-t`` fixes that bound at the generated picture's length: with an
+        # endless pad ffmpeg 7+ lets the audio run on for up to its 10 s
+        # ``-shortest`` buffer when the machine is busy.
         command += ["-map", "0:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+        if picture_seconds > 0:
+            command += ["-t", f"{picture_seconds:.3f}"]
     else:
         command += ["-an"]
     return command + ["-movflags", "+faststart", output_path]

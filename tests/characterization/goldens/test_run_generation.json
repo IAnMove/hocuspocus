@@ -8360,6 +8360,18 @@
           "<STATE>/outpaint-source.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -8379,6 +8391,8 @@
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.500",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -8938,6 +8952,18 @@
           "<STATE>/outpaint-source.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -8957,6 +8983,8 @@
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.500",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -9152,6 +9180,18 @@
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -9179,6 +9219,8 @@
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.125",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -9349,6 +9391,18 @@
           "<STATE>/outpaint-source.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -9368,6 +9422,8 @@
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.500",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
