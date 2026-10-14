@@ -1924,23 +1924,34 @@ class CoreRuntimeTests(unittest.TestCase):
             ("POST", "/api/v1/scenes/recordings"): "app/routers/scenes_favorites.py",
         })
 
-    def test_core_scene_save_refuses_a_body_that_is_not_an_object_like_the_full_server(self):
-        # The shared route takes ``body: dict`` on both servers, so a body that is
-        # not a JSON object is a validation error (422), where core used to read the
-        # raw body itself and answer 400 (a list) or crash (broken JSON).
+    def test_core_scene_save_takes_a_json_object_sent_as_json_like_the_full_server(self):
+        # The shared route takes ``body: dict`` on both servers. Core used to read
+        # the raw body itself, whatever the content type: a list answered 400, a
+        # broken body crashed, and JSON sent as text/plain or with no content type
+        # was saved. Now all of those are validation errors (422), as on the full
+        # server; the UI always sends the JSON content type.
+        scene = {"scene": {"version": 1, "name": "Plaza"}}
         folder, previous = self._in_temp_workspace()
         try:
             listed = self.client.post("/api/v1/scenes", json=[1, 2])
             broken = self.client.post(
                 "/api/v1/scenes", content=b"{nope", headers={"content-type": "application/json"},
             )
-            saved = self.client.post("/api/v1/scenes", json={"scene": {"version": 1, "name": "Plaza"}})
+            as_text = self.client.post(
+                "/api/v1/scenes", content=json.dumps(scene).encode(), headers={"content-type": "text/plain"},
+            )
+            untyped = self.client.post("/api/v1/scenes", content=json.dumps(scene).encode())
+            saved = self.client.post("/api/v1/scenes", json=scene)
+            stored = sorted(path.name for path in Path("outputs").rglob("*.scene.json"))
         finally:
             self._leave_temp_workspace(folder, previous)
         self.assertEqual(listed.status_code, 422, listed.text)
         self.assertEqual(listed.json()["detail"][0]["loc"], ["body"])
         self.assertEqual(broken.status_code, 422, broken.text)
+        self.assertEqual(as_text.status_code, 422, as_text.text)
+        self.assertEqual(untyped.status_code, 422, untyped.text)
         self.assertEqual(saved.status_code, 200, saved.text)
+        self.assertEqual(stored, [saved.json()["name"]])
 
     def test_core_scene_recording_without_a_file_is_a_validation_error_like_the_full_server(self):
         folder, previous = self._in_temp_workspace()
