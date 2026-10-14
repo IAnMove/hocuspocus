@@ -23,6 +23,8 @@ from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from scripts.architecture_contracts import ROOT, ROUTE_FIXTURE, _decorated_routes, _router_factory_routes
 
 
@@ -375,3 +377,114 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
     # route tables and to every test that extracts launch functions.
     for server in (MAIN, CORE):
         assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
+
+
+def _repaint_modules_with_bind_lists() -> list[Path]:
+    """Service and router modules that read launch names through a generated list."""
+    found = [
+        path for path in sorted((APP / "services").glob("repaint_*.py"))
+        if path.name != "repaint_binding.py"
+    ]
+    router = APP / "routers" / "repaint.py"
+    if router.is_file():
+        found.append(router)
+    return found
+
+
+def _statically_bound_module_names(tree: ast.AST) -> set[str]:
+    """Names a module binds in a way symtable can see: imports, defs, and assignments.
+
+    ``globals()[name] = ...`` is not one of these. A launch proxy installed that way stays free,
+    so the bind list has to name it.
+    """
+    bound: set[str] = set()
+
+    def target(node: ast.AST) -> None:
+        if isinstance(node, ast.Name):
+            bound.add(node.id)
+        elif isinstance(node, (ast.Tuple, ast.List)):
+            for item in node.elts:
+                target(item)
+
+    for node in tree.body:  # type: ignore[attr-defined]
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                bound.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            bound.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for item in node.targets:
+                target(item)
+        elif isinstance(node, ast.AnnAssign):
+            target(node.target)
+        elif isinstance(node, (ast.For, ast.AsyncFor)):
+            target(node.target)
+    return bound
+
+
+def _free_globals_of_functions(path: Path) -> set[str]:
+    """Globals the functions of ``path`` read that the module does not itself define."""
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    bound = _statically_bound_module_names(tree)
+    table = symtable.symtable(source, str(path), "exec")
+    free: set[str] = set()
+
+    def walk(child: symtable.SymbolTable) -> None:
+        if child.get_type() == "function":
+            for symbol in child.get_symbols():
+                name = symbol.get_name()
+                if (
+                    symbol.is_global() and symbol.is_referenced() and not symbol.is_declared_global()
+                    and name not in bound and not hasattr(builtins, name) and not name.startswith("__")
+                ):
+                    free.add(name)
+        for nested in child.get_children():
+            walk(nested)
+
+    walk(table)
+    return free
+
+
+def _declared_launch_names(path: Path) -> tuple[str, ...]:
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if not any(isinstance(target, ast.Name) and target.id == "_LAUNCH_NAMES" for target in node.targets):
+            continue
+        if not isinstance(node.value, ast.Tuple) or not all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in node.value.elts):
+            raise AssertionError(f"{path.name} must declare _LAUNCH_NAMES as a tuple of strings")
+        return tuple(item.value for item in node.value.elts)
+    raise AssertionError(f"{path.name} does not declare _LAUNCH_NAMES")
+
+
+def test_repaint_bind_lists_are_exactly_the_free_globals() -> None:
+    """The bind list is generated. A name the functions read, or one they no longer read, fails this."""
+    modules = _repaint_modules_with_bind_lists()
+    assert modules, "Repaint modules with a bind list"
+    for path in modules:
+        declared = _declared_launch_names(path)
+        free = _free_globals_of_functions(path)
+        assert declared == tuple(sorted(declared)), f"{path.name} _LAUNCH_NAMES is not sorted"
+        assert len(declared) == len(set(declared)), f"{path.name} _LAUNCH_NAMES has a duplicate"
+        assert declared == tuple(sorted(free)), (
+            f"{path.name} bind list drifted: missing {sorted(free.difference(declared))}, "
+            f"extra {sorted(set(declared).difference(free))}"
+        )
+
+
+def test_repaint_bind_once_refuses_a_different_namespace() -> None:
+    """A second bind cannot hide a wrong first one. The same dict may be bound again."""
+    from services.repaint_binding import bind_once
+
+    holder: list[dict | None] = [None]
+    first = {"kept": True}
+    bind_once(holder, first, "probe")
+    bind_once(holder, first, "probe")
+    assert holder[0] is first
+    with pytest.raises(RuntimeError, match="already bound"):
+        bind_once(holder, {}, "probe")
+    assert holder[0] is first

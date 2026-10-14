@@ -22,6 +22,7 @@ _requires_torch = unittest.skipUnless(
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_REPAINT_PLANNING_PATH = os.path.join(_ROOT, "app", "services", "repaint_planning.py")
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
 _WAN_HANDLER_PATH = os.path.join(
@@ -1143,10 +1144,6 @@ class TestMultiPersonRecast(unittest.TestCase):
                 "_build_recast_shot_prompt",
                 "_compose_recast_native_people_masks",
                 "_select_recast_generated_regions",
-                "_normalize_repaint_region_mappings",
-                "_repaint_resolution_for_aspect",
-                "_validate_repaint_target_aspect",
-                "_build_repaint_shot_prompt",
             ),
             {
                 "_RECAST_MASK_COLORS": [
@@ -1164,6 +1161,21 @@ class TestMultiPersonRecast(unittest.TestCase):
                 },
             },
         )
+        cls.helpers.update(_load_functions(
+            _REPAINT_PLANNING_PATH,
+            (
+                "_normalize_repaint_region_mappings",
+                "_repaint_resolution_for_aspect",
+                "_validate_repaint_target_aspect",
+                "_build_repaint_shot_prompt",
+            ),
+            {
+                "_RECAST_MASK_COLORS": [
+                    (0, 0, 255), (255, 0, 0), (0, 255, 0),
+                    (255, 0, 255), (0, 255, 255),
+                ],
+            },
+        ))
 
     def test_person_count_is_clamped_to_scail2_range(self):
         normalize = self.helpers["_normalize_recast_person_count"]
@@ -2149,7 +2161,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             }
 
         build = _load_functions(
-            _LAUNCH_PATH,
+            _REPAINT_PLANNING_PATH,
             ("_build_repaint_shot_manifest",),
             {
                 "os": os,
@@ -2299,23 +2311,28 @@ class TestMultiPersonRecast(unittest.TestCase):
                 "mask": os.path.join(output_dir, "scene-mask.png"),
             }
 
-        build = _load_functions(
+        shared = {
+            "os": os,
+            "_RECAST_MASK_COLORS": colors,
+            "_compose_recast_character_masks": self.helpers[
+                "_compose_recast_character_masks"
+            ],
+            "_compose_recast_group_reference_frame": fail_layout,
+            "_compose_recast_cast_reference_frame": fail_layout,
+            "_build_recast_source_scene_reference": fake_scene,
+        }
+        recast_helpers = _load_functions(
             _LAUNCH_PATH,
             (
                 "_recolor_recast_reference_mask",
                 "_save_recast_reference_pair",
-                "_build_repaint_shot_reference_conditioning",
             ),
-            {
-                "os": os,
-                "_RECAST_MASK_COLORS": colors,
-                "_compose_recast_character_masks": self.helpers[
-                    "_compose_recast_character_masks"
-                ],
-                "_compose_recast_group_reference_frame": fail_layout,
-                "_compose_recast_cast_reference_frame": fail_layout,
-                "_build_recast_source_scene_reference": fake_scene,
-            },
+            shared,
+        )
+        build = _load_functions(
+            _REPAINT_PLANNING_PATH,
+            ("_build_repaint_shot_reference_conditioning",),
+            {**shared, **recast_helpers},
         )["_build_repaint_shot_reference_conditioning"]
 
         target = np.zeros((8, 12, 3), dtype=np.uint8)
@@ -2914,7 +2931,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             save_mask_video=fake_save,
         )
         helpers = _load_functions(
-            _LAUNCH_PATH,
+            _REPAINT_PLANNING_PATH,
             ("_build_repaint_semantic_conditioning",),
             {
                 "os": os,
@@ -4305,6 +4322,20 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_repaint_semantic_masks_use_native_opposite_backgrounds(self):
         launch = _read(_LAUNCH_PATH)
+        planning = _read(_REPAINT_PLANNING_PATH)
+        self.assertIn(
+            "def _build_repaint_shot_manifest(",
+            planning,
+        )
+        self.assertIn("tracking_segments=shot_ranges", planning)
+        self.assertIn(
+            '"scail2_dynamic_source_scene_reference": True',
+            planning,
+        )
+        self.assertIn("background_color=(0, 0, 0)", planning)
+        self.assertIn("background_color=(255, 255, 255)", planning)
+        self.assertIn('"scail2_reference_mask_path"', planning)
+        self.assertIn('"scail2_primary_reference_people"', planning)
         self.assertIn(
             'background_color=(0, 0, 0)',
             launch,
@@ -4319,10 +4350,6 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn(
             '"scail2_primary_reference_people"',
-            launch,
-        )
-        self.assertIn(
-            "def _build_repaint_shot_manifest(",
             launch,
         )
         self.assertIn(

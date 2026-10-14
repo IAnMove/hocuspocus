@@ -284,3 +284,76 @@ def test_openapi_text_of_the_repaint_routes(server, golden) -> None:
                 "parameters": operation.get("parameters", []),
             }
     golden.check("openapi", 200, snapshot)
+
+
+# -- The wiring the move added --------------------------------------------------------------------------
+# Each Repaint module is bound once, to launch's own globals. A proxy reads that dict when the function
+# runs, so a patch of the launch name is what the moved function calls. A second bind to another dict
+# is refused and leaves the first one in place.
+
+_PLANNING_EXPORTS = (
+    "bind_repaint_planning",
+    "_normalize_repaint_region_mappings",
+    "_repaint_resolution_for_aspect",
+    "_validate_repaint_target_aspect",
+    "_prepare_repaint_target_frame",
+    "_repaint_preview_data_uri",
+    "_build_repaint_semantic_conditioning",
+    "_build_repaint_shot_prompt",
+    "_build_repaint_shot_reference_conditioning",
+    "_build_repaint_shot_manifest",
+)
+
+
+def _repaint_runtime_modules():
+    import importlib
+
+    modules = [importlib.import_module("services.repaint_planning")]
+    try:
+        modules.append(importlib.import_module("services.repaint_run"))
+    except ModuleNotFoundError:
+        pass
+    try:
+        modules.append(importlib.import_module("routers.repaint"))
+    except ModuleNotFoundError:
+        pass
+    return modules
+
+
+def test_repaint_modules_read_the_objects_launch_gave_them(full_server, monkeypatch) -> None:
+    from services.repaint_binding import LaunchName
+
+    del full_server
+    launch = worker_module()
+    modules = _repaint_runtime_modules()
+    planning = modules[0]
+    for module in modules:
+        assert module._NAMESPACE[0] is vars(launch), module.__name__
+        for name in module._LAUNCH_NAMES:
+            proxy = getattr(module, name)
+            assert isinstance(proxy, LaunchName), f"{module.__name__}.{name} is not a launch proxy"
+            assert proxy.resolve() is getattr(launch, name), f"{module.__name__}.{name} is not launch.{name}"
+    for name in _PLANNING_EXPORTS:
+        assert getattr(launch, name) is getattr(planning, name), name
+
+    sentinel = ("slot-color",)
+    monkeypatch.setattr(launch, "_RECAST_MASK_COLORS", sentinel)
+    colors = planning._RECAST_MASK_COLORS
+    assert colors.resolve() is sentinel
+    assert len(colors) == 1 and colors[0] == "slot-color" and colors[:1] == sentinel
+    assert bool(colors) is True
+
+    seen: list[str] = []
+
+    def _patched(*_args, **_kwargs):
+        seen.append("called")
+        return "patched"
+
+    monkeypatch.setattr(launch, "_detect_recast_shot_ranges", _patched)
+    assert planning._detect_recast_shot_ranges(None) == "patched"
+    assert seen == ["called"]
+    assert planning._detect_recast_shot_ranges.__name__ == "_patched"
+
+    with pytest.raises(RuntimeError, match="already bound"):
+        planning.bind_repaint_planning({})
+    assert planning._NAMESPACE[0] is vars(launch)

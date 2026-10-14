@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Repaint planning left the launch module.** Checking region mappings, the edited frame's aspect, the prepared frame, the preview image, and the shot prompt, conditioning and manifest still works the same way. The two Repaint routes still live in the main server file and call those same functions.
+
 **SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.
 
 **Edit-anything and inpaint left the launch module.** POST /api/v1/edit-anything and POST /api/v1/inpaint still answer the same way.
