@@ -23,6 +23,9 @@ SERVICE_FILES = (
     ROOT / "app" / "services" / "recast_matte.py",
     ROOT / "app" / "services" / "recast_reference_compose.py",
     ROOT / "app" / "services" / "recast_reference_prepare.py",
+    ROOT / "app" / "services" / "recast_shot_planning.py",
+    ROOT / "app" / "services" / "recast_shot_manifest.py",
+    ROOT / "app" / "services" / "recast_shot_run.py",
 )
 
 
@@ -572,7 +575,17 @@ def test_each_recast_service_binds_exactly_its_free_launch_names():
                     if isinstance(target, ast.Name) and not _is_bindable_assign(node):
                         defined[target.id] = path
     launch = LAUNCH.read_text(encoding="utf-8")
+    launch_tree = ast.parse(launch, filename=str(LAUNCH))
     assert launch.count("bind_recast_helpers(") == 1
+
+    def launch_exports(module: str, name: str) -> bool:
+        for node in launch_tree.body:
+            if not isinstance(node, ast.ImportFrom) or node.module != module:
+                continue
+            for alias in node.names:
+                if alias.name == name and (alias.asname or alias.name) == name:
+                    return True
+        return False
 
     for path in modules:
         if path.name == "recast_launch_binding.py":
@@ -584,8 +597,15 @@ def test_each_recast_service_binds_exactly_its_free_launch_names():
         kept = []
         for node in tree.body:
             if _is_bindable_assign(node):
-                bindables.append(node.value.args[0].value)
-                assert node.value.args[0].value not in defined
+                target = node.value.args[0].value
+                bindables.append(target)
+                home = defined.get(target)
+                if home is None:
+                    continue
+                # A helper that moved into another recast module still has to be the launch object
+                # the bindable reads. A bindable that names a function in its own file does not.
+                assert home != path, f"{path.name} bindable({target!r}) points at its own module"
+                assert launch_exports(f"services.{home.stem}", target), target
             else:
                 kept.append(node)
             if isinstance(node, ast.ImportFrom) and node.module in {
@@ -655,6 +675,73 @@ def _undefined_globals(source: str, filename: str) -> set[str]:
 
     walk(top)
     return missing
+
+
+def test_recast_shot_modules_bind_exactly_the_names_their_functions_read():
+    """The bind list is the free names of the moved functions, derived here.
+
+    A module whose every collaborator is imported has no ``bind`` and no free
+    name. A module that still needs a launch object names that object in
+    ``bind``'s keyword-only parameters, and in nothing else. ``Name = None``
+    is only the slot ``bind`` fills. Launch imports each module once and calls
+    ``bind`` once, and only when the module defines it.
+    """
+    services = ROOT / "app" / "services"
+    launch = LAUNCH.read_text(encoding="utf-8")
+    stems = (
+        "recast_shot_planning",
+        "recast_shot_manifest",
+        "recast_shot_run",
+    )
+    present = [stem for stem in stems if (services / f"{stem}.py").is_file()]
+    assert present and present[0] == "recast_shot_planning"
+
+    for stem in present:
+        path = services / f"{stem}.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        bind = next(
+            (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "bind"),
+            None,
+        )
+        slots = [
+            node.targets[0].id
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is None
+        ]
+        assert launch.count(f"from services.{stem} import (") == 1, stem
+        if bind is None:
+            assert slots == [], slots
+            assert _undefined_globals(source, str(path)) == set()
+            assert f"_bind_{stem}(" not in launch
+            continue
+        assert bind.args.args == [] and bind.args.posonlyargs == []
+        assert bind.args.vararg is None and bind.args.kwarg is None
+        assert bind.args.defaults == []
+        params = [arg.arg for arg in bind.args.kwonlyargs]
+        assert params, f"{stem}.bind takes no names"
+        assert sorted(slots) == sorted(params)
+        kept = []
+        for node in tree.body:
+            if node is bind:
+                continue
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in params
+                and isinstance(node.value, ast.Constant)
+                and node.value.value is None
+            ):
+                continue
+            kept.append(node)
+        stripped = ast.unparse(ast.Module(body=kept, type_ignores=[]))
+        assert _undefined_globals(stripped, str(path)) == set(params)
+        assert launch.count(f"_bind_{stem}(") == 1
 
 
 def test_timeline_preview_blends_the_anchor_and_returns_the_first_frame_when_nothing_is_found():

@@ -27,6 +27,9 @@ _RECAST_SERVICE_PATHS = (
     os.path.join(_ROOT, "app", "services", "recast_matte.py"),
     os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"),
     os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_planning.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_manifest.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_run.py"),
 )
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
@@ -3755,9 +3758,12 @@ class TestMultiPersonRecast(unittest.TestCase):
         sam3 = _read(_SAM3_PREPROCESSOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
 
-        self.assertIn("def _detect_recast_shot_ranges(", launch)
+        planning = _read(os.path.join(
+            _ROOT, "app", "services", "recast_shot_planning.py",
+        ))
+        self.assertIn("def _detect_recast_shot_ranges(", planning)
         self.assertIn("tracking_segments=shot_ranges", launch)
-        self.assertIn("def _recover_recast_unmapped_shots(", launch)
+        self.assertIn("def _recover_recast_unmapped_shots(", planning)
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn(
             "running generic-person appearance recovery",

@@ -675,3 +675,85 @@ def test_recast_helper_slots_are_the_launch_objects(full_server, monkeypatch) ->
                 assert os.fspath(value) == "slot-path"
             forwarded.append(target)
     assert forwarded, "the recast services have no launch forwarders"
+
+
+def _global_reads(function) -> set[str]:
+    """Names a function reads from the module it is defined in."""
+    import inspect
+    import symtable
+    import textwrap
+
+    names: set[str] = set()
+
+    def walk(scope) -> None:
+        names.update(
+            symbol.get_name()
+            for symbol in scope.get_symbols()
+            if symbol.is_global() and symbol.is_referenced()
+        )
+        for child in scope.get_children():
+            walk(child)
+
+    walk(symtable.symtable(textwrap.dedent(inspect.getsource(function)), "<shot>", "exec"))
+    return names
+
+
+def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    """Every global a moved shot function reads is the launch object, or a forwarder.
+
+    The forwarder is the one case that is not the object: patching the launch
+    name changes what the shot module calls. A slot left at None, or bound to
+    a copy, fails here.
+    """
+    import builtins
+    import importlib
+    import inspect
+
+    launch = worker_module()
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    stems = sorted(path.stem for path in services.glob("recast_shot_*.py"))
+    assert "recast_shot_planning" in stems
+    launch_names = vars(launch)
+    launch_source = Path(launch.__file__).read_text(encoding="utf-8")
+    compared: set[str] = set()
+    forwarded: set[str] = set()
+    for stem in stems:
+        assert launch_source.count(f"from services.{stem} import (") == 1
+        assert launch_source.count(f"_bind_{stem}(") in {0, 1}
+        module_name = f"services.{stem}"
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        own = {
+            name
+            for name, value in namespace.items()
+            if inspect.isfunction(value) and getattr(value, "__module__", None) == module_name and name != "bind"
+        }
+        for name in own:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        reads: set[str] = set()
+        for function_name in sorted(own):
+            reads.update(_global_reads(namespace[function_name]))
+        for name in sorted(reads):
+            if name in own or name.startswith("__") or hasattr(builtins, name):
+                continue
+            assert name in namespace, f"{module_name} reads {name}, which it does not define"
+            value = namespace[name]
+            if name in launch_names and value is launch_names[name]:
+                compared.add(name)
+                continue
+            assert callable(value) and name in launch_names, (
+                f"{module_name}.{name} is not launch.{name} and is not a forwarder"
+            )
+            sentinel = object()
+
+            def patched(*_args, _sentinel=sentinel, **_kwargs):
+                return _sentinel
+
+            monkeypatch.setattr(launch, name, patched)
+            assert value() is sentinel, f"patching launch.{name} did not change {module_name}.{name}"
+            monkeypatch.setattr(launch, name, launch_names[name])
+            forwarded.add(name)
+    assert "_RECAST_MASK_COLORS" in compared
+    assert "_normalize_recast_person_count" in compared
+    # Planning imports its collaborators. The run module's _run_generation forwarder joins later.
+    assert forwarded <= {"_run_generation"}
