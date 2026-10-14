@@ -21158,422 +21158,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             except Exception as e:
                 finish_job(job, "failed", error=str(e), message=str(e))
                 return False
-
-            # For video: extract film grain settings and apply as post-processing
-            # after generation (avoids 3x slowdown from pipeline re-processing).
-            # For images: leave film grain in params so the pipeline applies it inline
-            # (single image is instant, no slowdown issue).
-            gen_mode = raw_params.get("generation_mode", "video")
-            if gen_mode != "image":
-                pp_film_grain_intensity = raw_params.pop("film_grain_intensity", 0)
-                pp_film_grain_saturation = raw_params.pop("film_grain_saturation", 0.5)
-            else:
-                pp_film_grain_intensity = 0
-                pp_film_grain_saturation = 0.5
-
-            # FlashVSR upscaling is deferred to a whole-file post-pass (below):
-            # one continuous temporal pass over the assembled video instead of
-            # per-sliding-window chunks — FlashVSR's temporal state no longer
-            # resets at window boundaries (detail "pop" at seams), and it stops
-            # competing with the diffusion model for VRAM between windows.
-            # Lanczos/VAE methods keep the inline per-window path (cheap,
-            # stateless), and images keep inline upsampling (single frame).
-            pp_spatial_upsampling = ""
-            if gen_mode != "image":
-                _su_val = str(raw_params.get("spatial_upsampling") or "")
-                if "flashvsr" in _su_val:
-                    pp_spatial_upsampling = _su_val
-                    raw_params.pop("spatial_upsampling", None)
-
-            # Voice clone postprocessing (SeedVC) — replaces 1 or 2 voices
-            # in the generated video's audio with user-supplied reference
-            # voice(s). Driven by three params (set by the UI):
-            #   voice_clone_enabled: bool
-            #   voice_clone_refs:    list[str] of uploaded voice ref file paths
-            #   voice_clone_mode:    "single" or "two"
-            # Pop them out of raw_params so they don't leak into the
-            # generation handler (other handlers don't understand them).
-            pp_voice_clone_enabled = bool(raw_params.pop("voice_clone_enabled", False))
-            pp_voice_clone_refs = resolve_voice_ref_paths(
-                raw_params.pop("voice_clone_refs", None) or [],
-                uploads_root=os.path.join(os.getcwd(), "uploads"),
-                workspace_root=_workspace_dir(job.get("workspace")),
-            )
-            pp_voice_clone_mode = raw_params.pop("voice_clone_mode", "single")
-
-            defer_output_publication = bool(
-                raw_params.pop("_defer_output_publication", False)
-            )
-            recast_shot_manifest = raw_params.pop(
-                "_recast_shot_manifest",
-                None,
-            )
-            repaint_shot_manifest = raw_params.pop(
-                "_repaint_shot_manifest",
-                None,
-            )
-            outpaint_shot_manifest = raw_params.pop(
-                "_outpaint_shot_manifest",
-                None,
-            )
-            if recast_shot_manifest is not None:
-                shot_manifest = recast_shot_manifest
-                shot_workflow = "Recast"
-            elif repaint_shot_manifest is not None:
-                shot_manifest = repaint_shot_manifest
-                shot_workflow = "Repaint"
-            else:
-                shot_manifest = outpaint_shot_manifest
-                shot_workflow = "Outpaint"
-
-            if outpaint_shot_manifest is not None:
-                # Internal Outpaint shots must not run the continuous job's
-                # postprocessor against the complete source video. The final
-                # shot-aware worker restores one pristine audio track only
-                # after all exact-length clips have been assembled.
-                raw_params["_outpaint_preserve_audio"] = False
-                raw_params["_outpaint_source_video"] = None
-                raw_params["_outpaint_lock_source_pixels"] = False
-                raw_params["_outpaint_trim_smear"] = False
-
-            # Shot-aware edits supply exact per-shot guides and settings. They
-            # run through the ordinary task engine but defer concatenation and
-            # publication to their finishing worker.
-            if shot_manifest is not None:
-                import copy
-
-                if not isinstance(shot_manifest, list):
-                    finish_job(
-                        job,
-                        "failed",
-                        error=f"{shot_workflow} shot manifest is invalid",
-                        message=f"{shot_workflow} shot preparation failed",
-                    )
-                    return False
-                generated_entries = [
-                    entry
-                    for entry in shot_manifest
-                    if isinstance(entry, dict)
-                    and isinstance(entry.get("params"), dict)
-                ]
-                if not generated_entries:
-                    finish_job(
-                        job,
-                        "failed",
-                        error=(
-                            f"{shot_workflow} shot manifest contains no "
-                            "generated shots"
-                        ),
-                        message=f"{shot_workflow} shot preparation failed",
-                    )
-                    return False
-
-                manifest = []
-                group_id = f"{shot_workflow.casefold()}_shots_{job_id}"
-                for sequence_index, entry in enumerate(generated_entries):
-                    wgp.task_id += 1
-                    shot_params = copy.deepcopy(raw_params)
-                    shot_params.update(copy.deepcopy(entry["params"]))
-                    shot_params["multi_prompts_gen_type"] = 0
-                    shot_params["multi_clip_info"] = {
-                        "group_id": group_id,
-                        "index": int(entry.get(
-                            "shot_index",
-                            sequence_index,
-                        )),
-                        "total": len(generated_entries),
-                        "defer_concat": True,
-                        "progress_label": "Shot",
-                    }
-                    manifest.append({
-                        "id": wgp.task_id,
-                        "params": shot_params,
-                        "plugin_data": {},
-                    })
-
-            # Multi-clip mode: split single request into per-clip tasks
-            elif raw_params.get("multi_prompts_gen_type") == 3:
-                prompt_text = raw_params.get("prompt", "")
-                # Use clip boundary separator if present (Director v2 with sliding window support),
-                # otherwise fall back to newline split (Studio mode / legacy Director)
-                CLIP_SEPARATOR = "\n---CLIP_BOUNDARY---\n"
-                if CLIP_SEPARATOR in prompt_text:
-                    prompt_lines = [p.strip() for p in prompt_text.split(CLIP_SEPARATOR) if p.strip()]
-                else:
-                    prompt_lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
-                image_starts = raw_params.get("image_start", [])
-                if not isinstance(image_starts, list):
-                    image_starts = [image_starts] if image_starts else []
-                image_ends = raw_params.get("image_end", [])
-                if not isinstance(image_ends, list):
-                    image_ends = [image_ends] if image_ends else []
-                sw_size = raw_params.get("sliding_window_size", raw_params.get("video_length", 121))
-                per_clip_frames = raw_params.pop("per_clip_frames", None)  # optional per-clip durations
-                per_clip_seeds = raw_params.pop("per_clip_seeds", None)
-                per_clip_negative_prompts = raw_params.pop(
-                    "per_clip_negative_prompts",
-                    None,
-                )
-                per_clip_keyframes = raw_params.pop("per_clip_keyframes", None)  # optional keyframe injection per clip
-                preserve_se_duration_per_clip = bool(
-                    raw_params.pop("_se_preserve_duration_per_clip", False)
-                )
-                per_clip_h3_references = raw_params.pop(
-                    "per_clip_minimax_h3_references", None,
-                )
-                per_clip_continuations = raw_params.pop(
-                    "per_clip_continue_from_previous", None,
-                )
-                multi_clip_concat_audio = raw_params.pop(
-                    "multi_clip_concat_audio", None,
-                )
-                multi_clip_audio_start_sec = raw_params.pop("multi_clip_audio_start_sec", 0.0)
-                group_id = f"mc_{int(time.time())}_{raw_params.get('seed', 0)}"
-                clip_count = max(
-                    len(prompt_lines),
-                    len(image_starts),
-                    len(per_clip_h3_references or []),
-                    len(per_clip_continuations or []),
-                    1,
-                )
-
-                # Get model latent_size for frame quantization — wgp.py quantizes
-                # video_length to (n-1)//latent_size*latent_size+1, so we must match
-                # that here to keep cumulative audio offsets in sync with actual output.
-                _mc_model_type = raw_params.get("model_type", "")
-                try:
-                    _mc_min_f, _mc_fs, _mc_latent = wgp.get_model_min_frames_and_step(_mc_model_type)
-                except Exception:
-                    _mc_min_f, _mc_fs, _mc_latent = 17, 8, 8
-                try:
-                    _mc_model_def = wgp.get_model_def(_mc_model_type) or {}
-                except Exception:
-                    _mc_model_def = {}
-                _mc_bounded_director = str(
-                    _mc_model_def.get("director_video_strategy") or "rolling_window"
-                ) in {"bounded_start_end", "omni_reference"}
-                _mc_trim_end_frames = bool(
-                    _mc_model_def.get("director_trim_end_frames", True)
-                )
-
-                manifest = []
-                # Director timelines can begin after a silent intro. Preserve
-                # that source-audio origin for every clip's conditioning; the
-                # ordinary Studio path continues to default to frame zero.
-                try:
-                    cumulative_offset = max(
-                        0, int(raw_params.get("audio_frame_offset", 0) or 0),
-                    )
-                    multi_clip_audio_start_sec = max(
-                        0.0, float(multi_clip_audio_start_sec or 0),
-                    )
-                except (TypeError, ValueError):
-                    cumulative_offset = 0
-                    multi_clip_audio_start_sec = 0.0
-                total_trimmed_frames = 0
-                last_se_clip_end_image = None  # track last clip's end image for tail compensation
-                for i in range(clip_count):
-                    wgp.task_id += 1
-                    clip_params = raw_params.copy()
-                    if per_clip_seeds and i < len(per_clip_seeds):
-                        try:
-                            clip_params["seed"] = int(per_clip_seeds[i])
-                        except (TypeError, ValueError):
-                            pass
-                    if (
-                        isinstance(per_clip_negative_prompts, list)
-                        and i < len(per_clip_negative_prompts)
-                    ):
-                        clip_params["negative_prompt"] = str(
-                            per_clip_negative_prompts[i] or ""
-                        )
-                    clip_params["prompt"] = prompt_lines[i] if i < len(prompt_lines) else (prompt_lines[-1] if prompt_lines else "")
-                    clip_params["image_start"] = image_starts[i] if i < len(image_starts) else None
-                    clip_end = image_ends[i] if i < len(image_ends) else None
-                    clip_params["image_end"] = clip_end if clip_end else None
-                    if per_clip_h3_references is not None:
-                        if i >= len(per_clip_h3_references):
-                            raise ValueError(
-                                f"Missing MiniMax H3 reference manifest for clip {i + 1}."
-                            )
-                        clip_params["minimax_h3_references"] = (
-                            per_clip_h3_references[i]
-                        )
-                    # Set per-clip image_prompt_type based on which images are present
-                    has_start = bool(clip_params.get("image_start"))
-                    has_end = bool(clip_end)
-                    if has_start and has_end:
-                        clip_params["image_prompt_type"] = "SE"
-                    elif has_start:
-                        clip_params["image_prompt_type"] = "S"
-                    elif has_end:
-                        clip_params["image_prompt_type"] = "E"
-                    # Rolling-window multi-clip keeps its historic automatic
-                    # continuation. Bounded models opt in per clip: Director
-                    # uses this for duration-split FL2VA segments or an
-                    # explicitly planned literal continuation, never across
-                    # an ordinary editorial cut.
-                    if not has_start and i > 0:
-                        bounded_continuation = bool(
-                            per_clip_continuations
-                            and i < len(per_clip_continuations)
-                            and per_clip_continuations[i]
-                        )
-                        if not _mc_bounded_director or bounded_continuation:
-                            clip_params["_continuation"] = True
-                            if bounded_continuation:
-                                clip_params["_continuation_tail_skip"] = 0
-                    clip_frames = per_clip_frames[i] if per_clip_frames and i < len(per_clip_frames) else sw_size
-                    if _mc_bounded_director:
-                        clip_frames = int(clip_frames)
-                        _mc_max_f = int(
-                            _mc_model_def.get("frames_maximum") or clip_frames
-                        )
-                        if not (
-                            _mc_min_f <= clip_frames <= _mc_max_f
-                            and (clip_frames - _mc_min_f) % max(1, _mc_fs) == 0
-                        ):
-                            raise ValueError(
-                                f"Clip {i + 1} has {clip_frames} frames, outside "
-                                f"the selected model's {_mc_min_f}-{_mc_max_f} "
-                                f"frame lattice (step {_mc_fs})."
-                            )
-                    else:
-                        # Quantize to valid frame count (same formula as wgp.py)
-                        clip_frames = (clip_frames - 1) // _mc_latent * _mc_latent + 1
-                        clip_frames = max(clip_frames, _mc_min_f)
-                    # SE mode: mark tail frames for trimming (removes end-frame
-                    # conditioning distortion at tensor level before saving)
-                    trim_tail = 0
-                    if has_end and _mc_trim_end_frames:
-                        trim_tail = _mc_fs
-                        last_se_clip_end_image = clip_end
-                        if preserve_se_duration_per_clip:
-                            # `clip_frames` is the requested visible duration.
-                            # Generate one conditioning step more so removing
-                            # the distorted SE tail leaves that duration intact.
-                            clip_frames = (
-                                (clip_frames + trim_tail - 1)
-                                // _mc_latent
-                                * _mc_latent
-                                + 1
-                            )
-                    clip_params["video_length"] = clip_frames
-                    clip_params["trim_tail_frames"] = trim_tail
-                    clip_params["audio_frame_offset"] = cumulative_offset
-                    cumulative_offset += clip_frames - trim_tail  # advance by post-trim frames for audio sync
-                    if not preserve_se_duration_per_clip:
-                        total_trimmed_frames += trim_tail
-                    clip_params["multi_clip_info"] = {
-                        "group_id": group_id,
-                        "index": i,
-                        "total": clip_count,
-                        "cumulative_offset": True,
-                        "audio_start_sec": multi_clip_audio_start_sec,
-                        "concat_audio_path": multi_clip_concat_audio,
-                    }
-                    # If the clip prompt has newlines (window_prompts), use mode 1 (per-window)
-                    # Otherwise mode 0 (single task)
-                    clip_prompt = clip_params.get("prompt", "")
-                    clip_params["multi_prompts_gen_type"] = 1 if "\n" in clip_prompt else 0
-                    # Keyframe injection: add image_refs and frames_positions for this clip
-                    if per_clip_keyframes and i < len(per_clip_keyframes) and per_clip_keyframes[i]:
-                        kf_paths = per_clip_keyframes[i]
-                        clip_params["image_refs"] = kf_paths
-                        # Position each keyframe at "L" (last frame of each window)
-                        clip_params["frames_positions"] = " ".join(["L"] * len(kf_paths))
-                        # Enable frames injection mode
-                        existing_vpt = clip_params.get("video_prompt_type", "")
-                        if "KFI" not in existing_vpt:
-                            clip_params["video_prompt_type"] = existing_vpt + "KFI"
-                    manifest.append({
-                        "id": wgp.task_id,
-                        "params": clip_params,
-                        "plugin_data": {},
-                    })
-
-                # Compensation tail clip: if SE trimming removed frames, generate a
-                # short extra clip (start-frame only, no SE distortion) to fill the gap
-                # so the final video matches the full audio duration.
-                if total_trimmed_frames > 0 and _mc_trim_end_frames:
-                    # Snap to valid frame count for the model
-                    model_type = raw_params.get("model_type", "")
-                    try:
-                        min_f, fs, _ = wgp.get_model_min_frames_and_step(model_type)
-                    except Exception:
-                        min_f, fs = 9, 8  # LTX-2 defaults
-                    # Round up to nearest valid frame count (must be >= min_frames)
-                    tail_frames = max(min_f, ((total_trimmed_frames - 1) // fs) * fs + 1)
-                    if tail_frames < min_f:
-                        tail_frames = min_f
-
-                    wgp.task_id += 1
-                    tail_params = raw_params.copy()
-                    # Use last clip's prompt and last clip's end image as start frame
-                    tail_params["prompt"] = prompt_lines[-1] if prompt_lines else ""
-                    tail_params["image_start"] = last_se_clip_end_image
-                    tail_params["image_end"] = None
-                    tail_params["image_prompt_type"] = "S"  # start-only, no SE distortion
-                    tail_params["video_length"] = tail_frames
-                    tail_params["trim_tail_frames"] = 0
-                    tail_params["audio_frame_offset"] = cumulative_offset
-                    tail_params["multi_clip_info"] = {
-                        "group_id": group_id,
-                        "index": clip_count,
-                        "total": clip_count + 1,
-                        "cumulative_offset": True,
-                        "audio_start_sec": multi_clip_audio_start_sec,
-                        "concat_audio_path": multi_clip_concat_audio,
-                    }
-                    tail_params["multi_prompts_gen_type"] = 0
-
-                    # Update all previous clips' total count to include the tail
-                    for m in manifest:
-                        m["params"]["multi_clip_info"]["total"] = clip_count + 1
-
-                    manifest.append({
-                        "id": wgp.task_id,
-                        "params": tail_params,
-                        "plugin_data": {},
-                    })
-                    print(f"[Multi-Clip] SE trim compensation: lost {total_trimmed_frames} frames across {clip_count} clips, adding tail clip of {tail_frames} frames")
-            else:
-                wgp.task_id += 1
-                # SE trim: if end image is set, mark tail frames for trimming
-                # (removes distorted frames from end-frame conditioning)
-                has_end_image = raw_params.get("image_end") not in (None, "", [])
-                try:
-                    _single_model_def = wgp.get_model_def(
-                        raw_params.get("model_type", "")
-                    ) or {}
-                except Exception:
-                    _single_model_def = {}
-                if (
-                    has_end_image
-                    and raw_params.get("video_length")
-                    and bool(_single_model_def.get("director_trim_end_frames", True))
-                ):
-                    model_type = raw_params.get("model_type", "")
-                    try:
-                        _, fs, _ = wgp.get_model_min_frames_and_step(model_type)
-                    except Exception:
-                        fs = 8  # LTX-2 default
-                    raw_params["trim_tail_frames"] = fs
-
-                manifest = [{
-                    "id": wgp.task_id,
-                    "params": raw_params,
-                    "plugin_data": {},
-                }]
-            st.defer_output_publication, st.manifest = defer_output_publication, manifest
-            st.pp_film_grain_intensity = pp_film_grain_intensity
-            st.pp_film_grain_saturation = pp_film_grain_saturation
-            st.pp_spatial_upsampling = pp_spatial_upsampling
-            st.pp_voice_clone_enabled = pp_voice_clone_enabled
-            st.pp_voice_clone_mode = pp_voice_clone_mode
-            st.pp_voice_clone_refs, st.raw_params = pp_voice_clone_refs, raw_params
-            st.start_time, st.state = start_time, state
-            return _run_generation_queue(st)
+            st.raw_params, st.start_time, st.state = raw_params, start_time, state
+            return _run_generation_manifest(st)
 
         except Exception as e:
             active_task_timer = st.active_task_timer
@@ -21631,6 +21217,424 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_manifest(st):
+    """Pop the internal settings and build the task manifest (shot-aware edit, multi-clip or single)."""
+    job, job_id, raw_params = st.job, st.job_id, st.raw_params
+    # For video: extract film grain settings and apply as post-processing
+    # after generation (avoids 3x slowdown from pipeline re-processing).
+    # For images: leave film grain in params so the pipeline applies it inline
+    # (single image is instant, no slowdown issue).
+    gen_mode = raw_params.get("generation_mode", "video")
+    if gen_mode != "image":
+        pp_film_grain_intensity = raw_params.pop("film_grain_intensity", 0)
+        pp_film_grain_saturation = raw_params.pop("film_grain_saturation", 0.5)
+    else:
+        pp_film_grain_intensity = 0
+        pp_film_grain_saturation = 0.5
+
+    # FlashVSR upscaling is deferred to a whole-file post-pass (below):
+    # one continuous temporal pass over the assembled video instead of
+    # per-sliding-window chunks — FlashVSR's temporal state no longer
+    # resets at window boundaries (detail "pop" at seams), and it stops
+    # competing with the diffusion model for VRAM between windows.
+    # Lanczos/VAE methods keep the inline per-window path (cheap,
+    # stateless), and images keep inline upsampling (single frame).
+    pp_spatial_upsampling = ""
+    if gen_mode != "image":
+        _su_val = str(raw_params.get("spatial_upsampling") or "")
+        if "flashvsr" in _su_val:
+            pp_spatial_upsampling = _su_val
+            raw_params.pop("spatial_upsampling", None)
+
+    # Voice clone postprocessing (SeedVC) — replaces 1 or 2 voices
+    # in the generated video's audio with user-supplied reference
+    # voice(s). Driven by three params (set by the UI):
+    #   voice_clone_enabled: bool
+    #   voice_clone_refs:    list[str] of uploaded voice ref file paths
+    #   voice_clone_mode:    "single" or "two"
+    # Pop them out of raw_params so they don't leak into the
+    # generation handler (other handlers don't understand them).
+    pp_voice_clone_enabled = bool(raw_params.pop("voice_clone_enabled", False))
+    pp_voice_clone_refs = resolve_voice_ref_paths(
+        raw_params.pop("voice_clone_refs", None) or [],
+        uploads_root=os.path.join(os.getcwd(), "uploads"),
+        workspace_root=_workspace_dir(job.get("workspace")),
+    )
+    pp_voice_clone_mode = raw_params.pop("voice_clone_mode", "single")
+
+    defer_output_publication = bool(
+        raw_params.pop("_defer_output_publication", False)
+    )
+    recast_shot_manifest = raw_params.pop(
+        "_recast_shot_manifest",
+        None,
+    )
+    repaint_shot_manifest = raw_params.pop(
+        "_repaint_shot_manifest",
+        None,
+    )
+    outpaint_shot_manifest = raw_params.pop(
+        "_outpaint_shot_manifest",
+        None,
+    )
+    if recast_shot_manifest is not None:
+        shot_manifest = recast_shot_manifest
+        shot_workflow = "Recast"
+    elif repaint_shot_manifest is not None:
+        shot_manifest = repaint_shot_manifest
+        shot_workflow = "Repaint"
+    else:
+        shot_manifest = outpaint_shot_manifest
+        shot_workflow = "Outpaint"
+
+    if outpaint_shot_manifest is not None:
+        # Internal Outpaint shots must not run the continuous job's
+        # postprocessor against the complete source video. The final
+        # shot-aware worker restores one pristine audio track only
+        # after all exact-length clips have been assembled.
+        raw_params["_outpaint_preserve_audio"] = False
+        raw_params["_outpaint_source_video"] = None
+        raw_params["_outpaint_lock_source_pixels"] = False
+        raw_params["_outpaint_trim_smear"] = False
+
+    # Shot-aware edits supply exact per-shot guides and settings. They
+    # run through the ordinary task engine but defer concatenation and
+    # publication to their finishing worker.
+    if shot_manifest is not None:
+        import copy
+
+        if not isinstance(shot_manifest, list):
+            finish_job(
+                job,
+                "failed",
+                error=f"{shot_workflow} shot manifest is invalid",
+                message=f"{shot_workflow} shot preparation failed",
+            )
+            return False
+        generated_entries = [
+            entry
+            for entry in shot_manifest
+            if isinstance(entry, dict)
+            and isinstance(entry.get("params"), dict)
+        ]
+        if not generated_entries:
+            finish_job(
+                job,
+                "failed",
+                error=(
+                    f"{shot_workflow} shot manifest contains no "
+                    "generated shots"
+                ),
+                message=f"{shot_workflow} shot preparation failed",
+            )
+            return False
+
+        manifest = []
+        group_id = f"{shot_workflow.casefold()}_shots_{job_id}"
+        for sequence_index, entry in enumerate(generated_entries):
+            wgp.task_id += 1
+            shot_params = copy.deepcopy(raw_params)
+            shot_params.update(copy.deepcopy(entry["params"]))
+            shot_params["multi_prompts_gen_type"] = 0
+            shot_params["multi_clip_info"] = {
+                "group_id": group_id,
+                "index": int(entry.get(
+                    "shot_index",
+                    sequence_index,
+                )),
+                "total": len(generated_entries),
+                "defer_concat": True,
+                "progress_label": "Shot",
+            }
+            manifest.append({
+                "id": wgp.task_id,
+                "params": shot_params,
+                "plugin_data": {},
+            })
+
+    # Multi-clip mode: split single request into per-clip tasks
+    elif raw_params.get("multi_prompts_gen_type") == 3:
+        prompt_text = raw_params.get("prompt", "")
+        # Use clip boundary separator if present (Director v2 with sliding window support),
+        # otherwise fall back to newline split (Studio mode / legacy Director)
+        CLIP_SEPARATOR = "\n---CLIP_BOUNDARY---\n"
+        if CLIP_SEPARATOR in prompt_text:
+            prompt_lines = [p.strip() for p in prompt_text.split(CLIP_SEPARATOR) if p.strip()]
+        else:
+            prompt_lines = [l.strip() for l in prompt_text.split("\n") if l.strip()]
+        image_starts = raw_params.get("image_start", [])
+        if not isinstance(image_starts, list):
+            image_starts = [image_starts] if image_starts else []
+        image_ends = raw_params.get("image_end", [])
+        if not isinstance(image_ends, list):
+            image_ends = [image_ends] if image_ends else []
+        sw_size = raw_params.get("sliding_window_size", raw_params.get("video_length", 121))
+        per_clip_frames = raw_params.pop("per_clip_frames", None)  # optional per-clip durations
+        per_clip_seeds = raw_params.pop("per_clip_seeds", None)
+        per_clip_negative_prompts = raw_params.pop(
+            "per_clip_negative_prompts",
+            None,
+        )
+        per_clip_keyframes = raw_params.pop("per_clip_keyframes", None)  # optional keyframe injection per clip
+        preserve_se_duration_per_clip = bool(
+            raw_params.pop("_se_preserve_duration_per_clip", False)
+        )
+        per_clip_h3_references = raw_params.pop(
+            "per_clip_minimax_h3_references", None,
+        )
+        per_clip_continuations = raw_params.pop(
+            "per_clip_continue_from_previous", None,
+        )
+        multi_clip_concat_audio = raw_params.pop(
+            "multi_clip_concat_audio", None,
+        )
+        multi_clip_audio_start_sec = raw_params.pop("multi_clip_audio_start_sec", 0.0)
+        group_id = f"mc_{int(time.time())}_{raw_params.get('seed', 0)}"
+        clip_count = max(
+            len(prompt_lines),
+            len(image_starts),
+            len(per_clip_h3_references or []),
+            len(per_clip_continuations or []),
+            1,
+        )
+
+        # Get model latent_size for frame quantization — wgp.py quantizes
+        # video_length to (n-1)//latent_size*latent_size+1, so we must match
+        # that here to keep cumulative audio offsets in sync with actual output.
+        _mc_model_type = raw_params.get("model_type", "")
+        try:
+            _mc_min_f, _mc_fs, _mc_latent = wgp.get_model_min_frames_and_step(_mc_model_type)
+        except Exception:
+            _mc_min_f, _mc_fs, _mc_latent = 17, 8, 8
+        try:
+            _mc_model_def = wgp.get_model_def(_mc_model_type) or {}
+        except Exception:
+            _mc_model_def = {}
+        _mc_bounded_director = str(
+            _mc_model_def.get("director_video_strategy") or "rolling_window"
+        ) in {"bounded_start_end", "omni_reference"}
+        _mc_trim_end_frames = bool(
+            _mc_model_def.get("director_trim_end_frames", True)
+        )
+
+        manifest = []
+        # Director timelines can begin after a silent intro. Preserve
+        # that source-audio origin for every clip's conditioning; the
+        # ordinary Studio path continues to default to frame zero.
+        try:
+            cumulative_offset = max(
+                0, int(raw_params.get("audio_frame_offset", 0) or 0),
+            )
+            multi_clip_audio_start_sec = max(
+                0.0, float(multi_clip_audio_start_sec or 0),
+            )
+        except (TypeError, ValueError):
+            cumulative_offset = 0
+            multi_clip_audio_start_sec = 0.0
+        total_trimmed_frames = 0
+        last_se_clip_end_image = None  # track last clip's end image for tail compensation
+        for i in range(clip_count):
+            wgp.task_id += 1
+            clip_params = raw_params.copy()
+            if per_clip_seeds and i < len(per_clip_seeds):
+                try:
+                    clip_params["seed"] = int(per_clip_seeds[i])
+                except (TypeError, ValueError):
+                    pass
+            if (
+                isinstance(per_clip_negative_prompts, list)
+                and i < len(per_clip_negative_prompts)
+            ):
+                clip_params["negative_prompt"] = str(
+                    per_clip_negative_prompts[i] or ""
+                )
+            clip_params["prompt"] = prompt_lines[i] if i < len(prompt_lines) else (prompt_lines[-1] if prompt_lines else "")
+            clip_params["image_start"] = image_starts[i] if i < len(image_starts) else None
+            clip_end = image_ends[i] if i < len(image_ends) else None
+            clip_params["image_end"] = clip_end if clip_end else None
+            if per_clip_h3_references is not None:
+                if i >= len(per_clip_h3_references):
+                    raise ValueError(
+                        f"Missing MiniMax H3 reference manifest for clip {i + 1}."
+                    )
+                clip_params["minimax_h3_references"] = (
+                    per_clip_h3_references[i]
+                )
+            # Set per-clip image_prompt_type based on which images are present
+            has_start = bool(clip_params.get("image_start"))
+            has_end = bool(clip_end)
+            if has_start and has_end:
+                clip_params["image_prompt_type"] = "SE"
+            elif has_start:
+                clip_params["image_prompt_type"] = "S"
+            elif has_end:
+                clip_params["image_prompt_type"] = "E"
+            # Rolling-window multi-clip keeps its historic automatic
+            # continuation. Bounded models opt in per clip: Director
+            # uses this for duration-split FL2VA segments or an
+            # explicitly planned literal continuation, never across
+            # an ordinary editorial cut.
+            if not has_start and i > 0:
+                bounded_continuation = bool(
+                    per_clip_continuations
+                    and i < len(per_clip_continuations)
+                    and per_clip_continuations[i]
+                )
+                if not _mc_bounded_director or bounded_continuation:
+                    clip_params["_continuation"] = True
+                    if bounded_continuation:
+                        clip_params["_continuation_tail_skip"] = 0
+            clip_frames = per_clip_frames[i] if per_clip_frames and i < len(per_clip_frames) else sw_size
+            if _mc_bounded_director:
+                clip_frames = int(clip_frames)
+                _mc_max_f = int(
+                    _mc_model_def.get("frames_maximum") or clip_frames
+                )
+                if not (
+                    _mc_min_f <= clip_frames <= _mc_max_f
+                    and (clip_frames - _mc_min_f) % max(1, _mc_fs) == 0
+                ):
+                    raise ValueError(
+                        f"Clip {i + 1} has {clip_frames} frames, outside "
+                        f"the selected model's {_mc_min_f}-{_mc_max_f} "
+                        f"frame lattice (step {_mc_fs})."
+                    )
+            else:
+                # Quantize to valid frame count (same formula as wgp.py)
+                clip_frames = (clip_frames - 1) // _mc_latent * _mc_latent + 1
+                clip_frames = max(clip_frames, _mc_min_f)
+            # SE mode: mark tail frames for trimming (removes end-frame
+            # conditioning distortion at tensor level before saving)
+            trim_tail = 0
+            if has_end and _mc_trim_end_frames:
+                trim_tail = _mc_fs
+                last_se_clip_end_image = clip_end
+                if preserve_se_duration_per_clip:
+                    # `clip_frames` is the requested visible duration.
+                    # Generate one conditioning step more so removing
+                    # the distorted SE tail leaves that duration intact.
+                    clip_frames = (
+                        (clip_frames + trim_tail - 1)
+                        // _mc_latent
+                        * _mc_latent
+                        + 1
+                    )
+            clip_params["video_length"] = clip_frames
+            clip_params["trim_tail_frames"] = trim_tail
+            clip_params["audio_frame_offset"] = cumulative_offset
+            cumulative_offset += clip_frames - trim_tail  # advance by post-trim frames for audio sync
+            if not preserve_se_duration_per_clip:
+                total_trimmed_frames += trim_tail
+            clip_params["multi_clip_info"] = {
+                "group_id": group_id,
+                "index": i,
+                "total": clip_count,
+                "cumulative_offset": True,
+                "audio_start_sec": multi_clip_audio_start_sec,
+                "concat_audio_path": multi_clip_concat_audio,
+            }
+            # If the clip prompt has newlines (window_prompts), use mode 1 (per-window)
+            # Otherwise mode 0 (single task)
+            clip_prompt = clip_params.get("prompt", "")
+            clip_params["multi_prompts_gen_type"] = 1 if "\n" in clip_prompt else 0
+            # Keyframe injection: add image_refs and frames_positions for this clip
+            if per_clip_keyframes and i < len(per_clip_keyframes) and per_clip_keyframes[i]:
+                kf_paths = per_clip_keyframes[i]
+                clip_params["image_refs"] = kf_paths
+                # Position each keyframe at "L" (last frame of each window)
+                clip_params["frames_positions"] = " ".join(["L"] * len(kf_paths))
+                # Enable frames injection mode
+                existing_vpt = clip_params.get("video_prompt_type", "")
+                if "KFI" not in existing_vpt:
+                    clip_params["video_prompt_type"] = existing_vpt + "KFI"
+            manifest.append({
+                "id": wgp.task_id,
+                "params": clip_params,
+                "plugin_data": {},
+            })
+
+        # Compensation tail clip: if SE trimming removed frames, generate a
+        # short extra clip (start-frame only, no SE distortion) to fill the gap
+        # so the final video matches the full audio duration.
+        if total_trimmed_frames > 0 and _mc_trim_end_frames:
+            # Snap to valid frame count for the model
+            model_type = raw_params.get("model_type", "")
+            try:
+                min_f, fs, _ = wgp.get_model_min_frames_and_step(model_type)
+            except Exception:
+                min_f, fs = 9, 8  # LTX-2 defaults
+            # Round up to nearest valid frame count (must be >= min_frames)
+            tail_frames = max(min_f, ((total_trimmed_frames - 1) // fs) * fs + 1)
+            if tail_frames < min_f:
+                tail_frames = min_f
+
+            wgp.task_id += 1
+            tail_params = raw_params.copy()
+            # Use last clip's prompt and last clip's end image as start frame
+            tail_params["prompt"] = prompt_lines[-1] if prompt_lines else ""
+            tail_params["image_start"] = last_se_clip_end_image
+            tail_params["image_end"] = None
+            tail_params["image_prompt_type"] = "S"  # start-only, no SE distortion
+            tail_params["video_length"] = tail_frames
+            tail_params["trim_tail_frames"] = 0
+            tail_params["audio_frame_offset"] = cumulative_offset
+            tail_params["multi_clip_info"] = {
+                "group_id": group_id,
+                "index": clip_count,
+                "total": clip_count + 1,
+                "cumulative_offset": True,
+                "audio_start_sec": multi_clip_audio_start_sec,
+                "concat_audio_path": multi_clip_concat_audio,
+            }
+            tail_params["multi_prompts_gen_type"] = 0
+
+            # Update all previous clips' total count to include the tail
+            for m in manifest:
+                m["params"]["multi_clip_info"]["total"] = clip_count + 1
+
+            manifest.append({
+                "id": wgp.task_id,
+                "params": tail_params,
+                "plugin_data": {},
+            })
+            print(f"[Multi-Clip] SE trim compensation: lost {total_trimmed_frames} frames across {clip_count} clips, adding tail clip of {tail_frames} frames")
+    else:
+        wgp.task_id += 1
+        # SE trim: if end image is set, mark tail frames for trimming
+        # (removes distorted frames from end-frame conditioning)
+        has_end_image = raw_params.get("image_end") not in (None, "", [])
+        try:
+            _single_model_def = wgp.get_model_def(
+                raw_params.get("model_type", "")
+            ) or {}
+        except Exception:
+            _single_model_def = {}
+        if (
+            has_end_image
+            and raw_params.get("video_length")
+            and bool(_single_model_def.get("director_trim_end_frames", True))
+        ):
+            model_type = raw_params.get("model_type", "")
+            try:
+                _, fs, _ = wgp.get_model_min_frames_and_step(model_type)
+            except Exception:
+                fs = 8  # LTX-2 default
+            raw_params["trim_tail_frames"] = fs
+
+        manifest = [{
+            "id": wgp.task_id,
+            "params": raw_params,
+            "plugin_data": {},
+        }]
+    st.defer_output_publication, st.manifest = defer_output_publication, manifest
+    st.pp_film_grain_intensity = pp_film_grain_intensity
+    st.pp_film_grain_saturation = pp_film_grain_saturation
+    st.pp_spatial_upsampling = pp_spatial_upsampling
+    st.pp_voice_clone_enabled, st.pp_voice_clone_mode = pp_voice_clone_enabled, pp_voice_clone_mode
+    st.pp_voice_clone_refs = pp_voice_clone_refs
+    return _run_generation_queue(st)
 
 
 def _run_generation_queue(st):
