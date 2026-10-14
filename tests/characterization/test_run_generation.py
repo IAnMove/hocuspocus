@@ -111,26 +111,44 @@ POSTFX_MODULES = {
     "services.generation_sfx": ("_run_sfx_generation",),
 }
 
+# The Recast helper modules (C7). The worker's bystander protection calls two of their functions by their launch
+# names, and the helpers call each other through each module's own globals.
+RECAST_MODULES = (
+    "services.recast_masks",
+    "services.recast_matte",
+    "services.recast_reference_compose",
+    "services.recast_reference_prepare",
+)
+
+
+# Repaint (C6): the modules that took their launch objects, which they read under the launch names.
+REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
+
+# Canonical tasks (C10a): a generation publishes its Activity row through them, so a patch of ``time`` (or any other
+# name they hold) has to land on them too, or the task clock diverges from the launch name the test patched.
+CANONICAL_TASK_MODULES = (
+    "services.canonical_task_fields",
+    "services.canonical_task_publishers",
+    "services.canonical_task_sync",
+)
+
 
 def worker_modules() -> list:
-    """The modules whose globals the worker functions and the post-processing passes read. A move PR repoints this one
-    function.
+    """The modules whose globals the worker functions, the post-processing passes, the Recast helpers and the Repaint
+    routes that start the worker read. A move PR repoints this one function.
 
     That is the full server module while any worker function or pass is still in it, each module of
-    ``services.generation_worker`` that exists, and each module a pass moved to (C4). A name the worker or the passes
-    read is an attribute of every module that reads it.
+    ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7),
+    each Repaint module (C6) and each canonical task module (C10a). A name they read is an attribute of every module
+    that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
     passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
-    # Canonical task modules publish during a generation. A patch of ``time`` (or any other name they hold)
-    # has to land on them too, or the task clock diverges from the launch name the test patched.
-    canonical = [sys.modules[name] for name in (
-        "services.canonical_task_fields",
-        "services.canonical_task_publishers",
-        "services.canonical_task_sync",
-    ) if name in sys.modules]
-    return [worker_module(), *package, *passes, *canonical]
+    recast = [sys.modules[name] for name in RECAST_MODULES if name in sys.modules]
+    repaint = [sys.modules[name] for name in REPAINT_MODULES if name in sys.modules]
+    canonical = [sys.modules[name] for name in CANONICAL_TASK_MODULES if name in sys.modules]
+    return [worker_module(), *package, *passes, *recast, *repaint, *canonical]
 
 
 @dataclass
