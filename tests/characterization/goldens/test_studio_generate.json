@@ -1,0 +1,208 @@
+{
+  "edit-anything requires a model": {
+    "body": {
+      "detail": "model_type is required"
+    },
+    "status": 400
+  },
+  "edit-anything requires a prompt": {
+    "body": {
+      "detail": "prompt is required"
+    },
+    "status": 400
+  },
+  "edit-anything requires a video path": {
+    "body": {
+      "detail": "video_path is required"
+    },
+    "status": 400
+  },
+  "edit-anything video must exist": {
+    "body": {
+      "detail": "Video not found: no-such-video.mp4"
+    },
+    "status": 400
+  },
+  "extract-frames requires a time": {
+    "body": {
+      "detail": "At least one of start_time or end_time is required"
+    },
+    "status": 400
+  },
+  "extract-frames requires a video path": {
+    "body": {
+      "detail": "video_path is required"
+    },
+    "status": 400
+  },
+  "extract-frames video must exist": {
+    "body": {
+      "detail": "Video not found: no-such-video.mp4"
+    },
+    "status": 400
+  },
+  "generate accepts a minimal job": {
+    "body": {
+      "job_id": "<MASKED>",
+      "root_task_id": "<MASKED>",
+      "status": "queued",
+      "task_id": "<MASKED>"
+    },
+    "status": 200
+  },
+  "generate rejects a non-integer priority": {
+    "body": {
+      "detail": "priority must be an integer"
+    },
+    "status": 400
+  },
+  "generate rejects an output name that leaves the workspace": {
+    "body": {
+      "detail": {
+        "code": "invalid_output_name",
+        "message": "Output name must be a single file name inside the workspace",
+        "retryable": false
+      }
+    },
+    "status": 422
+  },
+  "generate rejects an unknown model": {
+    "body": {
+      "detail": "Unknown model: not_a_model"
+    },
+    "status": 400
+  },
+  "generate rejects an unknown workspace collection": {
+    "body": {
+      "detail": "Unknown Workspace collection"
+    },
+    "status": 400
+  },
+  "generate requires a prompt": {
+    "body": {
+      "detail": "prompt is required"
+    },
+    "status": 400
+  },
+  "generate requires model_type": {
+    "body": {
+      "detail": "model_type is required"
+    },
+    "status": 400
+  },
+  "inpaint requires a description": {
+    "body": {
+      "detail": "description is required"
+    },
+    "status": 400
+  },
+  "inpaint requires a model": {
+    "body": {
+      "detail": "model_type is required"
+    },
+    "status": 400
+  },
+  "inpaint requires a video path": {
+    "body": {
+      "detail": "video_path is required"
+    },
+    "status": 400
+  },
+  "inpaint video must exist": {
+    "body": {
+      "detail": "Video not found: no-such-video.mp4"
+    },
+    "status": 400
+  },
+  "openapi": {
+    "body": {
+      "GET /api/v1/sam/status": {
+        "description": "Check if the SAM segmentation service is available.",
+        "operationId": "sam_status_endpoint_api_v1_sam_status_get",
+        "parameters": [],
+        "summary": "Sam Status Endpoint"
+      },
+      "POST /api/v1/edit-anything": {
+        "description": "Submit an Edit Anything job: prompt-driven video edit using the\nAlissonerdx Edit Anything LoRA for LTX-2.3.\n\nUnlike Inpaint, this does NOT require a SAM mask. The LoRA is trained\nto interpret prompts in the patterns:\n  Add:     \"Add a/an [thing] with [attributes], [location].\"\n  Remove:  \"Remove the [thing] [location].\"\n  Replace: \"Replace the [original] [location] with a/an [new] [attributes].\"\n  Style:   \"Convert the video into a [style name] style.\"\n\nBody: {\n    video_path: str, prompt: str, model_type: str,\n    start_time?: float, end_time?: float  (optional time range; default = full video),\n    lora_strength?: float (default 1.0, try 1.2 if edit too weak),\n    negative_prompt?: str, seed?: int,\n    guidance_scale?: float (default 1.0 — distilled LoRA is designed to work at CFG=1),\n    num_inference_steps?: int (default 8 — distilled),\n    retake_strength?: float (default 1.0 — full regen of range; lower = preserve more source),\n    activated_loras?: list, loras_multipliers?: str (user's OTHER LoRAs; ours gets appended),\n    workspace?: str,\n}",
+        "operationId": "edit_anything_endpoint_api_v1_edit_anything_post",
+        "parameters": [],
+        "summary": "Edit Anything Endpoint"
+      },
+      "POST /api/v1/extract-frames": {
+        "description": "Extract one or two frames from a video at specific timestamps.\n\nUsed by the Edit Anything → \"Send to Image Mode\" round-trip: we extract\nthe start and/or end frames of the user's chosen edit range so they\ncan be loaded into Studio Image mode for prompt-driven editing, then\nfed back as boundary anchors to Edit Anything.\n\nBody: {\n    video_path: str,\n    start_time?: float,    # if provided, extract this frame\n    end_time?: float,      # if provided, extract this frame\n    wangp_media?: bool,    # resolve canonical media URLs within their roots\n    workspace?: str,\n}\n\nReturns: {\n    start_path, start_url,    # only if start_time provided\n    end_path, end_url,        # only if end_time provided\n    session_started_at,      # server Unix seconds, only for wangp_media\n}",
+        "operationId": "extract_frames_endpoint_api_v1_extract_frames_post",
+        "parameters": [],
+        "summary": "Extract Frames Endpoint"
+      },
+      "POST /api/v1/generate": {
+        "description": "Submit a generation job. Returns immediately with a job_id.",
+        "operationId": "generate_api_v1_generate_post",
+        "parameters": [],
+        "summary": "Generate"
+      },
+      "POST /api/v1/inpaint": {
+        "description": "Submit a text-driven inpaint job.\n\nPipeline: SAM segment → LTX retake with spatial mask.\n\nBody: {\n    video_path: str, description: str,\n    start_time?: float, end_time?: float,\n    model_type: str, retake_strength?: float,\n    seed?: int, guidance_scale?: float, num_inference_steps?: int,\n    negative_prompt?: str, mask_padding?: int, workspace?: str\n}",
+        "operationId": "inpaint_endpoint_api_v1_inpaint_post",
+        "parameters": [],
+        "summary": "Inpaint Endpoint"
+      },
+      "POST /api/v1/retake": {
+        "description": "Submit a retake job: regenerate a time region of an existing video.\n\nBody: {\n    video_path: str, start_time: float, end_time: float,\n    prompt: str, model_type: str,\n    negative_prompt?: str, seed?: int, guidance_scale?: float,\n    num_inference_steps?: int, retake_strength?: float (0-1),\n    workspace?: str\n}",
+        "operationId": "retake_video_endpoint_api_v1_retake_post",
+        "parameters": [],
+        "summary": "Retake Video Endpoint"
+      },
+      "POST /api/v1/segment/preview": {
+        "description": "Preview mask segmentation on a video frame.\n\nBody: {\n    video_path: str, text: str,\n    start_time?: float, end_time?: float, frame_index?: int\n}",
+        "operationId": "segment_preview_endpoint_api_v1_segment_preview_post",
+        "parameters": [],
+        "summary": "Segment Preview Endpoint"
+      }
+    },
+    "status": 200
+  },
+  "retake requires a model": {
+    "body": {
+      "detail": "model_type is required"
+    },
+    "status": 400
+  },
+  "retake requires a video path": {
+    "body": {
+      "detail": "video_path is required"
+    },
+    "status": 400
+  },
+  "retake video must exist": {
+    "body": {
+      "detail": "Video not found: no-such-video.mp4"
+    },
+    "status": 400
+  },
+  "sam status": {
+    "body": {
+      "error": "SAM service not installed. Open the Pinokio menu and click 'Install Inpaint Support (SAM 3.1)' to enable inpainting.",
+      "model_loaded": false,
+      "status": "not_installed"
+    },
+    "status": 200
+  },
+  "segment preview requires a video path": {
+    "body": {
+      "detail": "video_path is required"
+    },
+    "status": 400
+  },
+  "segment preview requires text": {
+    "body": {
+      "detail": "text is required"
+    },
+    "status": 400
+  },
+  "segment preview video must exist": {
+    "body": {
+      "detail": "Video not found: no-such-video.mp4"
+    },
+    "status": 400
+  }
+}
