@@ -11,8 +11,8 @@ import copy
 import json
 import re
 
-# The comic page check stays in the launch runtime until the comic batch.
-# The full server assigns the real function before any request.
+# The comic page check lives in services.comic_helpers. The full server
+# assigns that function onto this module before any request.
 _comic_page_problem = None
 
 
