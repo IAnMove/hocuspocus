@@ -23,7 +23,7 @@ Related: [MCP connect](SCENE_EFFECTS_AND_MCP.md#enable-and-connect-mcp)
 
 The core server mounts only the handshake routes (`/api/v1/auth/lan/status`,
 `login`, `logout`). It adds no `LanAuthMiddleware`, and it starts with
-`lan_messages=[]`, so it mints and prints no session token
+`lan_messages=[]`, so it prints no session token at startup
 (`tests/test_core_runtime.py` pins that). While core is shared
 (`PINOKIO_SHARE_LOCAL=true`, or a non-loopback `SERVER_NAME`):
 

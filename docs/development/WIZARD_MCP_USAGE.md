@@ -59,7 +59,7 @@ or render a video. Creation receipts include the premises actually saved.
 | --- | --- | --- |
 | `generation.image` | Studio Image, Wizard `prepare_image` + `start_generation`, MCP | Admission queued. Inspect the task. Qwen Image 2.1 (`qwen_image_21*`, including `qwen_image_21_turbo`) is unified T2I+edit: Wizard `attach_studio_references` with `edit_source` / `edit_mask`, MCP v2 `image_guide` / `image_mask` / `image_refs`. |
 | `generation.video` | MCP on the full server (full catalog and `game` profile), the generation inspector's clone/retry, Series shots and game tools. Studio Video and the Wizard's `prepare_video` + `start_generation` do **not** use it (they post to `/api/v1/generate`). | Admission queued. Version 2 is Wan 2.1 `t2v` / `t2v_1.3B`. Version 3 types MiniMax H3 (FL2VA / Ref2VA) and LTX-2.3. `validate: true` on v3 checks the envelope, builds the payload and does not enqueue. See [VIDEO_COMMANDS](VIDEO_COMMANDS.md). |
-| `generation.speech` | Studio Audio → Speech, MCP | Same. Literal text is preserved. Default engine is VoxCPM2 once installed (`voxcpm2_voicedesign`); otherwise KugelAudio. |
+| `generation.speech` | Studio Audio → Speech, MCP | Same. Literal text is preserved. Studio's default engine is VoxCPM2 once installed (`voxcpm2_voicedesign`), otherwise KugelAudio; an MCP call always names its own `model_type`. |
 | `generation.music` | Studio Audio → Music, MCP | Lyrics and Music Caption stay distinct. |
 | `generation.sfx` | Studio Audio → SFX, MCP | Text or a canonical video guide. |
 | `tools.upscale` | Tools → Upscale, MCP | Exact source + method. |

@@ -32,10 +32,13 @@ executable.
 Closed family `t2v` / `t2v_1.3B` (`VIDEO_MODEL_TYPES` in
 `app/services/video_generation_spec.py`). `freeze_video_generation_spec`
 validates and deep-copies the native parameter map. `original` keeps the
-submitted envelope; `effective` adds only adapter-owned video sentinels
-(`generation_mode=video`, `image_mode=0`, `multi_prompts_gen_type=2` so a
-multiline prompt stays one clip). The fingerprint is SHA-256 over the version,
-operation, workspace and effective parameters; `intent_id` is excluded.
+submitted envelope; `effective` adds the adapter-owned Studio video defaults
+(`STUDIO_VIDEO_DEFAULTS`: `generation_mode=video`, `image_mode=0`,
+`batch_size=1`, `repeat_generation=1`, empty LoRA, negative-prompt and
+prompt-type fields, `seed=-1`, and `multi_prompts_gen_type=2` so a multiline
+prompt stays one clip) for every field the caller left out. The fingerprint is
+SHA-256 over the version, operation, workspace and effective parameters;
+`intent_id` is excluded.
 
 ```json
 {
@@ -140,7 +143,9 @@ The call does not poll the GPU or start a model.
 
 After a restart, `jobs.leftovers` lists interrupted generation jobs and
 Video 2D/3D exports. `jobs.resume` retries the stored command;
-`jobs.discard` cancels it so a later scan cannot resurrect it. These three
+`jobs.discard` drops it from the queue (status `discarded`) so a later scan
+cannot resurrect it, and does nothing to a job that is already running (use
+`jobs.cancel`). Both take `input.intent_id`. These three
 tools are in the `game` MCP profile and the full catalog; the `series` profile
 has `jobs.wait` and `jobs.cancel` only.
 
