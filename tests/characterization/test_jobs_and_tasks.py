@@ -408,3 +408,151 @@ def test_the_audio_and_scene_modules_hold_the_objects_launch_names(full_server) 
     assert favorites._get_active_workspace == runtime._get_active_workspace
     assert favorites._read_kit_library is runtime._read_kit_library
     assert runtime._load_favorites is favorites._load_favorites and listing._load_favorites is favorites._load_favorites
+
+
+def _plain_job(job_id: str, **fields: object) -> dict:
+    """One idle registry record. No worker, no process, fixed clock."""
+    job = {
+        "id": job_id,
+        "jobId": job_id,
+        "workspace": "default",
+        "status": "queued",
+        "phase": "queued",
+        "stage": "queued",
+        "message": "Waiting",
+        "created_at": CREATED,
+        "createdAt": CREATED,
+        "current": 0,
+        "total": 0,
+        "progress": 0,
+    }
+    job.update(fields)
+    return job
+
+
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_canonical_sync_lists_every_kind_and_control_answers(server, golden, tmp_path, monkeypatch) -> None:
+    """One Activity sync walks every registry the canonical cluster still reads.
+
+    Recorded on the unchanged server. Every seeded job is idle: cancel settles in
+    this thread. Resume is asked only where the adapter returns before it starts a
+    worker (a completed Series plan, a comic plan with no saved request, a
+    generation task). A disk-only Director pipeline is not a live pipeline, and
+    the assembly controller was registered for the server's original outputs
+    folder, so those cancels are the current 404s. The reset is read from the
+    registry before another sync can publish over it.
+    """
+    import json
+
+    from services import model3d_service, rig_service
+    from services.series_jobs import SeriesJobStore
+    import routers.comics as comics
+    import routers.video_editor as video_editor
+
+    launch = _launch()
+    # ``test_manual_generation_job_is_published_with_its_details`` inserts this
+    # job into the shared registry before monkeypatch owns the key, then
+    # cancels it and leaves the cancelled record behind. Drop it so this sync
+    # lists only the jobs seeded below, in either test order.
+    launch._jobs.pop("golden-manual", None)
+    monkeypatch.setattr(launch._durable_generation_queue, "path", str(tmp_path / "queue.json"))
+    generation = launch._new_generation_job(
+        dict(PARAMS), "default", job_id="golden-gen", created_at=CREATED, publish_task=False,
+    )
+    monkeypatch.setitem(launch._jobs, "golden-gen", generation)
+    audio = _plain_job(
+        "audio-analysis-golden",
+        jobId="audio-analysis-golden",
+        task_id="task-audio-analysis-golden",
+        message="Waiting for audio CPU worker",
+    )
+    monkeypatch.setitem(launch._jobs, audio["id"], audio)
+    plan = _plain_job("golden-plan", message="Waiting to plan an episode", seriesId="series-golden", episodeId="episode-golden")
+    done = _plain_job(
+        "golden-plan-done", status="completed", phase="completed", stage="completed",
+        message="Episode planning finished", seriesId="series-golden", episodeId="episode-done",
+        finishedAt=CREATED,
+    )
+    render = _plain_job(
+        "golden-render", message="Waiting to render", seriesId="series-golden",
+        episodeId="episode-golden", items=[],
+    )
+    monkeypatch.setitem(launch._series_plan_jobs, plan["jobId"], plan)
+    monkeypatch.setitem(launch._series_plan_jobs, done["jobId"], done)
+    monkeypatch.setitem(launch._series_render_jobs, render["jobId"], render)
+    story = _plain_job("golden-story", message="Waiting to plan a story")
+    comic = _plain_job("golden-comic", message="Waiting to plan a comic")
+    monkeypatch.setitem(launch._story_plan_jobs, story["jobId"], story)
+    monkeypatch.setitem(launch._comic_plan_jobs, comic["jobId"], comic)
+    editor = _plain_job("golden-editor", message="Waiting for FFmpeg")
+    image = _plain_job("golden-image", message="Waiting for MiniMax Image")
+    monkeypatch.setitem(video_editor._video_editor_jobs, editor["id"], editor)
+    monkeypatch.setitem(comics._minimax_image_jobs, image["jobId"], image)
+    music = _plain_job(
+        "minimax-music-aabbccddeeff",
+        message="Waiting for MiniMax Music",
+        children=[_plain_job("golden-candidate", message="Waiting for a candidate", parentTaskId="task-minimax-music-minimax-music-aabbccddeeff")],
+    )
+    monkeypatch.setitem(launch._minimax_music_jobs, music["jobId"], music)
+    monkeypatch.setitem(model3d_service._jobs, "golden-model3d", _plain_job("golden-model3d", message="Waiting for Hunyuan"))
+    monkeypatch.setitem(rig_service._jobs, "golden-rig", _plain_job("golden-rig", engine="procedural", message="Waiting to rig"))
+    SeriesJobStore(launch._workspace_dir("default"), "assembly").save(_plain_job(
+        "golden-assembly", message="Waiting to join clips", seriesId="series-golden", episodeId="episode-golden",
+    ))
+    (server.outputs / "_director_pipeline_golden-director.json").write_text(json.dumps({
+        "pipeline_id": "golden-director",
+        "status": "completed",
+        "phase": "completed",
+        "pipeline_type": "music_video",
+        "generation_mode": "image_guided",
+        "created_at": CREATED,
+        "updated_at": CREATED,
+        "completed_at": CREATED,
+        "progress": {"current": 1, "total": 1, "message": "Director finished"},
+        "scene_description": "a golden scene",
+        "output_files": [],
+    }), encoding="utf-8")
+
+    server.check(golden, "canonical sync every kind", "GET", "/api/v1/tasks", params={"workspace": "default", "status": "all"})
+    productions = server.check(golden, "productions of the seeded pipeline", "GET", "/api/v1/productions", params={"workspace": "default"})
+    production_id = productions.json()["productions"][0]["id"]
+    run_id = productions.json()["productions"][0]["run_ids"][0]
+    server.check(golden, "one production", "GET", f"/api/v1/productions/{production_id}")
+    server.check(golden, "runs of the seeded pipeline", "GET", "/api/v1/runs", params={"workspace": "default"})
+    server.check(golden, "one run", "GET", f"/api/v1/runs/{run_id}")
+    server.check(golden, "production missing", "GET", "/api/v1/productions/production-does-not-exist")
+    server.check(golden, "productions unknown workspace", "GET", "/api/v1/productions", params={"workspace": "missing-workspace"})
+
+    workspace = {"workspace": "default"}
+    for case, task_id in (
+        ("cancel generation", "task-generation-golden-gen"),
+        ("cancel audio analysis", "task-audio-analysis-golden"),
+        ("cancel series plan", "task-series-plan-golden-plan"),
+        ("cancel series render", "task-series-render-golden-render"),
+        ("cancel story plan", "task-story-plan-golden-story"),
+        ("cancel video editor", "task-video-editor-golden-editor"),
+        ("cancel minimax image", "task-minimax-image-golden-image"),
+        ("cancel minimax music", "task-minimax-music-minimax-music-aabbccddeeff"),
+        ("cancel model3d", "task-model3d-golden-model3d"),
+        ("cancel rig", "task-rig-golden-rig"),
+        ("cancel series assembly", "task-series-assembly-golden-assembly"),
+        ("cancel director pipeline", "task-director-golden-director"),
+        ("cancel comic plan", "task-comic-plan-golden-comic"),
+    ):
+        server.check(golden, case, "POST", f"/api/v1/tasks/{task_id}/cancel", params=workspace)
+    server.check(golden, "retry generation", "POST", "/api/v1/tasks/task-generation-golden-gen/retry", params=workspace)
+    server.check(golden, "resume generation", "POST", "/api/v1/tasks/task-generation-golden-gen/resume", params=workspace)
+    server.check(golden, "retry completed series plan", "POST", "/api/v1/tasks/task-series-plan-golden-plan-done/retry", params=workspace)
+    server.check(golden, "resume completed series plan", "POST", "/api/v1/tasks/task-series-plan-golden-plan-done/resume", params=workspace)
+    server.check(golden, "retry comic plan without a request", "POST", "/api/v1/tasks/task-comic-plan-golden-comic/retry", params=workspace)
+
+    launch._upsert_canonical_task(
+        "default", "task-golden-reset",
+        root_id="task-golden-reset", kind="foreground", workflow="frontend",
+        title="Golden reset", status="failed", phase="failed", message="Failed",
+        created_at=CREATED, cancelable=False, error={"message": "boom", "retryable": True},
+    )
+    launch._reset_canonical_task_for_resume("default", "task-golden-reset")
+    reopened = launch._task_registry("default").get("task-golden-reset")
+    golden.check("reset reopens a failed task before the next sync", 200, server.normalise(reopened))
+    server.check(golden, "reset task after a later sync", "GET", "/api/v1/tasks/task-golden-reset", params=workspace)
