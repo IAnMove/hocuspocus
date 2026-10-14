@@ -1,0 +1,177 @@
+{
+  "cancel a repair that is not running": {
+    "body": {
+      "error": "No active repair for this pipeline"
+    },
+    "status": 409
+  },
+  "classify with no sections": {
+    "body": {
+      "method": "heuristic",
+      "sections": []
+    },
+    "status": 200
+  },
+  "classify without analysis": {
+    "body": {
+      "detail": "analysis is required"
+    },
+    "status": 400
+  },
+  "continue a missing pipeline": {
+    "body": {
+      "detail": "Pipeline is not paused"
+    },
+    "status": 400
+  },
+  "delete a missing pipeline": {
+    "body": {
+      "detail": "Pipeline not found: missing"
+    },
+    "status": 404
+  },
+  "edit an unknown clip prompt": {
+    "body": {
+      "error": "Clip not found"
+    },
+    "status": 400
+  },
+  "patch a missing preview": {
+    "body": {
+      "detail": "No saved state found for this pipeline."
+    },
+    "status": 400
+  },
+  "plan dialogue without analysis": {
+    "body": {
+      "detail": "analysis is required"
+    },
+    "status": 400
+  },
+  "plan prompts without a scene": {
+    "body": {
+      "detail": "scene_description is required"
+    },
+    "status": 400
+  },
+  "plan prompts without clips": {
+    "body": {
+      "detail": "clips is required"
+    },
+    "status": 400
+  },
+  "plan short film prompts without a scene": {
+    "body": {
+      "detail": "scene_description is required"
+    },
+    "status": 400
+  },
+  "plan short film prompts without clips": {
+    "body": {
+      "detail": "clips is required"
+    },
+    "status": 400
+  },
+  "plan short film script without a story": {
+    "body": {
+      "detail": "story_description is required"
+    },
+    "status": 400
+  },
+  "preview a missing pipeline": {
+    "body": {
+      "detail": "No saved state found for this pipeline."
+    },
+    "status": 400
+  },
+  "rejoin a missing pipeline": {
+    "body": {
+      "error": "Pipeline missing not found"
+    },
+    "status": 400
+  },
+  "repair a missing pipeline": {
+    "body": {
+      "error": "Pipeline missing not found"
+    },
+    "status": 400
+  },
+  "rerun an unknown clip image": {
+    "body": {
+      "error": "Clip index 9 out of range (0-0)"
+    },
+    "status": 400
+  },
+  "rerun an unknown clip video": {
+    "body": {
+      "error": "Clip index 9 out of range (0-0)"
+    },
+    "status": 400
+  },
+  "rerun an unknown segment": {
+    "body": {
+      "error": "This operation requires a saved MiniMax H3 production"
+    },
+    "status": 400
+  },
+  "resume a missing pipeline": {
+    "body": {
+      "detail": "No saved state found for this pipeline."
+    },
+    "status": 400
+  },
+  "resume a v2 plan job that does not exist": {
+    "body": {
+      "detail": "Director plan job not found"
+    },
+    "status": 404
+  },
+  "select a video for an unknown clip": {
+    "body": {
+      "error": "Select one valid video filename from this workspace"
+    },
+    "status": 400
+  },
+  "start with an unknown collection": {
+    "body": {
+      "detail": "Unknown Workspace collection"
+    },
+    "status": 400
+  },
+  "stop a missing pipeline": {
+    "body": {
+      "detail": "Pipeline not found"
+    },
+    "status": 404
+  },
+  "tag an unknown clip": {
+    "body": {
+      "error": "Pipeline or clip not found"
+    },
+    "status": 404
+  },
+  "v2 plan job that does not exist": {
+    "body": {
+      "detail": "Director plan job not found"
+    },
+    "status": 404
+  },
+  "v2 plan jobs for an empty workspace": {
+    "body": {
+      "jobs": []
+    },
+    "status": 200
+  },
+  "v2 plan progress for a missing activity": {
+    "body": {
+      "detail": "Planning activity not found"
+    },
+    "status": 404
+  },
+  "v2 plan with a bad body": {
+    "body": {
+      "detail": "Director plan request must be an object"
+    },
+    "status": 422
+  }
+}
