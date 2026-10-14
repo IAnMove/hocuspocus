@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Audio analysis can be polled and cancelled by job id when the song lives in another workspace.** Preparing a music video from a track adopted from another project used to answer "job not found" on the progress poll and on Cancel, because an omitted workspace was treated as the active one. The job id is enough; an explicit workspace still has to match. Whisper keeps running until the worker finishes if cancel is refused.
+
 **Favorites and scene save left the launch module.** Marking a clip as a favorite, saving a scene, and uploading a scene recording still answer the same way on the main server. The core server uses the same scene and recording routes, so it checks input the way the main server does. Saving a scene on core needs a JSON object sent with the JSON content type: a body that is not an object, a broken body, or JSON sent as plain text or with no content type is now rejected as invalid input (it used to be saved, or to fail with a server error). A core recording sent without a file is rejected as invalid input too, and one whose metadata field is far too large now gets a plain 400 instead of a server error. The web app always sends the right content type and a file, so it is not affected; a script that posts to core by hand must set `Content-Type: application/json`.
 
 **Audio upload, trim, mix, and analysis left the launch module.** Uploading a clip, adopting one the machine already has, trimming it, mixing tracks, and reading an analysis still answer the same way. An unknown analysis job is still not found. Asking for clips or a structure without an analysis is still refused. The analysis jobs stay in the same job registry as every other job.
