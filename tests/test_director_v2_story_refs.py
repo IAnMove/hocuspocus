@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import re
 import tempfile
@@ -28,27 +27,8 @@ from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
 from app.services.director_pipeline import _has_visual_references
+from app.services.director_v2_plan import _director_v2_planner_kwargs
 from app.services.director_video_strategy import SHOT_IMAGE_PROMPT_ONLY
-
-
-def _load_planner_kwargs():
-    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = []
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_DIRECTOR_V2_PLANNER_KEYS"
-            for target in node.targets
-        ):
-            selected.append(node)
-        if isinstance(node, ast.FunctionDef) and node.name == "_director_v2_planner_kwargs":
-            selected.append(node)
-    namespace: dict = {}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
-    return namespace["_director_v2_planner_kwargs"]
-
-
-_director_v2_planner_kwargs = _load_planner_kwargs()
 
 
 def _music_shot(index: int) -> dict:

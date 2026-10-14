@@ -28,8 +28,8 @@ from services import llm_service
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
 DIRECTOR = ROOT / "app" / "routers" / "director.py"
+DIRECTOR_V2 = ROOT / "app" / "services" / "director_v2_plan.py"
 REF2VA = ROOT / "app" / "models" / "minimax_h3" / "ref2va.py"
 MODELS_LANGUAGE = ROOT / "app" / "models" / "minimax_h3" / "spoken_language.py"
 LLM_SERVICE = ROOT / "app" / "services" / "llm_service.py"
@@ -90,7 +90,7 @@ def test_runtime_adapt_clip_plans_pass_explicit_policy():
         "director_plan_short_film_prompts": _module_function(
             DIRECTOR, "director_plan_short_film_prompts",
         ),
-        "_director_v2_plan_body": _module_function(LAUNCH, "_director_v2_plan_body"),
+        "_director_v2_plan_body": _module_function(DIRECTOR_V2, "_director_v2_plan_body"),
     }
     assert set(functions) == {
         "director_plan_prompts_and_images",
