@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.launch_ast import generation_source
+
 import routers.video_editor as editor_router
 from services import execution_mode
 from services.asset_manifest import (
@@ -560,6 +562,8 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
                 return ast.get_source_segment(text, node)
         raise AssertionError(name)
 
+    worker_text = generation_source()
+    worker_tree = ast.parse(worker_text)
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
@@ -568,7 +572,9 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
     ):
-        body = function_source(name)
+        # _write_output_sidecars is nested in a phase of the generation worker
+        body = (function_source(name, worker_text, worker_tree) if name == "_write_output_sidecars"
+                else function_source(name))
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
     animatic_source = (
