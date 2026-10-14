@@ -13,7 +13,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from services import execution_mode
+from services import execution_mode, task_controls
 
 
 def create_model3d_router(
@@ -117,4 +117,5 @@ def create_model3d_router(
     globals()["generate_model3d"] = generate_model3d
     globals()["model3d_job_status"] = model3d_job_status
     globals()["cancel_model3d_job"] = cancel_model3d_job
+    task_controls.register("model3d", "cancel", lambda task: cancel_model3d_job(task_controls.job_id(task)))
     return router

@@ -15,7 +15,7 @@ import core_runtime
 from core_runtime import api
 from services.platform_capabilities import FEATURE_UNAVAILABLE
 from services.scene_commands import SceneCommands
-from services import core_remote_image
+from services import core_canonical_tasks, core_remote_image
 from services.core_remote_image import catalog_entry
 
 
@@ -849,6 +849,183 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(foreign.status_code, 400, foreign.text)
         self.assertIn("Invalid workspace name", str(foreign.json()["detail"]))
 
+    def test_activity_cancel_stops_a_queued_video_editor_export(self):
+        """Core Activity now lists editor exports; Cancel must stop FFmpeg, not MiniMax."""
+        from services import core_workspace as core
+
+        class FrozenThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                pass
+
+            def start(self):
+                return None
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            workspace = core.workspace_dir("default")
+            Path(workspace, "clip.mp4").write_bytes(b"clip")
+            with patch("routers.video_editor.threading.Thread", FrozenThread):
+                started = self.client.post("/api/v1/video-editor/export", json={
+                    "clips": [{"source": "clip.mp4"}],
+                    "name": "Harbour cut",
+                    "workspace": "default",
+                })
+                job_id = started.json()["job_id"]
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+                editor = next(
+                    task for task in listed.json().get("tasks") or []
+                    if task.get("backend_job_id") == job_id
+                )
+                cancelled = self.client.post(
+                    f"/api/v1/tasks/{editor['id']}/cancel",
+                    params={"workspace": "default"},
+                )
+                status = self.client.get(f"/api/v1/video-editor/export/{job_id}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertTrue(editor.get("cancelable"), editor)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["status"], "cancelled", status.json())
+        self.assertEqual(cancelled.json()["task"]["status"], "cancelled")
+
+    def _activity_row(self, adapter, job_id, **fields):
+        """The Activity row a router publishes for one backend job, so Cancel/Resume have something to act on."""
+        return core_canonical_tasks.upsert_task(
+            "default", f"task-{adapter}-{job_id}", kind=adapter, workflow=adapter, title=adapter, status="queued",
+            backend_job_id=job_id, cancelable=True, metadata={"adapter": adapter}, **fields,
+        )
+
+    def _activity_control(self, row, action="cancel"):
+        return self.client.post(f"/api/v1/tasks/{row['id']}/{action}", params={"workspace": "default"})
+
+    def test_activity_cancel_reaches_the_jobs_of_the_routers_core_mounts(self):
+        """Before the controls table, every adapter but MiniMax image answered 404 "Task not found"."""
+        from services import core_remote_3d, rig_service, story_music_jobs
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            rig_service._jobs["rig-act"] = {"job_id": "rig-act", "status": "queued", "workspace": "default"}
+            core_remote_3d._JOBS["m3d-act"] = {"job_id": "m3d-act", "status": "queued", "workspace": "default"}
+            with story_music_jobs._minimax_music_jobs_lock:
+                story_music_jobs._minimax_music_jobs["minimax-music-aaaaaaaaaaaa"] = {
+                    "jobId": "minimax-music-aaaaaaaaaaaa", "workspace": "default", "status": "queued", "children": [],
+                }
+            rows = {
+                "rig": self._activity_row("rig", "rig-act"),
+                "model3d": self._activity_row("model3d", "m3d-act"),
+                "minimax-music": self._activity_row("minimax-music", "minimax-music-aaaaaaaaaaaa"),
+            }
+            answers = {name: self._activity_control(row) for name, row in rows.items()}
+            states = {
+                "rig": rig_service._jobs["rig-act"]["status"],
+                "model3d": core_remote_3d._JOBS["m3d-act"]["status"],
+                "minimax-music": story_music_jobs._minimax_music_jobs["minimax-music-aaaaaaaaaaaa"]["status"],
+            }
+        finally:
+            rig_service._jobs.pop("rig-act", None)
+            with story_music_jobs._minimax_music_jobs_lock:
+                story_music_jobs._minimax_music_jobs.clear()
+            self._leave_temp_workspace(folder, previous)
+        for name, answer in answers.items():
+            self.assertEqual(answer.status_code, 200, f"{name}: {answer.text}")
+            self.assertEqual(states[name], "cancelled", name)
+
+    def test_activity_cancel_of_a_music_candidate_row_cancels_its_job(self):
+        from services import story_music_jobs
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            job_id = "minimax-music-bbbbbbbbbbbb"
+            with story_music_jobs._minimax_music_jobs_lock:
+                story_music_jobs._minimax_music_jobs[job_id] = {
+                    "jobId": job_id, "workspace": "default", "status": "queued", "children": [],
+                }
+            row = self._activity_row(
+                "minimax-music-candidate", f"{job_id}-1", root_id=f"task-minimax-music-{job_id}",
+            )
+            answer = self._activity_control(row)
+            state = story_music_jobs._minimax_music_jobs[job_id]["status"]
+        finally:
+            with story_music_jobs._minimax_music_jobs_lock:
+                story_music_jobs._minimax_music_jobs.clear()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(answer.status_code, 200, answer.text)
+        self.assertEqual(state, "cancelled")
+
+    def test_activity_cancel_and_discard_reach_a_queued_series_assembly(self):
+        class FrozenThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                pass
+
+            def start(self):
+                return None
+
+        from routers import series_assembly
+        from services import core_workspace as core
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            series = self._ready_to_assemble()
+            # Assembly controllers are keyed by workspace folder when the router is built. Core's folders are
+            # relative to the working directory, which this test moved, so register the temp one the same way.
+            controller = next(iter(series_assembly._ASSEMBLY_CONTROLLERS.values()))
+            controllers = patch.dict(series_assembly._ASSEMBLY_CONTROLLERS, {
+                os.path.realpath(core.workspace_dir("default")): controller,
+            })
+            controllers.start()
+            self.addCleanup(controllers.stop)
+            with patch("routers.series_assembly.threading.Thread", FrozenThread):
+                started = self.client.post(
+                    f"/api/v1/series/{series['id']}/episodes/episode-1/assembly/start", json={"workspace": "default"},
+                )
+            job_id = started.json()["jobId"]
+            listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+            row = next(task for task in listed.json()["tasks"] if task.get("backend_job_id") == job_id)
+            cancelled = self._activity_control(row)
+            status = self.client.get(f"/api/v1/series/assembly/jobs/{job_id}", params={"workspace": "default"})
+            discarded = self.client.delete(f"/api/v1/tasks/{row['id']}", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 200, started.text)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        # The worker is frozen, so the job waits for its cancellation boundary instead of settling.
+        self.assertEqual(status.json()["status"], "cancelling", status.json())
+        self.assertEqual(discarded.status_code, 409, discarded.text)
+        self.assertIn("Cancel the active assembly", discarded.text, "the discard reached the assembly controller")
+
+    def test_activity_control_of_an_adapter_without_a_handler_keeps_the_old_answers(self):
+        """Core does not mount the audio router: its rows still answer as before (404 / 409), not with a guess."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            row = self._activity_row("audio-analysis", "audio-analysis-aaaaaaaaaaaa")
+            cancelled = self._activity_control(row)
+            resumed = self._activity_control(row, "resume")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(cancelled.status_code, 404, cancelled.text)
+        self.assertEqual(resumed.status_code, 409, resumed.text)
+
+    def test_task_controls_treat_retry_as_resume_and_the_last_registration_wins(self):
+        from services import task_controls
+
+        task_controls.register("unit-adapter", "resume", lambda task: "first")
+        task_controls.register("unit-adapter", "resume", lambda task: "second")
+        try:
+            self.assertEqual(task_controls.handler_for("unit-adapter", "retry")({}), "second")
+            self.assertEqual(task_controls.handler_for("unit-adapter", "RESUME")({}), "second")
+            self.assertIsNone(task_controls.handler_for("unit-adapter", "cancel"))
+            self.assertIsNone(task_controls.handler_for("", "cancel"))
+            with self.assertRaises(ValueError):
+                task_controls.register("unit-adapter", "cancel", None)
+            self.assertEqual(task_controls.job_id({"backend_job_id": 7}), "7")
+        finally:
+            task_controls._handlers.pop(("unit-adapter", "resume"), None)
+
     def test_production_profile_defaults_to_remote_providers(self):
         listed = self.client.get("/api/v1/production-profile")
         self.assertEqual(listed.status_code, 200)
@@ -895,53 +1072,58 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(created.status_code, 200)
         self.assertTrue(str(created.json()["id"]).startswith("series_"))
 
-    def test_series_assembly_joins_approved_clips_on_the_core_profile(self):
+    def _ready_to_assemble(self):
+        """Two approved clips of one episode, written to the temp workspace's library; returns the series."""
         from services.series_library import (
             create_series_project,
             empty_series_library,
             write_series_library,
         )
 
+        Path("outputs").mkdir()
+        Path("outputs", "one.mp4").write_bytes(b"one")
+        Path("outputs", "two.mp4").write_bytes(b"two")
+        series = create_series_project("default", title="Harbour")
+        season_id = series["seasons"][0]["id"]
+        series["assets"] = {
+            "asset-1": {"id": "asset-1", "kind": "video", "uri": "outputs/one.mp4",
+                        "ownerType": "episode", "ownerId": "episode-1"},
+            "asset-2": {"id": "asset-2", "kind": "video", "uri": "outputs/two.mp4",
+                        "ownerType": "episode", "ownerId": "episode-1"},
+        }
+        series["episodesById"] = {
+            "episode-1": {
+                "id": "episode-1",
+                "seasonId": season_id,
+                "script": [{"id": "scene_1", "beats": [], "dialogue": []}],
+                "shots": [{
+                    "id": "shot-2", "order": 2, "sceneId": "scene_1",
+                    "approvedAttemptId": "attempt-2",
+                    "attempts": [{"id": "attempt-2", "status": "completed",
+                                  "outputAssetIds": ["asset-2"]}],
+                }, {
+                    "id": "shot-1", "order": 1, "sceneId": "scene_1",
+                    "approvedAttemptId": "attempt-1",
+                    "attempts": [{"id": "attempt-1", "status": "completed",
+                                  "outputAssetIds": ["asset-1"]}],
+                }],
+            },
+        }
+        series["seasons"][0]["episodeOrder"] = ["episode-1"]
+        library = empty_series_library("default")
+        library["seriesById"][series["id"]] = series
+        library["seriesOrder"] = [series["id"]]
+        write_series_library(str(Path("outputs")), library, "default")
+        return series
+
+    def test_series_assembly_joins_approved_clips_on_the_core_profile(self):
         def concatenate(paths, output_path, **_kwargs):
             Path(output_path).write_bytes(b"".join(Path(path).read_bytes() for path in paths))
             return True
 
         folder, previous = self._in_temp_workspace()
         try:
-            Path("outputs").mkdir()
-            Path("outputs", "one.mp4").write_bytes(b"one")
-            Path("outputs", "two.mp4").write_bytes(b"two")
-            series = create_series_project("default", title="Harbour")
-            season_id = series["seasons"][0]["id"]
-            series["assets"] = {
-                "asset-1": {"id": "asset-1", "kind": "video", "uri": "outputs/one.mp4",
-                            "ownerType": "episode", "ownerId": "episode-1"},
-                "asset-2": {"id": "asset-2", "kind": "video", "uri": "outputs/two.mp4",
-                            "ownerType": "episode", "ownerId": "episode-1"},
-            }
-            series["episodesById"] = {
-                "episode-1": {
-                    "id": "episode-1",
-                    "seasonId": season_id,
-                    "script": [{"id": "scene_1", "beats": [], "dialogue": []}],
-                    "shots": [{
-                        "id": "shot-2", "order": 2, "sceneId": "scene_1",
-                        "approvedAttemptId": "attempt-2",
-                        "attempts": [{"id": "attempt-2", "status": "completed",
-                                      "outputAssetIds": ["asset-2"]}],
-                    }, {
-                        "id": "shot-1", "order": 1, "sceneId": "scene_1",
-                        "approvedAttemptId": "attempt-1",
-                        "attempts": [{"id": "attempt-1", "status": "completed",
-                                      "outputAssetIds": ["asset-1"]}],
-                    }],
-                },
-            }
-            series["seasons"][0]["episodeOrder"] = ["episode-1"]
-            library = empty_series_library("default")
-            library["seriesById"][series["id"]] = series
-            library["seriesOrder"] = [series["id"]]
-            write_series_library(str(Path("outputs")), library, "default")
+            series = self._ready_to_assemble()
             with patch("services.core_series_assembly.concatenate_clips", side_effect=concatenate), patch(
                 "routers.series_assembly.threading.Thread", ImmediateThread,
             ):
@@ -2596,6 +2778,54 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(listed.status_code, 200, listed.text)
         workflows = [item.get("workflow") for item in listed.json()["tasks"]]
         self.assertIn("series-plan", workflows)
+
+    def test_activity_cancel_and_resume_a_queued_series_plan(self):
+        """Core Activity lists Series plans; Cancel/Resume must hit the plan job, not MiniMax."""
+
+        class FrozenThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                pass
+
+            def start(self):
+                return None
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(), patch("routers.series_plan.threading.Thread", FrozenThread):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+                self.assertEqual(started.status_code, 200, started.text)
+                job_id = started.json()["jobId"]
+                listed = self.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"})
+                plan = next(
+                    task for task in listed.json().get("tasks") or []
+                    if task.get("backend_job_id") == job_id
+                )
+                cancelled = self.client.post(
+                    f"/api/v1/tasks/{plan['id']}/cancel",
+                    params={"workspace": "default"},
+                )
+                status = self.client.get(f"/api/v1/series/plan/jobs/{job_id}")
+                resumed = self.client.post(
+                    f"/api/v1/tasks/{plan['id']}/resume",
+                    params={"workspace": "default"},
+                )
+                after_resume = self.client.get(f"/api/v1/series/plan/jobs/{job_id}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertTrue(plan.get("cancelable"), plan)
+        self.assertTrue(plan.get("resumable"), plan)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(status.status_code, 200, status.text)
+        self.assertEqual(status.json()["status"], "cancelled", status.json())
+        self.assertEqual(cancelled.json()["task"]["status"], "cancelled")
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        self.assertEqual(after_resume.status_code, 200, after_resume.text)
+        self.assertEqual(after_resume.json()["status"], "queued", after_resume.json())
 
     def test_core_plan_recovery_and_discard_routes(self):
         folder, previous = self._in_temp_workspace()

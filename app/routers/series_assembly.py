@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.asset_manifest import publish_generation_sidecar
 from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
-from services import series_hearing, workspace_busy
+from services import series_hearing, task_controls, workspace_busy
 from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
@@ -779,6 +779,10 @@ def create_series_assembly_router(
         except (OSError, ValueError, json.JSONDecodeError):
             continue
 
+    for action in ("cancel", "resume", "discard"):
+        task_controls.register("series-assembly", action, lambda task, action=action: control_series_assembly_job(
+            workspace_dir(str(task.get("workspace") or "default")), task_controls.job_id(task), action,
+        ))
     return router
 
 

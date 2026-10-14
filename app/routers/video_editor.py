@@ -22,7 +22,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from services import resource_scheduler, workspace_busy
+from services import resource_scheduler, task_controls, workspace_busy
 from services.agent_activity import agent_attribution, requested_by as export_requested_by
 from services.asset_manifest import publish_generation_sidecar
 from services.media_refs import parse_media_ref
@@ -987,6 +987,11 @@ def cancel_video_editor_export(job_id: str) -> dict:
 _cancel_export_job = cancel_video_editor_export
 
 
+def _cancel_export_task(task: dict) -> dict:
+    """Activity's Cancel on an editor task (exports, alternative-song remounts and comic animatics share the registry)."""
+    return cancel_video_editor_export(task_controls.job_id(task))
+
+
 def create_video_editor_router(
     *,
     workspace_dir: Callable[..., str],
@@ -996,6 +1001,7 @@ def create_video_editor_router(
     thumbnail_cache_dir: str,
 ) -> APIRouter:
     """Probe, thumbnail, screenshot and export queue at the original ordinals."""
+    task_controls.register("video-editor", "cancel", _cancel_export_task)
     _bind_video_editor_runtime(
         workspace_dir=workspace_dir,
         get_active_workspace=get_active_workspace,
