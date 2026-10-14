@@ -441,10 +441,11 @@ async def outpaint_endpoint(request: Request):
         "force_fps": "control" if is_video else "auto",
         "resolution": f"{final_w}x{final_h}",
         "generation_mode": "video" if is_video else "image",
-        # WanGP saves a picture only when image_mode > 0; without it an image
-        # Outpaint was saved as a one-frame MP4 (validation N1). A video job
-        # leaves it out (None is stripped below), as it always did.
-        "image_mode": None if is_video else 1,
+        # No image_mode here, on purpose. An image source Outpaint on LTX-2 comes
+        # out as a one-frame MP4 (validation N1), but WanGP's validate_settings
+        # wipes video_guide_outpainting unless the model lists the image_mode
+        # (ltx2_handler.py lists only 0): image_mode=1 would turn this into a
+        # plain generation with no outpainting.
         # Tag for the gallery's Edits filter + Load Settings restore path.
         "edit_sub_mode": "outpaint",
         # V = source video guide (the ORIGINAL, unpadded source — the pipeline
