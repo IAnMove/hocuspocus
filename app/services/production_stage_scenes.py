@@ -18,7 +18,7 @@ from services.production_package import (
     attach_origins, clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for,
     manifest_rows, montage_made_by, montage_owned_by_other, write_manifest,
 )
-from services.production_scene2d import resume_clip, scene2d_document
+from services.production_scene2d import keeps_tempo, note_tempo, resume_clip, scene2d_document
 from services.production_scene_retry import apply_scene_export_failure, finish_scene_exports, skip_montage
 from services.video2d_edit import MAX_OPERATIONS
 
@@ -97,7 +97,7 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
         prior = done.get(shot["key"], {})
         fingerprint = host.scene_fingerprint(shot, style, stills, score, start, end)
         if (prior.get("dur") == dur and prior.get("file") and prior.get("clip") == used
-                and prior.get("fingerprint") == fingerprint):
+                and prior.get("fingerprint") == fingerprint and keeps_tempo(prior, shot, score.get("bpm"))):
             continue
         doc = production.scene_document(shot, start, end, score, clips, style, stills)
         docs[shot["key"]] = doc
@@ -105,6 +105,7 @@ def export_scenes(production: Any, spec: dict, windows: list[dict]) -> None:
                                                "input": {"workspace": production.ws, "document": doc}})
         done[shot["key"]] = {"intent": (reply.get("receipt") or {}).get("commandId"), "dur": dur, "clip": used,
                               "fingerprint": fingerprint, "file": None}
+        note_tempo(done[shot["key"]], shot, score.get("bpm"))
         production.save()
     failed = finish_scene_exports(
         production.mcp, production.ws, production.id, done, docs,

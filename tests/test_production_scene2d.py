@@ -481,6 +481,81 @@ def test_a_resume_exports_again_when_the_named_set_was_remade(tmp_path):
     assert calls == ["export"], "a remade set exports the scene again"
 
 
+def _tempo_production(tmp_path, plan, bpm=96):
+    """A production whose card scene was exported once by a shot edit (what records the tempo)."""
+    from services.production_shot_edit import reexport_shot
+    (tmp_path / "score.json").write_text(json.dumps({"duration": 8, "bpm": bpm, "beat": 0.5, "lines": []}))
+    exported = []
+    replies = {
+        scene2d.COMPILE: card_document,
+        "scenes.video2d.edit": lambda arguments: {"result": edit(arguments)["result"]},
+        "scenes.video2d.validate": lambda arguments: {"result": {"warnings": []}},
+        "scenes.document.save": lambda arguments: {"result": {"name": "p-s1.scene.json"}},
+        "scenes.video2d.export": lambda arguments: exported.append(arguments) or {"receipt": {"commandId": "export-s1"}},
+        "scenes.video2d.export.receipt": lambda arguments: {"receipt": {"artifacts": [{"name": "p-s1.mp4"}]}},
+        "montages.get": lambda arguments: {"result": {"revision": 1, "montage": {"revision": 1, "clips": [{"id": "s1", "source": "old.mp4"}]}}},
+        "montages.save": lambda arguments: {"result": {"file": "p.montage.json", "revision": 2}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: replies[tool](arguments))
+    production.state.update(spec=plan, score="score.json", status="completed", frames={"s1": "p-frame-s1.png"}, montage_file="p.montage.json")
+    reexport_shot(production, plan, "s1")
+    exported.clear()
+    return production, exported
+
+
+def _resume(production, plan, bpm):
+    from services.production_stage_scenes import export_scenes
+    Path(production.root / "score.json").write_text(json.dumps({"duration": 8, "bpm": bpm, "beat": 0.5, "lines": []}))
+    export_scenes(production, plan, shot_windows(plan, production.score()))
+
+
+def test_the_tempo_a_card_takes_is_the_scores_held_to_its_range_unless_the_shot_sets_one():
+    card = shot()
+    assert scene2d.score_tempo(card, 96) == 96.0 and scene2d.score_tempo(card, 999) == 220.0 and scene2d.score_tempo(card, 1) == 40.0
+    assert scene2d.score_tempo(card, None) is None and scene2d.score_tempo(card, 0) is None and scene2d.score_tempo(card, True) is None
+    assert scene2d.score_tempo(shot(scene2d={"controls": {"bpm": 120}}), 96) is None, "the shot's own bpm wins"
+    assert scene2d.score_tempo({"key": "s1", "kind": "still", "still": "cover"}, 96) is None
+    data, _prepared = scene2d.compile_input(card, {"subject_1": SUBJECT, "background": PLATE}, 4.0, 96)
+    assert data["controls"]["bpm"] == 96.0, "compile_input and the resume key read the same tempo"
+
+
+def test_a_changed_score_bpm_reexports_the_scene2d_card(tmp_path):
+    """compile_input writes the song tempo into the card; a resume must not keep the old card motion."""
+    drawn = {**shot(), "scene2d": {"template": "music-pinball", "cast": {"subject_1": SUBJECT}}, "frame": "a plaza"}
+    plan = spec(drawn)
+    production, exported = _tempo_production(tmp_path, plan)
+    assert production.state["scenes"]["s1"]["tempo"] == 96.0
+    _resume(production, plan, 96)
+    assert exported == [], "the same tempo keeps the scene"
+    _resume(production, plan, 140)
+    assert len(exported) == 1, "a new score tempo exports the card again"
+    assert production.state["scenes"]["s1"]["tempo"] == 140.0
+    _resume(production, plan, 300)
+    _resume(production, plan, 250)
+    assert len(exported) == 2, "tempos beyond the card's range hold to the same value: one more export, then none"
+
+
+def test_a_card_whose_shot_sets_its_own_bpm_ignores_the_score_tempo(tmp_path):
+    own = shot(scene2d={"controls": {"bpm": 120}})
+    plan = spec(own)
+    production, exported = _tempo_production(tmp_path, plan)
+    assert "tempo" not in production.state["scenes"]["s1"]
+    _resume(production, plan, 140)
+    assert exported == []
+
+
+def test_a_scene_exported_before_the_tempo_was_recorded_is_kept_and_learns_it(tmp_path):
+    """Upgrade: the scenes record of a finished production has no tempo; resuming with the same score exports nothing."""
+    plan = spec(shot())
+    production, exported = _tempo_production(tmp_path, plan)
+    del production.state["scenes"]["s1"]["tempo"]
+    _resume(production, plan, 96)
+    assert exported == [] and production.state["scenes"]["s1"]["tempo"] == 96.0
+    _resume(production, plan, 140)
+    assert len(exported) == 1
+
+
 def test_the_dry_run_reads_the_runs_own_pictures_for_the_alpha_check(tmp_path):
     from PIL import Image
     Image.new("RGB", (8, 8), (200, 40, 40)).save(tmp_path / "boxed.png")      # a picture with no transparent pixel

@@ -271,6 +271,45 @@ def _clamp(value: float, span: tuple[float, float]) -> float:
     return round(min(max(value, span[0]), span[1]), 3)
 
 
+def _tempo(card: str, controls: dict, bpm: Any) -> float | None:
+    """The score's tempo held to the card's bpm range: what ``compile_input`` writes when the card has a ``bpm``
+    control and the shot did not set one (None otherwise: the tempo does not change the card)."""
+    span = _span(card, "bpm")
+    if span and "bpm" not in controls and isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and bpm > 0:
+        return _clamp(float(bpm), span)
+    return None
+
+
+def score_tempo(shot: dict, bpm: Any) -> float | None:
+    """The tempo the shot's card would take from a score with this ``bpm`` (None for a shot or card that ignores it)."""
+    if not is_scene2d(shot):
+        return None
+    try:
+        card = str(prepare_card(shot).get("templateId"))
+    except Scene2dError:
+        return None
+    return _tempo(card, dict(shot["scene2d"].get("controls") or {}), bpm)
+
+
+def note_tempo(record: dict, shot: dict, bpm: Any) -> None:
+    """Write the tempo a scene is exported with on its ``scenes[key]`` record."""
+    tempo = score_tempo(shot, bpm)
+    if tempo is not None:
+        record["tempo"] = tempo
+
+
+def keeps_tempo(record: dict, shot: dict, bpm: Any) -> bool:
+    """True when an exported scene still has the tempo its card would take now. A record from before the tempo was
+    recorded learns it instead of exporting again, so an upgrade does not export every scene2d scene."""
+    tempo = score_tempo(shot, bpm)
+    if tempo is None or record.get("tempo") == tempo:
+        return True
+    if "tempo" in record:
+        return False
+    record["tempo"] = tempo
+    return True
+
+
 def compile_input(shot: dict, sources: dict[str, str], seconds: float, bpm: Any) -> tuple[dict, dict]:
     """The ``scenes.template.compile`` input for the shot, and the prepared request it was checked with.
 
@@ -278,9 +317,9 @@ def compile_input(shot: dict, sources: dict[str, str], seconds: float, bpm: Any)
     prepared = prepare_card(shot, sources)
     card = str(prepared.get("templateId"))
     controls = dict(shot["scene2d"].get("controls") or {})
-    tempo = _span(card, "bpm")
-    if tempo and "bpm" not in controls and isinstance(bpm, (int, float)) and not isinstance(bpm, bool) and bpm > 0:
-        controls["bpm"] = _clamp(float(bpm), tempo)
+    tempo = _tempo(card, controls, bpm)
+    if tempo is not None:
+        controls["bpm"] = tempo
     data = {"templateId": shot["scene2d"]["template"].strip(), "assets": sources, "controls": controls,
             "width": WIDTH, "height": HEIGHT, "fps": FPS}
     length = _span(card, "duration")
