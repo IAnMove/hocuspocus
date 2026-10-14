@@ -98,6 +98,7 @@ class Rig:
     job_ids: list[str] = field(default_factory=list)
     accepted: dict[str, dict] = field(default_factory=dict)
     releases: list[threading.Event] = field(default_factory=list)
+    returned: dict[str, bool] = field(default_factory=dict)
 
     @property
     def launch(self):
@@ -225,6 +226,8 @@ class Rig:
         }
         if job_id in self.accepted:
             observed["accepted"] = self.accepted[job_id]
+        # Internal callers (the Director, the shot-aware edit workers) act on what the worker returns.
+        observed["returned"] = self.returned.get(job_id)
         return observed
 
     def check(self, golden, case: str, body: Any, *, mask: tuple[str, ...] = ()) -> None:
@@ -275,6 +278,14 @@ def rig(server, clip, tmp_path, monkeypatch):
         launch._observe_generation_job_state(snapshot)
         state.events.append(dict(snapshot))
 
+    original_worker = launch._run_generation
+
+    def run_generation(job_id: str, *, finalize: bool = True) -> bool:
+        result = original_worker(job_id, finalize=finalize)
+        state.returned[job_id] = result
+        return result
+
+    monkeypatch.setattr(launch, "_run_generation", run_generation)
     clear_queue()
     job_lifecycle.set_job_state_observer(record)
     yield state
@@ -452,7 +463,7 @@ def test_a_failing_preparation_step_fails_the_job_before_any_model_work(rig, gol
     if stage == "h3_lora":
         base = rig.server.wgp.get_model_def
         rig.set_wgp("get_model_def", lambda model_type: {**(base(model_type) or {}), "architecture": "minimax_h3_fake"})
-    assert rig.launch._run_generation(job_id) is False
+    rig.launch._run_generation(job_id)
     rig.check(golden, f"preparation fails: {stage}", rig.observe(job_id))
 
 
@@ -535,7 +546,7 @@ def test_oddity_a_cancel_between_start_and_abort_registration_leaves_the_job_can
         launch.request_cancel(job, job_id=job_id, active_states=launch._active_gen_states)
 
     rig.patch("_apply_per_job_coefficient", cancel_during_preparation)
-    assert launch._run_generation(job_id) is False
+    launch._run_generation(job_id)
     rig.check(golden, "cancel before abort registration", rig.observe(job_id))
 
 
@@ -552,7 +563,7 @@ def test_a_job_cancelled_after_taking_the_slot_never_starts(rig, golden) -> None
         yield True
 
     rig.patch("_coordinated_generation_slot", slot_taken)
-    assert launch._run_generation(job_id) is False
+    launch._run_generation(job_id)
     rig.check(golden, "cancelled after slot", rig.observe(job_id))
 
 
@@ -623,7 +634,7 @@ def test_shot_manifests_become_deferred_clips(rig, golden, workflow) -> None:
     shots = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}},
              {"shot_index": 1, "params": {"prompt": "shot one", "video_length": 25}}, {"params": "ignored"}, "ignored"]
     job_id = rig.direct_job({**BODY, workflow: shots, "_defer_output_publication": True})
-    assert rig.launch._run_generation(job_id, finalize=False) is True
+    rig.launch._run_generation(job_id, finalize=False)
     rig.check(golden, f"shot manifest: {workflow}", rig.observe(job_id))
 
 
@@ -632,14 +643,14 @@ def test_shot_manifests_become_deferred_clips(rig, golden, workflow) -> None:
                                                ("_outpaint_shot_manifest", [])])
 def test_a_shot_manifest_that_is_not_usable_fails_the_job(rig, golden, workflow, manifest) -> None:
     job_id = rig.direct_job({**BODY, workflow: manifest})
-    assert rig.launch._run_generation(job_id) is False
+    rig.launch._run_generation(job_id)
     rig.check(golden, f"unusable shot manifest: {workflow}", rig.observe(job_id))
 
 
 # -- finalization -------------------------------------------------------------------------------------------------
 def test_a_caller_that_finishes_the_job_itself_gets_it_at_ninety_nine_percent(rig, golden) -> None:
     job_id = rig.direct_job(BODY)
-    assert rig.launch._run_generation(job_id, finalize=False) is True
+    rig.launch._run_generation(job_id, finalize=False)
     rig.check(golden, "finalize false", rig.observe(job_id))
 
 
@@ -651,7 +662,7 @@ def test_oddity_deferred_output_publication_over_http_publishes_nothing(rig, gol
 
 def test_deferred_output_publication_keeps_the_files_for_the_caller(rig, golden) -> None:
     job_id = rig.direct_job({**BODY, "_defer_output_publication": True})
-    assert rig.launch._run_generation(job_id, finalize=False) is True
+    rig.launch._run_generation(job_id, finalize=False)
     rig.check(golden, "deferred publication, not finalized", rig.observe(job_id))
 
 
@@ -665,13 +676,13 @@ def test_an_output_the_engine_did_not_register_is_claimed_when_it_is_the_only_ne
 def test_a_director_job_never_claims_an_output_the_engine_did_not_register(rig, golden) -> None:
     rig.engine.script = lambda call: call.save(register=False)
     job_id = rig.direct_job({**BODY, "_director_pipeline_id": "pipeline-golden"})
-    assert rig.launch._run_generation(job_id) is True
+    rig.launch._run_generation(job_id)
     rig.check(golden, "unregistered output of a director job", rig.observe(job_id))
 
 
 def test_a_recovered_job_says_it_restarts_from_the_beginning(rig, golden) -> None:
     job_id = rig.direct_job(BODY, recovered=True)
-    assert rig.launch._run_generation(job_id) is True
+    rig.launch._run_generation(job_id)
     rig.check(golden, "recovered job", rig.observe(job_id))
 
 
@@ -759,7 +770,7 @@ def test_the_legacy_h3_route_runs_its_isolated_runtime(rig, golden, tmp_path) ->
     rig.monkeypatch.setattr(minimax_h3_service, "generate", generate)
     rig.patch("_release_legacy_h3_when_queue_allows", lambda job_id: calls.append(["release when idle", job_id]))
     job_id = rig.direct_job({**BODY, "model_type": minimax_h3_service.MODEL_ID, "_director_pipeline_id": ""})
-    assert launch._run_generation(job_id) is True
+    launch._run_generation(job_id)
     rig.check(golden, "legacy h3", {**rig.observe(job_id, full=True), "service calls": calls})
 
 
@@ -773,5 +784,5 @@ def test_simulated_execution_replaces_only_the_inference(rig, golden) -> None:
     rig.patch("execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")))
     rig.patch("_run_simulated_generation", simulated)
     job_id = rig.direct_job(BODY)
-    assert rig.launch._run_generation(job_id) is True
+    rig.launch._run_generation(job_id)
     rig.check(golden, "simulated", {**rig.observe(job_id), "simulated calls": seen})

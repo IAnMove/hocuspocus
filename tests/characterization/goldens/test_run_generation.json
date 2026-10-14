@@ -28,6 +28,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -118,6 +119,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -202,6 +204,7 @@
         "cancel_requested": true,
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": null,
@@ -294,6 +297,7 @@
           ],
           "recovered": false
         },
+        "returned": true,
         "sidecars": {
           "<TIME>_seed42_a_calm_lake.meta.json": {
             "created_at": "<TIME>",
@@ -378,6 +382,7 @@
           "cancel_requested": true,
           "recovered": false
         },
+        "returned": false,
         "sidecars": {
           "<TIME>_seed42_a_calm_lake.meta.json": {
             "created_at": "<TIME>",
@@ -659,6 +664,7 @@
         },
         "recovered": false
       },
+      "returned": false,
       "sidecars": {
         "<TIME>_seed11_first_shot.meta.json": {
           "created_at": "<TIME>",
@@ -793,6 +799,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "asset_id": null,
@@ -1001,6 +1008,7 @@
         "cancel_requested": true,
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": null,
@@ -1080,6 +1088,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -1167,6 +1176,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -1256,6 +1266,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "timers": [
         "completed"
       ],
@@ -1333,6 +1344,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -1445,6 +1457,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "asset_id": null,
@@ -1643,6 +1656,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -1752,6 +1766,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": 1700000000.0,
@@ -1867,6 +1882,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed1234_a_red_barn.meta.json": {
           "created_at": "<TIME>",
@@ -2072,6 +2088,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "service calls": [
         [
           "cancel_idle_shutdown"
@@ -2290,6 +2307,7 @@
           ],
           "recovered": false
         },
+        "returned": false,
         "sidecars": {},
         "status": {
           "error": "Task validation failed",
@@ -2347,6 +2365,7 @@
           ],
           "recovered": false
         },
+        "returned": false,
         "sidecars": {},
         "status": {
           "error": "bad manifest",
@@ -2534,6 +2553,7 @@
         },
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed11_first_shot.meta.json": {
           "created_at": "<TIME>",
@@ -2804,6 +2824,7 @@
         },
         "recovered": false
       },
+      "returned": false,
       "sidecars": {
         "<TIME>_seed11_first_shot.meta.json": {
           "created_at": "<TIME>",
@@ -3016,6 +3037,7 @@
         },
         "recovered": false
       },
+      "returned": false,
       "sidecars": {
         "<TIME>_seed11_first_shot.meta.json": {
           "created_at": "<TIME>",
@@ -3239,6 +3261,7 @@
         },
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed11_first_shot.meta.json": {
           "created_at": "<TIME>",
@@ -3497,6 +3520,7 @@
         },
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_left.meta.json": {
           "created_at": "<TIME>",
@@ -3740,6 +3764,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -3993,6 +4018,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -4207,6 +4233,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "depth is not available",
@@ -4261,6 +4288,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "h3_lora is not available",
@@ -4315,6 +4343,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "managed_lora is not available",
@@ -4399,6 +4428,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -4507,6 +4537,7 @@
         ],
         "recovered": true
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": 1700000000.0,
@@ -4622,6 +4653,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake(2).meta.json": {
           "created_at": "<TIME>",
@@ -4805,6 +4837,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -4939,6 +4972,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -5073,6 +5107,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -5138,6 +5173,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "simulated calls": [
         [
@@ -5221,6 +5257,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "sfx_rain_on_a_tin_roof_7.meta.json": {
           "created_at": "<TIME>",
@@ -5409,6 +5446,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "MMAudio is not enabled in server configuration",
@@ -5494,6 +5532,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -5597,6 +5636,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {},
       "status": {
         "error": null,
@@ -5651,6 +5691,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "Outpaint shot manifest contains no generated shots",
@@ -5705,6 +5746,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "Recast shot manifest is invalid",
@@ -5759,6 +5801,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "Repaint shot manifest contains no generated shots",
@@ -5843,6 +5886,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "asset": {
@@ -6171,6 +6215,7 @@
         ],
         "recovered": false
       },
+      "returned": true,
       "sidecars": {
         "<TIME>_seed42_a_calm_lake.meta.json": {
           "created_at": "<TIME>",
@@ -6263,6 +6308,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "CUDA out of memory. Tried to allocate 2.00 GiB",
@@ -6333,6 +6379,7 @@
         ],
         "recovered": false
       },
+      "returned": false,
       "sidecars": {},
       "status": {
         "error": "a plain bug",
