@@ -557,6 +557,16 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 404, missing.text)
         self.assertEqual(audio.status_code, 400, audio.text)
 
+    def test_core_thumbnail_binding_leaves_the_other_output_ops_slots_alone(self):
+        """Both servers can be imported in one process; core binds only safe_join, never the full server's slots."""
+        from services import output_ops
+
+        sentinel = object()
+        with patch.object(output_ops, "_load_favorites", sentinel), patch.object(output_ops, "_safe_join", None):
+            output_ops.configure_thumbnails(safe_join="join")
+            self.assertEqual(output_ops._safe_join, "join")
+            self.assertIs(output_ops._load_favorites, sentinel)
+
     def test_core_refuses_browser_mutations_from_another_origin(self):
         """A foreign page can send a simple POST (text/plain) to a loopback port; core must refuse it like the full server."""
         evil = {"Origin": "http://evil.example"}
