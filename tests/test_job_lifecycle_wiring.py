@@ -89,6 +89,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.launch = _parse("app/_launch_runtime.py")
+        cls.sfx = _parse("app/services/generation_sfx.py")
         cls.tools_upscale = _parse("app/services/tools_upscale.py")
         cls.tools_router = _parse("app/routers/tools.py")
 
@@ -117,6 +118,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                     tree = self.tools_upscale
                 elif function_name == "_run_tool_revoice":
                     tree = self.tools_router
+                elif function_name == "_run_sfx_generation":
+                    tree = self.sfx
                 else:
                     tree = self.launch
                 lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name

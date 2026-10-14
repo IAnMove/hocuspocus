@@ -20,7 +20,7 @@ from tests.test_image_generation_commands import _run
 
 @pytest.fixture(scope='module')
 def worker_source():
-    source = Path(__file__).parents[1] / 'app' / '_launch_runtime.py'
+    source = Path(__file__).parents[1] / 'app' / 'services' / 'generation_sfx.py'
     tree = ast.parse(source.read_text(encoding='utf-8'))
     worker = next(node for node in tree.body
                   if isinstance(node, ast.FunctionDef) and node.name == '_run_sfx_generation')

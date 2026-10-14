@@ -561,7 +561,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
-        "_run_sfx_generation",
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
@@ -570,6 +569,11 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    sfx_path = Path(__file__).parents[1] / "app" / "services" / "generation_sfx.py"
+    sfx_text = sfx_path.read_text(encoding="utf-8")
+    sfx_body = function_source("_run_sfx_generation", sfx_text, ast.parse(sfx_text))
+    assert "publish_generation_sidecar" in sfx_body
+    assert "json.dump" not in sfx_body
     tools_tree = ast.parse(tools_source)
     sidecar = function_source("_write_tool_sidecar", tools_source, tools_tree)
     assert "publish_generation_sidecar" in sidecar
