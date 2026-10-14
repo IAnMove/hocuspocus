@@ -17,7 +17,8 @@ from services.series_produce import ProduceDeps, SeriesProduce
 from services.series_review import content_digest
 from services.series_script import ScriptError, apply_script
 from services.series_video_shots import (
-    STYLE_DRIFT_THRESHOLD, import_generated_take, style_distance,
+    STYLE_DRIFT_THRESHOLD, _file_digest, _request_digest, _take_matches, digest_request,
+    import_generated_take, normalize_video, style_distance,
 )
 from tests.test_series_script_produce import FILES, KITS, Series, finished
 
@@ -361,6 +362,63 @@ def test_a_changed_prompt_is_a_new_take_not_a_conflict(tmp_path):
     # The same request again replays its take instead of paying for a second clip.
     assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
     assert _intents(tools)[2] == intents[1] and len(tools.clips) == 2
+
+
+def _named_start_digest(shot, path):
+    return _request_digest(digest_request(normalize_video(shot["video"]), "480p", _file_digest(path)))
+
+
+def _kept_named_start(series, shot, path):
+    digest = _named_start_digest(shot, path)
+    shot["attempts"] = [{"id": "att-old", "status": "completed", "outputAssetIds": ["asset_old"]}]
+    shot["approvedAttemptId"] = "att-old"
+    series["assets"] = {"asset_old": {"id": "asset_old", "kind": "video", "uri": "outputs/old.mp4",
+                                      "metadata": {"videoRequest": digest}}}
+    return digest
+
+
+def test_replacing_a_named_start_image_is_a_new_request(tmp_path):
+    start = _png(tmp_path / "start.png", (10, 20, 30))
+    shot = _request(start="start.png")
+    series = {"id": "uv", "assets": {}}
+    _kept_named_start(series, shot, start)
+    assert _take_matches(series, shot, root=str(tmp_path))
+    _png(tmp_path / "start.png", (200, 10, 10))
+    assert not _take_matches(series, shot, root=str(tmp_path))
+    # A plan start still matches without the file's pixels, so existing plan-start takes stay current.
+    plan = _request()
+    plan["attempts"] = shot["attempts"]
+    series["assets"]["asset_old"]["metadata"]["videoRequest"] = _request_digest(
+        digest_request(normalize_video(plan["video"]), "480p"))
+    assert _take_matches(series, plan, root=str(tmp_path))
+
+
+def test_remaking_the_pose_start_is_a_new_request(tmp_path):
+    pose = _png(tmp_path / "hero-wave.png", (10, 20, 30))
+    shot = _request(start="pose:hero/wave")
+    series = {"id": "uv", "characters": [{"id": "hero", "voiceProfile": {"characterKitRef": {"id": "kit-hero"}}}],
+              "assets": {}}
+    kits = {"kit-hero": {"poses": {"wave": {"source": "hero-wave.png"}}}}
+    _kept_named_start(series, shot, pose)
+    assert _take_matches(series, shot, root=str(tmp_path), kits=kits)
+    _png(tmp_path / "hero-wave.png", (200, 10, 10))
+    assert not _take_matches(series, shot, root=str(tmp_path), kits=kits)
+
+
+def test_produce_remakes_when_the_named_start_image_changes(tmp_path):
+    start = _png(tmp_path / "start.png", (10, 20, 30))
+    clip = _png(tmp_path / "clip.png", (196, 180, 154))
+    tools = _Server(tmp_path, clip)
+    library, _episode_body = _episode(_request(start="start.png"))
+    series = library["seriesById"]["uv"]
+    shot = series["episodesById"]["ep1"]["shots"][0]
+    _kept_named_start(series, shot, start)
+    service = _produce(tmp_path, tools, library)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert _video_calls(tools, "generation.video") == [] and tools.imports == []
+    _png(tmp_path / "start.png", (200, 10, 10))
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert len(_video_calls(tools, "generation.video")) == 1 and tools.imports
 
 
 def _editor_series(shot):

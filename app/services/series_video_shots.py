@@ -22,7 +22,10 @@ The clip is an H3 preset in the series frame (``480x864`` for a portrait 480p se
 the shot's own ``resolution``, else the series' ``videoShotResolution``, else 480p.
 Both take 480p, 540p, 720p or 768p. Only a size other than 480p enters the request
 digest a take keeps (``videoRequest``), so the takes made while every clip was 480p
-still match their shot and are not made again.
+still match their shot and are not made again. A named start (pose, file or asset)
+also stores the start frame's pixels: replacing that image in place, or remaking
+the pose, is a new request. A ``plan`` start stays off that field so existing
+plan-start takes keep the digest they had.
 """
 from __future__ import annotations
 
@@ -157,10 +160,12 @@ def video_resolution(series: dict[str, Any], shot: dict[str, Any] | None = None)
     return H3_RESOLUTIONS[("portrait" if height > width else "landscape", video_preset(series, shot))]
 
 
-def digest_request(request: dict[str, Any], preset: str) -> dict[str, Any]:
+def digest_request(request: dict[str, Any], preset: str, start_content: str | None = None) -> dict[str, Any]:
     """The request a take's ``videoRequest`` digests: the size only when it is not 480p, so a 480p take keeps the
-    digest it had before sizes could be chosen."""
-    return request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
+    digest it had before sizes could be chosen. A named start's pixels are included when known; a plan start
+    omits them so existing plan-start takes still match."""
+    body = request if preset == DEFAULT_SERIES_RESOLUTION else {**request, "resolution": preset}
+    return {**body, "startContent": start_content} if start_content else body
 
 
 def cancel_generation(deps: Any, job_id: str) -> None:
@@ -205,13 +210,14 @@ def produce_videos(job: dict[str, Any], step: dict[str, Any], deps: Any, *, canc
 
     ``save`` stores the job; it runs when a take is submitted, so a cancel can stop that take."""
     series, episode = _episode_of(deps, job)
+    root, kits = deps.workspace_dir(job["workspace"]), _kits(deps, job["workspace"])
     allowed, overflow = _cap(episode, _scripted(episode))
     warnings = [_overflow_warning(episode, overflow)] if overflow else []
     waiting: list[dict[str, str]] = []
     done = set(step.get("doneShots") or [])
     run = _Run(job, step, deps, cancelled, save or (lambda: None))
     for shot in allowed:
-        if _already_made(series, shot, done):
+        if _already_made(series, shot, done, root=root, kits=kits):
             done.add(shot.get("id"))
             continue
         if _plan_blocks(episode, shot):
@@ -236,8 +242,9 @@ def _scripted(episode: dict[str, Any]) -> list[dict[str, Any]]:
     return [shot for shot in episode.get("shots") or [] if isinstance(shot, dict) and isinstance(shot.get("video"), dict)]
 
 
-def _already_made(series: dict[str, Any], shot: dict[str, Any], done: set) -> bool:
-    return shot.get("id") in done or _take_matches(series, shot)
+def _already_made(series: dict[str, Any], shot: dict[str, Any], done: set, *,
+                  root: str | None = None, kits: dict[str, Any] | None = None) -> bool:
+    return shot.get("id") in done or _take_matches(series, shot, root=root, kits=kits)
 
 
 class _Run:
@@ -395,6 +402,32 @@ def _take_digest(params: dict[str, Any], start_path: str) -> str:
     return hashlib.sha1(json.dumps(body, sort_keys=True).encode()).hexdigest()[:12]
 
 
+def _start_content(series: dict[str, Any], shot: dict[str, Any], *, root: str | None = None,
+                   kits: dict[str, Any] | None = None) -> str | None:
+    """Pixels of a named start frame. A plan start is omitted so existing plan-start takes keep their digest."""
+    if not root:
+        return None
+    try:
+        start = normalize_video(shot.get("video"))["start"]
+    except (TypeError, ValueError):
+        return None
+    if start == "plan":
+        return None
+
+    class _Resolve:
+        def workspace_dir(self, _workspace: str) -> str:
+            return root
+
+        def read_kits(self, _workspace: str) -> dict[str, Any]:
+            return kits or {}
+
+    try:
+        path, _reference = _named_frame({"workspace": ""}, start, series, _Resolve())
+    except VideoShotError:
+        return None
+    return _file_digest(path) or None
+
+
 def _failed_takes(step: dict[str, Any], shot_id: str, digest: str) -> list[int]:
     """Take numbers of this request that failed or were cancelled. The list is the step's, so it is saved with it."""
     failed = step.setdefault("failedTakes", {})
@@ -411,9 +444,12 @@ def _next_take(number: int, failed: list[int]) -> int:
     return number
 
 
-def _take_matches(series: dict[str, Any], shot: dict[str, Any]) -> bool:
+def _take_matches(series: dict[str, Any], shot: dict[str, Any], *, root: str | None = None,
+                  kits: dict[str, Any] | None = None) -> bool:
     try:
-        digest = _request_digest(digest_request(normalize_video(shot["video"]), video_preset(series, shot)))
+        request = normalize_video(shot["video"])
+        digest = _request_digest(digest_request(request, video_preset(series, shot),
+                                               _start_content(series, shot, root=root, kits=kits)))
     except ValueError:
         return False
     assets = series.get("assets") or {}
@@ -439,6 +475,7 @@ def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[s
     if end_ref:
         params["image_end"] = end_ref
     digest = _take_digest(params, start_path)
+    content = None if request["start"] == "plan" else (_file_digest(start_path) or None)
     failed = _failed_takes(run.step, shot["id"], digest)
     best: dict[str, Any] | None = None
     number, problem = 0, None
@@ -456,7 +493,7 @@ def _generate(run: _Run, shot: dict[str, Any], series: dict[str, Any]) -> dict[s
         distance = _drift(start_path, take_path, request["frames"])
         if best is None or _closer(distance, best.get("distance")):
             best = {"distance": distance, "file": take_path, "intent": intent, "number": number,
-                    "request": digest_request(request, video_preset(series, shot))}
+                    "request": digest_request(request, video_preset(series, shot), content)}
         if distance is not None and distance <= STYLE_DRIFT_THRESHOLD:
             break
     if best is None:
