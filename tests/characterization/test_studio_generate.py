@@ -1,8 +1,8 @@
 """Cheap answers of the Studio generation routes, recorded before they leave launch.
 
 These are the validation and error paths of ``POST /api/v1/generate``, retake,
-extract-frames, edit-anything, inpaint, SAM status and segment preview, plus
-one accepted ``POST /generate`` that the C0 fake engine finishes. They do not
+extract-frames, edit-anything, inpaint, SAM status, segment preview, outpaint
+and blend, plus accepted jobs that the C0 fake engine finishes. They do not
 re-record ``goldens/test_run_generation.json``. A real mask, a real SAM
 preview and a retake that reads frames need a GPU and are not here.
 """
@@ -21,10 +21,12 @@ from types import SimpleNamespace
 import pytest
 
 from tests.characterization import media
-from tests.characterization.test_run_generation import RECAST_MODULES, BODY, Rig, _media_writer, worker_module
+from tests.characterization.test_run_generation import (
+    RECAST_MODULES, SHOT_MODULES, BODY, Rig, _media_writer, worker_module,
+)
 # Fixtures, used by name: the C0 rig and its decodable clip.
 from tests.characterization.test_run_generation import WAIT, _stub_legacy_h3, clip, rig  # noqa: F401
-from tests.support.fake_wgp import FakeEngine, catalog_attributes, generation_attributes
+from tests.support.fake_wgp import FakeEngine, catalog_attributes, default_script, generation_attributes
 
 _ROUTES = (
     "/api/v1/generate",
@@ -564,6 +566,270 @@ def test_segment_preview_and_sam_status_with_sam_stubbed(server, golden, monkeyp
     golden.check("segment preview", 200, server.normalise(answers))
 
 
+# -- Outpaint and blend, recorded before they leave launch (C5) ------------------------------------
+# The route starts a non-daemon thread and returns. The rig's own settle waits
+# only for ``_run_generation_with_preparation``, so these tests join the thread
+# they actually started. The engine is held until that name has been read:
+# a fast fake job can finish before the test looks, and the name would be gone.
+_ROUTE_WORKERS = (
+    "(_run_generation)",
+    "(run_generation)",
+    "(_prepare_and_run_outpaint)",
+    "(_run_blend_generation)",
+)
+
+
+def _block_network(monkeypatch) -> None:
+    """These routes must not download a model. Local sockets stay open."""
+    import socket
+
+    def _host(address):
+        if isinstance(address, tuple) and address:
+            return address[0]
+        return None
+
+    real_create = socket.create_connection
+
+    def create_connection(address, *args, **kwargs):
+        host = _host(address)
+        if host in {"127.0.0.1", "::1", "localhost"}:
+            return real_create(address, *args, **kwargs)
+        raise RuntimeError(f"network blocked: {address}")
+
+    real_connect = socket.socket.connect
+
+    def connect(self, address):
+        host = _host(address)
+        if isinstance(host, str) and host not in {"127.0.0.1", "::1", "localhost"}:
+            raise RuntimeError(f"network blocked: {address}")
+        return real_connect(self, address)
+
+    monkeypatch.setattr(socket, "create_connection", create_connection)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+
+
+def _join_route_workers(rig, timeout: float = 60.0) -> None:
+    threads = [thread for thread in threading.enumerate() if thread.name.endswith(_ROUTE_WORKERS)]
+    for thread in threads:
+        thread.join(timeout)
+    alive = [thread for thread in threads if thread.is_alive()]
+    if alive:
+        launch = rig.launch
+        for job_id in list(rig.job_ids):
+            job = launch._jobs.get(job_id)
+            if job is not None:
+                launch.request_cancel(job, job_id=job_id, active_states=launch._active_gen_states)
+        for abort_state in list(launch._active_gen_states.values()):
+            abort_state["abort"] = True
+        for thread in alive:
+            thread.join(10)
+        alive = [thread for thread in alive if thread.is_alive()]
+    assert not alive, [thread.name for thread in alive]
+
+
+def _worker_names() -> list[str]:
+    names = []
+    for thread in threading.enumerate():
+        if thread.name.endswith(_ROUTE_WORKERS):
+            names.append(thread.name[thread.name.rfind("("):])
+    return sorted(names)
+
+
+def _accept(rig, path: str, body: dict) -> dict:
+    """Post one job, hold the engine, and record the thread the route started."""
+    release = rig.event()
+
+    def script(call) -> None:
+        call.hold(release)
+        default_script(call)
+
+    rig.engine.entered.clear()
+    rig.engine.scripts.append(script)
+    try:
+        status, answer = _submit(rig, path, body)
+        reached = bool(status == 200 and rig.engine.entered.wait(WAIT))
+        names = _worker_names()
+    finally:
+        release.set()
+        _join_route_workers(rig)
+    return {"status": status, "answer": answer, "worker threads": names, "reached engine": reached}
+
+
+def _hide_temp(observed: dict) -> dict:
+    """``mkdtemp`` lives in the server's temp folder, which the normaliser does not know."""
+    params = observed.get("params") or {}
+    folders = [
+        params[key]
+        for key in ("_blend_temp_dir", "_outpaint_shot_temp_dir")
+        if isinstance(params.get(key), str) and params.get(key)
+    ]
+    if not folders:
+        return observed
+    text = json.dumps(observed)
+    for folder in folders:
+        text = text.replace(folder, "<TEMP>")
+    return json.loads(text)
+
+
+def _outpaint_body(path: Path, **extra) -> dict:
+    return {
+        "video_path": str(path),
+        "model_type": "fake_t2v",
+        "prompt": "extend the lake",
+        "seed": 7,
+        "pad_right": 64,
+        "preserve_source_audio": False,
+        "lock_source_pixels": False,
+        **extra,
+    }
+
+
+def test_outpaint_and_blend_reject_bad_requests(server, golden, tmp_path, monkeypatch) -> None:
+    _block_network(monkeypatch)
+    still = media.image(tmp_path / "still.png", size=(64, 64))
+    other = media.image(tmp_path / "other.png", size=(64, 64))
+    monkeypatch.setattr(
+        server.wgp, "get_base_model_type",
+        lambda model_type: "ltxv_13B" if model_type == "fake_13b" else str(model_type),
+        raising=False,
+    )
+    server.check(golden, "outpaint requires a video path", "POST", "/api/v1/outpaint", json={})
+    server.check(
+        golden, "outpaint source must exist", "POST", "/api/v1/outpaint",
+        json={"video_path": "no-such-frame.png"},
+    )
+    server.check(
+        golden, "outpaint requires a model", "POST", "/api/v1/outpaint",
+        json={"video_path": str(still)},
+    )
+    server.check(
+        golden, "outpaint requires padding", "POST", "/api/v1/outpaint",
+        json={"video_path": str(still), "model_type": "fake_t2v"},
+    )
+    padded = {"video_path": str(still), "model_type": "fake_t2v", "pad_right": 64}
+    server.check(
+        golden, "outpaint rejects a non-numeric step count", "POST", "/api/v1/outpaint",
+        json={**padded, "num_inference_steps": "many"},
+    )
+    server.check(
+        golden, "outpaint rejects zero steps", "POST", "/api/v1/outpaint",
+        json={**padded, "num_inference_steps": 0},
+    )
+    server.check(
+        golden, "outpaint rejects a short 13B schedule", "POST", "/api/v1/outpaint",
+        json={**padded, "model_type": "fake_13b"},
+    )
+    server.check(golden, "blend requires both clips", "POST", "/api/v1/blend", json={})
+    server.check(
+        golden, "blend clip A must exist", "POST", "/api/v1/blend",
+        json={"clip_a_path": "no-such-a.png", "clip_b_path": str(other)},
+    )
+    server.check(
+        golden, "blend clip B must exist", "POST", "/api/v1/blend",
+        json={"clip_a_path": str(still), "clip_b_path": "no-such-b.png"},
+    )
+    server.check(
+        golden, "blend requires a model", "POST", "/api/v1/blend",
+        json={"clip_a_path": str(still), "clip_b_path": str(other)},
+    )
+
+
+def test_openapi_text_of_the_outpaint_and_blend_routes(server, golden) -> None:
+    spec = server.client.get("/openapi.json").json()
+    snapshot = {}
+    for path in ("/api/v1/outpaint", "/api/v1/blend"):
+        operations = spec["paths"][path]
+        for method, operation in operations.items():
+            snapshot[f"{method.upper()} {path}"] = {
+                "operationId": operation.get("operationId"),
+                "summary": operation.get("summary"),
+                "description": operation.get("description"),
+                "parameters": operation.get("parameters", []),
+            }
+    golden.check("outpaint and blend openapi", 200, snapshot)
+
+
+def test_outpaint_hands_the_worker_the_canvas_job(rig, golden, tmp_path, monkeypatch) -> None:
+    """An image and a non-official video. Both start the generation worker, not shot preparation."""
+    _block_network(monkeypatch)
+    still = media.image(tmp_path / "canvas.png", size=(64, 64))
+    clip_path = media.video(tmp_path / "canvas.mp4", seconds=3, size="64x64", fps=8)
+    observed = {}
+    for case, path in ("image", still), ("video", clip_path):
+        accepted = _accept(rig, "/api/v1/outpaint", _outpaint_body(path))
+        job_id = accepted["answer"]["job_id"]
+        observed[case] = {
+            "worker threads": accepted["worker threads"],
+            "reached engine": accepted["reached engine"],
+            "job": _hide_temp(_job(rig, job_id)),
+        }
+    rig.check(golden, "outpaint hands the worker the job", observed)
+
+
+def test_official_outpaint_detects_one_shot_then_generates(rig, golden, tmp_path, monkeypatch) -> None:
+    """A non-distilled LTX-2 definition short-circuits the reference resolver, so nothing is downloaded.
+
+    The clip is one solid colour, so preparation finds one shot and then calls the generation worker.
+    """
+    _block_network(monkeypatch)
+    real_base = rig.server.wgp.get_base_model_type
+    real_def = rig.server.wgp.get_model_def
+
+    def base_type(model_type):
+        if model_type == "fake_ltx":
+            return "ltx2_22B"
+        return real_base(model_type)
+
+    def model_def(model_type):
+        if model_type == "fake_ltx":
+            return {
+                "architecture": "ltx2_22B",
+                "ltx2_pipeline": "two_stage",
+                "fps": 8,
+                "frames_minimum": 1,
+                "latent_size": 1,
+                "URLs": [],
+                "name": "Fake LTX Dev",
+            }
+        return real_def(model_type)
+
+    rig.set_wgp("get_base_model_type", base_type)
+    rig.set_wgp("get_model_def", model_def)
+    clip_path = media.video(tmp_path / "official.mp4", seconds=3, size="64x64", fps=8)
+    accepted = _accept(rig, "/api/v1/outpaint", _outpaint_body(
+        clip_path, model_type="fake_ltx", mask_preserving_outpaint=True,
+    ))
+    job_id = accepted["answer"]["job_id"]
+    rig.check(golden, "official outpaint one shot", {
+        "worker threads": accepted["worker threads"],
+        "reached engine": accepted["reached engine"],
+        "job": _hide_temp(_job(rig, job_id)),
+    })
+
+
+def test_blend_hands_the_worker_the_transition_job(rig, golden, tmp_path, monkeypatch) -> None:
+    """Two stills. Overlap is longer than a still, so assembly keeps the generated transition and does not concat."""
+    _block_network(monkeypatch)
+    clip_a = media.image(tmp_path / "blend-a.png", size=(64, 64))
+    clip_b = media.image(tmp_path / "blend-b.png", size=(64, 64))
+    accepted = _accept(rig, "/api/v1/blend", {
+        "clip_a_path": str(clip_a),
+        "clip_b_path": str(clip_b),
+        "model_type": "fake_t2v",
+        "prompt": "the lake becomes a field",
+        "seed": 7,
+        "overlap_sec": 0.2,
+        "motion_prefix_sec": 0,
+        "motion_suffix_sec": 0,
+    })
+    job_id = accepted["answer"]["job_id"]
+    rig.check(golden, "blend hands the worker the job", {
+        "worker threads": accepted["worker threads"],
+        "reached engine": accepted["reached engine"],
+        "job": _hide_temp(_job(rig, job_id)),
+    })
+
+
 # -- The wiring the move added (C3 review) ---------------------------------------------------------------------------
 # The moved handlers read their launch collaborators from slots on their service module, which the router factories
 # fill when the full server mounts them. A slot left at None, bound to the wrong object, or captured before launch
@@ -624,20 +890,20 @@ def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monke
 
 
 # -- the wiring the C7 move added (C7 review) --------------------------------------------------------------------------
-# The Recast helpers moved to four service modules that import each other directly. Launch hands three of them the
-# launch objects they read through one ``bind`` each: masks gets forwarders for the shot helpers launch still defines
-# below the bind, matte gets ``_app_dir``, preparation gets ``_workspace_dir``. A slot left at None, bound to a copy,
-# a forwarder that captured the function at bind time, or a sibling taken from the wrong module would only show on
-# the branch that reads it, so every global each moved function reads is compared here with the object the same name
+# The Recast helpers moved to four service modules that import each other directly. Launch hands two of them the
+# launch objects they read through one ``bind`` each: matte gets ``_app_dir``, preparation gets ``_workspace_dir``.
+# The six shot helpers the character mask calls moved to services.recast_shot_planning (C8a); masks imports them
+# from there. A slot left at None, bound to a copy, or a sibling taken from the wrong module would only show on the
+# branch that reads it, so every global each moved function reads is compared here with the object the same name
 # holds in launch (where the function read it before the move) and with the module that defines it.
-RECAST_FORWARDED = {
-    "_detect_recast_shot_ranges": "_forward_recast_detect_shot_ranges",
-    "_find_recast_unmapped_shots": "_forward_recast_find_unmapped_shots",
-    "_normalize_recast_tracking_target": "_forward_recast_normalize_tracking_target",
-    "_recover_recast_unmapped_shots": "_forward_recast_recover_unmapped_shots",
-    "_select_recast_timeline_anchor": "_forward_recast_select_timeline_anchor",
-    "_summarize_recast_mapping_mask": "_forward_recast_summarize_mapping_mask",
-}
+RECAST_SHOT_HELPERS = (
+    "_detect_recast_shot_ranges",
+    "_find_recast_unmapped_shots",
+    "_normalize_recast_tracking_target",
+    "_recover_recast_unmapped_shots",
+    "_select_recast_timeline_anchor",
+    "_summarize_recast_mapping_mask",
+)
 
 
 def _recast_global_reads(value) -> set[str]:
@@ -666,25 +932,28 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
     slots = {name: {"_" + param for param in inspect.signature(module.bind).parameters} if hasattr(module, "bind")
              else set() for name, module in modules.items()}
     home: dict[str, object] = {}
-    for module_name, module in modules.items():
+    shot_modules = {name: importlib.import_module(name) for name in SHOT_MODULES}
+    for module_name, module in {**modules, **shot_modules}.items():
         for node in ast.parse(inspect.getsource(module)).body:
             if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name != "bind":
                 home[node.name] = module
             elif isinstance(node, ast.Assign):
                 home.update({target.id: module for target in node.targets
-                             if isinstance(target, ast.Name) and target.id not in slots[module_name]})
+                             if isinstance(target, ast.Name) and target.id not in slots.get(module_name, ())
+                             and not (isinstance(node.value, ast.Constant) and node.value.value is None)})
 
-    # Every name launch imports from a Recast module is that module's object.
+    # Every name launch imports from a Recast helper module is that module's object. (The shot modules, C8a, have
+    # their own check below.)
     exported = set()
     for node in ast.parse(Path(launch.__file__).read_text(encoding="utf-8")).body:
-        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("services.recast_"):
+        if isinstance(node, ast.ImportFrom) and node.module in modules:
             for alias in node.names:
                 assert getattr(launch, alias.asname or alias.name) is getattr(modules[node.module], alias.name)
                 exported.add(alias.name)
     assert {"_RECAST_RELIGHTING_LORA_FILENAME", "_normalize_recast_lora_settings", "_build_recast_adaptive_mask",
             "_render_recast_mask_locked_video", "_prepare_recast_reference_conditioning"} <= exported
 
-    from_launch, forwarded, siblings = set(), set(), set()
+    from_launch, siblings = set(), set()
     for module_name, module in modules.items():
         namespace = vars(module)
         own = [value for name, value in namespace.items() if name != "bind"
@@ -696,10 +965,7 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
                     continue
                 held = namespace[name]
                 assert held is not None, f"{module_name}.{name} was never bound"
-                if name in RECAST_FORWARDED:
-                    assert held is vars(launch)[RECAST_FORWARDED[name]], f"{module_name}.{name} is not launch's forwarder"
-                    forwarded.add(name)
-                elif name in home:
+                if name in home:
                     assert held is vars(home[name])[name], f"{module_name}.{name} is not {home[name].__name__}.{name}"
                     if name in vars(launch):
                         assert vars(launch)[name] is held, f"launch.{name} is not {module_name}.{name}"
@@ -708,7 +974,8 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
                     assert held is vars(launch)[name], f"{module_name}.{name} is not launch.{name}"
                     from_launch.add(name)
     assert from_launch == {"os", "threading", "_app_dir", "_workspace_dir"}
-    assert forwarded == set(RECAST_FORWARDED) == slots["services.recast_masks"]
+    assert slots["services.recast_masks"] == set() and not hasattr(modules["services.recast_masks"], "bind")
+    assert set(RECAST_SHOT_HELPERS) <= siblings
     assert {"_RECAST_MASK_COLORS", "_resolve_recast_media", "_recast_reference_subject_mask",
             "_refine_recast_reference_cutout", "_recast_subject_crop_box", "_get_recast_u2net_session"} <= siblings
 
@@ -719,10 +986,14 @@ def test_the_recast_helpers_read_the_objects_launch_holds(full_server, monkeypat
     for name in ("_build_recast_adaptive_mask", "_render_recast_mask_locked_video"):
         assert getattr(finalize, name) is getattr(masks, name) is getattr(launch, name), name
 
-    # A forwarder looks the launch name up when the mask builder calls it.
-    for name in RECAST_FORWARDED:
-        monkeypatch.setattr(launch, name, lambda *args, _name=name, **kwargs: (_name, args, kwargs))
-        assert getattr(masks, name)("frames", fps=25.0) == (name, ("frames",), {"fps": 25.0})
+    # The character mask calls the shot helpers recast_shot_planning defines, the objects launch re-exports; launch
+    # keeps no forwarder for them.
+    planning = shot_modules["services.recast_shot_planning"]
+    for name in RECAST_SHOT_HELPERS:
+        assert getattr(masks, name) is getattr(planning, name) is getattr(launch, name), name
+        assert getattr(planning, name).__module__ == "services.recast_shot_planning", name
+    assert not [name for name in vars(launch) if name.startswith("_forward_recast_")
+                and name != "_forward_recast_shot_run_generation"]
 
     # One U2Net session, its locks and its cache: the holder in recast_matte. Launch keeps no copy of any of them.
     matte = modules["services.recast_matte"]
@@ -757,3 +1028,180 @@ def test_a_rig_patch_reaches_the_recast_helper_that_reads_the_name(rig) -> None:
         "additional_ref_image_paths": ["/resolved/ws-a/side.png"],
         "reference_aligned_to_source": False,
     }]
+
+
+# -- The wiring the C5 move added (C5 review) ------------------------------------------------------------------------
+# Each outpaint and blend module imports the standard library, execution_mode and the job lifecycle itself, and takes
+# the launch objects it reads (wgp, the job registry and states, the workspace and job helpers, the recast helpers)
+# from one bind() (services) or its router factory (routers), which launch calls once; the Recast frame counter and
+# audio probe come from their service, as in launch. The generation worker is defined further down in launch, so that
+# slot holds launch's forwarder, which looks the launch name up when it is called. A slot left at None, bound to a copy
+# or to another function, or a forwarder that captured its target at bind time would only show on the branch that
+# reads it, so every global each moved function reads is compared here with the object the same name holds in launch,
+# where it read it before.
+_C5_EXPORTS = {
+    "services.outpaint_planning": (
+        "_resolve_outpaint_sampling", "_resolve_outpaint_video_timing", "_resolve_ltx2_outpaint_reference_model",
+        "_cap_outpaint_single_stage_window", "_resolve_outpaint_canvas_geometry", "_format_outpaint_percentage",
+        "_detect_outpaint_video_shot_ranges", "_build_outpaint_shot_filter", "_write_outpaint_shot_guide",
+        "_build_outpaint_shot_manifest", "_OUTPAINT_PIXEL_BUDGETS", "_OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS",
+        "_OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES",
+    ),
+    "services.outpaint_run": (
+        "_prepare_and_run_outpaint", "_write_outpaint_shot_aware_sidecar", "_run_outpaint_shot_generation",
+    ),
+    "routers.outpaint": ("outpaint_endpoint",),
+    "services.blend_run": ("_run_blend_generation",),
+    "routers.blend": ("blend_endpoint",),
+}
+# The launch names defined below the mount block, and the forwarder launch passes for each.
+_C5_FORWARDERS = {
+    "_run_generation": "_forward_studio_run_generation",
+}
+
+
+def _global_reads(function) -> set[str]:
+    """The global names a function (and the functions nested in it) reads, from its source."""
+    import inspect
+    import symtable
+    import textwrap
+
+    names: set[str] = set()
+
+    def walk(scope) -> None:
+        names.update(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_global() and symbol.is_referenced())
+        for child in scope.get_children():
+            walk(child)
+
+    for scope in symtable.symtable(textwrap.dedent(inspect.getsource(function)), "<moved>", "exec").get_children():
+        walk(scope)
+    return names
+
+
+def _bound_slots(module) -> set[str]:
+    """The module-level ``NAME = None`` placeholders that bind() or the router factory fills."""
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    return {target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)}
+
+
+def test_outpaint_and_blend_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    import builtins
+    import importlib
+    import inspect
+
+    launch = worker_module()
+    compared: set[str] = set()
+    slots: set[str] = set()
+    for module_name, exported in _C5_EXPORTS.items():
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        for name in exported:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        own = {name for name, value in namespace.items()
+               if inspect.isfunction(value) and value.__module__ == module_name}
+        plumbing = {"bind", "create_outpaint_router", "create_blend_router"}
+        for function_name in sorted(own - plumbing):
+            for name in sorted(_global_reads(namespace[function_name])):
+                if name in own:
+                    continue  # a helper that moved with it
+                if name not in namespace:
+                    assert hasattr(builtins, name), f"{module_name}.{function_name} reads {name}, which is not defined"
+                    continue
+                expected = vars(launch)[_C5_FORWARDERS.get(name, name)]
+                assert namespace[name] is expected, f"{module_name}.{name} is not the object launch holds"
+                compared.add(name)
+        module_slots = _bound_slots(module)
+        assert module_slots, module_name
+        for name in module_slots:
+            assert namespace[name] is not None, f"{module_name}.{name} was never bound"
+        slots |= module_slots
+    assert slots <= compared
+    assert {"os", "math", "time", "threading", "uuid", "traceback", "wgp", "execution_mode", "HTTPException",
+            "_jobs", "_active_gen_states", "_coordinated_generation_slot", "_workspace_dir", "_get_active_workspace",
+            "_register_manual_generation_job", "_generation_job_acceptance", "_recast_video_has_audio",
+            "_detect_recast_shot_ranges", "_quantize_recast_shot_frame_count", "_recast_video_frame_count",
+            "_run_generation", "update_job", "finish_job", "is_cancel_requested", "register_abort_state",
+            "unregister_abort_state", "try_start", "try_requeue", "record_job_outputs"} <= compared
+
+    # The forwarder calls whatever launch holds under the name when it is called, not what it held at bind.
+    calls = []
+    monkeypatch.setattr(launch, "_run_generation",
+                        lambda job_id, **kwargs: calls.append(["worker", job_id, kwargs]) or "ran")
+    for module_name in ("routers.outpaint", "services.outpaint_run", "routers.blend", "services.blend_run"):
+        assert importlib.import_module(module_name)._run_generation(module_name, finalize=False) == "ran"
+    assert calls == [
+        ["worker", "routers.outpaint", {"finalize": False}], ["worker", "services.outpaint_run", {"finalize": False}],
+        ["worker", "routers.blend", {"finalize": False}], ["worker", "services.blend_run", {"finalize": False}],
+    ]
+    # Python names a route's worker thread from the target, so the forwarder keeps the worker's name.
+    assert importlib.import_module("routers.outpaint")._run_generation.__name__ == "_run_generation"
+    assert importlib.import_module("routers.blend")._run_blend_generation.__name__ == "_run_blend_generation"
+
+
+def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    """Every global a moved shot function reads is the launch object, or a forwarder.
+
+    The forwarder is the one case that is not the object: patching the launch
+    name changes what the shot module calls. A slot left at None, or bound to
+    a copy, fails here.
+    """
+    import builtins
+    import importlib
+    import inspect
+
+    launch = worker_module()
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    stems = sorted(path.stem for path in services.glob("recast_shot_*.py"))
+    assert "recast_shot_planning" in stems
+    launch_names = vars(launch)
+    launch_source = Path(launch.__file__).read_text(encoding="utf-8")
+    compared: set[str] = set()
+    forwarded: set[str] = set()
+    for stem in stems:
+        assert launch_source.count(f"from services.{stem} import (") == 1
+        assert launch_source.count(f"_bind_{stem}(") in {0, 1}
+        module_name = f"services.{stem}"
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        own = {
+            name
+            for name, value in namespace.items()
+            if inspect.isfunction(value) and getattr(value, "__module__", None) == module_name and name != "bind"
+        }
+        for name in own:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        reads: set[str] = set()
+        for function_name in sorted(own):
+            reads.update(_global_reads(namespace[function_name]))
+        for name in sorted(reads):
+            if name in own or name.startswith("__") or hasattr(builtins, name):
+                continue
+            assert name in namespace, f"{module_name} reads {name}, which it does not define"
+            value = namespace[name]
+            if name in launch_names and value is launch_names[name]:
+                compared.add(name)
+                continue
+            assert callable(value) and name in launch_names, (
+                f"{module_name}.{name} is not launch.{name} and is not a forwarder"
+            )
+            sentinel = object()
+            original = launch_names[name]
+
+            def patched(*_args, _sentinel=sentinel, **_kwargs):
+                return _sentinel
+
+            monkeypatch.setattr(launch, name, patched)
+            assert value() is sentinel, f"patching launch.{name} did not change {module_name}.{name}"
+            monkeypatch.setattr(launch, name, original)
+            forwarded.add(name)
+    assert "_RECAST_MASK_COLORS" in compared
+    assert "_normalize_recast_person_count" in compared
+    if "recast_shot_run" in stems:
+        assert forwarded == {"_run_generation"}
+    else:
+        assert forwarded == set()

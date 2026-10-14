@@ -110,6 +110,9 @@ POSTFX_MODULES = {
     "services.generation_flashvsr": ("_chunked_flashvsr_upscale",),
     "services.generation_sfx": ("_run_sfx_generation",),
 }
+# Outpaint and blend (C5): the modules that took their launch objects, which they read under the launch names.
+OUTPAINT_BLEND_MODULES = ("services.outpaint_planning", "services.outpaint_run", "routers.outpaint",
+                          "services.blend_run", "routers.blend")
 
 # The Recast helper modules (C7). The worker's bystander protection calls two of their functions by their launch
 # names, and the helpers call each other through each module's own globals.
@@ -120,6 +123,13 @@ RECAST_MODULES = (
     "services.recast_reference_prepare",
 )
 
+# The Recast shot modules (C8a). The shot assembler reads its collaborators (the audio probe, the frame count, the
+# worker) through its own module's globals, and the manifest and planning functions call each other the same way.
+SHOT_MODULES = (
+    "services.recast_shot_planning",
+    "services.recast_shot_manifest",
+    "services.recast_shot_run",
+)
 
 # Repaint (C6): the modules that took their launch objects, which they read under the launch names.
 REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
@@ -134,21 +144,23 @@ CANONICAL_TASK_MODULES = (
 
 
 def worker_modules() -> list:
-    """The modules whose globals the worker functions, the post-processing passes, the Recast helpers and the Repaint
-    routes that start the worker read. A move PR repoints this one function.
+    """The modules whose globals the worker functions, the post-processing passes, the Recast code and the Repaint,
+    outpaint and blend routes that start the worker read. A move PR repoints this one function.
 
     That is the full server module while any worker function or pass is still in it, each module of
-    ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7),
-    each Repaint module (C6) and each canonical task module (C10a). A name they read is an attribute of every module
-    that reads it.
+    ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
+    Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5) and each canonical task
+    module (C10a). A name they read is an attribute of every module that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
     passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
     recast = [sys.modules[name] for name in RECAST_MODULES if name in sys.modules]
+    shots = [sys.modules[name] for name in SHOT_MODULES if name in sys.modules]
     repaint = [sys.modules[name] for name in REPAINT_MODULES if name in sys.modules]
+    studio = [sys.modules[name] for name in OUTPAINT_BLEND_MODULES if name in sys.modules]
     canonical = [sys.modules[name] for name in CANONICAL_TASK_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes, *recast, *repaint, *canonical]
+    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *canonical]
 
 
 @dataclass
@@ -401,6 +413,11 @@ def rig(server, clip, tmp_path, monkeypatch):
         return result
 
     monkeypatch.setattr(launch, "_run_generation", run_generation)
+    # The outpaint and blend modules (C5) start the worker from their own slot: they see the wrapper too, so the
+    # thread a route starts is named after it, as it was when the routes read launch's name.
+    for name in OUTPAINT_BLEND_MODULES:
+        if hasattr(sys.modules.get(name), "_run_generation"):
+            monkeypatch.setattr(sys.modules[name], "_run_generation", run_generation)
     clear_queue()
     job_lifecycle.set_job_state_observer(record)
     yield state
@@ -2142,6 +2159,257 @@ def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkey
     coefficients = importlib.import_module("services.generation_coefficients")
     monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
     assert coefficients._get_cached_hardware() == {"gpu_vram_gb": 7.0}
+
+
+# -- recast shot assembly (recorded before the helpers leave launch) --------------------------------
+def _refuse_remote_network(monkeypatch) -> None:
+    """The shot assembler must not download a model. Localhost stays open for the test client."""
+    import socket
+
+    real = socket.create_connection
+
+    def refuse(address, *args, **kwargs):
+        host = address[0] if isinstance(address, tuple) else address
+        if host in {"127.0.0.1", "localhost", "::1"}:
+            return real(address, *args, **kwargs)
+        raise AssertionError(f"this test must not open a network connection to {address!r}")
+
+    monkeypatch.setattr(socket, "create_connection", refuse)
+
+
+def _call_recast_shot_generation(rig, job_id: str) -> None:
+    """Run the assembler on a daemon thread, the same deadline ``Rig.call_worker`` gives the worker."""
+    outcome: dict[str, Any] = {}
+
+    def run() -> None:
+        try:
+            outcome["done"] = rig.launch._run_recast_shot_generation(job_id)
+        except BaseException as error:  # handed to the test thread below
+            outcome["error"] = error
+
+    thread = threading.Thread(target=run, name=f"golden-recast-shots {job_id}", daemon=True)
+    thread.start()
+    thread.join(60)
+    assert not thread.is_alive(), "_run_recast_shot_generation did not return within 60s"
+    if "error" in outcome:
+        raise outcome["error"]
+
+
+@pytest.mark.parametrize("case", [
+    "source audio",
+    "video only",
+    "passthrough segment",
+    "generation fails",
+    "missing segment",
+    "timeline length changed",
+    "cancelled during assembly",
+])
+def test_recast_shot_generation_joins_the_worker_clips(rig, golden, clip, monkeypatch, case) -> None:
+    """The assembler runs the worker with ``finalize=False``, then joins the clips and publishes one file.
+
+    Recorded while ``_run_recast_shot_generation`` still lives in launch. Concatenation, the audio probe and the
+    decoded frame count are the real callables' neighbours; the fake engine still runs the worker.
+    """
+    _refuse_remote_network(monkeypatch)
+    launch = rig.launch
+    temp = rig.server.outputs / "maestro-recast-shots-golden"
+    temp.mkdir()
+    source = None
+    if case in {"source audio", "passthrough segment"}:
+        source = rig.server.outputs / "recast-source.mp4"
+        shutil.copyfile(clip, source)
+    manifest: Any = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+    if case == "generation fails":
+        manifest = "not a list"
+    shot_index = 4 if case == "missing segment" else 0
+    shot: dict[str, Any] = {"shot_index": shot_index, "mode": "generate"}
+    if case == "passthrough segment":
+        shot = {"shot_index": 0, "mode": "passthrough", "passthrough_path": str(source)}
+    bundle = {
+        "shots": [shot],
+        "published_shots": [{"id": "s0"}],
+        "frame_count": 8,
+        "fps": 8,
+        "resolved_seed": 42,
+    }
+    params = {
+        **BODY,
+        "_defer_output_publication": True,
+        "_recast_shot_manifest": manifest,
+        "_recast_shot_temp_dir": str(temp),
+        "_recast_final_out_dir": str(rig.server.outputs),
+        "_recast_shot_bundle": bundle,
+    }
+    if source is not None:
+        params["_recast_source_video"] = str(source)
+    job_id = rig.direct_job(params)
+    launch._jobs[job_id]["out_dir"] = str(temp)
+
+    probes: list = []
+    assembly: list = []
+
+    def has_audio(path: str) -> bool:
+        probes.append(["audio", Path(path).name])
+        return case == "source audio"
+
+    def frame_count(path: str) -> int:
+        probes.append(["frames", Path(path).name])
+        return 3 if case == "timeline length changed" else 8
+
+    def concatenate(clip_paths, output_path, audio_path=None, audio_start_sec=0.0, abort_callback=None,
+                    pad_audio=False, audio_duration_sec=None):
+        assembly.append({
+            "clips": [Path(path).name for path in clip_paths],
+            "audio": None if audio_path is None else Path(audio_path).name,
+            "audio_start_sec": audio_start_sec,
+            "pad_audio": pad_audio,
+            "audio_duration_sec": audio_duration_sec,
+            "already_cancelled": bool(abort_callback and abort_callback()),
+        })
+        shutil.copyfile(clip_paths[0], output_path)
+        if case == "cancelled during assembly":
+            launch._jobs[job_id]["cancel_requested"] = True
+        return True
+
+    rig.patch("_recast_video_has_audio", has_audio)
+    rig.patch("_recast_video_frame_count", frame_count)
+    rig.set_wgp("concatenate_multi_clip_videos", concatenate)
+    _call_recast_shot_generation(rig, job_id)
+    kept = launch._jobs[job_id].get("params") or {}
+    rig.check(golden, f"recast shot generation: {case}", {
+        **rig.observe(job_id),
+        "assembly": assembly,
+        "probes": probes,
+        "private_left": sorted(
+            key for key in kept
+            if key.startswith("_recast") or key == "_defer_output_publication"
+        ),
+        "shot_aware": kept.get("edit_recast_shot_aware"),
+        "shot_plan": kept.get("edit_recast_shot_plan"),
+        "temp_removed": not temp.exists(),
+    })
+
+
+# -- recast shot assembly: the paths the seven cases above do not take (C8a review) ---------------------------------
+@pytest.mark.parametrize("case", [
+    "three shots in order",
+    "no segments",
+    "audio probe fails",
+    "join fails",
+    "frame probe fails",
+    "cancelled after the join",
+    "join longer than the timeline",
+])
+def test_recast_shot_generation_other_paths(rig, golden, clip, monkeypatch, case) -> None:
+    """More assembler paths, recorded while ``_run_recast_shot_generation`` still lived in launch (C7 head e393f5746).
+
+    Three shots join in timeline order, the passthrough between the two generated clips; an empty shot list, a failed
+    audio probe, a failed join and a failed frame count each end the job their own way; a cancel that lands after the
+    join leaves no final file and no sidecar behind; a join one frame longer than the timeline fails like a shorter
+    one.
+    """
+    _refuse_remote_network(monkeypatch)
+    launch = rig.launch
+    temp = rig.server.outputs / "maestro-recast-shots-golden"
+    temp.mkdir()
+    source = rig.server.outputs / "recast-source.mp4"
+    shutil.copyfile(clip, source)
+    manifest: Any = [{"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+    shots: list = [{"shot_index": 0, "mode": "generate"}]
+    if case == "three shots in order":
+        manifest = [{"shot_index": 2, "params": {"prompt": "shot two", "video_length": 17}},
+                    {"shot_index": 0, "params": {"prompt": "shot zero", "video_length": 17}}]
+        shots = [{"shot_index": 0, "mode": "generate"},
+                 {"shot_index": 1, "mode": "passthrough", "passthrough_path": str(source)},
+                 {"shot_index": 2, "mode": "generate"}]
+    elif case == "no segments":
+        shots = []
+    bundle = {
+        "shots": shots,
+        "published_shots": [{"id": f"s{shot['shot_index']}"} for shot in shots],
+        "frame_count": 8,
+        "fps": 8,
+        "resolved_seed": 42,
+    }
+    params = {
+        **BODY,
+        "_defer_output_publication": True,
+        "_recast_shot_manifest": manifest,
+        "_recast_shot_temp_dir": str(temp),
+        "_recast_final_out_dir": str(rig.server.outputs),
+        "_recast_shot_bundle": bundle,
+        "_recast_source_video": str(source),
+    }
+    job_id = rig.direct_job(params)
+    launch._jobs[job_id]["out_dir"] = str(temp)
+
+    probes: list = []
+    assembly: list = []
+    finals: list = []
+
+    def has_audio(path: str) -> bool:
+        probes.append(["audio", Path(path).name])
+        if case == "audio probe fails":
+            raise RuntimeError("ffprobe is not here")
+        return True
+
+    def frame_count(path: str) -> int:
+        probes.append(["frames", Path(path).name])
+        if case == "frame probe fails":
+            raise RuntimeError("decord is not here")
+        if case == "cancelled after the join":
+            launch._jobs[job_id]["cancel_requested"] = True
+        return 9 if case == "join longer than the timeline" else 8
+
+    def concatenate(clip_paths, output_path, audio_path=None, audio_start_sec=0.0, abort_callback=None,
+                    pad_audio=False, audio_duration_sec=None):
+        assembly.append({
+            "clips": [Path(path).name for path in clip_paths],
+            "audio": None if audio_path is None else Path(audio_path).name,
+            "audio_duration_sec": audio_duration_sec,
+        })
+        finals.append(Path(output_path))
+        if case == "join fails":
+            return False
+        shutil.copyfile(clip_paths[0], output_path)
+        # The real join can leave a metadata sibling next to its output; cleanup must take it too.
+        Path(output_path).with_suffix(".meta.json").write_text("{}", encoding="utf-8")
+        return True
+
+    rig.patch("_recast_video_has_audio", has_audio)
+    rig.patch("_recast_video_frame_count", frame_count)
+    rig.set_wgp("concatenate_multi_clip_videos", concatenate)
+    _call_recast_shot_generation(rig, job_id)
+    kept = launch._jobs[job_id].get("params") or {}
+    rig.check(golden, f"recast shot generation, other paths: {case}", {
+        **rig.observe(job_id),
+        "assembly": assembly,
+        "probes": probes,
+        "final_left": [path.exists() for path in finals],
+        "final_meta_left": [path.with_suffix(".meta.json").exists() for path in finals],
+        "private_left": sorted(
+            key for key in kept
+            if key.startswith("_recast") or key == "_defer_output_publication"
+        ),
+        "shot_aware": kept.get("edit_recast_shot_aware"),
+        "shot_plan": kept.get("edit_recast_shot_plan"),
+        "temp_removed": not temp.exists(),
+    })
+
+
+def test_a_rig_patch_reaches_every_recast_module(full_server) -> None:
+    """``Rig.patch`` writes a name on every module of ``worker_modules()`` that holds it. Each Recast service module
+    reads its collaborators through its own globals, so each one must be in that list, or a stub would miss the
+    module that calls it (C8a review: dropping a shot module from the list left every golden green)."""
+    import importlib
+
+    services = Path(__file__).resolve().parents[2] / "app" / "services"
+    stems = sorted(path.stem for path in services.glob("recast_*.py"))
+    assert "recast_masks" in stems
+    for stem in stems:
+        importlib.import_module(f"services.{stem}")
+    held = {module.__name__ for module in worker_modules()}
+    assert {f"services.{stem}" for stem in stems} <= held
 
 
 def test_a_rig_patch_of_time_reaches_the_canonical_task_clock(rig) -> None:

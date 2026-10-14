@@ -23,6 +23,9 @@ SERVICE_FILES = (
     ROOT / "app" / "services" / "recast_matte.py",
     ROOT / "app" / "services" / "recast_reference_compose.py",
     ROOT / "app" / "services" / "recast_reference_prepare.py",
+    ROOT / "app" / "services" / "recast_shot_planning.py",
+    ROOT / "app" / "services" / "recast_shot_manifest.py",
+    ROOT / "app" / "services" / "recast_shot_run.py",
 )
 
 
@@ -555,6 +558,9 @@ def test_video_frame_count_is_the_decoded_length(monkeypatch):
 
 
 RECAST_SERVICES = ("recast_masks", "recast_matte", "recast_reference_compose", "recast_reference_prepare")
+# The Recast shot modules (C8a). recast_masks imports six shot helpers from recast_shot_planning; their bind is
+# checked by test_recast_shot_modules_bind_exactly_the_names_their_functions_read.
+SHOT_SERVICES = ("recast_shot_planning", "recast_shot_manifest", "recast_shot_run")
 
 
 def test_each_recast_service_binds_exactly_its_free_launch_names():
@@ -589,6 +595,13 @@ def test_each_recast_service_binds_exactly_its_free_launch_names():
                     else:
                         assert target.id not in defined, f"{target.id} is defined twice in the slice"
                         defined[target.id] = stem
+    # A name the slice imports from a shot module must be defined there.
+    for stem in SHOT_SERVICES:
+        shot_tree = ast.parse((services / f"{stem}.py").read_text(encoding="utf-8"), filename=f"{stem}.py")
+        for node in shot_tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.ClassDef)) and node.name != "bind":
+                assert node.name not in defined, f"{node.name} is defined twice in the recast services"
+                defined[node.name] = stem
 
     launch_tree = ast.parse(LAUNCH.read_text(encoding="utf-8"))
     launch_names: set[str] = set()
@@ -602,7 +615,8 @@ def test_each_recast_service_binds_exactly_its_free_launch_names():
             launch_names.update(target.id for target in node.targets if isinstance(target, ast.Name))
         elif isinstance(node, (ast.Import, ast.ImportFrom)):
             launch_names.update((alias.asname or alias.name).split(".")[0] for alias in node.names)
-            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("services.recast_"):
+            # The shot modules (C8a) have their own bind check below.
+            if isinstance(node, ast.ImportFrom) and (node.module or "").rsplit(".", 1)[-1] in RECAST_SERVICES:
                 for alias in node.names:
                     if alias.name == "bind":
                         bind_aliases[alias.asname or alias.name] = node.module.rsplit(".", 1)[-1]
@@ -718,6 +732,187 @@ def _undefined_globals(source: str, filename: str) -> set[str]:
 
     walk(top)
     return missing
+
+
+def test_recast_shot_modules_bind_exactly_the_names_their_functions_read():
+    """The bind list is the free names of the moved functions, derived here.
+
+    A module whose every collaborator is imported has no ``bind`` and no free
+    name. A module that still needs a launch object names that object in
+    ``bind``'s keyword-only parameters, and in nothing else. ``Name = None``
+    is only the slot ``bind`` fills. Launch imports each module once and calls
+    ``bind`` once, and only when the module defines it.
+    """
+    services = ROOT / "app" / "services"
+    launch = LAUNCH.read_text(encoding="utf-8")
+    stems = (
+        "recast_shot_planning",
+        "recast_shot_manifest",
+        "recast_shot_run",
+    )
+    present = [stem for stem in stems if (services / f"{stem}.py").is_file()]
+    assert present and present[0] == "recast_shot_planning"
+
+    for stem in present:
+        path = services / f"{stem}.py"
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=str(path))
+        bind = next(
+            (node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "bind"),
+            None,
+        )
+        slots = [
+            node.targets[0].id
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is None
+        ]
+        assert launch.count(f"from services.{stem} import (") == 1, stem
+        if bind is None:
+            assert slots == [], slots
+            assert _undefined_globals(source, str(path)) == set()
+            assert f"_bind_{stem}(" not in launch
+            continue
+        assert bind.args.args == [] and bind.args.posonlyargs == []
+        assert bind.args.vararg is None and bind.args.kwarg is None
+        assert bind.args.defaults == []
+        params = [arg.arg for arg in bind.args.kwonlyargs]
+        assert params, f"{stem}.bind takes no names"
+        assert sorted(slots) == sorted(params)
+        kept = []
+        for node in tree.body:
+            if node is bind:
+                continue
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id in params
+                and isinstance(node.value, ast.Constant)
+                and node.value.value is None
+            ):
+                continue
+            kept.append(node)
+        stripped = ast.unparse(ast.Module(body=kept, type_ignores=[]))
+        assert _undefined_globals(stripped, str(path)) == set(params)
+        assert launch.count(f"_bind_{stem}(") == 1
+        # bind writes each keyword into the slot of the same name, and nothing else.
+        update = bind.body[-1].value
+        assert isinstance(update, ast.Call) and ast.unparse(update.func) == "globals().update"
+        assert {keyword.arg: ast.unparse(keyword.value) for keyword in update.keywords} == {p: p for p in params}
+        # Launch passes each slot its own name, or a forwarder whose body calls that launch name when it runs.
+        launch_tree = ast.parse(launch, filename=str(LAUNCH))
+        launch_functions = {node.name: node for node in launch_tree.body if isinstance(node, ast.FunctionDef)}
+        (call,) = [
+            node for node in ast.walk(launch_tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == f"_bind_{stem}"
+        ]
+        assert not call.args and sorted(keyword.arg for keyword in call.keywords) == sorted(params)
+        for keyword in call.keywords:
+            assert isinstance(keyword.value, ast.Name), keyword.arg
+            if keyword.value.id == keyword.arg:
+                continue
+            forwarder = launch_functions[keyword.value.id]
+            body = [node for node in forwarder.body if not isinstance(node, ast.Expr)]
+            assert len(body) == 1 and isinstance(body[0], ast.Return), forwarder.name
+            assert ast.unparse(body[0].value) == f"{keyword.arg}(*args, **kwargs)", forwarder.name
+            assert ast.unparse(forwarder.args) == "*args, **kwargs", forwarder.name
+
+
+def test_timeline_preview_blends_the_anchor_and_returns_the_first_frame_when_nothing_is_found():
+    """The preview card is the anchor frame, the mask tint and a character label."""
+    import numpy as np
+    from PIL import Image
+
+    preview = _load(("_compose_recast_timeline_preview",))["_compose_recast_timeline_preview"]
+    frames = np.full((2, 10, 20, 3), 100, dtype=np.uint8)
+    frames[0, :, :, 1] = 20
+    mask = np.zeros_like(frames)
+    mask[1, 2:6, 4:9] = (0, 0, 200)
+    found = {
+        "found": True,
+        "anchor_sample_index": 1,
+        "anchor_time_seconds": 1.5,
+        "mapping_index": 0,
+        "color": (0, 0, 255),
+    }
+
+    with pytest.raises(ValueError, match="T/H/W/RGB"):
+        preview(frames[0], [mask], [found])
+
+    untouched = preview(frames, [mask], [{"found": False}])
+    assert isinstance(untouched, Image.Image)
+    assert untouched.size == (20, 10)
+    assert untouched.getpixel((0, 0)) == (100, 20, 100)
+
+    card = preview(frames, [mask], [found])
+    assert card.size == (20, 34)
+    assert card.getpixel((0, 0)) == (22, 24, 29)
+    assert card.getpixel((10, 10)) == (0, 0, 255)
+    assert card.getpixel((6, 6)) == (235, 235, 235)
+    # 100 * 0.45 + 200 * 0.55 = 155 on the blue channel of the painted mask.
+    assert card.getpixel((4, 24 + 2)) == (45, 45, 155)
+    assert card.getpixel((0, 24)) == (100, 100, 100)
+
+    second = dict(found, mapping_index=1, color=(255, 0, 0), anchor_sample_index=0)
+    sheet = preview(frames, [mask, mask], [found, second], max_tile_width=8)
+    assert sheet.size == (16, 28)
+
+
+def test_shot_frames_resize_to_the_canvas_and_refuse_a_bad_shape():
+    import numpy as np
+
+    resize = _load(("_resize_recast_shot_frames",))["_resize_recast_shot_frames"]
+    frames = np.zeros((1, 2, 2, 3), dtype=np.uint8)
+    frames[0, 0, 0] = (255, 0, 0)
+    frames[0, 0, 1] = (0, 255, 0)
+    frames[0, 1, 0] = (0, 0, 255)
+    frames[0, 1, 1] = (255, 255, 0)
+
+    with pytest.raises(ValueError, match="T/H/W/RGB"):
+        resize(frames[0], (4, 4))
+    with pytest.raises(ValueError, match="positive"):
+        resize(frames, (0, 4))
+
+    same = resize(frames, (2, 2))
+    assert same.shape == (1, 2, 2, 3)
+    assert same is not frames
+    assert np.array_equal(same, frames)
+
+    nearest = resize(frames, (4, 4), semantic=True)
+    assert nearest.shape == (1, 4, 4, 3)
+    assert tuple(nearest[0, 0, 0]) == (255, 0, 0)
+    assert tuple(nearest[0, 0, 1]) == (255, 0, 0)
+    assert tuple(nearest[0, 1, 0]) == (255, 0, 0)
+    assert tuple(nearest[0, 3, 3]) == (255, 255, 0)
+
+    solid = np.full((2, 3, 5, 3), 40, dtype=np.uint8)
+    scaled = resize(solid, (6, 4))
+    assert scaled.shape == (2, 4, 6, 3)
+    assert int(scaled.max()) == 40 and int(scaled.min()) == 40
+
+
+def test_shot_video_refuses_an_empty_clip_and_writes_a_silent_file(tmp_path, monkeypatch):
+    import numpy as np
+
+    _block_network(monkeypatch)
+    write = _load(("_write_recast_shot_video",), {"os": os})["_write_recast_shot_video"]
+    frames = np.zeros((2, 8, 8, 3), dtype=np.uint8)
+    frames[:, :, :, 2] = 255
+    with pytest.raises(ValueError, match="empty or malformed"):
+        write(str(tmp_path / "empty.mp4"), frames[:0], 8)
+    with pytest.raises(ValueError, match="empty or malformed"):
+        write(str(tmp_path / "flat.mp4"), frames[0], 8)
+
+    path = tmp_path / "nested" / "shot.mp4"
+    assert write(str(path), frames, 8) == str(path)
+    assert path.is_file() and path.stat().st_size > 0
+    mask_path = tmp_path / "mask.mp4"
+    assert write(str(mask_path), frames, 8, semantic=True) == str(mask_path)
+    assert mask_path.is_file() and mask_path.stat().st_size > 0
 
 
 def test_video_has_audio_follows_the_ffprobe_answer(monkeypatch):
