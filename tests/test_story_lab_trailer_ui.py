@@ -45,7 +45,10 @@ def test_trailer_is_a_standalone_story_project_type_without_music():
     tabs = TABS.read_text(encoding="utf-8")
     catalog_en = CATALOG_EN.read_text(encoding="utf-8")
     catalog_es = CATALOG_ES.read_text(encoding="utf-8")
-    backend = ROOT.joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
+    backend = "\n".join(
+        ROOT.joinpath(path).read_text(encoding="utf-8")
+        for path in ("app/services/story_lab_jobs.py", "app/routers/story_lab.py")
+    )
 
     assert "'full_story' | 'music_video' | 'trailer' | 'quick_video'" in types
     assert "projectType === 'trailer' ? 60" in model

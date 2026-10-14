@@ -66,7 +66,8 @@ class CharacterSheetRouteTests(unittest.TestCase):
         route = os.path.join(os.path.dirname(__file__), "..", "app", "routers", "llm_director.py")
         with open(route, encoding="utf-8") as handle:
             source = handle.read()
-        self.assertIn('@router.post("/api/v1/characters/describe-refs")', source)
+        # The decorator also passes the handler's docstring as the OpenAPI description.
+        self.assertIn('@router.post("/api/v1/characters/describe-refs"', source)
         handler = source.split("async def describe_character_refs", 1)[1].split("return {", 1)[0]
         minimax_path, local_path = handler.split("        _ensure_llm_loaded()", 1)
         self.assertIn('if backend == "minimax":', minimax_path)

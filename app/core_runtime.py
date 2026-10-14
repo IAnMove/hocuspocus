@@ -17,7 +17,6 @@ from routers import core_labs as labs
 from routers.core_labs import create_core_labs_router
 from routers.core_mcp import create_core_mcp_router
 from routers.core_remote import create_core_remote_router
-from routers.core_series_plan import create_core_series_plan_router
 from routers.image_generation_commands import create_image_generation_commands_router
 from routers.lan_auth import create_lan_auth_router
 from routers.llm import create_llm_prompt_router, create_llm_router
@@ -142,7 +141,6 @@ api.include_router(create_series_assembly_router(
     concatenate_clips=lambda *args, **kwargs: core_series_assembly.concatenate_clips(*args, **kwargs),
     iso_now=labs._iso_now,
 ))
-api.include_router(create_core_series_plan_router())
 api.include_router(create_series_review_router(
     resolve_workspace=labs._series_workspace, lock=labs._LOCK, read_library=labs._read_series,
     write_library=labs._write_series, iso_now=labs._iso_now,
@@ -307,7 +305,7 @@ def _core_workspace_jobs():
 
 from types import SimpleNamespace
 
-from services.output_listing import configure as _configure_output_listing, serve_file
+from services.output_listing import _output_scan_cache, _output_scan_cache_lock, configure as _configure_output_listing, serve_file
 from routers.workspace_outputs import (
     create_list_outputs_router,
     create_serve_file_router,
@@ -315,7 +313,7 @@ from routers.workspace_outputs import (
 )
 
 _configure_output_listing(
-    workspace_dir=lambda workspace=None: core.workspace_dir(workspace),
+    workspace_dir=lambda workspace=None: core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace),
     load_favorites=lambda: set(),
     safe_join=core.safe_join,
     engine=SimpleNamespace(server_config={"save_path": "outputs"}),
@@ -488,7 +486,7 @@ api.include_router(create_rig_router(
 
 async def _publish_core_scene_recording(file, metadata, audio):
     try:
-        return await scene_save.publish_from_form({"file": file, "metadata": metadata, "audio": audio})
+        return await scene_save.publish_from_form({"file": file, "metadata": metadata, "audio": audio}, scan_cache=_output_scan_cache, scan_cache_lock=_output_scan_cache_lock)
     except HTTPException:
         raise
     except Exception as error:

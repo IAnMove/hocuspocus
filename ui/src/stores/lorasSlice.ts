@@ -33,11 +33,15 @@ export type LorasSlice = {
    *  so the user's global LoRA list isn't touched. */
   ensureEditAnythingLora: () => Promise<void>
   setLoraWeight: (filename: string, phaseIndex: number, value: number) => void
+  /** Snapshot of lora_id → filename loaded from localStorage at boot.
+   *  Used by `refreshLoraIdMap` reconciliation to rewrite filenames that
+   *  changed since save (LoRA version updates). Internal-only; not part
+   *  of the persisted runtime state. */
+  _loraFilenameSnapshotAtLoad?: Record<string, string>
 }
 
-/** These actions read and write sibling fields: _loraFilenameSnapshotAtLoad, savedLoraPerMode, params, generationMode, selectedModelPerMode, savedParamsPerMode, savedPromptPerMode, modelOptions, editSubMode. */
+/** These actions read and write sibling fields: savedLoraPerMode, params, generationMode, selectedModelPerMode, savedParamsPerMode, savedPromptPerMode, modelOptions, editSubMode. */
 export type LorasSliceHost = LorasSlice & {
-  _loraFilenameSnapshotAtLoad?: Record<string, string>
   savedLoraPerMode: Partial<Record<GenerationMode, { activated_loras: string[]; loras_multipliers: string; loraWeights: Record<string, number[]>; availableLoras: string[] }>>
   params: GenerateParams
   generationMode: GenerationMode

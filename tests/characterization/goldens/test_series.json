@@ -1,9 +1,63 @@
 {
+  "apply canon of a missing plan job": {
+    "body": {
+      "detail": "Series canon planning job not found"
+    },
+    "status": 404
+  },
+  "apply missing plan job": {
+    "body": {
+      "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "approve a missing attempt": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "approve bulk of a missing episode": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "approve canon before it is complete": {
+    "body": {
+      "detail": "Complete the World summary before approving canon"
+    },
+    "status": 400
+  },
+  "approve canon without a revision": {
+    "body": {
+      "detail": "baseRevision is required"
+    },
+    "status": 400
+  },
   "assembly recovery": {
     "body": {
       "jobs": []
     },
     "status": 200
+  },
+  "cancel missing plan job": {
+    "body": {
+      "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "cancel missing render job": {
+    "body": {
+      "detail": "Series render job not found"
+    },
+    "status": 404
+  },
+  "canon commit without a revision": {
+    "body": {
+      "detail": "baseRevision is required"
+    },
+    "status": 400
   },
   "create": {
     "body": {
@@ -129,11 +183,169 @@
     },
     "status": 200
   },
+  "delete missing episode": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "delete missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "discard missing plan job": {
+    "body": {
+      "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "discard missing render job": {
+    "body": {
+      "detail": "Series render job not found"
+    },
+    "status": 404
+  },
+  "duplicate": {
+    "body": {
+      "allowClipText": false,
+      "allowedProductionMethods": [
+        "generated_video"
+      ],
+      "assets": {},
+      "audience": "General",
+      "bestEffortLipSyncAcknowledged": false,
+      "cameraLanguage": "",
+      "canon": {
+        "approval": "draft",
+        "approvedAt": "",
+        "currentFacts": [],
+        "forbiddenChanges": [],
+        "immutableRules": [],
+        "longArcs": [],
+        "revision": 1,
+        "themes": [],
+        "timeline": [],
+        "worldSummary": ""
+      },
+      "characterVisualStyle": "",
+      "characters": [],
+      "createdAt": "<TIME>",
+      "createdBy": {
+        "actor": "user",
+        "capability": "series.duplicate",
+        "tool": "series"
+      },
+      "defaultEpisodeDurationSeconds": 75,
+      "episodesById": {},
+      "format": "episodic",
+      "genre": "",
+      "id": "series_<ID>",
+      "importSource": {
+        "historicalProductionIds": [],
+        "importedAt": "<TIME>",
+        "kind": "original",
+        "migrationNotes": "Duplicated from Series Lab project series_<ID>; episodes and attempts were not copied.",
+        "sourceStoryId": null,
+        "sourceWorkspaceId": null
+      },
+      "language": "English",
+      "languageIntent": {
+        "contentLanguage": "English",
+        "conversationLanguage": "",
+        "spokenLanguage": "English",
+        "technicalPromptLanguage": "en",
+        "verbatimSegments": []
+      },
+      "locations": [],
+      "logline": "",
+      "masterUniversePrompt": "",
+      "premise": "",
+      "props": [],
+      "protagonistCharacterId": "",
+      "protagonistConsistency": false,
+      "provider": {
+        "imageModel": "",
+        "imageProvider": "maestro",
+        "useGlobalProfile": true,
+        "videoCapabilities": {
+          "family": "minimax_h3_legacy",
+          "limits": {
+            "audio": 3,
+            "image": 9,
+            "total": 12,
+            "video": 3
+          },
+          "model": "minimax_h3_legacy",
+          "supportsContinuation": true,
+          "supportsFirstFrame": true,
+          "supportsFirstLast": true,
+          "supportsNativeAudio": true,
+          "version": "runtime-default"
+        },
+        "videoModel": "minimax_h3_legacy",
+        "videoSettings": {
+          "audioShift": 3,
+          "flowShift": 12,
+          "modelProfile": "quality",
+          "numInferenceSteps": 20,
+          "orientation": "landscape",
+          "renderStrategy": "auto",
+          "resolution": "480p"
+        },
+        "writingBaseUrl": "",
+        "writingModel": "",
+        "writingProvider": "maestro"
+      },
+      "relationships": [],
+      "revision": 1,
+      "rightsNote": "",
+      "seasons": [
+        {
+          "arc": "",
+          "createdAt": "<TIME>",
+          "episodeOrder": [],
+          "id": "season_<ID>_1",
+          "number": 1,
+          "premise": "",
+          "title": "Season 1",
+          "updatedAt": "<TIME>"
+        }
+      ],
+      "sourceMode": "original",
+      "spokenLanguage": "English",
+      "title": "Golden series (copy)",
+      "tone": "",
+      "updatedAt": "<TIME>",
+      "version": 1,
+      "visualStyle": ""
+    },
+    "status": 200
+  },
+  "duplicate missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "duration preview without a shot": {
+    "body": {
+      "detail": "Series shot is required"
+    },
+    "status": 400
+  },
   "episode before canon approval": {
     "body": {
       "detail": "Approve the reviewed Series canon before creating an episode"
     },
     "status": 400
+  },
+  "episodes empty": {
+    "body": {
+      "episodes": []
+    },
+    "status": 200
   },
   "get": {
     "body": {
@@ -256,6 +468,36 @@
       "detail": "Series Lab project not found"
     },
     "status": 404
+  },
+  "get missing episode": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "get missing plan job": {
+    "body": {
+      "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "get missing render job": {
+    "body": {
+      "detail": "Series render job not found"
+    },
+    "status": 404
+  },
+  "import asset outside uploads": {
+    "body": {
+      "detail": "Smart asset analysis only accepts HocusPocus Lab uploads"
+    },
+    "status": 400
+  },
+  "import story without a source": {
+    "body": {
+      "detail": "Choose a Story Lab project to import"
+    },
+    "status": 400
   },
   "library": {
     "body": {
@@ -399,6 +641,12 @@
     },
     "status": 200
   },
+  "list episodes of a missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
   "list one": {
     "body": {
       "series": [
@@ -535,6 +783,18 @@
     },
     "status": 200
   },
+  "plan start with an unknown scope": {
+    "body": {
+      "detail": "Unsupported Series Lab planning scope"
+    },
+    "status": 400
+  },
+  "prepare canon of a missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
   "produce jobs": {
     "body": {
       "jobs": [],
@@ -542,11 +802,77 @@
     },
     "status": 200
   },
+  "put missing episode": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "put series without a project": {
+    "body": {
+      "detail": "Series project is required"
+    },
+    "status": 400
+  },
+  "refresh references of a missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "reject a missing attempt": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
   "render recovery": {
     "body": {
       "jobs": []
     },
     "status": 200
+  },
+  "render start of a missing episode": {
+    "body": {
+      "detail": "Series episode not found"
+    },
+    "status": 404
+  },
+  "render start of a missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
+  },
+  "render start with an unknown mode": {
+    "body": {
+      "detail": "Render mode must be selected, failed, missing, or all"
+    },
+    "status": 400
+  },
+  "render start with no generated shots": {
+    "body": {
+      "detail": "No permitted unapproved generated-video shots match this request. Prepare animation shots in their editor or import a completed take."
+    },
+    "status": 400
+  },
+  "resume missing plan job": {
+    "body": {
+      "detail": "Series planning job not found"
+    },
+    "status": 404
+  },
+  "resume missing render job": {
+    "body": {
+      "detail": "Series render job not found"
+    },
+    "status": 404
+  },
+  "route references of a missing series": {
+    "body": {
+      "detail": "Series Lab project not found"
+    },
+    "status": 404
   },
   "update": {
     "body": {
