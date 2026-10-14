@@ -47,9 +47,11 @@ def _native_image_selectors(body):
     WanGP decides picture or clip from ``image_mode`` alone (``image_mode > 0``); a body that only said
     ``generation_mode: "image"`` rendered, and saved, an MP4 (validation gen-01). The typed image command already
     adds ``image_mode=1`` and ``video_length=1`` (``NATIVE_IMAGE_DEFAULTS``); REST and MCP ``generate`` get the same
-    here, before any check below reads ``image_mode``. A stated ``image_mode`` of 1 or 2 is kept.
+    here, before any check below reads ``image_mode``. A stated positive ``image_mode`` (1, 2 ...) is kept as it is,
+    like WanGP's own ``image_mode > 0``; absent, ``null``, 0 or a non-number becomes the image request it sits in.
     """
-    if body.get('generation_mode') == 'image' and body.get('image_mode') not in (1, 2):
+    mode = body.get('image_mode')
+    if body.get('generation_mode') == 'image' and not (isinstance(mode, int) and not isinstance(mode, bool) and mode > 0):
         body['image_mode'] = 1
         body['video_length'] = 1
 

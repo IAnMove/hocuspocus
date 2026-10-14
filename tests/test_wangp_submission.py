@@ -54,6 +54,9 @@ def test_legacy_references_are_unchanged_without_opt_in_and_video_cannot_opt_in(
     ({'image_mode': None}, 1, 1),
     ({'image_mode': 1, 'video_length': 1}, 1, 1),
     ({'image_mode': 2, 'video_length': 3}, 2, 3),   # a stated image mode of 2 is kept as it is
+    ({'image_mode': 3, 'video_length': 1}, 3, 1),    # any positive mode is an image for WanGP (image_mode > 0)
+    ({'image_mode': True}, 1, 1),                    # not a number: the image request wins
+    ({'image_mode': '0'}, 1, 1),
 ])
 def test_an_image_request_always_carries_the_selectors_wangp_reads(tmp_path, stated, expected_mode, expected_length):
     body = {'generation_mode': 'image', 'prompt': 'a barn', **stated}
