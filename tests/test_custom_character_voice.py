@@ -1,12 +1,7 @@
-import ast
 import asyncio
-import os
-from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import quote
 
 import pytest
-from fastapi import HTTPException
 
 from services.kernel.paths import PathPolicy
 from app.services.character_kit_library import patch_character_kit, read_character_kit_library
@@ -129,16 +124,12 @@ def test_legacy_adoption_remains_available_for_existing_audio_studio_callers(med
 
 def test_audio_adopt_endpoint_uses_source_workspace_and_new_canonical_resolver(media_roots, monkeypatch):
     """Execute the actual lightweight route functions without importing GPU runtimes."""
+    import routers.audio as audio_routes
+
     uploads, workspace = media_roots
     monkeypatch.chdir(uploads.parent)
     for root in media_roots:
         (root / "same.wav").write_bytes(b"reference")
-    launch = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
-    parsed = ast.parse(launch.read_text(encoding="utf-8"))
-    selected = [node for node in parsed.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-                and node.name in {"adopt_audio"}]
-    for node in selected:
-        node.decorator_list = []
     seen_workspaces = []
 
     def workspace_dir(name):
@@ -146,17 +137,16 @@ def test_audio_adopt_endpoint_uses_source_workspace_and_new_canonical_resolver(m
         return str(workspace)
 
     paths = PathPolicy(SimpleNamespace(workspace_dir=workspace_dir, active=lambda: "destination"))
-    namespace = {"os": os, "quote": quote, "Request": object, "HTTPException": HTTPException,
-                 "_resolve_request_media_path": paths.resolve_request_media_path,
-                 "_workspace_dir": workspace_dir, "_get_active_workspace": lambda: "destination",
-                 "_probe_audio_duration": lambda _: 5}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), str(launch), "exec"), namespace)
+    monkeypatch.setattr(audio_routes, "_resolve_request_media_path", paths.resolve_request_media_path)
+    monkeypatch.setattr(audio_routes, "_workspace_dir", workspace_dir)
+    monkeypatch.setattr(audio_routes, "_get_active_workspace", lambda: "destination")
+    monkeypatch.setattr(audio_routes, "_probe_audio_duration", lambda _: 5)
 
     class Request:
         async def json(self):
             return {"audio_path": "/api/v1/file/same.wav?workspace=original", "workspace": "original"}
 
-    result = asyncio.run(namespace["adopt_audio"](Request()))
+    result = asyncio.run(audio_routes.adopt_audio(Request()))
     assert seen_workspaces == ["original"]
     assert result["path"] == str(workspace / "same.wav")
     assert result["duration_seconds"] == 5
