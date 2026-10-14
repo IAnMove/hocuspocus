@@ -164,6 +164,57 @@ def test_a_command_job_still_planning_its_h3_windows_stays_off_the_gpu_queue(rig
     assert job["status"] == "queued"
 
 
+def test_a_command_job_whose_h3_planning_fails_leaves_the_gpu_queue_free(rig, monkeypatch) -> None:
+    """A failed plan finishes the job without ever entering ``acquire_generation_slot``. Had ``dispatch`` registered
+    it, its token would stay at the head of the GPU FIFO (only cancelled heads are dropped), and every later job would
+    wait forever on an idle GPU. The next job must get the GPU at once."""
+    import threading
+
+    from services import generation_preparation, h3_window_planner, image_generation_runtime, job_lifecycle
+
+    launch = rig.launch
+    started = []
+
+    class RecordingThread:
+        def __init__(self, *, target, args, name, daemon):
+            self.target, self.args, self.ident = target, args, None
+
+        def start(self):
+            self.ident = 1
+            started.append(self)
+
+    def planner_down(*_args, **_kwargs):
+        raise RuntimeError("planner down")
+
+    monkeypatch.setattr(image_generation_runtime, "threading", SimpleNamespace(Thread=RecordingThread))
+    monkeypatch.setattr(generation_preparation, "_ensure_llm_loaded", lambda: None)
+    monkeypatch.setattr(h3_window_planner, "plan_h3_sliding_windows", planner_down)
+    job = launch._new_generation_job(
+        {"model_type": "fake_t2v", "prompt": "a calm lake",
+         "_h3_window_plan_pending": {"expected_count": 2, "window_frames": 81}},
+        "default", job_id="dispatch-h3-plan-fails", reserve_generation=False, publish_task=True,
+    )
+    launch._image_generation_commands.dispatch(job)
+    [worker] = started
+    assert worker.target(*worker.args) is False
+    assert job["status"] == "failed" and "planner down" in job["message"]
+    assert [entry[2] for entry in job_lifecycle._generation_queues.get(id(launch._gen_lock), ())] == []
+
+    following = {"id": "after-failed-plan", "status": "queued", "params": {}}
+    acquired = []
+    waiter = threading.Thread(
+        target=lambda: acquired.append(job_lifecycle.acquire_generation_slot(launch._gen_lock, following)),
+        daemon=True,
+    )
+    waiter.start()
+    waiter.join(5)
+    if not acquired:  # free the waiter before failing, so it does not poll for the rest of the session
+        following["cancel_requested"] = True
+        waiter.join(5)
+    assert acquired == [True], "the next job never got the GPU"
+    launch._gen_lock.release()
+
+
 # One bind() per moved service. The injected names come from each module's source.
 BOUND_SERVICES = (
     "services.generation_jobs",
