@@ -1,9 +1,9 @@
 """Film grain and spatial upsampling of an already-saved video.
 
-Launch keeps the names the worker calls. ``wgp``, ``os``, ``time`` and
-``is_cancel_requested`` are read from launch's globals at call time, and so
-is ``_chunked_flashvsr_upscale``, which stays a launch name until that pass
-moves. A test that patches any of those names on the launch module is seen.
+Launch keeps the names the worker calls. ``wgp``, ``os``, ``time``,
+``is_cancel_requested`` and ``_chunked_flashvsr_upscale`` are read from
+launch's globals at call time. A test that patches any of those names on
+the launch module is seen.
 """
 from __future__ import annotations
 
