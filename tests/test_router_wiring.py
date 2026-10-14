@@ -398,7 +398,7 @@ def _bind_calls(path: Path, function_name: str) -> list[ast.Call]:
 
 
 def test_outpaint_modules_bind_every_free_name_once() -> None:
-    """The bind list is the free names of the written source, and each module is bound once.
+    """The bind list is the free names of the written source, and each outpaint and blend module is bound once.
 
     This does not call bind on the imported modules. Doing that would replace the slots the
     running server tests read.
@@ -409,6 +409,8 @@ def test_outpaint_modules_bind_every_free_name_once() -> None:
         "outpaint_planning": APP / "services" / "outpaint_planning.py",
         "outpaint_run": APP / "services" / "outpaint_run.py",
         "outpaint": APP / "routers" / "outpaint.py",
+        "blend_run": APP / "services" / "blend_run.py",
+        "blend": APP / "routers" / "blend.py",
     }
     for name, path in modules.items():
         source = path.read_text(encoding="utf-8")
@@ -422,15 +424,21 @@ def test_outpaint_modules_bind_every_free_name_once() -> None:
     bound = [call.args[0].id for call in launch_binds if call.args and isinstance(call.args[0], ast.Name)]
     assert bound.count("outpaint_planning") == 1
     assert bound.count("outpaint_run") == 1
+    assert bound.count("blend_run") == 1
     assert bound.count("outpaint") == 0
-    router_binds = _bind_calls(modules["outpaint"], "create_outpaint_router")
-    assert len(router_binds) == 1
-    assert isinstance(router_binds[0].args[0], ast.Subscript)
-    created = [
-        node for node in ast.walk(_parse(MAIN))
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == "create_outpaint_router"
-    ]
-    assert len(created) == 1
+    assert bound.count("blend") == 0
+    for factory, module_name in (
+        ("create_outpaint_router", "outpaint"),
+        ("create_blend_router", "blend"),
+    ):
+        router_binds = _bind_calls(modules[module_name], factory)
+        assert len(router_binds) == 1, factory
+        assert isinstance(router_binds[0].args[0], ast.Subscript), factory
+        created = [
+            node for node in ast.walk(_parse(MAIN))
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == factory
+        ]
+        assert len(created) == 1, factory
 
     def _run_generation(job):
         return job

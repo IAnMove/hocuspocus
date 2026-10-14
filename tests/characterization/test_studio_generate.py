@@ -887,20 +887,24 @@ def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monke
 
 
 def test_outpaint_slots_are_the_objects_launch_holds(full_server, monkeypatch) -> None:
-    """Each outpaint module is bound once, and every slot is the launch object at call time."""
+    """Each outpaint and blend module is bound once, and every slot is the launch object at call time."""
+    import routers.blend as blend_router
     import routers.outpaint as outpaint_router
+    import services.blend_run as blend_run
     import services.outpaint_planning as planning
     import services.outpaint_run as outpaint_run
 
     launch = worker_module()
     assert launch.outpaint_endpoint is outpaint_router.outpaint_endpoint
+    assert launch.blend_endpoint is blend_router.blend_endpoint
     assert launch._prepare_and_run_outpaint is outpaint_run._prepare_and_run_outpaint
     assert launch._run_outpaint_shot_generation is outpaint_run._run_outpaint_shot_generation
+    assert launch._run_blend_generation is blend_run._run_blend_generation
     assert launch._resolve_outpaint_sampling is planning._resolve_outpaint_sampling
     assert launch._OUTPAINT_PIXEL_BUDGETS is planning._OUTPAINT_PIXEL_BUDGETS
     assert launch._OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS is planning._OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS
     assert launch._OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES is planning._OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES
-    for module in (planning, outpaint_run, outpaint_router):
+    for module in (planning, outpaint_run, outpaint_router, blend_run, blend_router):
         assert module.LAUNCH_NAMES, module.__name__
         for name in module.LAUNCH_NAMES:
             slot = getattr(module, name)
@@ -915,10 +919,17 @@ def test_outpaint_slots_are_the_objects_launch_holds(full_server, monkeypatch) -
     monkeypatch.setattr(launch, "_run_generation", _run_generation)
     assert outpaint_router._run_generation("job") == "ran"
     assert outpaint_run._run_generation("job-2") == "ran"
-    assert calls == [("job",), ("job-2",)]
+    assert blend_router._run_generation("job-3") == "ran"
+    assert blend_run._run_generation("job-4") == "ran"
+    assert calls == [("job",), ("job-2",), ("job-3",), ("job-4",)]
     # Python names the worker thread from the live target, so a patched worker keeps its own name.
     assert outpaint_router._run_generation.__name__ == "_run_generation"
     assert outpaint_run._run_generation.__name__ == "_run_generation"
+    assert blend_run._run_generation.__name__ == "_run_generation"
+    # The blend route starts this function directly, so its thread name stays the real one.
+    assert blend_router._run_blend_generation.__name__ == "_run_blend_generation"
     monkeypatch.setattr(launch, "_jobs", {"job-1": {"id": "job-1"}})
     assert outpaint_run._jobs["job-1"]["id"] == "job-1"
+    assert blend_run._jobs["job-1"]["id"] == "job-1"
     assert "job-1" in outpaint_run._jobs
+    assert "job-1" in blend_run._jobs

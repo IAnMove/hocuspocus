@@ -533,11 +533,14 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     outpaint_source = (
         Path(__file__).parents[1] / "app" / "routers" / "outpaint.py"
     ).read_text(encoding="utf-8")
+    blend_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "blend.py"
+    ).read_text(encoding="utf-8")
     specialist_routes = (
         ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint", source),
         ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", source),
         ("async def outpaint_endpoint", "def create_outpaint_router", "_prepare_and_run_outpaint", outpaint_source),
-        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation", source),
+        ("async def blend_endpoint", "def create_blend_router", "_run_blend_generation", blend_source),
     )
     for start, end, real_worker, route_source in specialist_routes:
         route = route_source.split(start, 1)[1].split(end, 1)[0]

@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Blend left the launch module.** Joining two clips with a generated transition still answers the same way. The blend worker still asks the generation worker to render the transition, then finishes the job itself.
+
 **Outpaint left the launch module.** Extending a picture or a clip, including the official LTX-2 path and a clip with several camera shots, still answers the same way. The generation worker still does the outpaint audio and pixel pass itself.
 
 **SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.
