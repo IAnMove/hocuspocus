@@ -1,0 +1,2187 @@
+{
+  "mapped repaint stops when magic mask refuses": {
+    "body": {
+      "answer": {
+        "frames": 48,
+        "generation_details": {
+          "execution_mode": "real",
+          "flow_shift": 5,
+          "frames": 48,
+          "generation_mode": "video",
+          "guidance": 1.0,
+          "lora_count": 0,
+          "model_name": "SCAIL-2 Fast",
+          "model_type": "scail2_14B_fast",
+          "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+          "resolution": "704x480",
+          "seed": 5,
+          "simulated": false,
+          "steps": 6
+        },
+        "guidance_scale": 1.0,
+        "job_id": "<JOB>",
+        "num_inference_steps": 6,
+        "region_count": 1,
+        "resolution": "704x480",
+        "resolution_profile": "480p",
+        "root_task_id": "task-generation-<JOB>",
+        "sliding_window_size": 81,
+        "status": "queued",
+        "task_id": "task-generation-<JOB>"
+      },
+      "engine calls since": 0,
+      "job": {
+        "accepted": {
+          "frames": 48,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 5,
+            "frames": 48,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Fast",
+            "model_type": "scail2_14B_fast",
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "704x480",
+            "seed": 5,
+            "simulated": false,
+            "steps": 6
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 6,
+          "region_count": 1,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "engine_calls": [],
+        "files": [],
+        "left_behind": {
+          "abort_states": [],
+          "audio_save_path": "<OUTPUTS>",
+          "durable_queue": [],
+          "gpu_lock_free": true,
+          "image_save_path": "<OUTPUTS>",
+          "save_path": "<OUTPUTS>",
+          "vram_coefficient": 0.8
+        },
+        "listed": [],
+        "params": {
+          "_duration_seconds": 2.0,
+          "_execution_mode": "real",
+          "activated_loras": [],
+          "audio_prompt_type": "R",
+          "custom_settings": {
+            "image_ref_keyword_content": "person in red",
+            "scail2_animate_preprocessing": "raw"
+          },
+          "edit_end_time": 2.0,
+          "edit_repaint_conditioning": "semantic_regions",
+          "edit_repaint_output_resolution": [
+            704,
+            480
+          ],
+          "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+          "edit_repaint_region_count": 1,
+          "edit_repaint_region_mappings": [
+            {
+              "id": "repaint-1",
+              "source": "person in blue",
+              "target": "person in red"
+            }
+          ],
+          "edit_repaint_resolution_profile": "480p",
+          "edit_repaint_sliding_window_size": 81,
+          "edit_repaint_target_frame": "frame.png",
+          "edit_repaint_target_size": [
+            96,
+            64
+          ],
+          "edit_start_time": 0.0,
+          "edit_sub_mode": "restyle",
+          "edit_video_path": "source.mp4",
+          "flow_shift": 5,
+          "force_fps": "control",
+          "generation_mode": "video",
+          "guidance_scale": 1.0,
+          "image_prompt_type": "S",
+          "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+          "input_video_strength": 1,
+          "loras_multipliers": "",
+          "model_type": "scail2_14B_fast",
+          "negative_prompt": "",
+          "num_inference_steps": 6,
+          "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+          "resolution": "704x480",
+          "sample_solver": "euler",
+          "seed": 5,
+          "settings_version": 2.57,
+          "sliding_window_overlap": 5,
+          "sliding_window_size": 81,
+          "video_guide": "source.mp4",
+          "video_length": 48,
+          "video_prompt_type": "V1A"
+        },
+        "record": {
+          "acquired_resources": []
+        },
+        "returned": null,
+        "sidecars": {},
+        "status": {
+          "error": "Repaint region mapping failed: SAM stub: tests do not download Magic Mask",
+          "message": "Region mapping failed",
+          "oom_info": null,
+          "output_files": [],
+          "phase": "Mapping repaint regions",
+          "progress": 0,
+          "queue_position": null,
+          "status": "failed",
+          "step": 0,
+          "total_steps": 0
+        },
+        "task": {
+          "acquired_resources": [],
+          "cancelable": false,
+          "error": {
+            "message": "Repaint region mapping failed: SAM stub: tests do not download Magic Mask",
+            "retryable": true
+          },
+          "message": "Region mapping failed",
+          "phase": "Mapping repaint regions",
+          "progress": 0.0,
+          "result_refs": [],
+          "status": "failed"
+        },
+        "timers": [],
+        "transitions": [
+          "running | phase 'Mapping repaint regions' | 'Mapping 1 Repaint region...' | 0% | step 0/0 | outputs 0",
+          "failed | phase 'Mapping repaint regions' | 'Region mapping failed' | 0% | step 0/0 | outputs 0"
+        ]
+      },
+      "status": 200
+    },
+    "status": 200
+  },
+  "openapi": {
+    "body": {
+      "POST /api/v1/repaint": {
+        "description": "Animate an edited first frame with SCAIL-2 and a source video.\n\nWith no region mappings this deliberately mirrors the proven Studio\nVideo/Frames SCAIL Animate path. Optional mappings add paired SAM3\nsemantic masks for specific people or objects without changing that\nunderlying motion-conditioning recipe.",
+        "operationId": "repaint_endpoint_api_v1_repaint_post",
+        "parameters": [],
+        "summary": "Repaint Endpoint"
+      },
+      "POST /api/v1/repaint/preview": {
+        "description": "Preview optional source/edited-frame semantic correspondences.",
+        "operationId": "repaint_preview_endpoint_api_v1_repaint_preview_post",
+        "parameters": [],
+        "summary": "Repaint Preview Endpoint"
+      }
+    },
+    "status": 200
+  },
+  "preview reads a stubbed frame": {
+    "body": {
+      "aspect does not match": {
+        "body": {
+          "detail": "The edited first frame must keep the source video's aspect ratio (96×64 source vs 32×32 edited frame). Edit the extracted frame in Image Mode or resize without cropping."
+        },
+        "status": 400
+      },
+      "mask calls": [
+        [
+          "person in blue",
+          [
+            1,
+            64,
+            96,
+            3
+          ]
+        ],
+        [
+          "person in red",
+          [
+            1,
+            64,
+            96,
+            3
+          ]
+        ],
+        [
+          "a hat",
+          [
+            1,
+            64,
+            96,
+            3
+          ]
+        ],
+        [
+          "a hat",
+          [
+            1,
+            64,
+            96,
+            3
+          ]
+        ]
+      ],
+      "one region found": {
+        "body": {
+          "found": true,
+          "frame_index": 12,
+          "mapping_results": [
+            {
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "mapping_index": 0,
+              "source": "person in blue",
+              "source_found": true,
+              "target": "person in red",
+              "target_found": true
+            }
+          ],
+          "source_preview": {
+            "first": [
+              0,
+              0,
+              0
+            ],
+            "last": [
+              0,
+              0,
+              0
+            ],
+            "sha256": "c6c6d4269f50d04faa190402ade0c8e4bcc16cd29463e59a0300ef6520400f6c",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "target_preview": {
+            "first": [
+              200,
+              40,
+              40
+            ],
+            "last": [
+              200,
+              40,
+              40
+            ],
+            "sha256": "fbed6b1b942aedebc4894a4423b73fae62ad19ed06cbb9fc36a00677b9f727b5",
+            "size": [
+              96,
+              64
+            ]
+          }
+        },
+        "status": 200
+      },
+      "region missing from both frames": {
+        "body": {
+          "found": false,
+          "frame_index": 0,
+          "mapping_results": [
+            {
+              "color": [
+                0,
+                0,
+                255
+              ],
+              "mapping_index": 0,
+              "source": "a hat",
+              "source_found": false,
+              "target": "a hat",
+              "target_found": false
+            }
+          ],
+          "source_preview": {
+            "first": [
+              0,
+              0,
+              0
+            ],
+            "last": [
+              0,
+              0,
+              0
+            ],
+            "sha256": "f7b586904e3678145aa47e4232587c913139cef0102d6d8e9276fc80c35cbad3",
+            "size": [
+              96,
+              64
+            ]
+          },
+          "target_preview": {
+            "first": [
+              200,
+              40,
+              40
+            ],
+            "last": [
+              200,
+              40,
+              40
+            ],
+            "sha256": "f917e899d1c819426cdd85ea1f41a146d94f04e4da84fad998472baf19229c97",
+            "size": [
+              96,
+              64
+            ]
+          }
+        },
+        "status": 200
+      },
+      "video cannot be decoded": {
+        "body": {
+          "detail": "Repaint preview failed: unreadable"
+        },
+        "status": 500
+      }
+    },
+    "status": 200
+  },
+  "preview rejects incomplete requests": {
+    "body": {
+      "a region is not an object": {
+        "body": {
+          "detail": "Repaint region 1 is invalid."
+        },
+        "status": 400
+      },
+      "a region needs both descriptions": {
+        "body": {
+          "detail": "Repaint region 1 needs both a source-video description and an edited-frame description."
+        },
+        "status": 400
+      },
+      "mappings are not a list": {
+        "body": {
+          "detail": "Repaint region_mappings must be a list."
+        },
+        "status": 400
+      },
+      "missing frame": {
+        "body": {
+          "detail": "Edited first frame not found: None"
+        },
+        "status": 400
+      },
+      "missing video": {
+        "body": {
+          "detail": "Video not found: None"
+        },
+        "status": 400
+      },
+      "more than five regions": {
+        "body": {
+          "detail": "SCAIL-2 supports at most five Repaint regions."
+        },
+        "status": 400
+      },
+      "no regions": {
+        "body": {
+          "detail": "Add at least one region before previewing mappings."
+        },
+        "status": 400
+      }
+    },
+    "status": 200
+  },
+  "repaint prepares a job": {
+    "body": {
+      "704p below 16 GB": {
+        "answer": {
+          "detail": "704p Repaint currently requires at least 16 GB of VRAM. Detected 8.0 GB; select 512p or 480p."
+        },
+        "status": 400
+      },
+      "704p with unknown VRAM": {
+        "answer": {
+          "frames": 48,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 5,
+            "frames": 48,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Fast",
+            "model_type": "scail2_14B_fast",
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "1056x704",
+            "seed": 3,
+            "simulated": false,
+            "steps": 6
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 6,
+          "region_count": 0,
+          "resolution": "1056x704",
+          "resolution_profile": "704p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 41,
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "job": {
+          "accepted": {
+            "frames": 48,
+            "generation_details": {
+              "execution_mode": "real",
+              "flow_shift": 5,
+              "frames": 48,
+              "generation_mode": "video",
+              "guidance": 1.0,
+              "lora_count": 0,
+              "model_name": "SCAIL-2 Fast",
+              "model_type": "scail2_14B_fast",
+              "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+              "resolution": "1056x704",
+              "seed": 3,
+              "simulated": false,
+              "steps": 6
+            },
+            "guidance_scale": 1.0,
+            "job_id": "<JOB>",
+            "num_inference_steps": 6,
+            "region_count": 0,
+            "resolution": "1056x704",
+            "resolution_profile": "704p",
+            "root_task_id": "task-generation-<JOB>",
+            "sliding_window_size": 41,
+            "status": "queued",
+            "task_id": "task-generation-<JOB>"
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "flow_shift": 5,
+                "force_fps": "control",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "plugin_data": {},
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "resolution": "1056x704",
+                "sample_solver": "euler",
+                "seed": 3,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 41,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  1056,
+                  704
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "704p",
+                "edit_repaint_sliding_window_size": 41,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "resolution": "1056x704",
+                "sample_solver": "euler",
+                "seed": 3,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 41,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 3,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed3_the_edited_first_frame_s.meta.json",
+            "<TIME>_seed3_the_edited_first_frame_s.mp4",
+            "<TIME>_seed7_a_calm_lake.meta.json",
+            "<TIME>_seed7_a_calm_lake.mp4"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_duration_seconds": 2.0,
+            "_execution_mode": "real",
+            "activated_loras": [],
+            "audio_prompt_type": "R",
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_animate_preprocessing": "raw"
+            },
+            "edit_end_time": 2.0,
+            "edit_repaint_conditioning": "whole_frame_animate",
+            "edit_repaint_output_resolution": [
+              1056,
+              704
+            ],
+            "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "edit_repaint_region_count": 0,
+            "edit_repaint_region_mappings": [],
+            "edit_repaint_resolution_profile": "704p",
+            "edit_repaint_sliding_window_size": 41,
+            "edit_repaint_target_frame": "frame.png",
+            "edit_repaint_target_size": [
+              96,
+              64
+            ],
+            "edit_start_time": 0.0,
+            "edit_sub_mode": "restyle",
+            "edit_video_path": "source.mp4",
+            "flow_shift": 5,
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "S",
+            "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "input_video_strength": 1,
+            "loras_multipliers": "",
+            "model_type": "scail2_14B_fast",
+            "negative_prompt": "",
+            "num_inference_steps": 6,
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "1056x704",
+            "sample_solver": "euler",
+            "seed": 3,
+            "settings_version": 2.57,
+            "sliding_window_overlap": 5,
+            "sliding_window_size": 41,
+            "video_guide": "source.mp4",
+            "video_length": 48,
+            "video_prompt_type": "V1"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed3_the_edited_first_frame_s.mp4"
+            ]
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed3_the_edited_first_frame_s.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed3_the_edited_first_frame_s.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  1056,
+                  704
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "704p",
+                "edit_repaint_sliding_window_size": 41,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "provider": "local",
+                "resolution": "1056x704",
+                "sample_solver": "euler",
+                "seed": 3,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 41,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            },
+            "<TIME>_seed7_a_calm_lake.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed7_a_calm_lake.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "blur",
+                "num_inference_steps": 6,
+                "prompt": "a calm lake",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 7,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed3_the_edited_first_frame_s.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed3_the_edited_first_frame_s.mp4"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200
+      },
+      "HQ profile": {
+        "answer": {
+          "frames": 48,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 3,
+            "frames": 48,
+            "generation_mode": "video",
+            "guidance": 7.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 HQ",
+            "model_type": "scail2_14B",
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "704x480",
+            "seed": 9,
+            "simulated": false,
+            "steps": 12
+          },
+          "guidance_scale": 7.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 12,
+          "region_count": 0,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "job": {
+          "accepted": {
+            "frames": 48,
+            "generation_details": {
+              "execution_mode": "real",
+              "flow_shift": 3,
+              "frames": 48,
+              "generation_mode": "video",
+              "guidance": 7.0,
+              "lora_count": 0,
+              "model_name": "SCAIL-2 HQ",
+              "model_type": "scail2_14B",
+              "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+              "resolution": "704x480",
+              "seed": 9,
+              "simulated": false,
+              "steps": 12
+            },
+            "guidance_scale": 7.0,
+            "job_id": "<JOB>",
+            "num_inference_steps": 12,
+            "region_count": 0,
+            "resolution": "704x480",
+            "resolution_profile": "480p",
+            "root_task_id": "task-generation-<JOB>",
+            "sliding_window_size": 81,
+            "status": "queued",
+            "task_id": "task-generation-<JOB>"
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "flow_shift": 3,
+                "force_fps": "control",
+                "guidance_scale": 7.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "scail2_14B",
+                "negative_prompt": "",
+                "num_inference_steps": 12,
+                "plugin_data": {},
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "resolution": "704x480",
+                "sample_solver": "unipc",
+                "seed": 9,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 3,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 7.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B",
+                "negative_prompt": "",
+                "num_inference_steps": 12,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "resolution": "704x480",
+                "sample_solver": "unipc",
+                "seed": 9,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 5,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed3_the_edited_first_frame_s.meta.json",
+            "<TIME>_seed3_the_edited_first_frame_s.mp4",
+            "<TIME>_seed7_a_calm_lake.meta.json",
+            "<TIME>_seed7_a_calm_lake.mp4",
+            "<TIME>_seed9_the_edited_first_frame_s.meta.json",
+            "<TIME>_seed9_the_edited_first_frame_s.mp4"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_duration_seconds": 2.0,
+            "_execution_mode": "real",
+            "activated_loras": [],
+            "audio_prompt_type": "R",
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_animate_preprocessing": "raw"
+            },
+            "edit_end_time": 2.0,
+            "edit_repaint_conditioning": "whole_frame_animate",
+            "edit_repaint_output_resolution": [
+              704,
+              480
+            ],
+            "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "edit_repaint_region_count": 0,
+            "edit_repaint_region_mappings": [],
+            "edit_repaint_resolution_profile": "480p",
+            "edit_repaint_sliding_window_size": 81,
+            "edit_repaint_target_frame": "frame.png",
+            "edit_repaint_target_size": [
+              96,
+              64
+            ],
+            "edit_start_time": 0.0,
+            "edit_sub_mode": "restyle",
+            "edit_video_path": "source.mp4",
+            "flow_shift": 3,
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 7.0,
+            "image_prompt_type": "S",
+            "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "input_video_strength": 1,
+            "loras_multipliers": "",
+            "model_type": "scail2_14B",
+            "negative_prompt": "",
+            "num_inference_steps": 12,
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "704x480",
+            "sample_solver": "unipc",
+            "seed": 9,
+            "settings_version": 2.57,
+            "sliding_window_overlap": 5,
+            "sliding_window_size": 81,
+            "video_guide": "source.mp4",
+            "video_length": 48,
+            "video_prompt_type": "V1"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed9_the_edited_first_frame_s.mp4"
+            ]
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed3_the_edited_first_frame_s.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed3_the_edited_first_frame_s.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  1056,
+                  704
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "704p",
+                "edit_repaint_sliding_window_size": 41,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "provider": "local",
+                "resolution": "1056x704",
+                "sample_solver": "euler",
+                "seed": 3,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 41,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            },
+            "<TIME>_seed7_a_calm_lake.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed7_a_calm_lake.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "blur",
+                "num_inference_steps": 6,
+                "prompt": "a calm lake",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 7,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            },
+            "<TIME>_seed9_the_edited_first_frame_s.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed9_the_edited_first_frame_s.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 3,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 7.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B",
+                "negative_prompt": "",
+                "num_inference_steps": 12,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "unipc",
+                "seed": 9,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed9_the_edited_first_frame_s.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed9_the_edited_first_frame_s.mp4"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200
+      },
+      "SCAIL-2 is not installed": {
+        "answer": {
+          "detail": "Unknown model: scail2_14B_fast"
+        },
+        "status": 400
+      },
+      "edited frame aspect does not match": {
+        "answer": {
+          "detail": "The edited first frame must keep the source video's aspect ratio (96×64 source vs 32×32 edited frame). Edit the extracted frame in Image Mode or resize without cropping."
+        },
+        "status": 400
+      },
+      "jobs from the rejections": [],
+      "model is not SCAIL-2": {
+        "answer": {
+          "detail": "Repaint requires SCAIL-2 Fast or SCAIL-2 HQ. Received: fake_t2v"
+        },
+        "status": 400
+      },
+      "plan mode": {
+        "answer": {
+          "detail": "Plan mode is isolated to workspace 'e2e_wizard'; refusing workspace 'default'"
+        },
+        "status": 409
+      },
+      "queued after the rejections": [],
+      "source cannot be decoded": {
+        "answer": {
+          "detail": "Cannot read Repaint source video: unreadable"
+        },
+        "status": 400
+      },
+      "trimmed range": {
+        "answer": {
+          "frames": 48,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 5,
+            "frames": 48,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Fast",
+            "model_type": "scail2_14B_fast",
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "704x480",
+            "seed": 11,
+            "simulated": false,
+            "steps": 6
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 6,
+          "region_count": 0,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "job": {
+          "accepted": {
+            "frames": 48,
+            "generation_details": {
+              "execution_mode": "real",
+              "flow_shift": 5,
+              "frames": 48,
+              "generation_mode": "video",
+              "guidance": 1.0,
+              "lora_count": 0,
+              "model_name": "SCAIL-2 Fast",
+              "model_type": "scail2_14B_fast",
+              "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+              "resolution": "704x480",
+              "seed": 11,
+              "simulated": false,
+              "steps": 6
+            },
+            "guidance_scale": 1.0,
+            "job_id": "<JOB>",
+            "num_inference_steps": 6,
+            "region_count": 0,
+            "resolution": "704x480",
+            "resolution_profile": "480p",
+            "root_task_id": "task-generation-<JOB>",
+            "sliding_window_size": 81,
+            "status": "queued",
+            "task_id": "task-generation-<JOB>"
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "flow_shift": 5,
+                "force_fps": "control",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "plugin_data": {},
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 11,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "<STATE>/uploads/repaint_trim_<JOB>.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 0.4,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "<STATE>/range.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 11,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "<STATE>/uploads/repaint_trim_<JOB>.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 7,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed11_the_edited_first_frame_s.meta.json",
+            "<TIME>_seed11_the_edited_first_frame_s.mp4",
+            "<TIME>_seed3_the_edited_first_frame_s.meta.json",
+            "<TIME>_seed3_the_edited_first_frame_s.mp4",
+            "<TIME>_seed7_a_calm_lake.meta.json",
+            "<TIME>_seed7_a_calm_lake.mp4",
+            "<TIME>_seed9_the_edited_first_frame_s.meta.json",
+            "<TIME>_seed9_the_edited_first_frame_s.mp4"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_duration_seconds": 2.0,
+            "_execution_mode": "real",
+            "activated_loras": [],
+            "audio_prompt_type": "R",
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_animate_preprocessing": "raw"
+            },
+            "edit_end_time": 0.4,
+            "edit_repaint_conditioning": "whole_frame_animate",
+            "edit_repaint_output_resolution": [
+              704,
+              480
+            ],
+            "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "edit_repaint_region_count": 0,
+            "edit_repaint_region_mappings": [],
+            "edit_repaint_resolution_profile": "480p",
+            "edit_repaint_sliding_window_size": 81,
+            "edit_repaint_target_frame": "frame.png",
+            "edit_repaint_target_size": [
+              96,
+              64
+            ],
+            "edit_start_time": 0.0,
+            "edit_sub_mode": "restyle",
+            "edit_video_path": "<STATE>/range.mp4",
+            "flow_shift": 5,
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "S",
+            "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "input_video_strength": 1,
+            "loras_multipliers": "",
+            "model_type": "scail2_14B_fast",
+            "negative_prompt": "",
+            "num_inference_steps": 6,
+            "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+            "resolution": "704x480",
+            "sample_solver": "euler",
+            "seed": 11,
+            "settings_version": 2.57,
+            "sliding_window_overlap": 5,
+            "sliding_window_size": 81,
+            "video_guide": "<STATE>/uploads/repaint_trim_<JOB>.mp4",
+            "video_length": 48,
+            "video_prompt_type": "V1"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed11_the_edited_first_frame_s.mp4"
+            ]
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed11_the_edited_first_frame_s.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed11_the_edited_first_frame_s.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 0.4,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "<STATE>/range.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 11,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "<STATE>/uploads/repaint_trim_<JOB>.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "repaint_trim_<JOB>.mp4"
+              }
+            },
+            "<TIME>_seed3_the_edited_first_frame_s.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed3_the_edited_first_frame_s.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  1056,
+                  704
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "704p",
+                "edit_repaint_sliding_window_size": 41,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "",
+                "num_inference_steps": 6,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "provider": "local",
+                "resolution": "1056x704",
+                "sample_solver": "euler",
+                "seed": 3,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 41,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            },
+            "<TIME>_seed7_a_calm_lake.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed7_a_calm_lake.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "blur",
+                "num_inference_steps": 6,
+                "prompt": "a calm lake",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 7,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            },
+            "<TIME>_seed9_the_edited_first_frame_s.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed9_the_edited_first_frame_s.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 3,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 7.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B",
+                "negative_prompt": "",
+                "num_inference_steps": 12,
+                "prompt": "The edited first-frame scene moves naturally with the source video's exact action, interaction, and camera motion.",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "unipc",
+                "seed": 9,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed11_the_edited_first_frame_s.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed11_the_edited_first_frame_s.mp4"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200
+      },
+      "whole frame, fast profile": {
+        "answer": {
+          "frames": 48,
+          "generation_details": {
+            "execution_mode": "real",
+            "flow_shift": 5,
+            "frames": 48,
+            "generation_mode": "video",
+            "guidance": 1.0,
+            "lora_count": 0,
+            "model_name": "SCAIL-2 Fast",
+            "model_type": "scail2_14B_fast",
+            "prompt": "a calm lake",
+            "resolution": "704x480",
+            "seed": 7,
+            "simulated": false,
+            "steps": 6
+          },
+          "guidance_scale": 1.0,
+          "job_id": "<JOB>",
+          "num_inference_steps": 6,
+          "region_count": 0,
+          "resolution": "704x480",
+          "resolution_profile": "480p",
+          "root_task_id": "task-generation-<JOB>",
+          "sliding_window_size": 81,
+          "status": "queued",
+          "task_id": "task-generation-<JOB>"
+        },
+        "job": {
+          "accepted": {
+            "frames": 48,
+            "generation_details": {
+              "execution_mode": "real",
+              "flow_shift": 5,
+              "frames": 48,
+              "generation_mode": "video",
+              "guidance": 1.0,
+              "lora_count": 0,
+              "model_name": "SCAIL-2 Fast",
+              "model_type": "scail2_14B_fast",
+              "prompt": "a calm lake",
+              "resolution": "704x480",
+              "seed": 7,
+              "simulated": false,
+              "steps": 6
+            },
+            "guidance_scale": 1.0,
+            "job_id": "<JOB>",
+            "num_inference_steps": 6,
+            "region_count": 0,
+            "resolution": "704x480",
+            "resolution_profile": "480p",
+            "root_task_id": "task-generation-<JOB>",
+            "sliding_window_size": 81,
+            "status": "queued",
+            "task_id": "task-generation-<JOB>"
+          },
+          "engine_calls": [
+            {
+              "audio_save_path": "<OUTPUTS>",
+              "image_save_path": "<OUTPUTS>",
+              "kwargs": {
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "flow_shift": 5,
+                "force_fps": "control",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "mode": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "blur",
+                "num_inference_steps": 6,
+                "plugin_data": {},
+                "prompt": "a calm lake",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 7,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "blur",
+                "num_inference_steps": 6,
+                "prompt": "a calm lake",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 7,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "prompt": "a calm lake",
+              "save_path": "<OUTPUTS>",
+              "state_is_the_task_state": true,
+              "task_id": 1,
+              "vram_safety_coefficient": 0.8
+            }
+          ],
+          "files": [
+            "<TIME>_seed7_a_calm_lake.meta.json",
+            "<TIME>_seed7_a_calm_lake.mp4"
+          ],
+          "left_behind": {
+            "abort_states": [],
+            "audio_save_path": "<OUTPUTS>",
+            "durable_queue": [],
+            "gpu_lock_free": true,
+            "image_save_path": "<OUTPUTS>",
+            "save_path": "<OUTPUTS>",
+            "vram_coefficient": 0.8
+          },
+          "listed": [],
+          "params": {
+            "_duration_seconds": 2.0,
+            "_execution_mode": "real",
+            "activated_loras": [],
+            "audio_prompt_type": "R",
+            "custom_settings": {
+              "image_ref_keyword_content": "human character",
+              "scail2_animate_preprocessing": "raw"
+            },
+            "edit_end_time": 2.0,
+            "edit_repaint_conditioning": "whole_frame_animate",
+            "edit_repaint_output_resolution": [
+              704,
+              480
+            ],
+            "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "edit_repaint_region_count": 0,
+            "edit_repaint_region_mappings": [],
+            "edit_repaint_resolution_profile": "480p",
+            "edit_repaint_sliding_window_size": 81,
+            "edit_repaint_target_frame": "frame.png",
+            "edit_repaint_target_size": [
+              96,
+              64
+            ],
+            "edit_start_time": 0.0,
+            "edit_sub_mode": "restyle",
+            "edit_video_path": "source.mp4",
+            "flow_shift": 5,
+            "force_fps": "control",
+            "generation_mode": "video",
+            "guidance_scale": 1.0,
+            "image_prompt_type": "S",
+            "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+            "input_video_strength": 1,
+            "loras_multipliers": "",
+            "model_type": "scail2_14B_fast",
+            "negative_prompt": "blur",
+            "num_inference_steps": 6,
+            "prompt": "a calm lake",
+            "resolution": "704x480",
+            "sample_solver": "euler",
+            "seed": 7,
+            "settings_version": 2.57,
+            "sliding_window_overlap": 5,
+            "sliding_window_size": 81,
+            "video_guide": "source.mp4",
+            "video_length": 48,
+            "video_prompt_type": "V1"
+          },
+          "record": {
+            "acquired_resources": [
+              "local_gpu:0"
+            ],
+            "clip_output_files": [
+              "<TIME>_seed7_a_calm_lake.mp4"
+            ]
+          },
+          "returned": true,
+          "sidecars": {
+            "<TIME>_seed7_a_calm_lake.meta.json": {
+              "created_at": "<TIME>",
+              "generation_mode": "video",
+              "generation_time": "<MASKED>",
+              "job_id": "<JOB>",
+              "output_filename": "<TIME>_seed7_a_calm_lake.mp4",
+              "params": {
+                "_duration_seconds": 2.0,
+                "_execution_mode": "real",
+                "activated_loras": [],
+                "audio_prompt_type": "R",
+                "custom_settings": {
+                  "image_ref_keyword_content": "human character",
+                  "scail2_animate_preprocessing": "raw"
+                },
+                "edit_end_time": 2.0,
+                "edit_repaint_conditioning": "whole_frame_animate",
+                "edit_repaint_output_resolution": [
+                  704,
+                  480
+                ],
+                "edit_repaint_prepared_target_frame": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "edit_repaint_region_count": 0,
+                "edit_repaint_region_mappings": [],
+                "edit_repaint_resolution_profile": "480p",
+                "edit_repaint_sliding_window_size": 81,
+                "edit_repaint_target_frame": "frame.png",
+                "edit_repaint_target_size": [
+                  96,
+                  64
+                ],
+                "edit_start_time": 0.0,
+                "edit_sub_mode": "restyle",
+                "edit_video_path": "source.mp4",
+                "flow_shift": 5,
+                "force_fps": "control",
+                "generation_mode": "video",
+                "guidance_scale": 1.0,
+                "image_prompt_type": "S",
+                "image_start": "<STATE>/uploads/repaint_target_<JOB>.png",
+                "input_video_strength": 1,
+                "loras_multipliers": "",
+                "model_type": "scail2_14B_fast",
+                "negative_prompt": "blur",
+                "num_inference_steps": 6,
+                "prompt": "a calm lake",
+                "provider": "local",
+                "resolution": "704x480",
+                "sample_solver": "euler",
+                "seed": 7,
+                "settings_version": 2.57,
+                "sliding_window_overlap": 5,
+                "sliding_window_size": 81,
+                "video_guide": "source.mp4",
+                "video_length": 48,
+                "video_prompt_type": "V1"
+              },
+              "root_task_id": "task-generation-<JOB>",
+              "task_id": "task-generation-<JOB>",
+              "upload_filenames": {
+                "image_start": "repaint_target_<JOB>.png",
+                "video_guide": "source.mp4"
+              }
+            }
+          },
+          "status": {
+            "error": null,
+            "message": "Done",
+            "oom_info": null,
+            "output_files": [
+              "<TIME>_seed7_a_calm_lake.mp4"
+            ],
+            "phase": "",
+            "progress": 100,
+            "queue_position": null,
+            "status": "completed",
+            "step": 0,
+            "total_steps": 0
+          },
+          "task": {
+            "acquired_resources": [],
+            "cancelable": false,
+            "error": null,
+            "message": "Done",
+            "phase": "completed",
+            "progress": 1.0,
+            "result_refs": [
+              "<TIME>_seed7_a_calm_lake.mp4"
+            ],
+            "status": "completed"
+          },
+          "timers": [
+            "completed"
+          ],
+          "transitions": [
+            "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
+            "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
+            "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 1",
+            "completed | phase '' | 'Done' | 100% | step 0/0 | outputs 1"
+          ]
+        },
+        "status": 200
+      }
+    },
+    "status": 200
+  },
+  "repaint rejects incomplete requests": {
+    "body": {
+      "mappings are not a list": {
+        "body": {
+          "detail": "Repaint region_mappings must be a list."
+        },
+        "status": 400
+      },
+      "missing frame": {
+        "body": {
+          "detail": "Edited first frame not found: None"
+        },
+        "status": 400
+      },
+      "missing video": {
+        "body": {
+          "detail": "Video not found: None"
+        },
+        "status": 400
+      },
+      "trim of a file ffmpeg cannot read": {
+        "body": {
+          "detail": "Could not prepare the selected Repaint range: e    62.  3.102 / 62.  3.102\n  libavfilter    11. 14.102 / 11. 14.102\n  libswscale      9.  5.102 /  9.  5.102\n  libswresample   6.  3.102 /  6.  3.102\n[in#0 @ 0x<ADDR>] Format mov,mp4,m4a,3gp,3g2,mj2 detected only with low score of 1, misdetection possible!\n[in#0 @ 0x<ADDR>] moov atom not found\n[in#0 @ 0x<ADDR>] Error opening input: Invalid data found when processing input\nError opening input file source.mp4.\nError opening input files: Invalid data found when processing input\n"
+        },
+        "status": 500
+      },
+      "trim range is inverted": {
+        "body": {
+          "detail": "Repaint needs a valid source-video time range."
+        },
+        "status": 400
+      },
+      "trim times are not numeric": {
+        "body": {
+          "detail": "Repaint trim times must be numeric."
+        },
+        "status": 400
+      }
+    },
+    "status": 200
+  }
+}
