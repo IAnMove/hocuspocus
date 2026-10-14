@@ -254,7 +254,7 @@ def adopt_take(production: Any, key: str, take_file: str) -> None:
     if not (production.root / take_file).is_file():
         raise ShotEditError("take_not_found", f"take {take_file} is not in the workspace")
     _path, url = production.upload(take_file)
-    shot_with = {name: take[name] for name in ("model", "steps") if name in take}      # what spec.video compares on the next run
+    shot_with = {name: take[name] for name in ("model", "steps", "window") if name in take}      # what spec.video and the audio window compare on the next run
     production.state.setdefault("clips", {})[key] = {"file": take_file, "qa": _qa(take), "url": url, **shot_with}
 
 

@@ -10,6 +10,8 @@ from typing import Any
 
 from services.production_image_defaults import default_image_model, image_choice
 from services.production_seeds import default_seed, ensure_seed_base, window_seed
+from services.production_shot_sources import learn_window, recipe_parts, stale_reasons
+from services.production_takes import obsolete_clip
 
 
 def _host():
@@ -140,9 +142,10 @@ def cast_sheets(production: Any, spec: dict) -> None:
 
 
 def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> None:
-    """An H3 shot whose spec changed is shot again: a new frame prompt drops its frame and its clip, a new action,
-    camera or singing only its clip (a scene2d background is redrawn the same way). A shot seen for the first time
-    (or made before this was recorded) keeps what it has."""
+    """An H3 shot whose spec changed is shot again: a new frame prompt, image model or start-frame size drops its frame
+    and its clip, a new action, camera, singing, video look, clip size or an audio window that moved more than 0.3 s
+    only its clip (a scene2d background is redrawn the same way). A shot seen for the first time (or made before an
+    input was recorded) keeps what it has: see production_shot_sources."""
     sources = production.state.setdefault("h3_sources", {})
     frames, clips = production.state.setdefault("frames", {}), production.state.setdefault("clips", {})
     for window in windows:
@@ -152,12 +155,15 @@ def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> No
         frame = _digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
         clip = _digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
         known = sources.get(key) or {"frame": frame, "clip": clip}
-        if known["frame"] != frame and frames.pop(key, None):
-            production.log(f"frame {key}: the shot's picture changed, drawing it again")
-        if known["clip"] != clip and isinstance(clips.get(key), dict):
+        now = {"frame": frame, "clip": clip, "parts": recipe_parts(spec, window)}
+        draw_why, shoot_why = stale_reasons(known, now, window, clips.get(key))
+        if draw_why and frames.pop(key, None):
+            production.log(f"frame {key}: {draw_why}, drawing it again")
+        if shoot_why and isinstance(clips.get(key), dict) and not obsolete_clip(clips[key]):
             clips[key]["obsolete"] = True
-            production.log(f"clip {key}: the shot changed, shooting it again")
-        sources[key] = {"frame": frame, "clip": clip}
+            production.log(f"clip {key}: {shoot_why}, shooting it again")
+        sources[key] = now
+        learn_window(clips.get(key), window)
 
 
 def _draws_frame(window: dict) -> bool:

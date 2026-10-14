@@ -52,7 +52,7 @@ def mark_moved_clips(state: dict, before: dict[str, tuple[float, float]], after:
             continue
         old, new = before.get(key), after.get(key)
         # Windows are stored to the millisecond. A raw float 0.3 is slightly over 0.3 and must still count as kept.
-        moved = _window_moved(old, new, limit)
+        moved = window_moved(old, new, limit)
         if moved:
             clip["obsolete"] = True
             obsolete.append(key)
@@ -61,7 +61,7 @@ def mark_moved_clips(state: dict, before: dict[str, tuple[float, float]], after:
     return obsolete
 
 
-def _window_moved(old: tuple[float, float] | None, new: tuple[float, float] | None, limit: float = WINDOW_MOVE) -> bool:
+def window_moved(old: tuple[float, float] | None, new: tuple[float, float] | None, limit: float = WINDOW_MOVE) -> bool:
     return old is None or new is None or round(abs(old[0] - new[0]), 3) > limit or round(abs(old[1] - new[1]), 3) > limit
 
 
@@ -85,7 +85,7 @@ def _locked_moved(production: Any, before: dict[str, tuple[float, float]], after
     for key, clip in (production.state.get("clips") or {}).items():
         if not isinstance(clip, dict):
             continue
-        if _window_moved(before.get(key), after.get(key)) and is_locked(production, key):
+        if window_moved(before.get(key), after.get(key)) and is_locked(production, key):
             blocked.append(key)
     return sorted(blocked)
 

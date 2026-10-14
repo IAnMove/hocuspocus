@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from services.music_production import Production, segments
-from services.production_shot_edit import ShotEditError, update_shot, use_take
+from services.production_shot_edit import ShotEditError, adopt_take, update_shot, use_take
 from services.production_shot_review import record_decision
 
 
@@ -126,6 +126,16 @@ def test_use_take_refuses_another_productions_montage(tmp_path: Path):
     assert caught.value.code == "montage_foreign"
     assert saved == []
     assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+
+
+def test_an_adopted_take_keeps_the_audio_window_it_was_shot_against(tmp_path: Path):
+    production, _spec, _root, _saved, _edits = _build(tmp_path)
+    production.state["takes"]["s0"][1]["window"] = [1.0, 3.0]
+    production.upload = lambda name: (name, "/u/" + name)
+    adopt_take(production, "s0", "take-b.mp4")
+    assert production.state["clips"]["s0"]["window"] == [1.0, 3.0]
+    adopt_take(production, "s0", "take-a.mp4")
+    assert "window" not in production.state["clips"]["s0"], "a take made before the window was recorded stays unknown"
 
 
 def test_use_take_exports_the_chosen_scene_once(tmp_path: Path):

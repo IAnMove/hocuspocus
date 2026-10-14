@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a resumed production redoes exactly what an edit changed, and nothing else.** Changing a shot's image model or steps, the start-frame size (`resolution.frames`), the video look (`style.video`), the clip size (`resolution.clips`) or the audio window of a shot now draws the frame, shoots the clip and exports the scene that depend on it, each as a new job. Naming the default size is not a change, and small moves of a shot's window add up instead of being forgotten on every resume. A production made before this was recorded keeps all its pictures and clips when you resume it with the same spec: nothing is drawn or shot again until you change something.
+
 **Fixed: editing a cast member's look now redraws it.** Rewriting a character's `sheet_prompt` or `single_prompt`, changing its seed or image model, or editing `style.image` used to keep the old reference sheet and portrait, so every shot built on it kept the old character. A resumed production now draws that character again (a new job, not the old one), redraws a group plate when a member changed, and redraws and re-shoots only the H3 shots that show it. A production made before this was recorded keeps what it has.
 
 **Fixed: a production no longer overwrites another production's montage.** When two productions once shared a title, the second one's saved montage pointer could still name the first one's timeline, and a rerun, a re-package or a shot retake then wrote over it. Now the production keeps the file only if its own clips are in it. Otherwise it writes its own `<id>.montage.json`. A shot edit on such a pointer is refused with `montage_foreign` and asks you to run the montage stage again.
