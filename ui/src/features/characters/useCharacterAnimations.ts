@@ -22,29 +22,35 @@ export function pendingCustomDefs(runs: Record<string, AnimationJob>, kit: Chara
  * same one), so this only starts it and follows it: a run survives a reload, a tab change or a restart, and a failed one keeps the poses
  * it made. Review and deletion are edits of the kit, read from the library again just before they are saved. */
 export function useCharacterAnimations(workspace: string, kitId: string | undefined, reload: () => void, pollMs = 2000, idleMs = 8000) {
-  const [jobs, setJobs] = useState<AnimationJob[]>([])
+  // What is shown belongs to one character: switching character shows nothing until the new one has been read.
+  const scope = `${workspace}\u0000${kitId ?? ''}`
+  const [view, setView] = useState<{ scope: string; jobs: AnimationJob[]; saved: string }>({ scope, jobs: [], saved: '' })
+  const { jobs, saved } = view.scope === scope ? view : { jobs: [] as AnimationJob[], saved: '' }
   const [error, setError] = useState('')
-  const [saved, setSaved] = useState('')
+  const show = useCallback((change: (current: { jobs: AnimationJob[]; saved: string }) => { jobs: AnimationJob[]; saved: string }) =>
+    setView(previous => ({ scope, ...change(previous.scope === scope ? previous : { jobs: [], saved: '' }) })), [scope])
   const known = useRef<Record<string, string>>({})
   const openedAt = useRef(0)
 
   const refresh = useCallback(async () => {
     if (!kitId) return
     const latest = await fetchAnimationJobs(workspace, kitId)
+    let ended = ''
     for (const job of latest) {
       // A job that ended while this was looking (or that started and ended between two looks) put its animation on the character.
       const before = known.current[job.jobId]
       const endedNow = job.status === 'completed' && (before ? before !== 'completed' : job.createdAt * 1000 >= openedAt.current)
-      if (endedNow) { reload(); setSaved(job.animationId) }
+      if (endedNow) { reload(); ended = job.animationId }
       known.current[job.jobId] = job.status
     }
-    setJobs(latest)
-  }, [workspace, kitId, reload])
+    show(current => ({ jobs: latest, saved: ended || current.saved }))
+  }, [workspace, kitId, reload, show])
 
   useEffect(() => {
     known.current = {}; openedAt.current = Date.now()
-    setJobs([]); setSaved('')
-    if (kitId) void refresh().catch(cause => setError((cause as Error).message))
+    if (!kitId) return undefined
+    const first = setTimeout(() => { void refresh().catch(cause => setError((cause as Error).message)) }, 0)
+    return () => clearTimeout(first)
   }, [workspace, kitId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Quick while a job runs; slow otherwise, so an animation the Wizard or an MCP tool starts shows up here as well.
@@ -56,21 +62,21 @@ export function useCharacterAnimations(workspace: string, kitId: string | undefi
   }, [kitId, active, refresh, pollMs, idleMs])
 
   const start = useCallback(async (kit: CharacterKit, def: AnimationDef, model: string, remake?: string) => {
-    setError(''); setSaved('')
+    setError(''); show(current => ({ ...current, saved: '' }))
     try {
       // An animation the kit does not have yet is made from the words the author wrote; one it has is made again from the words it kept.
       const custom = def.custom && !kit.animations?.[def.id]
         ? { title: def.title.es, view: def.view as 'bust' | 'front' | 'side', poses: def.poses.map(pose => pose.prompt) } : undefined
       const job = await startAnimationJob({ workspace, kitId: kit.id, animation: def.id, model, ...(remake ? { pose: remake } : {}), ...(custom ? { custom } : {}) })
       known.current[job.jobId] = job.status
-      setJobs(list => [job, ...list.filter(item => item.jobId !== job.jobId)])
+      show(current => ({ ...current, jobs: [job, ...current.jobs.filter(item => item.jobId !== job.jobId)] }))
     } catch (cause) { setError((cause as Error).message) }
-  }, [workspace])
+  }, [workspace, show])
 
   const cancel = useCallback(async (jobId: string) => {
-    try { const job = await cancelAnimationJob(workspace, jobId); setJobs(list => list.map(item => item.jobId === jobId ? job : item)) }
+    try { const job = await cancelAnimationJob(workspace, jobId); show(current => ({ ...current, jobs: current.jobs.map(item => item.jobId === jobId ? job : item) })) }
     catch (cause) { setError((cause as Error).message) }
-  }, [workspace])
+  }, [workspace, show])
 
   const commit = useCallback(async (id: string, change: (kit: CharacterKit) => CharacterKit) => {
     const library = await fetchCharacterKitLibrary(workspace)
@@ -80,9 +86,9 @@ export function useCharacterAnimations(workspace: string, kitId: string | undefi
     reload()
   }, [workspace, reload])
   const change = useCallback(async (id: string, edit: (kit: CharacterKit) => CharacterKit) => {
-    setError(''); setSaved('')
+    setError(''); show(current => ({ ...current, saved: '' }))
     try { await commit(id, edit) } catch (cause) { setError((cause as Error).message) }
-  }, [commit])
+  }, [commit, show])
   const review = useCallback((id: string, animation: string, state: CharacterKitReviewState) => change(id, kit => reviewKitAnimation(kit, animation, state)), [change])
   const remove = useCallback((id: string, animation: string) => change(id, kit => withoutKitAnimation(kit, animation)), [change])
 
