@@ -70,13 +70,14 @@ def _assert_story_lab_is_bound_to_the_server(launch, monkeypatch) -> None:
     assert lab_schema._storyboard_page_problem({}, 1) == launch._comic_page_problem({}, 1) is not None
     # The publish and resume hooks are read at call time (the first with globals().get, so a name
     # the bind forgot would stop the Activity row without an error). Publish looks the publishers
-    # module up when called. Reset still looks the launch name up; that function has not moved.
+    # module up when called. Reset looks the sync module up when called.
     import services.canonical_task_publishers as task_publishers
+    import services.canonical_task_sync as task_sync
     assert callable(lab_jobs._publish_generic_legacy_task) and callable(lab_router._publish_generic_legacy_task)
     monkeypatch.setattr(task_publishers, "_publish_generic_legacy_task", lambda record, adapter: ("published", adapter))
     assert lab_jobs._publish_generic_legacy_task({}, "story-plan") == ("published", "story-plan")
     assert lab_router._publish_generic_legacy_task({}, "story-plan") == ("published", "story-plan")
-    monkeypatch.setattr(launch, "_reset_canonical_task_for_resume", lambda workspace, task_id: (workspace, task_id))
+    monkeypatch.setattr(task_sync, "_reset_canonical_task_for_resume", lambda workspace, task_id: (workspace, task_id))
     assert lab_router._reset_canonical_task_for_resume("film", "task-1") == ("film", "task-1")
 
 

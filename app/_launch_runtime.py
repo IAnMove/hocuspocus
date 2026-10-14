@@ -13161,7 +13161,7 @@ def _forward_series_plan_publish(job, adapter):
 
 
 def _forward_series_plan_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_series_plan_runtime(
@@ -13202,7 +13202,7 @@ def _forward_series_render_publish(job, adapter):
 
 
 def _forward_series_render_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_series_render_runtime(
@@ -13376,7 +13376,7 @@ def _forward_story_plan_publish(record, adapter):
 
 
 def _forward_story_plan_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_story_lab_runtime(
@@ -13440,7 +13440,7 @@ bind_director_comic_runtime(
     workspace_dir=_workspace_dir,
     get_active_workspace=_get_active_workspace,
     publish_legacy_task=lambda snapshot, adapter: canonical_task_publishers._publish_generic_legacy_task(snapshot, adapter),
-    reset_task=lambda workspace, task_id: _reset_canonical_task_for_resume(workspace, task_id),
+    reset_task=lambda workspace, task_id: canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id),
 )
 api.include_router(create_director_comic_router())
 
@@ -13626,28 +13626,51 @@ api.include_router(create_uploads_router(
 # Canonical task registry and compatibility adapters
 # ============================================================================
 
-def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
-    """Explicitly reopen a terminal adapter task before its worker publishes."""
-    if not task_id:
-        return
-    try:
-        registry = _task_registry(workspace)
-        existing = registry.get(task_id)
-        if existing and str(existing.get("status") or "") in {
-            "failed", "cancelled", "interrupted",
-        }:
-            registry.update(
-                task_id,
-                status="queued",
-                phase="queued",
-                message="Resume requested",
-                error=None,
-                completed_at=None,
-                event_type="task.resume_requested",
-                force=True,
-            )
-    except Exception as exc:
-        print(f"[Task registry] Could not reopen {task_id}: {exc}")
+from services import canonical_task_sync
+
+canonical_task_sync.bind(
+    _comic_plan_jobs=_comic_plan_jobs,
+    _comic_plan_jobs_lock=_comic_plan_jobs_lock,
+    _jobs=_jobs,
+    _minimax_music_jobs=_minimax_music_jobs,
+    _minimax_music_jobs_lock=_minimax_music_jobs_lock,
+    _publish_minimax_music_job=_publish_minimax_music_job,
+    _series_plan_jobs=_series_plan_jobs,
+    _series_plan_jobs_lock=_series_plan_jobs_lock,
+    _series_render_jobs=_series_render_jobs,
+    _series_render_jobs_lock=_series_render_jobs_lock,
+    _story_plan_jobs=_story_plan_jobs,
+    _story_plan_jobs_lock=_story_plan_jobs_lock,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+    cancel_audio_analysis_job=cancel_audio_analysis_job,
+    cancel_comic_minimax_job=cancel_comic_minimax_job,
+    cancel_job=cancel_job,
+    cancel_model3d_job=cancel_model3d_job,
+    cancel_rig_job=cancel_rig_job,
+    cancel_series_episode_plan=cancel_series_episode_plan,
+    cancel_series_render_job=cancel_series_render_job,
+    cancel_story_lab_generation=cancel_story_lab_generation,
+    cancel_story_music_candidates_job=cancel_story_music_candidates_job,
+    cancel_video_editor_export=cancel_video_editor_export,
+    control_quick_video_batch_job=control_quick_video_batch_job,
+    control_series_assembly_job=control_series_assembly_job,
+    director_pipeline_resume=director_pipeline_resume,
+    director_pipeline_stop=director_pipeline_stop,
+    list_minimax_image_jobs=list_minimax_image_jobs,
+    list_video_editor_jobs=list_video_editor_jobs,
+    resume_director_comic_plan=resume_director_comic_plan,
+    resume_series_episode_plan=resume_series_episode_plan,
+    resume_series_render_job=resume_series_render_job,
+    resume_story_lab_generation=resume_story_lab_generation,
+    wgp=wgp,
+)
+from services.canonical_task_sync import (
+    _control_canonical_task,
+    _list_canonical_production_pipelines,
+    _reset_canonical_task_for_resume,
+    _sync_canonical_tasks,
+)
 
 
 from services import canonical_task_fields
@@ -13676,132 +13699,11 @@ _audio_jobs_service._publish_generic_legacy_task = _publish_generic_legacy_task
 
 
 
-def _sync_canonical_tasks(workspace: str) -> None:
-    for job in list(_jobs.values()):
-        if str(job.get("workspace") or "default") == workspace:
-            snapshot = snapshot_job(job)
-            if str(job.get("id") or "").startswith("audio-analysis-"):
-                _publish_generic_legacy_task(snapshot, "audio-analysis")
-            else:
-                _publish_generation_task(snapshot)
-    try:
-        from services.director_pipeline import list_recent_pipelines
-        director_base = wgp.server_config.get("save_path", "outputs")
-        for pipeline in list_recent_pipelines(director_base, workspace):
-            _publish_director_task(pipeline, workspace)
-    except Exception:
-        pass
-    with _series_plan_jobs_lock:
-        series_plans = [copy.deepcopy(job) for job in _series_plan_jobs.values()]
-    with _series_render_jobs_lock:
-        series_renders = [copy.deepcopy(job) for job in _series_render_jobs.values()]
-    for job in series_plans:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_series_task(job, "series-plan")
-    for job in series_renders:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_series_task(job, "series-render")
-    try:
-        from services.series_jobs import SeriesJobStore
-        assembly_jobs = SeriesJobStore(_workspace_dir(workspace), "assembly").list()
-    except (OSError, ValueError, json.JSONDecodeError):
-        assembly_jobs = []
-    for job in assembly_jobs:
-        if str(job.get("workspace") or workspace) == workspace:
-            _publish_series_assembly_task(job)
-    with _story_plan_jobs_lock:
-        story_jobs = [copy.deepcopy(job) for job in _story_plan_jobs.values()]
-    with _comic_plan_jobs_lock:
-        comic_jobs = [copy.deepcopy(job) for job in _comic_plan_jobs.values()]
-    for job in story_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "story-plan")
-    for job in comic_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "comic-plan")
-    video_editor_jobs = list_video_editor_jobs()
-    for job in video_editor_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "video-editor")
-    for job in list_minimax_image_jobs():
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "minimax-image")
-    with _minimax_music_jobs_lock:
-        minimax_music_jobs = [copy.deepcopy(job) for job in _minimax_music_jobs.values()]
-    for job in minimax_music_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_minimax_music_job(job)
-    try:
-        with model3d_service._lock:
-            model3d_jobs = [copy.deepcopy(job) for job in model3d_service._jobs.values()]
-        for job in model3d_jobs:
-            if str(job.get("workspace") or "default") == workspace:
-                _publish_generic_legacy_task(job, "model3d")
-    except Exception:
-        pass
-    try:
-        from services import rig_service
-        with rig_service._lock:
-            rig_jobs = [copy.deepcopy(job) for job in rig_service._jobs.values()]
-        for job in rig_jobs:
-            if str(job.get("workspace") or "default") == workspace:
-                _publish_generic_legacy_task(job, "rig")
-    except Exception:
-        pass
 
 
 api.include_router(create_system_resources_router())
 
 
-def _control_canonical_task(task: dict, action: str):
-    adapter = str((task.get("metadata") or {}).get("adapter") or "")
-    legacy_id = str(task.get("backend_job_id") or task.get("pipeline_id") or "")
-    if action == "cancel":
-        if adapter == "generation": return cancel_job(legacy_id)
-        if adapter == "director": return director_pipeline_stop(legacy_id)
-        if adapter == "series-plan": return cancel_series_episode_plan(legacy_id)
-        if adapter == "series-render": return cancel_series_render_job(legacy_id)
-        if adapter == "story-plan": return cancel_story_lab_generation(legacy_id)
-        if adapter == "video-editor": return cancel_video_editor_export(legacy_id)
-        if adapter == "model3d": return cancel_model3d_job(legacy_id)
-        if adapter == "rig": return cancel_rig_job(legacy_id)
-        if adapter == "minimax-image": return cancel_comic_minimax_job(legacy_id)
-        if adapter == "audio-analysis": return cancel_audio_analysis_job(legacy_id)
-        if adapter == "minimax-music": return cancel_story_music_candidates_job(legacy_id)
-        if adapter == "minimax-music-candidate":
-            root_backend_id = str(task.get("root_id") or "").removeprefix(
-                "task-minimax-music-"
-            )
-            return cancel_story_music_candidates_job(root_backend_id)
-        if adapter == "series-assembly":
-            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "cancel")
-        if adapter == "quick-video-batch":
-            return control_quick_video_batch_job(
-                _workspace_dir(str(task.get("workspace") or "default")),
-                legacy_id,
-                "cancel",
-            )
-    if action in {"retry", "resume"}:
-        if adapter == "director": return director_pipeline_resume(legacy_id)
-        if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
-        if adapter == "series-render": return resume_series_render_job(legacy_id)
-        if adapter == "story-plan": return resume_story_lab_generation(legacy_id)
-        if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
-        if adapter == "series-assembly":
-            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "resume")
-        if adapter == "quick-video-batch":
-            return control_quick_video_batch_job(
-                _workspace_dir(str(task.get("workspace") or "default")),
-                legacy_id,
-                "resume",
-            )
-    if action == "discard" and adapter == "series-assembly":
-        return control_series_assembly_job(
-            _workspace_dir(str(task.get("workspace") or "default")),
-            legacy_id,
-            "discard",
-        )
-    raise HTTPException(status_code=409, detail=f"Task does not support {action}")
 
 
 from routers.canonical_tasks import create_canonical_tasks_router
@@ -13883,9 +13785,6 @@ api.include_router(create_projects_router(
 
 from routers.productions import create_productions_router
 
-def _list_canonical_production_pipelines(workspace: str):
-    from services.director_pipeline import list_pipeline_states
-    return list_pipeline_states(wgp.server_config.get("save_path", "outputs"), workspace)
 
 api.include_router(create_productions_router(
     list_workspaces=_list_workspaces,

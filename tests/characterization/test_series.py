@@ -182,14 +182,15 @@ def _assert_series_render_is_bound_to_the_server(launch, monkeypatch) -> None:
     assert render_jobs._run_generation is launch._run_generation
     assert render_jobs._cancel_series_render_job is render_router.cancel_series_render_job
     # The publish hook is read with globals().get, so a name the bind forgot would stop the
-    # Activity row without an error. The stored forwarder looks the publishers module up at
-    # call time. Reset still looks the launch name up; that function has not moved.
+    # Activity row without an error. The stored forwarders look the publishers module and the
+    # sync module up at call time.
     import services.canonical_task_publishers as task_publishers
+    import services.canonical_task_sync as task_sync
     assert callable(render_jobs._publish_series_task) and callable(render_router._publish_series_task)
     monkeypatch.setattr(task_publishers, "_publish_series_task", lambda job, adapter: ("published", adapter))
     assert render_jobs._publish_series_task({}, "series-render") == ("published", "series-render")
     assert render_router._publish_series_task({}, "series-render") == ("published", "series-render")
-    monkeypatch.setattr(launch, "_reset_canonical_task_for_resume", lambda workspace, task_id: (workspace, task_id))
+    monkeypatch.setattr(task_sync, "_reset_canonical_task_for_resume", lambda workspace, task_id: (workspace, task_id))
     assert render_router._reset_canonical_task_for_resume("film", "task-1") == ("film", "task-1")
 
 
