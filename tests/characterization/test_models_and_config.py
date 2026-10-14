@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 
@@ -927,6 +928,37 @@ def test_lora_guide_generation(lora_library, golden, monkeypatch) -> None:
     generate("lora guide generate missing file", {"model_type": "fake_t2v", "filename": "ghost.safetensors"})
     generate("lora guide generate unknown model", {"model_type": "not_a_model", "filename": "target.safetensors"})
     generate("lora guide generate missing fields", {"model_type": "fake_t2v"})
+
+    # Production resolve_lora_path uses basename, so a path that names an
+    # installed LoRA used to pass the existence check and then write the
+    # sidecar/guide next to os.path.join(lora_dir, filename).
+    outside = server.lora_root.parent / "outside-guides"
+    outside.mkdir()
+    (outside / "target.guide.md").write_text("LEAKED\n", encoding="utf-8")
+    monkeypatch.setattr(
+        server.wgp,
+        "resolve_lora_path",
+        lambda _model_type, filename: str(wan / os.path.basename(filename)),
+        raising=False,
+    )
+    traversal = os.path.relpath(outside / "target.safetensors", wan).replace("\\", "/")
+    generate("lora guide generate traversal", {"model_type": "fake_t2v", "filename": traversal})
+    generate("lora guide generate absolute", {"model_type": "fake_t2v", "filename": str(outside / "target.safetensors")})
+    server.check(
+        golden,
+        "lora guide get traversal",
+        "GET",
+        f"/api/v1/loras/fake_t2v/{quote(traversal, safe='')}/guide",
+    )
+    from fastapi import HTTPException
+    from services import lora_guides
+    with pytest.raises(HTTPException) as leaked:
+        lora_guides.get_lora_guide("fake_t2v", traversal)
+    assert leaked.value.status_code == 400
+    assert leaked.value.detail == "Invalid filename"
+    assert (outside / "target.civitai.json").exists() is False
+    assert (outside / "target.guide.md").read_text(encoding="utf-8") == "LEAKED\n"
+
     server.check(golden, "lora guide after generate", "GET", "/api/v1/loras/fake_t2v/target.safetensors/guide")
     golden.check("lora guide files after generate", 200, server.normalise(_text_files(server.lora_root)))
 

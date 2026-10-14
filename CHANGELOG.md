@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Generating or reading a LoRA guide now refuses a filename that is not a basename.** `resolve_lora_path` already looked up the weights by basename, so `POST /api/v1/loras/generate-guide` with `../outside/style.safetensors` (when `style.safetensors` was installed) used to copy the sidecar and write the `.guide.md` outside the LoRA tree. Delete, preview and the NSFW override already rejected that shape. The GET guide route uses the same check, so a `%2e%2e` path no longer reads a file next to that join.
+
 **LoRA guide generation left the launch module.** Asking for a guide, starting a scan, and reading a scan that does not exist still answer the same way. Generating a guide still needs a loaded language model. The scan registry stays one object.
 
 **The LoRA library left the launch module.** The directory list, the installed LoRAs, a model's LoRA list and details, deleting a file, and the NSFW override still answer the same way. The update manifest still answers the same way.

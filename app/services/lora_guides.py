@@ -222,6 +222,20 @@ def _generate_and_save_lora_guide(lora_path: str, meta: dict, filename: str = ""
     return {"guide": guide_text, "recommended_weights": weights}
 
 
+def _require_lora_filename(filename: str) -> str:
+    """Guides and sidecars live under get_lora_dir() keyed by basename.
+
+    resolve_lora_path() already strips directories when locating the
+    weights, so a filename with ``..`` used to pass the existence check
+    and then write ``.civitai.json`` / ``.guide.md`` next to
+    ``os.path.join(lora_dir, filename)`` — outside the LoRA tree.
+    """
+    name = str(filename or "")
+    if name != os.path.basename(name) or name.startswith("."):
+        raise HTTPException(status_code=400, detail="Invalid filename")
+    return name
+
+
 async def generate_lora_guide(request: Request):
     """Generate a .guide.md for a LoRA by feeding its CivitAI metadata to the LLM."""
     body = await request.json()
@@ -230,6 +244,7 @@ async def generate_lora_guide(request: Request):
 
     if not model_type or not filename:
         raise HTTPException(status_code=400, detail="model_type and filename required")
+    filename = _require_lora_filename(filename)
 
     try:
         lora_dir = wgp.get_lora_dir(model_type)
@@ -276,6 +291,7 @@ async def generate_lora_guide(request: Request):
 
 def get_lora_guide(model_type: str, filename: str):
     """Get the generated guide for a LoRA, if it exists."""
+    filename = _require_lora_filename(filename)
     try:
         lora_dir = wgp.get_lora_dir(model_type)
     except Exception:
