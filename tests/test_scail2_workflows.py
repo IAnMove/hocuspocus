@@ -119,6 +119,19 @@ def _read(path: str) -> str:
         return handle.read()
 
 
+
+def _recast_endpoint_text() -> str:
+    """POST /api/v1/recast. Pins of that handler follow it out of launch."""
+    return _read(os.path.join(_ROOT, "app", "services", "recast_endpoint.py"))
+
+
+def _recast_routes_text() -> str:
+    """Both Recast handlers (C8b). A text launch must not hold must not come back in them either."""
+    return _recast_endpoint_text() + "\n\n" + _read(
+        os.path.join(_ROOT, "app", "services", "recast_preview.py"),
+    )
+
+
 def _function_defs(path: str) -> dict[str, ast.FunctionDef]:
     tree = ast.parse(_read(path), filename=os.path.relpath(path, _ROOT))
     return {
@@ -3767,30 +3780,34 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_wires_count_into_process_and_sam3(self):
         source = _read(_LAUNCH_PATH)
-        self.assertIn('"video_prompt_type": f"V0{person_count}AI"', source)
-        self.assertIn('"image_prompt_type": ""', source)
+        handler = _recast_endpoint_text()
+        self.assertIn('"video_prompt_type": f"V0{person_count}AI"', handler)
+        self.assertIn('"image_prompt_type": ""', handler)
         self.assertNotIn('"image_start": ref_image_path', source)
-        self.assertIn('"num_inference_steps": inference_steps', source)
+        self.assertNotIn('"image_start": ref_image_path', _recast_routes_text())
+        self.assertIn('"num_inference_steps": inference_steps', handler)
         self.assertIn(
             'body.get("num_inference_steps"),\n        8 if recast_fast else 40',
-            source,
+            handler,
         )
-        self.assertIn('"flow_shift": 1 if recast_fast', source)
-        self.assertIn('"edit_recast_person_count": person_count', source)
-        self.assertIn("color_palette=mask_colors", source)
-        self.assertIn("max_colored_objects=person_count", source)
-        self.assertIn('background_color=(255, 255, 255)', source)
+        self.assertIn('"flow_shift": 1 if recast_fast', handler)
+        self.assertIn('"edit_recast_person_count": person_count', handler)
+        self.assertIn("color_palette=mask_colors", handler)
+        self.assertIn("max_colored_objects=person_count", handler)
+        self.assertIn('background_color=(255, 255, 255)', handler)
 
     def test_strict_pixel_lock_is_an_opt_in_fallback(self):
         launch = launch_and_worker_source(_read(_LAUNCH_PATH))
+        handler = _recast_endpoint_text()
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
-        self.assertIn('body.get("protect_bystanders") is True', launch)
-        self.assertIn('"_recast_protect_bystanders": protect_bystanders', launch)
+        self.assertIn('body.get("protect_bystanders") is True', handler)
+        self.assertIn('"_recast_protect_bystanders": protect_bystanders', handler)
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn('colorkey=0xFFFFFF', masks)
         self.assertNotIn('"_recast_mask_background"', launch)
+        self.assertNotIn('"_recast_mask_background"', _recast_routes_text())
         self.assertNotIn('"_recast_mask_background"', masks)
         self.assertIn("_build_recast_adaptive_mask(", launch)
         self.assertIn('wgp.release_model()', launch)
@@ -3803,6 +3820,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_offers_single_reference_native_group_conditioning(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
         store = _read(_OUTPUT_RESTORE_SLICE_PATH)
@@ -3810,11 +3828,11 @@ class TestMultiPersonRecast(unittest.TestCase):
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
-        self.assertIn('if "preserve_bystanders" in body:', launch)
-        self.assertIn('body.get("preserve_bystanders") is True', launch)
-        self.assertIn('body.get("preserve_scene_reference") is True', launch)
-        self.assertIn('preserve_bystanders = True', launch)
-        self.assertIn("_build_recast_native_people_conditioning(", launch)
+        self.assertIn('if "preserve_bystanders" in body:', handler)
+        self.assertIn('body.get("preserve_bystanders") is True', handler)
+        self.assertIn('body.get("preserve_scene_reference") is True', handler)
+        self.assertIn('preserve_bystanders = True', handler)
+        self.assertIn("_build_recast_native_people_conditioning(", handler)
         # Recast's shot references and manifest moved to recast_shot_manifest (C8a); launch's remaining copies of the
         # composer and scene-reference calls are Repaint's forwarders (C6).
         shot_manifest = _read(os.path.join(_ROOT, "app", "services", "recast_shot_manifest.py"))
@@ -3822,28 +3840,29 @@ class TestMultiPersonRecast(unittest.TestCase):
         compose = _read(os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"))
         self.assertIn("recast_group_ref_", compose)
         self.assertIn("recast_group_mask_", compose)
-        self.assertIn('"scail2_primary_reference_people": 1', launch)
-        self.assertIn('"scail2_additional_reference_mask_paths"', launch)
-        self.assertIn('job["params"]["image_refs"] = [', launch)
-        self.assertIn("[None, *target_expected_colors]", launch)
-        self.assertIn('"scail2_identity_latent_reference_index"', launch)
+        self.assertIn('"scail2_primary_reference_people": 1', handler)
+        self.assertIn('"scail2_additional_reference_mask_paths"', handler)
+        self.assertIn('job["params"]["image_refs"] = [', handler)
+        self.assertIn("[None, *target_expected_colors]", handler)
+        self.assertIn('"scail2_identity_latent_reference_index"', handler)
         self.assertIn("_get_scail2_identity_latent_reference_index(", scail2)
         self.assertIn(
             '"scail2_identity_latent_reference_index"',
             wan_handler,
         )
-        self.assertIn("native_people['conditioning_count']", launch)
+        self.assertIn("native_people['conditioning_count']", handler)
         self.assertNotIn("recast_bystanders_matted_ref_", launch)
+        self.assertNotIn("recast_bystanders_matted_ref_", _recast_routes_text())
         self.assertNotIn("recast_bystanders_matted_ref_", compose)
         self.assertNotIn("recast_bystanders_matted_ref_", shot_manifest)
         self.assertIn("_build_recast_source_scene_reference(", shot_manifest)
         self.assertIn(
             "_enable_recast_dynamic_source_scene_reference(",
-            launch,
+            handler,
         )
         self.assertIn("recast_source_scene_ref_", compose)
         self.assertIn("recast_source_scene_mask_", compose)
-        self.assertIn("_ensure_source_scene_reference(", launch)
+        self.assertIn("_ensure_source_scene_reference(", handler)
         self.assertIn(
             '"edit_recast_source_scene_reference"',
             compose,
@@ -3871,9 +3890,9 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("editRecastPreserveBystanders: true", edit_store)
         self.assertIn("preserve_bystanders: true", recast)
         self.assertIn("p.edit_recast_preserve_scene_reference === true", store)
-        self.assertIn("_recast_probe_needs_bystander_tracking(", launch)
-        self.assertIn("if map_native_bystanders:", launch)
-        self.assertIn("skipping the second full SAM3 pass", launch)
+        self.assertIn("_recast_probe_needs_bystander_tracking(", handler)
+        self.assertIn("if map_native_bystanders:", handler)
+        self.assertIn("skipping the second full SAM3 pass", handler)
         self.assertNotIn("Preserve other people natively", controls)
         self.assertIn("t('recast.aboutText')", controls)
         self.assertIn(
@@ -3883,6 +3902,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_discovers_mappings_across_the_selected_timeline(self):
         launch = launch_and_worker_source(_read(_LAUNCH_PATH))
+        handler = _recast_endpoint_text()
         scail2 = _read(_SCAIL2_PATH)
         wan_handler = _read(_WAN_HANDLER_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -3905,8 +3925,8 @@ class TestMultiPersonRecast(unittest.TestCase):
             masks,
         )
         self.assertIn("anywhere in the selected video", masks)
-        self.assertIn('"edit_recast_timeline_anchors"', launch)
-        self.assertIn('"scail2_timeline_source_scene_reference"', launch)
+        self.assertIn('"edit_recast_timeline_anchors"', handler)
+        self.assertIn('"scail2_timeline_source_scene_reference"', handler)
         self.assertIn('"scail2_timeline_source_scene_reference"', scail2)
         self.assertIn(
             '"scail2_timeline_source_scene_reference"',
@@ -3935,7 +3955,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn(
             '"scail2_reference_expected_colors"\n                    ] = [\n                        None,',
-            launch,
+            handler,
         )
         self.assertIn(
             "_select_scail2_window_reference_indices(",
@@ -3954,6 +3974,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn(
             "def _run_recast_shot_generation(",
             shot_run,
+        )
+        self.assertIn(
+            '"_recast_shot_manifest"',
+            handler,
         )
         self.assertIn(
             '"_recast_shot_manifest"',
@@ -3977,7 +4001,8 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
 
     def test_recast_worker_initializes_probe_frame_before_local_use(self):
-        tree = ast.parse(_read(_LAUNCH_PATH), filename="app/_launch_runtime.py")
+        endpoint_path = os.path.join(_ROOT, "app", "services", "recast_endpoint.py")
+        tree = ast.parse(_read(endpoint_path), filename="app/services/recast_endpoint.py")
         endpoint = next(
             node
             for node in tree.body
@@ -4011,6 +4036,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_relighting_is_hash_pinned_and_opt_in(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
@@ -4026,7 +4052,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             prepare,
         )
         self.assertIn('"converter": "scail2_sat_lora"', launch)
-        self.assertIn('body.get("use_relighting") is True', launch)
+        self.assertIn('body.get("use_relighting") is True', handler)
         self.assertIn("def _normalize_recast_lora_settings(", prepare)
         self.assertIn("single-phase LoRA settings", prepare)
         self.assertIn("editRecastUseRelighting: false", edit_store)
@@ -4045,19 +4071,20 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_isolates_reference_background_by_default(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         scail2 = _read(_SCAIL2_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
-        self.assertIn('body.get("isolate_reference") is not False', launch)
-        self.assertIn('"scail2_isolate_reference_background": False', launch)
-        self.assertIn('"scail2_reference_alpha_path"', launch)
-        self.assertIn('"edit_recast_isolate_reference": isolate_reference', launch)
+        self.assertIn('body.get("isolate_reference") is not False', handler)
+        self.assertIn('"scail2_isolate_reference_background": False', handler)
+        self.assertIn('"scail2_reference_alpha_path"', handler)
+        self.assertIn('"edit_recast_isolate_reference": isolate_reference', handler)
         prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
         self.assertIn("def _prepare_recast_reference_frame", prepare)
         self.assertIn("isolate_reference=isolate_reference", prepare)
-        self.assertIn("isolate_reference=isolate_reference", launch)
+        self.assertIn("isolate_reference=isolate_reference", handler)
         self.assertIn("def _load_reference_alpha", scail2)
         self.assertIn("def _isolate_scail2_reference", scail2)
         self.assertIn("image_ref = _isolate_scail2_reference(", scail2)
@@ -4069,6 +4096,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_uses_identity_latents_and_trims_motion_preroll(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         scail2 = _read(_SCAIL2_PATH)
         any2video = _read(os.path.join(
             _ROOT, "app", "models", "wan", "any2video.py",
@@ -4078,14 +4106,14 @@ class TestMultiPersonRecast(unittest.TestCase):
         prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
 
         self.assertIn('"identity_image": identity_image', prepare)
-        self.assertIn('"scail2_clip_reference_path"', launch)
+        self.assertIn('"scail2_clip_reference_path"', handler)
         self.assertIn(
             '"scail2_identity_latent_isolation": isolate_reference',
-            launch,
+            handler,
         )
-        self.assertIn('"scail2_recast_warmup_frames": _RECAST_WARMUP_FRAMES', launch)
-        self.assertIn('"scail2_primary_only_continuations": True', launch)
-        self.assertIn('"video_length": gen_frames', launch)
+        self.assertIn('"scail2_recast_warmup_frames": _RECAST_WARMUP_FRAMES', handler)
+        self.assertIn('"scail2_primary_only_continuations": True', handler)
+        self.assertIn('"video_length": gen_frames', handler)
         self.assertIn("def _load_clip_identity_reference", scail2)
         self.assertIn("def _blend_scail2_identity_latents", scail2)
         self.assertIn(
@@ -4128,11 +4156,12 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_default_prefers_dedicated_fast_scail2(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         form = _read(_STUDIO_FORM_SLICE_PATH)
         models = _read(_MODELS_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
-        self.assertIn('body.get("model_type") or _RECAST_FAST_MODEL_TYPE', launch)
+        self.assertIn('body.get("model_type") or _RECAST_FAST_MODEL_TYPE', handler)
         self.assertIn("wantsViggle ? 'viggle_animate' : 'scail2_14B_recast_fast'", form)
         self.assertIn("t('recast.aboutText')", controls)
         self.assertIn("Fast is recommended (8 steps)", studio["recast"]["aboutText"])
@@ -4143,6 +4172,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_resolution_profile_does_not_change_model_schedule(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
@@ -4153,19 +4183,21 @@ class TestMultiPersonRecast(unittest.TestCase):
         prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
         self.assertIn('"512p": (896, 512)', prepare)
         self.assertIn('"704p": (1280, 704)', prepare)
-        self.assertIn('"resolution": recast_resolution', launch)
-        self.assertIn('"sliding_window_size": recast_window_size', launch)
+        self.assertIn('"resolution": recast_resolution', handler)
+        self.assertIn('"sliding_window_size": recast_window_size', handler)
         self.assertIn(
             'body.get("num_inference_steps")',
-            launch,
+            handler,
         )
-        self.assertIn('"num_inference_steps": inference_steps', launch)
+        self.assertIn('"num_inference_steps": inference_steps', handler)
         self.assertNotIn('"num_inference_steps": 8 if recast_fast else', launch)
+        self.assertNotIn('"num_inference_steps": 8 if recast_fast else', _recast_routes_text())
         self.assertIn(
             '"edit_recast_resolution_profile": resolution_profile',
-            launch,
+            handler,
         )
         self.assertNotIn('if resolution_profile == "512p"', launch)
+        self.assertNotIn('if resolution_profile == "512p"', _recast_routes_text())
         self.assertNotIn('if resolution_profile == "512p"', prepare)
         self.assertIn("editRecastResolutionProfile: '480p'", edit_store)
         self.assertIn(
@@ -4258,14 +4290,18 @@ class TestMultiPersonRecast(unittest.TestCase):
             advanced,
         )
         self.assertIn("!isScailEdit && <div>", advanced)
+        # The Recast handler's copies left launch (C8b): count over the text launch held before the move.
+        handler = _recast_endpoint_text()
         self.assertGreaterEqual(
-            launch.count('"num_inference_steps": inference_steps'),
+            (launch + handler).count('"num_inference_steps": inference_steps'),
             2,
         )
         self.assertGreaterEqual(
-            launch.count('"guidance_scale": guidance_scale'),
+            (launch + handler).count('"guidance_scale": guidance_scale'),
             2,
         )
+        self.assertIn('"num_inference_steps": inference_steps', handler)
+        self.assertIn('"guidance_scale": guidance_scale', handler)
         router = _read(_REPAINT_ROUTER_PATH)
         self.assertIn('"num_inference_steps": inference_steps', router)
         self.assertIn('"guidance_scale": guidance_scale', router)
@@ -4284,10 +4320,11 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_uses_native_replace_without_changing_studio_animate(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         scail2 = _read(_SCAIL2_PATH)
         form = _read(_STUDIO_FORM_SLICE_PATH)
         output_restore = _read(_OUTPUT_RESTORE_SLICE_PATH)
-        self.assertIn('"scail2_recast_conditioning": "native_replace"', launch)
+        self.assertIn('"scail2_recast_conditioning": "native_replace"', handler)
         self.assertIn("replace_mode = test_scail2_replace(video_prompt_type)", scail2)
         self.assertIn("replace_conditioning = test_scail2_replace(video_prompt_type)", scail2)
         self.assertNotIn("animation_recast", scail2)
@@ -4311,9 +4348,10 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_aligned_reference_reuses_the_exact_target_mask(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         scail2 = _read(_SCAIL2_PATH)
-        self.assertIn('"edit_recast_ref_aligned": reference_aligned_to_source', launch)
-        self.assertIn('"scail2_reference_mask_path"', launch)
+        self.assertIn('"edit_recast_ref_aligned": reference_aligned_to_source', handler)
+        self.assertIn('"scail2_reference_mask_path"', handler)
         self.assertIn("def _load_aligned_ref_mask", scail2)
         self.assertIn("ref_mask = _load_aligned_ref_mask(", scail2)
 
@@ -4350,6 +4388,7 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_auto_face_detail_is_previewed_saved_and_automatic(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
@@ -4357,10 +4396,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         client = api_client_source()
         studio = json.loads(_read(_STUDIO_EN_PATH))
 
-        self.assertIn('body.get("auto_face_detail") is not False', launch)
+        self.assertIn('body.get("auto_face_detail") is not False', handler)
         self.assertIn(
             '"edit_recast_auto_face_detail": auto_face_detail',
-            launch,
+            handler,
         )
         prepare = _read(os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"))
         self.assertIn('"auto_face_detail_refs": auto_face_detail_refs', prepare)
@@ -4380,21 +4419,22 @@ class TestMultiPersonRecast(unittest.TestCase):
 
     def test_recast_prompt_guidance_is_compatible_but_off_and_hidden(self):
         launch = _read(_LAUNCH_PATH)
+        handler = _recast_endpoint_text()
         store = _read(_OUTPUT_RESTORE_SLICE_PATH)
         recast = _read(_RECAST_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         controls = _read(_RECAST_CONTROLS_PATH)
         self.assertIn(
             'body.get("enhance_prompt") is True',
-            launch,
+            handler,
         )
         self.assertIn(
             '"edit_recast_enhance_prompt": enhance_prompt',
-            launch,
+            handler,
         )
         self.assertIn(
             '"edit_recast_raw_prompt": raw_recast_prompt',
-            launch,
+            handler,
         )
         self.assertIn("editRecastEnhancePrompt: false", edit_store)
         self.assertIn("enhance_prompt: false", recast)

@@ -131,6 +131,12 @@ SHOT_MODULES = (
     "services.recast_shot_manifest",
     "services.recast_shot_run",
 )
+# Recast route modules (C8b). The preview handler imports its collaborators, so a stub has to
+# land on that module too, not only on launch.
+ROUTE_MODULES = (
+    "services.recast_preview",
+    "services.recast_endpoint",
+)
 
 # Repaint (C6): the modules that took their launch objects, which they read under the launch names.
 REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
@@ -161,13 +167,13 @@ COLLABORATOR_MODULES = (
 
 def worker_modules() -> list:
     """The modules whose globals the worker functions, the post-processing passes, the Recast code and the Repaint,
-    outpaint and blend routes that start the worker read. A move PR repoints this one function.
+    Recast, outpaint and blend routes that start the worker read. A move PR repoints this one function.
 
     That is the full server module while any worker function or pass is still in it, each module of
     ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
     Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5), each collaborator module
-    the generation-jobs slice moved, each canonical task module (C10a) and each helper module a moved callee lives in
-    (C9c). A name they read is an attribute of every module that reads it.
+    the generation-jobs slice moved, each canonical task module (C10a), each helper module a moved callee lives in
+    (C9c) and each Recast route module (C8b). A name they read is an attribute of every module that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
@@ -179,8 +185,9 @@ def worker_modules() -> list:
     collaborators = [sys.modules[name] for name in COLLABORATOR_MODULES if name in sys.modules]
     canonical = [sys.modules[name] for name in CANONICAL_TASK_MODULES if name in sys.modules]
     callees = [sys.modules[name] for name in MOVED_CALLEES if name in sys.modules]
+    routes = [sys.modules[name] for name in ROUTE_MODULES if name in sys.modules]
     return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *collaborators, *canonical,
-            *callees]
+            *callees, *routes]
 
 
 @dataclass

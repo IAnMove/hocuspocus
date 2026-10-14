@@ -566,14 +566,18 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
+    recast_source = (
+        Path(__file__).parents[1] / "app" / "services" / "recast_endpoint.py"
+    ).read_text(encoding="utf-8")
     outpaint_source = (
         Path(__file__).parents[1] / "app" / "routers" / "outpaint.py"
     ).read_text(encoding="utf-8")
     blend_source = (
         Path(__file__).parents[1] / "app" / "routers" / "blend.py"
     ).read_text(encoding="utf-8")
+    # Recast left launch (C8b): its slice is the rest of the service file, which ends with the handler.
     specialist_routes = (
-        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", source),
+        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", recast_source),
         ("async def outpaint_endpoint", "def create_outpaint_router", "_prepare_and_run_outpaint", outpaint_source),
         ("async def blend_endpoint", "def create_blend_router", "_run_blend_generation", blend_source),
     )

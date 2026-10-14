@@ -96,6 +96,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         cls.director = _parse("app/routers/director.py")
         cls.tools_upscale = _parse("app/services/tools_upscale.py")
         cls.tools_router = _parse("app/routers/tools.py")
+        cls.recast_endpoint = _parse("app/services/recast_endpoint.py")
         cls.blend_run = _parse("app/services/blend_run.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
@@ -123,6 +124,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                     tree = self.tools_upscale
                 elif function_name == "_run_tool_revoice":
                     tree = self.tools_router
+                elif function_name == "_run_recast":
+                    tree = self.recast_endpoint
                 elif function_name == "_run_blend_generation":
                     tree = self.blend_run
                 elif function_name == "_run_sfx_generation":
@@ -187,6 +190,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "edit_anything_endpoint": edit_requests,
             "inpaint_endpoint": edit_requests,
             "repaint_endpoint": _parse("app/routers/repaint.py"),
+            "recast_endpoint": self.recast_endpoint,
             "outpaint_endpoint": _parse("app/routers/outpaint.py"),
             "blend_endpoint": _parse("app/routers/blend.py"),
         }

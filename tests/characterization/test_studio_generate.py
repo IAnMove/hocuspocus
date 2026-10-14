@@ -5,15 +5,24 @@ extract-frames, edit-anything, inpaint, SAM status, segment preview, outpaint
 and blend, plus accepted jobs that the C0 fake engine finishes. They do not
 re-record ``goldens/test_run_generation.json``. A real mask, a real SAM
 preview and a retake that reads frames need a GPU and are not here.
+
+The Recast routes at the bottom were recorded the same way, on the tree where
+both handlers still live in launch. Detection and reference preparation are
+stubbed, so a golden never downloads SAM or a LoRA. The JPEG bytes of a
+preview are encoder-dependent, so the golden keeps the decoded image's shape.
 """
 from __future__ import annotations
 
 import ast
+import base64
+import io
 import json
 import re
 import shutil
 import sys
 import threading
+import time
+from contextlib import contextmanager
 from dataclasses import replace as _replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +36,9 @@ from tests.characterization.test_run_generation import (
     RECAST_MODULES, SHOT_MODULES, BODY, Rig, _media_writer, worker_module,
 )
 # Fixtures, used by name: the C0 rig and its decodable clip.
-from tests.characterization.test_run_generation import WAIT, _stub_legacy_h3, clip, rig  # noqa: F401
+from tests.characterization.test_run_generation import (  # noqa: F401
+    WAIT, _refuse_remote_network, _stub_legacy_h3, clip, rig,
+)
 from tests.support.fake_wgp import FakeEngine, catalog_attributes, default_script, generation_attributes
 
 _ROUTES = (
@@ -1207,3 +1218,1130 @@ def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypa
         assert forwarded == {"_run_generation"}
     else:
         assert forwarded == set()
+
+
+def test_recast_preview_reads_the_objects_launch_holds(full_server) -> None:
+    """The preview handler's collaborators are the objects launch holds.
+
+    The served function is the router wrapper. Launch's ``recast_preview_endpoint``
+    is that same wrapper, which is what the route calls.
+    """
+    import builtins
+    import importlib
+
+    from routers.recast_preview import recast_preview_endpoint as served
+
+    launch = worker_module()
+    module = importlib.import_module("services.recast_preview")
+    assert launch.recast_preview_endpoint is served
+    assert served is not module.recast_preview_endpoint
+    reads = _global_reads(module.recast_preview_endpoint)
+    compared = set()
+    for name in sorted(reads):
+        if name.startswith("__") or hasattr(builtins, name):
+            continue
+        assert getattr(module, name) is getattr(launch, name), name
+        compared.add(name)
+    assert "_resolve_recast_media" in compared
+    assert "HTTPException" in compared
+
+
+def test_recast_endpoint_reads_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    """Every global the moved handler reads is the launch object, or a forwarder.
+
+    The served function is the router wrapper. Launch's ``recast_endpoint`` is
+    that same wrapper. ``_run_generation`` and ``_get_cached_hardware`` are
+    forwarders: patching the launch name changes what the handler calls, and
+    the worker thread is still named ``_run_generation``.
+    """
+    import builtins
+    import importlib
+
+    from routers.recast import recast_endpoint as served
+
+    launch = worker_module()
+    module = importlib.import_module("services.recast_endpoint")
+    assert launch.recast_endpoint is served
+    # MCP's "recast" tool (the Viggle path) calls the function the route serves.
+    assert launch._mcp_handlers["recast"] is served
+    assert served is not module.recast_endpoint
+    assert launch._bind_recast_endpoint is module.bind
+    reads = _global_reads(module.recast_endpoint)
+    compared = set()
+    forwarded = set()
+    for name in sorted(reads):
+        if name.startswith("__") or hasattr(builtins, name):
+            continue
+        assert hasattr(module, name), name
+        value = getattr(module, name)
+        launch_value = getattr(launch, name)
+        if value is launch_value:
+            compared.add(name)
+            continue
+        assert callable(value), name
+        sentinel = object()
+
+        def patched(*_args, _sentinel=sentinel, **_kwargs):
+            return _sentinel
+
+        monkeypatch.setattr(launch, name, patched)
+        assert value() is sentinel, name
+        monkeypatch.setattr(launch, name, launch_value)
+        forwarded.add(name)
+    assert "_resolve_recast_media" in compared
+    assert "_coordinated_generation_slot" in compared
+    assert "generate" in compared
+    assert forwarded == {"_run_generation", "_get_cached_hardware"}
+    # The Studio routes' forwarders (C3), shared: no Recast copy of them in launch.
+    assert module._run_generation is launch._forward_studio_run_generation
+    assert module._get_cached_hardware is launch._forward_studio_cached_hardware
+    # The route starts the worker as a thread named after it, as before the move.
+    assert module._run_generation.__name__ == launch._run_generation.__name__ == "_run_generation"
+
+
+# -- Recast routes (recorded on the pre-move tree; patches land on the service too) --
+# ``POST /api/v1/recast`` starts its worker and then builds the HTTP body from the same params object.
+# The worker can mutate those params as soon as it takes the generation slot, so a golden that reads
+# the answer has to hold the slot until the response is in hand. ``_patch_recast`` writes the stub on
+# launch today and, once the handler has moved, on the service module that actually reads the name.
+
+_RECAST_MODULES = ("services.recast_endpoint", "services.recast_preview")
+_RECAST_THREAD = "(_run_recast)"
+_GENERATE_THREAD = "(_run_generation_with_preparation)"
+
+
+def _patch_recast(monkeypatch, name, value) -> None:
+    """Patch ``name`` on launch and on each recast service module that already has it."""
+    launch = worker_module()
+    holders = []
+    if hasattr(launch, name):
+        holders.append(launch)
+    for module_name in _RECAST_MODULES:
+        module = sys.modules.get(module_name)
+        if module is not None and hasattr(module, name):
+            holders.append(module)
+    assert holders, name
+    for module in holders:
+        monkeypatch.setattr(module, name, value)
+
+
+def _install_recast_decord(monkeypatch, *, frames: int = 17, fps: float = 8.0, fail: str | None = None) -> None:
+    """A fixed clip. The real decoder is not installed on every CI machine, and a dummy file is not a video."""
+    import numpy
+
+    class VideoReader:
+        def __init__(self, path: str) -> None:
+            if fail:
+                raise RuntimeError(fail)
+            self.path = path
+
+        def get_avg_fps(self) -> float:
+            return fps
+
+        def __len__(self) -> int:
+            return frames
+
+        def __getitem__(self, index: int):
+            frame = numpy.zeros((64, 96, 3), dtype="uint8")
+            return SimpleNamespace(shape=frame.shape, asnumpy=lambda: frame)
+
+        def get_batch(self, indices):
+            count = len(list(indices))
+            batch = numpy.zeros((count, 64, 96, 3), dtype="uint8")
+            return SimpleNamespace(asnumpy=lambda: batch)
+
+    monkeypatch.setitem(sys.modules, "decord", SimpleNamespace(VideoReader=VideoReader))
+
+
+def _paint_keyword_mask(frames, *_args, **_kwargs):
+    """One blue person (the first Recast palette color) in every frame of ``frames``."""
+    import numpy
+
+    mask = numpy.zeros(numpy.asarray(frames).shape, dtype="uint8")
+    mask[..., 2] = 255
+    return mask
+
+
+def _empty_keyword_mask(frames, *_args, **_kwargs):
+    import numpy
+
+    return numpy.zeros(numpy.asarray(frames).shape, dtype="uint8")
+
+
+def _stub_magic_mask(monkeypatch, keyword_masks) -> None:
+    import shared.magic_mask as magic_mask
+
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", keyword_masks)
+
+    def generate_video_mask(_video_path, _target, output_dir=None, **_kwargs):
+        folder = Path(output_dir or ".")
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / "recast-mask.mp4"
+        target.write_bytes(b"mask")
+        return str(target), None
+
+    monkeypatch.setattr(magic_mask, "generate_video_mask", generate_video_mask)
+
+
+def _stub_recast_preparation(monkeypatch) -> None:
+    """The route's own writes, without SAM, reference crops, or a bystander pass."""
+
+    def prepare(mappings, _mask, _output_dir, _job_id, **_kwargs):
+        reference = mappings[0]["ref_image_path"]
+        return {
+            "image_refs": [reference],
+            "primary_mask": reference,
+            "additional_masks": [],
+            "expected_colors": [[0, 0, 255]],
+            "clip_identity_ref": reference,
+            "auto_face_detail_refs": [],
+            "reference_canvas": [96, 64],
+            "previews": [{"kind": "primary"}],
+        }
+
+    def scene(_params, *_args, **_kwargs):
+        return {"hidden_fraction": 0.0, "expansion_pixels": 8}
+
+    _patch_recast(monkeypatch, "_prepare_recast_reference_conditioning", prepare)
+    _patch_recast(monkeypatch, "_enable_recast_dynamic_source_scene_reference", scene)
+    _patch_recast(monkeypatch, "_recast_probe_needs_bystander_tracking", lambda *_args, **_kwargs: False)
+
+
+@contextmanager
+def _hold_recast_detection(monkeypatch):
+    """Block the detection slot until the HTTP handler has returned its body."""
+    launch = worker_module()
+    real = launch._coordinated_generation_slot
+    release = threading.Event()
+
+    @contextmanager
+    def gated(job, description=None, **kwargs):
+        if "recast" in str(description or ""):
+            if not release.wait(WAIT):
+                raise AssertionError("the test never released the recast detection slot")
+        with real(job, description=description, **kwargs) as acquired:
+            yield acquired
+
+    _patch_recast(monkeypatch, "_coordinated_generation_slot", gated)
+    try:
+        yield release
+    finally:
+        release.set()
+
+
+def _live_threads(suffix: str) -> list:
+    deadline = time.monotonic() + WAIT
+    while time.monotonic() < deadline:
+        threads = [thread for thread in threading.enumerate() if thread.name.endswith(suffix) and thread.is_alive()]
+        if threads:
+            return threads
+        time.sleep(0.01)
+    raise AssertionError(f"no live thread named {suffix}")
+
+
+def _join(threads) -> None:
+    for thread in threads:
+        thread.join(WAIT)
+        assert not thread.is_alive(), thread.name
+
+
+def _finish_held_recast(release: threading.Event) -> None:
+    """The worker is blocked in the detection slot. Find it, open the slot, then wait."""
+    threads = _live_threads(_RECAST_THREAD)
+    release.set()
+    _join(threads)
+
+
+def _jpeg_shape(body: dict) -> dict:
+    """Drop encoder bytes. The golden keeps the decoded image's format, mode and size."""
+    if not isinstance(body, dict) or "preview" not in body:
+        return body
+    preview = body.get("preview")
+    facts: dict = {"jpeg_data_url": False}
+    if isinstance(preview, str) and preview.startswith("data:image/jpeg;base64,"):
+        from PIL import Image
+
+        raw = base64.b64decode(preview.split(",", 1)[1], validate=True)
+        image = Image.open(io.BytesIO(raw))
+        image.load()
+        facts = {"jpeg_data_url": True, "format": image.format, "mode": image.mode, "size": list(image.size)}
+    recorded = dict(body)
+    recorded["preview"] = facts
+    return recorded
+
+
+def _answer(response) -> dict:
+    try:
+        return response.json()
+    except ValueError:
+        return {"<text>": response.text}
+
+
+def _recast_files(server) -> tuple[Path, Path]:
+    video = server.outputs / "recast-source.mp4"
+    video.parent.mkdir(parents=True, exist_ok=True)
+    video.write_bytes(b"not decoded: decord is faked")
+    reference = media.image(server.root / "uploads" / "hero.png")
+    return video, reference
+
+
+def _post(server, path: str, body: dict):
+    return server.client.post(path, json=body)
+
+
+def test_recast_preview_rejects_a_bad_request(server, golden, monkeypatch) -> None:
+    _refuse_remote_network(monkeypatch)
+    _install_recast_decord(monkeypatch)
+    video, _reference = _recast_files(server)
+    launch = worker_module()
+    before = set(launch._jobs)
+    cases = {
+        "preview video must exist": ({}, None),
+        "preview allows at most five mappings": (
+            {"video_path": str(video), "character_mappings": [{"target": f"person {index}"} for index in range(6)]},
+            None,
+        ),
+        "preview mapping must be an object": (
+            {"video_path": str(video), "character_mappings": ["nope"]},
+            None,
+        ),
+        "preview mapping needs a target": (
+            {"video_path": str(video), "character_mappings": [{"ref_image_path": "hero.png"}]},
+            None,
+        ),
+    }
+    for case, (body, _unused) in cases.items():
+        response = _post(server, "/api/v1/recast/preview", body)
+        golden.check(case, response.status_code, server.normalise(_answer(response)))
+    _install_recast_decord(monkeypatch, fail="unreadable clip")
+    response = _post(server, "/api/v1/recast/preview", {"video_path": str(video), "target": "person"})
+    golden.check("preview cannot read a broken video", response.status_code, server.normalise(_answer(response)))
+    _install_recast_decord(monkeypatch)
+    response = _post(server, "/api/v1/recast/preview", {"video_path": str(video), "end_time": "nope"})
+    golden.check("preview rejects a bad end time", response.status_code, server.normalise(_answer(response)))
+    import shared.magic_mask as magic_mask
+
+    def fail_value(*_args, **_kwargs):
+        raise ValueError("no person")
+
+    def fail_runtime(*_args, **_kwargs):
+        raise RuntimeError("mask exploded")
+
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", fail_value)
+    response = _post(server, "/api/v1/recast/preview", {"video_path": str(video), "target": "person"})
+    golden.check("preview segmentation value error", response.status_code, server.normalise(_answer(response)))
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", fail_runtime)
+    response = _post(server, "/api/v1/recast/preview", {"video_path": str(video), "target": "person"})
+    golden.check("preview segmentation crash", response.status_code, server.normalise(_answer(response)))
+    golden.check("preview rejections create no job", 200, {"jobs created": len(set(launch._jobs) - before)})
+
+
+def test_recast_preview_returns_a_jpeg_and_reference_previews(server, golden, monkeypatch) -> None:
+    _refuse_remote_network(monkeypatch)
+    _install_recast_decord(monkeypatch)
+    _stub_magic_mask(monkeypatch, _paint_keyword_mask)
+    video, reference = _recast_files(server)
+    recorded = {}
+
+    def keep(case: str, body: dict) -> None:
+        response = _post(server, "/api/v1/recast/preview", body)
+        recorded[case] = {"status": response.status_code, "body": _jpeg_shape(server.normalise(_answer(response)))}
+
+    keep("one person", {"video_path": str(video), "target": "person"})
+    keep("one mapped person", {"video_path": str(video), "character_mappings": [{"target": "person"}]})
+
+    def prepare_previews(*_args, **_kwargs):
+        return {"previews": [{"kind": "primary"}]}
+
+    _patch_recast(monkeypatch, "_prepare_recast_reference_conditioning", prepare_previews)
+    keep("reference previews pass through", {
+        "video_path": str(video), "target": "person", "ref_image_path": str(reference),
+    })
+
+    def fail_value(*_args, **_kwargs):
+        raise ValueError("missing crop")
+
+    def fail_runtime(*_args, **_kwargs):
+        raise RuntimeError("encoder broke")
+
+    _patch_recast(monkeypatch, "_prepare_recast_reference_conditioning", fail_value)
+    response = _post(server, "/api/v1/recast/preview", {
+        "video_path": str(video), "target": "person", "ref_image_path": str(reference),
+    })
+    recorded["reference preview value error"] = {"status": response.status_code, "body": server.normalise(_answer(response))}
+    _patch_recast(monkeypatch, "_prepare_recast_reference_conditioning", fail_runtime)
+    response = _post(server, "/api/v1/recast/preview", {
+        "video_path": str(video), "target": "person", "ref_image_path": str(reference),
+    })
+    recorded["reference preview crash"] = {"status": response.status_code, "body": server.normalise(_answer(response))}
+    golden.check("recast preview", 200, recorded)
+
+
+def test_recast_rejects_before_a_job_exists(server, golden, monkeypatch) -> None:
+    _refuse_remote_network(monkeypatch)
+    _install_recast_decord(monkeypatch)
+    video, reference = _recast_files(server)
+    launch = worker_module()
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
+    before = set(launch._jobs)
+    present = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake"}
+    cases = {
+        "video must exist": {},
+        "reference must exist": {"video_path": str(video)},
+        "additional views must be a list": {**present, "additional_ref_image_paths": "nope"},
+        "a mapping must be an object": {**present, "character_mappings": ["nope"]},
+        "a mapping needs a reference": {**present, "character_mappings": [{"target": "person"}]},
+        "the video must be readable": present,
+        "704p below 16 GB": {**present, "resolution_profile": "704p"},
+        "the default model is the dedicated recast model": present,
+        "a legacy fast model migrates to the dedicated model": {**present, "model_type": "scail2_14B_fast"},
+        "enhancement off rejects an empty prompt": {**present, "model_type": "fake_t2v", "prompt": ""},
+        "viggle needs a video and a frame": {"model_type": "viggle_animate"},
+    }
+    recorded = {}
+    for case, body in cases.items():
+        if case == "the video must be readable":
+            _install_recast_decord(monkeypatch, fail="unreadable clip")
+        elif case == "704p below 16 GB":
+            _install_recast_decord(monkeypatch)
+            monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 8.0})
+        elif case == "the default model is the dedicated recast model":
+            monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
+            _install_recast_decord(monkeypatch)
+        response = _post(server, "/api/v1/recast", body)
+        recorded[case] = {"status": response.status_code, "body": server.normalise(_answer(response))}
+    recorded["jobs created"] = len(set(launch._jobs) - before)
+    golden.check("recast rejections", 200, recorded)
+
+
+def test_recast_legacy_job_reaches_the_fake_engine(rig, golden, monkeypatch) -> None:
+    """A legacy single-reference Recast. Stubs stand in for SAM and the reference crops.
+
+    The HTTP body is what the handler returns before detection mutates the params. The job
+    observation is what the worker and the fake engine left after detection.
+    """
+    _refuse_remote_network(monkeypatch)
+    _install_recast_decord(monkeypatch)
+    _stub_magic_mask(monkeypatch, _paint_keyword_mask)
+    _stub_recast_preparation(monkeypatch)
+    rig.patch("_ensure_managed_loras_present", lambda *_args, **_kwargs: [])
+    video, reference = _recast_files(rig.server)
+    body = {
+        "video_path": str(video),
+        "ref_image_path": str(reference),
+        "model_type": "fake_t2v",
+        "prompt": "a calm lake",
+        "seed": 7,
+        "resolution_profile": "512p",
+        "num_inference_steps": 99,
+        "guidance_scale": 99,
+    }
+    with _hold_recast_detection(monkeypatch) as release:
+        status, answer = _submit(rig, "/api/v1/recast", body)
+        assert status == 200, answer
+        _finish_held_recast(release)
+    job = _job(rig, answer["job_id"])
+    assert job["engine_calls"], "the recast worker never called the fake engine"
+    assert job["status"]["status"] != "failed", job["status"]
+    rig.check(golden, "recast legacy job", {"status": status, "answer": answer, "job": job})
+
+
+def test_recast_stops_when_the_mask_finds_nobody(rig, golden, monkeypatch) -> None:
+    _refuse_remote_network(monkeypatch)
+    _install_recast_decord(monkeypatch)
+    _stub_magic_mask(monkeypatch, _empty_keyword_mask)
+    _stub_recast_preparation(monkeypatch)
+    rig.patch("_ensure_managed_loras_present", lambda *_args, **_kwargs: [])
+    video, reference = _recast_files(rig.server)
+    body = {
+        "video_path": str(video),
+        "ref_image_path": str(reference),
+        "model_type": "fake_t2v",
+        "prompt": "a calm lake",
+        "seed": 7,
+    }
+    with _hold_recast_detection(monkeypatch) as release:
+        status, answer = _submit(rig, "/api/v1/recast", body)
+        assert status == 200, answer
+        _finish_held_recast(release)
+    job = _job(rig, answer["job_id"])
+    assert job["engine_calls"] == []
+    rig.check(golden, "recast finds nobody", {"status": status, "answer": answer, "job": job})
+
+
+def test_recast_viggle_uses_the_generate_route(rig, golden, monkeypatch) -> None:
+    """Viggle is not a Recast worker. A bad request stops first; a stubbed prepare is an ordinary generate."""
+    _refuse_remote_network(monkeypatch)
+    from services import wangp_submission
+
+    rejected = _post(rig.server, "/api/v1/recast", {"model_type": "viggle_animate"})
+    monkeypatch.setattr(wangp_submission, "prepare_viggle_recast", lambda *_args, **_kwargs: dict(BODY))
+    since = len(rig.engine.calls)
+    status, answer = _submit(rig, "/api/v1/recast", {"model_type": "viggle_animate"})
+    assert status == 200, answer
+    _join(_live_threads(_GENERATE_THREAD))
+    job = _job(rig, answer["job_id"], since)
+    assert job["engine_calls"], "viggle recast never reached the fake engine"
+    rig.check(golden, "recast viggle", {
+        "rejected": {"status": rejected.status_code, "body": rejected.json()},
+        "accepted": {"status": status, "answer": answer, "job": job},
+    })
+
+
+def test_openapi_text_of_the_recast_routes(server, golden) -> None:
+    spec = server.client.get("/openapi.json").json()
+    snapshot = {}
+    for path in ("/api/v1/recast/preview", "/api/v1/recast"):
+        operations = spec["paths"][path]
+        for method, operation in operations.items():
+            snapshot[f"{method.upper()} {path}"] = {
+                "operationId": operation.get("operationId"),
+                "summary": operation.get("summary"),
+                "description": operation.get("description"),
+                "parameters": operation.get("parameters", []),
+            }
+    golden.check("recast openapi", 200, snapshot)
+
+
+# -- Recast: the blocks the first goldens did not reach (C8b review) -------------------------------------------------
+# Recorded on the tree where the handler still lived in launch (5367e7efe plus the goldens above). SAM, the reference
+# crops, the cast and bystander references, the shot manifest and the shot runner are recorders: each keeps what the
+# handler handed it (a frame or a mask as its shape, first value and sum), so a golden pins the handler's choices and
+# not only its HTTP answer. The jobs then run on the C0 fake engine.
+
+_RECAST_SCAIL = {
+    "scail2_14B_recast_fast": {
+        "name": "SCAIL-2 Recast Fast", "URLs": [], "fps": 16,
+        "frames_minimum": 5, "frames_steps": 4, "latent_size": 4,
+    },
+    "scail2_14B": {
+        "name": "SCAIL-2 HQ", "URLs": [], "fps": 16,
+        "frames_minimum": 5, "frames_steps": 4, "latent_size": 4,
+    },
+}
+
+
+def _install_recast_scail(rig) -> None:
+    real = rig.server.wgp.get_model_def
+    rig.set_wgp("get_model_def", lambda model_type: _RECAST_SCAIL.get(model_type) or real(model_type))
+
+
+def _recast_normalised(value, *patterns: tuple[str, str]):
+    text = json.dumps(value, default=str)
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text)
+    return json.loads(text)
+
+
+def _recast_facts(value):
+    """JSON facts of what the handler handed a stub: arrays as shape, first value and sum; callables by kind."""
+    import numpy
+
+    if isinstance(value, numpy.ndarray):
+        flat = value.reshape(-1)
+        return {"shape": list(value.shape), "first": int(flat[0]) if flat.size else None, "sum": int(value.sum())}
+    if isinstance(value, dict):
+        return {str(key): _recast_facts(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_recast_facts(item) for item in value]
+    if callable(value):
+        return "<callable>"
+    return value
+
+
+def _paint_people(count: int):
+    """A keyword mask with ``count`` people, one Recast palette color each, side by side."""
+
+    def paint(frames, *_args, **_kwargs):
+        import numpy
+
+        from services.recast_masks import _RECAST_MASK_COLORS
+
+        mask = numpy.zeros(numpy.asarray(frames).shape, dtype="uint8")
+        width = mask.shape[-2]
+        for index in range(count):
+            mask[..., index * width // count:(index + 1) * width // count, :] = _RECAST_MASK_COLORS[index]
+        return mask
+
+    return paint
+
+
+class _RecastStubs:
+    """Recorders for the collaborators the Recast handler calls after it has answered.
+
+    ``shots``, ``segments``, ``common``, ``timeline_aware`` and ``tracking_fps`` shape the mapped tracking;
+    ``bystanders`` is the probe's answer; ``native`` is how the bystander pass ends ("group", "none", "error",
+    "cancel"); ``manifest`` is how the shot manifest ends ("ok", "error", "cancel"); ``on_tracking`` runs inside the
+    mapped tracking (a cancel); ``tracking_progress`` and ``native_progress`` are the progress reports each pass makes.
+    """
+
+    def __init__(self, rig, monkeypatch, *, people: int = 1, shots: int = 1, segments: int | None = None,
+                 common: int | None = 0, timeline_aware: bool = False, bystanders: bool = False,
+                 native: str = "group", manifest: str = "ok", face_details: int = 0, on_tracking=None,
+                 tracking_fps: float = 8.0, tracking_progress=None, native_progress=None) -> None:
+        import numpy
+        import shared.magic_mask as magic_mask
+
+        self.rig, self.calls = rig, []
+        self.on_tracking = on_tracking
+        uploads = rig.server.root / "uploads"
+        uploads.mkdir(parents=True, exist_ok=True)
+        frames = [numpy.full((64, 96, 3), index, dtype="uint8") for index in range(17)]
+        masks = [numpy.full((64, 96, 3), 100 + index, dtype="uint8") for index in range(17)]
+        bounds = [[0, 17]] if shots == 1 else [[0, 9], [9, 17]]
+        count = people
+
+        def record(name, *args, **kwargs):
+            # One line per call in the golden: the name, then what the handler passed.
+            self.calls.append(json.dumps([name, _recast_facts(list(args)), _recast_facts(kwargs)], sort_keys=True,
+                                         default=str))
+
+        def keyword_masks(frames_in, target, **kwargs):
+            record("generate_keyword_masks", target, **kwargs)
+            return _paint_people(count)(frames_in)
+
+        def video_mask(video_path, target, output_dir=None, **kwargs):
+            record("generate_video_mask", Path(video_path).name, target, **kwargs)
+            path = Path(output_dir) / "recast-mask.mp4"
+            path.write_bytes(b"mask")
+            return str(path), None
+
+        monkeypatch.setattr(magic_mask, "generate_keyword_masks", keyword_masks)
+        monkeypatch.setattr(magic_mask, "generate_video_mask", video_mask)
+
+        def character_mask(video_path, mappings, output_dir, progress_callback=None, abort_callback=None):
+            record("_build_recast_character_mask", Path(video_path).name, [m["id"] for m in mappings], output_dir)
+            total = len(mappings)
+            for mapping_index, done, of in tracking_progress or (
+                (0, 0, 10), (0, 0, 10), (0, 5, 10), (total - 1, 5, 10), (total - 1, 10, 10),
+            ):
+                progress_callback(mapping_index, total, done, of)
+            if self.on_tracking:
+                self.on_tracking(self)
+            abort_callback()
+            path = Path(output_dir) / "mapped-mask.mp4"
+            path.write_bytes(b"mask")
+            return {
+                "fps": tracking_fps, "mapping_masks": ["<mapping masks>"], "shot_ranges": bounds, "shot_count": shots,
+                "common_frame_index": common, "scene_anchor_index": 4, "source_frames": frames, "mask_frames": masks,
+                "mapping_summaries": [{"id": m["id"], "anchor_frame_index": 2 + index} for index, m in
+                                      enumerate(mappings)],
+                "recovered_shots": [{"shot_index": 1, "mapping_id": mappings[0]["id"]}],
+                "timeline_aware": timeline_aware, "video_mask": str(path),
+            }
+
+        def plan(mapping_masks, shot_ranges, **kwargs):
+            record("_plan_recast_shot_segments", mapping_masks, shot_ranges, **kwargs)
+            return [{"segment": index} for index in range(segments if segments is not None else shots)]
+
+        def probe(frame, mask, person_count):
+            record("_recast_probe_needs_bystander_tracking", frame, mask, person_count)
+            return bystanders
+
+        def prepare(mappings, mask, output_dir, job_id, **kwargs):
+            record("_prepare_recast_reference_conditioning", [m["id"] for m in mappings], mask, output_dir, job_id,
+                   **kwargs)
+            reference = mappings[0]["ref_image_path"]
+            return {
+                "image_refs": [m["ref_image_path"] for m in mappings], "primary_mask": reference,
+                "additional_masks": [f"mask-{m['id']}" for m in mappings[1:]],
+                "expected_colors": [[0, 0, 255]] * len(mappings), "clip_identity_ref": reference,
+                "auto_face_detail_refs": [f"face-{index}" for index in range(face_details)],
+                "reference_canvas": [96, 64], "primary_target_refs": [reference], "previews": [],
+            }
+
+        def cast_reference(prepared, output_dir, job_id, person_count, **kwargs):
+            record("_build_recast_target_group_reference", sorted(prepared), output_dir, job_id, person_count,
+                   **kwargs)
+            return {"image": f"{output_dir}/cast.png", "mask": f"{output_dir}/cast-mask.png", "mode": "shared_frame"}
+
+        def native_people(video_path, mask_path, person_count, output_dir, job_id, **kwargs):
+            record("_build_recast_native_people_conditioning", Path(video_path).name, Path(mask_path).name,
+                   person_count, output_dir, job_id, **kwargs)
+            progress = kwargs["progress_callback"]
+            if native == "cancel":
+                rig.cancel(job_id)
+            for done, of in native_progress or ((0, 4), (0, 4), (2, 4), (4, 4)):
+                progress(done, of)
+            if native == "error":
+                raise RuntimeError("ambiguous people")
+            if native == "none":
+                return {"reference_image": None, "assignments": []}
+            return {
+                "reference_image": f"{output_dir}/group.png", "reference_mask": f"{output_dir}/group-mask.png",
+                "video_mask": f"{output_dir}/group-mask.mp4", "conditioning_count": person_count + 2,
+                "assignments": [{"track": 1}, {"track": 2}],
+            }
+
+        def scene(params, frame, mask, person_count, output_dir, job_id):
+            record("_enable_recast_dynamic_source_scene_reference", sorted(params), frame, mask, person_count,
+                   output_dir, job_id)
+            return {"hidden_fraction": 0.25, "expansion_pixels": 12}
+
+        def shot_manifest(params, tracking, prepared, temp_dir, job_id, **kwargs):
+            record("_build_recast_shot_manifest", sorted(params), sorted(tracking), sorted(prepared),
+                   Path(temp_dir).name, job_id, **kwargs)
+            if manifest == "error":
+                raise RuntimeError("manifest broke")
+            if manifest == "cancel":
+                rig.cancel(job_id)
+            return {
+                "tasks": [{"prompt": "shot one"}], "shots": [{"mode": "generate"}, {"mode": "passthrough"}],
+                "published_shots": [{"index": 0}, {"index": 1}], "frame_count": 17, "fps": 8.0,
+                "camera_shot_count": shots, "cast_transition_count": max(0, (segments or shots) - shots),
+            }
+
+        def shot_run(job_id):
+            from services.job_lifecycle import finish_job, try_start
+
+            job = rig.launch._jobs[job_id]
+            record("_run_recast_shot_generation", job_id, Path(job["out_dir"]).name,
+                   sorted(key for key in job["params"] if key.startswith("_")))
+            if try_start(job, phase="Joining shots", message="Joining shots..."):
+                finish_job(job, "completed", message="Shots joined")
+
+        shot_folder = rig.server.root / "shot-tmp"
+
+        def mkdtemp(prefix="tmp", **_kwargs):
+            rig.recast_folders = getattr(rig, "recast_folders", 0) + 1
+            folder = shot_folder / f"{prefix}{rig.recast_folders}"
+            folder.mkdir(parents=True)
+            return str(folder)
+
+        import tempfile
+
+        monkeypatch.setattr(tempfile, "mkdtemp", mkdtemp)
+        for name, value in (
+            ("_build_recast_character_mask", character_mask), ("_plan_recast_shot_segments", plan),
+            ("_recast_probe_needs_bystander_tracking", probe), ("_prepare_recast_reference_conditioning", prepare),
+            ("_build_recast_target_group_reference", cast_reference),
+            ("_build_recast_native_people_conditioning", native_people),
+            ("_enable_recast_dynamic_source_scene_reference", scene), ("_build_recast_shot_manifest", shot_manifest),
+            ("_run_recast_shot_generation", shot_run),
+        ):
+            _patch_recast(monkeypatch, name, value)
+        rig.patch("_ensure_managed_loras_present", lambda *_args, **_kwargs: [])
+
+
+def _recast_mappings(rig, count: int) -> list[dict]:
+    uploads = rig.server.root / "uploads"
+    return [
+        {"id": f"cast-{index + 1}", "target": f"person {index + 1}",
+         "ref_image_path": str(media.image(uploads / f"hero-{index + 1}.png"))}
+        for index in range(count)
+    ]
+
+
+def _recast_run(rig, monkeypatch, body: dict, stubs: _RecastStubs) -> dict:
+    """Submit; keep the params the handler built before detection; let detection and the fake engine finish."""
+    since = len(rig.engine.calls)
+    with _hold_recast_detection(monkeypatch) as release:
+        try:
+            status, answer = _submit(rig, "/api/v1/recast", body)
+        except Exception as error:  # the test client re-raises what the server did not turn into an answer
+            return {"server error": f"{type(error).__name__}: {error}", "calls": stubs.calls}
+        if status != 200:
+            return {"status": status, "answer": answer}
+        built = _params(rig, answer["job_id"])
+        _finish_held_recast(release)
+    return {"status": status, "answer": answer, "built": built, "calls": stubs.calls,
+            "job": _recast_job_facts(rig, answer["job_id"], since, built)}
+
+
+def _recast_job_facts(rig, job_id: str, since: int, built: dict | None = None, workspace: str = "default") -> dict:
+    """The C0 observation without what accumulates across cases (files, sidecars, the job list): the status, the
+    transitions, the engine's inputs, the params the worker changed or added after ``built``, what was left held."""
+    observed = rig.observe(job_id, workspace=workspace)
+    final = _params(rig, job_id)
+    params = final
+    if built is not None:
+        params = {key: value for key, value in final.items() if built.get(key, "<absent>") != value}
+        params["<removed>"] = sorted(key for key in built if key not in final)
+    return {
+        "status": observed["status"], "record": observed["record"], "transitions": observed["transitions"],
+        "engine_inputs": [json.dumps(call.get("kwargs"), sort_keys=True, default=str)
+                          for call in observed["engine_calls"][since:]], "params": params,
+        "left_behind": observed["left_behind"], "returned": observed["returned"],
+    }
+
+
+def test_recast_answers_by_model_profile_and_option(rig, golden, monkeypatch) -> None:
+    """The HTTP answer and the params the handler builds, by model, resolution profile, VRAM, fps and options."""
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    video, reference = _recast_files(rig.server)
+    loras = rig.server.root / "loras"
+    loras.mkdir(parents=True, exist_ok=True)
+    for name in ("style.safetensors", "scail2_relighting_lora.safetensors"):
+        (loras / name).write_bytes(b"lora")
+    rig.set_wgp("get_lora_dir", lambda *_args, **_kwargs: str(loras))
+    present = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake", "seed": 3}
+    cases = {
+        "fast by default at 480p": ({**present}, 0.0, 8.0),
+        "fast with steps, a fixed guidance and relighting next to a user LoRA": (
+            {**present, "num_inference_steps": 12, "guidance_scale": 9, "use_relighting": True,
+             "activated_loras": ["style.safetensors"], "loras_multipliers": "0.7;0.3"}, 0.0, 8.0),
+        "HQ at 512p from 60 fps with three grouped people and every option flipped": (
+            {**present, "model_type": "scail2_14B", "resolution_profile": "quality", "person_count": 3,
+             "guidance_scale": 7.5, "num_inference_steps": 30, "protect_bystanders": True,
+             "preserve_scene_reference": False, "isolate_reference": False, "auto_face_detail": False,
+             "enhance_prompt": True, "prompt": "Replace the man with a knight", "negative_prompt": "blur"},
+            0.0, 60.0),
+        "704p with 24 GB": ({**present, "resolution_profile": "704p"}, 24.0, 8.0),
+        "704p with unknown VRAM": ({**present, "resolution_profile": "1280x704"}, 0.0, 8.0),
+        "a reference given by a path outside the uploads resolves by its name": (
+            {**present, "ref_image_path": "../../elsewhere/hero.png"}, 0.0, 8.0),
+    }
+    recorded = {}
+    for case, (body, vram, fps) in cases.items():
+        people = int(body.get("person_count") or 1)
+        stubs = _RecastStubs(rig, monkeypatch, people=people)
+        _install_recast_decord(monkeypatch, fps=fps)
+        monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": vram})
+        if body.get("protect_bystanders"):
+            def adaptive(generated, mask, count, folder, progress_callback=None):
+                progress_callback(1, 1)
+                return str(Path(folder) / "adaptive.mp4")
+
+            def locked(source, mask, generated):
+                target = Path(generated).with_name("locked.mp4")
+                shutil.copyfile(generated, target)
+                return str(target)
+
+            rig.patch("_build_recast_adaptive_mask", adaptive)
+            rig.patch("_render_recast_mask_locked_video", locked)
+        recorded[case] = _recast_run(rig, monkeypatch, body, stubs)
+    rig.check(golden, "recast answers by model profile and option", recorded)
+
+
+def test_recast_rejects_what_the_first_goldens_did_not_send(rig, golden, monkeypatch) -> None:
+    """Rejections that need a model the fake engine knows, and requests that resolve no file."""
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch)
+    video, reference = _recast_files(rig.server)
+    before = set(rig.launch._jobs)
+    present = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake"}
+    two = _recast_mappings(rig, 2)
+    cases = {
+        "enhancement off rejects an empty prompt": {**present, "prompt": " ", "enhance_prompt": False},
+        "a video path that climbs out of the workspace and names no file": {
+            **present, "video_path": "../../../no-such-folder/no-such-clip.mp4"},
+        "an edited full frame maps one replacement only": {
+            **present, "character_mappings": [{**two[0], "reference_aligned_to_source": True}, two[1]]},
+        "six mappings": {**present, "character_mappings": [{**two[0], "id": f"m{index}"} for index in range(6)]},
+    }
+    recorded = {}
+    for case, body in cases.items():
+        response = rig.server.client.post("/api/v1/recast", json=body)
+        recorded[case] = {"status": response.status_code, "body": _answer(response)}
+    recorded["jobs created"] = len(set(rig.launch._jobs) - before)
+    rig.check(golden, "recast rejects what the first goldens did not send", recorded)
+
+
+def test_recast_trims_the_source_before_it_reads_it(rig, golden, monkeypatch) -> None:
+    """A trim runs ffmpeg once (recorded, not run) and the trimmed file becomes the guide; a failed or invalid trim
+    keeps the full clip."""
+    import subprocess
+
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch)
+    video, reference = _recast_files(rig.server)
+    commands = []
+    outcome = {"code": 0}
+    real_run = subprocess.run
+
+    def run(cmd, *args, **kwargs):
+        if not (isinstance(cmd, list) and cmd[:2] == ["ffmpeg", "-y"] and "recast_trim_" in str(cmd[-1])):
+            return real_run(cmd, *args, **kwargs)
+        commands.append({"cmd": [Path(part).name if "/" in str(part) else part for part in cmd],
+                         "kwargs": sorted(kwargs)})
+        if outcome["code"] == 0:
+            Path(cmd[-1]).write_bytes(b"trimmed")
+        return SimpleNamespace(returncode=outcome["code"], stderr="trim refused", stdout="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    present = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake", "seed": 3}
+    recorded = {}
+    for case, body, code in (
+        ("a trim", {**present, "start_time": 0.5, "end_time": "1.5"}, 0),
+        ("a trim ffmpeg refuses", {**present, "start_time": 0.5, "end_time": 1.5}, 1),
+        ("a trim too short to cut", {**present, "start_time": 1.0, "end_time": 1.04}, 0),
+        ("trim times that are not numbers", {**present, "start_time": "soon", "end_time": "later"}, 0),
+    ):
+        outcome["code"] = code
+        stubs = _RecastStubs(rig, monkeypatch)
+        result = _recast_run(rig, monkeypatch, body, stubs)
+        recorded[case] = {**result, "ffmpeg": list(commands)}
+        commands.clear()
+    rig.check(golden, "recast trims the source",
+              _recast_normalised(recorded, (r"recast_trim_[0-9a-f]{8}\.mp4", "recast_trim_<ID>.mp4")))
+
+
+def test_recast_maps_characters_in_one_shot(rig, golden, monkeypatch) -> None:
+    """Two explicit mappings that share a frame in one camera shot: timeline tracking, one native cast reference, and
+    each way the bystander pass can end."""
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch)
+    video, _reference = _recast_files(rig.server)
+    mappings = _recast_mappings(rig, 2)
+    body = {"video_path": str(video), "character_mappings": mappings, "prompt": "two knights", "seed": 5}
+    recorded = {}
+    for case, options in (
+        ("bystanders mapped into the native group", {"bystanders": True, "native": "group", "face_details": 2}),
+        ("no bystander survives full tracking", {"bystanders": True, "native": "none"}),
+        ("the bystander pass fails and Recast goes on target-only", {"bystanders": True, "native": "error"}),
+        ("no bystander in the anchor frame", {"bystanders": False}),
+        ("no shared frame: per-character anchors and timeline scene references",
+         {"bystanders": False, "common": None, "timeline_aware": True}),
+    ):
+        stubs = _RecastStubs(rig, monkeypatch, people=2, **options)
+        recorded[case] = _recast_run(rig, monkeypatch, body, stubs)
+    recorded["one mapping"] = _recast_run(
+        rig, monkeypatch, {**body, "character_mappings": mappings[:1]},
+        _RecastStubs(rig, monkeypatch, people=1, bystanders=True, native="group"))
+    rig.check(golden, "recast maps characters in one shot", recorded)
+
+
+def test_recast_hands_shots_and_cast_changes_to_the_shot_runner(rig, golden, monkeypatch) -> None:
+    """Two camera shots, or one shot with a cast change: the shot manifest goes to the shot runner, which gets the
+    private folder; the strict pixel lock is switched off. A manifest that fails removes its folder."""
+    import secrets
+
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch, fps=60.0)
+    monkeypatch.setattr(secrets, "randbelow", lambda bound: 424242)
+    video, _reference = _recast_files(rig.server)
+    mappings = _recast_mappings(rig, 2)
+    body = {"video_path": str(video), "character_mappings": mappings, "prompt": "two knights",
+            "protect_bystanders": True, "seed": 9}
+    frames_and_step = {"fail": False}
+
+    def min_frames_and_step(model_type):
+        if frames_and_step["fail"]:
+            raise KeyError(model_type)
+        return 9, 4, 4
+
+    rig.set_wgp("get_model_min_frames_and_step", min_frames_and_step)
+    recorded = {}
+    for case, request, options in (
+        ("two camera shots", body, {"shots": 2, "segments": 2}),
+        ("one camera shot with a cast change and a random seed", {**body, "seed": -1}, {"shots": 1, "segments": 2}),
+        ("a seed that is not a number", {**body, "seed": "soon"}, {"shots": 2, "segments": 2}),
+        ("the manifest fails", body, {"shots": 2, "segments": 2, "manifest": "error"}),
+    ):
+        frames_and_step["fail"] = options.get("manifest") == "error"
+        stubs = _RecastStubs(rig, monkeypatch, people=2, **options)
+        result = _recast_run(rig, monkeypatch, request, stubs)
+        shot_folder = rig.server.root / "shot-tmp"
+        result["shot folders left"] = sorted(path.name for path in shot_folder.iterdir()) if shot_folder.exists() \
+            else []
+        recorded[case] = result
+    rig.check(golden, "recast hands shots to the shot runner", recorded)
+
+
+def test_recast_stops_when_cancelled_during_detection(rig, golden, monkeypatch) -> None:
+    """A cancel while the mapped characters are tracked, while the bystanders are mapped, or once the shot manifest
+    exists: the handler stops, the job never reaches the engine, and a private shot folder is removed."""
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch)
+    video, _reference = _recast_files(rig.server)
+    mappings = _recast_mappings(rig, 2)
+    body = {"video_path": str(video), "character_mappings": mappings, "prompt": "two knights", "seed": 5}
+
+    def cancel_during_tracking(stubs):
+        stubs.rig.cancel(stubs.rig.job_ids[-1])
+
+    recorded = {}
+    for case, options in (
+        ("during mapped tracking", {"on_tracking": cancel_during_tracking}),
+        ("during the bystander pass", {"bystanders": True, "native": "cancel"}),
+        ("after the shot manifest", {"shots": 2, "segments": 2, "manifest": "cancel"}),
+    ):
+        stubs = _RecastStubs(rig, monkeypatch, people=2, **options)
+        result = _recast_run(rig, monkeypatch, body, stubs)
+        assert result["job"]["engine_inputs"] == [], case
+        shot_folder = rig.server.root / "shot-tmp"
+        result["shot folders left"] = sorted(path.name for path in shot_folder.iterdir()) if shot_folder.exists() \
+            else []
+        recorded[case] = result
+    rig.check(golden, "recast stops when cancelled during detection", recorded)
+
+
+def test_recast_follows_the_execution_mode(rig, golden, monkeypatch) -> None:
+    """Plan mode refuses before any job; simulate mode skips SAM and hands the job straight to the generation worker,
+    in the test workspace only."""
+    from services import execution_mode
+
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch)
+    video, reference = _recast_files(rig.server)
+    stubs = _RecastStubs(rig, monkeypatch)
+    body = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake", "seed": 3}
+    workspace = execution_mode.POLICY.workspace
+    recorded = {}
+    for case, mode, request in (
+        ("plan mode", "plan", {**body, "workspace": workspace}),
+        ("simulate mode in the default workspace", "simulate", body),
+        ("simulate mode in the test workspace", "simulate", {**body, "workspace": workspace}),
+    ):
+        monkeypatch.setattr(execution_mode, "POLICY", _replace(execution_mode.POLICY, mode=mode, step_delay=0.0))
+        since = len(rig.engine.calls)
+        status, answer = _submit(rig, "/api/v1/recast", request)
+        recorded[case] = {"status": status, "answer": answer}
+        if status == 200:
+            _join_edit_workers()
+            recorded[case]["job"] = _recast_job_facts(rig, answer["job_id"], since,
+                                                      workspace=request.get("workspace", "default"))
+    recorded["calls"] = stubs.calls
+    rig.check(golden, "recast follows the execution mode", recorded)
+
+
+# -- Recast: what the mutation run of the C8b review showed no case pinned ------------------------------------------
+# Recorded on the tree where both handlers still lived in launch, like the cases above. Each case is named after the
+# behaviour it pins; together they make every mutation that survived the cases above fail.
+
+
+def test_recast_edges_the_first_cases_let_through(rig, golden, monkeypatch) -> None:
+    """A short trim is still cut; two people asked and one found stops the job; a cast change is held for 0.2 s of
+    the tracked clip; progress is reported every 5%; a cancel during tracking ends quietly (no traceback)."""
+    import subprocess
+    import traceback
+
+    _refuse_remote_network(monkeypatch)
+    _install_recast_scail(rig)
+    _install_recast_decord(monkeypatch)
+    video, reference = _recast_files(rig.server)
+    commands = []
+    real_run = subprocess.run
+
+    def run(cmd, *args, **kwargs):
+        if not (isinstance(cmd, list) and cmd[:2] == ["ffmpeg", "-y"] and "recast_trim_" in str(cmd[-1])):
+            return real_run(cmd, *args, **kwargs)
+        commands.append([Path(part).name if "/" in str(part) else part for part in cmd])
+        Path(cmd[-1]).write_bytes(b"trimmed")
+        return SimpleNamespace(returncode=0, stderr="", stdout="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    tracebacks = []
+    real_print_exc = traceback.print_exc
+
+    def print_exc(*args, **kwargs):
+        tracebacks.append("print_exc")
+        return real_print_exc(*args, **kwargs)
+
+    monkeypatch.setattr(traceback, "print_exc", print_exc)
+    mappings = _recast_mappings(rig, 2)
+    present = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake", "seed": 3}
+    mapped = {"video_path": str(video), "character_mappings": mappings, "prompt": "two knights", "seed": 5}
+
+    def cancel_during_tracking(stubs):
+        stubs.rig.cancel(stubs.rig.job_ids[-1])
+
+    recorded = {}
+    for case, body, options in (
+        ("a 0.1 s trim is cut", {**present, "start_time": 0.5, "end_time": 0.6}, {}),
+        ("two people asked and one found", {**present, "person_count": 2}, {"people": 1}),
+        ("a cast change in a 40 fps tracking is held for eight frames", mapped,
+         {"people": 2, "segments": 2, "tracking_fps": 40.0}),
+        ("tracking and bystander progress every 5%", mapped,
+         {"people": 2, "bystanders": True, "native": "group",
+          "tracking_progress": ((0, 0, 20), (0, 2, 20), (0, 3, 20), (0, 4, 20), (1, 20, 20)),
+          "native_progress": ((0, 20), (1, 20), (2, 20), (3, 20), (20, 20))}),
+        ("a cancel during tracking prints no traceback", mapped,
+         {"people": 2, "on_tracking": cancel_during_tracking}),
+    ):
+        stubs = _RecastStubs(rig, monkeypatch, **options)
+        tracebacks.clear()
+        result = _recast_run(rig, monkeypatch, body, stubs)
+        recorded[case] = {**result, "ffmpeg": list(commands), "tracebacks": len(tracebacks)}
+        commands.clear()
+    rig.check(golden, "recast edges the first cases let through",
+              _recast_normalised(recorded, (r"recast_trim_[0-9a-f]{8}\.mp4", "recast_trim_<ID>.mp4")))
+
+
+def test_recast_preview_edges_the_first_cases_let_through(server, golden, monkeypatch) -> None:
+    """The preview's own choices: the colour each mapping is tracked in, the overlay it draws, the anchors and the
+    defaults it hands reference preparation, a timeline whose end equals its start, and no reference preview when
+    nobody was found."""
+    import hashlib
+
+    import numpy
+    import shared.magic_mask as magic_mask
+    from PIL import Image
+
+    _refuse_remote_network(monkeypatch)
+    _install_recast_decord(monkeypatch)
+    video, reference = _recast_files(server)
+    uploads = server.root / "uploads"
+    second = media.image(uploads / "villain.png")
+    calls = []
+    # Where each target is found: the left half of the frame, or the right half.
+    found_targets = {"person": slice(0, 48), "the knight": slice(48, 96)}
+
+    def keyword_masks(frames, target, **kwargs):
+        palette = [list(color) for color in kwargs.get("color_palette") or []]
+        calls.append(["generate_keyword_masks", target, palette, kwargs.get("max_colored_objects"),
+                      len(kwargs.get("tracking_segments") or []), list(numpy.asarray(frames).shape)])
+        mask = numpy.zeros(numpy.asarray(frames).shape, dtype="uint8")
+        if target in found_targets:
+            mask[..., :, found_targets[target], :] = palette[0]
+        return mask
+
+    def prepare(mappings, mask, folder, job_id, **kwargs):
+        calls.append(["_prepare_recast_reference_conditioning", [Path(m["ref_image_path"]).name for m in mappings],
+                      _recast_facts(mask), Path(folder).name.startswith("maestro-recast-preview-"), job_id,
+                      _recast_facts(kwargs)])
+        return {"previews": [{"kind": "primary", "mappings": len(mappings)}]}
+
+    real_fromarray = Image.fromarray
+
+    def fromarray(array, *args, **kwargs):
+        raw = numpy.ascontiguousarray(array)
+        calls.append(["Image.fromarray", list(raw.shape), str(raw.dtype), hashlib.sha256(raw.tobytes()).hexdigest(),
+                      raw.reshape(-1)[:6].tolist()])
+        return real_fromarray(array, *args, **kwargs)
+
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", keyword_masks)
+    monkeypatch.setattr(Image, "fromarray", fromarray)
+    _patch_recast(monkeypatch, "_prepare_recast_reference_conditioning", prepare)
+    recorded = {}
+    for case, body in (
+        ("one person with a reference, defaults", {"video_path": str(video), "target": "person",
+                                                   "ref_image_path": str(reference)}),
+        ("a reference and nobody found", {"video_path": str(video), "target": "nobody",
+                                          "ref_image_path": str(reference)}),
+        ("a timeline whose end equals its start", {"video_path": str(video), "target": "person", "time": 1.0,
+                                                    "end_time": 1.0}),
+        ("two mappings, both found, with references", {"video_path": str(video), "character_mappings": [
+            {"target": "person", "ref_image_path": str(reference)},
+            {"target": "the knight", "ref_image_path": str(second)}]}),
+        ("two mappings, one found", {"video_path": str(video), "character_mappings": [
+            {"target": "person"}, {"target": "the villain"}]}),
+    ):
+        calls.clear()
+        response = server.client.post("/api/v1/recast/preview", json=body)
+        recorded[case] = {"status": response.status_code, "body": _jpeg_shape(server.normalise(_answer(response))),
+                          "calls": [json.dumps(call, sort_keys=True, default=str) for call in calls]}
+    golden.check("recast preview edges the first cases let through", 200, server.normalise(recorded))
+
+
+def test_a_rig_patch_reaches_the_recast_routes(rig) -> None:
+    """``Rig.patch`` writes a stub on every module that reads the name, the two Recast route modules included."""
+    import importlib
+
+    def stub(*_args, **_kwargs):
+        return None
+
+    endpoint = importlib.import_module("services.recast_endpoint")
+    preview = importlib.import_module("services.recast_preview")
+    rig.patch("_prepare_recast_reference_conditioning", stub)
+    assert endpoint._prepare_recast_reference_conditioning is stub
+    assert preview._prepare_recast_reference_conditioning is stub
+    rig.patch("_coordinated_generation_slot", stub)
+    assert endpoint._coordinated_generation_slot is stub
