@@ -456,6 +456,95 @@ class MoveAwareRatchetTests(unittest.TestCase):
             "not a verified move: brand_new (31) is not in the base"
         ])
 
+    def test_a_nested_piece_is_credited_to_the_def_it_was_carved_from(self):
+        # A nested def never counts towards the function it is defined in. Pieces carved out of
+        # `outer.can_merge` are measured against `outer.can_merge`, never against `outer`, although
+        # `outer`'s last name part is longer.
+        outer = "_coalesce_h3_dialogue_shots"
+
+        def ifs(prefix, count, pad="    "):
+            return "".join(f"{pad}if body.get('{prefix}{j}'):\n{pad}    value += {j}\n" for j in range(count))
+
+        def coalesce(can_merge, *, own=20, siblings=""):
+            inner = "def can_merge(body, value=0):\n" + can_merge + "    return value\n" + siblings
+            return f"def {outer}(body, value=0):\n" + ifs("o", own) + textwrap.indent(inner, "    ") + "    return value\n"
+
+        blocks = [ifs(f"s{k}_", 15) for k in range(6)]
+        base = {LAUNCH: launch_with(coalesce(ifs("c", 15) + "".join(blocks)))}
+
+        def calls(prefix):
+            return "".join(f"    value = {prefix}stage{k}(body, value)\n" for k in range(6))
+
+        siblings = "".join(f"\ndef can_merge_stage{k}(body, value):\n{block}    return value\n" for k, block in enumerate(blocks))
+        nested = "".join(
+            textwrap.indent(f"def stage{k}(body, value):\n{block}    return value\n", "    ") for k, block in enumerate(blocks)
+        )
+
+        def note(piece):
+            return (
+                "split: " + ", ".join(f"{outer}.{piece}{k} (16)" for k in range(6))
+                + f" carved out of {outer}.can_merge (106 -> 16); not counted against the complex-function budget"
+            )
+
+        # Sibling pieces in the same enclosing function.
+        warnings, failures, _, _ = run(base, {LAUNCH: launch_with(
+            coalesce(ifs("c", 15) + calls("can_merge_"), siblings=siblings),
+        )})
+        self.assertNoFailures(failures)
+        self.assertIn(note("can_merge_stage"), warnings)
+        # Pieces nested in the def they came from.
+        warnings, failures, _, _ = run(base, {LAUNCH: launch_with(coalesce(ifs("c", 15) + nested + calls("")))})
+        self.assertNoFailures(failures)
+        self.assertIn(note("can_merge.stage"), warnings)
+        # The enclosing function's drop does not pay for them: `outer` sheds 90 decisions of its own,
+        # new pieces next to an untouched `can_merge` add 90.
+        fresh = "".join(
+            f"\ndef can_merge_new{k}(body, value):\n" + ifs(f"n{k}_", 15) + "    return value\n" for k in range(6)
+        )
+        warnings, failures, _, _ = run(
+            {LAUNCH: launch_with(coalesce(ifs("c", 15) + "".join(blocks), own=110))},
+            {LAUNCH: launch_with(coalesce(ifs("c", 15) + "".join(blocks), own=20, siblings=fresh))},
+        )
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
+        self.assertTrue(any(
+            f"named after {outer}.can_merge, but {outer}.can_merge dropped 0 (106 -> 106)" in item for item in warnings
+        ), warnings)
+
+    def test_when_last_name_parts_tie_the_parent_in_the_piece_s_own_scope_wins(self):
+        # The longer qualified name used to win, so these genuine splits were measured against a
+        # function in another scope that kept its complexity.
+        note = (
+            "split: " + ", ".join(f"_run_generation_stage{k} (16)" for k in range(6))
+            + " carved out of _run_generation (106 -> 16); not counted against the complex-function budget"
+        )
+        runner = "class Runner:\n" + textwrap.indent(branchy("run_generation", 20, start=7000), "    ")
+        base, changed = split_case(own_before=15, own_after=15, pieces=6)
+        base[LAUNCH] += "\n\n" + runner
+        changed[LAUNCH] += "\n\n" + runner
+        warnings, failures, _, _ = run(base, changed)
+        self.assertNoFailures(failures)
+        self.assertIn(note, warnings)
+        # Methods: `ComicMoviePlanner.plan` comes first in the records and has a name as long.
+        comic = "class ComicMoviePlanner:\n" + textwrap.indent(branchy("plan", 30, start=8000), "    ")
+        blocks = ["".join(f"    if body.get('s{k}_{j}'):\n        value += {j}\n" for j in range(15)) for k in range(6)]
+        own = "".join(f"    if body.get('own{j}'):\n        value += 1\n" for j in range(15))
+        before = "def plan(self, body, value=0):\n" + own + "".join(blocks) + "    return value\n"
+        after = (
+            "def plan(self, body, value=0):\n" + own
+            + "".join(f"    value = self.plan_stage{k}(body, value)\n" for k in range(6)) + "    return value\n"
+            + "".join(f"\ndef plan_stage{k}(self, body, value):\n{block}    return value\n" for k, block in enumerate(blocks))
+        )
+        warnings, failures, _, _ = run(
+            {LAUNCH: launch_with(comic, "class MusicVideoPlanner:\n" + textwrap.indent(before, "    "))},
+            {LAUNCH: launch_with(comic, "class MusicVideoPlanner:\n" + textwrap.indent(after, "    "))},
+        )
+        self.assertNoFailures(failures)
+        self.assertIn(
+            "split: " + ", ".join(f"MusicVideoPlanner.plan_stage{k} (16)" for k in range(6))
+            + " carved out of MusicVideoPlanner.plan (106 -> 16); not counted against the complex-function budget",
+            warnings,
+        )
+
     def test_split_credit_needs_a_change_that_adds_no_logic(self):
         # Laundering: the parent sheds its 120 decisions into helpers under 15
         # (no rule counts those), and the "pieces" named after it hold brand-new
