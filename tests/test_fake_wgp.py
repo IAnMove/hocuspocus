@@ -17,7 +17,7 @@ import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
-from tests.support.fake_wgp import APP_DIR, catalog_attributes, make_fake_wgp
+from tests.support.fake_wgp import APP_DIR, FakeEngine, catalog_attributes, generation_attributes, make_fake_wgp
 
 WGP = APP_DIR / "wgp.py"
 # Attributes the fake keeps as a namespace, and the real module they stand for.
@@ -95,6 +95,7 @@ def _fake_attributes(tmp_path: Path) -> dict[str, object]:
     fake = make_fake_wgp(tmp_path)
     attributes = {name: value for name, value in vars(fake).items() if not name.startswith("__")}
     attributes.update(catalog_attributes())
+    attributes.update(generation_attributes(FakeEngine(), fake))
     return attributes
 
 
@@ -180,3 +181,27 @@ def test_the_drift_check_follows_a_function_wgp_imports_from_another_module() ->
     problems = _drift("renamed", reshaped, names, "wgp")
     assert any("parameter 0 is 'name', wgp names it 'file_name'" in item for item in problems)
     assert _drift("library", reshaped, names, "wgp") == []
+
+
+def test_the_fake_engine_parses_a_manifest_and_records_what_it_is_asked_to_generate(tmp_path) -> None:
+    fake = make_fake_wgp(tmp_path)
+    engine = FakeEngine()
+    for name, value in {**catalog_attributes(), **generation_attributes(engine, fake)}.items():
+        setattr(fake, name, value)
+    state = {"gen": {}}
+    manifest = [{"id": 1, "params": {"model_type": "fake_t2v", "prompt": "a lake", "seed": 5}},
+                {"id": 7, "params": {"model_type": "no_such_model", "prompt": "skipped"}}, "not a task"]
+    queue, error = fake._parse_task_manifest(manifest, state, str(tmp_path))
+    assert error is None
+    assert [task["id"] for task in queue] == [1] and queue[0]["params"]["state"] is state
+    assert fake.task_id == 2
+    sent = []
+    assert fake.generate_video(queue[0], lambda command, data: sent.append(command), plugin_data={}) is True
+    gen = state["gen"]
+    assert sent == ["status", "progress", "progress", "info"]
+    assert [Path(path).name for path in gen["file_list"]] == ["2026-01-02-03h04m05s_seed5_a_lake.mp4"]
+    assert engine.calls[0]["task_id"] == 1 and "state" not in engine.calls[0]["params"]
+    # A call made after the job was aborted does nothing, as in WanGP.
+    gen["abort"] = True
+    assert fake.generate_video(queue[0], lambda command, data: None) is False
+    assert len(gen["file_list"]) == 1
