@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Story Lab planning left the main server file.** Checking a story stage, normalising its ids, and the problem checks now live with the Story Lab schema. Analysing uploaded images, generating one stage, translating lyrics, and starting, reading, resuming and cancelling a Story Lab job are the same routes with the same answers. The job list, the set of jobs that are running, and their lock live in one place, and the main server still uses those same objects. A plan still writes the same checkpoints and still shows up in Activity. The comic page check stays in the main server file. The core server does not plan a Story.
+
 **Director music and character-reference description left the launch module.** Asking for a song, or for a description of character reference images, still answers the same way. An empty description still asks for the images. An empty music request still stops before any track is generated.
 
 **Presets, system settings, and service settings left the launch module.** Saving a preset, changing a memory profile, and reading or updating service settings still answer the same way. An empty update is still refused. The core server keeps its own copies of the settings routes it already served.
