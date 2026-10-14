@@ -150,6 +150,35 @@ def test_system_reads_and_release(server, golden) -> None:
     assert {"rife2", "rife4"} <= {item["value"] for item in processors["processors"]}
 
 
+def test_tools_reject_invalid_input(server, golden) -> None:
+    """Upscale and revoice refuse a bad request before any model work.
+
+    A real upscale or revoice needs a clip and a GPU, so only the validation
+    answers are recorded here.
+    """
+    server.check(
+        golden,
+        "upscale unsupported method",
+        "POST",
+        "/api/v1/tools/upscale",
+        json={"method": "not-a-method"},
+    )
+    server.check(
+        golden,
+        "upscale missing source",
+        "POST",
+        "/api/v1/tools/upscale",
+        json={},
+    )
+    server.check(
+        golden,
+        "revoice missing source",
+        "POST",
+        "/api/v1/tools/revoice",
+        json={},
+    )
+
+
 def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
     """The full server's MCP routes before this step's router edit. Access is off, so POST never reaches a tool."""
     message = {"jsonrpc": "2.0", "id": 1, "method": "ping"}

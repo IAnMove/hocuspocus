@@ -710,6 +710,12 @@
     },
     "status": 200
   },
+  "revoice missing source": {
+    "body": {
+      "detail": "Source format is not supported"
+    },
+    "status": 400
+  },
   "services config": {
     "body": {
       "anthropic_api_key": "",
@@ -789,5 +795,17 @@
       "runtime": "<MASKED>"
     },
     "status": 200
+  },
+  "upscale missing source": {
+    "body": {
+      "detail": "Source format is not supported"
+    },
+    "status": 400
+  },
+  "upscale unsupported method": {
+    "body": {
+      "detail": "Unsupported upscale method"
+    },
+    "status": 400
   }
 }
