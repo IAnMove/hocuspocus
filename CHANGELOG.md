@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**LoRA guide generation left the launch module.** Asking for a guide, starting a scan, and reading a scan that does not exist still answer the same way. Generating a guide still needs a loaded language model. The scan registry stays one object.
+
+**The LoRA library left the launch module.** The directory list, the installed LoRAs, a model's LoRA list and details, deleting a file, and the NSFW override still answer the same way. The update manifest still answers the same way.
+
+**Model visibility, selections, the production profile, the model catalog and model options left the launch module.** Showing or hiding a model, remembering the model chosen for each mode, and saving the production profile still answer the same way, including a list or a mode the server refuses. The catalog, a model's debug view, its defaults, its options, the resolution list, and the download status still answer the same way. Deleting a model that is not installed, or one that is in use, and downloading a model that does not exist, still answer the same way. The visibility write lock and the download map stay one object each. The core server keeps its own copies of these routes.
+
 **Director v2 plan jobs left the main server file.** Planning a v2 production, listing its saved jobs, reading one job, resuming it, and reading plan progress are the same routes with the same answers. A plan still checkpoints the same batches and still shows up in Activity. The set of public model providers is still the main server's set. The core server does not plan a v2 production.
 
 **Director planner and short-film pipeline routes left the main server file.** Classifying sections, planning prompts and images, planning dialogue scenes, planning a short film's prompts, and planning a short film's script are the same routes with the same answers. Starting, continuing, previewing, updating a preview, stopping, and resuming a pipeline are the same routes with the same answers. Editing a clip's prompt, tag, or chosen video, repairing a pipeline, cancelling that repair, rerunning an image, a video, or a segment, rejoining the clips, and deleting a pipeline are the same routes with the same answers. The pipeline is still prepared once, the first time a route needs it, and music generation, a quick-video batch, and the Activity cancel and resume actions call that same function and those same stop and resume routes. The core server does not start, continue, or rerun a pipeline.

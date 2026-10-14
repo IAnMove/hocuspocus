@@ -272,7 +272,7 @@ def test_series_lines_in_a_voxcpm2_voice_send_no_language_mode_and_carry_the_sty
 
 def _runtime_function(name, namespace, *helpers):
     import ast
-    path = ROOT / "app/_launch_runtime.py"
+    path = ROOT / "app/services/model_downloads.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     wanted = {name, *helpers}
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]

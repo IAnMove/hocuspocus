@@ -1,6 +1,7 @@
 """Model catalog over a fake WanGP catalog, and the configuration reads the Settings screen makes."""
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -32,6 +33,313 @@ def test_model_settings_defaults(server, golden) -> None:
     server.check(golden, "model visibility", "GET", "/api/v1/model-visibility")
     server.check(golden, "model selections", "GET", "/api/v1/model-selections")
     server.check(golden, "production profile", "GET", "/api/v1/production-profile")
+
+
+def _keep_config_keys(monkeypatch, config, *keys: str) -> None:
+    """Put each key back after a route that writes ``wgp.server_config``."""
+    for key in keys:
+        monkeypatch.setitem(config, key, config.get(key))
+
+
+def test_model_visibility_and_selections_round_trip(server, golden, monkeypatch) -> None:
+    """Visibility and per-mode selections, including the ids and modes the server refuses.
+
+    Both writes go through the kernel config file. The server fixture points that
+    file at this test's temp folder, and the keys are put back afterwards.
+    """
+    config = server.wgp.server_config
+    _keep_config_keys(
+        monkeypatch,
+        config,
+        "maestro_model_visibility",
+        "maestro_model_selections",
+    )
+    server.check(
+        golden,
+        "visibility save",
+        "PUT",
+        "/api/v1/model-visibility",
+        json={
+            "enabled_models": [" fake_t2v ", "fake_t2v", "fake_i2v"],
+            "initialized_mature_models": [" fake_i2v "],
+            "defaults_version": 3,
+        },
+    )
+    server.check(
+        golden,
+        "visibility not an object",
+        "PUT",
+        "/api/v1/model-visibility",
+        json=["fake_t2v"],
+    )
+    server.check(
+        golden,
+        "visibility ids not a list",
+        "PUT",
+        "/api/v1/model-visibility",
+        json={"enabled_models": "fake_t2v"},
+    )
+    server.check(
+        golden,
+        "visibility id not a string",
+        "PUT",
+        "/api/v1/model-visibility",
+        json={"enabled_models": [123]},
+    )
+    server.check(
+        golden,
+        "selections save",
+        "PUT",
+        "/api/v1/model-selections",
+        json={"selected_models": {"video": " fake_t2v ", "image": "", "audio": "fake_i2v"}},
+    )
+    server.check(
+        golden,
+        "selections not an object",
+        "PUT",
+        "/api/v1/model-selections",
+        json=["video"],
+    )
+    server.check(
+        golden,
+        "selections unknown mode",
+        "PUT",
+        "/api/v1/model-selections",
+        json={"selected_models": {"nope": "fake_t2v"}},
+    )
+    server.check(
+        golden,
+        "selections value not a string",
+        "PUT",
+        "/api/v1/model-selections",
+        json={"selected_models": {"video": 123}},
+    )
+
+
+def test_production_profile_rejects_a_bad_body(server, golden) -> None:
+    """A profile that is not the object the normaliser expects is refused before it is saved."""
+    server.check(
+        golden,
+        "production profile not an object",
+        "PUT",
+        "/api/v1/production-profile",
+        json={"profile": "local"},
+    )
+    server.check(
+        golden,
+        "production profile missing sections",
+        "PUT",
+        "/api/v1/production-profile",
+        json={"profile": {"text": {"provider": "minimax", "model": "MiniMax-M3"}}},
+    )
+
+
+def test_model_options_defaults_resolutions_and_download_errors(catalog, golden, monkeypatch) -> None:
+    """Cheap catalog reads, and the delete/download answers that need no weights.
+
+    A real download, a delete of files that are on disk, and options for an
+    installed WanGP model need the GPU install. Those stay out of this golden.
+    """
+    base_def = catalog.wgp.get_model_def
+
+    def model_def(model_type: str):
+        if model_type == "fake_image":
+            return {
+                "name": "Fake Image",
+                "architecture": "fake_image",
+                "description": "A stills model that exists only in tests.",
+                "image_outputs": True,
+                "fps": 0,
+                "image_prompt_types_allowed": "",
+                "guide_preprocessing": {"selection": ["", "PV"], "default": ""},
+                "sample_solvers": [("UniPC", "unipc"), ("Euler", "euler")],
+                "inpaint_support": True,
+                "native_rgba": True,
+            }
+        return base_def(model_type)
+
+    monkeypatch.setattr(catalog.wgp, "get_model_def", model_def, raising=False)
+
+    def resolution_choices(current_resolution_choice, model_resolutions=None):
+        # The real helper returns (choices, current). The route unpacks that pair.
+        return ([("480p", "832x480"), ("720p", "1280x720")], current_resolution_choice)
+
+    monkeypatch.setattr(catalog.wgp, "get_resolution_choices", resolution_choices, raising=False)
+    monkeypatch.setattr(catalog.wgp, "load_model_definitions", lambda: None, raising=False)
+
+    catalog.check(golden, "options text to video", "GET", "/api/v1/model-options/fake_t2v")
+    catalog.check(golden, "options image to video", "GET", "/api/v1/model-options/fake_i2v")
+    catalog.check(golden, "options image", "GET", "/api/v1/model-options/fake_image")
+    catalog.check(golden, "options unknown", "GET", "/api/v1/model-options/not_a_model")
+    catalog.check(golden, "defaults text to video", "GET", "/api/v1/defaults/fake_t2v")
+    catalog.check(golden, "defaults unknown", "GET", "/api/v1/defaults/not_a_model")
+    catalog.check(golden, "resolutions", "GET", "/api/v1/resolutions")
+    catalog.check(golden, "downloads status", "GET", "/api/v1/models/downloads/status")
+    catalog.check(golden, "active downloads", "GET", "/api/v1/downloads/active")
+    catalog.check(golden, "reload definitions", "POST", "/api/v1/models/reload")
+    catalog.check(golden, "debug text to video", "GET", "/api/v1/models/fake_t2v/debug")
+    catalog.check(golden, "debug unknown", "GET", "/api/v1/models/not_a_model/debug")
+    catalog.check(golden, "delete unknown", "DELETE", "/api/v1/models/not_a_model")
+    catalog.check(golden, "delete nothing on disk", "DELETE", "/api/v1/models/fake_t2v")
+    catalog.check(golden, "download unknown", "POST", "/api/v1/models/not_a_model/download")
+
+    import sys
+
+    launch = sys.modules["_launch_runtime"]
+    launch._jobs["golden-delete"] = {
+        "id": "golden-delete",
+        "status": "running",
+        "params": {"model_type": "fake_i2v"},
+    }
+    try:
+        catalog.check(golden, "delete while generating", "DELETE", "/api/v1/models/fake_i2v")
+    finally:
+        launch._jobs.pop("golden-delete", None)
+
+
+def test_model_preferences_rewrite_the_whole_config_file(server, monkeypatch) -> None:
+    """Visibility, selections and the profile share one writer: the live config, four-space JSON, no temp file left.
+
+    The goldens record the answers; this records what lands on disk and what a refusal leaves alone.
+    """
+    import json
+
+    config = server.wgp.server_config
+    _keep_config_keys(
+        monkeypatch,
+        config,
+        "maestro_model_visibility",
+        "maestro_model_selections",
+        "maestro_production_profile",
+    )
+    monkeypatch.setitem(config, "services", dict(config.get("services") or {}))
+    path = Path(server.wgp.server_config_filename)
+    assert not path.exists()
+
+    def saved() -> tuple[str, dict]:
+        text = path.read_text(encoding="utf-8")
+        return text, json.loads(text)
+
+    def leftovers() -> list[str]:
+        return sorted(item.name for item in path.parent.iterdir() if item.name.endswith(".tmp"))
+
+    response = server.client.put(
+        "/api/v1/model-visibility",
+        json={"enabled_models": [" fake_t2v ", "fake_i2v"], "defaults_version": 2},
+    )
+    assert response.status_code == 200
+    text, document = saved()
+    assert document["maestro_model_visibility"] == {
+        "enabled_models": ["fake_t2v", "fake_i2v"],
+        "initialized_mature_models": [],
+        "defaults_version": 2,
+    }
+    assert text == json.dumps(document, indent=4)
+    assert leftovers() == []
+
+    chosen = {"image": "fake_i2v", "video": "fake_t2v", "audio": "fake_i2v"}
+    response = server.client.put("/api/v1/model-selections", json={"selected_models": chosen})
+    assert response.status_code == 200
+    text, document = saved()
+    assert document["maestro_model_selections"] == chosen
+    assert document["maestro_model_visibility"]["enabled_models"] == ["fake_t2v", "fake_i2v"]
+    assert text == json.dumps(document, indent=4)
+
+    before = path.read_text(encoding="utf-8")
+    too_long = server.client.put("/api/v1/model-visibility", json={"enabled_models": ["x" * 201]})
+    assert (too_long.status_code, too_long.json()["detail"]) == (400, "A model identifier is too long.")
+    crowded = server.client.put(
+        "/api/v1/model-selections",
+        json={"selected_models": {mode: "x" for mode in ("image", "video", "audio", "model3d", "avatar", "sixth")}},
+    )
+    assert (crowded.status_code, crowded.json()["detail"]) == (400, "Too many model selection entries.")
+    assert path.read_text(encoding="utf-8") == before
+
+    profile = server.client.get("/api/v1/production-profile").json()["profile"]
+    profile["text"] = {"provider": "ollama", "model": "llama"}
+    response = server.client.put("/api/v1/production-profile", json={"profile": profile})
+    assert response.status_code == 200
+    text, document = saved()
+    saved_text = document["maestro_production_profile"]["text"]
+    assert (saved_text["provider"], saved_text["model"]) == ("ollama", "llama")
+    # Saving the profile mirrors its text section into the legacy services keys and drops the image and video overrides.
+    assert document["services"]["llm_provider"] == "ollama"
+    assert document["services"]["llm_model_id"] == "llama"
+    assert document["services"]["llm_remote_url"] == "http://127.0.0.1:11434"
+    assert document["maestro_model_selections"] == {"audio": "fake_i2v"}
+    assert text == json.dumps(document, indent=4)
+    assert leftovers() == []
+
+
+def test_a_model_download_runs_in_the_background_and_shows_in_the_status(catalog, monkeypatch) -> None:
+    """The pre-download worker writes the one download map the status route reads, on success and on failure."""
+    import sys
+    import time
+    from types import SimpleNamespace
+
+    wgp = catalog.wgp
+    launch = sys.modules["_launch_runtime"]
+    on_disk: set[str] = set()
+    fetched: list[tuple] = []
+
+    def locate_file(file_name, create_path_if_none=False, error_if_none=True, extra_paths=None):
+        name = os.path.basename(str(file_name))
+        if name in on_disk:
+            return str(catalog.root / name)
+        if error_if_none:
+            raise Exception(f"{name} is not on disk")
+        return None
+
+    def get_model_filename(model_type=None, quantization=None, dtype_policy=None, submodel_no=1, URLs=None, module_type=None):
+        return "" if URLs is not None else f"ckpts/{model_type}.safetensors"
+
+    def download_models(filename, model_type, source_type, submodel_no, force_path=None):
+        fetched.append((os.path.basename(filename), model_type, source_type, submodel_no))
+        on_disk.add(os.path.basename(filename))
+
+    for name, value in {
+        "fl": SimpleNamespace(locate_file=locate_file),
+        "transformer_quantization": "int8",
+        "transformer_dtype_policy": "auto",
+        "text_encoder_quantization": "int8",
+        "get_transformer_dtype": lambda model_type, policy: "bf16",
+        "get_model_filename": get_model_filename,
+        "download_models": download_models,
+        "get_local_model_filename": lambda name, extra_paths=None: locate_file(name, error_if_none=False),
+    }.items():
+        monkeypatch.setattr(wgp, name, value, raising=False)
+
+    def wait_for(model_type: str) -> dict:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            entry = catalog.client.get("/api/v1/models/downloads/status").json()["downloads"].get(model_type)
+            if entry and entry["status"] != "downloading":
+                return entry
+            time.sleep(0.02)
+        raise AssertionError(f"{model_type} never left the downloading state")
+
+    try:
+        started = catalog.client.post("/api/v1/models/fake_t2v/download")
+        assert (started.status_code, started.json()) == (200, {"status": "downloading", "model_type": "fake_t2v"})
+        assert wait_for("fake_t2v") == {"status": "completed", "error": None}
+        assert fetched == [("fake_t2v.safetensors", "fake_t2v", 0, 1)]
+        assert "fake_t2v" in launch._model_downloads
+        listed = {item["model_type"]: item["is_downloaded"] for item in catalog.client.get("/api/v1/models").json()["models"]}
+        assert listed["fake_t2v"] is True and listed["fake_i2v"] is False
+
+        def refuse(filename, model_type, source_type, submodel_no, force_path=None):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(wgp, "download_models", refuse, raising=False)
+        catalog.client.post("/api/v1/models/fake_i2v/download")
+        assert wait_for("fake_i2v") == {"status": "failed", "error": "disk full"}
+        assert catalog.client.get("/api/v1/models/downloads/status").json()["downloads"] == {
+            "fake_t2v": {"status": "completed", "error": None},
+            "fake_i2v": {"status": "failed", "error": "disk full"},
+        }
+    finally:
+        with launch._model_downloads_lock:
+            launch._model_downloads.clear()
 
 
 def test_production_profile_save(server, golden, monkeypatch) -> None:
@@ -222,3 +530,445 @@ def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
     server.check(golden, "mcp alias post disabled", "POST", "/api/v1/wangp/mcp", json=message)
     server.check(golden, "mcp get", "GET", "/api/v1/mcp")
     server.check(golden, "mcp alias get", "GET", "/api/v1/wangp/mcp")
+
+
+def _write_lora_library(root: Path) -> Path:
+    """One weight file, so the unsorted installed walk cannot change order."""
+    wan = root / "wan"
+    wan.mkdir(parents=True)
+    (root / "flux").mkdir()
+    hidden = root / ".hidden"
+    hidden.mkdir()
+    (hidden / "note.txt").write_text("skip\n", encoding="utf-8")
+    (root / "readme.txt").write_text("ignore\n", encoding="utf-8")
+    (wan / "style.safetensors").write_bytes(b"lora-weight")
+    (wan / "style.civitai.json").write_text(
+        json.dumps(
+            {
+                "modelId": 12345,
+                "versionId": 99,
+                "name": "Style LoRA",
+                "baseModel": "Wan Video",
+                "trainedWords": ["styleword"],
+                "nsfw": False,
+                "downloadedAt": "2020-01-02T03:04:05Z",
+                "publishedAt": "2020-01-01T00:00:00Z",
+                "tags": ["cinematic"],
+                "description": "A calm style.",
+                "images": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (wan / "style.guide.md").write_text(
+        "Use the trigger word styleword for a calm look.\n",
+        encoding="utf-8",
+    )
+    return wan
+
+
+@pytest.fixture
+def lora_library(catalog, monkeypatch, tmp_path):
+    """A temp LoRA tree on an absolute root, with the WanGP lookups the list routes need."""
+    root = tmp_path / "lora-root"
+    wan = _write_lora_library(root)
+    config = catalog.wgp.server_config
+    monkeypatch.setitem(config, "loras_root", str(root))
+    monkeypatch.setitem(config, "checkpoints_paths", [str(tmp_path / "primary-ckpts")])
+
+    def get_lora_dir(model_type):
+        if model_type == "not_a_model":
+            raise RuntimeError("unknown model type")
+        return str(wan)
+
+    monkeypatch.setattr(catalog.wgp, "get_lora_dir", get_lora_dir, raising=False)
+    monkeypatch.setattr(catalog.wgp, "get_lora_search_dirs", lambda _model_type: [str(wan)], raising=False)
+    monkeypatch.setattr(
+        catalog.wgp,
+        "resolve_lora_path",
+        lambda _model_type, filename: str(wan / filename),
+        raising=False,
+    )
+    catalog.lora_root = root
+    catalog.lora_wan = wan
+    return catalog
+
+
+def test_lora_library_reads(lora_library, golden) -> None:
+    """Directories, the installed list, and one model's list and details, on a temp tree."""
+    lora_library.check(golden, "lora directories", "GET", "/api/v1/loras/directories")
+    lora_library.check(golden, "loras installed", "GET", "/api/v1/loras/installed")
+    lora_library.check(golden, "loras for model", "GET", "/api/v1/loras/fake_t2v")
+    lora_library.check(golden, "lora details for model", "GET", "/api/v1/loras/fake_t2v/details")
+    lora_library.check(golden, "loras for legacy h3", "GET", "/api/v1/loras/minimax_h3_legacy")
+    lora_library.check(golden, "lora details for legacy h3", "GET", "/api/v1/loras/minimax_h3_legacy/details")
+    lora_library.check(golden, "loras for 3d model", "GET", "/api/v1/loras/hunyuan3d-2mv")
+    lora_library.check(golden, "lora details for 3d model", "GET", "/api/v1/loras/hunyuan3d-2mv/details")
+    lora_library.check(golden, "loras unknown model", "GET", "/api/v1/loras/not_a_real_model")
+    lora_library.check(golden, "lora details unknown model", "GET", "/api/v1/loras/not_a_real_model/details")
+    lora_library.check(golden, "lora update manifest empty", "GET", "/api/v1/loras/update-manifest")
+    lora_library.check(golden, "lora preview invalid name", "GET", "/api/v1/loras/preview/.secret.png")
+    lora_library.check(golden, "lora preview missing", "GET", "/api/v1/loras/preview/no-such.png")
+
+
+def test_lora_delete_validation(lora_library, golden, monkeypatch, tmp_path) -> None:
+    """Delete refuses a bad name, a missing file, a linked copy, and a bundled LoRA."""
+    server = lora_library
+    config = server.wgp.server_config
+    missing_root = str(tmp_path / "no-such-loras")
+    monkeypatch.setitem(config, "loras_root", missing_root)
+    server.check(
+        golden,
+        "lora delete no root",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "style.safetensors"},
+    )
+    monkeypatch.setitem(config, "loras_root", str(server.lora_root))
+    server.check(golden, "lora delete missing params", "DELETE", "/api/v1/loras/file")
+    server.check(
+        golden,
+        "lora delete bad extension",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "readme.txt"},
+    )
+    server.check(
+        golden,
+        "lora delete traversal name",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "../x.safetensors"},
+    )
+    server.check(
+        golden,
+        "lora delete invalid directory",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "..", "filename": "style.safetensors"},
+    )
+    server.check(
+        golden,
+        "lora delete missing file",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "missing.safetensors"},
+    )
+
+    linked = tmp_path / "other-install"
+    linked_wan = linked / "loras" / "wan"
+    linked_wan.mkdir(parents=True)
+    (linked / "ckpts").mkdir()
+    (linked_wan / "linked_only.safetensors").write_bytes(b"linked-weight")
+    monkeypatch.setitem(
+        config,
+        "checkpoints_paths",
+        [str(tmp_path / "primary-ckpts"), str(linked / "ckpts")],
+    )
+    server.check(
+        golden,
+        "lora delete linked copy",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "linked_only.safetensors"},
+    )
+
+    def bundled(model_type, prop="URLs", sub_prop_name=None, return_list=True, stack=()):
+        if prop == "loras":
+            return ["https://example.invalid/weights/style.safetensors"]
+        return []
+
+    monkeypatch.setattr(server.wgp, "get_model_recursive_prop", bundled, raising=False)
+    server.check(
+        golden,
+        "lora delete bundled",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "style.safetensors"},
+    )
+
+    wan = server.lora_wan
+    (wan / "gone.safetensors").write_bytes(b"gone-weight")
+    (wan / "gone.civitai.json").write_text("{}\n", encoding="utf-8")
+    (wan / "gone.guide.md").write_text("gone\n", encoding="utf-8")
+    (wan / "gone_preview1.png").write_bytes(b"png")
+    server.check(
+        golden,
+        "lora delete file",
+        "DELETE",
+        "/api/v1/loras/file",
+        params={"directory": "wan", "filename": "gone.safetensors"},
+    )
+
+
+def test_lora_nsfw_override_validation(lora_library, golden, monkeypatch, tmp_path) -> None:
+    """Override refuses a bad body, then writes and clears the flag on one file."""
+    server = lora_library
+    config = server.wgp.server_config
+    monkeypatch.setitem(config, "loras_root", str(tmp_path / "no-such-loras"))
+    server.check(
+        golden,
+        "lora nsfw override no root",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": True},
+    )
+    monkeypatch.setitem(config, "loras_root", str(server.lora_root))
+    server.check(golden, "lora nsfw override missing filename", "POST", "/api/v1/loras/nsfw-override", json={})
+    server.check(
+        golden,
+        "lora nsfw override bad flag",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": "yes"},
+    )
+    server.check(
+        golden,
+        "lora nsfw override traversal",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "../x.safetensors", "nsfw": True},
+    )
+    server.check(
+        golden,
+        "lora nsfw override missing file",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "missing.safetensors", "nsfw": True},
+    )
+    (server.lora_wan / "plain.safetensors").write_bytes(b"plain-weight")
+    server.check(
+        golden,
+        "lora nsfw override set",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": True},
+    )
+    server.check(
+        golden,
+        "lora nsfw override clear",
+        "POST",
+        "/api/v1/loras/nsfw-override",
+        json={"filename": "plain.safetensors", "nsfw": None},
+    )
+
+
+def test_lora_guide_reads(lora_library, golden) -> None:
+    """A missing scan, a missing guide, and a guide that is already on disk."""
+    lora_library.check(golden, "lora scan missing", "GET", "/api/v1/loras/scan-status/missing-scan")
+    lora_library.check(
+        golden,
+        "lora guide missing",
+        "GET",
+        "/api/v1/loras/fake_t2v/absent.safetensors/guide",
+    )
+    lora_library.check(
+        golden,
+        "lora guide unknown model",
+        "GET",
+        "/api/v1/loras/not_a_model/style.safetensors/guide",
+    )
+    lora_library.check(
+        golden,
+        "lora guide present",
+        "GET",
+        "/api/v1/loras/fake_t2v/style.safetensors/guide",
+    )
+
+
+class _CivitaiReply:
+    """What ``requests.get`` returns for the CivitAI calls the LoRA routes make."""
+
+    def __init__(self, status: int, payload=None) -> None:
+        self.status_code = status
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            import requests
+
+            error = requests.HTTPError(str(self.status_code))
+            error.response = self
+            raise error
+
+
+def _write_update_tree(wan: Path) -> None:
+    """Files with sidecars for every update status, plus one the update check must skip."""
+
+    def lora(name: str, **meta) -> None:
+        (wan / name).write_bytes(b"weights-" + name.encode())
+        sidecar = {"name": name, "baseModel": "Wan Video", "nsfw": False, "downloadedAt": "2020-01-02T03:04:05Z"}
+        sidecar.update(meta)
+        (wan / (os.path.splitext(name)[0] + ".civitai.json")).write_text(json.dumps(sidecar), encoding="utf-8")
+
+    lora("old.safetensors", modelId=111, versionId=5)
+    lora("removed.safetensors", modelId=222, versionId=1)
+    lora("bundle.safetensors", modelId=333, versionId=2)
+    lora("newer_v1.safetensors", modelId=555, versionId=7)
+    lora("newer_v2.safetensors", modelId=555, versionId=8)
+    lora("ltx-2-19b-distilled-lora-384.safetensors", modelId=444, versionId=1)
+
+
+def _civitai_models() -> dict:
+    return {
+        111: _CivitaiReply(200, {"type": "LORA", "modelVersions": [
+            {"id": 6, "publishedAt": "2026-01-02T00:00:00Z", "description": "<p>Fixed <b>hands</b></p>"},
+            {"id": 5, "publishedAt": "2025-01-02T00:00:00Z"},
+        ]}),
+        222: _CivitaiReply(404),
+        333: _CivitaiReply(200, {"type": "Checkpoint", "modelVersions": [{"id": 3, "publishedAt": "2026-02-02T00:00:00Z"}]}),
+        555: _CivitaiReply(200, {"type": "LORA", "modelVersions": [{"id": 9, "publishedAt": "2026-03-03T00:00:00Z"}]}),
+        12345: _CivitaiReply(200, {"type": "LORA", "modelVersions": [{"id": 99, "publishedAt": "2020-01-01T00:00:00Z"}]}),
+    }
+
+
+def _installed_rows(server, golden, case: str) -> None:
+    """The installed list sorted by file name: the walk is unsorted and differs between file systems."""
+    response = server.client.get("/api/v1/loras/installed")
+    rows = sorted(response.json()["loras"], key=lambda row: (row["directory"], row["filename"]))
+    body = {**response.json(), "loras": rows}
+    golden.check(case, response.status_code, server.normalise(body))
+
+
+def test_lora_update_check(lora_library, golden, monkeypatch) -> None:
+    """Check-updates over fake CivitAI answers, the statuses the lists then show, and an offline retry."""
+    import requests
+
+    server = lora_library
+    _write_update_tree(server.lora_wan)
+    asked: list[str] = []
+    models = _civitai_models()
+
+    def fake_get(url, headers=None, timeout=None, **_kwargs):
+        asked.append(url.rsplit("/api/v1/", 1)[-1])
+        model_id = url.rsplit("/", 1)[-1]
+        return models.get(int(model_id), _CivitaiReply(404)) if model_id.isdigit() else _CivitaiReply(404)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+    server.check(golden, "lora update check", "POST", "/api/v1/loras/check-updates")
+    golden.check("lora update requests", 200, sorted(asked))
+    server.check(golden, "lora update check fresh", "POST", "/api/v1/loras/check-updates")
+    asked.clear()
+    server.check(golden, "lora update check forced", "POST", "/api/v1/loras/check-updates", params={"force": "true"})
+    golden.check("lora update requests forced", 200, sorted(asked))
+    manifest = json.loads((server.lora_root / ".lora_update_manifest.json").read_text(encoding="utf-8"))
+    golden.check("lora update manifest file", 200, server.normalise(manifest))
+    _installed_rows(server, golden, "loras installed after update check")
+    server.check(golden, "lora details after update check", "GET", "/api/v1/loras/fake_t2v/details")
+    sidecar = json.loads((server.lora_wan / "old.civitai.json").read_text(encoding="utf-8"))
+    golden.check("lora sidecar published date", 200, server.normalise(sidecar))
+
+    def offline(*_args, **_kwargs):
+        raise requests.ConnectionError("offline")
+
+    monkeypatch.setattr(requests, "get", offline)
+    server.check(golden, "lora update check offline", "POST", "/api/v1/loras/check-updates", params={"force": "true"})
+    manifest = json.loads((server.lora_root / ".lora_update_manifest.json").read_text(encoding="utf-8"))
+    golden.check("lora update manifest after offline", 200, server.normalise(manifest))
+
+
+def _text_files(root: Path) -> dict:
+    """Every guide and sidecar under ``root`` by relative path, for a before and after comparison."""
+    found = {}
+    for path in sorted(root.rglob("*")):
+        if path.is_file() and path.name.endswith((".guide.md", ".civitai.json")):
+            found[path.relative_to(root).as_posix()] = path.read_text(encoding="utf-8")
+    return found
+
+
+def test_lora_guide_generation(lora_library, golden, monkeypatch) -> None:
+    """One guide through a fake language model, then a scan that fetches metadata and writes guides."""
+    import hashlib
+    import time
+
+    import requests
+    from services import llm_routing, llm_service
+
+    server = lora_library
+    wan = server.lora_wan
+    long_text = "A calm cinematic style that shifts colours towards teal and orange with soft contrast. " * 2
+
+    def lora(filename: str, **meta) -> None:
+        (wan / filename).write_bytes(b"weights-" + filename.encode())
+        if meta:
+            sidecar = {"name": filename, "baseModel": "Wan Video", "description": long_text, "trainedWords": ["trigger"]}
+            sidecar.update(meta)
+            (wan / (os.path.splitext(filename)[0] + ".civitai.json")).write_text(json.dumps(sidecar), encoding="utf-8")
+
+    lora("target.safetensors", modelId=1, versionId=1, name="Target")
+    lora("plain.safetensors", modelId=2, versionId=1, name="Plain")
+    lora("empty.safetensors", modelId=3, versionId=1, name="Empty")
+    lora("short.safetensors", modelId=4, versionId=1, name="Short", description="")
+    lora("no_sidecar.safetensors")
+
+    def answer(**request) -> str:
+        prompt = request["prompt"]
+        if "LoRA Name: Target" in prompt or "LoRA Name: Scanned" in prompt:
+            return '```json\n{"guide": "Use the trigger word.", "recommended_weights": {"source": "civitai", "default": 0.7, "min": 0.5, "max": 1.0}}\n```'
+        if "LoRA Name: Plain" in prompt:
+            return "Just write the guide as plain text."
+        return ""
+
+    monkeypatch.setattr(llm_service, "is_loaded", lambda: True)
+    monkeypatch.setattr(llm_service, "generate", answer)
+    monkeypatch.setattr(llm_routing, "_ensure_llm_loaded", lambda *_args, **_kwargs: None)
+
+    def generate(case: str, body: dict) -> None:
+        server.check(golden, case, "POST", "/api/v1/loras/generate-guide", json=body)
+
+    generate("lora guide generate", {"model_type": "fake_t2v", "filename": "target.safetensors"})
+    generate("lora guide generate plain text", {"model_type": "fake_t2v", "filename": "plain.safetensors"})
+    generate("lora guide generate empty answer", {"model_type": "fake_t2v", "filename": "empty.safetensors"})
+    generate("lora guide generate too little metadata", {"model_type": "fake_t2v", "filename": "short.safetensors"})
+    generate("lora guide generate no sidecar", {"model_type": "fake_t2v", "filename": "no_sidecar.safetensors"})
+    generate("lora guide generate missing file", {"model_type": "fake_t2v", "filename": "ghost.safetensors"})
+    generate("lora guide generate unknown model", {"model_type": "not_a_model", "filename": "target.safetensors"})
+    generate("lora guide generate missing fields", {"model_type": "fake_t2v"})
+    server.check(golden, "lora guide after generate", "GET", "/api/v1/loras/fake_t2v/target.safetensors/guide")
+    golden.check("lora guide files after generate", 200, server.normalise(_text_files(server.lora_root)))
+
+    # The scan: one file with no sidecar (CivitAI knows its hash), one CivitAI does not know.
+    lora("scan_new.safetensors")
+    scan_hash = hashlib.sha256((wan / "scan_new.safetensors").read_bytes()).hexdigest()
+    asked: list[str] = []
+
+    def fake_get(url, headers=None, timeout=None, **_kwargs):
+        asked.append(url.rsplit("/api/v1/", 1)[-1].replace(scan_hash, "<HASH>"))
+        if url.endswith(f"/model-versions/by-hash/{scan_hash}"):
+            return _CivitaiReply(200, {
+                "modelId": 9001, "id": 9002, "model": {"name": "Scanned"}, "baseModel": "Wan Video",
+                "trainedWords": ["scanword"],
+                "images": [{"url": "https://images.invalid/a.png", "meta": {"prompt": "a prompt"}}],
+            })
+        if url.endswith("/models/9001"):
+            return _CivitaiReply(200, {"description": "<p>Scanned   <i>description</i></p>", "tags": ["scan-tag"]})
+        return _CivitaiReply(404)
+
+    monkeypatch.setattr(requests, "get", fake_get)
+
+    def scan(case: str, body: dict) -> None:
+        started = server.check(
+            golden, f"{case} start", "POST", "/api/v1/loras/scan-and-generate-guides", json=body, mask=("scan_id",),
+        )
+        scan_id = started.json().get("scan_id")
+        if not scan_id:
+            return
+        deadline = time.time() + 20
+        state = {}
+        while time.time() < deadline:
+            state = server.client.get(f"/api/v1/loras/scan-status/{scan_id}").json()
+            if state.get("status") == "complete":
+                break
+            time.sleep(0.02)
+        state["results"] = sorted(state.get("results", []), key=lambda item: (item["filename"], sorted(item)))
+        golden.check(f"{case} final", 200, server.normalise(state))
+
+    scan("lora scan", {})
+    golden.check("lora scan requests", 200, sorted(asked))
+    golden.check("lora scan files", 200, server.normalise(_text_files(server.lora_root)))
+    asked.clear()
+    scan("lora scan again", {})
+    scan("lora scan forced", {"force": True})
