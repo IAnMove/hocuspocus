@@ -12,6 +12,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.support.launch_ast import generation_source
+
 import routers.video_editor as editor_router
 from services import execution_mode
 from services.asset_manifest import (
@@ -22,17 +24,38 @@ from services.asset_manifest import (
 )
 
 
-def _load_launch_function(name, namespace):
-    source = (Path(__file__).parents[1] / "app" / "_launch_runtime.py").read_text(
-        encoding="utf-8",
-    )
-    tree = ast.parse(source, filename="app/_launch_runtime.py")
-    function = next(
-        node for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
-    )
+def _load_launch_function(name, namespace, *, relative="app/_launch_runtime.py"):
+    """Exec ``name`` from ``relative``, or from the recast service that now defines it."""
+    root = Path(__file__).parents[1]
+    relatives = [relative]
+    if relative == "app/_launch_runtime.py":
+        relatives.extend((
+            "app/services/recast_shot_manifest.py",
+            "app/services/recast_shot_planning.py",
+            "app/services/recast_shot_run.py",
+        ))
+    function = None
+    chosen = None
+    for item in relatives:
+        path = root / item
+        if not path.is_file():
+            continue
+        source = path.read_text(encoding="utf-8")
+        tree = ast.parse(source, filename=item)
+        function = next(
+            (
+                node for node in tree.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+            ),
+            None,
+        )
+        if function is not None:
+            chosen = item
+            break
+    if function is None:
+        raise AssertionError(name)
     exec(
-        compile(ast.Module(body=[function], type_ignores=[]), "app/_launch_runtime.py", "exec"),
+        compile(ast.Module(body=[function], type_ignores=[]), chosen, "exec"),
         namespace,
     )
     return namespace[name]
@@ -199,7 +222,9 @@ def test_simulated_worker_returns_cleanly_when_artifact_creation_is_cancelled(tm
         "update_job": lambda *_args, **_kwargs: True,
         "is_cancel_requested": lambda _job: True,
     }
-    worker = _load_launch_function("_run_simulated_generation", namespace)
+    worker = _load_launch_function(
+        "_run_simulated_generation", namespace, relative="app/services/generation_preparation.py",
+    )
     job = {
         "id": "cancelled-simulation",
         "out_dir": str(tmp_path),
@@ -229,8 +254,13 @@ def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
         "os": os,
         "time": time,
     }
-    _load_launch_function("_publish_generation_sidecar_for_studio_job", namespace)
-    worker = _load_launch_function("_run_simulated_generation", namespace)
+    _load_launch_function(
+        "_publish_generation_sidecar_for_studio_job", namespace,
+        relative="app/services/canonical_task_publishers.py",
+    )
+    worker = _load_launch_function(
+        "_run_simulated_generation", namespace, relative="app/services/generation_preparation.py",
+    )
     job = {
         "id": "sim-job-1",
         "created_at": 1_700_000_000.0,
@@ -282,7 +312,9 @@ def test_tool_sidecar_publishes_canonical_manifest_without_invented_actor(tmp_pa
         "time": time,
         "publish_generation_sidecar": publish_generation_sidecar,
     }
-    write = _load_launch_function("_write_tool_sidecar", namespace)
+    write = _load_launch_function(
+        "_write_tool_sidecar", namespace, relative="app/routers/tools.py",
+    )
     write(
         str(tmp_path),
         "clip.mp4",
@@ -346,6 +378,11 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
 ):
     artifact = tmp_path / "clip.mp4"
     artifact.write_bytes(b"video")
+    relative = "app/_launch_runtime.py"
+    if writer_name == "_write_repaint_shot_aware_sidecar":
+        relative = "app/services/repaint_run.py"
+    elif writer_name == "_write_outpaint_shot_aware_sidecar":
+        relative = "app/services/outpaint_run.py"
     write = _load_launch_function(
         writer_name,
         {
@@ -353,6 +390,7 @@ def test_edit_shot_sidecar_publishes_canonical_manifest_without_invented_actor(
             "time": time,
             "publish_generation_sidecar": publish_generation_sidecar,
         },
+        relative=relative,
     )
     job = {
         "id": f"{tool}-job",
@@ -483,6 +521,8 @@ def test_editor_gallery_sidecar_publishes_canonical_manifest_without_invented_ac
     write = getattr(editor_router, writer_name, None)
     if write is None and writer_name == "_write_scene_recording_sidecar":
         from services.scene_save import _write_scene_recording_sidecar as write
+    elif write is None and writer_name == "_write_comic_animatic_sidecar":
+        from services.comic_animatic import _write_comic_animatic_sidecar as write
     elif write is None:
         write = _load_launch_function(
             writer_name,
@@ -521,45 +561,124 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         encoding="utf-8",
     )
     ast.parse(source)
-    assert "@api.exception_handler(execution_mode.ExecutionModeError)" in source
-    worker = source.split("def _run_generation(job_id:", 1)[1]
+    assert "api.add_exception_handler(execution_mode.ExecutionModeError, execution_mode_error_handler)" in source
+    worker = generation_source()
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
+    recast_source = (
+        Path(__file__).parents[1] / "app" / "services" / "recast_endpoint.py"
+    ).read_text(encoding="utf-8")
+    outpaint_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "outpaint.py"
+    ).read_text(encoding="utf-8")
+    blend_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "blend.py"
+    ).read_text(encoding="utf-8")
+    # Recast left launch (C8b): its slice is the rest of the service file, which ends with the handler.
     specialist_routes = (
-        ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
-        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
-        ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "async def inpaint_endpoint", "_run_blend_generation"),
-        ("async def tools_upscale", "async def tools_revoice", "_run_tool_upscale"),
-        ("async def tools_revoice", "def _run_simulated_generation", "_run_tool_revoice"),
+        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", recast_source),
+        ("async def outpaint_endpoint", "def create_outpaint_router", "_prepare_and_run_outpaint", outpaint_source),
+        ("async def blend_endpoint", "def create_blend_router", "_run_blend_generation", blend_source),
     )
-    for start, end, real_worker in specialist_routes:
-        route = source.split(start, 1)[1].split(end, 1)[0]
+    for start, end, real_worker, route_source in specialist_routes:
+        route = route_source.split(start, 1)[1].split(end, 1)[0]
+        assert "execution_mode.policy().simulated" in route
+        assert real_worker in route
+        assert "_run_generation" in route
+    repaint_route = (
+        Path(__file__).parents[1] / "app" / "routers" / "repaint.py"
+    ).read_text(encoding="utf-8").split("async def repaint_endpoint", 1)[1]
+    assert "execution_mode.policy().simulated" in repaint_route
+    assert "_run_repaint" in repaint_route
+    assert "_run_generation" in repaint_route
+    tools_source = (
+        Path(__file__).parents[1] / "app" / "routers" / "tools.py"
+    ).read_text(encoding="utf-8")
+    tools_routes = (
+        ("async def tools_upscale", "async def tools_revoice", "_run_tool_upscale"),
+        ("async def tools_revoice", "create_tools_post_router.tools_upscale", "_run_tool_revoice"),
+    )
+    for start, end, real_worker in tools_routes:
+        route = tools_source.split(start, 1)[1].split(end, 1)[0]
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
     tree = ast.parse(source)
 
-    def function_source(name):
-        for node in ast.walk(tree):
+    def function_source(name, text=source, parsed=tree):
+        for node in ast.walk(parsed):
             if isinstance(node, ast.FunctionDef) and node.name == name:
-                return ast.get_source_segment(source, node)
+                return ast.get_source_segment(text, node)
         raise AssertionError(name)
 
+    manifest_source = (
+        Path(__file__).parents[1] / "app" / "services" / "recast_shot_manifest.py"
+    ).read_text(encoding="utf-8")
+    manifest_tree = ast.parse(manifest_source)
+    worker_text = generation_source()
+    worker_tree = ast.parse(worker_text)
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
-        "_run_sfx_generation",
-        "_write_tool_sidecar",
-        "_write_recast_shot_aware_sidecar",
-        "_write_repaint_shot_aware_sidecar",
-        "_write_outpaint_shot_aware_sidecar",
-        "_write_comic_animatic_sidecar",
     ):
-        body = function_source(name)
+        # _write_output_sidecars is nested in a phase of the generation worker.
+        # _run_simulated_generation moved to services/generation_preparation.py.
+        if name == "_write_output_sidecars":
+            body = function_source(name, worker_text, worker_tree)
+        elif name == "_run_simulated_generation":
+            prep_path = Path(__file__).parents[1] / "app" / "services" / "generation_preparation.py"
+            prep_text = prep_path.read_text(encoding="utf-8")
+            body = function_source(name, prep_text, ast.parse(prep_text))
+        else:
+            body = function_source(name)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    recast_sidecar = function_source(
+        "_write_recast_shot_aware_sidecar", manifest_source, manifest_tree,
+    )
+    assert "publish_generation_sidecar" in recast_sidecar
+    assert "json.dump" not in recast_sidecar
+    repaint_run_source = (
+        Path(__file__).parents[1] / "app" / "services" / "repaint_run.py"
+    ).read_text(encoding="utf-8")
+    repaint_sidecar = function_source(
+        "_write_repaint_shot_aware_sidecar",
+        repaint_run_source,
+        ast.parse(repaint_run_source),
+    )
+    assert "publish_generation_sidecar" in repaint_sidecar
+    assert "json.dump" not in repaint_sidecar
+    outpaint_run_source = (
+        Path(__file__).parents[1] / "app" / "services" / "outpaint_run.py"
+    ).read_text(encoding="utf-8")
+    outpaint_sidecar = function_source(
+        "_write_outpaint_shot_aware_sidecar",
+        outpaint_run_source,
+        ast.parse(outpaint_run_source),
+    )
+    assert "publish_generation_sidecar" in outpaint_sidecar
+    assert "json.dump" not in outpaint_sidecar
+    sfx_path = Path(__file__).parents[1] / "app" / "services" / "generation_sfx.py"
+    sfx_text = sfx_path.read_text(encoding="utf-8")
+    sfx_body = function_source("_run_sfx_generation", sfx_text, ast.parse(sfx_text))
+    assert "publish_generation_sidecar" in sfx_body
+    assert "json.dump" not in sfx_body
+    animatic_source = (
+        Path(__file__).parents[1] / "app" / "services" / "comic_animatic.py"
+    ).read_text(encoding="utf-8")
+    animatic_tree = ast.parse(animatic_source)
+    animatic_node = next(
+        item for item in animatic_tree.body
+        if isinstance(item, ast.FunctionDef) and item.name == "_write_comic_animatic_sidecar"
+    )
+    animatic_body = ast.get_source_segment(animatic_source, animatic_node)
+    assert "publish_generation_sidecar" in animatic_body
+    assert "json.dump" not in animatic_body
+    tools_tree = ast.parse(tools_source)
+    sidecar = function_source("_write_tool_sidecar", tools_source, tools_tree)
+    assert "publish_generation_sidecar" in sidecar
+    assert "json.dump" not in sidecar
     scene_save = (Path(__file__).parents[1] / "app" / "services" / "scene_save.py").read_text(encoding="utf-8")
     scene_tree = ast.parse(scene_save)
     scene_node = next(
@@ -576,6 +695,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         body = ast.get_source_segment(editor_source, node)
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
-    h3_slice = source.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
+    h3_slice = worker.split("generated = minimax_h3_service.generate", 1)[1].split("if not finalize:", 1)[0]
     assert "publish_generation_sidecar" in h3_slice
     assert "json.dump" not in h3_slice

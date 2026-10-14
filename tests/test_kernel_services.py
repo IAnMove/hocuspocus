@@ -1072,3 +1072,29 @@ def test_the_director_probes_again_while_the_server_holds_a_failed_probe(pipelin
     pipeline_wiring(get_cached_hardware=lambda: {"gpu_vram_gb": 0.0})
     snapshot = director_pipeline._director_hardware_snapshot()
     assert snapshot == fresh and snapshot is not fresh
+
+
+def test_the_director_routes_wire_the_pipeline_once_with_the_servers_helpers(monkeypatch) -> None:
+    """The first route that needs the pipeline wires it with what the server bound; the next routes do not wire it again."""
+    from routers import director as director_routes
+
+    names = ("_jobs", "_run_generation", "wgp", "_gen_lock", "_request_generation_cancel", "_active_gen_states",
+             "_publish_director_task", "_get_cached_hardware")
+    bound = {name: object() for name in names}
+    for name, value in bound.items():
+        monkeypatch.setattr(director_routes, name, value)
+    monkeypatch.setattr(director_routes._pipeline_init_state, "initialized", False)
+    wired: list = []
+    monkeypatch.setattr(director_pipeline, "init", lambda *args, **kwargs: wired.append((args, kwargs)))
+
+    director_routes._init_pipeline()
+    director_routes._init_pipeline()
+
+    assert len(wired) == 1
+    args, kwargs = wired[0]
+    assert args == tuple(bound[name] for name in names[:6])
+    assert kwargs == {
+        "state_observer": bound["_publish_director_task"],
+        "get_cached_hardware": bound["_get_cached_hardware"],
+    }
+    assert director_routes._pipeline_init_state.initialized is True

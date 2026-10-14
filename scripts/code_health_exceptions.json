@@ -14,5 +14,13 @@
     "owner": "ina",
     "issue": "refactor program 2026-10, design §6.6 U12",
     "expires": "2026-12-12"
+  },
+  {
+    "path": "app/services/generation_worker/finalize.py",
+    "rule": "complexity_hotspot",
+    "reason": "_run_generation_outpaint is the outpaint pass of _run_generation, split in place in slice 20 and moved verbatim with the generation worker in slice 21. Complexity is 37. The body was not edited to lower it: its for/try loop ends iterations with continue and return False, and cutting it needs a control signal that adds decisions, which would cost the whole split its credit.",
+    "owner": "ina",
+    "issue": "refactor program 2026-10, slice 20-21",
+    "expires": "2026-12-12"
   }
 ]

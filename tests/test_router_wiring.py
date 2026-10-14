@@ -6,6 +6,8 @@
 - No method and path is defined twice in a server.
 - The routes of the route table fixture and the routes of the core server
   (``app/core_runtime.py``) exist in the main server.
+- A server never reads a global name it does not define (a slice that moved a
+  function out must leave an import for every caller that stayed).
 
 Routes added at run time (``api.add_api_route`` in a loop) are not seen here.
 """
@@ -13,8 +15,10 @@ Routes added at run time (``api.add_api_route`` in a loop) are not seen here.
 from __future__ import annotations
 
 import ast
+import builtins
 import json
 import re
+import symtable
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
@@ -32,7 +36,6 @@ PENDING = "Pending owner decision (2026-10-13): neither wired nor deleted."
 CORE_SERVER_ONLY = {
     "core_labs:create_core_labs_router": "Core server only: the main server serves these Labs routes itself.",
     "core_remote:create_core_remote_router": "Core server only: remote generation routes without a local engine.",
-    "core_series_plan:create_core_series_plan_router": "Core server only: the main server plans Series itself.",
 }
 NOT_MOUNTED_IN_MAIN = {
     **CORE_SERVER_ONLY,
@@ -208,6 +211,79 @@ def test_every_router_factory_is_mounted_by_the_main_server_or_listed() -> None:
     assert set(CORE_SERVER_ONLY) <= core
 
 
+def test_gallery_routes_keep_the_service_docstring_as_their_openapi_description() -> None:
+    """The thin route wrappers in workspace_outputs.py carry no text; the moved service function does."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers.workspace_outputs import (
+        create_list_outputs_router,
+        create_serve_file_router,
+        create_storage_usage_router,
+    )
+    from services import output_listing, storage_usage
+
+    app = FastAPI()
+    for router in (create_list_outputs_router(), create_serve_file_router(), create_storage_usage_router()):
+        app.include_router(router)
+    paths = app.openapi()["paths"]
+    for path, function in (
+        ("/api/v1/outputs", output_listing.list_outputs),
+        ("/api/v1/file/{filename}", output_listing.serve_file),
+        ("/api/v1/storage/usage", storage_usage.storage_usage),
+    ):
+        assert paths[path]["get"].get("description") == inspect.cleandoc(function.__doc__), path
+
+
+def test_storage_duplicate_routes_keep_the_service_docstring_as_their_openapi_description() -> None:
+    """The thin route wrappers in storage_tools.py carry no text; the moved service functions do."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers.storage_tools import create_storage_tools_router
+    from services import storage_tools
+
+    app = FastAPI()
+    app.include_router(create_storage_tools_router())
+    paths = app.openapi()["paths"]
+    for path, method, function in (
+        ("/api/v1/storage/duplicates", "get", storage_tools.storage_duplicates),
+        ("/api/v1/storage/duplicates/reclaim", "post", storage_tools.storage_reclaim),
+        ("/api/v1/storage/duplicates/remove-linked", "post", storage_tools.storage_remove_linked),
+    ):
+        assert paths[path][method].get("description") == inspect.cleandoc(function.__doc__), path
+
+
+def test_director_music_and_character_description_keep_their_docstring_as_openapi_description(monkeypatch) -> None:
+    """The route wrappers in llm_director.py carry no text; the module-level handlers do."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers import llm_director
+
+    # The factories assign the launch objects onto the module; give them placeholders and let monkeypatch undo it.
+    for name in (
+        "wgp", "_get_active_workspace", "_workspace_dir", "_init_pipeline", "_effective_llm_routing",
+        "_llm_default_device", "_DEFAULT_LLM_REPO", "_resolve_model3d_input_path",
+    ):
+        monkeypatch.setattr(llm_director, name, None, raising=False)
+    app = FastAPI()
+    app.include_router(llm_director.create_director_music_router(
+        wgp=None, _get_active_workspace=None, _workspace_dir=None, _init_pipeline=None,
+        _effective_llm_routing=None, _llm_default_device=None, _DEFAULT_LLM_REPO=None,
+    ))
+    app.include_router(llm_director.create_character_describe_router(_resolve_model3d_input_path=None))
+    paths = app.openapi()["paths"]
+    for path, function in (
+        ("/api/v1/director/generate-music", llm_director.director_generate_music),
+        ("/api/v1/characters/describe-refs", llm_director.describe_character_refs),
+    ):
+        assert paths[path]["post"].get("description") == inspect.cleandoc(function.__doc__), path
+
+
 def test_core_mcp_returns_the_shared_wangp_router() -> None:
     tree = _parse(ROUTERS / "core_mcp.py")
     factory = next(
@@ -282,3 +358,237 @@ def test_core_server_routes_exist_in_the_main_server() -> None:
         if _route_key(route) not in main and route["source"] not in pending_sources
     )
     assert missing == [], "The UI calls the same paths on both servers; serve these in the main server too."
+
+
+def _defined_module_names(path: Path) -> tuple[symtable.SymbolTable, set[str]]:
+    """The module's symbol table and the names it defines: assigned, imported, a def or a class, or a ``global`` set."""
+    top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+    bound = {item.get_name() for item in top.get_symbols() if item.is_assigned() or item.is_imported() or item.is_namespace()}
+
+    def declare(table: symtable.SymbolTable) -> None:
+        # ``global NAME`` followed by an assignment inside a function defines the module name.
+        bound.update(item.get_name() for item in table.get_symbols() if item.is_declared_global() and item.is_assigned())
+        for child in table.get_children():
+            declare(child)
+
+    declare(top)
+    return top, bound
+
+
+def _undefined_global_names(path: Path) -> dict[str, list[str]]:
+    """Global names some function reads that the module never defines, with the functions that read them."""
+    top, bound = _defined_module_names(path)
+    missing: dict[str, list[str]] = {}
+
+    def walk(table: symtable.SymbolTable) -> None:
+        for item in table.get_symbols():
+            name = item.get_name()
+            if (
+                table is not top and item.is_global() and item.is_referenced()
+                and name not in bound and not hasattr(builtins, name) and not name.startswith("__")
+            ):
+                missing.setdefault(name, []).append(table.get_name())
+        for child in table.get_children():
+            walk(child)
+
+    walk(top)
+    return missing
+
+
+def test_a_server_never_reads_a_name_it_does_not_define() -> None:
+    # R4a moved the Series plan handlers out of launch and left two callers behind (the Activity
+    # cancel and resume of a Series plan task): a NameError on the first click, invisible to the
+    # route tables and to every test that extracts launch functions.
+    for server in (MAIN, CORE):
+        assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
+
+
+# The main server hands its own ``globals()`` to ``create_image_generation_commands``, which reads command collaborators
+# out of that dict by key and passes it on to the operation factories. A key launch does not define is a ``KeyError``
+# the first time a command runs, and nothing else sees it: the kernel PR (#1059) stopped defining
+# ``register_generation_job`` in launch and every command-started job (image, speech, music, sfx, video) failed to
+# dispatch, while the tests kept passing because they hand ``dispatch`` a runtime dict of their own. The first module
+# also reads optional keys with ``.get``: an undefined one silently leaves the operation (sfx, upscale) out. The other
+# three are checked for ``runtime["key"]`` only: ``tools_upscale_commands`` reads optional hooks with ``.get`` and falls
+# back to a default (or ``None``) when launch has no such name, and launch has never defined seven of them
+# (``_probe_tool_video``, ``_tools_processor_capabilities``, ``_tools_processor_parameters``, ``_uploads_dir``,
+# ``_validate_tools_processors``, ``_validated_tools_processor_settings``, ``resolve_tool_source``).
+RUNTIME_DICT_READERS = {
+    APP / "services" / "image_generation_runtime.py": True,
+    APP / "services" / "video_generation_commands.py": False,
+    APP / "services" / "studio_sfx_commands.py": False,
+    APP / "services" / "tools_upscale_commands.py": False,
+}
+
+
+def _runtime_keys(path: Path, *, with_get: bool) -> set[str]:
+    """String keys the module reads from its ``runtime`` argument: ``runtime["key"]``, and ``runtime.get("key")``."""
+    keys: set[str] = set()
+    for node in ast.walk(_parse(path)):
+        if isinstance(node, ast.Subscript):
+            target, key = node.value, node.slice
+        elif with_get and isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+            target, key = node.func.value, node.args[0] if node.args else None
+        else:
+            continue
+        if isinstance(target, ast.Name) and target.id == "runtime" and isinstance(key, ast.Constant) and isinstance(key.value, str):
+            keys.add(key.value)
+    return keys
+
+
+def test_the_command_runtime_only_reads_keys_the_main_server_defines() -> None:
+    _, defined = _defined_module_names(MAIN)
+    for path, with_get in RUNTIME_DICT_READERS.items():
+        keys = _runtime_keys(path, with_get=with_get)
+        assert keys, f"{path.name} reads no key from `runtime`: if it renamed the argument, follow it here"
+        assert sorted(keys - defined) == [], (
+            f"{path.name} reads keys the main server does not define: import the shared service directly instead"
+        )
+
+
+# Repaint (C6): each module takes the launch objects it reads from one keyword-only function, bind() for a service and
+# the router factory for the router, which launch calls once. Launch's call is the bind list, and the list is the
+# module's free names; nothing here is written by hand.
+C6_BINDERS = {
+    APP / "services" / "repaint_planning.py": ("bind", "_bind_repaint_planning"),
+    APP / "services" / "repaint_run.py": ("bind", "_bind_repaint_run"),
+    APP / "routers" / "repaint.py": ("create_repaint_router", "create_repaint_router"),
+}
+# Outpaint and blend (C5), the same way.
+C5_BINDERS = {
+    APP / "services" / "outpaint_planning.py": ("bind", "_bind_outpaint_planning"),
+    APP / "services" / "outpaint_run.py": ("bind", "_bind_outpaint_run"),
+    APP / "routers" / "outpaint.py": ("create_outpaint_router", "create_outpaint_router"),
+    APP / "services" / "blend_run.py": ("bind", "_bind_blend_run"),
+    APP / "routers" / "blend.py": ("create_blend_router", "create_blend_router"),
+}
+
+
+def _placeholders(tree: ast.Module) -> set[str]:
+    """Module-level ``NAME = None``: the slots the binder fills."""
+    return {target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)}
+
+
+def _free_reads(path: Path, skip: set[str]) -> set[str]:
+    """Global names the module's functions read (nested functions included), other than ``skip``'s."""
+    top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+    names: set[str] = set()
+
+    def walk(table: symtable.SymbolTable) -> None:
+        names.update(item.get_name() for item in table.get_symbols() if item.is_global() and item.is_referenced())
+        for child in table.get_children():
+            walk(child)
+
+    for child in top.get_children():
+        if child.get_name() not in skip:
+            walk(child)
+    return {name for name in names if not hasattr(builtins, name)}
+
+
+def _module_bindings(tree: ast.Module) -> dict[str, list[int]]:
+    """The lines at which a module statement binds each name (def, class, assignment, import)."""
+    lines: dict[str, list[int]] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names = [node.name]
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [(alias.asname or alias.name).split(".")[0] for alias in node.names]
+        elif isinstance(node, ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        else:
+            continue
+        for name in names:
+            lines.setdefault(name, []).append(node.lineno)
+    return lines
+
+
+def _forwarded_name(function: ast.FunctionDef) -> str | None:
+    """``NAME`` when the def only calls it: ``def f(*args, **kwargs): return NAME(*args, **kwargs)``, or
+    ``def f(): return NAME()``, with an optional docstring."""
+    body = [node for node in function.body
+            if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))]
+    arguments = function.args
+    if (len(body) != 1 or not isinstance(body[0], ast.Return) or not isinstance(body[0].value, ast.Call)
+            or not isinstance(body[0].value.func, ast.Name)
+            or arguments.posonlyargs or arguments.args or arguments.kwonlyargs):
+        return None
+    call = body[0].value
+    if not arguments.vararg and not arguments.kwarg:
+        passes_through = not call.args and not call.keywords
+    else:
+        passes_through = (
+            arguments.vararg is not None and arguments.kwarg is not None
+            and len(call.args) == 1 and isinstance(call.args[0], ast.Starred)
+            and getattr(call.args[0].value, "id", "") == arguments.vararg.arg
+            and len(call.keywords) == 1 and call.keywords[0].arg is None
+            and getattr(call.keywords[0].value, "id", "") == arguments.kwarg.arg
+        )
+    return call.func.id if passes_through else None
+
+
+def test_repaint_modules_take_every_launch_object_once() -> None:
+    _assert_each_module_takes_every_launch_object_once(C6_BINDERS)
+
+
+def test_outpaint_and_blend_modules_take_every_launch_object_once() -> None:
+    _assert_each_module_takes_every_launch_object_once(C5_BINDERS)
+
+
+def _assert_each_module_takes_every_launch_object_once(binders: dict) -> None:
+    launch = _parse(MAIN)
+    launch_lines = _module_bindings(launch)
+    launch_defs = {node.name: node for node in launch.body if isinstance(node, ast.FunctionDef)}
+    # A name a launch function rebinds with ``global`` would leave the module holding the old object.
+    rebound = {name for node in ast.walk(launch) if isinstance(node, ast.Global) for name in node.names}
+    for path, (binder_name, launch_name) in binders.items():
+        source = path.read_text(encoding="utf-8")
+        # String annotations can change how FastAPI reads a route's body.
+        assert "from __future__ import annotations" not in source, path.name
+        assert _undefined_global_names(path) == {}, path.name
+        tree = _parse(path)
+        binders = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == binder_name]
+        assert len(binders) == 1, path.name
+        binder = binders[0]
+        assert not binder.args.args and not binder.args.vararg and not binder.args.kwarg, path.name
+        params = {arg.arg for arg in binder.args.kwonlyargs}
+        updates = [node for node in ast.walk(binder) if isinstance(node, ast.Call)
+                   and isinstance(node.func, ast.Attribute) and node.func.attr == "update"
+                   and isinstance(node.func.value, ast.Call) and getattr(node.func.value.func, "id", "") == "globals"]
+        assert len(updates) == 1, path.name
+        slots = {keyword.arg: keyword.value.id for keyword in updates[0].keywords}
+        assert set(slots.values()) == params, path.name
+        assert set(slots) == _placeholders(tree), path.name
+        # The slots are exactly the names the moved functions read and the module neither defines nor imports.
+        defined = set(_module_bindings(tree)) - _placeholders(tree)
+        reads = _free_reads(path, {binder_name})
+        assert reads - defined == set(slots), path.name
+
+        # Launch calls the binder once, by keyword, with every parameter, after each value exists.
+        calls = [node for node in ast.walk(launch) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == launch_name]
+        assert len(calls) == 1, launch_name
+        call = calls[0]
+        assert not call.args and {keyword.arg for keyword in call.keywords} == params, launch_name
+        slot_of = {param: slot for slot, param in slots.items()}
+        for keyword in call.keywords:
+            assert isinstance(keyword.value, ast.Name), (launch_name, keyword.arg)
+            value = keyword.value.id
+            # Defined above the call and never bound again; a later name needs a forwarder.
+            assert max(launch_lines[value]) < call.lineno, (launch_name, value)
+            assert value not in rebound, (launch_name, value)
+            # The slot holds launch's object of the same name, or a forwarder that calls that name.
+            slot = slot_of[keyword.arg]
+            if value != slot:
+                assert value in launch_defs and _forwarded_name(launch_defs[value]) == slot, (launch_name, value)
+
+
+def test_repaint_forwarders_only_forward() -> None:
+    """Every Repaint forwarder in launch passes its arguments to the launch name it is named after."""
+    launch = _parse(MAIN)
+    forwarders = [node for node in launch.body
+                  if isinstance(node, ast.FunctionDef) and node.name.startswith("_forward_repaint_")]
+    assert forwarders
+    for node in forwarders:
+        assert _forwarded_name(node) == node.name[len("_forward_repaint"):], node.name

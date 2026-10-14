@@ -19,8 +19,13 @@ from routers.canonical_tasks import task_event_cursor
 
 ROOT = Path(__file__).parents[1]
 LAUNCH_PATH = ROOT / "app" / "_launch_runtime.py"
-SOURCE = LAUNCH_PATH.read_text(encoding="utf-8")
-TREE = ast.parse(SOURCE, filename=str(LAUNCH_PATH))
+# Field, publisher and sync helpers moved out of launch. The exec namespace below is unchanged.
+_FUNCTION_FILES = (
+    "app/services/canonical_task_fields.py",
+    "app/services/canonical_task_publishers.py",
+    "app/services/canonical_task_sync.py",
+    "app/_launch_runtime.py",
+)
 
 
 class DummyHTTPException(Exception):
@@ -31,10 +36,19 @@ class DummyHTTPException(Exception):
 
 
 def _function(name: str) -> ast.FunctionDef:
-    for node in TREE.body:
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            return node
-    raise AssertionError(f"Function {name!r} not found")
+    found: list[ast.FunctionDef] = []
+    for relative in _FUNCTION_FILES:
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        found.extend(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        )
+    if len(found) != 1:
+        raise AssertionError(f"Function {name!r} found {len(found)} times")
+    return found[0]
 
 
 def _load_helpers(*names: str, save_path: Path | None = None) -> dict:

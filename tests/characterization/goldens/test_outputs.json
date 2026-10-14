@@ -1,4 +1,153 @@
 {
+  "alternative songs list": {
+    "body": {
+      "adaptation": "loop_assembled",
+      "duration_seconds": "<MASKED>",
+      "parent": "mix.mp4",
+      "songs": [],
+      "source_clip_count": 1
+    },
+    "status": 200
+  },
+  "alternative songs missing": {
+    "body": {
+      "detail": "Videoclip not found"
+    },
+    "status": 404
+  },
+  "alternative songs no shots": {
+    "body": {
+      "detail": "This videoclip has no reusable shots on disk to remount"
+    },
+    "status": 400
+  },
+  "alternative songs not a video": {
+    "body": {
+      "detail": "Alternative songs are for video mixes"
+    },
+    "status": 400
+  },
+  "attach song missing audio": {
+    "body": {
+      "detail": "Audio source could not be found: nope.wav"
+    },
+    "status": 400
+  },
+  "attach song needs audio": {
+    "body": {
+      "detail": "audio_name is required"
+    },
+    "status": 400
+  },
+  "delete listed workspace": {
+    "body": {
+      "deleted": "only-film.png"
+    },
+    "status": 200
+  },
+  "delete missing": {
+    "body": {
+      "deleted": "not-there.png"
+    },
+    "status": 200
+  },
+  "delete output": {
+    "body": {
+      "deleted": "gone.png"
+    },
+    "status": 200
+  },
+  "delete song missing video": {
+    "body": {
+      "detail": "Videoclip not found"
+    },
+    "status": 404
+  },
+  "delete song not attached": {
+    "body": {
+      "detail": "That alternative song is not attached to this videoclip."
+    },
+    "status": 400
+  },
+  "delete traversal": {
+    "body": {
+      "detail": "Not Found"
+    },
+    "status": 404
+  },
+  "extra info": {
+    "body": {
+      "available": false,
+      "clip": {
+        "audio_prompt": "",
+        "created_at": 1760000004.0,
+        "file_modified_at": 1760000004.0,
+        "file_size_bytes": "<MASKED>",
+        "generation_mode": "video",
+        "generation_time_sec": null,
+        "generation_timings": {},
+        "guidance_scale": null,
+        "job_id": "job-notes",
+        "model_prompts": {},
+        "model_type": "fake_t2v",
+        "name": "notes.mp4",
+        "negative_prompt": "",
+        "num_inference_steps": null,
+        "prompt": "a blue field",
+        "prompt_cleanup": {},
+        "resolution": "64x36",
+        "saved_metadata": {
+          "created_at": 1760000004,
+          "generation_mode": "video",
+          "job_id": "job-notes",
+          "params": {
+            "model_type": "fake_t2v",
+            "prompt": "a blue field",
+            "resolution": "64x36",
+            "seed": 9
+          }
+        },
+        "seed": 9,
+        "video_length_frames": null
+      },
+      "data": null,
+      "director_context": false,
+      "language": "en",
+      "language_label": "English",
+      "prompt_count": 1
+    },
+    "status": 200
+  },
+  "extra info bad language": {
+    "body": {
+      "detail": "Unsupported language: xx"
+    },
+    "status": 400
+  },
+  "extra info generate bad language": {
+    "body": {
+      "detail": "Unsupported language: xx"
+    },
+    "status": 400
+  },
+  "extra info missing": {
+    "body": {
+      "detail": "Output video not found"
+    },
+    "status": 404
+  },
+  "extra info no metadata": {
+    "body": {
+      "detail": "This video has no saved prompt metadata; media re-analysis is disabled"
+    },
+    "status": 400
+  },
+  "extra info not a video": {
+    "body": {
+      "detail": "Extra info is available for videos only"
+    },
+    "status": 400
+  },
   "file missing": {
     "body": {
       "detail": "File not found"
@@ -10,6 +159,33 @@
       "detail": "File not found"
     },
     "status": 404
+  },
+  "group clips": {
+    "body": {
+      "clips": [
+        {
+          "filename": "shot_a.mp4",
+          "index": 0,
+          "prompt": "shot 0",
+          "total": 2
+        },
+        {
+          "filename": "shot_b.mp4",
+          "index": 1,
+          "prompt": "shot 1",
+          "total": 2
+        }
+      ],
+      "group_id": "grp1"
+    },
+    "status": 200
+  },
+  "group clips missing": {
+    "body": {
+      "clips": [],
+      "group_id": "missing-group"
+    },
+    "status": 200
   },
   "list": {
     "body": {
@@ -68,6 +244,31 @@
     },
     "status": 200
   },
+  "list edits": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000002.0,
+          "completion_time_source": "file",
+          "created_at": 1760000002.0,
+          "edit_sub_mode": "retake",
+          "favorite": false,
+          "height": 8,
+          "mode": "image",
+          "name": "retake.png",
+          "origin": null,
+          "result_kind": null,
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/retake.png?v=1760000002000000-<SIZE>",
+          "type": "image",
+          "url": "/api/v1/file/retake.png",
+          "width": 8
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
   "list favorites": {
     "body": {
       "outputs": [
@@ -112,6 +313,34 @@
           "type": "image",
           "url": "/api/v1/file/<TIME>_seed7_golden_image.png",
           "width": 8
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
+  "list multiclip": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000001.0,
+          "completion_time_source": "file",
+          "created_at": 1760000001.0,
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "harbour_multiclip.mp4",
+          "origin": {
+            "actor": "wizard",
+            "capability": "generation.video"
+          },
+          "result_kind": "chapter",
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/harbour_multiclip.mp4?v=1760000001000000-<SIZE>",
+          "type": "video",
+          "url": "/api/v1/file/harbour_multiclip.mp4",
+          "width": 64
         }
       ],
       "total": 1
@@ -175,6 +404,34 @@
     },
     "status": 200
   },
+  "list origin wizard": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000001.0,
+          "completion_time_source": "file",
+          "created_at": 1760000001.0,
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "harbour_multiclip.mp4",
+          "origin": {
+            "actor": "wizard",
+            "capability": "generation.video"
+          },
+          "result_kind": "chapter",
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/harbour_multiclip.mp4?v=1760000001000000-<SIZE>",
+          "type": "video",
+          "url": "/api/v1/file/harbour_multiclip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 1
+    },
+    "status": 200
+  },
   "list page": {
     "body": {
       "outputs": [
@@ -197,6 +454,34 @@
         }
       ],
       "total": 3
+    },
+    "status": 200
+  },
+  "list result kind chapter": {
+    "body": {
+      "outputs": [
+        {
+          "completed_at": 1760000001.0,
+          "completion_time_source": "file",
+          "created_at": 1760000001.0,
+          "edit_sub_mode": null,
+          "favorite": false,
+          "height": 36,
+          "mode": "video",
+          "name": "harbour_multiclip.mp4",
+          "origin": {
+            "actor": "wizard",
+            "capability": "generation.video"
+          },
+          "result_kind": "chapter",
+          "size": "<MASKED>",
+          "thumbnail_url": "/api/v1/outputs/thumbnail/harbour_multiclip.mp4?v=1760000001000000-<SIZE>",
+          "type": "video",
+          "url": "/api/v1/file/harbour_multiclip.mp4",
+          "width": 64
+        }
+      ],
+      "total": 1
     },
     "status": 200
   },
@@ -270,6 +555,80 @@
     },
     "status": 404
   },
+  "metadata without sidecar": {
+    "body": {
+      "params": null,
+      "source": "none"
+    },
+    "status": 200
+  },
+  "mount song missing": {
+    "body": {
+      "detail": "Alternative song not found"
+    },
+    "status": 404
+  },
+  "move already there": {
+    "body": {
+      "detail": "Already in that workspace"
+    },
+    "status": 400
+  },
+  "move cross workspace": {
+    "body": {
+      "moved": "hero.png",
+      "to": "archive"
+    },
+    "status": 200
+  },
+  "move invalid workspace": {
+    "body": {
+      "detail": "Invalid workspace name"
+    },
+    "status": 400
+  },
+  "move missing": {
+    "body": {
+      "detail": "File not found"
+    },
+    "status": 404
+  },
+  "move needs workspace": {
+    "body": {
+      "detail": "workspace is required"
+    },
+    "status": 400
+  },
+  "move traversal": {
+    "body": {
+      "detail": "Not Found"
+    },
+    "status": 404
+  },
+  "move traversal encoded": {
+    "body": {
+      "detail": "Invalid output path"
+    },
+    "status": 400
+  },
+  "rejoin missing group": {
+    "body": {
+      "detail": "No clips found for group nope"
+    },
+    "status": 404
+  },
+  "rejoin needs group": {
+    "body": {
+      "detail": "group_id is required"
+    },
+    "status": 400
+  },
+  "rejoin needs two clips": {
+    "body": {
+      "detail": "Need at least 2 clips to rejoin"
+    },
+    "status": 400
+  },
   "scene recording": {
     "body": {
       "completed_at": "<TIME>",
@@ -325,6 +684,24 @@
   "scene save needs version 1": {
     "body": {
       "detail": "A version 1 scene is required"
+    },
+    "status": 400
+  },
+  "thumbnail missing": {
+    "body": {
+      "detail": "Output not found"
+    },
+    "status": 404
+  },
+  "thumbnail not media": {
+    "body": {
+      "detail": "This output has no media thumbnail"
+    },
+    "status": 400
+  },
+  "thumbnail unknown size": {
+    "body": {
+      "detail": "Unknown thumbnail size"
     },
     "status": 400
   }

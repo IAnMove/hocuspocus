@@ -27,9 +27,12 @@ def command(intent="upscale-intent"):
 
 
 def native_endpoint(tmp_path, legacy_calls):
-    source = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+    source = Path(__file__).resolve().parents[1] / "app" / "routers" / "tools.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    definition = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "tools_upscale")
+    definition = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "tools_upscale"
+    )
     definition.decorator_list = []
     namespace = {
         "Request": object, "HTTPException": HTTPException, "uuid": uuid, "time": time,
@@ -148,8 +151,9 @@ def test_image_admission_cannot_be_relabelled_as_a_tool_worker(tmp_path):
 
 @pytest.mark.parametrize("capability", ["upscale", "tools.upscale"])
 def test_native_task_projection_identifies_upscale_for_activity(tmp_path, capability):
-    source = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
+    root = Path(__file__).resolve().parents[1]
+    source = root / "app" / "services" / "canonical_task_fields.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
     definition = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                       and node.name == "_generation_task_fields")
     namespace = {

@@ -2,29 +2,12 @@
 
 from __future__ import annotations
 
-import ast
-import copy
-import re
 import unittest
-from pathlib import Path
 
-
-def _load_functions(*names: str):
-    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = [
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    namespace = {"copy": copy, "re": re}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
-    return tuple(namespace[name] for name in names)
-
-
-_story_id_token, _normalize_story_stage_ids, _story_stage_problem = _load_functions(
-    "_story_id_token",
-    "_normalize_story_stage_ids",
-    "_story_stage_problem",
+from services.story_lab_schema import (
+    _normalize_story_stage_ids,
+    _story_id_token,
+    _story_stage_problem,
 )
 
 

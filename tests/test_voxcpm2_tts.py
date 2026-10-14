@@ -272,7 +272,7 @@ def test_series_lines_in_a_voxcpm2_voice_send_no_language_mode_and_carry_the_sty
 
 def _runtime_function(name, namespace, *helpers):
     import ast
-    path = ROOT / "app/_launch_runtime.py"
+    path = ROOT / "app/services/model_downloads.py"
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     wanted = {name, *helpers}
     functions = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name in wanted]
@@ -300,16 +300,138 @@ def test_a_folder_only_model_is_ready_when_its_declared_assets_are_on_disk():
 
 
 def test_pre_download_fetches_the_handler_folder_when_there_is_no_main_file():
+    """The folder-only fallback moved to services.engine.model_files with the same call."""
+    from services.engine.model_files import download_model_files
+
     calls = []
-    fake_wgp = types.SimpleNamespace(
-        get_model_def=lambda _model: {}, transformer_quantization="int8", transformer_dtype_policy="",
-        get_transformer_dtype=lambda *_a: None, get_model_filename=lambda **_k: "",
-        get_model_recursive_prop=lambda *_a, **_k: [] if _a[1] == "modules" else None,
-        download_models=lambda *args, **_k: calls.append(args))
-    download = _runtime_function("_download_model_files", {
-        "wgp": fake_wgp, "_is_legacy_h3_model": lambda _model: False, "_check_model_downloaded": lambda _model: True})
-    download("voxcpm2_base")
+    download_model_files(
+        "voxcpm2_base",
+        is_legacy_h3_model=lambda _model: False,
+        ensure_quality_assets=lambda *_args, **_kwargs: None,
+        is_h3_downloaded=lambda: False,
+        get_model_def=lambda _model: {},
+        transformer_quantization="int8",
+        transformer_dtype_policy="",
+        get_transformer_dtype=lambda *_args: None,
+        get_model_filename=lambda **_kwargs: "",
+        get_model_recursive_prop=lambda *_args, **_kwargs: [] if _args[1] == "modules" else None,
+        download_models=lambda *args, **_kwargs: calls.append(args),
+        get_local_model_filename=lambda *_args, **_kwargs: "present",
+        text_encoder_quantization="int8",
+        check_model_downloaded=lambda _model: True,
+    )
     assert calls == [("", "voxcpm2_base", 0, -1)]
+
+
+def _model_file_filename(log):
+    """A stand-in for wgp.get_model_filename that records how it was called."""
+
+    def get_model_filename(*args, **kwargs):
+        frozen = tuple(sorted((key, tuple(value) if isinstance(value, list) else value) for key, value in kwargs.items()))
+        if args:
+            log.append(("pos", args, frozen))
+        else:
+            log.append(("kw", frozen))
+        return f"file-{len(log)}"
+
+    return get_model_filename
+
+
+def _resolve_case(model_type, model_def):
+    from services.engine.model_files import resolve_model_files
+
+    log = []
+
+    def recursive(target, prop, return_list=False, sub_prop_name=None):
+        if prop == "modules" and sub_prop_name == "_list":
+            return target
+        if prop == "modules":
+            return list(model_def.get("modules") or [])
+        if prop == "text_encoder_URLs":
+            return model_def.get("text_encoder_URLs")
+        return None
+
+    plan = resolve_model_files(
+        model_type,
+        get_model_def=lambda _model: model_def,
+        transformer_quantization="int8",
+        transformer_dtype_policy="bf16",
+        get_transformer_dtype=lambda *_args: "computed-dtype",
+        get_model_filename=_model_file_filename(log),
+        get_model_recursive_prop=recursive,
+        text_encoder_quantization="int8",
+    )
+    return log, plan
+
+
+# Read from the file-resolution block of wgp.load_models (app/wgp.py, the
+# statements from `model_filename = get_model_filename(...)` through the text
+# encoder download). That function was not executed: app/wgp.py imports torch
+# at module level. The rows below are the calls that block makes when
+# save_quantized is false, the main filename does not contain "quanto", the
+# definition has no minimax_h3_text_encoder_variants, and no module is a list
+# with wangp_1272 set. Under those conditions the mirror requests the same
+# files. The string-module source flag is 1 here; the vendored block stores
+# True, and download_models compares with ==, so True and 1 select the same
+# branch.
+_MAIN = ("kw", (("dtype_policy", "bf16"), ("model_type", "plain"), ("quantization", "int8")))
+_SECOND = ("kw", (("dtype_policy", "bf16"), ("model_type", "combo"), ("quantization", "int8"), ("submodel_no", 2)))
+_VAE = ("pos", ("combo", "int8", "computed-dtype"), (("module_type", "vae"),))
+_URLS_A = ("pos", ("combo", "int8", "computed-dtype"), (("URLs", ("http://a",)),))
+_URLS_B = ("pos", ("combo", "int8", "computed-dtype"), (("URLs", ("http://b",)),))
+_ENCODER = ("kw", (
+    ("URLs", ("http://te/model",)),
+    ("dtype_policy", "bf16"),
+    ("model_type", "combo"),
+    ("quantization", "int8"),
+))
+
+
+def test_resolve_model_files_matches_the_vendored_resolution_table():
+    """The mirror and a reading of wgp.load_models list the same files for these definitions."""
+    plain_calls, plain = _resolve_case("plain", {})
+    assert plain_calls == [_MAIN]
+    assert plain.files == (("file-1", 0, 1),)
+    assert plain.text_encoder is None
+
+    combo_def = {
+        "URLs2": ["http://second"],
+        "modules": ["vae", {"URLs": ["http://a"], "URLs2": ["http://b"]}],
+        "text_encoder_URLs": ["http://te/model"],
+        "text_encoder_folder": "te-dir",
+    }
+    # The main-file row uses this definition's model type. Rebuild that one
+    # token the same way the table above was read off load_models.
+    main = ("kw", (("dtype_policy", "bf16"), ("model_type", "combo"), ("quantization", "int8")))
+    calls, plan = _resolve_case("combo", combo_def)
+    assert calls == [main, _SECOND, _VAE, _URLS_A, _URLS_B, _ENCODER]
+    assert plan.files == (
+        ("file-1", 0, 1),
+        ("file-2", 0, 2),
+        ("file-3", 1, 0),
+        ("file-4", 1, 1),
+        ("file-5", 1, 2),
+    )
+    assert plan.text_encoder == ("file-6", "te-dir")
+
+    overridden, over = _resolve_case("encoded", {
+        "text_encoder_URLs": ["http://te/model"],
+        "text_encoder_quantization": "bf16-encoder",
+        "text_encoder_folder": None,
+    })
+    assert overridden[1] == ("kw", (
+        ("URLs", ("http://te/model",)),
+        ("dtype_policy", "bf16"),
+        ("model_type", "encoded"),
+        ("quantization", "bf16-encoder"),
+    ))
+    assert over.text_encoder == ("file-2", None)
+
+
+def test_resolve_model_files_rejects_a_module_dict_with_no_urls():
+    """Both blocks raise when a module dict has no URLs. The mirror's message is launch's."""
+    with pytest.raises(Exception, match="No URLs defined for Module"):
+        _resolve_case("broken", {"modules": [{"URLs2": ["http://b"]}]})
 
 
 # -- speech request boundary ---------------------------------------------------------------------

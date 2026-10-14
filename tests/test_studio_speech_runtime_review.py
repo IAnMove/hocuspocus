@@ -154,8 +154,9 @@ def _runtime(tmp_path, observed, monkeypatch):
         "_list_workspaces": lambda: [{"name": "runtime-speech"}],
         "_lora_is_compatible_with_model": lambda _definition, _path: True,
     }
-    # The dispatch takes its queue registration from the lifecycle module, not from the runtime dictionary.
-    monkeypatch.setattr("services.image_generation_runtime.register_generation_job", lambda _lock, job: dispatched.append(("registered", deepcopy(job))))
+    # ``dispatch`` imports the shared FIFO registration; it is not a key of the runtime dict.
+    monkeypatch.setattr("services.image_generation_runtime.register_generation_job",
+                        lambda _lock, job: dispatched.append(("registered", deepcopy(job))))
     service = create_image_generation_commands(runtime)
     return service, registry, queue, dispatched, started
 

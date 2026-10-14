@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.launch_ast import generation_module
 from services.media_paths import (
     MediaPathNotAllowed,
     resolve_permitted_media_path,
@@ -205,7 +206,8 @@ def test_permitted_media_path_distinguishes_missing_from_forbidden(tmp_path):
 
 
 def test_audio_trim_and_analysis_endpoints_use_the_shared_resolver():
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    audio = ROOT / "app" / "routers" / "audio.py"
+    tree = ast.parse(audio.read_text(encoding="utf-8"), filename=str(audio))
     functions = {
         node.name: node
         for node in tree.body
@@ -246,12 +248,7 @@ def test_story_cover_jobs_use_the_shared_cover_resolver():
 
 
 def test_generation_resolves_voice_clone_refs_before_seedvc():
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    run = next(
-        node for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name == "_run_generation"
-    )
+    run = generation_module()
     calls = [
         node.func.id
         for node in ast.walk(run)
@@ -265,7 +262,8 @@ def test_adopting_audio_is_confined_to_audio_the_uploader_would_not_transcode():
     the pipeline can already open. The uploader transcodes mp3/m4a/aac to PCM
     WAV because the clip slicer reads with soundfile; nothing does that for an
     adopted file, so the endpoint asks the resolver for audio only."""
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    audio = ROOT / "app" / "routers" / "audio.py"
+    tree = ast.parse(audio.read_text(encoding="utf-8"), filename=str(audio))
     adopt = next(
         node for node in tree.body
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))

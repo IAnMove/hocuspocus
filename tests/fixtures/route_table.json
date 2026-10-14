@@ -38,7 +38,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 3
     },
     {
@@ -48,7 +48,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_preferences.py",
       "ordinal": 4
     },
     {
@@ -58,7 +58,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_preferences.py",
       "ordinal": 5
     },
     {
@@ -68,7 +68,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_preferences.py",
       "ordinal": 6
     },
     {
@@ -78,7 +78,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_preferences.py",
       "ordinal": 7
     },
     {
@@ -88,7 +88,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_preferences.py",
       "ordinal": 8
     },
     {
@@ -98,7 +98,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_preferences.py",
       "ordinal": 9
     },
     {
@@ -108,7 +108,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 10
     },
     {
@@ -118,7 +118,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 11
     },
     {
@@ -128,7 +128,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 12
     },
     {
@@ -138,7 +138,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 13
     },
     {
@@ -148,7 +148,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 14
     },
     {
@@ -158,7 +158,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 15
     },
     {
@@ -168,7 +168,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 16
     },
     {
@@ -178,7 +178,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/lora_guides.py",
       "ordinal": 17
     },
     {
@@ -188,7 +188,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 18
     },
     {
@@ -198,7 +198,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 19
     },
     {
@@ -208,7 +208,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 20
     },
     {
@@ -218,7 +218,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 21
     },
     {
@@ -228,7 +228,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 22
     },
     {
@@ -238,7 +238,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 23
     },
     {
@@ -248,7 +248,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 24
     },
     {
@@ -258,7 +258,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 25
     },
     {
@@ -268,7 +268,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/loras.py",
       "ordinal": 26
     },
     {
@@ -278,7 +278,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/civitai.py",
       "ordinal": 27
     },
     {
@@ -288,7 +288,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/civitai.py",
       "ordinal": 28
     },
     {
@@ -298,7 +298,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 29
     },
     {
@@ -308,7 +308,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/checkpoints.py",
       "ordinal": 30
     },
     {
@@ -318,7 +318,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/checkpoints.py",
       "ordinal": 31
     },
     {
@@ -328,7 +328,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/civitai.py",
       "ordinal": 32
     },
     {
@@ -338,7 +338,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/civitai.py",
       "ordinal": 33
     },
     {
@@ -348,7 +348,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/civitai.py",
       "ordinal": 34
     },
     {
@@ -358,7 +358,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/civitai.py",
       "ordinal": 35
     },
     {
@@ -368,7 +368,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/huggingface.py",
       "ordinal": 36
     },
     {
@@ -378,7 +378,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/lora_guides.py",
       "ordinal": 37
     },
     {
@@ -388,7 +388,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/lora_guides.py",
       "ordinal": 38
     },
     {
@@ -398,7 +398,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/checkpoints.py",
       "ordinal": 39
     },
     {
@@ -408,7 +408,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/lora_guides.py",
       "ordinal": 40
     },
     {
@@ -418,7 +418,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 41
     },
     {
@@ -428,7 +428,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 42
     },
     {
@@ -438,7 +438,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 43
     },
     {
@@ -448,7 +448,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 44
     },
     {
@@ -458,7 +458,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 45
     },
     {
@@ -468,7 +468,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 46
     },
     {
@@ -478,7 +478,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 47
     },
     {
@@ -488,7 +488,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model_catalog.py",
       "ordinal": 48
     },
     {
@@ -498,7 +498,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 49
     },
     {
@@ -508,7 +508,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 50
     },
     {
@@ -518,7 +518,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 51
     },
     {
@@ -528,7 +528,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 52
     },
     {
@@ -538,7 +538,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 53
     },
     {
@@ -608,7 +608,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 60
     },
     {
@@ -618,7 +618,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 61
     },
     {
@@ -628,7 +628,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/settings.py",
       "ordinal": 62
     },
     {
@@ -638,7 +638,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 63
     },
     {
@@ -648,7 +648,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 64
     },
     {
@@ -658,7 +658,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model3d.py",
       "ordinal": 65
     },
     {
@@ -668,7 +668,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model3d.py",
       "ordinal": 66
     },
     {
@@ -678,7 +678,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model3d.py",
       "ordinal": 67
     },
     {
@@ -688,7 +688,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model3d.py",
       "ordinal": 68
     },
     {
@@ -698,7 +698,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/model3d.py",
       "ordinal": 69
     },
     {
@@ -708,7 +708,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/rig.py",
       "ordinal": 70
     },
     {
@@ -718,7 +718,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/rig.py",
       "ordinal": 71
     },
     {
@@ -728,7 +728,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/rig.py",
       "ordinal": 72
     },
     {
@@ -738,7 +738,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/rig.py",
       "ordinal": 73
     },
     {
@@ -748,7 +748,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 74
     },
     {
@@ -758,7 +758,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 75
     },
     {
@@ -768,7 +768,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 76
     },
     {
@@ -778,7 +778,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 77
     },
     {
@@ -788,7 +788,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/storage_tools.py",
       "ordinal": 78
     },
     {
@@ -798,7 +798,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/storage_tools.py",
       "ordinal": 79
     },
     {
@@ -808,7 +808,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/storage_tools.py",
       "ordinal": 80
     },
     {
@@ -818,7 +818,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 81
     },
     {
@@ -908,7 +908,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/llm_director.py",
       "ordinal": 90
     },
     {
@@ -948,7 +948,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/llm_director.py",
       "ordinal": 94
     },
     {
@@ -958,7 +958,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 95
     },
     {
@@ -968,7 +968,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 96
     },
     {
@@ -978,7 +978,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 97
     },
     {
@@ -988,7 +988,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 98
     },
     {
@@ -998,7 +998,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 99
     },
     {
@@ -1008,7 +1008,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 100
     },
     {
@@ -1018,7 +1018,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 101
     },
     {
@@ -1028,7 +1028,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 102
     },
     {
@@ -1038,7 +1038,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 103
     },
     {
@@ -1048,7 +1048,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 104
     },
     {
@@ -1058,7 +1058,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 105
     },
     {
@@ -1088,7 +1088,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/audio.py",
       "ordinal": 108
     },
     {
@@ -1098,7 +1098,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 109
     },
     {
@@ -1108,7 +1108,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 110
     },
     {
@@ -1118,7 +1118,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 111
     },
     {
@@ -1128,7 +1128,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 112
     },
     {
@@ -1138,7 +1138,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 113
     },
     {
@@ -1148,7 +1148,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 114
     },
     {
@@ -1168,7 +1168,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 116
     },
     {
@@ -1178,7 +1178,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 117
     },
     {
@@ -1188,7 +1188,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 118
     },
     {
@@ -1198,7 +1198,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 119
     },
     {
@@ -1208,7 +1208,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 120
     },
     {
@@ -1268,7 +1268,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 126
     },
     {
@@ -1278,7 +1278,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 127
     },
     {
@@ -1288,7 +1288,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 128
     },
     {
@@ -1298,7 +1298,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 129
     },
     {
@@ -1308,7 +1308,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 130
     },
     {
@@ -1318,7 +1318,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 131
     },
     {
@@ -1328,7 +1328,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 132
     },
     {
@@ -1338,7 +1338,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 133
     },
     {
@@ -1348,7 +1348,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 134
     },
     {
@@ -1358,7 +1358,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director.py",
       "ordinal": 135
     },
     {
@@ -1368,7 +1368,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_v2.py",
       "ordinal": 136
     },
     {
@@ -1378,7 +1378,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_v2.py",
       "ordinal": 137
     },
     {
@@ -1388,7 +1388,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_v2.py",
       "ordinal": 138
     },
     {
@@ -1398,7 +1398,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_v2.py",
       "ordinal": 139
     },
     {
@@ -1408,7 +1408,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_v2.py",
       "ordinal": 140
     },
     {
@@ -1418,7 +1418,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_generate.py",
       "ordinal": 141
     },
     {
@@ -1428,7 +1428,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_edit_requests.py",
       "ordinal": 142
     },
     {
@@ -1438,7 +1438,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_edit_requests.py",
       "ordinal": 143
     },
     {
@@ -1448,7 +1448,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_edit_requests.py",
       "ordinal": 144
     },
     {
@@ -1458,7 +1458,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/repaint.py",
       "ordinal": 145
     },
     {
@@ -1468,7 +1468,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/repaint.py",
       "ordinal": 146
     },
     {
@@ -1478,7 +1478,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/recast_preview.py",
       "ordinal": 147
     },
     {
@@ -1488,7 +1488,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/recast.py",
       "ordinal": 148
     },
     {
@@ -1498,7 +1498,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outpaint.py",
       "ordinal": 149
     },
     {
@@ -1508,7 +1508,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/blend.py",
       "ordinal": 150
     },
     {
@@ -1518,7 +1518,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_segmentation.py",
       "ordinal": 151
     },
     {
@@ -1528,7 +1528,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_segmentation.py",
       "ordinal": 152
     },
     {
@@ -1538,7 +1538,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/studio_edit_requests.py",
       "ordinal": 153
     },
     {
@@ -1548,7 +1548,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/tools.py",
       "ordinal": 154
     },
     {
@@ -1558,7 +1558,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/tools.py",
       "ordinal": 155
     },
     {
@@ -1568,7 +1568,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/generation_jobs.py",
       "ordinal": 156
     },
     {
@@ -1578,7 +1578,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/generation_jobs.py",
       "ordinal": 157
     },
     {
@@ -1588,7 +1588,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/generation_jobs.py",
       "ordinal": 158
     },
     {
@@ -1598,7 +1598,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/generation_jobs.py",
       "ordinal": 159
     },
     {
@@ -1608,7 +1608,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/generation_jobs.py",
       "ordinal": 160
     },
     {
@@ -1618,7 +1618,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/generation_jobs.py",
       "ordinal": 161
     },
     {
@@ -1628,7 +1628,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/scenes_favorites.py",
       "ordinal": 162
     },
     {
@@ -1638,7 +1638,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/scenes_favorites.py",
       "ordinal": 163
     },
     {
@@ -1648,7 +1648,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/scenes_favorites.py",
       "ordinal": 164
     },
     {
@@ -1908,7 +1908,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/scenes_favorites.py",
       "ordinal": 190
     },
     {
@@ -2088,7 +2088,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 208
     },
     {
@@ -2098,7 +2098,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 209
     },
     {
@@ -2108,7 +2108,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 210
     },
     {
@@ -2118,7 +2118,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 211
     },
     {
@@ -2128,7 +2128,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 212
     },
     {
@@ -2138,7 +2138,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 213
     },
     {
@@ -2148,7 +2148,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 214
     },
     {
@@ -2158,7 +2158,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 215
     },
     {
@@ -2168,7 +2168,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 216
     },
     {
@@ -2178,7 +2178,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 217
     },
     {
@@ -2188,7 +2188,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 218
     },
     {
@@ -2198,7 +2198,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 219
     },
     {
@@ -2208,7 +2208,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 220
     },
     {
@@ -2218,7 +2218,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 221
     },
     {
@@ -2228,7 +2228,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 222
     },
     {
@@ -2238,7 +2238,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 223
     },
     {
@@ -2248,7 +2248,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 224
     },
     {
@@ -2258,7 +2258,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 225
     },
     {
@@ -2268,7 +2268,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 226
     },
     {
@@ -2278,7 +2278,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 227
     },
     {
@@ -2288,7 +2288,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 228
     },
     {
@@ -2298,7 +2298,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 229
     },
     {
@@ -2308,7 +2308,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 230
     },
     {
@@ -2318,7 +2318,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_plan.py",
       "ordinal": 231
     },
     {
@@ -2328,7 +2328,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_render.py",
       "ordinal": 232
     },
     {
@@ -2338,7 +2338,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_render.py",
       "ordinal": 233
     },
     {
@@ -2348,7 +2348,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_render.py",
       "ordinal": 234
     },
     {
@@ -2358,7 +2358,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_render.py",
       "ordinal": 235
     },
     {
@@ -2368,7 +2368,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_render.py",
       "ordinal": 236
     },
     {
@@ -2378,7 +2378,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_render.py",
       "ordinal": 237
     },
     {
@@ -2388,7 +2388,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 238
     },
     {
@@ -2398,7 +2398,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 239
     },
     {
@@ -2608,7 +2608,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/series_library.py",
       "ordinal": 260
     },
     {
@@ -2698,7 +2698,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 269
     },
     {
@@ -2708,7 +2708,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 270
     },
     {
@@ -2758,7 +2758,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 275
     },
     {
@@ -2768,7 +2768,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 276
     },
     {
@@ -2778,7 +2778,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 277
     },
     {
@@ -2788,7 +2788,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 278
     },
     {
@@ -2798,7 +2798,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/story_lab.py",
       "ordinal": 279
     },
     {
@@ -2808,7 +2808,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 280
     },
     {
@@ -2818,7 +2818,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 281
     },
     {
@@ -2828,7 +2828,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 282
     },
     {
@@ -2838,7 +2838,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 283
     },
     {
@@ -2848,7 +2848,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 284
     },
     {
@@ -2858,7 +2858,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 285
     },
     {
@@ -2868,7 +2868,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/director_comic.py",
       "ordinal": 286
     },
     {
@@ -2878,7 +2878,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 287
     },
     {
@@ -2898,7 +2898,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 289
     },
     {
@@ -2908,7 +2908,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/workspace_outputs.py",
       "ordinal": 290
     },
     {
@@ -2918,7 +2918,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 291
     },
     {
@@ -2928,7 +2928,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/alternative_songs.py",
       "ordinal": 292
     },
     {
@@ -2938,7 +2938,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/alternative_songs.py",
       "ordinal": 293
     },
     {
@@ -2948,7 +2948,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/alternative_songs.py",
       "ordinal": 294
     },
     {
@@ -2958,7 +2958,7 @@
       "status_code": 202,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/alternative_songs.py",
       "ordinal": 295
     },
     {
@@ -2968,7 +2968,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 296
     },
     {
@@ -2978,7 +2978,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 297
     },
     {
@@ -2988,7 +2988,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 298
     },
     {
@@ -2998,7 +2998,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 299
     },
     {
@@ -3088,7 +3088,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 308
     },
     {
@@ -3098,7 +3098,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/outputs_ops.py",
       "ordinal": 309
     },
     {
@@ -3128,7 +3128,7 @@
       "status_code": null,
       "response_model": null,
       "include_in_schema": null,
-      "source": "app/_launch_runtime.py",
+      "source": "app/routers/system.py",
       "ordinal": 312
     },
     {

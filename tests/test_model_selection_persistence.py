@@ -10,6 +10,9 @@ from tests.api_client_source import api_client_source
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
+VISIBILITY_PATH = os.path.join(ROOT, "app", "services", "model_visibility.py")
+PREFERENCES_PATH = os.path.join(ROOT, "app", "routers", "model_preferences.py")
+DIRECTOR_PATH = os.path.join(ROOT, "app", "routers", "llm_director.py")
 
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 MODELS_PATH = os.path.join(ROOT, "ui", "src", "stores", "modelsSlice.ts")
@@ -54,22 +57,25 @@ def _story_ui() -> str:
 class TestModelSelectionPersistence(unittest.TestCase):
     def test_global_production_profile_is_the_generic_llm_source(self):
         launch = _source(LAUNCH_PATH)
+        service = _source(VISIBILITY_PATH)
+        router = _source(PREFERENCES_PATH)
 
-        self.assertIn('@api.get("/api/v1/production-profile")', launch)
-        self.assertIn('@api.put("/api/v1/production-profile")', launch)
-        self.assertIn('"provider": "minimax", "model": "MiniMax-M3"', launch)
-        self.assertIn('"model": "minimax_h3_legacy"', launch)
+        self.assertIn('@router.get("/api/v1/production-profile")', router)
+        self.assertIn('@router.put("/api/v1/production-profile")', router)
+        self.assertIn('"provider": "minimax", "model": "MiniMax-M3"', service)
+        self.assertIn('"model": "minimax_h3_legacy"', service)
         self.assertIn("def _effective_llm_routing", launch)
-        ensure = launch[launch.index("def _ensure_llm_loaded():"):]
-        ensure = ensure[:ensure.index("@api.post", 1)]
+        director = _source(DIRECTOR_PATH)
+        ensure = director[director.index("def _ensure_llm_loaded():"):]
+        ensure = ensure[:ensure.index("\ndef ", 1)]
         self.assertIn("_effective_llm_routing(services)", ensure)
         services = _source(SERVICES_PATH)
         self.assertIn("loadProductionProfile", services)
         self.assertIn("updateProductionProfile", services)
 
     def test_backend_normalizes_per_mode_preferences(self):
-        source = _source(LAUNCH_PATH)
-        tree = ast.parse(source, filename=LAUNCH_PATH)
+        source = _source(VISIBILITY_PATH)
+        tree = ast.parse(source, filename=VISIBILITY_PATH)
         function = next(
             node for node in tree.body
             if isinstance(node, ast.FunctionDef)
@@ -82,7 +88,7 @@ class TestModelSelectionPersistence(unittest.TestCase):
                 {"image", "video", "audio", "model3d", "avatar"},
             ),
         }
-        exec(compile(module, LAUNCH_PATH, "exec"), namespace)
+        exec(compile(module, VISIBILITY_PATH, "exec"), namespace)
         normalize = namespace["_normalize_model_selections"]
 
         self.assertEqual(
@@ -95,12 +101,12 @@ class TestModelSelectionPersistence(unittest.TestCase):
             normalize({"video": 123})
 
     def test_client_and_boot_hydration_use_server_preferences(self):
-        launch = _source(LAUNCH_PATH)
+        router = _source(PREFERENCES_PATH)
         client = api_client_source()
         models = _source(MODELS_PATH)
 
-        self.assertIn('@api.get("/api/v1/model-selections")', launch)
-        self.assertIn('@api.put("/api/v1/model-selections")', launch)
+        self.assertIn('@router.get("/api/v1/model-selections")', router)
+        self.assertIn('@router.put("/api/v1/model-selections")', router)
         self.assertIn("fetchModelSelections", client)
         self.assertIn("updateModelSelections", client)
         self.assertIn("api.fetchModelSelections()", models)

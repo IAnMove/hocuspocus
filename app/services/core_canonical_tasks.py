@@ -131,6 +131,39 @@ def publish_music_activity(job: dict, adapter: str) -> dict | None:
     )
 
 
+def publish_studio_activity(record: dict, adapter: str) -> dict | None:
+    """Publish one Model3D or rig snapshot into the core Activity registry."""
+    if not isinstance(record, dict):
+        return None
+    task_id = _editor_text(record.get("task_id") or record.get("taskId"), "")
+    if not task_id:
+        return None
+    status = task_status(record.get("status"))
+    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
+    filename = record.get("filename")
+    title = "3D model" if adapter == "model3d" else "Rig"
+    return upsert_task(
+        _editor_text(record.get("workspace"), "default"),
+        task_id,
+        root_id=_editor_text(record.get("root_task_id") or record.get("rootTaskId"), task_id),
+        kind=adapter or "model3d",
+        workflow=adapter or "model3d",
+        title=title,
+        status=status,
+        phase=_editor_text(record.get("phase"), status)[:160],
+        message=_editor_text(record.get("message"), status),
+        provider=_editor_text(record.get("provider"), "local"),
+        model=_editor_text(record.get("model_id") or record.get("model") or record.get("engine"), ""),
+        backend_job_id=_editor_text(record.get("job_id") or record.get("jobId"), ""),
+        result_refs=[str(filename)] if filename else [],
+        metadata={
+            "adapter": adapter,
+            "actor": provenance.get("actor") or "unknown",
+            "tool": provenance.get("tool") or adapter,
+        },
+    )
+
+
 def publish_video_editor_activity(snapshot: dict, adapter: str) -> dict | None:
     """Publish one video-editor job snapshot into the core Activity registry."""
     task_id = _editor_text(snapshot.get("task_id"), "")
@@ -146,6 +179,68 @@ def publish_video_editor_activity(snapshot: dict, adapter: str) -> dict | None:
         fields["completed_at"] = snapshot.get("finished_at")
     workspace = _editor_text(snapshot.get("workspace"), "default")
     return upsert_task(workspace, task_id, **fields)
+
+
+def publish_series_plan_activity(job: dict, adapter: str) -> dict | None:
+    """Publish a Series planning job into the core Activity registry.
+
+    Core has no GPU lane and no resource scheduler. The row is still an
+    Activity task the Series screen can list, cancel and resume.
+    """
+    if not isinstance(job, dict):
+        return None
+    job_id = _editor_text(job.get("jobId"), "")
+    if not job_id:
+        return None
+    task_id = _editor_text(job.get("taskId"), "") or f"task-{adapter or 'series-plan'}-{job_id}"
+    if job.get("bootstrapKnownSeries") is True:
+        title = "Series Lab · Known-series bible"
+    elif job.get("jobType") == "canon":
+        title = "Series Lab · Canon"
+    else:
+        title = "Series Lab · Episode planning"
+    status = task_status(job.get("status"))
+    return upsert_task(
+        _editor_text(job.get("workspace"), "default"),
+        task_id,
+        root_id=_editor_text(job.get("rootTaskId"), "") or task_id,
+        kind="llm-planning",
+        workflow=adapter or "series-plan",
+        title=title,
+        status=status,
+        phase=_editor_text(job.get("stage"), status)[:160],
+        message=_editor_text(job.get("message"), status),
+        backend_job_id=job_id,
+        project_id=_editor_text(job.get("seriesId"), ""),
+        entity_type="episode",
+        entity_id=_editor_text(job.get("episodeId"), ""),
+        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        resumable=True,
+        recoverable=True,
+        metadata={"adapter": adapter or "series-plan"},
+    )
+
+
+def reset_series_plan_task_for_resume(workspace: str, task_id: str) -> None:
+    """Reopen a terminal Series plan task before its worker publishes again."""
+    if not task_id:
+        return
+    try:
+        registry = core_generation_commands.registry_for(workspace)
+        existing = registry.get(task_id)
+        if existing and str(existing.get("status") or "") in {"failed", "cancelled", "interrupted"}:
+            registry.update(
+                task_id,
+                status="queued",
+                phase="queued",
+                message="Resume requested",
+                error=None,
+                completed_at=None,
+                event_type="task.resume_requested",
+                force=True,
+            )
+    except Exception as exc:
+        print(f"[Task registry] Could not reopen {task_id}: {exc}")
 
 
 def sync_tasks(workspace: str) -> None:

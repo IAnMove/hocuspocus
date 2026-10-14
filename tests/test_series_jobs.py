@@ -1,11 +1,6 @@
-import ast
 import copy
-import json
-import math
-import sys
 import threading
-import time
-import types
+
 import pytest
 from pathlib import Path
 
@@ -13,24 +8,6 @@ from services.series_jobs import SeriesJobStore
 
 
 _ROOT = Path(__file__).parents[1]
-_LAUNCH = _ROOT / "app" / "_launch_runtime.py"
-
-
-def _load_launch_functions(*names: str, namespace: dict) -> None:
-    tree = ast.parse(_LAUNCH.read_text(encoding="utf-8"), filename=str(_LAUNCH))
-    selected = []
-    for name in names:
-        function = next(
-            node for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-            and node.name == name
-        )
-        function = copy.deepcopy(function)
-        function.decorator_list = []
-        selected.append(function)
-    module = ast.Module(body=selected, type_ignores=[])
-    ast.fix_missing_locations(module)
-    exec(compile(module, str(_LAUNCH), "exec"), namespace)
 
 
 def test_render_queue_survives_store_recreation(tmp_path):
@@ -45,31 +22,37 @@ def test_render_queue_survives_store_recreation(tmp_path):
     assert second.recoverable()[0]["jobId"] == "series-render-1"
 
 
-def test_render_endpoint_and_resumption_cannot_bypass_series_production_permissions():
+def test_render_endpoint_and_resumption_cannot_bypass_series_production_permissions(monkeypatch):
     from fastapi import HTTPException
+
+    import routers.series_render as routes
+    import services.series_render_jobs as render_jobs
+
     shot = {'id':'shot-1', 'productionMethod':'generated_video', 'attempts':[]}
     episode = {'id':'episode-1', 'shots':[shot]}
     series = {'id':'series-1', 'allowedProductionMethods':['animation_2d'], 'episodesById':{'episode-1':episode}}
-    namespace = {'copy':copy, 'HTTPException':HTTPException, '_series_library_lock':threading.RLock(),
-        '_series_library_workspace':lambda value: 'default',
-        '_read_series_workspace':lambda workspace: {'seriesById':{'series-1':series}},
-        '_series_project_or_404':lambda library, key: library['seriesById'][key],
-        '_active_series_render_for_episode':lambda *args: None,
-        '_series_render_candidates':lambda episode, body: episode['shots'],
-    }
-    _load_launch_functions('start_series_episode_render', '_series_render_context', namespace=namespace)
+    library = {'seriesById':{'series-1':series}}
+    monkeypatch.setattr(routes, "_series_library_lock", threading.RLock())
+    monkeypatch.setattr(routes, "_series_library_workspace", lambda value: 'default')
+    monkeypatch.setattr(routes, "_read_series_workspace", lambda workspace: library)
+    monkeypatch.setattr(routes, "_series_project_or_404", lambda current, key: current['seriesById'][key])
+    monkeypatch.setattr(routes, "_active_series_render_for_episode", lambda *args: None)
+    monkeypatch.setattr(routes, "_series_render_candidates", lambda episode, body: episode['shots'])
+    monkeypatch.setattr(render_jobs, "_series_library_lock", threading.RLock())
+    monkeypatch.setattr(render_jobs, "_read_series_workspace", lambda workspace: library)
+    monkeypatch.setattr(render_jobs, "_series_project_or_404", lambda current, key: current['seriesById'][key])
     with pytest.raises(HTTPException, match='No permitted') as denied:
-        namespace['start_series_episode_render']('series-1', 'episode-1', {})
+        routes.start_series_episode_render('series-1', 'episode-1', {})
     assert denied.value.status_code == 400
     with pytest.raises(ValueError, match='not permitted'):
-        namespace['_series_render_context']({'workspace':'default','seriesId':'series-1','episodeId':'episode-1'}, {'shotId':'shot-1'})
+        render_jobs._series_render_context({'workspace':'default','seriesId':'series-1','episodeId':'episode-1'}, {'shotId':'shot-1'})
     leftover = {'id':'shot-leftover', 'productionMethod':'imported_video', 'attempts':[]}
     episode['shots'] = [leftover, shot]
     with pytest.raises(HTTPException, match='No permitted'):
-        namespace['start_series_episode_render']('series-1', 'episode-1', {})
+        routes.start_series_episode_render('series-1', 'episode-1', {})
     shot['productionMethod'] = 'animation_2d'
     with pytest.raises(HTTPException, match='No permitted'):
-        namespace['start_series_episode_render']('series-1', 'episode-1', {})
+        routes.start_series_episode_render('series-1', 'episode-1', {})
 
 
 def test_discard_removes_checkpoint_not_output(tmp_path):
@@ -85,7 +68,7 @@ def test_discard_removes_checkpoint_not_output(tmp_path):
     assert output.read_bytes() == b"approved"
 
 
-def test_series_render_settlement_marks_fully_rendered_episode_completed():
+def test_series_render_settlement_marks_fully_rendered_episode_completed(monkeypatch):
     library = {
         "seriesById": {
             "series-1": {
@@ -107,18 +90,16 @@ def test_series_render_settlement_marks_fully_rendered_episode_completed():
             },
         },
     }
-    writes = []
-    namespace = {
-        "copy": copy,
-        "_series_library_lock": threading.RLock(),
-        "_read_series_workspace": lambda _workspace: copy.deepcopy(library),
-        "_series_project_or_404": lambda current, series_id: current["seriesById"][series_id],
-        "_write_series_workspace": lambda _workspace, current: writes.append(copy.deepcopy(current)) or current,
-        "_series_iso_now": lambda: "2026-08-11T00:00:00Z",
-    }
-    _load_launch_functions("_series_settle_episode_render_status", namespace=namespace)
+    import services.series_render_jobs as render_jobs
 
-    status = namespace["_series_settle_episode_render_status"]({
+    writes = []
+    monkeypatch.setattr(render_jobs, "_series_library_lock", threading.RLock())
+    monkeypatch.setattr(render_jobs, "_read_series_workspace", lambda _workspace: copy.deepcopy(library))
+    monkeypatch.setattr(render_jobs, "_series_project_or_404", lambda current, series_id: current["seriesById"][series_id])
+    monkeypatch.setattr(render_jobs, "_write_series_workspace", lambda _workspace, current: writes.append(copy.deepcopy(current)) or current)
+    monkeypatch.setattr(render_jobs, "_series_iso_now", lambda: "2026-08-11T00:00:00Z")
+
+    status = render_jobs._series_settle_episode_render_status({
         "workspace": "default", "seriesId": "series-1", "episodeId": "episode-1",
     })
 
@@ -129,7 +110,7 @@ def test_series_render_settlement_marks_fully_rendered_episode_completed():
     assert episode["updatedAt"] == "2026-08-11T00:00:00Z"
 
 
-def test_series_render_settlement_returns_partial_episode_to_shot_plan():
+def test_series_render_settlement_returns_partial_episode_to_shot_plan(monkeypatch):
     library = {
         "seriesById": {
             "series-1": {
@@ -148,18 +129,16 @@ def test_series_render_settlement_returns_partial_episode_to_shot_plan():
             },
         },
     }
-    writes = []
-    namespace = {
-        "copy": copy,
-        "_series_library_lock": threading.RLock(),
-        "_read_series_workspace": lambda _workspace: copy.deepcopy(library),
-        "_series_project_or_404": lambda current, series_id: current["seriesById"][series_id],
-        "_write_series_workspace": lambda _workspace, current: writes.append(copy.deepcopy(current)) or current,
-        "_series_iso_now": lambda: "2026-08-11T00:00:00Z",
-    }
-    _load_launch_functions("_series_settle_episode_render_status", namespace=namespace)
+    import services.series_render_jobs as render_jobs
 
-    status = namespace["_series_settle_episode_render_status"]({
+    writes = []
+    monkeypatch.setattr(render_jobs, "_series_library_lock", threading.RLock())
+    monkeypatch.setattr(render_jobs, "_read_series_workspace", lambda _workspace: copy.deepcopy(library))
+    monkeypatch.setattr(render_jobs, "_series_project_or_404", lambda current, series_id: current["seriesById"][series_id])
+    monkeypatch.setattr(render_jobs, "_write_series_workspace", lambda _workspace, current: writes.append(copy.deepcopy(current)) or current)
+    monkeypatch.setattr(render_jobs, "_series_iso_now", lambda: "2026-08-11T00:00:00Z")
+
+    status = render_jobs._series_settle_episode_render_status({
         "workspace": "default", "seriesId": "series-1", "episodeId": "episode-1",
     })
 
@@ -177,7 +156,7 @@ def test_planning_and_render_namespaces_are_isolated(tmp_path):
     assert render.load("same")["status"] == "failed"
 
 
-def test_active_render_guard_is_scoped_to_workspace_series_and_episode():
+def test_active_render_guard_is_scoped_to_workspace_series_and_episode(monkeypatch):
     persisted = [{
         "jobId": "persisted-active", "workspace": "default",
         "seriesId": "series-1", "episodeId": "episode-1", "status": "running",
@@ -190,41 +169,38 @@ def test_active_render_guard_is_scoped_to_workspace_series_and_episode():
         def list(self):
             return copy.deepcopy(persisted)
 
-    namespace = {
-        "copy": copy,
-        "json": json,
-        "_series_render_jobs_lock": threading.RLock(),
-        "_series_render_jobs": {
-            "cached-other-series": {
-                "jobId": "cached-other-series", "workspace": "default",
-                "seriesId": "series-2", "episodeId": "episode-1", "status": "queued",
-            },
-        },
-        "_series_render_store": lambda _workspace: Store(),
-    }
-    _load_launch_functions("_active_series_render_for_episode", namespace=namespace)
+    import services.series_render_jobs as render_jobs
 
-    active = namespace["_active_series_render_for_episode"]("default", "series-1", "episode-1")
+    monkeypatch.setattr(render_jobs, "_series_render_jobs_lock", threading.RLock())
+    monkeypatch.setattr(render_jobs, "_series_render_jobs", {
+        "cached-other-series": {
+            "jobId": "cached-other-series", "workspace": "default",
+            "seriesId": "series-2", "episodeId": "episode-1", "status": "queued",
+        },
+    })
+    monkeypatch.setattr(render_jobs, "_series_render_store", lambda _workspace: Store())
+
+    active = render_jobs._active_series_render_for_episode("default", "series-1", "episode-1")
 
     assert active["jobId"] == "persisted-active"
-    assert namespace["_active_series_render_for_episode"]("default", "series-1", "episode-2") is None
-    assert namespace["_active_series_render_for_episode"]("default", "series-2", "episode-1")["jobId"] == "cached-other-series"
-    assert namespace["_active_series_render_for_episode"]("other", "series-1", "episode-1") is None
+    assert render_jobs._active_series_render_for_episode("default", "series-1", "episode-2") is None
+    assert render_jobs._active_series_render_for_episode("default", "series-2", "episode-1")["jobId"] == "cached-other-series"
+    assert render_jobs._active_series_render_for_episode("other", "series-1", "episode-1") is None
 
 
 def test_explicit_slot_regeneration_preserves_approved_attempt_while_bulk_skips_it():
-    namespace = {}
-    _load_launch_functions("_series_render_candidates", namespace=namespace)
+    from services.series_render_jobs import _series_render_candidates
+
     episode = {"shots": [{
         "id": "shot-approved", "approvedAttemptId": "attempt-old", "attempts": [],
     }, {
         "id": "shot-missing", "attempts": [],
     }]}
 
-    selected = namespace["_series_render_candidates"](episode, {
+    selected = _series_render_candidates(episode, {
         "mode": "selected", "shotIds": ["shot-approved"],
     })
-    missing = namespace["_series_render_candidates"](episode, {"mode": "missing"})
+    missing = _series_render_candidates(episode, {"mode": "missing"})
 
     assert [shot["id"] for shot in selected] == ["shot-approved"]
     assert [shot["id"] for shot in missing] == ["shot-missing"]
@@ -262,47 +238,38 @@ def test_running_series_cancel_waits_for_child_and_runtime_release(monkeypatch):
         jobs[render_job_id].update(copy.deepcopy(patch))
         return copy.deepcopy(jobs[render_job_id])
 
-    series_module = types.ModuleType("services.series_library")
-    series_module.update_shot_render_attempt = lambda shot, _attempt_id, **_patch: shot
-    monkeypatch.setitem(sys.modules, "services.series_library", series_module)
+    import routers.series_render as routes
+    import services.series_render_jobs as render_jobs
 
-    class HTTPException(Exception):
-        def __init__(self, status_code, detail):
-            super().__init__(detail)
-            self.status_code = status_code
-
-    namespace = {
-        "HTTPException": HTTPException,
-        "copy": copy,
-        "time": time,
-        "_jobs": {child_id: {}},
-        "_series_render_jobs_lock": threading.RLock(),
-        "_series_render_active_jobs": active,
-        "_load_series_render_job": load,
-        "_series_render_update": update,
-        "_series_iso_now": lambda: "2026-08-10T00:00:00Z",
-        "_series_library_lock": threading.RLock(),
-        "_read_series_workspace": lambda _workspace: {},
-        "_series_project_or_404": lambda _library, _series_id: {
-            "id": "series-1",
-            "revision": 1,
-            "episodesById": {"episode-1": {"id": "episode-1", "shots": []}},
-        },
-        "_write_series_workspace": lambda _workspace, library: library,
-        "_request_generation_cancel": lambda target: child_cancels.append(target),
-        "_run_series_render_job_inner": lambda _job_id: None,
-        "_is_legacy_h3_model": lambda model: model == "minimax_h3_legacy",
-        "_is_minimax_h3_model": lambda _model: False,
-        "_release_legacy_h3_when_queue_allows": lambda target: releases.append(target),
-        "_release_h3_when_queue_allows": lambda _target: None,
+    lock = threading.RLock()
+    project = {
+        "id": "series-1",
+        "revision": 1,
+        "episodesById": {"episode-1": {"id": "episode-1", "shots": []}},
     }
-    _load_launch_functions(
-        "cancel_series_render_job",
-        "_run_series_render_job",
-        namespace=namespace,
-    )
+    monkeypatch.setattr(routes, "_series_render_jobs_lock", lock)
+    monkeypatch.setattr(routes, "_series_render_active_jobs", active)
+    monkeypatch.setattr(routes, "_load_series_render_job", load)
+    monkeypatch.setattr(routes, "_series_render_update", update)
+    monkeypatch.setattr(routes, "_series_iso_now", lambda: "2026-08-10T00:00:00Z")
+    monkeypatch.setattr(routes, "_series_library_lock", threading.RLock())
+    monkeypatch.setattr(routes, "_read_series_workspace", lambda _workspace: {})
+    monkeypatch.setattr(routes, "_series_project_or_404", lambda _library, _series_id: project)
+    monkeypatch.setattr(routes, "_write_series_workspace", lambda _workspace, library: library)
+    monkeypatch.setattr(routes, "_jobs", {child_id: {}})
+    monkeypatch.setattr(routes, "_request_generation_cancel", lambda target: child_cancels.append(target))
+    monkeypatch.setattr(render_jobs, "_series_render_jobs_lock", lock)
+    monkeypatch.setattr(render_jobs, "_series_render_active_jobs", active)
+    monkeypatch.setattr(render_jobs, "_load_series_render_job", load)
+    monkeypatch.setattr(render_jobs, "_series_render_update", update)
+    monkeypatch.setattr(render_jobs, "_series_iso_now", lambda: "2026-08-10T00:00:00Z")
+    monkeypatch.setattr(render_jobs, "_run_series_render_job_inner", lambda _job_id: None)
+    monkeypatch.setattr(render_jobs, "_is_legacy_h3_model", lambda model: model == "minimax_h3_legacy")
+    monkeypatch.setattr(render_jobs, "_is_minimax_h3_model", lambda _model: False)
+    monkeypatch.setattr(render_jobs, "_release_legacy_h3_when_queue_allows", lambda target: releases.append(target))
+    monkeypatch.setattr(render_jobs, "_release_h3_when_queue_allows", lambda _target: None)
 
-    response = namespace["cancel_series_render_job"](job_id)
+    response = routes.cancel_series_render_job(job_id)
 
     assert response["status"] == "cancelling"
     assert jobs[job_id]["status"] == "cancelling"
@@ -313,16 +280,69 @@ def test_running_series_cancel_waits_for_child_and_runtime_release(monkeypatch):
     # The worker owns the safe boundary. Only its finalizer may publish the
     # terminal state and schedule release of the shared H3 runtime.
     active.clear()
-    namespace["_run_series_render_job"](job_id)
+    render_jobs._run_series_render_job(job_id)
     assert jobs[job_id]["status"] == "cancelled"
     assert jobs[job_id]["finishedAt"] is not None
     assert jobs[job_id]["items"][0]["status"] == "cancelled"
     assert releases == [job_id]
 
 
+def test_series_render_task_adapter_lists_snapshots_and_cancels(monkeypatch):
+    import services.series_render_jobs as render_jobs
+
+    job = {
+        "jobId": "series-render-1",
+        "workspace": "film",
+        "taskId": "task-series-render-series-render-1",
+        "status": "running",
+    }
+    other = {
+        "jobId": "series-render-2",
+        "workspace": "other",
+        "taskId": "task-series-render-series-render-2",
+    }
+    published = []
+    cancelled = []
+
+    def publish(item, adapter):
+        published.append((item["jobId"], adapter))
+        return {"id": item["taskId"], "adapter": adapter}
+
+    monkeypatch.setattr(render_jobs, "_series_render_jobs_lock", threading.RLock())
+    monkeypatch.setattr(render_jobs, "_series_render_jobs", {
+        job["jobId"]: job,
+        other["jobId"]: other,
+    })
+    monkeypatch.setattr(render_jobs, "_publish_series_task", publish)
+    monkeypatch.setattr(
+        render_jobs, "_cancel_series_render_job",
+        lambda job_id: cancelled.append(job_id) or {"jobId": job_id, "status": "cancelling"},
+    )
+
+    adapter = render_jobs.series_render_task_adapter
+    assert adapter.list("film") == [{"id": "task-series-render-series-render-1", "adapter": "series-render"}]
+    assert published == [("series-render-1", "series-render")]
+    assert adapter.snapshot("film", "task-series-render-series-render-1")["id"] == "task-series-render-series-render-1"
+    assert adapter.snapshot("film", "missing") is None
+    assert adapter.snapshot("other", "task-series-render-series-render-1") is None
+    assert adapter.cancel("film", "task-series-render-series-render-1") == {
+        "jobId": "series-render-1", "status": "cancelling",
+    }
+    assert cancelled == ["series-render-1"]
+    assert adapter.cancel("film", "missing") is None
+    monkeypatch.setattr(render_jobs, "_publish_series_task", None)
+    assert adapter.list("film") == []
+    assert adapter.snapshot("film", "task-series-render-series-render-1") is None
+
+
 def test_running_series_plan_cancel_waits_for_llm_worker_boundary():
+    from unittest.mock import patch
+
+    import routers.series_plan as routes
+    import services.series_plan_jobs as plan_jobs
+
     job_id = "series-plan-safe-cancel"
-    jobs = {
+    stored = {
         job_id: {
             "jobId": job_id,
             "workspace": "default",
@@ -334,52 +354,39 @@ def test_running_series_plan_cancel_waits_for_llm_worker_boundary():
     active = {job_id}
 
     def load(plan_job_id):
-        return copy.deepcopy(jobs.get(plan_job_id))
+        return copy.deepcopy(stored.get(plan_job_id))
 
-    def update(plan_job_id, **patch):
-        current = jobs[plan_job_id]
+    def update(plan_job_id, **fields):
+        current = stored[plan_job_id]
         if (
             current.get("status") == "cancelling"
-            and patch.get("status") not in {"cancelling", "cancelled"}
+            and fields.get("status") not in {"cancelling", "cancelled"}
         ):
             return copy.deepcopy(current)
-        current.update(copy.deepcopy(patch))
+        current.update(copy.deepcopy(fields))
         return copy.deepcopy(current)
 
-    class HTTPException(Exception):
-        def __init__(self, status_code, detail):
-            super().__init__(detail)
-            self.status_code = status_code
+    with (
+        patch.object(routes, "_load_series_plan_job", load),
+        patch.object(routes, "_series_plan_update", update),
+        patch.object(routes, "_series_plan_active_jobs", active),
+        patch.object(plan_jobs, "_load_series_plan_job", load),
+        patch.object(plan_jobs, "_series_plan_update", update),
+        patch.object(plan_jobs, "_series_plan_active_jobs", active),
+        patch.object(plan_jobs, "_run_series_plan_job_inner", lambda _job_id: None),
+        patch.object(plan_jobs, "_run_series_canon_plan_job_inner", lambda _job_id: None),
+        patch.object(plan_jobs, "_publish_series_task", lambda _job, _adapter: None),
+        patch.object(plan_jobs, "_workspace_dir", lambda _workspace=None: "/unused"),
+    ):
+        response = routes.cancel_series_episode_plan(job_id)
+        assert response["status"] == "cancelling"
+        assert stored[job_id].get("finishedAt") is None
 
-    namespace = {
-        "HTTPException": HTTPException,
-        "copy": copy,
-        "time": time,
-        "_series_plan_jobs_lock": threading.RLock(),
-        "_series_plan_active_jobs": active,
-        "_load_series_plan_job": load,
-        "_series_plan_update": update,
-        "_publish_series_task": lambda _job, _adapter: None,
-        "_run_series_plan_job_inner": lambda _job_id: None,
-        "_run_series_canon_plan_job_inner": lambda _job_id: None,
-        "_workspace_dir": lambda _workspace=None: "/unused",
-    }
-    _load_launch_functions(
-        "_planning_cancel_message",
-        "cancel_series_episode_plan",
-        "_run_series_plan_job",
-        namespace=namespace,
-    )
-
-    response = namespace["cancel_series_episode_plan"](job_id)
-    assert response["status"] == "cancelling"
-    assert jobs[job_id]["finishedAt"] is None
-
-    active.clear()
-    namespace["_run_series_plan_job"](job_id)
-    assert jobs[job_id]["status"] == "cancelled"
-    assert jobs[job_id]["finishedAt"] is not None
-    assert "Completed stages remain recoverable" in jobs[job_id]["message"]
+        active.clear()
+        plan_jobs._run_series_plan_job(job_id)
+    assert stored[job_id]["status"] == "cancelled"
+    assert stored[job_id]["finishedAt"] is not None
+    assert "Completed stages remain recoverable" in stored[job_id]["message"]
 
 
 def _editable_episode_fixture():
@@ -420,8 +427,8 @@ def _editable_episode_fixture():
 
 
 def test_manual_episode_proposal_edits_preserve_protected_ids():
-    namespace = {"copy": copy, "math": math}
-    _load_launch_functions("_prepare_edited_series_episode_proposal", namespace=namespace)
+    from services.series_plan_jobs import _prepare_edited_series_episode_proposal
+
     stored = _editable_episode_fixture()
     edited = copy.deepcopy(stored)
     edited["outline"]["beats"][0] = "Edited beat"
@@ -433,7 +440,7 @@ def test_manual_episode_proposal_edits_preserve_protected_ids():
         "locations": [{"id": "location-1"}],
     }
 
-    result = namespace["_prepare_edited_series_episode_proposal"](stored, edited, series)
+    result = _prepare_edited_series_episode_proposal(stored, edited, series)
 
     assert result["outline"]["beats"] == ["Edited beat"]
     assert result["script"][0]["id"] == "scene-1"
@@ -445,14 +452,14 @@ def test_manual_episode_proposal_edits_preserve_protected_ids():
 
 
 def test_manual_episode_proposal_rejects_replaced_internal_ids():
-    namespace = {"copy": copy}
-    _load_launch_functions("_prepare_edited_series_episode_proposal", namespace=namespace)
+    from services.series_plan_jobs import _prepare_edited_series_episode_proposal
+
     stored = _editable_episode_fixture()
     edited = copy.deepcopy(stored)
     edited["shots"][0]["id"] = "replacement-shot"
 
     try:
-        namespace["_prepare_edited_series_episode_proposal"](
+        _prepare_edited_series_episode_proposal(
             stored, edited, {"characters": [{"id": "character-1"}], "locations": [{"id": "location-1"}]},
         )
     except ValueError as exc:

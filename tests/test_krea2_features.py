@@ -14,7 +14,10 @@ _APP = _ROOT / "app"
 _HANDLER_PATH = _APP / "models" / "krea2" / "krea2_handler.py"
 _MAIN_PATH = _APP / "models" / "krea2" / "krea2_main.py"
 _MMDIT_PATH = _APP / "models" / "krea2" / "krea2_mmdit.py"
-_LAUNCH_PATH = _APP / "_launch_runtime.py"
+_HF_IMPORT_PATH = _APP / "services" / "hf_import.py"
+_CIVITAI_PATH = _APP / "services" / "civitai.py"
+_DOWNLOADS_PATH = _APP / "services" / "model_downloads.py"
+_OPTIONS_PATH = _APP / "services" / "model_options.py"
 _GGUF_PATH = _APP / "shared" / "utils" / "gguf_mapping.py"
 _TYPES_PATH = _ROOT / "ui" / "src" / "types" / "index.ts"
 _REF_UI_PATH = _ROOT / "ui" / "src" / "components" / "Sidebar" / "ImageRefSection.tsx"
@@ -77,7 +80,7 @@ def _load_lora_preprocessor():
 
 
 def _load_model_download_check(*, vision_exists: bool):
-    tree = ast.parse(_read(_LAUNCH_PATH), filename=str(_LAUNCH_PATH))
+    tree = ast.parse(_read(_DOWNLOADS_PATH), filename=str(_DOWNLOADS_PATH))
     function = next(
         node for node in tree.body
         if isinstance(node, ast.FunctionDef) and node.name == "_check_model_downloaded"
@@ -98,7 +101,7 @@ def _load_model_download_check(*, vision_exists: bool):
         "_variant_group_downloaded": lambda _group: True,
     }
     module = ast.Module(body=[function], type_ignores=[])
-    exec(compile(ast.fix_missing_locations(module), str(_LAUNCH_PATH), "exec"), namespace)
+    exec(compile(ast.fix_missing_locations(module), str(_DOWNLOADS_PATH), "exec"), namespace)
     return namespace["_check_model_downloaded"]("krea2_raw_edit")
 
 
@@ -199,9 +202,9 @@ class TestKrea2LoraCompatibility(unittest.TestCase):
 
 class TestKrea2LoraBrowser(unittest.TestCase):
     def test_civitai_and_huggingface_routes_target_krea_directory(self):
-        civit_map = _literal_assignment(_LAUNCH_PATH, "CIVIT_TO_LOCAL_ARCH")
-        hf_map = _literal_assignment(_LAUNCH_PATH, "HF_BASE_TO_LOCAL_DIR")
-        filters = _literal_assignment(_LAUNCH_PATH, "CIVITAI_MODEL_FILTERS")
+        civit_map = _literal_assignment(_CIVITAI_PATH, "CIVIT_TO_LOCAL_ARCH")
+        hf_map = _literal_assignment(_HF_IMPORT_PATH, "HF_BASE_TO_LOCAL_DIR")
+        filters = _literal_assignment(_CIVITAI_PATH, "CIVITAI_MODEL_FILTERS")
         self.assertEqual(civit_map["Krea 2"], "krea2")
         self.assertEqual(hf_map["krea/Krea-2-Raw"], "krea2")
         self.assertEqual(hf_map["krea/Krea-2-Turbo"], "krea2")
@@ -211,11 +214,11 @@ class TestKrea2LoraBrowser(unittest.TestCase):
         )
 
     def test_owned_lora_filter_and_reference_limit_are_wired_to_ui(self):
-        launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         ref_ui = _read(_REF_UI_PATH)
         inputs_ui = _read(_INPUTS_UI_PATH)
         types_source = _read(_TYPES_PATH)
-        self.assertIn('"max_image_refs": md.get("max_image_refs")', launch)
+        self.assertIn('"max_image_refs": md.get("max_image_refs")', options)
         self.assertIn("max_image_refs?: number | null", types_source)
         self.assertIn("const configuredMaxRefs = modelOptions?.max_image_refs ?? null", ref_ui)
         self.assertIn("configuredMaxRefs - (usesEditSource ? 1 : 0)", ref_ui)

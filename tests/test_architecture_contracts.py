@@ -149,6 +149,40 @@ def test_route_paths_must_be_string_literals(monkeypatch) -> None:
     assert [route["path"] for route in _routes_of(computed)] == ["f'{PREFIX}/items'"]
 
 
+def test_add_api_route_is_recorded_in_source_order() -> None:
+    source = "\n".join([
+        "def create_example_router():",
+        "    router = APIRouter()",
+        "    @router.get('/first')",
+        "    def first():",
+        "        pass",
+        "    router.add_api_route('/second', second, methods=['POST'])",
+        "    router.add_api_route('/third', third, methods=['PUT', 'PATCH'])",
+        "    return router",
+        "def second():",
+        "    pass",
+        "def third():",
+        "    pass",
+        "",
+    ])
+    tree = ast.parse(source)
+    factory = tree.body[0]
+    decorated = []
+    for node in ast.walk(factory):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            decorated.extend(architecture_contracts._decorated_routes(node, owner="app/routers/example.py"))
+    added = architecture_contracts._add_api_routes(factory, owner="app/routers/example.py")
+    routes = sorted(decorated + added, key=lambda item: item["_line"])
+    assert [(route["method"], route["path"], route["endpoint"]) for route in routes] == [
+        ("GET", "/first", "first"),
+        ("POST", "/second", "second"),
+        ("PUT", "/third", "third"),
+        ("PATCH", "/third", "third"),
+    ]
+    assert all(route["source"] == "app/routers/example.py" for route in routes)
+    assert all(route["status_code"] is None for route in routes)
+
+
 def test_stacked_route_decorators_register_bottom_up() -> None:
     routes = _routes_of(
         "@router.get('/first')\n@router.head('/second')\ndef both():\n    pass\n"

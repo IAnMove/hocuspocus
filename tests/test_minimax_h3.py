@@ -14,6 +14,7 @@ import types
 import typing
 import unittest
 from unittest import mock
+from tests.support.launch_ast import launch_and_worker_source
 
 
 _ROOT = Path(__file__).resolve().parents[1]
@@ -30,6 +31,16 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_OPTION_HELPERS_PATH = _APP / "services" / "generation_option_helpers.py"
+_HF_IMPORT_PATH = _APP / "services" / "hf_import.py"
+_CIVITAI_PATH = _APP / "services" / "civitai.py"
+_CIVITAI_DOWNLOADS_PATH = _APP / "services" / "civitai_downloads.py"
+_GENERATE_PATH = _APP / "services" / "studio_generate.py"
+_COEFFICIENT_PATH = _APP / "services" / "generation_coefficients.py"
+_LORA_LIBRARY_PATH = _APP / "services" / "lora_library.py"
+_DOWNLOADS_PATH = _APP / "services" / "model_downloads.py"
+_OPTIONS_PATH = _APP / "services" / "model_options.py"
+_SYSTEM_ROUTER_PATH = _APP / "routers" / "system.py"
 _LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
 _DEFAULT_PATH = _APP / "defaults" / "minimax_h3.json"
@@ -172,7 +183,7 @@ def _literal_assignment(path: Path, name: str):
 
 
 def _load_minimax_h3_lora_routing_helpers():
-    tree = ast.parse(_read(_LAUNCH_PATH), filename=str(_LAUNCH_PATH))
+    tree = ast.parse(_read(_CIVITAI_PATH), filename=str(_CIVITAI_PATH))
     selected = []
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
@@ -289,9 +300,9 @@ class TestMiniMaxH3Definition(unittest.TestCase):
                 model_def=model_def,
             )
 
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         self.assertIn("minimax_h3_service.generate(", launch)
-        self.assertIn("def _is_legacy_h3_model", launch)
+        self.assertIn("def _is_legacy_h3_model", _read(_OPTION_HELPERS_PATH))
         self.assertIn("_release_legacy_h3_when_queue_allows", launch)
         legacy_branch = launch.split(
             "if legacy_h3_job:", 2,
@@ -301,12 +312,13 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_series_and_manual_release_drop_the_isolated_h3_runtime(self):
         launch = _read(_LAUNCH_PATH)
-        series_worker = launch.split(
+        series_worker = _read(_APP / "services" / "series_render_jobs.py").split(
             "def _run_series_render_job(job_id: str) -> None:", 1,
         )[1].split("def _series_render_candidates", 1)[0]
-        manual_release = launch.split(
+        system_router = _read(_SYSTEM_ROUTER_PATH)
+        manual_release = system_router.split(
             "def system_release_model():", 1,
-        )[1].split("# ============================================================================", 1)[0]
+        )[1].split("return router", 1)[0]
 
         self.assertIn(
             "_release_legacy_h3_when_queue_allows(job_id)", series_worker,
@@ -744,14 +756,15 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_resolution_and_encoder_capabilities_reach_the_ui_and_backend(self):
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_STORE_PATH)
         studio_configuration = _read(_STUDIO_CONFIGURATION_SLICE_PATH)
         presets = _read(_RESOLUTION_PRESETS_PATH)
         aspects = _read(_ASPECT_RATIO_GRID_PATH)
         self.assertIn("_recommended_minimax_h3_encoder", launch)
-        self.assertIn('"recommended": key == _h3_encoder_default', launch)
-        self.assertIn('"resolution_presets": md.get("resolution_presets")', launch)
+        self.assertIn('"recommended": key == _h3_encoder_default', options)
+        self.assertIn('"resolution_presets": md.get("resolution_presets")', options)
         self.assertIn("elif minimax_h3_references:", wgp)
         self.assertIn("_h3_auto_budgets", wgp)
         self.assertIn("_h3_auto_fallbacks", wgp)
@@ -857,10 +870,11 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertEqual(studio["model"]["audioIn"], "Audio In")
         self.assertNotIn("badges.push('Audio')", selector)
         self.assertIn("lora_compatibility_note", _read(_LORA_SELECTOR_PATH))
-        launch = _read(_LAUNCH_PATH)
-        self.assertIn('"selector_help": md.get("selector_help", "")', launch)
-        self.assertIn('"lora_compatibility_note": md.get("lora_compatibility_note", "")', launch)
-        self.assertIn('"director_memory_policy": md.get', launch)
+        downloads = _read(_DOWNLOADS_PATH)
+        options = _read(_OPTIONS_PATH)
+        self.assertIn('"selector_help": md.get("selector_help", "")', downloads)
+        self.assertIn('"lora_compatibility_note": md.get("lora_compatibility_note", "")', downloads)
+        self.assertIn('"director_memory_policy": md.get', options)
 
     def test_h3_reserves_transformer_activation_workspace(self):
         source = _read(_HANDLER_PATH)
@@ -870,19 +884,21 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_video_references_get_a_dedicated_memory_profile(self):
         launch = _read(_LAUNCH_PATH)
+        coefficient = _read(_COEFFICIENT_PATH)
+        options = _read(_OPTIONS_PATH)
         wgp = _read(_WGP_PATH)
         transformer = _read(_TRANSFORMER_PATH)
-        self.assertIn("_h3_video_reference_count", launch)
-        self.assertIn("h3_reference_activation_gb", launch)
-        self.assertIn("compute_h3_weight_budget", launch)
-        self.assertIn("h3_weight_budget_gb", launch)
-        self.assertIn("resident H3 profile will reload with packed-sequence headroom", launch)
+        self.assertIn("_h3_video_reference_count", coefficient)
+        self.assertIn("h3_reference_activation_gb", coefficient)
+        self.assertIn("compute_h3_weight_budget", coefficient)
+        self.assertIn("h3_weight_budget_gb", coefficient)
+        self.assertIn("resident H3 profile will reload with packed-sequence headroom", coefficient)
         self.assertIn("_maestro_profile_vram_coefficient", wgp)
         self.assertIn("get_linear_split_map", transformer)
         self.assertIn("MINIMAX_H3_ACTIVATION_CHUNK_TOKENS", transformer)
         self.assertIn("from shared.attention import pay_attention", transformer)
         self.assertIn("[MiniMax H3 Perf]", _read(_MAIN_PATH))
-        self.assertIn('"first_block_cache": md.get', launch)
+        self.assertIn('"first_block_cache": md.get', options)
 
     def test_all_auxiliary_downloads_are_revision_pinned(self):
         downloads = self.handler.query_model_files(lambda item: [item], "minimax_h3")
@@ -910,6 +926,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         store = _read(_GENERATION_SLICE_PATH)
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
         self.assertIn(
@@ -922,7 +939,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         helper = _read(_H3_DURATION_PATH)
         self.assertIn("if (!supportsSlidingWindows && maximumFrames != null)", helper)
         self.assertIn("delete params.sliding_window_size", store)
-        self.assertIn('"frames_maximum": md.get("frames_maximum")', launch)
+        self.assertIn('"frames_maximum": md.get("frames_maximum")', options)
         self.assertIn("sliding_window_memory_policy", duration)
         self.assertIn("s.params.resolution", duration)
         self.assertIn("safeWindowFrames", duration)
@@ -931,8 +948,8 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("sliding_window_memory_override", store)
         self.assertIn("t('duration.autoPaced')", duration)
         self.assertEqual(studio["duration"]["autoPaced"], "full prompt auto-paced")
-        self.assertIn('"sliding_window_memory_policy": md.get(', launch)
-        self.assertIn('h3_window_adjustment.get("unsupported")', launch)
+        self.assertIn('"sliding_window_memory_policy": md.get(', options)
+        self.assertIn('h3_window_adjustment.get("unsupported")', _read(_GENERATE_PATH))
 
     def test_h3_is_enabled_for_existing_and_fresh_installs(self):
         store = _read(_MODEL_VISIBILITY_PATH)
@@ -947,7 +964,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("7: ['minimax_h3_ref2va']", store)
         self.assertIn("8: ['minimax_h3_full', 'minimax_h3_ref2va_full']", store)
         self.assertIn("9: ['minimax_h3_legacy']", store)
-        self.assertIn('md.get("returns_audio", False)', _read(_LAUNCH_PATH))
+        self.assertIn('md.get("returns_audio", False)', _read(_OPTIONS_PATH))
 
     def test_h3_prompt_guides_cover_native_audio_and_director(self):
         shared = _read(_GUIDE_RESOLUTION_PATH)
@@ -1016,7 +1033,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         self.assertIn("dialogue", guide)
 
     def test_omni_reference_request_and_ui_are_wired_end_to_end(self):
-        launch = _read(_LAUNCH_PATH)
+        launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         main = _read(_MAIN_PATH)
         wgp = _read(_WGP_PATH)
         store = _read(_GENERATION_SLICE_PATH)
@@ -1024,8 +1041,9 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         section = _read(_OMNI_REFERENCE_SECTION_PATH)
         generate_button = _read(_GENERATE_BUTTON_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
-        self.assertIn('if _generation_model_def.get("omni_reference"):', launch)
-        self.assertIn("validate_reference_manifest", launch)
+        generate = _read(_GENERATE_PATH)
+        self.assertIn('if _generation_model_def.get("omni_reference"):', generate)
+        self.assertIn("validate_reference_manifest", generate)
         self.assertIn("per_clip_minimax_h3_references", launch)
         self.assertIn("director_trim_end_frames", launch)
         self.assertIn('"minimax_h3_references": minimax_h3_references', wgp)
@@ -1248,9 +1266,9 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("install_native_lora_forwards", main)
         self.assertIn('hasattr(wan_model, "validate_loras")', wgp)
         self.assertIn('hasattr(wan_model, "finalize_loras")', wgp)
-        launch = _read(_LAUNCH_PATH)
-        self.assertIn("def _lora_is_compatible_with_model", launch)
-        self.assertIn("lora_compatible", launch)
+        library = _read(_LORA_LIBRARY_PATH)
+        self.assertIn("def _lora_is_compatible_with_model", library)
+        self.assertIn("lora_compatible", library)
 
     def test_turbo_metadata_detection_and_evaluation_count(self):
         turbo = _load_turbo_helpers()
@@ -1351,19 +1369,20 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
 
     def test_managed_turbo_choice_is_discoverable_for_full_and_pruned(self):
         launch = _read(_LAUNCH_PATH)
+        options = _read(_OPTIONS_PATH)
         toggle = _read(_TURBO_TOGGLE_PATH)
         sidebar = _read(_SIDEBAR_PATH)
         advanced = _read(_ADVANCED_SETTINGS_PATH)
         types_source = _read(_TYPES_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
-        self.assertIn("def _minimax_h3_turbo_option", launch)
-        self.assertIn('names.update(item["filename"]', launch)
+        self.assertIn("def _minimax_h3_turbo_option", _read(_OPTION_HELPERS_PATH))
+        self.assertIn('names.update(item["filename"]', _read(_LORA_LIBRARY_PATH))
         self.assertIn("MINIMAX_H3_TURBO_LORA_FILENAME: {", launch)
-        self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', launch)
-        self.assertIn('"minimax_h3_runtime_advisory":', launch)
+        self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', options)
+        self.assertIn('"minimax_h3_runtime_advisory":', options)
         self.assertIn("_minimax_h3_runtime_advisory", launch)
-        self.assertIn("normalize_h3_runtime_request", launch)
+        self.assertIn("normalize_h3_runtime_request", _read(_GENERATE_PATH))
         self.assertIn("<MiniMaxH3TurboToggle />", sidebar)
         self.assertIn("t('chrome.experimental')", toggle)
         self.assertIn("setParam('num_inference_steps', option.steps)", toggle)
@@ -1377,7 +1396,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("minimax_h3_turbo_mode?: boolean", types_source)
         self.assertIn("minimax_h3_runtime_advisory?:", types_source)
 
-        option = _load_source_function(_LAUNCH_PATH, "_minimax_h3_turbo_option")
+        option = _load_source_function(_OPTION_HELPERS_PATH, "_minimax_h3_turbo_option")
         sys.path.insert(0, str(_APP))
         try:
             pruned = option({
@@ -1467,9 +1486,9 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
 
 class TestMiniMaxH3LoraBrowserRouting(unittest.TestCase):
     def test_civitai_filter_and_base_mapping_target_shared_h3_directory(self):
-        civit_map = _literal_assignment(_LAUNCH_PATH, "CIVIT_TO_LOCAL_ARCH")
-        hf_map = _literal_assignment(_LAUNCH_PATH, "HF_BASE_TO_LOCAL_DIR")
-        filters = _literal_assignment(_LAUNCH_PATH, "CIVITAI_MODEL_FILTERS")
+        civit_map = _literal_assignment(_CIVITAI_PATH, "CIVIT_TO_LOCAL_ARCH")
+        hf_map = _literal_assignment(_HF_IMPORT_PATH, "HF_BASE_TO_LOCAL_DIR")
+        filters = _literal_assignment(_CIVITAI_PATH, "CIVITAI_MODEL_FILTERS")
 
         self.assertEqual(civit_map["MiniMax H3"], "minimax_h3")
         self.assertEqual(hf_map["MiniMaxAI/MiniMax-H3"], "minimax_h3")
@@ -1505,12 +1524,14 @@ class TestMiniMaxH3LoraBrowserRouting(unittest.TestCase):
         self.assertEqual(civit_arch("LTXV 2.3"), "ltx2")
 
     def test_browser_and_pasted_url_flows_use_canonical_h3_routing(self):
-        launch = _read(_LAUNCH_PATH)
-        self.assertIn("arch = _civitai_lora_arch(base)", launch)
-        self.assertIn("inferred_target_arch = _civitai_lora_arch(base_model)", launch)
-        self.assertIn("target_arch = _civitai_lora_arch(base_model)", launch)
-        self.assertIn("if _is_minimax_h3_identity(_identity_blob):", launch)
-        self.assertIn('hf_base_label = "MiniMax H3 (detected from repo name/tags)"', launch)
+        civitai = _read(_CIVITAI_PATH)
+        downloads = _read(_CIVITAI_DOWNLOADS_PATH)
+        hf_import = _read(_HF_IMPORT_PATH)
+        self.assertIn("arch = _civitai_lora_arch(base)", civitai)
+        self.assertIn("inferred_target_arch = _civitai_lora_arch(base_model)", downloads)
+        self.assertIn("target_arch = _civitai_lora_arch(base_model)", downloads)
+        self.assertIn("if _is_minimax_h3_identity(_identity_blob):", hf_import)
+        self.assertIn('hf_base_label = "MiniMax H3 (detected from repo name/tags)"', hf_import)
 
 
 _RUNTIME_AVAILABLE = all(

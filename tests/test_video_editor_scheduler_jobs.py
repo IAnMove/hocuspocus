@@ -2,9 +2,10 @@
 
 The editor export runs the mounted router module (``routers.video_editor``),
 which owns the only job registry. Importing ``app.launch`` initializes the full
-Maestro application, so the comic animatic worker is extracted from its AST and
-runs against that same registry with small in-memory fakes. No FFmpeg process,
-model, or GPU runtime is used.
+Maestro application, so ``start_comic_animatic`` is extracted from the comics
+router and runs against that same registry. The animatic worker is the real
+``services.comic_animatic`` function, with its video-editor callables pointed
+at that registry. No FFmpeg process, model, or GPU runtime is used.
 """
 from __future__ import annotations
 
@@ -18,7 +19,6 @@ import re
 import sys
 import threading
 import time
-import traceback
 import types
 import uuid
 from contextlib import contextmanager
@@ -29,6 +29,7 @@ from types import SimpleNamespace
 import pytest
 
 import routers.video_editor as editor_router
+import services.comic_animatic as comic_animatic
 from services.asset_manifest import SCHEMA_NAME
 
 
@@ -55,11 +56,30 @@ def _tree() -> ast.Module:
 
 
 def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
     for node in _tree().body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             selected = copy.deepcopy(node)
             selected.decorator_list = []
-            return selected
+            found.append(selected)
+    for relative in (
+        "app/services/canonical_task_fields.py",
+        "app/services/canonical_task_publishers.py",
+        "app/services/canonical_task_sync.py",
+    ):
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+                selected = copy.deepcopy(node)
+                selected.decorator_list = []
+                found.append(selected)
+    if len(found) == 1:
+        return found[0]
+    if found:
+        raise AssertionError(f"Function {name!r} found {len(found)} times")
     if name == "start_comic_animatic":
         comics = ast.parse(COMICS.read_text(encoding="utf-8"), filename=str(COMICS))
         for node in ast.walk(comics):
@@ -217,50 +237,36 @@ def _harness(monkeypatch, tmp_path: Path) -> dict:
         )
     jobs = editor_router._video_editor_jobs
 
-    # The animatic half: launch and comics code bound to the same registry.
+    # The animatic worker is the real module. Its video-editor names point at
+    # this test's registry and are restored when the test ends.
+    monkeypatch.setattr(comic_animatic, "resource_scheduler", scheduler)
+    monkeypatch.setattr(comic_animatic, "_VIDEO_EDITOR_FFMPEG_LANE", editor_router._VIDEO_EDITOR_FFMPEG_LANE)
+    monkeypatch.setattr(comic_animatic, "_VIDEO_EDITOR_TERMINAL", editor_router._VIDEO_EDITOR_TERMINAL)
+    monkeypatch.setattr(comic_animatic, "_video_editor_job_snapshot", editor_router._video_editor_job_snapshot)
+    monkeypatch.setattr(comic_animatic, "_video_editor_job_update", editor_router._video_editor_job_update)
+    monkeypatch.setattr(comic_animatic, "_video_editor_cancel_requested", editor_router._video_editor_cancel_requested)
+    monkeypatch.setattr(comic_animatic, "_remove_video_editor_output_bundle", editor_router._remove_video_editor_output_bundle)
+    monkeypatch.setattr(comic_animatic, "_finish_video_editor_cancelled", editor_router._finish_video_editor_cancelled)
+    monkeypatch.setattr(comic_animatic, "_resolve_comic_animatic_image", resolve_in_workspace)
     namespace = {
         "HTTPException": _HTTPException,
-        "copy": copy,
-        "json": json,
         "os": os,
         "re": re,
         "threading": fake_threading,
         "time": time,
-        "traceback": traceback,
         "uuid": uuid,
-        "resource_scheduler": scheduler,
-        "_VIDEO_EDITOR_FFMPEG_LANE": editor_router._VIDEO_EDITOR_FFMPEG_LANE,
-        "_VIDEO_EDITOR_TERMINAL": editor_router._VIDEO_EDITOR_TERMINAL,
-        "_public_video_editor_job": editor_router._public_video_editor_job,
-        "_video_editor_job_snapshot": editor_router._video_editor_job_snapshot,
-        "_video_editor_job_update": editor_router._video_editor_job_update,
-        "_register_video_editor_job": editor_router._register_video_editor_job,
-        "_video_editor_cancel_requested": editor_router._video_editor_cancel_requested,
-        "_remove_video_editor_output_bundle": editor_router._remove_video_editor_output_bundle,
-        "_finish_video_editor_cancelled": editor_router._finish_video_editor_cancelled,
-        "_video_editor_task_identity": editor_router._video_editor_task_identity,
-        "_workspace_dir": workspace_dir,
-        "_get_active_workspace": active_workspace,
+        "get_active_workspace": active_workspace,
+        "workspace_dir": workspace_dir,
+        "video_editor_task_identity": editor_router._video_editor_task_identity,
+        "register_video_editor_job": editor_router._register_video_editor_job,
+        "video_editor_job_update": editor_router._video_editor_job_update,
+        "public_video_editor_job": editor_router._public_video_editor_job,
+        "ffmpeg_lane_key": LANE_KEY,
+        "run_comic_animatic": comic_animatic._run_comic_animatic,
         "start_video_editor_export": editor_router._start_video_editor_export,
         "cancel_video_editor_export": editor_router.cancel_video_editor_export,
     }
-    _load(
-        "_write_comic_animatic_sidecar",
-        "_run_comic_animatic",
-        "start_comic_animatic",
-        namespace=namespace,
-    )
-    namespace.update({
-        "get_active_workspace": namespace["_get_active_workspace"],
-        "workspace_dir": namespace["_workspace_dir"],
-        "video_editor_task_identity": namespace["_video_editor_task_identity"],
-        "register_video_editor_job": namespace["_register_video_editor_job"],
-        "ffmpeg_lane_key": LANE_KEY,
-        "run_comic_animatic": namespace["_run_comic_animatic"],
-        "video_editor_job_update": namespace["_video_editor_job_update"],
-        "public_video_editor_job": namespace["_public_video_editor_job"],
-    })
-    namespace["_resolve_comic_animatic_image"] = resolve_in_workspace
+    _load("start_comic_animatic", namespace=namespace)
     namespace.update({
         "DeferredThread": DeferredThread,
         "events": events,

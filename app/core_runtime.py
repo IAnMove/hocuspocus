@@ -17,7 +17,6 @@ from routers import core_labs as labs
 from routers.core_labs import create_core_labs_router
 from routers.core_mcp import create_core_mcp_router
 from routers.core_remote import create_core_remote_router
-from routers.core_series_plan import create_core_series_plan_router
 from routers.image_generation_commands import create_image_generation_commands_router
 from routers.lan_auth import create_lan_auth_router
 from routers.llm import create_llm_prompt_router, create_llm_router
@@ -29,6 +28,7 @@ from routers.production_media import create_production_media_router
 from routers.recipes import create_recipes_router
 from routers.scene_commands import create_scene_commands_router
 from routers.scene_packages import create_scene_packages_router
+from routers.scenes_favorites import create_scene_output_router, create_scene_recording_router
 from routers.series_assembly import create_series_assembly_router
 from routers.series_review import create_series_review_router
 from routers.style_library import create_style_library_router
@@ -141,7 +141,6 @@ api.include_router(create_series_assembly_router(
     concatenate_clips=lambda *args, **kwargs: core_series_assembly.concatenate_clips(*args, **kwargs),
     iso_now=labs._iso_now,
 ))
-api.include_router(create_core_series_plan_router())
 api.include_router(create_series_review_router(
     resolve_workspace=labs._series_workspace, lock=labs._LOCK, read_library=labs._read_series,
     write_library=labs._write_series, iso_now=labs._iso_now,
@@ -285,52 +284,52 @@ def cancel_job(job_id: str):
     return job
 
 
-@api.get("/api/v1/workspaces")
-def list_workspaces_endpoint():
-    return {"workspaces": core.list_workspaces(), "active": core.active_workspace()}
-
-
-@api.put("/api/v1/workspaces/active")
-async def set_active_workspace(request: Request):
-    body = await request.json()
-    name = str(body.get("name") or "default")
-    try:
-        path = core.workspace_dir(name)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+def _core_persist_active(name, apply_save_paths=True):
+    """Save the active workspace in core_config.json. Core has no WanGP save paths."""
+    del apply_save_paths
+    path = core.workspace_dir(name)
     data = core.load_config()
     data.setdefault("services", {})["active_workspace"] = name
     core.save_config(data)
-    return {"status": "ok", "active": name, "path": path}
+    return path
 
 
-@api.post("/api/v1/workspaces")
-async def create_workspace(request: Request):
-    body = await request.json()
-    name = str(body.get("name") or "").strip()
-    try:
-        path = core.workspace_dir(name)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"status": "ok", "name": name, "path": path}
+def _core_workspace_jobs():
+    """Image and 3D jobs that should keep a workspace from being deleted."""
+    from services import core_remote_3d, core_remote_image
+    return [
+        *core_remote_image.list_active(),
+        *(job for job in core_remote_3d._JOBS.values() if isinstance(job, dict)),
+    ]
 
 
-@api.get("/api/v1/outputs")
-def list_outputs(workspace: str = "", media_type: str = "", limit: int = 0, offset: int = 0):
-    try:
-        return core.list_outputs(workspace, media_type=media_type, limit=limit, offset=offset)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+from types import SimpleNamespace
 
+from services.output_listing import _output_scan_cache, _output_scan_cache_lock, configure as _configure_output_listing, serve_file
+from routers.workspace_outputs import (
+    create_list_outputs_router,
+    create_serve_file_router,
+    create_workspace_router,
+)
 
-@api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
-    from services.win_safe_files import share_delete_file_response
-    folder = core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace)
-    path = core.safe_join(folder, filename)
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="Output file not found")
-    return share_delete_file_response(path, expected_sha256=sha256)
+_configure_output_listing(
+    workspace_dir=lambda workspace=None: core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace),
+    load_favorites=lambda: set(),
+    safe_join=core.safe_join,
+    engine=SimpleNamespace(server_config={"save_path": "outputs"}),
+)
+api.include_router(create_workspace_router(
+    list_workspaces=core.list_workspaces,
+    get_active_workspace=core.active_workspace,
+    persist_active=_core_persist_active,
+    workspace_dir=core.workspace_dir,
+    generation_idle=lambda: True,
+    jobs=_core_workspace_jobs,
+    safe_join=core.safe_join,
+    save_path=lambda: str(core.outputs_root()),
+))
+api.include_router(create_list_outputs_router())
+api.include_router(create_serve_file_router())
 
 
 @api.get("/api/v1/system-config")
@@ -452,64 +451,42 @@ def wangp_capabilities():
     return {"processors": []}
 
 
-@api.get("/api/v1/rig/capabilities")
-def rig_capabilities():
-    from services import rig_service
-    payload = rig_service.capabilities()
-    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
-    payload["engines"] = [engine for engine in payload["engines"] if engine["id"] in {"procedural", "humanoid"}]
-    return payload
-
-
-@api.post("/api/v1/rig/generate")
-async def generate_rig(request: Request):
-    from services import rig_service
-    body = await request.json()
-    if str(body.get("engine") or "procedural") not in {"procedural", "humanoid"}:
+def _core_rig_gate(body: dict) -> None:
+    if str((body or {}).get("engine") or "procedural") not in {"procedural", "humanoid"}:
         require_capability_http("unirig_ai")
+
+
+def _core_rig_engines(engines: list) -> list:
+    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
+    return [engine for engine in engines if engine.get("id") in {"procedural", "humanoid"}]
+
+
+def _core_rig_input(value: str, workspace: str | None = None) -> str | None:
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=core.safe_join,
+        workspace_dir=core.workspace_dir,
+        save_path=lambda: str(core.outputs_root()),
+    )
+
+
+from routers.rig import create_rig_router
+api.include_router(create_rig_router(
+    resolve_input_path=_core_rig_input,
+    workspace_dir=core.workspace_dir_or_400,
+    get_active_workspace=core.active_workspace,
+    safe_join=core.safe_join,
+    publish_task=core_canonical_tasks.publish_studio_activity,
+    engine_gate=_core_rig_gate,
+    filter_engines=_core_rig_engines,
+))
+
+
+async def _publish_core_scene_recording(file, metadata, audio):
     try:
-        workspace = body.get("workspace") or core.active_workspace()
-        folder = core.workspace_dir(workspace)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    source_name = str(body.get("source") or "").strip()
-    if not source_name:
-        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
-    if not source_name.lower().endswith(".glb"):
-        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = core.safe_join(folder, source_name)
-    if not source_path or not os.path.isfile(source_path):
-        raise HTTPException(status_code=400, detail="Source 3D model not found")
-    try:
-        return rig_service.start_job(body=body, source_path=source_path, output_dir=folder, workspace=workspace)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except RuntimeError as error:
-        raise HTTPException(status_code=500, detail=str(error)) from error
-
-
-@api.get("/api/v1/rig/status/{job_id}")
-def rig_job_status(job_id: str):
-    from services import rig_service
-    job = rig_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    return job
-
-
-@api.post("/api/v1/rig/jobs/{job_id}/cancel")
-def cancel_rig_job(job_id: str):
-    from services import rig_service
-    job = rig_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    return job
-
-
-@api.post("/api/v1/scenes/recordings")
-async def save_scene_recording(request: Request):
-    try:
-        return await scene_save.publish_from_form(await request.form())
+        return await scene_save.publish_from_form({"file": file, "metadata": metadata, "audio": audio}, scan_cache=_output_scan_cache, scan_cache_lock=_output_scan_cache_lock)
     except HTTPException:
         raise
     except Exception as error:
@@ -519,14 +496,14 @@ async def save_scene_recording(request: Request):
         ) from error
 
 
-@api.post("/api/v1/scenes")
-async def save_scene(request: Request):
-    body = await request.json()
-    return scene_save.save_core_scene(
+api.include_router(create_scene_recording_router(publish_recording=_publish_core_scene_recording))
+api.include_router(create_scene_output_router(
+    save_scene=lambda body: scene_save.save_core_scene(
         body,
         workspace_dir=core.workspace_dir,
         active_workspace=core.active_workspace,
-    )
+    ),
+))
 
 
 def _resolve_editor_input(value: str, workspace: str | None = None) -> str | None:

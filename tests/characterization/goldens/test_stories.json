@@ -1,0 +1,479 @@
+{
+  "analyze a path outside uploads": {
+    "body": {
+      "detail": "Smart asset analysis only accepts HocusPocus Lab uploads"
+    },
+    "status": 400
+  },
+  "analyze too many images": {
+    "body": {
+      "detail": "Import at most 24 images per batch"
+    },
+    "status": 400
+  },
+  "analyze without images": {
+    "body": {
+      "detail": "Choose at least one image"
+    },
+    "status": 400
+  },
+  "cancel a missing job": {
+    "body": {
+      "detail": "Story generation job not found"
+    },
+    "status": 404
+  },
+  "generate an unknown scope": {
+    "body": {
+      "detail": "Unsupported Story Lab generation scope"
+    },
+    "status": 400
+  },
+  "generate one stage without a premise": {
+    "body": {
+      "detail": "Write a premise before generating the story"
+    },
+    "status": 400
+  },
+  "generate the whole story at once": {
+    "body": {
+      "detail": "Full Story Lab generation must use /api/v1/stories/generate/start"
+    },
+    "status": 400
+  },
+  "library empty": {
+    "body": {
+      "activeId": "",
+      "projects": {},
+      "revision": 0,
+      "version": 2
+    },
+    "status": 200
+  },
+  "lifecycle activity after a cancelled job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story draft generated and ready for review.",
+        "phase": "completed",
+        "resumable": true,
+        "status": "completed",
+        "title": "Story Lab planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story generation cancelled: the active request was aborted where supported and otherwise stopped at the next safe boundary. Completed stages remain recoverable.",
+        "phase": "cancelled",
+        "resumable": true,
+        "status": "cancelled",
+        "title": "Story Lab planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle activity after a completed job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story draft generated and ready for review.",
+        "phase": "completed",
+        "resumable": true,
+        "status": "completed",
+        "title": "Story Lab planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle activity after a failed job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story draft generated and ready for review.",
+        "phase": "completed",
+        "resumable": true,
+        "status": "completed",
+        "title": "Story Lab planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story generation cancelled: the active request was aborted where supported and otherwise stopped at the next safe boundary. Completed stages remain recoverable.",
+        "phase": "cancelled",
+        "resumable": true,
+        "status": "cancelled",
+        "title": "Story Lab planning"
+      },
+      {
+        "error": {
+          "message": "Story generation failed after JSON repair: LLM response for Story Lab overview, attempt 2 is not a JSON object",
+          "retryable": true
+        },
+        "kind": "llm-planning",
+        "message": "Story generation stopped. Completed stages were preserved.",
+        "phase": "overview",
+        "resumable": true,
+        "status": "failed",
+        "title": "Story Lab planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle activity after a resumed job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story draft generated and ready for review.",
+        "phase": "completed",
+        "resumable": true,
+        "status": "completed",
+        "title": "Story Lab planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story draft generated and ready for review.",
+        "phase": "completed",
+        "resumable": true,
+        "status": "completed",
+        "title": "Story Lab planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Story generation cancelled: the active request was aborted where supported and otherwise stopped at the next safe boundary. Completed stages remain recoverable.",
+        "phase": "cancelled",
+        "resumable": true,
+        "status": "cancelled",
+        "title": "Story Lab planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle cancel a completed job": {
+    "body": {
+      "jobId": "story-plan-<JOB>",
+      "message": "Story draft generated and ready for review.",
+      "status": "completed"
+    },
+    "status": 200
+  },
+  "lifecycle cancel a running job": {
+    "body": {
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation cancellation requested; aborting the active LLM response where supported, otherwise waiting for its safe boundary.",
+      "status": "cancelling"
+    },
+    "status": 200
+  },
+  "lifecycle cancelled job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation cancelled: the active request was aborted where supported and otherwise stopped at the next safe boundary. Completed stages remain recoverable.",
+      "result": null,
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "cancelled",
+      "status": "cancelled",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1,
+      "updatedAt": "<TIME>"
+    },
+    "status": 200
+  },
+  "lifecycle completed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 1,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "story-plan-<JOB>",
+      "message": "Story draft generated and ready for review.",
+      "result": {
+        "result": {
+          "overview": {
+            "allowClipText": false,
+            "audience": "General",
+            "characterVisualStyle": "ink",
+            "creativeBrief": {
+              "action": "waiting",
+              "context": "A harbour.",
+              "durationSeconds": 30,
+              "generalIdea": "A keeper waits.",
+              "musicStyle": "",
+              "performer": "",
+              "quickFormat": "",
+              "setting": "harbour",
+              "songStory": "",
+              "subjects": "keeper"
+            },
+            "ending": "The ship comes.",
+            "enforceVisualStyle": true,
+            "genre": "Adventure",
+            "language": "English",
+            "logline": "A keeper waits.",
+            "musicVideoGenerationMode": "",
+            "premise": "A harbour.",
+            "synopsis": "A keeper waits for a ship.",
+            "theme": "patience",
+            "title": "Harbour",
+            "tone": "warm",
+            "visualStyle": "ink"
+          }
+        }
+      },
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "completed",
+      "status": "completed",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1,
+      "updatedAt": "<TIME>"
+    },
+    "status": 200
+  },
+  "lifecycle completed job reloaded from its checkpoint": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 1,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "story-plan-<JOB>",
+      "message": "Story draft generated and ready for review.",
+      "result": {
+        "result": {
+          "overview": {
+            "allowClipText": false,
+            "audience": "General",
+            "characterVisualStyle": "ink",
+            "creativeBrief": {
+              "action": "waiting",
+              "context": "A harbour.",
+              "durationSeconds": 30,
+              "generalIdea": "A keeper waits.",
+              "musicStyle": "",
+              "performer": "",
+              "quickFormat": "",
+              "setting": "harbour",
+              "songStory": "",
+              "subjects": "keeper"
+            },
+            "ending": "The ship comes.",
+            "enforceVisualStyle": true,
+            "genre": "Adventure",
+            "language": "English",
+            "logline": "A keeper waits.",
+            "musicVideoGenerationMode": "",
+            "premise": "A harbour.",
+            "synopsis": "A keeper waits for a ship.",
+            "theme": "patience",
+            "title": "Harbour",
+            "tone": "warm",
+            "visualStyle": "ink"
+          }
+        }
+      },
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "completed",
+      "status": "completed",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1,
+      "updatedAt": "<TIME>"
+    },
+    "status": 200
+  },
+  "lifecycle failed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "error": "Story generation failed after JSON repair: LLM response for Story Lab overview, attempt 2 is not a JSON object",
+      "finishedAt": "<TIME>",
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation stopped. Completed stages were preserved.",
+      "result": null,
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "overview",
+      "status": "failed",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1,
+      "updatedAt": "<TIME>"
+    },
+    "status": 200
+  },
+  "lifecycle resume a completed job": {
+    "body": {
+      "jobId": "story-plan-<JOB>",
+      "message": "Story draft generated and ready for review.",
+      "status": "completed"
+    },
+    "status": 200
+  },
+  "lifecycle resume a failed job": {
+    "body": {
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation resumed.",
+      "status": "queued"
+    },
+    "status": 200
+  },
+  "lifecycle resume while the worker is still active": {
+    "body": {
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation is already running.",
+      "status": "cancelling"
+    },
+    "status": 200
+  },
+  "lifecycle resumed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 1,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "story-plan-<JOB>",
+      "message": "Story draft generated and ready for review.",
+      "result": {
+        "result": {
+          "overview": {
+            "allowClipText": false,
+            "audience": "General",
+            "characterVisualStyle": "ink",
+            "creativeBrief": {
+              "action": "waiting",
+              "context": "A harbour.",
+              "durationSeconds": 30,
+              "generalIdea": "A keeper waits.",
+              "musicStyle": "",
+              "performer": "",
+              "quickFormat": "",
+              "setting": "harbour",
+              "songStory": "",
+              "subjects": "keeper"
+            },
+            "ending": "The ship comes.",
+            "enforceVisualStyle": true,
+            "genre": "Adventure",
+            "language": "English",
+            "logline": "A keeper waits.",
+            "musicVideoGenerationMode": "",
+            "premise": "A harbour.",
+            "synopsis": "A keeper waits for a ship.",
+            "theme": "patience",
+            "title": "Harbour",
+            "tone": "warm",
+            "visualStyle": "ink"
+          }
+        }
+      },
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "completed",
+      "status": "completed",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1,
+      "updatedAt": "<TIME>"
+    },
+    "status": 200
+  },
+  "lifecycle running job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "error": null,
+      "finishedAt": null,
+      "jobId": "story-plan-<JOB>",
+      "message": "Generating overview…",
+      "result": null,
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "overview",
+      "status": "running",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1,
+      "updatedAt": "<TIME>"
+    },
+    "status": 200
+  },
+  "lifecycle start 1": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation queued.",
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "queued",
+      "status": "queued",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1
+    },
+    "status": 200
+  },
+  "lifecycle start 2": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation queued.",
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "queued",
+      "status": "queued",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1
+    },
+    "status": 200
+  },
+  "lifecycle start 3": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "jobId": "story-plan-<JOB>",
+      "message": "Story generation queued.",
+      "rootTaskId": "task-story-plan-story-plan-<JOB>",
+      "stage": "queued",
+      "status": "queued",
+      "taskId": "task-story-plan-story-plan-<JOB>",
+      "total": 1
+    },
+    "status": 200
+  },
+  "resume a missing job": {
+    "body": {
+      "detail": "Story generation job not found"
+    },
+    "status": 404
+  },
+  "start an unknown scope": {
+    "body": {
+      "detail": "Unsupported Story Lab generation scope"
+    },
+    "status": 400
+  },
+  "start without a premise": {
+    "body": {
+      "detail": "Write a premise before generating the story"
+    },
+    "status": 400
+  },
+  "status of a missing job": {
+    "body": {
+      "detail": "Story generation job not found"
+    },
+    "status": 404
+  },
+  "translate without a language": {
+    "body": {
+      "detail": "Choose a target language"
+    },
+    "status": 400
+  },
+  "translate without lyrics": {
+    "body": {
+      "detail": "Lyrics are required"
+    },
+    "status": 400
+  }
+}

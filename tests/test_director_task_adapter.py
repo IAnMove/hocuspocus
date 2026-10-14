@@ -12,18 +12,28 @@ _ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_adapter():
-    source_path = _ROOT / "app" / "_launch_runtime.py"
-    tree = ast.parse(source_path.read_text(encoding="utf-8"))
     wanted = {
         "_task_status",
         "_task_timestamp",
         "_publish_director_task",
     }
-    nodes = [
-        node for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name in wanted
-    ]
+    nodes = []
+    for relative in (
+        "app/services/canonical_task_fields.py",
+        "app/services/canonical_task_publishers.py",
+        "app/services/canonical_task_sync.py",
+        "app/_launch_runtime.py",
+    ):
+        path = _ROOT / relative
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        nodes.extend(
+            node for node in tree.body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in wanted
+        )
+    assert sorted(node.name for node in nodes) == sorted(wanted)
+    source_path = _ROOT / "app" / "_launch_runtime.py"
     captured = {}
 
     def upsert(workspace, task_id, **fields):

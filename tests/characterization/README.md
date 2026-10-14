@@ -40,6 +40,23 @@ the skip reason gives the command above. CI runs them in their own step of the
   reporting another time fails. A measured duration under such a key
   (`elapsed_time`) is not masked: name it in `mask`.
 
+- `test_run_generation.py`: the generation worker (`_run_generation`) runs for real, with a scripted
+  fake engine instead of the GPU. `POST /api/v1/generate` starts the worker thread; `FakeEngine`
+  (`tests/support/fake_wgp.py`) plays `wgp.generate_video`: it sends progress commands, writes a media file into
+  `wgp.save_path` and lists it in the generation state, or raises, or blocks (`call.hold`) while the test cancels.
+  Each test records one observation of the finished job (every lifecycle write, the status and canonical task,
+  the files and sidecars, what the engine received, what the worker left behind). The fake `generate_video`
+  declares WanGP's real parameters (read from `app/wgp.py`), so the worker's own signature filter decides which
+  params reach it; `engine_calls[].kwargs` is what WanGP would receive. Branches that HTTP cannot reach
+  call `_run_generation` directly (`Rig.call_worker`, in a daemon thread with a deadline) on a job the server's
+  own factory built. Tests named `test_oddity_*` pin
+  behaviour that looks unintended: a refactor keeps it, and a fix re-records the golden in its own PR. The stubs go
+  through `Rig.patch`, which patches the name on every module in `worker_modules()` that holds it: the full server
+  module and the modules of `app/services/generation_worker/`, where the worker lives since slice 21 (they get the
+  server's objects through `bind_generation_worker`). `test_generation_worker_bind.py` checks that every injected name is bound.
+  A worker that never finishes fails its test; if its thread is still alive when the session ends, `conftest.py`
+  ends the process with exit code 1 instead of letting Python wait for it.
+
 ## The rule for move PRs: goldens first
 
 A PR that moves code (a slice out of `_launch_runtime.py` or `useStore.ts`)
@@ -73,6 +90,8 @@ description.
   `server.check(..., mask=("size",))`, and when the same value sits inside
   a string, replace it there too: `replace=((pattern, replacement),)`
   (`test_outputs.py` does both).
+- A job's generation goes through `FakeEngine` (see above); script it with `rig.engine.script` or `rig.engine.scripts`.
+  Names the generation worker needs from WanGP live in `generation_attributes` (drift-checked like the rest).
 - When a route reads WanGP state the fake lacks, the call fails with the
   attribute's name. Give the fake that attribute in the test
   (`monkeypatch.setattr(server.wgp, name, value, raising=False)`); see the
