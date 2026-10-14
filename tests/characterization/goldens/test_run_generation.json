@@ -11271,7 +11271,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -12354,7 +12353,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -12907,7 +12905,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -13097,7 +13094,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
