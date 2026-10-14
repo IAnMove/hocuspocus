@@ -164,13 +164,10 @@ def test_a_command_job_still_planning_its_h3_windows_stays_off_the_gpu_queue(rig
     assert job["status"] == "queued"
 
 
-def test_a_command_job_whose_h3_planning_fails_leaves_the_gpu_queue_free(rig, monkeypatch) -> None:
-    """A failed plan finishes the job without ever entering ``acquire_generation_slot``. Had ``dispatch`` registered
-    it, its token would stay at the head of the GPU FIFO (only cancelled heads are dropped), and every later job would
-    wait forever on an idle GPU. The next job must get the GPU at once."""
-    import threading
-
-    from services import generation_preparation, h3_window_planner, image_generation_runtime, job_lifecycle
+def _run_a_planning_command_job(rig, monkeypatch, planner, job_id: str) -> dict:
+    """Admit a video whose H3 window prompts are still to be planned through ``dispatch`` on launch's real globals,
+    then run its worker in this thread with ``planner`` as the window planner. Returns the job."""
+    from services import generation_preparation, h3_window_planner, image_generation_runtime
 
     launch = rig.launch
     started = []
@@ -183,24 +180,27 @@ def test_a_command_job_whose_h3_planning_fails_leaves_the_gpu_queue_free(rig, mo
             self.ident = 1
             started.append(self)
 
-    def planner_down(*_args, **_kwargs):
-        raise RuntimeError("planner down")
-
     monkeypatch.setattr(image_generation_runtime, "threading", SimpleNamespace(Thread=RecordingThread))
     monkeypatch.setattr(generation_preparation, "_ensure_llm_loaded", lambda: None)
-    monkeypatch.setattr(h3_window_planner, "plan_h3_sliding_windows", planner_down)
+    monkeypatch.setattr(h3_window_planner, "plan_h3_sliding_windows", planner)
     job = launch._new_generation_job(
         {"model_type": "fake_t2v", "prompt": "a calm lake",
          "_h3_window_plan_pending": {"expected_count": 2, "window_frames": 81}},
-        "default", job_id="dispatch-h3-plan-fails", reserve_generation=False, publish_task=True,
+        "default", job_id=job_id, reserve_generation=False, publish_task=True,
     )
     launch._image_generation_commands.dispatch(job)
     [worker] = started
     assert worker.target(*worker.args) is False
-    assert job["status"] == "failed" and "planner down" in job["message"]
-    assert [entry[2] for entry in job_lifecycle._generation_queues.get(id(launch._gen_lock), ())] == []
+    return job
 
-    following = {"id": "after-failed-plan", "status": "queued", "params": {}}
+
+def _the_next_job_gets_the_gpu(launch) -> None:
+    import threading
+
+    from services import job_lifecycle
+
+    assert [entry[2] for entry in job_lifecycle._generation_queues.get(id(launch._gen_lock), ())] == []
+    following = {"id": "after-the-plan", "status": "queued", "params": {}}
     acquired = []
     waiter = threading.Thread(
         target=lambda: acquired.append(job_lifecycle.acquire_generation_slot(launch._gen_lock, following)),
@@ -213,6 +213,39 @@ def test_a_command_job_whose_h3_planning_fails_leaves_the_gpu_queue_free(rig, mo
         waiter.join(5)
     assert acquired == [True], "the next job never got the GPU"
     launch._gen_lock.release()
+
+
+def test_a_command_job_whose_h3_planning_fails_leaves_the_gpu_queue_free(rig, monkeypatch) -> None:
+    """A failed plan finishes the job without ever entering ``acquire_generation_slot``. Had ``dispatch`` registered
+    it, its token would stay at the head of the GPU FIFO (only cancelled heads are dropped), and every later job would
+    wait forever on an idle GPU. The next job must get the GPU at once."""
+
+    def planner_down(*_args, **_kwargs):
+        raise RuntimeError("planner down")
+
+    job = _run_a_planning_command_job(rig, monkeypatch, planner_down, "dispatch-h3-plan-fails")
+    assert job["status"] == "failed" and "planner down" in job["message"]
+    _the_next_job_gets_the_gpu(rig.launch)
+
+
+def test_a_command_job_cancelled_while_planning_settles_and_leaves_the_gpu_queue_free(rig, monkeypatch) -> None:
+    """Cancel lands while the planner runs (the job is ``running``, phase planning, with no abort state). The plan
+    is thrown away, the job settles to cancelled once the planner returns, its saved request is removed, and the
+    next job gets the GPU."""
+    launch = rig.launch
+
+    def planner_cancelled_midway(*_args, **_kwargs):
+        job = launch._jobs["dispatch-h3-plan-cancelled"]
+        assert job["status"] == "running" and job["phase"] == "planning"
+        launch.request_cancel(job, job_id=job["id"], active_states=launch._active_gen_states)
+        assert job["status"] == "cancelling"
+        return {"window_prompts": ["first window", "second window"]}
+
+    job = _run_a_planning_command_job(rig, monkeypatch, planner_cancelled_midway, "dispatch-h3-plan-cancelled")
+    assert (job["status"], job["message"]) == ("cancelled", "Cancelled")
+    assert "h3_window_prompts" not in job["params"]
+    assert "dispatch-h3-plan-cancelled" not in [record["id"] for record in launch._durable_generation_queue.list()]
+    _the_next_job_gets_the_gpu(launch)
 
 
 # One bind() per moved service. The injected names come from each module's source.
