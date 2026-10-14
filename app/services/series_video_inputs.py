@@ -5,8 +5,8 @@ tier. It stays exactly as it was, so every take made before keeps matching. Thre
 were never in it; they travel in one more optional digest per take:
 
 * ``orientation``: the series frame is portrait (704x1280, not 1280x704);
-* ``plan``: for ``start: "plan"``, the 2D cast (character, pose, position) and the location plate the start frame is
-  composed from;
+* ``plan``: for ``start: "plan"``, the pose image each cast member's kit gives and where it stands, and the location
+  plate: what the start frame is composed from (a member with no image is not drawn and counts for nothing);
 * ``start``: for a named start (``pose:<character>/<pose>``, a workspace file or an asset), the pixels of that file.
 
 Only the parts that apply are hashed, and a take always records the digest it was made with, even when no part

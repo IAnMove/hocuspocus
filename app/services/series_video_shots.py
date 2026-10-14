@@ -467,7 +467,7 @@ def _video_inputs(series: dict[str, Any], shot: dict[str, Any], request: dict[st
     if height > width:
         parts["orientation"] = "portrait"
     if request["start"] == "plan":
-        parts["plan"] = _plan_part(series, shot)
+        parts["plan"] = _plan_part(series, shot, space)
     else:
         pixels = _start_pixels(series, request["start"], space)
         if pixels is None:
@@ -476,14 +476,15 @@ def _video_inputs(series: dict[str, Any], shot: dict[str, Any], request: dict[st
     return inputs_digest(parts)
 
 
-def _plan_part(series: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
-    """What a ``plan`` start frame is composed from: who stands where, in which pose, and the location plate.
+def _plan_part(series: dict[str, Any], shot: dict[str, Any], space: _Space) -> dict[str, Any]:
+    """What a ``plan`` start frame is composed from: the pose image each cast member's kit gives and where it stands
+    (``_plan_layers``), and the location plate.
 
-    The plate itself is a media intent keyed by these files and positions, so only a change here composes a new one."""
-    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
-    cast = [[entry.get("characterId"), entry.get("poseId") or "base", entry.get("x", 50)]
-            for entry in layout.get("cast") or [] if isinstance(entry, dict)]
-    return {"cast": cast, "base": _location_file(series, shot)}
+    The plate itself is a media intent keyed by these files and positions, so only a change here composes a new one:
+    a character given another kit, or a pose image that appears after a clip made on the flat plate, is a new clip;
+    a cast member with no image is not drawn and changes nothing."""
+    layers = _plan_layers(shot, series, space.kits, space.root)
+    return {"cast": [[layer["file"], layer["x"]] for layer in layers], "base": _location_file(series, shot)}
 
 
 def _start_pixels(series: dict[str, Any], name: str, space: _Space) -> str | None:

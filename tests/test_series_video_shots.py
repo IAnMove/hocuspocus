@@ -402,23 +402,25 @@ def test_a_take_records_the_inputs_it_was_made_from_next_to_its_request(tmp_path
 def test_a_changed_plan_plate_is_a_new_take(tmp_path):
     clip = _png(tmp_path / "clip.png", (196, 180, 154))
     tools = _Server(tmp_path, clip)
+    kits, root = _pose_kits(tmp_path, "ana"), str(tmp_path)
     library, episode = _episode(_request())
     series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
     shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
-    service = _produce(tmp_path, tools, library)
+    service = _kit_produce(tmp_path, tools, library, kits)
     assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
     first = tools.imports[0]["metadata"]
     _attach_take(series, shot, first)
-    assert _take_matches(series, shot)
+    assert _take_matches(series, shot, root=root, kits=kits)
     shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 70}]}
-    assert not _take_matches(series, shot), "the composed start plate changed; the old clip does not fit"
+    assert not _take_matches(series, shot, root=root, kits=kits), "the composed start plate changed; the old clip does not fit"
     done = finished(service, service.start("cast", "uv", "ep1")["jobId"])
     assert done["status"] == "completed", done
-    assert len(_video_calls(tools, "generation.video")) == 2
+    assert len(set(_intents(tools))) == 2, "a new clip, not the first one replayed"
     second = tools.imports[1]["metadata"]
     assert second["videoInputs"] != first["videoInputs"] and second["videoRequest"] == first["videoRequest"]
     shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
-    assert _take_matches(series, shot), "the first take fits again; it was kept as an attempt"
+    assert _take_matches(series, shot, root=root, kits=kits), "the first take fits again; it was kept as an attempt"
 
 
 def test_a_changed_location_plate_is_a_new_take(tmp_path):
@@ -445,14 +447,72 @@ def test_a_take_with_no_plan_inputs_still_notices_a_cast_added_later(tmp_path):
     """A take made after the upgrade always keeps its inputs, also when none applied: absent means legacy only."""
     clip = _png(tmp_path / "clip.png", (196, 180, 154))
     tools = _Server(tmp_path, clip)
+    kits, root = _pose_kits(tmp_path, "ana"), str(tmp_path)
     library, episode = _episode(_request())
     series, shot = library["seriesById"]["uv"], episode["shots"][0]
-    service = _produce(tmp_path, tools, library)
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    service = _kit_produce(tmp_path, tools, library, kits)
     assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
     _attach_take(series, shot, tools.imports[0]["metadata"])
-    assert _take_matches(series, shot)
+    assert _take_matches(series, shot, root=root, kits=kits)
     shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
-    assert not _take_matches(series, shot)
+    assert not _take_matches(series, shot, root=root, kits=kits)
+
+
+def _pose_kits(tmp_path, *names):
+    """Kits whose ``wave`` pose is a workspace file, as a real kit stores it; ``names`` are the images that exist."""
+    for name in names:
+        _png(tmp_path / f"{name}-wave.png", (30, 20, 10) if name == "ana" else (90, 20, 10))
+    return {f"kit-{name}": {"poses": {"wave": {"source": f"/api/v1/file/{name}-wave.png?workspace=cast"}}}
+            for name in ("ana", "bea")}
+
+
+def _kit_produce(tmp_path, tools, library, kits):
+    return SeriesProduce(ProduceDeps(call=tools, workspace_dir=lambda _ws: str(tmp_path), read_library=lambda _ws: library,
+                                     read_kits=lambda _ws: kits, import_take=tools.imports.append,
+                                     sleep=lambda _s: None, poll_seconds=0))
+
+
+def test_a_plan_start_follows_the_pose_files_its_plate_is_composed_from(tmp_path):
+    """The start plate is composed from the image each cast member's kit gives (``_plan_layers``): a character given
+    another kit is a new plate and a new clip; a pose image that appears after a clip made on the flat plate too."""
+    kits = _pose_kits(tmp_path, "ana", "bea")
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _kit_produce(tmp_path, tools, library, kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    root = str(tmp_path)
+    assert _take_matches(series, shot, root=root, kits=kits)
+    series["characters"][0]["voiceProfile"]["characterKitRef"]["id"] = "kit-bea"
+    assert not _take_matches(series, shot, root=root, kits=kits), "another kit draws her: the old clip does not fit"
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first, second = _intents(tools)
+    assert first != second, "a new plate is a new clip, not the old one replayed"
+
+
+def test_a_pose_image_that_appears_after_the_flat_plate_is_a_new_take(tmp_path):
+    kits = _pose_kits(tmp_path)
+    library, episode = _episode(_request())
+    series, shot = library["seriesById"]["uv"], episode["shots"][0]
+    series["characters"] = [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana"}}}]
+    shot["layout2d"] = {"cast": [{"characterId": "ana", "poseId": "wave", "x": 20}]}
+    tools = _Server(tmp_path, _png(tmp_path / "clip.png", (196, 180, 154)))
+    service = _kit_produce(tmp_path, tools, library, kits)
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    assert _video_calls(tools, "media.compose")[0]["input"]["layers"][0]["x"] == 50, "no image yet: the flat plate"
+    _attach_take(series, shot, tools.imports[0]["metadata"])
+    root = str(tmp_path)
+    shot["layout2d"]["cast"][0]["x"] = 70
+    assert _take_matches(series, shot, root=root, kits=kits), "moving a member with no image changes no plate"
+    _pose_kits(tmp_path, "ana")
+    assert not _take_matches(series, shot, root=root, kits=kits), "her image exists now: the plate has her"
+    assert finished(service, service.start("cast", "uv", "ep1")["jobId"])["status"] == "completed"
+    first, second = _intents(tools)
+    assert first != second
 
 
 def test_a_take_made_before_video_inputs_existed_is_not_made_again(tmp_path):
