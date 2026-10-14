@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Alternative songs left the launch module.** Listing the songs on a videoclip, attaching one, deleting one, and refusing a mount that has no song still answer the same way. A remount still uses the video editor's job registry. A real FFmpeg remount was not run here.
+
 **Gallery thumbnails, metadata, extra info, rejoining clips, and moving or deleting an output left the launch module.** A still still gets a preview. A missing file is still not found. Metadata still comes from the sidecar, or from the file, or is empty. Extra info still reads the saved prompt and refuses a language it does not know. A group that is not on disk still has no clips. Rejoin still asks for a group and for two clips before it concatenates. Moving a file still stays inside the workspace, and deleting one still removes the file the gallery was listing.
 
 **Favorites and scene save left the launch module.** Marking a clip as a favorite, saving a scene, and uploading a scene recording still answer the same way on the main server. The core server uses the same scene and recording routes. A core scene that is not a JSON object, and a core recording sent without a file, are rejected as invalid input.
