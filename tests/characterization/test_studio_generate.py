@@ -554,3 +554,62 @@ def test_segment_preview_and_sam_status_with_sam_stubbed(server, golden, monkeyp
     answers["sam status"] = server.client.get("/api/v1/sam/status").json()
     answers["calls"] = calls
     golden.check("segment preview", 200, server.normalise(answers))
+
+
+# -- The wiring the move added (C3 review) ---------------------------------------------------------------------------
+# The moved handlers read their launch collaborators from slots on their service module, which the router factories
+# fill when the full server mounts them. A slot left at None, bound to the wrong object, or captured before launch
+# defines it would only show on the branch that reads it, so every slot is compared here with the object the handler
+# read from launch before the move. Three are indirect on purpose: launch defines them below the mounts, so the slot
+# holds a forwarder that looks the launch name up when it is called.
+
+_INDIRECT_SLOTS = {"_run_generation", "_get_cached_hardware", "_workspace_collection_registry"}
+_MOVED = {
+    "services.studio_generate": ("generate",),
+    "services.studio_edit_requests": ("retake_video_endpoint", "extract_frames_endpoint", "edit_anything_endpoint",
+                                      "inpaint_endpoint"),
+    "services.studio_segmentation": ("sam_status_endpoint", "segment_preview_endpoint"),
+}
+
+
+def _slots(module) -> list[str]:
+    """The module-level names the service starts at None: the factory (or launch) fills each of them."""
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    return [target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)]
+
+
+def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monkeypatch) -> None:
+    import importlib
+
+    launch = worker_module()
+    seen = []
+    for module_name, handlers in _MOVED.items():
+        module = importlib.import_module(module_name)
+        for name in handlers:
+            assert getattr(launch, name) is getattr(module, name), f"launch.{name} is not {module_name}.{name}"
+        for slot in _slots(module):
+            seen.append(slot)
+            value = getattr(module, slot)
+            assert value is not None, f"{module_name}.{slot} was never bound"
+            if slot not in _INDIRECT_SLOTS:
+                assert value is getattr(launch, slot), f"{module_name}.{slot} is not launch.{slot}"
+    assert {"_jobs", "_job_leftovers", "wgp", "execution_mode", "_run_generation", "EDIT_ANYTHING_LORA_FILENAME",
+            "_resolve_wangp_visual_media", "_register_manual_generation_job"} <= set(seen)
+
+    import services.studio_edit_requests as edit_requests
+    import services.studio_generate as studio_generate
+
+    calls = []
+    monkeypatch.setattr(launch, "_run_generation", lambda *args, **kwargs: calls.append((args, kwargs)) or "ran")
+    assert edit_requests._run_generation("job-1") == "ran" and calls == [(("job-1",), {})]
+    # Python names a worker thread after its target: production threads keep the name "_run_generation".
+    assert edit_requests._run_generation.__name__ == "_run_generation"
+    monkeypatch.setattr(launch, "_get_cached_hardware", lambda: {"gpu_vram_gb": 7.0})
+    assert studio_generate._get_cached_hardware() == {"gpu_vram_gb": 7.0}
+    monkeypatch.setattr(launch, "_workspace_collection_registry", SimpleNamespace(get=lambda key: ("found", key)))
+    assert studio_generate._workspace_collection_registry.get("c-1") == ("found", "c-1")
