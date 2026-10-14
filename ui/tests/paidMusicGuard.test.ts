@@ -133,6 +133,26 @@ test('Manual song Generate needs the MiniMax key in cover mode even on the local
   assert.doesNotMatch(await manualGenerateButton('original', false), /disabled=""/)
 })
 
+async function musicReadinessLine(mode: 'original' | 'cover', minimaxConfigured: boolean): Promise<string> {
+  const { createElement } = await import('react')
+  const { renderToStaticMarkup } = await import('react-dom/server')
+  const { StoryMusicSettingsBar } = await import('../src/features/stories/StoryMusicSettingsBar.tsx')
+  const base = createStoryProject('music_video')
+  return renderToStaticMarkup(createElement(StoryMusicSettingsBar, {
+    project: { ...base, music: { ...base.music, mode } },
+    patch: () => {}, busy: null, musicQueue: null, musicCueBusy: false, minimaxConfigured,
+    musicVersionStyle: {}, musicVersionLanguage: {},
+  } as never))
+}
+
+test('the music readiness line names MiniMax in cover mode and ACE only for an original song', async () => {
+  const coverNoKey = await musicReadinessLine('cover', false)
+  assert.match(coverNoKey, /Configure the shared MiniMax key/)
+  assert.doesNotMatch(coverNoKey, /Local ACE-Step selected/)
+  assert.match(await musicReadinessLine('cover', true), /MiniMax is configured/)
+  assert.match(await musicReadinessLine('original', false), /Local ACE-Step selected/)
+})
+
 test('Story Lab asks before a paid MiniMax request and never for a local one', () => {
   const asked: string[] = []
   const ask = (message: string) => { asked.push(message); return false }
