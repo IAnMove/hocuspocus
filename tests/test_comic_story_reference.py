@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-import ast
 import base64
-import copy
 import os
-import re
 import tempfile
 import unittest
 import sys
@@ -14,21 +11,7 @@ from unittest.mock import Mock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "app"))
 from services import minimax_image_service  # noqa: E402
-
-
-def _load_launch_functions(*names: str, namespace: dict | None = None) -> dict:
-    launch_path = os.path.join(os.path.dirname(__file__), "..", "app", "_launch_runtime.py")
-    with open(launch_path, "r", encoding="utf-8") as handle:
-        tree = ast.parse(handle.read())
-    selected = []
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
-            node = copy.deepcopy(node)
-            node.decorator_list = []
-            selected.append(node)
-    scope = dict(namespace or {})
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), scope)
-    return scope
+from services.comic_helpers import _normalize_comic_panel_character_ids  # noqa: E402
 
 
 class _MiniMaxResponse:
@@ -46,12 +29,8 @@ class _MiniMaxResponse:
 
 class TestComicStoryReferences(unittest.TestCase):
     def test_panel_characters_resolve_names_and_keep_visual_priority(self):
-        scope = _load_launch_functions(
-            "_normalize_comic_panel_character_ids",
-            namespace={"re": re},
-        )
         panel = {"characters": [" VIGIL ", "Nara", "vigil", "unknown"]}
-        scope["_normalize_comic_panel_character_ids"](panel, [
+        _normalize_comic_panel_character_ids(panel, [
             {"id": "nara", "name": "Nara"},
             {"id": "vigil", "name": "The Vigil"},
         ])

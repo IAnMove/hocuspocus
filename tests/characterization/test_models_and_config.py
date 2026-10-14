@@ -197,6 +197,151 @@ def test_model_options_defaults_resolutions_and_download_errors(catalog, golden,
         launch._jobs.pop("golden-delete", None)
 
 
+def test_model_preferences_rewrite_the_whole_config_file(server, monkeypatch) -> None:
+    """Visibility, selections and the profile share one writer: the live config, four-space JSON, no temp file left.
+
+    The goldens record the answers; this records what lands on disk and what a refusal leaves alone.
+    """
+    import json
+
+    config = server.wgp.server_config
+    _keep_config_keys(
+        monkeypatch,
+        config,
+        "maestro_model_visibility",
+        "maestro_model_selections",
+        "maestro_production_profile",
+    )
+    monkeypatch.setitem(config, "services", dict(config.get("services") or {}))
+    path = Path(server.wgp.server_config_filename)
+    assert not path.exists()
+
+    def saved() -> tuple[str, dict]:
+        text = path.read_text(encoding="utf-8")
+        return text, json.loads(text)
+
+    def leftovers() -> list[str]:
+        return sorted(item.name for item in path.parent.iterdir() if item.name.endswith(".tmp"))
+
+    response = server.client.put(
+        "/api/v1/model-visibility",
+        json={"enabled_models": [" fake_t2v ", "fake_i2v"], "defaults_version": 2},
+    )
+    assert response.status_code == 200
+    text, document = saved()
+    assert document["maestro_model_visibility"] == {
+        "enabled_models": ["fake_t2v", "fake_i2v"],
+        "initialized_mature_models": [],
+        "defaults_version": 2,
+    }
+    assert text == json.dumps(document, indent=4)
+    assert leftovers() == []
+
+    chosen = {"image": "fake_i2v", "video": "fake_t2v", "audio": "fake_i2v"}
+    response = server.client.put("/api/v1/model-selections", json={"selected_models": chosen})
+    assert response.status_code == 200
+    text, document = saved()
+    assert document["maestro_model_selections"] == chosen
+    assert document["maestro_model_visibility"]["enabled_models"] == ["fake_t2v", "fake_i2v"]
+    assert text == json.dumps(document, indent=4)
+
+    before = path.read_text(encoding="utf-8")
+    too_long = server.client.put("/api/v1/model-visibility", json={"enabled_models": ["x" * 201]})
+    assert (too_long.status_code, too_long.json()["detail"]) == (400, "A model identifier is too long.")
+    crowded = server.client.put(
+        "/api/v1/model-selections",
+        json={"selected_models": {mode: "x" for mode in ("image", "video", "audio", "model3d", "avatar", "sixth")}},
+    )
+    assert (crowded.status_code, crowded.json()["detail"]) == (400, "Too many model selection entries.")
+    assert path.read_text(encoding="utf-8") == before
+
+    profile = server.client.get("/api/v1/production-profile").json()["profile"]
+    profile["text"] = {"provider": "ollama", "model": "llama"}
+    response = server.client.put("/api/v1/production-profile", json={"profile": profile})
+    assert response.status_code == 200
+    text, document = saved()
+    saved_text = document["maestro_production_profile"]["text"]
+    assert (saved_text["provider"], saved_text["model"]) == ("ollama", "llama")
+    # Saving the profile mirrors its text section into the legacy services keys and drops the image and video overrides.
+    assert document["services"]["llm_provider"] == "ollama"
+    assert document["services"]["llm_model_id"] == "llama"
+    assert document["services"]["llm_remote_url"] == "http://127.0.0.1:11434"
+    assert document["maestro_model_selections"] == {"audio": "fake_i2v"}
+    assert text == json.dumps(document, indent=4)
+    assert leftovers() == []
+
+
+def test_a_model_download_runs_in_the_background_and_shows_in_the_status(catalog, monkeypatch) -> None:
+    """The pre-download worker writes the one download map the status route reads, on success and on failure."""
+    import sys
+    import time
+    from types import SimpleNamespace
+
+    wgp = catalog.wgp
+    launch = sys.modules["_launch_runtime"]
+    on_disk: set[str] = set()
+    fetched: list[tuple] = []
+
+    def locate_file(file_name, create_path_if_none=False, error_if_none=True, extra_paths=None):
+        name = os.path.basename(str(file_name))
+        if name in on_disk:
+            return str(catalog.root / name)
+        if error_if_none:
+            raise Exception(f"{name} is not on disk")
+        return None
+
+    def get_model_filename(model_type=None, quantization=None, dtype_policy=None, submodel_no=1, URLs=None, module_type=None):
+        return "" if URLs is not None else f"ckpts/{model_type}.safetensors"
+
+    def download_models(filename, model_type, source_type, submodel_no, force_path=None):
+        fetched.append((os.path.basename(filename), model_type, source_type, submodel_no))
+        on_disk.add(os.path.basename(filename))
+
+    for name, value in {
+        "fl": SimpleNamespace(locate_file=locate_file),
+        "transformer_quantization": "int8",
+        "transformer_dtype_policy": "auto",
+        "text_encoder_quantization": "int8",
+        "get_transformer_dtype": lambda model_type, policy: "bf16",
+        "get_model_filename": get_model_filename,
+        "download_models": download_models,
+        "get_local_model_filename": lambda name, extra_paths=None: locate_file(name, error_if_none=False),
+    }.items():
+        monkeypatch.setattr(wgp, name, value, raising=False)
+
+    def wait_for(model_type: str) -> dict:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            entry = catalog.client.get("/api/v1/models/downloads/status").json()["downloads"].get(model_type)
+            if entry and entry["status"] != "downloading":
+                return entry
+            time.sleep(0.02)
+        raise AssertionError(f"{model_type} never left the downloading state")
+
+    try:
+        started = catalog.client.post("/api/v1/models/fake_t2v/download")
+        assert (started.status_code, started.json()) == (200, {"status": "downloading", "model_type": "fake_t2v"})
+        assert wait_for("fake_t2v") == {"status": "completed", "error": None}
+        assert fetched == [("fake_t2v.safetensors", "fake_t2v", 0, 1)]
+        assert "fake_t2v" in launch._model_downloads
+        listed = {item["model_type"]: item["is_downloaded"] for item in catalog.client.get("/api/v1/models").json()["models"]}
+        assert listed["fake_t2v"] is True and listed["fake_i2v"] is False
+
+        def refuse(filename, model_type, source_type, submodel_no, force_path=None):
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(wgp, "download_models", refuse, raising=False)
+        catalog.client.post("/api/v1/models/fake_i2v/download")
+        assert wait_for("fake_i2v") == {"status": "failed", "error": "disk full"}
+        assert catalog.client.get("/api/v1/models/downloads/status").json()["downloads"] == {
+            "fake_t2v": {"status": "completed", "error": None},
+            "fake_i2v": {"status": "failed", "error": "disk full"},
+        }
+    finally:
+        with launch._model_downloads_lock:
+            launch._model_downloads.clear()
+
+
 def test_production_profile_save(server, golden, monkeypatch) -> None:
     """The saved profile the Settings screen writes. Recorded before the normalizer moves."""
     config = server.wgp.server_config

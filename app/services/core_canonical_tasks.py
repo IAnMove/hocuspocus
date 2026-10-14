@@ -181,6 +181,68 @@ def publish_video_editor_activity(snapshot: dict, adapter: str) -> dict | None:
     return upsert_task(workspace, task_id, **fields)
 
 
+def publish_series_plan_activity(job: dict, adapter: str) -> dict | None:
+    """Publish a Series planning job into the core Activity registry.
+
+    Core has no GPU lane and no resource scheduler. The row is still an
+    Activity task the Series screen can list, cancel and resume.
+    """
+    if not isinstance(job, dict):
+        return None
+    job_id = _editor_text(job.get("jobId"), "")
+    if not job_id:
+        return None
+    task_id = _editor_text(job.get("taskId"), "") or f"task-{adapter or 'series-plan'}-{job_id}"
+    if job.get("bootstrapKnownSeries") is True:
+        title = "Series Lab · Known-series bible"
+    elif job.get("jobType") == "canon":
+        title = "Series Lab · Canon"
+    else:
+        title = "Series Lab · Episode planning"
+    status = task_status(job.get("status"))
+    return upsert_task(
+        _editor_text(job.get("workspace"), "default"),
+        task_id,
+        root_id=_editor_text(job.get("rootTaskId"), "") or task_id,
+        kind="llm-planning",
+        workflow=adapter or "series-plan",
+        title=title,
+        status=status,
+        phase=_editor_text(job.get("stage"), status)[:160],
+        message=_editor_text(job.get("message"), status),
+        backend_job_id=job_id,
+        project_id=_editor_text(job.get("seriesId"), ""),
+        entity_type="episode",
+        entity_id=_editor_text(job.get("episodeId"), ""),
+        cancelable=status in {"created", "queued", "waiting_resource", "running"},
+        resumable=True,
+        recoverable=True,
+        metadata={"adapter": adapter or "series-plan"},
+    )
+
+
+def reset_series_plan_task_for_resume(workspace: str, task_id: str) -> None:
+    """Reopen a terminal Series plan task before its worker publishes again."""
+    if not task_id:
+        return
+    try:
+        registry = core_generation_commands.registry_for(workspace)
+        existing = registry.get(task_id)
+        if existing and str(existing.get("status") or "") in {"failed", "cancelled", "interrupted"}:
+            registry.update(
+                task_id,
+                status="queued",
+                phase="queued",
+                message="Resume requested",
+                error=None,
+                completed_at=None,
+                event_type="task.resume_requested",
+                force=True,
+            )
+    except Exception as exc:
+        print(f"[Task registry] Could not reopen {task_id}: {exc}")
+
+
 def sync_tasks(workspace: str) -> None:
     registry = core_generation_commands.registry_for(workspace)
     tasks, _latest = registry.snapshot(limit=500)
