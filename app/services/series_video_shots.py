@@ -720,12 +720,11 @@ def admitted_job_id(reply: Any) -> str | None:
     if not isinstance(reply, dict):
         return None
     receipt = reply.get("receipt") if isinstance(reply.get("receipt"), dict) else {}
-    admitted = receipt.get("result") if isinstance(receipt.get("result"), dict) else {}
-    job = reply.get("job") if isinstance(reply.get("job"), dict) else {}
-    task = reply.get("task") if isinstance(reply.get("task"), dict) else {}
-    found = (admitted.get("job_id") or reply.get("job_id") or reply.get("jobId") or job.get("jobId")
-             or job.get("job_id") or task.get("job_id"))
-    return str(found) if found else None
+    for holder in (receipt.get("result"), reply, reply.get("job"), reply.get("task")):
+        for key in ("job_id", "jobId"):
+            if isinstance(holder, dict) and holder.get(key):
+                return str(holder[key])
+    return None
 
 
 def _job_id(payload: dict[str, Any]) -> str:
