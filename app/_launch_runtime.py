@@ -22035,51 +22035,10 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 summary += f" ({skipped} skipped)"
             print(summary)
             success = not cancelled and completed == (total_tasks - skipped)
-
-            # Clean up continuation temp files
-            if os.path.isdir(out_dir):
-                for f in os.listdir(out_dir):
-                    if f.startswith("_continuation_") and f.endswith(".png"):
-                        try:
-                            os.remove(os.path.join(out_dir, f))
-                        except Exception:
-                            pass
-
-            # Publish any files that finished before an abort. Director waits
-            # for this worker to settle and persists these partial outputs.
-            new_files = []
-            if os.path.isdir(out_dir):
-                new_files = collect_job_outputs(
-                    gen,
-                    out_dir,
-                    before,
-                    allow_legacy_fallback=not bool(
-                        job["params"].get("_director_pipeline_id")
-                    ),
-                )
-                record_job_outputs(
-                    job,
-                    [] if defer_output_publication else new_files,
-                    clip_output_files=(
-                        None
-                        if defer_output_publication
-                        else clip_output_files
-                    ),
-                    join_output_file=(
-                        None
-                        if defer_output_publication
-                        else join_output_file
-                    ),
-                )
-                if not defer_output_publication:
-                    _write_output_sidecars(new_files)
-
-            if cancelled or is_cancel_requested(job):
-                return False
-            st._write_output_sidecars = _write_output_sidecars
-            st.clip_output_files = clip_output_files
-            st.defer_output_publication = defer_output_publication
-            st.join_output_file, st.new_files, st.out_dir = join_output_file, new_files, out_dir
+            st._write_output_sidecars, st.before = _write_output_sidecars, before
+            st.cancelled, st.clip_output_files = cancelled, clip_output_files
+            st.defer_output_publication, st.gen = defer_output_publication, gen
+            st.join_output_file, st.out_dir = join_output_file, out_dir
             st.pp_film_grain_intensity = pp_film_grain_intensity
             st.pp_film_grain_saturation = pp_film_grain_saturation
             st.pp_spatial_upsampling = pp_spatial_upsampling
@@ -22087,7 +22046,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             st.pp_voice_clone_mode = pp_voice_clone_mode
             st.pp_voice_clone_refs, st.raw_params = pp_voice_clone_refs, raw_params
             st.success = success
-            return _run_generation_finalize(st)
+            return _run_generation_collect(st)
 
         except Exception as e:
             if active_task_timer is not None:
@@ -22144,6 +22103,55 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_collect(st):
+    """Clean up, publish the files the run produced and honour a cancel."""
+    _write_output_sidecars, before, cancelled = st._write_output_sidecars, st.before, st.cancelled
+    clip_output_files, defer_output_publication = st.clip_output_files, st.defer_output_publication
+    gen, job, join_output_file, out_dir = st.gen, st.job, st.join_output_file, st.out_dir
+    # Clean up continuation temp files
+    if os.path.isdir(out_dir):
+        for f in os.listdir(out_dir):
+            if f.startswith("_continuation_") and f.endswith(".png"):
+                try:
+                    os.remove(os.path.join(out_dir, f))
+                except Exception:
+                    pass
+
+    # Publish any files that finished before an abort. Director waits
+    # for this worker to settle and persists these partial outputs.
+    new_files = []
+    if os.path.isdir(out_dir):
+        new_files = collect_job_outputs(
+            gen,
+            out_dir,
+            before,
+            allow_legacy_fallback=not bool(
+                job["params"].get("_director_pipeline_id")
+            ),
+        )
+        record_job_outputs(
+            job,
+            [] if defer_output_publication else new_files,
+            clip_output_files=(
+                None
+                if defer_output_publication
+                else clip_output_files
+            ),
+            join_output_file=(
+                None
+                if defer_output_publication
+                else join_output_file
+            ),
+        )
+        if not defer_output_publication:
+            _write_output_sidecars(new_files)
+
+    if cancelled or is_cancel_requested(job):
+        return False
+    st.new_files = new_files
+    return _run_generation_finalize(st)
 
 
 def _run_generation_finalize(st):
