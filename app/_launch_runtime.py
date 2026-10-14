@@ -2397,40 +2397,22 @@ from routers.recast_preview import create_recast_preview_router, recast_preview_
 
 api.include_router(create_recast_preview_router())
 
-
-def _forward_recast_endpoint_run_generation(*args, **kwargs):
-    """Call whatever ``_run_generation`` is now.
-
-    The characterization rig replaces the worker after launch imports the
-    recast handler. Binding the function would keep calling the original.
-    Python names the worker thread from ``__name__``.
-    """
-    return _run_generation(*args, **kwargs)
-
-
-# The route starts this as a thread. Python names the thread from __name__.
-_forward_recast_endpoint_run_generation.__name__ = "_run_generation"
-
-
-def _forward_recast_endpoint_cached_hardware(*args, **kwargs):
-    """Hardware detection is defined further down in this module."""
-    return _get_cached_hardware(*args, **kwargs)
-
-
 from services.recast_endpoint import bind as _bind_recast_endpoint
 from routers.recast import create_recast_router, recast_endpoint
 
+# The worker and the hardware probe are defined further down (and the rig replaces the worker): the Studio
+# forwarders above look each one up when the handler calls it.
 _bind_recast_endpoint(
     wgp=wgp,
     _active_gen_states=_active_gen_states,
     _coordinated_generation_slot=_coordinated_generation_slot,
     _generation_job_acceptance=_generation_job_acceptance,
     _get_active_workspace=_get_active_workspace,
-    _get_cached_hardware=_forward_recast_endpoint_cached_hardware,
+    _get_cached_hardware=_forward_studio_cached_hardware,
     _normalize_scail2_guidance_scale=_normalize_scail2_guidance_scale,
     _normalize_scail2_inference_steps=_normalize_scail2_inference_steps,
     _register_manual_generation_job=_register_manual_generation_job,
-    _run_generation=_forward_recast_endpoint_run_generation,
+    _run_generation=_forward_studio_run_generation,
     _workspace_dir=_workspace_dir,
 )
 api.include_router(create_recast_router())

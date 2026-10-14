@@ -932,7 +932,11 @@ def test_recast_endpoint_reads_the_objects_launch_holds(full_server, monkeypatch
     assert "_coordinated_generation_slot" in compared
     assert "generate" in compared
     assert forwarded == {"_run_generation", "_get_cached_hardware"}
-    assert module._run_generation.__name__ == "_run_generation"
+    # The Studio routes' forwarders (C3), shared: no Recast copy of them in launch.
+    assert module._run_generation is launch._forward_studio_run_generation
+    assert module._get_cached_hardware is launch._forward_studio_cached_hardware
+    # The route starts the worker as a thread named after it, as before the move.
+    assert module._run_generation.__name__ == launch._run_generation.__name__ == "_run_generation"
 
 
 # -- Recast routes (recorded on the pre-move tree; patches land on the service too) --
