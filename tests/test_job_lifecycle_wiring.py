@@ -168,10 +168,13 @@ class TestJobLifecycleWiring(unittest.TestCase):
         self.assertIn("register_generation_job", _called_names(new_job))
         manual_job = _function(queue, "register_manual_job")
         self.assertIn("register_generation_job", _called_names(manual_job))
+        edit_requests = _parse("app/services/studio_edit_requests.py")
         sources = {
             "tools_upscale": self.tools_router,
             "tools_revoice": self.tools_router,
-            "retake_video_endpoint": _parse("app/services/studio_edit_requests.py"),
+            "retake_video_endpoint": edit_requests,
+            "edit_anything_endpoint": edit_requests,
+            "inpaint_endpoint": edit_requests,
         }
         for endpoint_name in (
             "retake_video_endpoint",

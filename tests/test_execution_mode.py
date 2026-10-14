@@ -531,7 +531,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
         ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
         ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "async def inpaint_endpoint", "_run_blend_generation"),
+        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation"),
     )
     for start, end, real_worker in specialist_routes:
         route = source.split(start, 1)[1].split(end, 1)[0]

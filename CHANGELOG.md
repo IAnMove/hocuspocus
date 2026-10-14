@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Edit-anything and inpaint left the launch module.** POST /api/v1/edit-anything and POST /api/v1/inpaint still answer the same way.
+
 **Retake and frame extraction left the launch module.** POST /api/v1/retake and POST /api/v1/extract-frames still answer the same way.
 
 **Submitting a generation left the launch module.** POST /api/v1/generate still answers the same way. A Viggle recast, a series shot and MCP still call that same function.
