@@ -408,16 +408,16 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
 # the first time a command runs, and nothing else sees it: the kernel PR (#1059) stopped defining
 # ``register_generation_job`` in launch and every command-started job (image, speech, music, sfx, video) failed to
 # dispatch, while the tests kept passing because they hand ``dispatch`` a runtime dict of their own. The first module
-# also reads optional keys with ``.get``: an undefined one silently leaves the operation (sfx, upscale) out. The other
-# three are checked for ``runtime["key"]`` only: ``tools_upscale_commands`` reads optional hooks with ``.get`` and falls
-# back to a default (or ``None``) when launch has no such name, and launch has never defined seven of them
-# (``_probe_tool_video``, ``_tools_processor_capabilities``, ``_tools_processor_parameters``, ``_uploads_dir``,
-# ``_validate_tools_processors``, ``_validated_tools_processor_settings``, ``resolve_tool_source``).
+# also reads optional keys with ``.get``: an undefined one silently leaves the operation (sfx, upscale) out. So does
+# ``tools_upscale_commands`` since validation finding edit-06: it used to read seven hooks with ``.get`` that launch
+# has never defined (``_probe_tool_video``, ``_tools_processor_capabilities``, ``_tools_processor_parameters``,
+# ``_uploads_dir``, ``_validate_tools_processors``, ``_validated_tools_processor_settings``, ``resolve_tool_source``);
+# they always fell back to the real validators and were deleted. The other two are checked for ``runtime["key"]`` only.
 RUNTIME_DICT_READERS = {
     APP / "services" / "image_generation_runtime.py": True,
     APP / "services" / "video_generation_commands.py": False,
     APP / "services" / "studio_sfx_commands.py": False,
-    APP / "services" / "tools_upscale_commands.py": False,
+    APP / "services" / "tools_upscale_commands.py": True,
 }
 
 
