@@ -25,7 +25,7 @@ from urllib.parse import unquote, urlparse
 
 from fastapi import APIRouter, HTTPException
 
-from services import execution_mode, minimax_image_service, resource_scheduler
+from services import execution_mode, minimax_image_service, resource_scheduler, workspace_busy
 from services.provider_profile import resolve_minimax_key
 
 
@@ -236,6 +236,16 @@ def list_minimax_image_jobs() -> list[dict]:
     """Snapshot MiniMax image jobs for Activity's canonical sync."""
     with _minimax_image_jobs_lock:
         return [copy.deepcopy(job) for job in _minimax_image_jobs.values()]
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """MiniMax Image-01 requests that still write panels into their workspace (``services.workspace_busy`` probe)."""
+    with _minimax_image_jobs_lock:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _minimax_image_jobs.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
 
 
 def _cancel_comic_minimax_job(job_id: str) -> dict:

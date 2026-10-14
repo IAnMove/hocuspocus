@@ -26,6 +26,7 @@ PROBE_FUNCTION = "busy_jobs"
 COMMON: tuple[tuple[str, str], ...] = (
     ("video-editor", "routers.video_editor"),
     ("minimax-music", "services.story_music_jobs"),
+    ("minimax-image", "routers.comics"),
 )
 # The full server (NVIDIA / WanGP) only.
 FULL_ONLY: tuple[tuple[str, str], ...] = ()

@@ -196,11 +196,27 @@ def _seed_minimax_music(_tmp_path):
     return reset
 
 
+def _seed_minimax_image(_tmp_path):
+    from routers import comics
+
+    def reset():
+        with comics._minimax_image_jobs_lock:
+            comics._minimax_image_jobs.clear()
+
+    reset()
+    with comics._minimax_image_jobs_lock:
+        comics._minimax_image_jobs["minimax-image-1"] = {
+            "jobId": "minimax-image-1", "workspace": "film", "status": "waiting_resource",
+        }
+    return reset
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
     pytest.param("video-editor", "full", _seed_video_editor, id="video-editor"),
     pytest.param("minimax-music", "full", _seed_minimax_music, id="minimax-music"),
+    pytest.param("minimax-image", "full", _seed_minimax_image, id="minimax-image"),
 ]
 
 
