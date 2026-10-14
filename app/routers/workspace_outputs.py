@@ -6,6 +6,7 @@ register the routes, so each server can mount them at the old positions.
 """
 from __future__ import annotations
 
+import inspect
 import os
 import re
 
@@ -142,7 +143,9 @@ def create_list_outputs_router():
     """GET /api/v1/outputs at the full server's original position."""
     router = APIRouter()
 
-    @router.get("/api/v1/outputs")
+    # The description is the service function's docstring, so the OpenAPI text
+    # is what the full server published when it defined these handlers itself.
+    @router.get("/api/v1/outputs", description=inspect.cleandoc(output_listing.list_outputs.__doc__))
     def list_outputs(
         response: Response,
         limit: int = 0,
@@ -172,7 +175,7 @@ def create_serve_file_router():
     """GET /api/v1/file/{filename} at the full server's original position."""
     router = APIRouter()
 
-    @router.get("/api/v1/file/{filename:path}")
+    @router.get("/api/v1/file/{filename:path}", description=inspect.cleandoc(output_listing.serve_file.__doc__))
     def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
         try:
             return output_listing.serve_file(filename, workspace, sha256)
@@ -186,7 +189,7 @@ def create_storage_usage_router():
     """GET /api/v1/storage/usage. The full server mounts this; the report reads WanGP weights."""
     router = APIRouter()
 
-    @router.get("/api/v1/storage/usage")
+    @router.get("/api/v1/storage/usage", description=inspect.cleandoc(storage_usage_service.storage_usage.__doc__))
     def storage_usage():
         return storage_usage_service.storage_usage()
 

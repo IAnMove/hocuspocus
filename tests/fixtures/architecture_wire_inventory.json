@@ -8,12 +8,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_activity_generation_details.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_api_workspace_security.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -44,12 +38,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_cancellable_model_downloads.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_character_kit_library_router.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
@@ -60,12 +48,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_comic_director_json_recovery.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
       "file": "tests/test_comic_plan_resume_contract.py",
@@ -212,12 +194,6 @@
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
-      "file": "tests/test_llm_request_cancellation.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_media_path_security.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
@@ -332,12 +308,6 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
-      "file": "tests/test_scail2_workflows.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
       "file": "tests/test_scene_packages.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
@@ -360,12 +330,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_series_lifecycle.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
       "file": "tests/test_series_render.py",
@@ -426,12 +390,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
-      "file": "tests/test_story_montage_clip_history_ui.py",
-      "target": "ui/src/stores/useStore.ts",
-      "classification": "fragile_source",
-      "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
     },
     {
       "file": "tests/test_studio_sfx_native_worker.py",
