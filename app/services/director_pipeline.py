@@ -2507,10 +2507,12 @@ def update_clip_prompts(
             raise ValueError("Clip not found")
         if video_prompt is not None:
             text = str(video_prompt)
-            write_workspace_prompt(
+            changed = write_workspace_prompt(
                 clips, plans, planned, clip_index, "video_prompt", text,
                 extras={"_director_h3_source_prompt": text},
             )
+            if changed:
+                _resync_h3_segment_prompts(state, clip_index, text)
         if image_prompt is not None:
             write_workspace_prompt(
                 clips, plans, planned, clip_index, "image_prompt", str(image_prompt),
@@ -4136,6 +4138,68 @@ def _h3_edit_references(state: dict, clip_index: int) -> tuple[list[str], list[s
     return selected, video_refs, audio_refs
 
 
+def _cut_shot_prompt_into_h3_segments(
+    segments: list,
+    plan: dict,
+    video_params: Mapping[str, Any],
+    direct_video_master_prompt: str,
+    *,
+    identity_safe: bool,
+    allow_text: bool,
+) -> None:
+    """Give every H3 segment its own slice of the shot prompt in ``plan``.
+
+    A shot is cut into one prompt per 5 s segment ("Perform only these actions
+    in this segment", then "Continue directly from the supplied continuity
+    frame"), so a segment never replays the whole shot.
+    """
+    base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
+    for index, record in enumerate(segments):
+        mode = "references" if identity_safe and index > 0 else base_mode
+        record["prompt"] = _minimax_h3_segment_prompt(
+            plan,
+            index,
+            len(segments),
+            str(video_params.get("h3_audio_prompt") or ""),
+            mode,
+            direct_video_master_prompt,
+            allow_text,
+        )
+
+
+def _resync_h3_segment_prompts(state: dict, clip_index: int, text: str) -> None:
+    """A Workspaces save changed an H3 shot's prompt: re-cut its segments from the new text.
+
+    Repeat after Save sends no ``prompt_override``, so the regenerate reads
+    ``h3_segments[*].prompt``; left as the previous take they discard the edit.
+    The new text replaces the authored windows and segment prompts it was cut
+    from, and the saved wording is the user's, so the no-text lock is not added.
+    The segments are stale until they are regenerated.
+    """
+    clips = state.get("clips") if isinstance(state.get("clips"), list) else []
+    clip = clips[clip_index] if 0 <= clip_index < len(clips) else None
+    segments = clip.get("h3_segments") if isinstance(clip, dict) else None
+    if not (isinstance(segments, list) and segments and _is_sequential_h3_model(state.get("video_model"))):
+        return
+    segments = [record for record in segments if isinstance(record, dict)]
+    video_params = state.get("video_params") if isinstance(state.get("video_params"), dict) else {}
+    snapshot = state.get("_params_snapshot") if isinstance(state.get("_params_snapshot"), dict) else {}
+    direct_video, master_prompt = _direct_video_settings({**state, **snapshot})
+    base_mode = str(video_params.get("h3_reference_mode") or "first_frame")
+    image_refs = [] if direct_video else _h3_edit_references(state, clip_index)[0]
+    _cut_shot_prompt_into_h3_segments(
+        segments,
+        {**clip, "video_prompt": text, "h3_segment_prompts": [], "window_prompts": []},
+        video_params,
+        master_prompt,
+        identity_safe=base_mode == "first_frame" and bool(image_refs),
+        allow_text=True,
+    )
+    clip["h3_segment_prompts"] = []
+    for record in segments:
+        record["stale"] = True
+
+
 def rerun_h3_segment(
     out_dir: str,
     pid: str,
@@ -4175,18 +4239,14 @@ def rerun_h3_segment(
     )
     identity_safe = base_mode == "first_frame" and bool(image_refs)
     if replace_shot_prompt and prompt_override:
-        plan = {**clip, "video_prompt": prompt_override, "h3_segment_prompts": []}
-        for index, record in enumerate(segments):
-            mode = "references" if identity_safe and index > 0 else base_mode
-            record["prompt"] = _minimax_h3_segment_prompt(
-                plan,
-                index,
-                len(segments),
-                str(video_params.get("h3_audio_prompt") or ""),
-                mode,
-                direct_video_master_prompt,
-                allow_segment_text,
-            )
+        _cut_shot_prompt_into_h3_segments(
+            segments,
+            {**clip, "video_prompt": prompt_override, "h3_segment_prompts": []},
+            video_params,
+            direct_video_master_prompt,
+            identity_safe=identity_safe,
+            allow_text=allow_segment_text,
+        )
         clip["video_prompt"] = prompt_override
     elif prompt_override:
         segments[segment_index]["prompt"] = prompt_override

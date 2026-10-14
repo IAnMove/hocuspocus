@@ -142,6 +142,107 @@ def test_rerun_h3_video_initializes_a_missing_saved_shot(tmp_path: Path):
     assert saved["clips"][0]["h3_segments"][0]["stale"] is True
 
 
+def test_saved_h3_prompt_drives_regenerate_without_override(tmp_path: Path):
+    """Workspaces Save then Repeat sends no prompt_override; segments must follow."""
+    state = _saved_state(tmp_path)
+    _write_pipeline(tmp_path, state)
+    director_pipeline.update_clip_prompts(
+        str(tmp_path),
+        "editable",
+        0,
+        video_prompt="A dragon flies over the castle.",
+    )
+    submitted = []
+
+    def submit(params, **_kwargs):
+        submitted.append(params)
+        filename = f"new_{len(submitted)}.mp4"
+        (tmp_path / filename).write_bytes(b"new video")
+        return [filename]
+
+    with patch.object(director_pipeline, "_submit_and_wait", side_effect=submit), \
+            patch("app.services.video_editor.probe_media", return_value={"duration": 5.16}), \
+            patch("app.services.video_editor.extract_frame",
+                  side_effect=lambda _s, destination, _t: Path(destination).write_bytes(b"frame")):
+        director_pipeline.rerun_clip_video(str(tmp_path), "editable", 0)
+
+    assert submitted, "H3 regenerate should submit at least one segment"
+    assert all("A dragon flies over the castle." in item["prompt"] for item in submitted)
+    assert all("Segment 0. Audio: wind." not in item["prompt"] for item in submitted)
+
+
+THREE_ACTIONS = "She walks to the door. She opens it. She steps outside."
+
+
+def _saved_clip(tmp_path: Path) -> dict:
+    return director_pipeline.load_pipeline_state(str(tmp_path), "editable")["clips"][0]
+
+
+def test_a_saved_shot_prompt_is_cut_into_one_slice_per_h3_segment(tmp_path: Path):
+    """The shot is cut into its segments again; a segment never replays the whole shot."""
+    _write_pipeline(tmp_path, _saved_state(tmp_path))
+
+    director_pipeline.update_clip_prompts(str(tmp_path), "editable", 0, video_prompt=THREE_ACTIONS)
+
+    clip = _saved_clip(tmp_path)
+    first, second, third = (record["prompt"] for record in clip["h3_segments"])
+    assert "Perform only these actions in this segment" in first
+    assert "She walks to the door." in first
+    assert "She opens it." not in first and "She steps outside." not in first
+    for later, own, others in (
+        (second, "She opens it.", ("She walks to the door.", "She steps outside.")),
+        (third, "She steps outside.", ("She walks to the door.", "She opens it.")),
+    ):
+        assert "Continue directly from the supplied continuity frame" in later
+        assert own in later
+        assert not any(other in later for other in others)
+    assert all(record["stale"] for record in clip["h3_segments"])
+    assert clip["h3_segment_prompts"] == []
+    assert clip["video_prompt"] == THREE_ACTIONS
+    assert director_pipeline._typed_at_review(
+        director_pipeline.load_pipeline_state(str(tmp_path), "editable"), 0, "video_prompt",
+    )
+
+
+def test_an_unchanged_workspace_save_leaves_the_h3_segments_alone(tmp_path: Path):
+    state = _saved_state(tmp_path)
+    _write_pipeline(tmp_path, state)
+    before = _saved_clip(tmp_path)["h3_segments"]
+
+    director_pipeline.update_clip_prompts(
+        str(tmp_path), "editable", 0, video_prompt=state["clips"][0]["video_prompt"],
+    )
+
+    assert _saved_clip(tmp_path)["h3_segments"] == before
+    assert not any(record["stale"] for record in before)
+
+
+def test_a_saved_shot_prompt_replaces_the_authored_windows_it_was_cut_from(tmp_path: Path):
+    """A clip that carries window prompts would otherwise slice the old windows and ignore the save."""
+    state = _saved_state(tmp_path)
+    state["clips"][0]["window_prompts"] = ["Old window one.", "Old window two.", "Old window three."]
+    state["clips"][0]["h3_segment_prompts"] = ["Old a.", "Old b.", "Old c."]
+    _write_pipeline(tmp_path, state)
+
+    director_pipeline.update_clip_prompts(str(tmp_path), "editable", 0, video_prompt=THREE_ACTIONS)
+
+    prompts = [record["prompt"] for record in _saved_clip(tmp_path)["h3_segments"]]
+    assert not any("Old " in prompt for prompt in prompts)
+    assert "She opens it." in prompts[1]
+
+
+def test_a_workspace_save_leaves_the_segments_of_a_non_h3_production_alone(tmp_path: Path):
+    state = _saved_state(tmp_path)
+    state["video_model"] = "ltx2_22B_distilled_1_1"
+    _write_pipeline(tmp_path, state)
+    before = _saved_clip(tmp_path)["h3_segments"]
+
+    director_pipeline.update_clip_prompts(str(tmp_path), "editable", 0, video_prompt=THREE_ACTIONS)
+
+    assert _saved_clip(tmp_path)["h3_segments"] == before
+    assert _saved_clip(tmp_path)["video_prompt"] == THREE_ACTIONS
+
+
 def test_rerun_h3_segment_cascades_and_rejoin_uses_current_versions(tmp_path: Path):
     state = _saved_state(tmp_path)
     state["video_model"] = "minimax_h3_legacy"

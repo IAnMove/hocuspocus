@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: Repeat on an H3 shot uses the prompt you saved in Workspaces.** Saving a new prompt for a MiniMax H3 shot only changed the shot text; its 5-second segments kept the old prompts, so Repeat regenerated the old shot. Saving now cuts the new text into one slice per segment (each segment performs only its part, as when you regenerate with a new prompt), replaces the old planner windows it came from, and marks the segments for regeneration. Saving the same text again changes nothing.
+
 **Fixed: text you write in Workspaces survives Regenerate and Repeat.** A shot prompt edited in Workspaces (typed by hand, or a rewrite you accepted) was not remembered as yours, so Regenerate and Repeat put the "no visible text" lock back on and stripped any lettering you had added (sung projects only). The edit is now marked as typed, like text typed at the review pause; saving the same wording again changes nothing.
 
 **Fixed: Inpaint and its mask preview find a clip picked from the gallery.** Picking a workspace clip in Inpaint sent its file name and workspace, but both the mask preview and the inpaint job only looked in the uploads folder and answered "Video not found". They now look in the clip's workspace first, like Retake and Edit Anything, and fall back to uploads for a dropped file.
