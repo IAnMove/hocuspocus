@@ -5,6 +5,18 @@
     },
     "status": 200
   },
+  "describe refs missing images": {
+    "body": {
+      "detail": "image_paths is required"
+    },
+    "status": 400
+  },
+  "generate music empty": {
+    "body": {
+      "detail": "Unknown model: ace_step_v1_5_xl_sft_lm_4b"
+    },
+    "status": 400
+  },
   "lan auth status": {
     "body": {
       "authenticated": true,

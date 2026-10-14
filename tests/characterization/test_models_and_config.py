@@ -193,6 +193,28 @@ def test_tools_reject_invalid_input(server, golden) -> None:
     )
 
 
+def test_director_and_describe_refuse_an_empty_request(server, golden) -> None:
+    """Director music and character description refuse an empty body before any model work.
+
+    A real song or a description needs a loaded model and, for music, a GPU.
+    These are the answers the full server gives first.
+    """
+    server.check(
+        golden,
+        "describe refs missing images",
+        "POST",
+        "/api/v1/characters/describe-refs",
+        json={},
+    )
+    server.check(
+        golden,
+        "generate music empty",
+        "POST",
+        "/api/v1/director/generate-music",
+        json={},
+    )
+
+
 def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
     """The full server's MCP routes before this step's router edit. Access is off, so POST never reaches a tool."""
     message = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
