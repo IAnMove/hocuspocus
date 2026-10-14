@@ -1,8 +1,16 @@
-"""Director comic cheap reads: validation errors, a missing job, and no completed plan.
+"""Director comic: validation errors, a missing job, no completed plan, and the plan, text-page, story-revise and
+plan-job life cycle with a fake writing provider.
 
-A real plan, a text-page rewrite and a story revision call an LLM. Those paths are not recorded here.
+A real LLM, a real process restart and the animatic render are not exercised here.
 """
 from __future__ import annotations
+
+import json
+import re
+import sys
+import threading
+import time
+from pathlib import Path
 
 
 def test_director_comic_routes_answer_the_recorded_errors(server, golden) -> None:
@@ -36,13 +44,6 @@ def test_director_comic_routes_answer_the_recorded_errors(server, golden) -> Non
 # --- The writers and the plan job life cycle, with a fake writing provider -------------------------------
 # The real LLM, real images and the animatic render are not exercised here. The fake provider answers by what
 # the prompt asks for, so the planner, the lettering editor, the story editor and the language repair all run.
-
-import json
-import re
-import sys
-import threading
-import time
-from pathlib import Path
 
 WRITER = {"writingProvider": "ollama", "writingModel": "golden-writer", "writingBaseUrl": "http://127.0.0.1:11434"}
 PLAN_ID = (r"comic-plan-[0-9a-f]{12}", "comic-plan-<PLAN>")
