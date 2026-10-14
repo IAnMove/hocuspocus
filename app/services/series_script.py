@@ -50,7 +50,9 @@ from services.series_duration_estimate import estimate_episode
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
 from services.series_render import SERIES_RESOLUTIONS, series_resolution_preset
-from services.series_video_shots import budget_warning, parse_budget, reference_problems, store_video
+from services.series_video_shots import (
+    budget_warning, method_warning, methods_to_allow, parse_budget, reference_problems, store_video,
+)
 from services.series_voice_rooms import PRESETS
 
 CODES = {key: code for code, key in LANGUAGE_KEYS.items()}
@@ -180,6 +182,7 @@ class EpisodeScript:
         for index, shot in enumerate(self.script.get("shots") or []):
             self._check_shot(index, shot if isinstance(shot, dict) else {})
         self._note_budget()
+        self._note_method()
         finish_check(self)
 
     def _note_budget(self) -> None:
@@ -191,6 +194,12 @@ class EpisodeScript:
             self.checker.problems.append(str(error))
             return
         warning = budget_warning(self.script, self.video_budget, self.shot_id)
+        if warning:
+            self.warnings.append(warning)
+
+    def _note_method(self) -> None:
+        """Video shots are ``imported_video``: a series that does not allow it is told so here, and a write enables it."""
+        warning = method_warning(self.series, self.script, self.shot_id)
         if warning:
             self.warnings.append(warning)
 
@@ -481,6 +490,15 @@ def _episode_patch(built: EpisodeScript, title: str, premise: str, shots: list[d
     return episode
 
 
+def _enable_video_method(tool: Callable[..., dict], series: dict[str, Any], script: dict[str, Any]) -> list[str]:
+    """Add ``imported_video`` to a series whose script has video shots (the check warned). Before anything is written."""
+    methods = methods_to_allow(series, script)
+    if methods is None:
+        return []
+    tool("series.update", {"series": {"allowedProductionMethods": methods}, "base_revision": series["revision"]})
+    return ["imported_video"]
+
+
 def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], dict], kits: dict[str, Any], files: set[str],
                  workspace: str, script: dict[str, Any], episode_id: str | None = None, check_only: bool = False,
                  root: str | None = None, number: int | None = None) -> dict[str, Any]:
@@ -500,6 +518,7 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     if check_only:
         return {"checked": True, **summary}
     tool = _tool_caller(call, workspace, series["id"])
+    enabled = _enable_video_method(tool, series, script)
     title = str(_pick(_texts(script.get("title")), built.original) or f"Episode {number}")
     premise = str(_pick(_texts(script.get("premise")), built.original) or "")
     if not episode_id:
@@ -514,4 +533,5 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
         "episode_id": episode_id, "language": language, **built.version(language)}).get("missingLines") or []
         for language in built.languages[1:]}
     removed = [shot["id"] for shot in (current["episodesById"][episode_id].get("shots") or []) if shot["id"] not in summary["shots"]]
-    return {"episodeId": episode_id, **summary, "missingLines": missing, **({"removedShots": removed} if removed else {})}
+    return {"episodeId": episode_id, **summary, "missingLines": missing, **({"removedShots": removed} if removed else {}),
+            **({"enabledProductionMethods": enabled} if enabled else {})}
