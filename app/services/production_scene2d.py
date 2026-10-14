@@ -303,6 +303,18 @@ def scene_inputs(state: dict, shot: dict) -> str | None:
     return "scene2d:" + hashlib.sha256(json.dumps([frame, cutouts], sort_keys=True).encode()).hexdigest()[:16]
 
 
+def resume_clip(state: dict, shot: dict, clips: dict | None = None) -> str | None:
+    """What ``export_scenes`` stores in ``scenes[key].clip`` and compares on resume.
+
+    A leftover h3 take on the same key is not a scene2d input: the card plays
+    cutouts and its plate, so the resume token is always ``scene_inputs``."""
+    if is_scene2d(shot):
+        return scene_inputs(state, shot)
+    kept = clips if clips is not None else state.get("clips") or {}
+    found = kept.get(shot.get("key")) or (kept.get(shot.get("clip")) if shot.get("kind") == "clip" else None)
+    return found.get("file") if isinstance(found, dict) else None
+
+
 def scene2d_document(production: Any, shot: dict, seconds: float, score: dict, stills: dict) -> dict:
     """The card compiled for this cut, kept in state by its input so a package or a resume does not compile again."""
     from services.music_production import ProductionError

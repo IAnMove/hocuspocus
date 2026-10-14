@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: re-doing a Video 2D (scene2d) shot no longer trusts a leftover H3 clip.** A scene2d shot that still carried an old H3 take used that take's file name to decide whether its scene was up to date, so a new cut-out or a new background was not exported again on resume. The scene now compares what the card is really made from (its drawn frame and cut-outs).
+
 **Fixed: a resumed production redoes exactly what an edit changed, and nothing else.** Changing a shot's image model or steps, the start-frame size (`resolution.frames`), the video look (`style.video`), the clip size (`resolution.clips`) or the audio window of a shot now draws the frame, shoots the clip and exports the scene that depend on it, each as a new job. Naming the default size is not a change, and small moves of a shot's window add up instead of being forgotten on every resume. A production made before this was recorded keeps all its pictures and clips when you resume it with the same spec: nothing is drawn or shot again until you change something.
 
 **Fixed: editing a cast member's look now redraws it.** Rewriting a character's `sheet_prompt` or `single_prompt`, changing its seed or image model, or editing `style.image` used to keep the old reference sheet and portrait, so every shot built on it kept the old character. A resumed production now draws that character again (a new job, not the old one), redraws a group plate when a member changed, and redraws and re-shoots only the H3 shots that show it. A production made before this was recorded keeps what it has.

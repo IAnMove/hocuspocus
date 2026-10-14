@@ -400,6 +400,41 @@ def test_a_shot_edit_rebuilds_the_card_scene_and_records_what_a_resume_compares(
     assert calls == [], "the scene the edit exported is the one a resume would make"
 
 
+def test_a_leftover_h3_clip_does_not_skip_a_new_cutout_on_resume(tmp_path):
+    """An h3 take on the same key is not what a scene2d resume compares: a new cutout must export again."""
+    from services.production_shot_edit import reexport_shot
+    from services.production_stage_scenes import export_scenes
+    (tmp_path / "score.json").write_text(json.dumps({"duration": 8, "bpm": 120, "beat": 0.5, "lines": []}))
+    item = shot(scene2d={"cast": {"subject_1": "lia"}, "background": PLATE})
+    plan = spec(item, cast=[{"id": "lia", "sheet_prompt": "a singer"}])
+    replies = {
+        scene2d.COMPILE: card_document,
+        "scenes.video2d.edit": lambda arguments: {"result": edit(arguments)["result"]},
+        "scenes.video2d.validate": lambda arguments: {"result": {"warnings": []}},
+        "scenes.document.save": lambda arguments: {"result": {"name": "p-s1.scene.json"}},
+        "scenes.video2d.export": lambda arguments: {"receipt": {"commandId": "export-s1"}},
+        "scenes.video2d.export.receipt": lambda arguments: {"receipt": {"artifacts": [{"name": "p-s1.mp4"}]}},
+        "montages.get": lambda arguments: {"result": {"revision": 1, "montage": {"revision": 1, "clips": [{"id": "s1", "source": "old.mp4"}]}}},
+        "montages.save": lambda arguments: {"result": {"file": "p.montage.json", "revision": 2}},
+    }
+    production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
+                            mcp=lambda tool, arguments: replies[tool](arguments))
+    production.state.update(
+        spec=plan, score="score.json", status="completed", montage_file="p.montage.json",
+        clips={"s1": {"file": "old-h3.mp4", "url": "/api/v1/file/old-h3.mp4?workspace=ws"}},
+        cast={"lia": "/api/v1/uploads/sheet.png"},
+        cast_cutouts={"lia": {"source": "x", "url": "/api/v1/file/lia-cut.png?workspace=ws"}},
+    )
+    reexport_shot(production, plan, "s1")
+    token = scene2d.scene_inputs(production.state, item)
+    assert production.state["scenes"]["s1"]["clip"] == token and token != "old-h3.mp4"
+    production.state["cast_cutouts"]["lia"]["url"] = "/api/v1/file/lia-cut-b.png?workspace=ws"
+    calls = []
+    replies["scenes.video2d.export"] = lambda arguments: calls.append(arguments) or {"receipt": {"commandId": "again"}}
+    export_scenes(production, plan, shot_windows(plan, production.score()))
+    assert calls, "a new cutout must export again; an h3 leftover must not be the resume key"
+
+
 def test_the_dry_run_reads_the_runs_own_pictures_for_the_alpha_check(tmp_path):
     from PIL import Image
     Image.new("RGB", (8, 8), (200, 40, 40)).save(tmp_path / "boxed.png")      # a picture with no transparent pixel
