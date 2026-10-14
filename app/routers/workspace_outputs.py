@@ -108,6 +108,24 @@ def create_workspace_router(
         busy = any(j.get("status") in ("queued", "running") for j in jobs())
         if busy or not generation_idle():
             raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        # Hunyuan3D / Meshy / Hi3D write the GLB from model3d_service._jobs,
+        # which is neither jobs() nor _active_gen_states. Deleting mid-job
+        # wipes the project and lets workspace_dir resurrect an empty folder
+        # for the leftover worker.
+        try:
+            from services.model3d_service import has_active_jobs as any_model3d_job_active
+            if any_model3d_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
+        # Procedural / UniRig jobs live in rig_service._jobs and write the
+        # rigged GLB into the same captured output_dir.
+        try:
+            from services.rig_service import has_active_jobs as any_rig_job_active
+            if any_rig_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
         # Director pipelines are alive between their generation jobs (LLM
         # planning, review pauses) with no _jobs entry — but their next step
         # would resurrect the folder via _workspace_dir().

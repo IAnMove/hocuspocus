@@ -114,3 +114,89 @@ def test_delete_output_rejects_traversal(tmp_path, monkeypatch, name):
 
     assert result == {"deleted": name}
     assert outside.read_bytes() == b"keep"
+
+
+def _delete_workspace_client(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers.workspace_outputs import create_workspace_router
+
+    film = tmp_path / "film"
+    film.mkdir()
+    (film / "hero.glb").write_bytes(b"mesh")
+    policy = PathPolicy()
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["film"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=policy.safe_join,
+        save_path=lambda: str(tmp_path),
+    ))
+    return TestClient(app), film
+
+
+def test_delete_workspace_refuses_while_model3d_is_running(tmp_path):
+    """Hunyuan3D / Meshy / Hi3D live in model3d_service._jobs, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from services import model3d_service
+
+    client, film = _delete_workspace_client(tmp_path)
+    with model3d_service._lock:
+        stored = dict(model3d_service._jobs)
+        model3d_service._jobs.clear()
+        model3d_service._jobs["model3d-busy"] = {
+            "status": "waiting_resource",
+            "model_id": "hunyuan3d-2.1",
+            "workspace": "film",
+        }
+    try:
+        refused = client.delete("/api/v1/workspaces/film")
+        kept_mesh = film.is_dir() and (film / "hero.glb").read_bytes() == b"mesh"
+        with model3d_service._lock:
+            model3d_service._jobs.clear()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        with model3d_service._lock:
+            model3d_service._jobs.clear()
+            model3d_service._jobs.update(stored)
+    assert refused.status_code == 409, refused.text
+    assert "generation" in refused.json()["detail"].lower()
+    assert kept_mesh
+    assert deleted.status_code == 200, deleted.text
+    assert not film.is_dir()
+
+
+def test_delete_workspace_refuses_while_rig_is_running(tmp_path):
+    """Procedural / UniRig jobs live in rig_service._jobs, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from services import rig_service
+
+    client, film = _delete_workspace_client(tmp_path)
+    with rig_service._lock:
+        stored = dict(rig_service._jobs)
+        rig_service._jobs.clear()
+        rig_service._jobs["rig-busy"] = {
+            "status": "running",
+            "engine": "procedural",
+            "workspace": "film",
+        }
+    try:
+        refused = client.delete("/api/v1/workspaces/film")
+        kept_mesh = film.is_dir() and (film / "hero.glb").read_bytes() == b"mesh"
+        with rig_service._lock:
+            rig_service._jobs.clear()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        with rig_service._lock:
+            rig_service._jobs.clear()
+            rig_service._jobs.update(stored)
+    assert refused.status_code == 409, refused.text
+    assert "generation" in refused.json()["detail"].lower()
+    assert kept_mesh
+    assert deleted.status_code == 200, deleted.text
+    assert not film.is_dir()
