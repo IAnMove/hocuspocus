@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**The full server runs a generation job in smaller steps (no behaviour change).** One function used to run every picture, video, speech and sound job from start to finish, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits, so a job does the same things in the same order and ends the same way on a cancel or an error. This only prepares the next moves, which need each step to be small enough to live in a file of its own.
+
 **Story Lab planning left the main server file.** Checking a story stage, normalising its ids, and the problem checks now live with the Story Lab schema. Analysing uploaded images, generating one stage, translating lyrics, and starting, reading, resuming and cancelling a Story Lab job are the same routes with the same answers. The job list, the set of jobs that are running, and their lock live in one place, and the main server still uses those same objects. A plan still writes the same checkpoints and still shows up in Activity. The comic page check stays in the main server file. The core server does not plan a Story.
 
 **Director music and character-reference description left the launch module.** Asking for a song, or for a description of character reference images, still answers the same way. An empty description still asks for the images. An empty music request still stops before any track is generated.
