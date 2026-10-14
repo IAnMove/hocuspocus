@@ -111,19 +111,29 @@ POSTFX_MODULES = {
     "services.generation_sfx": ("_run_sfx_generation",),
 }
 
+# The Recast helper modules (C7). The worker's bystander protection calls two of their functions by their launch
+# names, and the helpers call each other through each module's own globals.
+RECAST_MODULES = (
+    "services.recast_masks",
+    "services.recast_matte",
+    "services.recast_reference_compose",
+    "services.recast_reference_prepare",
+)
+
 
 def worker_modules() -> list:
-    """The modules whose globals the worker functions and the post-processing passes read. A move PR repoints this one
-    function.
+    """The modules whose globals the worker functions, the post-processing passes and the Recast helpers read. A move
+    PR repoints this one function.
 
     That is the full server module while any worker function or pass is still in it, each module of
-    ``services.generation_worker`` that exists, and each module a pass moved to (C4). A name the worker or the passes
-    read is an attribute of every module that reads it.
+    ``services.generation_worker`` that exists, each module a pass moved to (C4) and each Recast helper module (C7).
+    A name the worker, the passes or the helpers read is an attribute of every module that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
     passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes]
+    recast = [sys.modules[name] for name in RECAST_MODULES if name in sys.modules]
+    return [worker_module(), *package, *passes, *recast]
 
 
 @dataclass
