@@ -405,6 +405,14 @@ C6_BINDERS = {
     APP / "services" / "repaint_run.py": ("bind", "_bind_repaint_run"),
     APP / "routers" / "repaint.py": ("create_repaint_router", "create_repaint_router"),
 }
+# Outpaint and blend (C5), the same way.
+C5_BINDERS = {
+    APP / "services" / "outpaint_planning.py": ("bind", "_bind_outpaint_planning"),
+    APP / "services" / "outpaint_run.py": ("bind", "_bind_outpaint_run"),
+    APP / "routers" / "outpaint.py": ("create_outpaint_router", "create_outpaint_router"),
+    APP / "services" / "blend_run.py": ("bind", "_bind_blend_run"),
+    APP / "routers" / "blend.py": ("create_blend_router", "create_blend_router"),
+}
 
 
 def _placeholders(tree: ast.Module) -> set[str]:
@@ -472,12 +480,20 @@ def _forwarded_name(function: ast.FunctionDef) -> str | None:
 
 
 def test_repaint_modules_take_every_launch_object_once() -> None:
+    _assert_each_module_takes_every_launch_object_once(C6_BINDERS)
+
+
+def test_outpaint_and_blend_modules_take_every_launch_object_once() -> None:
+    _assert_each_module_takes_every_launch_object_once(C5_BINDERS)
+
+
+def _assert_each_module_takes_every_launch_object_once(binders: dict) -> None:
     launch = _parse(MAIN)
     launch_lines = _module_bindings(launch)
     launch_defs = {node.name: node for node in launch.body if isinstance(node, ast.FunctionDef)}
     # A name a launch function rebinds with ``global`` would leave the module holding the old object.
     rebound = {name for node in ast.walk(launch) if isinstance(node, ast.Global) for name in node.names}
-    for path, (binder_name, launch_name) in C6_BINDERS.items():
+    for path, (binder_name, launch_name) in binders.items():
         source = path.read_text(encoding="utf-8")
         # String annotations can change how FastAPI reads a route's body.
         assert "from __future__ import annotations" not in source, path.name
