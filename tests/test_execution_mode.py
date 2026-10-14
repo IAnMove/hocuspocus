@@ -535,7 +535,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
         ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
         ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation"),
+        ("async def blend_endpoint", "def _get_cached_hardware", "_run_blend_generation"),
     )
     for start, end, real_worker in specialist_routes:
         route = source.split(start, 1)[1].split(end, 1)[0]
@@ -567,7 +567,6 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     for name in (
         "_run_simulated_generation",
         "_write_output_sidecars",
-        "_run_sfx_generation",
         "_write_recast_shot_aware_sidecar",
         "_write_repaint_shot_aware_sidecar",
         "_write_outpaint_shot_aware_sidecar",
@@ -577,6 +576,11 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
                 else function_source(name))
         assert "publish_generation_sidecar" in body
         assert "json.dump" not in body
+    sfx_path = Path(__file__).parents[1] / "app" / "services" / "generation_sfx.py"
+    sfx_text = sfx_path.read_text(encoding="utf-8")
+    sfx_body = function_source("_run_sfx_generation", sfx_text, ast.parse(sfx_text))
+    assert "publish_generation_sidecar" in sfx_body
+    assert "json.dump" not in sfx_body
     animatic_source = (
         Path(__file__).parents[1] / "app" / "services" / "comic_animatic.py"
     ).read_text(encoding="utf-8")
