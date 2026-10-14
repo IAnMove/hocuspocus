@@ -297,9 +297,13 @@ def test_audio_analysis_jobs_are_registry_entries_that_either_cancel_route_ends(
 
     registry = server.client.app.state.runtime.jobs.registry
     gate = threading.Event()
+    reached_beats = threading.Event()
 
     def analyze(audio_path, transcribe=False, extract_vocals_for_transcription=True, lyrics_hint=None):
+        # The progress callback writes the job on this thread before it returns, so the event below says the
+        # job already shows the phase. ``running`` alone does not: it is written first, still in ``loading_audio``.
         audio_analysis._set_progress("detecting_beats", "beats")
+        reached_beats.set()
         gate.wait(20)
         return {"duration": 1.0}
 
@@ -333,7 +337,8 @@ def test_audio_analysis_jobs_are_registry_entries_that_either_cancel_route_ends(
         }
         assert registry[first_id]["id"] == first_id and registry[first_id]["task_id"] == "task-mine"
 
-        running = wait_for(first_id, {"running"})
+        assert reached_beats.wait(15), "the first analysis never reached its beat detection"
+        running = read(first_id)
         assert (running["status"], running["phase"], running["step"], running["progress"]) == ("running", "detecting_beats", 2, 20)
 
         second = server.client.post(jobs, json={"audio_path": "second.wav"})
