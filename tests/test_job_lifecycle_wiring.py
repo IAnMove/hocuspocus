@@ -89,6 +89,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.launch = _parse("app/_launch_runtime.py")
+        cls.director = _parse("app/routers/director.py")
         cls.tools_upscale = _parse("app/services/tools_upscale.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
@@ -244,7 +245,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         }
         for endpoint_name, worker_name in expected.items():
             with self.subTest(endpoint=endpoint_name):
-                endpoint = _function(self.launch, endpoint_name)
+                endpoint = _function(self.director, endpoint_name)
                 awaited_thread_targets = {
                     call.args[0].id
                     for node in ast.walk(endpoint)
@@ -258,8 +259,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 self.assertIn(worker_name, awaited_thread_targets)
 
     def test_director_bulk_repair_routes_to_server_owned_worker(self):
-        repair = _function(self.launch, "repair_saved_pipeline")
-        cancel = _function(self.launch, "cancel_saved_pipeline_repair")
+        repair = _function(self.director, "repair_saved_pipeline")
+        cancel = _function(self.director, "cancel_saved_pipeline_repair")
         self.assertIn("start_pipeline_repair", _called_names(repair))
         self.assertIn("cancel_pipeline_repair", _called_names(cancel))
 
