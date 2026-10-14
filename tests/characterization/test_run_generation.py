@@ -463,6 +463,33 @@ def test_the_vram_coefficient_is_tightened_for_the_job_and_restored(rig, golden,
     rig.check(golden, "vram coefficient", observed)
 
 
+def test_a_native_job_starts_up_in_a_fixed_order_before_its_abort_handle_is_registered(rig, monkeypatch) -> None:
+    """Between taking the slot and reaching the engine, a native (WanGP) job cancels a pending H3 idle release, stops
+    the isolated H3 runtime, tightens its VRAM coefficient and only then registers its abort handle."""
+    from services import minimax_h3_service
+
+    launch = rig.launch
+    steps: list = []
+    real_coefficient, real_register = launch._apply_per_job_coefficient, launch.register_abort_state
+
+    def register(*args, **kwargs):
+        steps.append("register abort state")
+        return real_register(*args, **kwargs)
+
+    rig.patch("_cancel_h3_idle_release", lambda: steps.append("cancel H3 idle release"))
+    monkeypatch.setattr(minimax_h3_service, "stop_runtime", lambda *args, **kwargs: steps.append("stop H3 runtime"))
+    monkeypatch.setattr(minimax_h3_service, "cancel_idle_shutdown",
+                        lambda *args, **kwargs: steps.append("keep H3 runtime"))
+    rig.patch("_apply_per_job_coefficient", lambda job: (steps.append("VRAM coefficient"), real_coefficient(job))[1])
+    rig.patch("register_abort_state", register)
+    rig.engine.script = lambda call: (steps.append("engine"), call.save())
+    job_id = rig.direct_job(BODY)
+    assert rig.call_worker(job_id) is True
+    # The first two are the GPU slot's hand-off from an isolated H3 runtime, before the worker's own steps.
+    assert steps == ["keep H3 runtime", "stop H3 runtime", "cancel H3 idle release", "stop H3 runtime",
+                     "VRAM coefficient", "register abort state", "engine"]
+
+
 # -- a job that fails ---------------------------------------------------------------------------------
 def test_an_engine_error_fails_the_job_with_its_text(rig, golden) -> None:
     def script(call) -> None:
@@ -1128,6 +1155,49 @@ def test_a_cancel_during_post_processing_stops_the_remaining_passes(rig, golden)
     rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: order.append(["film grain", Path(path).name]))
     job_id = rig.run({**BODY, "repeat_generation": 2, "spatial_upsampling": "flashvsr_x2", "film_grain_intensity": 0.4})
     rig.check(golden, "cancel during post-processing", {**rig.observe(job_id), "order": order})
+
+
+def test_a_failed_job_runs_no_finishing_pass_on_the_outputs_it_keeps(rig, clip, tmp_path, monkeypatch) -> None:
+    """The engine saves a video and a sound, then fails: the job fails (it is not cancelled) and keeps both files.
+    Every finishing pass (outpaint, Recast protection, FlashVSR, film grain, voice clone, audio normalisation) runs
+    only for a job that succeeded, so none of them touches the kept files."""
+    media.sound(tmp_path / "uploads" / "audio" / "voice.wav")
+    source = tmp_path / "finishing-source.mp4"
+    shutil.copyfile(clip, source)
+    ran: list = []
+
+    def script(call) -> None:
+        call.save()
+        call.save("audio", suffix="_soundtrack")
+        raise RuntimeError("fake engine died after saving")
+
+    real_run = subprocess.run
+
+    def media_tools(command, *args, **kwargs):
+        if list(command)[0] in ("ffmpeg", "ffprobe"):
+            ran.append(list(command)[0])
+            return subprocess.CompletedProcess(command, 1, "", "the test runs no media tool")
+        return real_run(command, *args, **kwargs)
+
+    rig.engine.script = script
+    monkeypatch.setattr(subprocess, "run", media_tools)
+    rig.set_wgp("wan_model", SimpleNamespace(name="resident model"))
+    rig.set_wgp("release_model", lambda: ran.append("release model"))
+    rig.patch("_build_recast_adaptive_mask", lambda *args, **kwargs: ran.append("trace"))
+    rig.patch("_render_recast_mask_locked_video", lambda *args, **kwargs: ran.append("render"))
+    rig.patch("_apply_spatial_upsampling_to_file", lambda path, method, job=None: ran.append("upscale"))
+    rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: ran.append("film grain"))
+    _voice_clone_stub(monkeypatch, ran)
+    job_id = rig.direct_job({**BODY, "_outpaint_source_video": str(source), "_outpaint_preserve_audio": True,
+                             "_recast_protect_bystanders": True, "_recast_source_video": str(source),
+                             "video_mask": "uploads/recast-mask.mp4", "spatial_upsampling": "flashvsr_x2",
+                             "film_grain_intensity": 0.4, "voice_clone_enabled": True,
+                             "voice_clone_refs": ["audio/voice.wav"], "tts_dynaudnorm": True})
+    assert rig.call_worker(job_id) is False
+    job = rig.launch._jobs[job_id]
+    assert job["status"] == "failed" and not job.get("cancel_requested")
+    assert len(job["output_files"]) == 2
+    assert ran == []
 
 
 def _instant_retries(rig) -> None:
