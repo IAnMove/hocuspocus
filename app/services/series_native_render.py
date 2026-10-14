@@ -525,7 +525,8 @@ class SeriesNativeRender:
         three_d = shot.get("productionMethod") == "animation_3d"
         for _attempt in range(EXPORT_RETRIES + 1):
             if item["stage"] == "scene":
-                item["inputs"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace))
+                # The version travels with the digest: a job resumed after an upgrade imports what it computed then.
+                item["inputs"], item["inputsVersion"] = render_inputs(series, shot, kits, self.deps.workspace_dir(workspace)), INPUTS_VERSION
                 if three_d:
                     self._scene3d(workspace, job, item, series, episode, shot, kits)
                 else:
@@ -973,7 +974,7 @@ class SeriesNativeRender:
         self._set_length(workspace, job, item)
         metadata = {"productionMethod": method, "sceneFilename": item["scene"], "automaticDraft": True,
                     "nativeServerRender": job["jobId"], "duration": item.get("duration"), "language": job["language"],
-                    **({"renderInputs": item["inputs"], "renderInputsVersion": INPUTS_VERSION} if item.get("inputs") else {}),
+                    **({"renderInputs": item["inputs"], "renderInputsVersion": item.get("inputsVersion")} if item.get("inputs") else {}),
                     **({"dialogueBeats": item["subtitles"]} if item.get("subtitles") else {}),
                     **({"foley": {key: item["foley"][key] for key in ("prompt", "volume", "file")}} if item.get("foley") else {}),
                     **({"reviewStage": item["pass"]} if item.get("pass") in ("preview", "final") else {})}

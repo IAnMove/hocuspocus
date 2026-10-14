@@ -441,6 +441,29 @@ def test_a_render_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
     assert render.status("cast", done["jobId"])["status"] == "completed", "a finished job is never marked interrupted"
 
 
+def test_a_take_imported_by_a_job_resumed_across_an_upgrade_keeps_the_version_of_its_inputs(tmp_path):
+    """The server restarts to upgrade while a shot waits at its import: the job kept ``inputs`` computed by the older
+    code (a version-2 digest). Stamped with today's version, that take would read as out of date on a portrait series
+    and render once more; it is read as the older take it is. A take rendered now keeps the version it was made at."""
+    from services.series_jobs import SeriesJobStore
+    from services.series_take_inputs import INPUTS_VERSION
+    tools = Tools(tmp_path)
+    render = service(tmp_path, tools, [])
+    assert finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)["status"] == "completed"
+    imports = lambda: [args["input"]["metadata"] for name, args in tools.calls if name == "series.asset.import"]  # noqa: E731
+    assert imports()[-1]["renderInputsVersion"] == INPUTS_VERSION
+    SeriesJobStore(str(tmp_path), "native").save({
+        "jobId": "native-upgrade", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1", "status": "running",
+        "approve": True, "language": "spanish", "original": True, "current": 0, "total": 1, "createdAt": time.time(),
+        "items": [{"shotId": "s01", "stage": "import", "status": "running", "lines": {}, "scene": "s01.scene.json",
+                   "video": "s01.mp4", "inputs": "d202e66790420803"}]})
+    assert render.status("cast", "native-upgrade")["status"] == "interrupted"
+    render.resume("cast", "native-upgrade")
+    assert finished(render, "native-upgrade", tmp_path)["status"] == "completed"
+    kept = imports()[-1]
+    assert kept["renderInputs"] == "d202e66790420803" and kept.get("renderInputsVersion") != INPUTS_VERSION
+
+
 def test_a_job_read_while_its_thread_ran_is_not_marked_interrupted_after_the_thread_finished(tmp_path):
     """The race: a reader loads the job (running), the thread saves completed and ends, then the reader's stale copy was
     marked interrupted and saved over the finished job."""
