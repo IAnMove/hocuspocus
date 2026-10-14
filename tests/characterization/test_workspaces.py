@@ -54,6 +54,179 @@ def test_wizard_persistence_round_trip(server, golden) -> None:
     server.check(golden, "wizard workflows loaded", "GET", "/api/v1/wizard/workflows")
 
 
+def test_storage_duplicates_scan_reclaim_and_linked_removal(server, golden, tmp_path, monkeypatch) -> None:
+    """Duplicate scan, reclaim and linked-removal guards. No weights are downloaded.
+
+    The scan reads whatever ``wgp.fl`` and the LoRA root say. Both are pointed
+    at empty-or-fixture folders under this test, so the answer does not depend
+    on the machine's model folders.
+    """
+    primary = tmp_path / "install-a" / "app" / "ckpts"
+    linked = tmp_path / "install-b" / "app" / "ckpts"
+    loras = tmp_path / "loras"
+    primary.mkdir(parents=True)
+    linked.mkdir(parents=True)
+    loras.mkdir()
+    payload = b"w" * (10 * 1024 * 1024)
+    (primary / "same.safetensors").write_bytes(payload)
+    (linked / "same.safetensors").write_bytes(payload)
+    (primary / "clash.safetensors").write_bytes(b"aaa")
+    (linked / "clash.safetensors").write_bytes(b"bbbb")
+    linked_app = str(linked.parent)
+
+    class _Files:
+        def get_checkpoints_paths(self):
+            return [str(primary), str(linked)]
+
+        def is_external_root(self, root):
+            return os.path.abspath(root) == str(linked)
+
+        def is_protected_path(self, path):
+            if not path:
+                return False
+            candidate = os.path.abspath(path)
+            try:
+                return os.path.commonpath([candidate, linked_app]) == linked_app
+            except ValueError:
+                return False
+
+    monkeypatch.setattr(server.wgp, "fl", _Files(), raising=False)
+    monkeypatch.setitem(server.wgp.server_config, "loras_root", str(loras))
+
+    same_primary = str(primary / "same.safetensors")
+    same_linked = str(linked / "same.safetensors")
+    server.check(golden, "storage duplicates", "GET", "/api/v1/storage/duplicates")
+    server.check(
+        golden, "reclaim missing path", "POST", "/api/v1/storage/duplicates/reclaim", json={"path": ""},
+    )
+    server.check(
+        golden, "reclaim absent file", "POST", "/api/v1/storage/duplicates/reclaim",
+        json={"path": str(primary / "nope.safetensors")},
+    )
+    server.check(
+        golden, "reclaim a linked file", "POST", "/api/v1/storage/duplicates/reclaim",
+        json={"path": same_linked},
+    )
+    server.check(
+        golden, "remove linked while disabled", "POST", "/api/v1/storage/duplicates/remove-linked",
+        json={"path": same_linked},
+    )
+    services = server.wgp.server_config["services"]
+    monkeypatch.setitem(services, "storage_allow_linked_removal", True)
+    server.check(
+        golden, "remove linked duplicate", "POST", "/api/v1/storage/duplicates/remove-linked",
+        json={"path": same_linked},
+    )
+    assert (linked / "same.safetensors").is_file()
+    server.check(
+        golden, "reclaim primary duplicate", "POST", "/api/v1/storage/duplicates/reclaim",
+        json={"path": same_primary},
+    )
+    assert not (primary / "same.safetensors").is_file()
+    assert (linked / "same.safetensors").is_file()
+
+
+def test_storage_duplicates_never_count_or_delete_one_physical_file_twice(server, tmp_path, monkeypatch) -> None:
+    """The safety checks of the duplicate tools, on links and look-alike files. No golden: plain assertions.
+
+    A hard link, a symlink, or a linked root that is the primary root through a link is one physical file:
+    it is "shared", never a duplicate, and neither reclaim nor remove-linked deletes it. Same-size files that
+    differ in a sampled chunk are conflicts, and so is a longer linked file that starts like the primary one.
+    Pairs under 10 MB are not listed. The "." search root is not a linked install. A primary file present in
+    two linked installs is listed once. Remove-linked refuses a primary file. Recorded on the server before the
+    C9c move (the code under test did not change).
+    """
+    from services import win_safe_files
+
+    size = 10 * 1024 * 1024
+    primary = tmp_path / "install-a" / "app" / "ckpts"
+    linked = tmp_path / "install-b" / "app" / "ckpts"
+    second = tmp_path / "install-c" / "app" / "ckpts"
+    joined = tmp_path / "install-j" / "app" / "ckpts"  # a linked root that is the primary root, through a link
+    for folder in (primary, linked, second, joined.parent):
+        folder.mkdir(parents=True)
+    os.symlink(primary, joined)
+    loras = tmp_path / "loras"
+    loras.mkdir()
+
+    def write(path, seed, flip=None):
+        data = bytearray(bytes([seed]) * size)
+        if flip is not None:
+            data[flip] ^= 0xFF
+        path.write_bytes(bytes(data))
+
+    write(primary / "hard.safetensors", 1)
+    os.link(primary / "hard.safetensors", linked / "hard.safetensors")
+    write(primary / "sym.safetensors", 2)
+    os.symlink(primary / "sym.safetensors", linked / "sym.safetensors")
+    write(primary / "tail.safetensors", 3)
+    write(linked / "tail.safetensors", 3, flip=size - 5)
+    write(primary / "middle.safetensors", 4)
+    write(linked / "middle.safetensors", 4, flip=size // 2 + 7)
+    write(primary / "same.safetensors", 5)
+    write(linked / "same.safetensors", 5)
+    write(second / "same.safetensors", 5)
+    write(primary / "longer.safetensors", 7)
+    (linked / "longer.safetensors").write_bytes(bytes([7]) * size + b"more")
+    (primary / "small.safetensors").write_bytes(b"s" * 1024)
+    (linked / "small.safetensors").write_bytes(b"s" * 1024)
+    write(tmp_path / "dot.safetensors", 6)  # the "." root is the working directory (tmp_path)
+    write(primary / "dot.safetensors", 6)
+    linked_roots = {str(linked), str(second), str(joined)}
+    linked_apps = [str(linked.parent), str(second.parent), str(joined.parent)]
+
+    class _Files:
+        def get_checkpoints_paths(self):
+            return [str(primary), str(linked), str(second), str(joined), "."]
+
+        def is_external_root(self, root):
+            return os.path.abspath(root) in linked_roots
+
+        def is_protected_path(self, path):
+            candidate = os.path.abspath(path)
+            return any(os.path.commonpath([candidate, app]) == app for app in linked_apps)
+
+    monkeypatch.setattr(server.wgp, "fl", _Files(), raising=False)
+    monkeypatch.setitem(server.wgp.server_config, "loras_root", str(loras))
+
+    scan = server.client.get("/api/v1/storage/duplicates").json()
+    assert [(row["rel_path"], row["linked_install"]) for row in scan["duplicates"]] == [
+        ("same.safetensors", "install-b"),
+    ]
+    assert sorted((row["rel_path"], row["linked_install"]) for row in scan["conflicts"]) == [
+        ("longer.safetensors", "install-b"), ("middle.safetensors", "install-b"), ("tail.safetensors", "install-b"),
+    ]
+    # hard + sym through install-b; every primary name (the small one too) through the joined root.
+    assert scan["shared_via_link"] == 2 + 8
+    assert scan["total_reclaimable_bytes"] == size
+
+    refused = (409, {"detail": "No identical linked copy exists (anymore) — refusing to delete the only copy."})
+    for name in ("hard.safetensors", "sym.safetensors", "tail.safetensors", "middle.safetensors", "longer.safetensors"):
+        response = server.client.post("/api/v1/storage/duplicates/reclaim", json={"path": str(primary / name)})
+        assert (response.status_code, response.json()) == refused, name
+        assert (primary / name).is_file() and (linked / name).exists(), name
+
+    monkeypatch.setitem(server.wgp.server_config["services"], "storage_allow_linked_removal", True)
+    recycled = []
+    monkeypatch.setattr(win_safe_files, "recycle_file", lambda target: recycled.append(target) or True)
+    for name in ("hard.safetensors", "sym.safetensors", "middle.safetensors", "longer.safetensors"):
+        response = server.client.post("/api/v1/storage/duplicates/remove-linked", json={"path": str(linked / name)})
+        assert response.status_code == 409, name
+    response = server.client.post(
+        "/api/v1/storage/duplicates/remove-linked", json={"path": str(primary / "same.safetensors")},
+    )
+    assert (response.status_code, response.json()) == (400, {
+        "detail": "That file is not in a linked install — use Reclaim for HocusPocus Lab's own copies.",
+    })
+    response = server.client.post(
+        "/api/v1/storage/duplicates/remove-linked", json={"path": str(linked / "same.safetensors")},
+    )
+    assert response.status_code == 200
+    assert response.json()["surviving_copy"] == str(primary / "same.safetensors")
+    assert recycled == [str(linked / "same.safetensors")]
+    assert (primary / "hard.safetensors").read_bytes()[:1] == b"\x01"
+
+
 def test_storage_usage_reads_sidecars_and_workspace_sizes(server, golden) -> None:
     """Storage usage joins generation sidecars with the bytes in each workspace."""
     (server.outputs / "clip.meta.json").write_text(

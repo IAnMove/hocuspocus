@@ -135,6 +135,12 @@ SHOT_MODULES = (
 # Repaint (C6): the modules that took their launch objects, which they read under the launch names.
 REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
 
+# Helpers the worker calls by the launch name that C9c moved. Included once the full server has imported them.
+MOVED_CALLEES = (
+    "services.managed_loras",
+    "services.generation_option_helpers",
+)
+
 # Canonical tasks (C10a): a generation publishes its Activity row through them, so a patch of ``time`` (or any other
 # name they hold) has to land on them too, or the task clock diverges from the launch name the test patched.
 CANONICAL_TASK_MODULES = (
@@ -160,8 +166,8 @@ def worker_modules() -> list:
     That is the full server module while any worker function or pass is still in it, each module of
     ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
     Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5), each collaborator module
-    the generation-jobs slice moved and each canonical task module (C10a). A name they read is an attribute of every
-    module that reads it.
+    the generation-jobs slice moved, each canonical task module (C10a) and each helper module a moved callee lives in
+    (C9c). A name they read is an attribute of every module that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
@@ -172,7 +178,9 @@ def worker_modules() -> list:
     studio = [sys.modules[name] for name in OUTPAINT_BLEND_MODULES if name in sys.modules]
     collaborators = [sys.modules[name] for name in COLLABORATOR_MODULES if name in sys.modules]
     canonical = [sys.modules[name] for name in CANONICAL_TASK_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *collaborators, *canonical]
+    callees = [sys.modules[name] for name in MOVED_CALLEES if name in sys.modules]
+    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *collaborators, *canonical,
+            *callees]
 
 
 @dataclass

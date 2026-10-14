@@ -561,7 +561,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         encoding="utf-8",
     )
     ast.parse(source)
-    assert "@api.exception_handler(execution_mode.ExecutionModeError)" in source
+    assert "api.add_exception_handler(execution_mode.ExecutionModeError, execution_mode_error_handler)" in source
     worker = generation_source()
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
