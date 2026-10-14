@@ -41,8 +41,66 @@ def test_unreadable_source_fails_before_sam_is_started(tmp_path, monkeypatch):
     assert jobs == []
 
 
-def _inpaint(tmp_path, monkeypatch, resolution):
-    source = tmp_path / 'source.mp4'
+def test_inpaint_finds_a_gallery_filename_in_the_named_workspace(tmp_path, monkeypatch):
+    film = tmp_path / 'film'
+    film.mkdir()
+    source = film / 'hero-clip.mp4'
+    source.write_bytes(b'video')
+    handler, request, _segment, jobs, _ffmpeg = _inpaint(
+        tmp_path, monkeypatch, '',
+        source=source,
+        workspace_dir=lambda ws: str(film) if ws == 'film' else str(tmp_path / 'missing'),
+        body={'video_path': 'hero-clip.mp4', 'workspace': 'film', 'description': 'a blue coat',
+              'model_type': 'ltx2', 'sam_target': 'coat'},
+    )
+    result = asyncio.run(handler(request))
+    assert result['status'] == 'queued'
+    assert jobs[0]['params']['retake_video'] == str(source)
+    assert jobs[0]['workspace'] == 'film'
+
+
+def test_inpaint_still_finds_an_uploads_filename(tmp_path, monkeypatch):
+    uploads = tmp_path / 'uploads'
+    uploads.mkdir()
+    source = uploads / 'dropped.mp4'
+    source.write_bytes(b'video')
+    handler, request, _segment, jobs, _ffmpeg = _inpaint(
+        tmp_path, monkeypatch, '',
+        source=source,
+        cwd=tmp_path,
+        workspace_dir=lambda _ws: str(tmp_path / 'empty-workspace'),
+        body={'video_path': 'dropped.mp4', 'description': 'a blue coat',
+              'model_type': 'ltx2', 'sam_target': 'coat'},
+    )
+    result = asyncio.run(handler(request))
+    assert result['status'] == 'queued'
+    assert jobs[0]['params']['retake_video'] == str(source)
+
+
+def test_segment_preview_finds_a_gallery_filename_in_the_named_workspace(tmp_path, monkeypatch):
+    from services import studio_segmentation
+
+    film = tmp_path / 'film'
+    film.mkdir()
+    source = film / 'hero-clip.mp4'
+    source.write_bytes(b'video')
+    preview = Mock(return_value={'mask_preview': 'abc', 'masks_path': str(tmp_path / 'mask.npy'), 'frame_index': 0})
+    sam = SimpleNamespace(check_sam_status=Mock(), segment_image_preview=preview, segment_video=Mock(),
+                          ensure_sam_running=Mock(return_value=True))
+    monkeypatch.setitem(sys.modules, 'services.inpaint_service', sam)
+    monkeypatch.setattr(studio_segmentation, '_workspace_dir', lambda ws: str(film) if ws == 'film' else str(tmp_path))
+    monkeypatch.setattr(studio_segmentation, '_get_active_workspace', lambda: 'default')
+
+    async def body():
+        return {'video_path': 'hero-clip.mp4', 'text': 'the coat', 'workspace': 'film'}
+
+    result = asyncio.run(studio_segmentation.segment_preview_endpoint(SimpleNamespace(json=body)))
+    assert result['target'] == 'the coat'
+    assert preview.call_args.kwargs['video_path'] == str(source)
+
+
+def _inpaint(tmp_path, monkeypatch, resolution, *, source=None, body=None, workspace_dir=None, cwd=None):
+    source = source or (tmp_path / 'source.mp4')
     source.write_bytes(b'video')
     masks = tmp_path / 'masks.npy'
     masks.write_bytes(b'mask')
@@ -62,12 +120,15 @@ def _inpaint(tmp_path, monkeypatch, resolution):
         return SimpleNamespace(returncode=0)
     ffmpeg = Mock(side_effect=scale)
     monkeypatch.setattr('subprocess.run', ffmpeg)
+    if cwd is not None:
+        monkeypatch.setattr(os, 'getcwd', lambda: str(cwd))
     jobs = []
     namespace = {
         'os': os, 'time': time, 'uuid': uuid, 'Request': object, 'HTTPException': HTTPException,
         'api': SimpleNamespace(post=lambda *_: lambda fn: fn),
         'threading': SimpleNamespace(Thread=lambda **_: SimpleNamespace(start=lambda: None)),
-        '_get_active_workspace': lambda: 'default', '_workspace_dir': lambda _: str(tmp_path),
+        '_get_active_workspace': lambda: 'default',
+        '_workspace_dir': workspace_dir or (lambda _: str(tmp_path)),
         '_register_manual_generation_job': jobs.append, '_run_generation': lambda _: None,
         '_generation_job_acceptance': lambda _: {},
     }
@@ -75,7 +136,8 @@ def _inpaint(tmp_path, monkeypatch, resolution):
     node = next(n for n in ast.parse(path.read_text(encoding='utf-8')).body
                 if isinstance(n, ast.AsyncFunctionDef) and n.name == 'inpaint_endpoint')
     exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), namespace)
-    async def body():
-        return {'video_path': str(source), 'description': 'a blue coat',
-                'model_type': 'ltx2', 'sam_target': 'coat', 'resolution': resolution}
-    return namespace['inpaint_endpoint'], SimpleNamespace(json=body), segment, jobs, ffmpeg
+    payload = body or {'video_path': str(source), 'description': 'a blue coat',
+                       'model_type': 'ltx2', 'sam_target': 'coat', 'resolution': resolution}
+    async def request_body():
+        return payload
+    return namespace['inpaint_endpoint'], SimpleNamespace(json=request_body), segment, jobs, ffmpeg

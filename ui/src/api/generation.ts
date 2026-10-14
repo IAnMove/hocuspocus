@@ -464,6 +464,7 @@ export async function segmentPreview(params: {
   video_path: string; text: string; frame_index?: number;
   start_time?: number; end_time?: number;
   full_video?: boolean; invert_mask?: boolean;
+  workspace?: string;
 }): Promise<{ mask_preview: string; target: string; frame_index: number; masks_path?: string; prompt?: string; negative_prompt?: string }> {
   const res = await fetch(`${BASE}/api/v1/segment/preview`, {
     method: 'POST',

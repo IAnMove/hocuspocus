@@ -9,6 +9,10 @@ import traceback
 
 from fastapi import HTTPException, Request
 
+# Bound by the router factory. None until the full server mounts the routes.
+_get_active_workspace = None
+_workspace_dir = None
+
 
 async def sam_status_endpoint():
     """Check if the SAM segmentation service is available."""
@@ -32,12 +36,17 @@ async def segment_preview_endpoint(request: Request):
     if not text:
         raise HTTPException(status_code=400, detail="text is required")
 
-    # Resolve path
+    # Same order as inpaint / edit-anything: gallery filename in the
+    # request workspace (or the active one), then uploads/.
     if not os.path.isabs(video_path):
-        uploads_dir = os.path.join(os.getcwd(), "uploads")
-        candidate = os.path.join(uploads_dir, os.path.basename(video_path))
+        workspace_dir = _workspace_dir(body.get("workspace") or _get_active_workspace())
+        candidate = os.path.join(workspace_dir, video_path)
         if os.path.isfile(candidate):
             video_path = candidate
+        if not os.path.isfile(video_path):
+            uploads_candidate = os.path.join(os.getcwd(), "uploads", os.path.basename(video_path))
+            if os.path.isfile(uploads_candidate):
+                video_path = uploads_candidate
 
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")

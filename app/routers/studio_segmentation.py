@@ -28,8 +28,12 @@ async def segment_preview_endpoint(request: Request):
     return await _segment_preview_endpoint(request)
 
 
-def create_studio_segmentation_router():
+def create_studio_segmentation_router(*, get_active_workspace, workspace_dir):
     """Mount SAM status and segment preview in the order the launch server registered them."""
+    from services import studio_segmentation as module
+
+    module._get_active_workspace = get_active_workspace
+    module._workspace_dir = workspace_dir
     router = APIRouter()
     router.add_api_route("/api/v1/sam/status", sam_status_endpoint, methods=["GET"])
     router.add_api_route("/api/v1/segment/preview", segment_preview_endpoint, methods=["POST"])
