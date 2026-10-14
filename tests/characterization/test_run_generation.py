@@ -128,22 +128,26 @@ SHOT_MODULES = (
     "services.recast_shot_run",
 )
 
+# Repaint (C6): the modules that took their launch objects, which they read under the launch names.
+REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
+
 
 def worker_modules() -> list:
-    """The modules whose globals the worker functions, the post-processing passes and the Recast code read. A move
-    PR repoints this one function.
+    """The modules whose globals the worker functions, the post-processing passes, the Recast code and the Repaint
+    routes that start the worker read. A move PR repoints this one function.
 
     That is the full server module while any worker function or pass is still in it, each module of
-    ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7) and
-    each Recast shot module (C8a). A name the worker, the passes, the helpers or the shot code read is an attribute
-    of every module that reads it.
+    ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
+    Recast shot module (C8a) and each Repaint module (C6). A name they read is an attribute of every module that
+    reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
     passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
     recast = [sys.modules[name] for name in RECAST_MODULES if name in sys.modules]
     shots = [sys.modules[name] for name in SHOT_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes, *recast, *shots]
+    repaint = [sys.modules[name] for name in REPAINT_MODULES if name in sys.modules]
+    return [worker_module(), *package, *passes, *recast, *shots, *repaint]
 
 
 @dataclass
