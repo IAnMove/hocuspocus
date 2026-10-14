@@ -1,4 +1,4232 @@
 {
+  "lifecycle activity after a completed job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "page",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle activity after a failed job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "bible",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "page",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      },
+      {
+        "error": {
+          "message": "Comic planning failed: LLM returned no text while the story bible, attempt 1",
+          "retryable": true
+        },
+        "kind": "llm-planning",
+        "message": "Comic planning failed: LLM returned no text while the story bible, attempt 1",
+        "phase": "bible",
+        "resumable": true,
+        "status": "failed",
+        "title": "Comic planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle activity after a resumed job": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "bible",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "page",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "page",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle activity while a job runs": {
+    "body": [
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Comic plan generated and validated.",
+        "phase": "bible",
+        "resumable": true,
+        "status": "completed",
+        "title": "Comic planning"
+      },
+      {
+        "error": null,
+        "kind": "llm-planning",
+        "message": "Writing the story outline and character bible…",
+        "phase": "bible",
+        "resumable": true,
+        "status": "running",
+        "title": "Comic planning"
+      }
+    ],
+    "status": 200
+  },
+  "lifecycle blocked job once released": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle cancel through the Activity controller": {
+    "body": {
+      "detail": "Task does not support cancel"
+    },
+    "status": 409
+  },
+  "lifecycle completed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle completed job reloaded from its checkpoint": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle failed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "error": "Comic planning failed: LLM returned no text while the story bible, attempt 1",
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic planning failed: LLM returned no text while the story bible, attempt 1",
+      "model": "golden-writer",
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "bible",
+      "status": "failed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle job with an invalid page": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "error": "Page 1 remained invalid after 3 attempts: it contains 3 panels instead of 2. Resume to try this page again.",
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Page 1 remained invalid after 3 attempts: it contains 3 panels instead of 2. Resume to try this page again.",
+      "model": "golden-writer",
+      "page": 1,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": []
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "failed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle recent completed": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle recent completed from the checkpoints": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle recent completed with several jobs": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle resume a completed job": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Resuming from the latest durable checkpoint…",
+      "status": "queued"
+    },
+    "status": 200
+  },
+  "lifecycle resume a failed job through the Activity controller": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Resuming from the latest durable checkpoint…",
+      "status": "queued"
+    },
+    "status": 200
+  },
+  "lifecycle resume the invalid page": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Resuming from the latest durable checkpoint…",
+      "status": "queued"
+    },
+    "status": 200
+  },
+  "lifecycle resume while the worker is still active": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Writing the story outline and character bible…",
+      "status": "planning_bible"
+    },
+    "status": 200
+  },
+  "lifecycle resumed completed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "bible",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle resumed failed job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle resumed invalid page": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 2,
+      "error": null,
+      "finishedAt": "<TIME>",
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic plan generated and validated.",
+      "model": "golden-writer",
+      "page": 2,
+      "planningCheckpoint": {
+        "bible": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "logline": "A keeper waits.",
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour"
+        },
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [
+                  "BOOM 1.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 1.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [
+                  "BOOM 1.2"
+                ]
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [
+                  "BOOM 2.1"
+                ]
+              },
+              {
+                "captions": [
+                  "Caption",
+                  "Caption"
+                ],
+                "characters": [
+                  "The Keeper",
+                  "KEEPER",
+                  "stranger"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  },
+                  {
+                    "bubbleType": "thought",
+                    "text": "Line 2.2b"
+                  }
+                ],
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [
+                  "BOOM 2.2"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "result": {
+        "plan": {
+          "characters": [
+            {
+              "description": "tall, grey coat",
+              "id": "keeper",
+              "locked": true,
+              "name": "The Keeper"
+            }
+          ],
+          "id": "comic-plan-<PLAN>",
+          "language": "English",
+          "logline": "A keeper waits.",
+          "pages": [
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 1,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 1.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-1",
+                  "imagePrompt": "image 1.1",
+                  "narrativeRole": "role 1.1",
+                  "order": 1,
+                  "sceneDescription": "scene 1.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 1.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 1.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p1-2",
+                  "imagePrompt": "image 1.2",
+                  "narrativeRole": "role 1.2",
+                  "order": 2,
+                  "sceneDescription": "scene 1.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            },
+            {
+              "layoutHint": "dynamic",
+              "pageNumber": 2,
+              "panels": [
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption 2.1"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.1",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.1"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-1",
+                  "imagePrompt": "image 2.1",
+                  "narrativeRole": "role 2.1",
+                  "order": 1,
+                  "sceneDescription": "scene 2.1",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                },
+                {
+                  "cameraMove": "push-in",
+                  "captions": [
+                    "Caption"
+                  ],
+                  "characters": [
+                    "keeper"
+                  ],
+                  "continuityNotes": "beat 2.2",
+                  "dialogue": [
+                    {
+                      "bubbleType": "speech",
+                      "text": "Line 2.2"
+                    }
+                  ],
+                  "durationSeconds": 3.0,
+                  "framing": "Wide shot",
+                  "id": "p2-2",
+                  "imagePrompt": "image 2.2",
+                  "narrativeRole": "role 2.2",
+                  "order": 2,
+                  "sceneDescription": "scene 2.2",
+                  "soundEffects": [],
+                  "videoPrompt": ""
+                }
+              ]
+            }
+          ],
+          "storyStructure": [
+            {
+              "goal": "goal 1",
+              "pageNumber": 1,
+              "stage": "Setup",
+              "turningPoint": "turn 1"
+            },
+            {
+              "goal": "goal 2",
+              "pageNumber": 2,
+              "stage": "Setup",
+              "turningPoint": "turn 2"
+            }
+          ],
+          "styleBible": "",
+          "synopsis": "A keeper waits for a ship.",
+          "title": "Harbour",
+          "version": 1
+        }
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "page",
+      "status": "completed",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle running job": {
+    "body": {
+      "createdAt": "<TIME>",
+      "current": 0,
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Writing the story outline and character bible…",
+      "model": "golden-writer",
+      "provider": "ollama",
+      "request": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "pageCount": 2,
+        "panelsPerPage": 2,
+        "premise": "A keeper waits.",
+        "workspace": "default",
+        "writingBaseUrl": "http://127.0.0.1:11434",
+        "writingModel": "golden-writer",
+        "writingProvider": "ollama"
+      },
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "stage": "bible",
+      "status": "planning_bible",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "total": 2,
+      "updatedAt": "<TIME>",
+      "workspace": "default"
+    },
+    "status": 200
+  },
+  "lifecycle start 1": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic Director accepted the request.",
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "status": "queued",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>"
+    },
+    "status": 200
+  },
+  "lifecycle start 2": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic Director accepted the request.",
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "status": "queued",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>"
+    },
+    "status": 200
+  },
+  "lifecycle start 3": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic Director accepted the request.",
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "status": "queued",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>"
+    },
+    "status": 200
+  },
+  "lifecycle start 4": {
+    "body": {
+      "jobId": "comic-plan-job-<JOB>",
+      "message": "Comic Director accepted the request.",
+      "rootTaskId": "task-comic-plan-comic-plan-job-<JOB>",
+      "status": "queued",
+      "taskId": "task-comic-plan-comic-plan-job-<JOB>"
+    },
+    "status": 200
+  },
+  "lifecycle what the writer was asked": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "page 2"
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle what the writer was asked after the block": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "page 2"
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle what the writer was asked after the invalid page": {
+    "body": {
+      "calls": [
+        "page 1",
+        "page 2"
+      ]
+    },
+    "status": 200
+  },
+  "lifecycle what the writer was asked after the resume": {
+    "body": {
+      "calls": []
+    },
+    "status": 200
+  },
+  "lifecycle what the writer was asked for the invalid page": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "page 1",
+        "page 1"
+      ]
+    },
+    "status": 200
+  },
+  "plan as a storyboard": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "English",
+        "logline": "A keeper waits.",
+        "pages": [
+          {
+            "layoutHint": "grid",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "pan-left",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [],
+                "durationSeconds": 2.5,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": "move 1.1"
+              }
+            ]
+          },
+          {
+            "layoutHint": "grid",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "cameraMove": "pan-left",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [],
+                "durationSeconds": 2.5,
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [],
+                "videoPrompt": "move 2.1"
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          },
+          {
+            "goal": "goal 2",
+            "pageNumber": 2,
+            "stage": "Setup",
+            "turningPoint": "turn 2"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
+  "plan in Spanish repairs scattered English words": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "Spanish",
+        "logline": "A keeper waits.",
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "La verdad 1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "La verdad 1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-3",
+                "imagePrompt": "image 1.3",
+                "narrativeRole": "role 1.3",
+                "order": 3,
+                "sceneDescription": "scene 1.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.4",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "La verdad 1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-4",
+                "imagePrompt": "image 1.4",
+                "narrativeRole": "role 1.4",
+                "order": 4,
+                "sceneDescription": "scene 1.4",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
+  "plan in Spanish repairs the English lines": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "Spanish",
+        "logline": "A keeper waits.",
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "La verdad 1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [],
+                "continuityNotes": "beat 1.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "La verdad 1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-3",
+                "imagePrompt": "image 1.3",
+                "narrativeRole": "role 1.3",
+                "order": 3,
+                "sceneDescription": "scene 1.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
+  "plan in Spanish whose repair stays in English": {
+    "body": {
+      "detail": "Page 1 remained invalid after 3 attempts: some reader-facing lines are not written in Spanish. Resume to try this page again."
+    },
+    "status": 422
+  },
+  "plan in Spanish whose repair stays in English: what the writer was asked": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "language repair",
+        "page 1",
+        "language repair",
+        "page 1",
+        "language repair"
+      ]
+    },
+    "status": 200
+  },
+  "plan in Spanish with scattered English words: what the writer was asked": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "language repair"
+      ]
+    },
+    "status": 200
+  },
+  "plan in Spanish: what the writer was asked": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "language repair"
+      ]
+    },
+    "status": 200
+  },
+  "plan two pages": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "English",
+        "logline": "A keeper waits.",
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 1.3"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.3"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-3",
+                "imagePrompt": "image 1.3",
+                "narrativeRole": "role 1.3",
+                "order": 3,
+                "sceneDescription": "scene 1.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 2.3"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.3"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-3",
+                "imagePrompt": "image 2.3",
+                "narrativeRole": "role 2.3",
+                "order": 3,
+                "sceneDescription": "scene 2.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          },
+          {
+            "goal": "goal 2",
+            "pageNumber": 2,
+            "stage": "Setup",
+            "turningPoint": "turn 2"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
+  "plan two pages: what the writer was asked": {
+    "body": {
+      "calls": [
+        "bible",
+        "page 1",
+        "page 2"
+      ],
+      "page one continuity": "Opening page; establish the premise and visual geography.",
+      "page two continuity": "Continuity entering from page 1: beat 1.1 beat 1.2 beat 1.3"
+    },
+    "status": 200
+  },
+  "plan whose bible comes back empty": {
+    "body": {
+      "detail": "Comic planning failed: LLM returned no text while the story bible, attempt 1"
+    },
+    "status": 500
+  },
+  "plan whose pages stay invalid": {
+    "body": {
+      "detail": "Page 1 remained invalid after 3 attempts: it contains 4 panels instead of 3. Resume to try this page again."
+    },
+    "status": 422
+  },
+  "plan with high dialogue": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "English",
+        "logline": "A keeper waits.",
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 1.1"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.2"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 1.3"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.3"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-3",
+                "imagePrompt": "image 1.3",
+                "narrativeRole": "role 1.3",
+                "order": 3,
+                "sceneDescription": "scene 1.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.4",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 1.4"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-4",
+                "imagePrompt": "image 1.4",
+                "narrativeRole": "role 1.4",
+                "order": 4,
+                "sceneDescription": "scene 1.4",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 2.1"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.1"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.2"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption 2.3"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.3"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-3",
+                "imagePrompt": "image 2.3",
+                "narrativeRole": "role 2.3",
+                "order": 3,
+                "sceneDescription": "scene 2.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "Caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.4",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Line 2.4"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-4",
+                "imagePrompt": "image 2.4",
+                "narrativeRole": "role 2.4",
+                "order": 4,
+                "sceneDescription": "scene 2.4",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          },
+          {
+            "goal": "goal 2",
+            "pageNumber": 2,
+            "stage": "Setup",
+            "turningPoint": "turn 2"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
   "plan without a premise": {
     "body": {
       "detail": "Comic premise is required"
@@ -16,6 +4244,435 @@
       "detail": "Comic planning job not found"
     },
     "status": 404
+  },
+  "revise a story": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "English",
+        "logline": "A sharper logline.",
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "First caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Talk"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "First caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Talk"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-3",
+                "imagePrompt": "image 1.3",
+                "narrativeRole": "role 1.3",
+                "order": 3,
+                "sceneDescription": "scene 1.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "First caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Talk"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [
+                  "First caption"
+                ],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.3",
+                "dialogue": [
+                  {
+                    "bubbleType": "speech",
+                    "text": "Talk"
+                  }
+                ],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-3",
+                "imagePrompt": "image 2.3",
+                "narrativeRole": "role 2.3",
+                "order": 3,
+                "sceneDescription": "scene 2.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          },
+          {
+            "goal": "goal 2",
+            "pageNumber": 2,
+            "stage": "Setup",
+            "turningPoint": "turn 2"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
+  "revise a storyboard": {
+    "body": {
+      "plan": {
+        "characters": [
+          {
+            "description": "tall, grey coat",
+            "id": "keeper",
+            "locked": true,
+            "name": "The Keeper"
+          }
+        ],
+        "id": "comic-plan-<PLAN>",
+        "language": "English",
+        "logline": "A sharper logline.",
+        "pages": [
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 1,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.1",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-1",
+                "imagePrompt": "image 1.1",
+                "narrativeRole": "role 1.1",
+                "order": 1,
+                "sceneDescription": "scene 1.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-2",
+                "imagePrompt": "image 1.2",
+                "narrativeRole": "role 1.2",
+                "order": 2,
+                "sceneDescription": "scene 1.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 1.3",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p1-3",
+                "imagePrompt": "image 1.3",
+                "narrativeRole": "role 1.3",
+                "order": 3,
+                "sceneDescription": "scene 1.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          },
+          {
+            "layoutHint": "dynamic",
+            "pageNumber": 2,
+            "panels": [
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.1",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-1",
+                "imagePrompt": "image 2.1",
+                "narrativeRole": "role 2.1",
+                "order": 1,
+                "sceneDescription": "scene 2.1",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.2",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-2",
+                "imagePrompt": "image 2.2",
+                "narrativeRole": "role 2.2",
+                "order": 2,
+                "sceneDescription": "scene 2.2",
+                "soundEffects": [],
+                "videoPrompt": ""
+              },
+              {
+                "cameraMove": "push-in",
+                "captions": [],
+                "characters": [
+                  "keeper"
+                ],
+                "continuityNotes": "beat 2.3",
+                "dialogue": [],
+                "durationSeconds": 3.0,
+                "framing": "Wide shot",
+                "id": "p2-3",
+                "imagePrompt": "image 2.3",
+                "narrativeRole": "role 2.3",
+                "order": 3,
+                "sceneDescription": "scene 2.3",
+                "soundEffects": [],
+                "videoPrompt": ""
+              }
+            ]
+          }
+        ],
+        "storyStructure": [
+          {
+            "goal": "goal 1",
+            "pageNumber": 1,
+            "stage": "Setup",
+            "turningPoint": "turn 1"
+          },
+          {
+            "goal": "goal 2",
+            "pageNumber": 2,
+            "stage": "Setup",
+            "turningPoint": "turn 2"
+          }
+        ],
+        "styleBible": "",
+        "synopsis": "A keeper waits for a ship.",
+        "title": "Harbour",
+        "version": 1
+      }
+    },
+    "status": 200
+  },
+  "revise that loses a page": {
+    "body": {
+      "detail": "Story revision changed the page count"
+    },
+    "status": 422
+  },
+  "rewrite a page": {
+    "body": {
+      "page": {
+        "layoutHint": "dynamic",
+        "pageNumber": 2,
+        "panels": [
+          {
+            "cameraMove": "push-in",
+            "captions": [
+              "rewrite: Caption 2.1"
+            ],
+            "characters": [
+              "keeper"
+            ],
+            "continuityNotes": "beat 2.1",
+            "dialogue": [
+              {
+                "bubbleType": "scream",
+                "speakerId": "nobody",
+                "text": "rewrite: Line 2.1"
+              }
+            ],
+            "durationSeconds": 3.0,
+            "framing": "Wide shot",
+            "id": "p2-1",
+            "imagePrompt": "image 2.1",
+            "narrativeRole": "role 2.1",
+            "order": 1,
+            "sceneDescription": "scene 2.1",
+            "soundEffects": [],
+            "videoPrompt": ""
+          },
+          {
+            "cameraMove": "push-in",
+            "captions": [],
+            "characters": [
+              "keeper"
+            ],
+            "continuityNotes": "beat 2.2",
+            "dialogue": [],
+            "durationSeconds": 3.0,
+            "framing": "Wide shot",
+            "id": "p2-2",
+            "imagePrompt": "image 2.2",
+            "narrativeRole": "role 2.2",
+            "order": 2,
+            "sceneDescription": "scene 2.2",
+            "soundEffects": [],
+            "videoPrompt": ""
+          },
+          {
+            "cameraMove": "push-in",
+            "captions": [],
+            "characters": [
+              "keeper"
+            ],
+            "continuityNotes": "beat 2.3",
+            "dialogue": [],
+            "durationSeconds": 3.0,
+            "framing": "Wide shot",
+            "id": "p2-3",
+            "imagePrompt": "image 2.3",
+            "narrativeRole": "role 2.3",
+            "order": 3,
+            "sceneDescription": "scene 2.3",
+            "soundEffects": [],
+            "videoPrompt": ""
+          }
+        ]
+      }
+    },
+    "status": 200
+  },
+  "rewrite that loses a panel": {
+    "body": {
+      "detail": "The LLM returned the wrong number of panels"
+    },
+    "status": 422
   },
   "start without a premise": {
     "body": {
@@ -64,5 +4721,90 @@
       "detail": "A valid comic plan is required"
     },
     "status": 400
+  },
+  "translate a page": {
+    "body": {
+      "page": {
+        "layoutHint": "dynamic",
+        "pageNumber": 1,
+        "panels": [
+          {
+            "cameraMove": "push-in",
+            "captions": [
+              "translate: Caption 1.1"
+            ],
+            "characters": [
+              "keeper"
+            ],
+            "continuityNotes": "beat 1.1",
+            "dialogue": [
+              {
+                "bubbleType": "speech",
+                "text": "translate: Line 1.1"
+              }
+            ],
+            "durationSeconds": 3.0,
+            "framing": "Wide shot",
+            "id": "p1-1",
+            "imagePrompt": "image 1.1",
+            "narrativeRole": "role 1.1",
+            "order": 1,
+            "sceneDescription": "scene 1.1",
+            "soundEffects": [],
+            "videoPrompt": ""
+          },
+          {
+            "cameraMove": "push-in",
+            "captions": [],
+            "characters": [
+              "keeper"
+            ],
+            "continuityNotes": "beat 1.2",
+            "dialogue": [],
+            "durationSeconds": 3.0,
+            "framing": "Wide shot",
+            "id": "p1-2",
+            "imagePrompt": "image 1.2",
+            "narrativeRole": "role 1.2",
+            "order": 2,
+            "sceneDescription": "scene 1.2",
+            "soundEffects": [],
+            "videoPrompt": ""
+          },
+          {
+            "cameraMove": "push-in",
+            "captions": [
+              "translate: Caption 1.3"
+            ],
+            "characters": [
+              "keeper"
+            ],
+            "continuityNotes": "beat 1.3",
+            "dialogue": [
+              {
+                "bubbleType": "speech",
+                "text": "translate: Line 1.3"
+              }
+            ],
+            "durationSeconds": 3.0,
+            "framing": "Wide shot",
+            "id": "p1-3",
+            "imagePrompt": "image 1.3",
+            "narrativeRole": "role 1.3",
+            "order": 3,
+            "sceneDescription": "scene 1.3",
+            "soundEffects": [],
+            "videoPrompt": ""
+          }
+        ]
+      }
+    },
+    "status": 200
+  },
+  "translate that changes the text blocks": {
+    "body": {
+      "detail": "The translation changed the number or type of text blocks"
+    },
+    "status": 422
   }
 }

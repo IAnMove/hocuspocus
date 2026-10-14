@@ -1,9 +1,9 @@
 """Story Lab schema, stage normalisation and problem checks.
 
-Moved verbatim from the launch runtime. ``_storyboard_page_problem`` still
-calls ``_comic_page_problem``, which the comic batch owns. The full server
-assigns that function onto this module before any request. This module does
-not import WanGP or ``_launch_runtime``.
+Moved verbatim from the launch runtime. ``_storyboard_page_problem`` calls
+``_comic_page_problem``, which lives in ``services.comic_helpers`` and is
+imported here directly. This module does not import WanGP or
+``_launch_runtime``.
 """
 from __future__ import annotations
 
@@ -11,9 +11,7 @@ import copy
 import json
 import re
 
-# The comic page check lives in services.comic_helpers. The full server
-# assigns that function onto this module before any request.
-_comic_page_problem = None
+from services.comic_helpers import _comic_page_problem
 
 
 def _storyboard_page_problem(page, expected_panels: int = 1) -> str | None:

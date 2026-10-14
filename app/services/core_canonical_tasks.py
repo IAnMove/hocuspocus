@@ -131,6 +131,39 @@ def publish_music_activity(job: dict, adapter: str) -> dict | None:
     )
 
 
+def publish_studio_activity(record: dict, adapter: str) -> dict | None:
+    """Publish one Model3D or rig snapshot into the core Activity registry."""
+    if not isinstance(record, dict):
+        return None
+    task_id = _editor_text(record.get("task_id") or record.get("taskId"), "")
+    if not task_id:
+        return None
+    status = task_status(record.get("status"))
+    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
+    filename = record.get("filename")
+    title = "3D model" if adapter == "model3d" else "Rig"
+    return upsert_task(
+        _editor_text(record.get("workspace"), "default"),
+        task_id,
+        root_id=_editor_text(record.get("root_task_id") or record.get("rootTaskId"), task_id),
+        kind=adapter or "model3d",
+        workflow=adapter or "model3d",
+        title=title,
+        status=status,
+        phase=_editor_text(record.get("phase"), status)[:160],
+        message=_editor_text(record.get("message"), status),
+        provider=_editor_text(record.get("provider"), "local"),
+        model=_editor_text(record.get("model_id") or record.get("model") or record.get("engine"), ""),
+        backend_job_id=_editor_text(record.get("job_id") or record.get("jobId"), ""),
+        result_refs=[str(filename)] if filename else [],
+        metadata={
+            "adapter": adapter,
+            "actor": provenance.get("actor") or "unknown",
+            "tool": provenance.get("tool") or adapter,
+        },
+    )
+
+
 def publish_video_editor_activity(snapshot: dict, adapter: str) -> dict | None:
     """Publish one video-editor job snapshot into the core Activity registry."""
     task_id = _editor_text(snapshot.get("task_id"), "")

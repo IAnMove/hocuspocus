@@ -108,7 +108,7 @@ def test_series_duplicate_and_empty_episode_list(server, golden) -> None:
     )
 
 
-def test_series_render_routes_answer_the_recorded_errors(server, golden) -> None:
+def test_series_render_routes_answer_the_recorded_errors(server, golden, monkeypatch) -> None:
     """Validation and missing-job answers for the Series render routes. No model runs."""
     missing = "missing-series"
     workspace = {"workspace": "default"}
@@ -165,6 +165,30 @@ def test_series_render_routes_answer_the_recorded_errors(server, golden) -> None
     from services.series_render_jobs import series_render_task_adapter
     launch = sys.modules["_launch_runtime"]
     assert launch.ctx.tasks.adapter_for("series-render") is series_render_task_adapter
+    _assert_series_render_is_bound_to_the_server(launch, monkeypatch)
+
+
+def _assert_series_render_is_bound_to_the_server(launch, monkeypatch) -> None:
+    """The render state has one instance, and every injected name is the server's own."""
+    import routers.series_render as render_router
+    import services.series_render_jobs as render_jobs
+
+    for name in ("_series_render_jobs", "_series_render_jobs_lock", "_series_render_active_jobs"):
+        assert getattr(launch, name) is getattr(render_jobs, name) is getattr(render_router, name), name
+    assert render_jobs._jobs is launch._jobs is launch.ctx.jobs.registry
+    assert render_router._jobs is launch._jobs
+    assert render_jobs._series_library_lock is launch._series_library_lock
+    assert render_router._series_library_lock is launch._series_library_lock
+    assert render_jobs._run_generation is launch._run_generation
+    assert render_jobs._cancel_series_render_job is render_router.cancel_series_render_job
+    # The publish hook is read with globals().get, so a name the bind forgot would stop the
+    # Activity row without an error. Both are forwarders that look the launch name up at call time.
+    assert callable(render_jobs._publish_series_task) and callable(render_router._publish_series_task)
+    monkeypatch.setattr(launch, "_publish_series_task", lambda job, adapter: ("published", adapter))
+    assert render_jobs._publish_series_task({}, "series-render") == ("published", "series-render")
+    assert render_router._publish_series_task({}, "series-render") == ("published", "series-render")
+    monkeypatch.setattr(launch, "_reset_canonical_task_for_resume", lambda workspace, task_id: (workspace, task_id))
+    assert render_router._reset_canonical_task_for_resume("film", "task-1") == ("film", "task-1")
 
 
 def test_series_plan_routes_answer_the_recorded_errors(server, golden) -> None:

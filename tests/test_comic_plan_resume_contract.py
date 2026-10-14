@@ -222,3 +222,28 @@ def test_comic_planner_prompt_has_no_tone_line_when_the_tone_is_empty():
         assert "Genre: Adventure\nAudience: General\n" in prompt, body
     prompt = _comic_planner_prompt({"tone": "Warm"})
     assert "Genre: Adventure\nTone: Warm\nAudience: General\n" in prompt
+
+
+# --- The storyboard page check does not need the full server ------------------------------------------
+# The Story Lab storyboard check calls the comic page check. It used to be a placeholder that the full
+# server filled in at start-up, so the check failed with "'NoneType' object is not callable" anywhere else.
+
+
+def test_storyboard_page_check_works_without_the_full_server():
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    from services.comic_helpers import _comic_page_problem
+
+    app = str(Path(__file__).resolve().parents[1] / "app")
+    code = (
+        "import sys; sys.path.insert(0, sys.argv[1]); "
+        "from services.story_lab_schema import _storyboard_page_problem; "
+        "print(_storyboard_page_problem({}, 1))"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code, app], capture_output=True, text=True, timeout=120,
+    )
+    assert result.returncode == 0, result.stderr[-800:]
+    assert result.stdout.strip() == _comic_page_problem({}, 1) == "the panels field is not an array"

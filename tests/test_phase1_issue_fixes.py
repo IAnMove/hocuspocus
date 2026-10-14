@@ -56,6 +56,9 @@ _OUTPAINT_SUBMISSION_PATH = os.path.join(
 _STUDIO_EDIT_SLICE_PATH = os.path.join(
     _ROOT, "ui", "src", "features", "studio", "store", "studioEditSlice.ts",
 )
+_OUTPUT_RESTORE_SLICE_PATH = os.path.join(
+    _ROOT, "ui", "src", "features", "studio", "store", "outputRestoreSlice.ts",
+)
 _MODELS_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelsSlice.ts")
 _VISIBILITY_PATH = os.path.join(_ROOT, "ui", "src", "stores", "modelVisibility.ts")
 _INPUTS_PATH = os.path.join(
@@ -1736,7 +1739,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
     def test_ui_replaces_misleading_controls_with_one_recommended_toggle(self):
         controls = _read(_OUTPAINT_CONTROLS_PATH)
         client = api_client_source()
-        store = _read(_STORE_PATH)
+        output_restore = _read(_OUTPUT_RESTORE_SLICE_PATH)
         outpaint = _read(_OUTPAINT_SUBMISSION_PATH)
         edit_store = _read(_STUDIO_EDIT_SLICE_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
@@ -1746,7 +1749,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         self.assertIn("mask_preserving_outpaint?: boolean", client)
         self.assertIn("outpaint_aspect?:", client)
         self.assertIn("outpaint_aspect: state.outpaintAspect", outpaint)
-        self.assertIn("_inferOutpaintAspect", store)
+        self.assertIn("_inferOutpaintAspect", output_restore)
         self.assertIn("source_preservation: 1.0", outpaint)
         self.assertIn("outpaint_lora_strength: 1.0", outpaint)
         self.assertIn("lock_source_pixels: false", outpaint)

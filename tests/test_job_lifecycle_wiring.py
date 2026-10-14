@@ -91,6 +91,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         cls.launch = _parse("app/_launch_runtime.py")
         cls.director = _parse("app/routers/director.py")
         cls.tools_upscale = _parse("app/services/tools_upscale.py")
+        cls.tools_router = _parse("app/routers/tools.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
         expected = {
@@ -113,7 +114,12 @@ class TestJobLifecycleWiring(unittest.TestCase):
         }
         for function_name, required in expected.items():
             with self.subTest(function=function_name):
-                tree = self.tools_upscale if function_name == "_run_tool_upscale" else self.launch
+                if function_name == "_run_tool_upscale":
+                    tree = self.tools_upscale
+                elif function_name == "_run_tool_revoice":
+                    tree = self.tools_router
+                else:
+                    tree = self.launch
                 lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name
                 function = _function(tree, lookup_name)
                 functions = [function]
@@ -175,9 +181,14 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "tools_revoice",
         ):
             with self.subTest(endpoint=endpoint_name):
+                tree = (
+                    self.tools_router
+                    if endpoint_name in {"tools_upscale", "tools_revoice"}
+                    else self.launch
+                )
                 self.assertIn(
                     "_register_manual_generation_job",
-                    _called_names(_function(self.launch, endpoint_name)),
+                    _called_names(_function(tree, endpoint_name)),
                 )
 
         director = _parse("app/services/director_pipeline.py")

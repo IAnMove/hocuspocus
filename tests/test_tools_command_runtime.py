@@ -27,9 +27,12 @@ def command(intent="upscale-intent"):
 
 
 def native_endpoint(tmp_path, legacy_calls):
-    source = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
+    source = Path(__file__).resolve().parents[1] / "app" / "routers" / "tools.py"
     tree = ast.parse(source.read_text(encoding="utf-8"))
-    definition = next(node for node in tree.body if isinstance(node, ast.AsyncFunctionDef) and node.name == "tools_upscale")
+    definition = next(
+        node for node in ast.walk(tree)
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "tools_upscale"
+    )
     definition.decorator_list = []
     namespace = {
         "Request": object, "HTTPException": HTTPException, "uuid": uuid, "time": time,

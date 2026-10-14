@@ -6,6 +6,8 @@
 - No method and path is defined twice in a server.
 - The routes of the route table fixture and the routes of the core server
   (``app/core_runtime.py``) exist in the main server.
+- A server never reads a global name it does not define (a slice that moved a
+  function out must leave an import for every caller that stayed).
 
 Routes added at run time (``api.add_api_route`` in a loop) are not seen here.
 """
@@ -13,8 +15,10 @@ Routes added at run time (``api.add_api_route`` in a loop) are not seen here.
 from __future__ import annotations
 
 import ast
+import builtins
 import json
 import re
+import symtable
 from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
@@ -207,6 +211,59 @@ def test_every_router_factory_is_mounted_by_the_main_server_or_listed() -> None:
     assert set(CORE_SERVER_ONLY) <= core
 
 
+def test_gallery_routes_keep_the_service_docstring_as_their_openapi_description() -> None:
+    """The thin route wrappers in workspace_outputs.py carry no text; the moved service function does."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers.workspace_outputs import (
+        create_list_outputs_router,
+        create_serve_file_router,
+        create_storage_usage_router,
+    )
+    from services import output_listing, storage_usage
+
+    app = FastAPI()
+    for router in (create_list_outputs_router(), create_serve_file_router(), create_storage_usage_router()):
+        app.include_router(router)
+    paths = app.openapi()["paths"]
+    for path, function in (
+        ("/api/v1/outputs", output_listing.list_outputs),
+        ("/api/v1/file/{filename}", output_listing.serve_file),
+        ("/api/v1/storage/usage", storage_usage.storage_usage),
+    ):
+        assert paths[path]["get"].get("description") == inspect.cleandoc(function.__doc__), path
+
+
+def test_director_music_and_character_description_keep_their_docstring_as_openapi_description(monkeypatch) -> None:
+    """The route wrappers in llm_director.py carry no text; the module-level handlers do."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers import llm_director
+
+    # The factories assign the launch objects onto the module; give them placeholders and let monkeypatch undo it.
+    for name in (
+        "wgp", "_get_active_workspace", "_workspace_dir", "_init_pipeline", "_effective_llm_routing",
+        "_llm_default_device", "_DEFAULT_LLM_REPO", "_resolve_model3d_input_path",
+    ):
+        monkeypatch.setattr(llm_director, name, None, raising=False)
+    app = FastAPI()
+    app.include_router(llm_director.create_director_music_router(
+        wgp=None, _get_active_workspace=None, _workspace_dir=None, _init_pipeline=None,
+        _effective_llm_routing=None, _llm_default_device=None, _DEFAULT_LLM_REPO=None,
+    ))
+    app.include_router(llm_director.create_character_describe_router(_resolve_model3d_input_path=None))
+    paths = app.openapi()["paths"]
+    for path, function in (
+        ("/api/v1/director/generate-music", llm_director.director_generate_music),
+        ("/api/v1/characters/describe-refs", llm_director.describe_character_refs),
+    ):
+        assert paths[path]["post"].get("description") == inspect.cleandoc(function.__doc__), path
+
+
 def test_core_mcp_returns_the_shared_wangp_router() -> None:
     tree = _parse(ROUTERS / "core_mcp.py")
     factory = next(
@@ -281,3 +338,40 @@ def test_core_server_routes_exist_in_the_main_server() -> None:
         if _route_key(route) not in main and route["source"] not in pending_sources
     )
     assert missing == [], "The UI calls the same paths on both servers; serve these in the main server too."
+
+
+def _undefined_global_names(path: Path) -> dict[str, list[str]]:
+    """Global names some function reads that the module never defines, with the functions that read them."""
+    top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+    bound = {item.get_name() for item in top.get_symbols() if item.is_assigned() or item.is_imported() or item.is_namespace()}
+
+    def declare(table: symtable.SymbolTable) -> None:
+        # ``global NAME`` followed by an assignment inside a function defines the module name.
+        bound.update(item.get_name() for item in table.get_symbols() if item.is_declared_global() and item.is_assigned())
+        for child in table.get_children():
+            declare(child)
+
+    declare(top)
+    missing: dict[str, list[str]] = {}
+
+    def walk(table: symtable.SymbolTable) -> None:
+        for item in table.get_symbols():
+            name = item.get_name()
+            if (
+                table is not top and item.is_global() and item.is_referenced()
+                and name not in bound and not hasattr(builtins, name) and not name.startswith("__")
+            ):
+                missing.setdefault(name, []).append(table.get_name())
+        for child in table.get_children():
+            walk(child)
+
+    walk(top)
+    return missing
+
+
+def test_a_server_never_reads_a_name_it_does_not_define() -> None:
+    # R4a moved the Series plan handlers out of launch and left two callers behind (the Activity
+    # cancel and resume of a Series plan task): a NameError on the first click, invisible to the
+    # route tables and to every test that extracts launch functions.
+    for server in (MAIN, CORE):
+        assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
