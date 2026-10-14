@@ -1924,6 +1924,75 @@ class CoreRuntimeTests(unittest.TestCase):
             ("POST", "/api/v1/scenes/recordings"): "app/routers/scenes_favorites.py",
         })
 
+    def test_core_scene_save_refuses_a_body_that_is_not_an_object_like_the_full_server(self):
+        # The shared route takes ``body: dict`` on both servers, so a body that is
+        # not a JSON object is a validation error (422), where core used to read the
+        # raw body itself and answer 400 (a list) or crash (broken JSON).
+        folder, previous = self._in_temp_workspace()
+        try:
+            listed = self.client.post("/api/v1/scenes", json=[1, 2])
+            broken = self.client.post(
+                "/api/v1/scenes", content=b"{nope", headers={"content-type": "application/json"},
+            )
+            saved = self.client.post("/api/v1/scenes", json={"scene": {"version": 1, "name": "Plaza"}})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(listed.status_code, 422, listed.text)
+        self.assertEqual(listed.json()["detail"][0]["loc"], ["body"])
+        self.assertEqual(broken.status_code, 422, broken.text)
+        self.assertEqual(saved.status_code, 200, saved.text)
+
+    def test_core_scene_recording_without_a_file_is_a_validation_error_like_the_full_server(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            missing = self.client.post("/api/v1/scenes/recordings", data={"metadata": "{}"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(missing.status_code, 422, missing.text)
+        self.assertEqual(missing.json()["detail"][0]["loc"], ["body", "file"])
+
+    def test_core_scene_recording_route_keeps_the_workspace_query_and_the_voice_mix(self):
+        # Through the shared route, core still adds ?workspace= to both URLs
+        # (the full server does not) and still mixes the separate voice track.
+        folder, previous = self._in_temp_workspace()
+        try:
+            seen = []
+
+            def fake_transcode(src, dest, *, fps, audio_tracks, duration, embedded_audio):
+                Path(dest).write_bytes(b"mp4-bytes")
+                seen.append([dict(item) for item in audio_tracks])
+
+            metadata = json.dumps({
+                "workspace": "client-lab",
+                "embeddedAudio": False,
+                "prompt": "harbour",
+                "scene": {"version": 1, "name": "Harbour Shot", "width": 64, "height": 64,
+                          "fps": 30, "duration": 2, "layers": []},
+            })
+            with patch("services.scene_save.transcode_scene_recording", side_effect=fake_transcode), patch(
+                "services.scene_save.publish_generation_sidecar",
+            ) as sidecar:
+                response = self.client.post(
+                    "/api/v1/scenes/recordings",
+                    files={"file": ("capture.webm", b"silent-webm", "video/webm"),
+                           "audio": ("voice.wav", b"voice-wav", "audio/wav")},
+                    data={"metadata": metadata},
+                )
+            mix_path = seen[0][0]["path"] if seen else ""
+            mix_left_behind = os.path.isfile(mix_path)
+            published = sorted(path.name for path in Path("outputs", "client-lab").glob("*.mp4"))
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(response.status_code, 200, response.text)
+        saved = response.json()
+        self.assertEqual(saved["url"], f"/api/v1/file/{saved['name']}?workspace=client-lab")
+        self.assertTrue(saved["thumbnail_url"].endswith("?workspace=client-lab"), saved["thumbnail_url"])
+        self.assertEqual(published, [saved["name"]])
+        self.assertEqual(len(seen[0]), 1)
+        self.assertIn("scene-audio", mix_path)
+        self.assertFalse(mix_left_behind)
+        self.assertEqual(sidecar.call_args.kwargs["workspace_id"], "client-lab")
+
     def test_core_llm_load_uses_the_stored_provider_key_and_routing(self):
         from services import core_workspace as core
 
