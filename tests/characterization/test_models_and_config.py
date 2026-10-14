@@ -34,6 +34,168 @@ def test_model_settings_defaults(server, golden) -> None:
     server.check(golden, "production profile", "GET", "/api/v1/production-profile")
 
 
+def _keep_config_keys(monkeypatch, config, *keys: str) -> None:
+    """Put each key back after a route that writes ``wgp.server_config``."""
+    for key in keys:
+        monkeypatch.setitem(config, key, config.get(key))
+
+
+def test_model_visibility_and_selections_round_trip(server, golden, monkeypatch) -> None:
+    """Visibility and per-mode selections, including the ids and modes the server refuses.
+
+    Both writes go through the kernel config file. The server fixture points that
+    file at this test's temp folder, and the keys are put back afterwards.
+    """
+    config = server.wgp.server_config
+    _keep_config_keys(
+        monkeypatch,
+        config,
+        "maestro_model_visibility",
+        "maestro_model_selections",
+    )
+    server.check(
+        golden,
+        "visibility save",
+        "PUT",
+        "/api/v1/model-visibility",
+        json={
+            "enabled_models": [" fake_t2v ", "fake_t2v", "fake_i2v"],
+            "initialized_mature_models": [" fake_i2v "],
+            "defaults_version": 3,
+        },
+    )
+    server.check(
+        golden,
+        "visibility not an object",
+        "PUT",
+        "/api/v1/model-visibility",
+        json=["fake_t2v"],
+    )
+    server.check(
+        golden,
+        "visibility ids not a list",
+        "PUT",
+        "/api/v1/model-visibility",
+        json={"enabled_models": "fake_t2v"},
+    )
+    server.check(
+        golden,
+        "visibility id not a string",
+        "PUT",
+        "/api/v1/model-visibility",
+        json={"enabled_models": [123]},
+    )
+    server.check(
+        golden,
+        "selections save",
+        "PUT",
+        "/api/v1/model-selections",
+        json={"selected_models": {"video": " fake_t2v ", "image": "", "audio": "fake_i2v"}},
+    )
+    server.check(
+        golden,
+        "selections not an object",
+        "PUT",
+        "/api/v1/model-selections",
+        json=["video"],
+    )
+    server.check(
+        golden,
+        "selections unknown mode",
+        "PUT",
+        "/api/v1/model-selections",
+        json={"selected_models": {"nope": "fake_t2v"}},
+    )
+    server.check(
+        golden,
+        "selections value not a string",
+        "PUT",
+        "/api/v1/model-selections",
+        json={"selected_models": {"video": 123}},
+    )
+
+
+def test_production_profile_rejects_a_bad_body(server, golden) -> None:
+    """A profile that is not the object the normaliser expects is refused before it is saved."""
+    server.check(
+        golden,
+        "production profile not an object",
+        "PUT",
+        "/api/v1/production-profile",
+        json={"profile": "local"},
+    )
+    server.check(
+        golden,
+        "production profile missing sections",
+        "PUT",
+        "/api/v1/production-profile",
+        json={"profile": {"text": {"provider": "minimax", "model": "MiniMax-M3"}}},
+    )
+
+
+def test_model_options_defaults_resolutions_and_download_errors(catalog, golden, monkeypatch) -> None:
+    """Cheap catalog reads, and the delete/download answers that need no weights.
+
+    A real download, a delete of files that are on disk, and options for an
+    installed WanGP model need the GPU install. Those stay out of this golden.
+    """
+    base_def = catalog.wgp.get_model_def
+
+    def model_def(model_type: str):
+        if model_type == "fake_image":
+            return {
+                "name": "Fake Image",
+                "architecture": "fake_image",
+                "description": "A stills model that exists only in tests.",
+                "image_outputs": True,
+                "fps": 0,
+                "image_prompt_types_allowed": "",
+                "guide_preprocessing": {"selection": ["", "PV"], "default": ""},
+                "sample_solvers": [("UniPC", "unipc"), ("Euler", "euler")],
+                "inpaint_support": True,
+                "native_rgba": True,
+            }
+        return base_def(model_type)
+
+    monkeypatch.setattr(catalog.wgp, "get_model_def", model_def, raising=False)
+
+    def resolution_choices(current_resolution_choice, model_resolutions=None):
+        # The real helper returns (choices, current). The route unpacks that pair.
+        return ([("480p", "832x480"), ("720p", "1280x720")], current_resolution_choice)
+
+    monkeypatch.setattr(catalog.wgp, "get_resolution_choices", resolution_choices, raising=False)
+    monkeypatch.setattr(catalog.wgp, "load_model_definitions", lambda: None, raising=False)
+
+    catalog.check(golden, "options text to video", "GET", "/api/v1/model-options/fake_t2v")
+    catalog.check(golden, "options image to video", "GET", "/api/v1/model-options/fake_i2v")
+    catalog.check(golden, "options image", "GET", "/api/v1/model-options/fake_image")
+    catalog.check(golden, "options unknown", "GET", "/api/v1/model-options/not_a_model")
+    catalog.check(golden, "defaults text to video", "GET", "/api/v1/defaults/fake_t2v")
+    catalog.check(golden, "defaults unknown", "GET", "/api/v1/defaults/not_a_model")
+    catalog.check(golden, "resolutions", "GET", "/api/v1/resolutions")
+    catalog.check(golden, "downloads status", "GET", "/api/v1/models/downloads/status")
+    catalog.check(golden, "active downloads", "GET", "/api/v1/downloads/active")
+    catalog.check(golden, "reload definitions", "POST", "/api/v1/models/reload")
+    catalog.check(golden, "debug text to video", "GET", "/api/v1/models/fake_t2v/debug")
+    catalog.check(golden, "debug unknown", "GET", "/api/v1/models/not_a_model/debug")
+    catalog.check(golden, "delete unknown", "DELETE", "/api/v1/models/not_a_model")
+    catalog.check(golden, "delete nothing on disk", "DELETE", "/api/v1/models/fake_t2v")
+    catalog.check(golden, "download unknown", "POST", "/api/v1/models/not_a_model/download")
+
+    import sys
+
+    launch = sys.modules["_launch_runtime"]
+    launch._jobs["golden-delete"] = {
+        "id": "golden-delete",
+        "status": "running",
+        "params": {"model_type": "fake_i2v"},
+    }
+    try:
+        catalog.check(golden, "delete while generating", "DELETE", "/api/v1/models/fake_i2v")
+    finally:
+        launch._jobs.pop("golden-delete", None)
+
+
 def test_production_profile_save(server, golden, monkeypatch) -> None:
     """The saved profile the Settings screen writes. Recorded before the normalizer moves."""
     config = server.wgp.server_config
