@@ -13,7 +13,8 @@ from typing import Any
 
 from services.production_control import sleep_until
 from services.production_package import (
-    clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, workspace_url, write_manifest,
+    clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows,
+    montage_owned_by_other, workspace_url, write_manifest,
 )
 from services.production_scene2d import scene_inputs
 from services.production_scene_retry import finish_scene_exports
@@ -137,6 +138,9 @@ def replace_montage_clip(production: Any, key: str, video_file: str, expected_re
         raise ShotEditError("montage_missing", "this production has no montage yet")
     current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": montage_file}}).get("result") or {})
     montage = current.get("montage") or current
+    if montage_owned_by_other(montage, production.id):
+        raise ShotEditError("montage_foreign", "this production's montage_file points at another production's timeline: "
+                                               "run the montage stage again to create its own")
     found = False
     for clip in montage.get("clips") or []:
         if clip.get("id") == key:

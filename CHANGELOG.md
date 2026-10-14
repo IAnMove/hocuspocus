@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a production no longer overwrites another production's montage.** When two productions once shared a title, the second one's saved montage pointer could still name the first one's timeline, and a rerun, a re-package or a shot retake then wrote over it. Now the production keeps the file only if its own clips are in it. Otherwise it writes its own `<id>.montage.json`. A shot edit on such a pointer is refused with `montage_foreign` and asks you to run the montage stage again.
+
 **Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.
 
 **Storage duplicate tools, the managed LoRA download, model-file helpers, generation option helpers and the request guards left the main server file.** The duplicate scan, reclaim and linked-install removal still answer the same way. A generation still downloads a managed LoRA that is missing, and still reads the same registry. The model list still reports the same weight groups and the same missing image-model files. Prompt types, SCAIL-2 steps and guidance, the output seed and the MiniMax H3 options are still normalised the same way. A policy refusal is still a 409, a browser mutation from another origin is still refused, and a traced mutation is still recorded. LAN authentication is still the first check. The main server file is about 700 lines shorter.
