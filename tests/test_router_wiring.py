@@ -208,6 +208,31 @@ def test_every_router_factory_is_mounted_by_the_main_server_or_listed() -> None:
     assert set(CORE_SERVER_ONLY) <= core
 
 
+def test_gallery_routes_keep_the_service_docstring_as_their_openapi_description() -> None:
+    """The thin route wrappers in workspace_outputs.py carry no text; the moved service function does."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers.workspace_outputs import (
+        create_list_outputs_router,
+        create_serve_file_router,
+        create_storage_usage_router,
+    )
+    from services import output_listing, storage_usage
+
+    app = FastAPI()
+    for router in (create_list_outputs_router(), create_serve_file_router(), create_storage_usage_router()):
+        app.include_router(router)
+    paths = app.openapi()["paths"]
+    for path, function in (
+        ("/api/v1/outputs", output_listing.list_outputs),
+        ("/api/v1/file/{filename}", output_listing.serve_file),
+        ("/api/v1/storage/usage", storage_usage.storage_usage),
+    ):
+        assert paths[path]["get"].get("description") == inspect.cleandoc(function.__doc__), path
+
+
 def test_core_mcp_returns_the_shared_wangp_router() -> None:
     tree = _parse(ROUTERS / "core_mcp.py")
     factory = next(

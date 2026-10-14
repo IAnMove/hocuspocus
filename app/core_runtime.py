@@ -314,7 +314,7 @@ from routers.workspace_outputs import (
 )
 
 _configure_output_listing(
-    workspace_dir=lambda workspace=None: core.workspace_dir(workspace),
+    workspace_dir=lambda workspace=None: core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace),
     load_favorites=lambda: set(),
     safe_join=core.safe_join,
     engine=SimpleNamespace(server_config={"save_path": "outputs"}),

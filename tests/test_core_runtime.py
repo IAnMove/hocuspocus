@@ -1583,6 +1583,27 @@ class CoreRuntimeTests(unittest.TestCase):
         row = listed.json()["outputs"][0]
         self.assertEqual((row.get("width"), row.get("height")), (8, 6))
 
+    def test_core_still_serves_the_uploads_view_files(self):
+        """The gallery's Uploads view lists ``/api/v1/file/<name>?workspace=__uploads__``; core served it before the share."""
+        from PIL import Image
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("uploads").mkdir()
+            Image.new("RGB", (8, 6), (1, 2, 3)).save(Path("uploads", "pick.png"))
+            listed = self.client.get("/api/v1/outputs", params={"workspace": "__uploads__"})
+            served = self.client.get("/api/v1/file/pick.png", params={"workspace": "__uploads__"})
+            missing = self.client.get("/api/v1/file/nope.png", params={"workspace": "__uploads__"})
+            expected = Path("uploads", "pick.png").read_bytes()
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(listed.status_code, 200, listed.text)
+        self.assertEqual(listed.json()["outputs"][0]["url"], "/api/v1/file/pick.png?workspace=__uploads__")
+        self.assertEqual(served.status_code, 200, served.text)
+        self.assertEqual(served.content, expected)
+        self.assertEqual(served.headers["content-type"], "image/png")
+        self.assertEqual(missing.status_code, 404, missing.text)
+
     def test_core_outputs_filter_by_origin_and_result_kind(self):
         folder, previous = self._in_temp_workspace()
         try:
