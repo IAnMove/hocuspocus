@@ -26,6 +26,9 @@ RECAST_MODULES = (
     "recast_shot_planning",
     "recast_shot_manifest",
     "recast_shot_run",
+    # The Recast routes (C8b) import the helper and shot modules directly.
+    "recast_endpoint",
+    "recast_preview",
 )
 
 PLANNING = (
