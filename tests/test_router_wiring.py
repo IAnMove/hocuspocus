@@ -236,6 +236,26 @@ def test_gallery_routes_keep_the_service_docstring_as_their_openapi_description(
         assert paths[path]["get"].get("description") == inspect.cleandoc(function.__doc__), path
 
 
+def test_storage_duplicate_routes_keep_the_service_docstring_as_their_openapi_description() -> None:
+    """The thin route wrappers in storage_tools.py carry no text; the moved service functions do."""
+    import inspect
+
+    from fastapi import FastAPI
+
+    from routers.storage_tools import create_storage_tools_router
+    from services import storage_tools
+
+    app = FastAPI()
+    app.include_router(create_storage_tools_router())
+    paths = app.openapi()["paths"]
+    for path, method, function in (
+        ("/api/v1/storage/duplicates", "get", storage_tools.storage_duplicates),
+        ("/api/v1/storage/duplicates/reclaim", "post", storage_tools.storage_reclaim),
+        ("/api/v1/storage/duplicates/remove-linked", "post", storage_tools.storage_remove_linked),
+    ):
+        assert paths[path][method].get("description") == inspect.cleandoc(function.__doc__), path
+
+
 def test_director_music_and_character_description_keep_their_docstring_as_openapi_description(monkeypatch) -> None:
     """The route wrappers in llm_director.py carry no text; the module-level handlers do."""
     import inspect
