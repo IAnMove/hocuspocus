@@ -56,37 +56,7 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_director_narrow_locks.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "architecture_rule",
-      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_director_raw_prompts.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "architecture_rule",
-      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_director_resume_endpoint.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_director_stop_endpoint.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_director_task_adapter.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_director_v2_story_refs.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
@@ -99,12 +69,6 @@
     },
     {
       "file": "tests/test_execution_mode.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "architecture_rule",
-      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
-    },
-    {
-      "file": "tests/test_h3_policy_language_audio_creative.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
