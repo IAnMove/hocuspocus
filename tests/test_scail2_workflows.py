@@ -3663,6 +3663,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
         self.assertIn('colorkey=0xFFFFFF', masks)
         self.assertNotIn('"_recast_mask_background"', launch)
+        self.assertNotIn('"_recast_mask_background"', masks)
         self.assertIn("_build_recast_adaptive_mask(", launch)
         self.assertIn('wgp.release_model()', launch)
         self.assertIn("source_video, adaptive_mask, generated_video", launch)
@@ -3702,6 +3703,7 @@ class TestMultiPersonRecast(unittest.TestCase):
         )
         self.assertIn("native_people['conditioning_count']", launch)
         self.assertNotIn("recast_bystanders_matted_ref_", launch)
+        self.assertNotIn("recast_bystanders_matted_ref_", compose)
         self.assertIn("_build_recast_source_scene_reference(", launch)
         self.assertIn(
             "_enable_recast_dynamic_source_scene_reference(",
@@ -3756,15 +3758,17 @@ class TestMultiPersonRecast(unittest.TestCase):
         sam3 = _read(_SAM3_PREPROCESSOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
 
-        self.assertIn("def _detect_recast_shot_ranges(", launch)
-        self.assertIn("tracking_segments=shot_ranges", launch)
-        self.assertIn("def _recover_recast_unmapped_shots(", launch)
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
+        self.assertIn("def _detect_recast_shot_ranges(", launch)
+        # The character mask builder moved to recast_masks (C7); the launch
+        # copies of these two strings are Repaint's, pinned by its own test.
+        self.assertIn("tracking_segments=shot_ranges", masks)
+        self.assertIn("def _recover_recast_unmapped_shots(", launch)
         self.assertIn(
             "running generic-person appearance recovery",
             masks,
         )
-        self.assertIn("anywhere in the selected video", launch)
+        self.assertIn("anywhere in the selected video", masks)
         self.assertIn('"edit_recast_timeline_anchors"', launch)
         self.assertIn('"scail2_timeline_source_scene_reference"', launch)
         self.assertIn('"scail2_timeline_source_scene_reference"', scail2)
@@ -4020,6 +4024,7 @@ class TestMultiPersonRecast(unittest.TestCase):
             launch,
         )
         self.assertNotIn('if resolution_profile == "512p"', launch)
+        self.assertNotIn('if resolution_profile == "512p"', prepare)
         self.assertIn("editRecastResolutionProfile: '480p'", edit_store)
         self.assertIn(
             "resolution_profile: state.editRecastResolutionProfile",
