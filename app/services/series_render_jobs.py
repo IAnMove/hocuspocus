@@ -60,8 +60,10 @@ def _clip_name(shot_id: str, child_job_id: str) -> str:
 
     WanGP names an unnamed clip after its prompt (spaces and brackets stay) and adds ``(2)`` when a name is taken;
     ``validate_series_asset_uri`` accepts neither, so the finished clip was registered as a failure.
-    Like ``series_native_render``, a Series render names its outputs."""
-    shot = re.sub(r"[^A-Za-z0-9_-]+", "_", str(shot_id)).strip("_")[:60] or "shot"
+    Like ``series_native_render``, a Series render names its outputs. The whole stem stays within 50 bytes, where
+    WanGP cuts names on Windows (``truncate_for_filesystem``): a planner shot id (``shot_`` + 32 hex) would push the
+    child job id, the part that makes the name unique, past that cut."""
+    shot = re.sub(r"[^A-Za-z0-9_-]+", "_", str(shot_id)).strip("_")[:24] or "shot"
     return f"series-{shot}-{child_job_id}"
 
 

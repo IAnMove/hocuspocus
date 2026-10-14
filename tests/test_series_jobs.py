@@ -1,4 +1,5 @@
 import copy
+import re
 import threading
 
 import pytest
@@ -545,6 +546,21 @@ def test_two_runs_of_the_same_shot_never_share_a_clip_name(monkeypatch, tmp_path
     first = _drive_series_render(monkeypatch, tmp_path, _wangp_name)[1][0]["output_filename"]
     second = _drive_series_render(monkeypatch, tmp_path, _wangp_name)[1][0]["output_filename"]
     assert first != second, "WanGP would call the second one name(2).mp4, which the asset path refuses"
+
+
+def test_a_clip_name_keeps_its_child_job_id_where_wangp_cuts_names_to_50_bytes():
+    """On Windows WanGP cuts the stem to 50 bytes (``truncate_for_filesystem``). A planner shot id (``shot_`` + 32 hex)
+    put the child job id past that cut, so two runs of the shot could share a name and get "(2)" again."""
+    from services.series_planning import _planning_uid
+    from services.series_render_jobs import _clip_name
+    from shared.utils.utils import truncate_for_filesystem
+
+    for shot_id in ("e1s00", _planning_uid("shot"), "x" * 120, "plano (1) ñ"):
+        names = [_clip_name(shot_id, child) for child in ("sr0123456789", "sr0123456780")]
+        for name in names:
+            assert len(name.encode("utf-8")) <= 50 and truncate_for_filesystem(name, 50) == name, name
+            assert re.fullmatch(r"series-[A-Za-z0-9_-]+-sr[0-9a-f]{10}", name), name
+        assert names[0] != names[1]
 
 
 def _stale_render_checkpoint(monkeypatch, tmp_path, *, claimed=False, cached=False):
