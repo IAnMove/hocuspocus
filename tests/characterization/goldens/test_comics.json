@@ -1,0 +1,68 @@
+{
+  "plan without a premise": {
+    "body": {
+      "detail": "Comic premise is required"
+    },
+    "status": 400
+  },
+  "recent completed with none": {
+    "body": {
+      "detail": "No completed comic plan is available to recover"
+    },
+    "status": 404
+  },
+  "resume a missing job": {
+    "body": {
+      "detail": "Comic planning job not found"
+    },
+    "status": 404
+  },
+  "start without a premise": {
+    "body": {
+      "detail": "Comic premise is required"
+    },
+    "status": 400
+  },
+  "status of a missing job": {
+    "body": {
+      "detail": "Comic planning job not found"
+    },
+    "status": 404
+  },
+  "story revise with uneven panels": {
+    "body": {
+      "detail": "Story revision currently requires a consistent panel count per page"
+    },
+    "status": 400
+  },
+  "story revise without a plan": {
+    "body": {
+      "detail": "A valid comic plan is required"
+    },
+    "status": 400
+  },
+  "text page index out of range": {
+    "body": {
+      "detail": "Comic page index is out of range"
+    },
+    "status": 400
+  },
+  "text page translate without a language": {
+    "body": {
+      "detail": "Choose a target language"
+    },
+    "status": 400
+  },
+  "text page with a bad mode": {
+    "body": {
+      "detail": "Text mode must be rewrite or translate"
+    },
+    "status": 400
+  },
+  "text page without a plan": {
+    "body": {
+      "detail": "A valid comic plan is required"
+    },
+    "status": 400
+  }
+}
