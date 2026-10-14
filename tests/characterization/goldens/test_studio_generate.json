@@ -3241,27 +3241,6 @@
           ],
           "transitions": [
             "running | phase '' | 'Preparing...' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)…' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 4%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 9%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 14%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 19%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 24%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 29%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 34%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 39%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 44%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 49%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 54%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 59%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 64%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 69%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 74%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 79%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 84%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 89%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 94%' | 0% | step 0/0 | outputs 0",
-            "running | phase '' | 'Downloading Edit Anything model (one-time setup)… 99%' | 0% | step 0/0 | outputs 0",
             "running | phase 'Loading fake model' | 'Loading fake model' | 0% | step 0/0 | outputs 0",
             "running | phase 'Sampling | 1/2' | 'Sampling | 1/2' | 50% | step 1/2 | outputs 0",
             "running | phase 'Sampling | 2/2' | 'Sampling | 2/2' | 100% | step 2/2 | outputs 0",
@@ -3732,6 +3711,25 @@
         },
         "status": 200
       },
+      "managed lora checks": [
+        [
+          [],
+          "fake_t2v"
+        ],
+        [
+          [
+            "mine.safetensors",
+            "ltx23_edit_anything_global_rank128_v1_9000steps_adamw.safetensors"
+          ],
+          "fake_t2v"
+        ],
+        [
+          [
+            "ltx23_edit_anything_global_rank128_v1_9000steps_adamw.safetensors"
+          ],
+          "fake_t2v"
+        ]
+      ],
       "rejected": {
         "edit anything with an empty range": {
           "answer": {

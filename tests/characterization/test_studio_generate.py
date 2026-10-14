@@ -22,7 +22,7 @@ import pytest
 from tests.characterization import media
 from tests.characterization.test_run_generation import BODY, Rig, _media_writer, worker_module
 # Fixtures, used by name: the C0 rig and its decodable clip.
-from tests.characterization.test_run_generation import WAIT, _stub_legacy_h3, clip, hold_then, rig  # noqa: F401
+from tests.characterization.test_run_generation import WAIT, _stub_legacy_h3, clip, rig  # noqa: F401
 from tests.support.fake_wgp import FakeEngine, catalog_attributes, generation_attributes
 
 _ROUTES = (
@@ -365,6 +365,10 @@ def test_generate_h3_gates(rig, golden, monkeypatch) -> None:
 
 def test_retake_and_edit_anything_jobs(rig, golden, monkeypatch, tmp_path) -> None:
     _probe_as(monkeypatch)
+    # The worker fetches a managed LoRA (Edit Anything) from Hugging Face when it is missing; a test never does.
+    managed: list = []
+    rig.patch("_ensure_managed_loras_present",
+              lambda activated, model_type, progress=None: managed.append([list(activated or []), model_type]) or [])
     source = _source(rig)
     uploads = rig.server.root / "uploads"
     media.image(uploads / "anchor_start.png")
@@ -402,13 +406,16 @@ def test_retake_and_edit_anything_jobs(rig, golden, monkeypatch, tmp_path) -> No
         status, answer = _submit(rig, path, body)
         rejected[case] = {"status": status, "answer": answer}
     observed["rejected"] = rejected
+    observed["managed lora checks"] = managed
     rig.check(golden, "retake and edit anything", observed)
 
 
 def test_edit_routes_follow_the_execution_mode(rig, golden, monkeypatch) -> None:
-    from services import execution_mode
+    from services import execution_mode, inpaint_service
 
     _probe_as(monkeypatch)
+    # Inpaint stops SAM before it registers the job; nothing listens in a test.
+    monkeypatch.setattr(inpaint_service, "shutdown_sam", lambda: None)
     source = _source(rig)
     monkeypatch.setattr(execution_mode, "POLICY", _replace(execution_mode.POLICY, mode="plan"))
     answers = {}
