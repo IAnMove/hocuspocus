@@ -1,0 +1,89 @@
+{
+  "analyze a path outside uploads": {
+    "body": {
+      "detail": "Smart asset analysis only accepts HocusPocus Lab uploads"
+    },
+    "status": 400
+  },
+  "analyze too many images": {
+    "body": {
+      "detail": "Import at most 24 images per batch"
+    },
+    "status": 400
+  },
+  "analyze without images": {
+    "body": {
+      "detail": "Choose at least one image"
+    },
+    "status": 400
+  },
+  "cancel a missing job": {
+    "body": {
+      "detail": "Story generation job not found"
+    },
+    "status": 404
+  },
+  "generate an unknown scope": {
+    "body": {
+      "detail": "Unsupported Story Lab generation scope"
+    },
+    "status": 400
+  },
+  "generate one stage without a premise": {
+    "body": {
+      "detail": "Write a premise before generating the story"
+    },
+    "status": 400
+  },
+  "generate the whole story at once": {
+    "body": {
+      "detail": "Full Story Lab generation must use /api/v1/stories/generate/start"
+    },
+    "status": 400
+  },
+  "library empty": {
+    "body": {
+      "activeId": "",
+      "projects": {},
+      "revision": 0,
+      "version": 2
+    },
+    "status": 200
+  },
+  "resume a missing job": {
+    "body": {
+      "detail": "Story generation job not found"
+    },
+    "status": 404
+  },
+  "start an unknown scope": {
+    "body": {
+      "detail": "Unsupported Story Lab generation scope"
+    },
+    "status": 400
+  },
+  "start without a premise": {
+    "body": {
+      "detail": "Write a premise before generating the story"
+    },
+    "status": 400
+  },
+  "status of a missing job": {
+    "body": {
+      "detail": "Story generation job not found"
+    },
+    "status": 404
+  },
+  "translate without a language": {
+    "body": {
+      "detail": "Choose a target language"
+    },
+    "status": 400
+  },
+  "translate without lyrics": {
+    "body": {
+      "detail": "Lyrics are required"
+    },
+    "status": 400
+  }
+}
