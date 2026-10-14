@@ -123,13 +123,22 @@ class Rig:
             self.accepted[answer["job_id"]] = answer
         return answer
 
+    @staticmethod
+    def workers() -> list[threading.Thread]:
+        """The worker threads the route started (Python 3.10 names a thread ``Thread-N (target)``)."""
+        return [thread for thread in threading.enumerate() if thread.name.endswith(f"({WORKER})")]
+
     def join(self, timeout: float = 30.0) -> None:
-        """Wait for every worker thread the route started (Python 3.10 names a thread ``Thread-N (target)``),
-        so the whole ``finally`` block has run."""
-        for thread in threading.enumerate():
-            if thread.name.endswith(f"({WORKER})"):
-                thread.join(timeout)
-                assert not thread.is_alive(), "the generation worker did not finish"
+        """Wait for every worker thread, so the whole ``finally`` block has run."""
+        for thread in self.workers():
+            thread.join(timeout)
+            assert not thread.is_alive(), "the generation worker did not finish"
+
+    def wait_until(self, condition: Callable[[], bool], what: str) -> None:
+        deadline = time.monotonic() + 10
+        while not condition():
+            assert time.monotonic() < deadline, f"never saw: {what}"
+            time.sleep(0.01)
 
     def run(self, body: dict) -> str:
         job_id = self.post(body)["job_id"]
@@ -451,6 +460,7 @@ def test_a_failing_preparation_step_fails_the_job_before_any_model_work(rig, gol
     def explode(*_args, **_kwargs):
         raise RuntimeError(f"{stage} is not available")
 
+    released: list = []
     if stage == "depth":
         monkeypatch.setattr(managed_preprocessors, "uses_temporal_depth", lambda params: True)
         monkeypatch.setattr(managed_preprocessors, "ensure_video_depth_checkpoint", explode)
@@ -458,27 +468,35 @@ def test_a_failing_preparation_step_fails_the_job_before_any_model_work(rig, gol
         rig.patch("_ensure_managed_loras_present", explode)
     else:
         monkeypatch.setattr(managed_preprocessors, "ensure_minimax_h3_lora_affine_maps", explode)
-        rig.patch("_release_h3_when_queue_allows", lambda job_id: None)
+        rig.patch("_release_h3_when_queue_allows", released.append)
     job_id = rig.direct_job({**BODY, "activated_loras": ["golden.safetensors"]})
     if stage == "h3_lora":
         base = rig.server.wgp.get_model_def
         rig.set_wgp("get_model_def", lambda model_type: {**(base(model_type) or {}), "architecture": "minimax_h3_fake"})
     rig.launch._run_generation(job_id)
-    rig.check(golden, f"preparation fails: {stage}", rig.observe(job_id))
+    rig.check(golden, f"preparation fails: {stage}", {**rig.observe(job_id), "h3 runtime release asked for": released})
 
 
 # -- cancelling ------------------------------------------------------------------------------------------
-def test_a_queued_job_cancelled_before_it_starts_never_reaches_the_engine(rig, golden) -> None:
-    """The slot is not acquired (``acquired`` is False): the worker returns before its ``try`` block."""
+def test_a_queued_job_cancelled_before_it_starts_never_reaches_the_engine(rig, golden, monkeypatch) -> None:
+    """The slot is not acquired (``acquired`` is False): the worker returns before its ``try`` block, so it
+    does not touch the running job's VRAM coefficient, abort state or save path."""
+    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.8)
     release = rig.event()
     rig.engine.script = hold_then(lambda call: call.save(), release=release)
-    first = rig.post(BODY)["job_id"]
+    first = rig.post({**BODY, "resolution": "1280x720", "video_length": 241})["job_id"]
     assert rig.engine.entered.wait(10)
     rig.wait_for(first, message="Sampling | 1/2")
+    coefficient = rig.server.wgp.args.vram_safety_coefficient
     second = rig.post({**BODY, "prompt": "never started"})["job_id"]
     waiting = {"first": rig.get(f"/api/v1/status/{first}"), "second": rig.get(f"/api/v1/status/{second}"),
                "listed": rig.get("/api/v1/jobs")}
     cancelled = rig.cancel(second)
+    rig.wait_until(lambda: len(rig.workers()) == 1, "the cancelled job's worker returning")
+    waiting["first's coefficient untouched"] = (coefficient < 0.8
+                                                 and rig.server.wgp.args.vram_safety_coefficient == coefficient)
+    waiting["first's abort state kept"] = sorted(rig.launch._active_gen_states) == [first]
     release.set()
     rig.join()
     never_started = rig.observe(second)
@@ -690,8 +708,17 @@ def test_a_recovered_job_says_it_restarts_from_the_beginning(rig, golden) -> Non
 def test_post_processing_runs_in_a_fixed_order_on_every_video(rig, golden, tmp_path, monkeypatch) -> None:
     media.sound(tmp_path / "uploads" / "audio" / "voice.wav")
     order: list = []
-    rig.patch("_apply_spatial_upsampling_to_file", lambda path, method, job=None: order.append(["upscale", Path(path).name, method]))
-    rig.patch("_apply_film_grain_to_file", lambda path, intensity, saturation: order.append(["film grain", Path(path).name, intensity, saturation]))
+
+    def upscale(path, method, job=None):
+        order.append(["upscale", Path(path).name, method])
+        Path(path).write_bytes(b"upscaled")
+
+    def film_grain(path, intensity, saturation):
+        order.append(["film grain", Path(path).name, intensity, saturation])
+        Path(path).write_bytes(b"graded")
+
+    rig.patch("_apply_spatial_upsampling_to_file", upscale)
+    rig.patch("_apply_film_grain_to_file", film_grain)
 
     def voice_clone(video_path, voice_ref_paths, mode):
         order.append(["voice clone", Path(video_path).name, [Path(ref).name for ref in voice_ref_paths], mode])
@@ -700,7 +727,12 @@ def test_post_processing_runs_in_a_fixed_order_on_every_video(rig, golden, tmp_p
     job_id = rig.run({**BODY, "film_grain_intensity": 0.4, "film_grain_saturation": 0.7, "spatial_upsampling": "flashvsr_x2",
                       "voice_clone_enabled": True, "voice_clone_refs": ["audio/voice.wav", "audio/missing.wav"],
                       "voice_clone_mode": "two"})
-    rig.check(golden, "post-processing order", {**rig.observe(job_id, full=True), "order": order})
+    observed = rig.observe(job_id, full=True)
+    # The sidecar is written again after post-processing, so it describes the file the passes left behind.
+    (name, sidecar), = rig.sidecars().items()
+    sizes = {"file": (rig.server.outputs / sidecar["output_filename"]).stat().st_size,
+             "sidecar": sidecar["asset"]["media"]["size_bytes"]}
+    rig.check(golden, "post-processing order", {**observed, "order": order, "bytes": sizes})
 
 
 def test_dynamic_audio_normalisation_runs_ffmpeg_on_audio_outputs(rig, golden, monkeypatch) -> None:

@@ -264,14 +264,14 @@
               "generation_mode": "video",
               "model_type": "fake_t2v",
               "prompt": "a calm lake",
-              "resolution": "64x64",
+              "resolution": "1280x720",
               "seed": 42,
-              "video_length": 17
+              "video_length": 241
             },
             "prompt": "a calm lake",
             "save_path": "<OUTPUTS>",
             "task_id": 1,
-            "vram_safety_coefficient": 0.8
+            "vram_safety_coefficient": 0.7164236111111111
           }
         ],
         "files": [
@@ -295,7 +295,23 @@
           "clip_output_files": [
             "<TIME>_seed42_a_calm_lake.mp4"
           ],
-          "recovered": false
+          "recovered": false,
+          "vram_adjustment": {
+            "base_coef": 0.8,
+            "ceilinged": false,
+            "compute_penalty": 0.00024305555555555465,
+            "compute_ratio": 1.0041666666666667,
+            "effective_coef": 0.7164236111111111,
+            "floored": false,
+            "lora_penalty": 0.0,
+            "lora_total_gb": 0.0,
+            "pass_penalty": 0.08333333333333333,
+            "reasons": [
+              "-0.083 for 1 extra pipeline stage(s) (2.0 GB)",
+              "-0.000 for 1.00× compute vs baseline (1280×720 × 241 frames, 0.0 GB)"
+            ],
+            "stage_count": 2
+          }
         },
         "returned": true,
         "sidecars": {
@@ -311,9 +327,9 @@
               "model_type": "fake_t2v",
               "prompt": "a calm lake",
               "provider": "local",
-              "resolution": "64x64",
+              "resolution": "1280x720",
               "seed": 42,
-              "video_length": 17
+              "video_length": 241
             },
             "root_task_id": "task-generation-<JOB>",
             "task_id": "task-generation-<JOB>",
@@ -396,9 +412,9 @@
               "model_type": "fake_t2v",
               "prompt": "a calm lake",
               "provider": "local",
-              "resolution": "64x64",
+              "resolution": "1280x720",
               "seed": 42,
-              "video_length": 17
+              "video_length": 241
             },
             "root_task_id": "task-generation-<JOB>",
             "task_id": "task-generation-<JOB>",
@@ -441,13 +457,13 @@
           "finished_at": null,
           "generation_details": {
             "execution_mode": "real",
-            "frames": 17,
+            "frames": 241,
             "generation_mode": "video",
             "lora_count": 0,
             "model_name": "Fake Text to Video",
             "model_type": "fake_t2v",
             "prompt": "a calm lake",
-            "resolution": "64x64",
+            "resolution": "1280x720",
             "seed": 42,
             "simulated": false
           },
@@ -480,6 +496,8 @@
           "token_usage_source": "not_measured",
           "total_steps": 2
         },
+        "first's abort state kept": true,
+        "first's coefficient untouched": true,
         "listed": {
           "jobs": [
             {
@@ -488,13 +506,13 @@
               "finished_at": null,
               "generation_details": {
                 "execution_mode": "real",
-                "frames": 17,
+                "frames": 241,
                 "generation_mode": "video",
                 "lora_count": 0,
                 "model_name": "Fake Text to Video",
                 "model_type": "fake_t2v",
                 "prompt": "a calm lake",
-                "resolution": "64x64",
+                "resolution": "1280x720",
                 "seed": 42,
                 "simulated": false
               },
@@ -3954,6 +3972,10 @@
         "status": "queued",
         "task_id": "task-generation-<JOB>"
       },
+      "bytes": {
+        "file": 6,
+        "sidecar": 6
+      },
       "engine_calls": [
         {
           "audio_save_path": "<OUTPUTS>",
@@ -4217,6 +4239,7 @@
     "body": {
       "engine_calls": [],
       "files": [],
+      "h3 runtime release asked for": [],
       "left_behind": {
         "abort_states": [],
         "audio_save_path": "<OUTPUTS>",
@@ -4272,6 +4295,9 @@
     "body": {
       "engine_calls": [],
       "files": [],
+      "h3 runtime release asked for": [
+        "golden-direct"
+      ],
       "left_behind": {
         "abort_states": [],
         "audio_save_path": "<OUTPUTS>",
@@ -4327,6 +4353,7 @@
     "body": {
       "engine_calls": [],
       "files": [],
+      "h3 runtime release asked for": [],
       "left_behind": {
         "abort_states": [],
         "audio_save_path": "<OUTPUTS>",
