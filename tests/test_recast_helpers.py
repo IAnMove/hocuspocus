@@ -748,6 +748,58 @@ def test_recast_shot_modules_bind_exactly_the_names_their_functions_read():
         assert launch.count(f"_bind_{stem}(") == 1
 
 
+def test_recast_endpoint_binds_exactly_the_names_its_function_reads():
+    """The route module's bind list is the free names of the moved handler.
+
+    ``recast_endpoint`` stays the served wrapper, so launch does not re-export
+    the service function. It imports ``bind`` once and calls it once. A name
+    the handler reads and this test does not find in the bind list fails here.
+    """
+    path = ROOT / "app" / "services" / "recast_endpoint.py"
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source, filename=str(path))
+    bind = next(
+        node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "bind"
+    )
+    assert bind.args.args == [] and bind.args.posonlyargs == []
+    assert bind.args.vararg is None and bind.args.kwarg is None
+    assert bind.args.defaults == []
+    assert bind.args.kw_defaults == [None] * len(bind.args.kwonlyargs)
+    params = [arg.arg for arg in bind.args.kwonlyargs]
+    slots = [
+        node.targets[0].id
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and isinstance(node.value, ast.Constant)
+        and node.value.value is None
+    ]
+    assert sorted(slots) == sorted(params)
+    kept = []
+    for node in tree.body:
+        if node is bind:
+            continue
+        if (
+            isinstance(node, ast.Assign)
+            and len(node.targets) == 1
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id in params
+            and isinstance(node.value, ast.Constant)
+            and node.value.value is None
+        ):
+            continue
+        kept.append(node)
+    stripped = ast.unparse(ast.Module(body=kept, type_ignores=[]))
+    assert _undefined_globals(stripped, str(path)) == set(params)
+    assert _undefined_globals(source, str(path)) == set()
+    launch = LAUNCH.read_text(encoding="utf-8")
+    assert launch.count("from services.recast_endpoint import bind as _bind_recast_endpoint") == 1
+    assert launch.count("_bind_recast_endpoint(") == 1
+    assert launch.count("from routers.recast import create_recast_router, recast_endpoint") == 1
+    assert launch.count("api.include_router(create_recast_router())") == 1
+
+
 def test_timeline_preview_blends_the_anchor_and_returns_the_first_frame_when_nothing_is_found():
     """The preview card is the anchor frame, the mask tint and a character label."""
     import numpy as np

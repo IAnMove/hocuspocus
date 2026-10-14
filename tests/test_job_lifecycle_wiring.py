@@ -92,6 +92,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         cls.director = _parse("app/routers/director.py")
         cls.tools_upscale = _parse("app/services/tools_upscale.py")
         cls.tools_router = _parse("app/routers/tools.py")
+        cls.recast_endpoint = _parse("app/services/recast_endpoint.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
         expected = {
@@ -118,6 +119,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                     tree = self.tools_upscale
                 elif function_name == "_run_tool_revoice":
                     tree = self.tools_router
+                elif function_name == "_run_recast":
+                    tree = self.recast_endpoint
                 else:
                     tree = self.launch
                 lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name
@@ -176,6 +179,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "retake_video_endpoint": edit_requests,
             "edit_anything_endpoint": edit_requests,
             "inpaint_endpoint": edit_requests,
+            "recast_endpoint": self.recast_endpoint,
         }
         for endpoint_name in (
             "retake_video_endpoint",

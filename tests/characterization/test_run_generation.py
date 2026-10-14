@@ -103,6 +103,7 @@ SHOT_MODULES = (
 # land on that module too, not only on launch.
 ROUTE_MODULES = (
     "services.recast_preview",
+    "services.recast_endpoint",
 )
 
 

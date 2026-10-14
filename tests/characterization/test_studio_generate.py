@@ -799,7 +799,54 @@ def test_recast_preview_reads_the_objects_launch_holds(full_server) -> None:
     assert "HTTPException" in compared
 
 
-# -- Recast routes (recorded while both handlers still live in launch) --------------------------------
+def test_recast_endpoint_reads_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    """Every global the moved handler reads is the launch object, or a forwarder.
+
+    The served function is the router wrapper. Launch's ``recast_endpoint`` is
+    that same wrapper. ``_run_generation`` and ``_get_cached_hardware`` are
+    forwarders: patching the launch name changes what the handler calls, and
+    the worker thread is still named ``_run_generation``.
+    """
+    import builtins
+    import importlib
+
+    from routers.recast import recast_endpoint as served
+
+    launch = worker_module()
+    module = importlib.import_module("services.recast_endpoint")
+    assert launch.recast_endpoint is served
+    assert served is not module.recast_endpoint
+    assert launch._bind_recast_endpoint is module.bind
+    reads = _global_reads(module.recast_endpoint)
+    compared = set()
+    forwarded = set()
+    for name in sorted(reads):
+        if name.startswith("__") or hasattr(builtins, name):
+            continue
+        assert hasattr(module, name), name
+        value = getattr(module, name)
+        launch_value = getattr(launch, name)
+        if value is launch_value:
+            compared.add(name)
+            continue
+        assert callable(value), name
+        sentinel = object()
+
+        def patched(*_args, _sentinel=sentinel, **_kwargs):
+            return _sentinel
+
+        monkeypatch.setattr(launch, name, patched)
+        assert value() is sentinel, name
+        monkeypatch.setattr(launch, name, launch_value)
+        forwarded.add(name)
+    assert "_resolve_recast_media" in compared
+    assert "_coordinated_generation_slot" in compared
+    assert "generate" in compared
+    assert forwarded == {"_run_generation", "_get_cached_hardware"}
+    assert module._run_generation.__name__ == "_run_generation"
+
+
+# -- Recast routes (recorded on the pre-move tree; patches land on the service too) --
 # ``POST /api/v1/recast`` starts its worker and then builds the HTTP body from the same params object.
 # The worker can mutate those params as soon as it takes the generation slot, so a golden that reads
 # the answer has to hold the slot until the response is in hand. ``_patch_recast`` writes the stub on

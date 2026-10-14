@@ -551,14 +551,18 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")
     assert simulated < native_model
+    recast_source = (
+        Path(__file__).parents[1] / "app" / "services" / "recast_endpoint.py"
+    ).read_text(encoding="utf-8")
+    # Recast left launch. The repaint slice now ends at the next function that stayed.
     specialist_routes = (
-        ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
-        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
-        ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation"),
+        ("async def repaint_endpoint", "def _resolve_outpaint_sampling", "_run_repaint", source),
+        ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast", recast_source),
+        ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint", source),
+        ("async def blend_endpoint", "def _apply_film_grain_to_file", "_run_blend_generation", source),
     )
-    for start, end, real_worker in specialist_routes:
-        route = source.split(start, 1)[1].split(end, 1)[0]
+    for start, end, real_worker, route_source in specialist_routes:
+        route = route_source.split(start, 1)[1].split(end, 1)[0]
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
