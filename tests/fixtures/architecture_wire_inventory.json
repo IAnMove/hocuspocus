@@ -56,12 +56,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_character_sheet.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
       "file": "tests/test_code_health.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",

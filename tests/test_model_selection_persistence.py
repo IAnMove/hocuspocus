@@ -10,6 +10,7 @@ from tests.api_client_source import api_client_source
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
+DIRECTOR_PATH = os.path.join(ROOT, "app", "routers", "llm_director.py")
 
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
 MODELS_PATH = os.path.join(ROOT, "ui", "src", "stores", "modelsSlice.ts")
@@ -60,8 +61,9 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn('"provider": "minimax", "model": "MiniMax-M3"', launch)
         self.assertIn('"model": "minimax_h3_legacy"', launch)
         self.assertIn("def _effective_llm_routing", launch)
-        ensure = launch[launch.index("def _ensure_llm_loaded():"):]
-        ensure = ensure[:ensure.index("@api.post", 1)]
+        director = _source(DIRECTOR_PATH)
+        ensure = director[director.index("def _ensure_llm_loaded():"):]
+        ensure = ensure[:ensure.index("\ndef ", 1)]
         self.assertIn("_effective_llm_routing(services)", ensure)
         services = _source(SERVICES_PATH)
         self.assertIn("loadProductionProfile", services)

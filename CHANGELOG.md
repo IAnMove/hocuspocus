@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Director music and character-reference description left the launch module.** Asking for a song, or for a description of character reference images, still answers the same way. An empty description still asks for the images. An empty music request still stops before any track is generated.
+
 **Presets, system settings, and service settings left the launch module.** Saving a preset, changing a memory profile, and reading or updating service settings still answer the same way. An empty update is still refused. The core server keeps its own copies of the settings routes it already served.
 
 **Upscale and revoice left the launch module.** Asking the full server to upscale a clip or replace its voice still answers the same way, including a request it refuses before any model work. The core server still blocks those two routes when the local tool is not available.
