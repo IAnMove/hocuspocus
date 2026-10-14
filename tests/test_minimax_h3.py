@@ -31,6 +31,7 @@ _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
 _GENERATE_PATH = _APP / "services" / "studio_generate.py"
+_COEFFICIENT_PATH = _APP / "services" / "generation_coefficients.py"
 _SYSTEM_ROUTER_PATH = _APP / "routers" / "system.py"
 _LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
@@ -873,13 +874,14 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
     def test_h3_video_references_get_a_dedicated_memory_profile(self):
         launch = _read(_LAUNCH_PATH)
+        coefficient = _read(_COEFFICIENT_PATH)
         wgp = _read(_WGP_PATH)
         transformer = _read(_TRANSFORMER_PATH)
-        self.assertIn("_h3_video_reference_count", launch)
-        self.assertIn("h3_reference_activation_gb", launch)
-        self.assertIn("compute_h3_weight_budget", launch)
-        self.assertIn("h3_weight_budget_gb", launch)
-        self.assertIn("resident H3 profile will reload with packed-sequence headroom", launch)
+        self.assertIn("_h3_video_reference_count", coefficient)
+        self.assertIn("h3_reference_activation_gb", coefficient)
+        self.assertIn("compute_h3_weight_budget", coefficient)
+        self.assertIn("h3_weight_budget_gb", coefficient)
+        self.assertIn("resident H3 profile will reload with packed-sequence headroom", coefficient)
         self.assertIn("_maestro_profile_vram_coefficient", wgp)
         self.assertIn("get_linear_split_map", transformer)
         self.assertIn("MINIMAX_H3_ACTIVATION_CHUNK_TOKENS", transformer)
