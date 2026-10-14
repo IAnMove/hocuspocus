@@ -163,8 +163,10 @@ export const createOutputRestoreSlice: SliceCreator<OutputRestoreSlice, OutputRe
     // modelOptions matches the restored model before rerollGeneration
     // submits (stale capabilities used to strip stg_scale/perturbation_*
     // from the request, which then poisoned the next sidecar with zeros).
-    // Virtual SFX clears stale options locally without fetching an endpoint.
+    // Virtual SFX clears stale options locally without fetching an endpoint; it has no
+    // LoRAs either, so drop the previous model's list (as selectModel does).
     if (!sfxModelTypes.has(modelType)) get().loadLoras(modelType)
+    else set({ availableLoras: [] })
     await get().loadModelOptions(modelType)
     if (!restore.isCurrent()) return false
 
