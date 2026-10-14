@@ -248,8 +248,7 @@ def test_story_cover_jobs_use_the_shared_cover_resolver():
 
 
 def test_generation_resolves_voice_clone_refs_before_seedvc():
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    run = generation_module(tree)
+    run = generation_module()
     calls = [
         node.func.id
         for node in ast.walk(run)

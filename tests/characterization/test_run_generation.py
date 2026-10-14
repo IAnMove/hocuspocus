@@ -14,7 +14,7 @@ the model is the legacy H3 route, the slot is taken a moment before a cancel).
 Those tests build the job with the server's own factory and call
 ``_run_generation`` directly, with the collaborators that need a GPU stubbed.
 Every stub goes through :meth:`Rig.patch`, so a PR that moves the worker only
-repoints ``worker_module``.
+repoints ``worker_modules``.
 
 The goldens pin today's behaviour, including its oddities. Tests whose names
 start with ``test_oddity_`` pin behaviour that looks unintended; a refactor must
@@ -88,8 +88,23 @@ def _install_fake_decord(monkeypatch) -> list:
 
 
 def worker_module():
-    """The module whose globals ``_run_generation`` reads. A move PR repoints this one function."""
+    """The full server module: the jobs, the locks and ``request_cancel`` the worker and the tests share live here."""
     return sys.modules["_launch_runtime"]
+
+
+# The modules of the generation worker package, in the order the worker runs them.
+WORKER_PACKAGE = ("prepare", "tasks", "finalize")
+
+
+def worker_modules() -> list:
+    """The modules whose globals the worker functions read. A move PR repoints this one function.
+
+    That is the full server module while any worker function is still in it, and each module of
+    ``services.generation_worker`` that exists. A name the worker reads is an attribute of every module that reads it.
+    """
+    package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
+               if f"services.generation_worker.{name}" in sys.modules]
+    return [worker_module(), *package]
 
 
 @dataclass
@@ -110,7 +125,10 @@ class Rig:
         return worker_module()
 
     def patch(self, name: str, value: Any) -> None:
-        self.monkeypatch.setattr(worker_module(), name, value)
+        holders = [module for module in worker_modules() if hasattr(module, name)]
+        assert holders, f"no worker module has a global named {name!r}"
+        for module in holders:
+            self.monkeypatch.setattr(module, name, value)
 
     def event(self) -> threading.Event:
         """An event the engine script waits on; the fixture sets it at teardown so a failed test never hangs."""
