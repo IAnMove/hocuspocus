@@ -30,6 +30,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_SYSTEM_ROUTER_PATH = _APP / "routers" / "system.py"
 _LLM_ROUTER_PATH = _APP / "routers" / "llm.py"
 _LLM_SERVICE_PATH = _APP / "services" / "llm_service.py"
 _DEFAULT_PATH = _APP / "defaults" / "minimax_h3.json"
@@ -300,9 +301,10 @@ class TestMiniMaxH3Definition(unittest.TestCase):
         series_worker = launch.split(
             "def _run_series_render_job(job_id: str) -> None:", 1,
         )[1].split("def _series_render_candidates", 1)[0]
-        manual_release = launch.split(
+        system_router = _read(_SYSTEM_ROUTER_PATH)
+        manual_release = system_router.split(
             "def system_release_model():", 1,
-        )[1].split("# ============================================================================", 1)[0]
+        )[1].split("return router", 1)[0]
 
         self.assertIn(
             "_release_legacy_h3_when_queue_allows(job_id)", series_worker,
