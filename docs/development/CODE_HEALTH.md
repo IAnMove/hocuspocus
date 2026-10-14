@@ -229,7 +229,9 @@ that budget when both of these are true:
   - `startGeneration` → `startGenerationAudio`, but not `startGenerations`.
 
   The parent must be at complexity 15+ in the base. The piece's name must not
-  be in the base records. The longest matching parent wins.
+  be in the base records. The parent with the longest last name part wins,
+  so a piece is never taken from a parent whose last name part is merely a
+  prefix of it (`Router.run` is not the parent of `_run_generation_prepare`).
 - **Complexity rule.** The parent's complexity, summed over every function of
   that name, must drop by at least the sum of the pieces' **decisions**, which
   is their complexity minus one each. Extracting a block with *d* decisions

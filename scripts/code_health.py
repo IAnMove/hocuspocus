@@ -682,7 +682,7 @@ def _split_parent(child: dict, parents: dict[tuple[bool, str], list[dict]]) -> t
         key for key in parents
         if key[0] == python and _carved_from(child["name"], key[1])
     ]
-    return max(candidates, key=lambda key: len(key[1])) if candidates else None
+    return max(candidates, key=lambda key: (len(_split_stem(key[1])), len(key[1]))) if candidates else None
 
 
 def _added_decisions(current: dict, baseline: dict) -> int | None:
@@ -709,7 +709,7 @@ def split_credit(current: dict, baseline: dict) -> tuple[int, list[str]]:
 
     A piece is a named function at COMPLEXITY_WARNING+ whose name is not in
     the base records, named after a base function at COMPLEXITY_WARNING+
-    (see ``_carved_from``; the longest matching parent wins). The pieces of
+    (see ``_carved_from``; the parent with the longest last name part wins). The pieces of
     one parent are credited only when the parent's complexity, summed over
     every function of that name, drops by at least the pieces' decisions
     (complexity - 1 each): extracting a block with d decisions lowers the

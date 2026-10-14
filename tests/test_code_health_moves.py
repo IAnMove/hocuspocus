@@ -415,6 +415,47 @@ class MoveAwareRatchetTests(unittest.TestCase):
         changed[LAUNCH] += "\n\ndef unrelated(body):\n    if body is None:\n        return None\n    return body.get('x')\n"
         self.assertNoFailures(run(base, changed)[1])
 
+    def test_a_piece_is_credited_to_the_parent_it_is_named_after_and_the_gate_is_unchanged(self):
+        # `QuickVideoBatchRouterFactory.run` is complex too. Its last name part, `run`, is a prefix of every
+        # `_run_generation_*` name, and its qualified name is longer than `_run_generation`. The parent used
+        # to be the longer qualified name, so no `_run_generation_*` split could be credited.
+        colliding = (
+            "class QuickVideoBatchRouterFactory:\n"
+            + textwrap.indent(branchy("run", 46, start=9000), "    ")
+        )
+        note = (
+            "split: " + ", ".join(f"_run_generation_stage{k} (16)" for k in range(6))
+            + " carved out of _run_generation (106 -> 16); not counted against the complex-function budget"
+        )
+        # An ordinary split is credited exactly as before ...
+        base, changed = split_case(own_before=15, own_after=15, pieces=6)
+        warnings, failures, _, _ = run(base, changed)
+        self.assertNoFailures(failures)
+        self.assertIn(note, warnings)
+        # ... and next to the colliding function it is credited the same way.
+        base[LAUNCH] += "\n\n" + colliding
+        changed[LAUNCH] += "\n\n" + colliding
+        warnings, failures, _, _ = run(base, changed)
+        self.assertNoFailures(failures)
+        self.assertIn(note, warnings)
+        # Naming is not enough: pieces that only borrow the prefix while the parent keeps its complexity are
+        # still refused, with the colliding function present.
+        borrowed = [branchy(f"_run_generation_new{k}", 15, start=5000 + 100 * k) for k in range(6)]
+        base = {LAUNCH: launch_with(branchy("_run_generation", 120), colliding)}
+        changed = {LAUNCH: launch_with(branchy("_run_generation", 120), colliding, *borrowed)}
+        warnings, failures, _, _ = run(base, changed)
+        self.assertEqual(failures, ["high-complexity function count grew by 6; budget is 5" + UNCREDITED])
+        # A new function above 25 that is not a split is still a new hotspot.
+        _, failures, _, _ = run(
+            {LAUNCH: launch_with(branchy("_run_generation", 120), colliding)},
+            {LAUNCH: launch_with(branchy("_run_generation", 120), colliding),
+             "app/services/brand_new.py": branchy("brand_new", 30)},
+        )
+        self.assertEqual(failures, [
+            "new complexity hotspot app/services/brand_new.py is 31; limit is 25; "
+            "not a verified move: brand_new (31) is not in the base"
+        ])
+
     def test_split_credit_needs_a_change_that_adds_no_logic(self):
         # Laundering: the parent sheds its 120 decisions into helpers under 15
         # (no rule counts those), and the "pieces" named after it hold brand-new
