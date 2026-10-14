@@ -27,9 +27,12 @@ COMMON: tuple[tuple[str, str], ...] = (
     ("video-editor", "routers.video_editor"),
     ("minimax-music", "services.story_music_jobs"),
     ("minimax-image", "routers.comics"),
+    ("rig", "services.rig_service"),
 )
 # The full server (NVIDIA / WanGP) only.
-FULL_ONLY: tuple[tuple[str, str], ...] = ()
+FULL_ONLY: tuple[tuple[str, str], ...] = (
+    ("model3d", "services.model3d_service"),
+)
 # The core server (Apple Silicon / remote providers) only.
 CORE_ONLY: tuple[tuple[str, str], ...] = ()
 

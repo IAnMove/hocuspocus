@@ -211,12 +211,40 @@ def _seed_minimax_image(_tmp_path):
     return reset
 
 
+def _seed_job_table(module, job_id, record):
+    """Put one job in a service's ``_jobs`` table (under its lock); returns the function that empties it."""
+
+    def reset():
+        with module._lock:
+            module._jobs.clear()
+            module._processes.clear()
+
+    reset()
+    with module._lock:
+        module._jobs[job_id] = record
+    return reset
+
+
+def _seed_rig(_tmp_path):
+    from services import rig_service
+
+    return _seed_job_table(rig_service, "rig-1", {"workspace": "film", "status": "running", "engine": "procedural"})
+
+
+def _seed_model3d(_tmp_path):
+    from services import model3d_service
+
+    return _seed_job_table(model3d_service, "model3d-1", {"workspace": "film", "status": "queued", "model_id": "m"})
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
     pytest.param("video-editor", "full", _seed_video_editor, id="video-editor"),
     pytest.param("minimax-music", "full", _seed_minimax_music, id="minimax-music"),
     pytest.param("minimax-image", "full", _seed_minimax_image, id="minimax-image"),
+    pytest.param("rig", "full", _seed_rig, id="rig"),
+    pytest.param("model3d", "full", _seed_model3d, id="model3d"),
 ]
 
 
@@ -343,3 +371,24 @@ def test_busy_message_names_each_blocker_and_stays_short():
     assert "and 4 more" in text and "k8" not in text
     assert refusal == {"detail": text, "code": "workspace_busy", "blocking": items}
     assert workspace_busy.message("film", items[-1:]).count("late (could not be checked)") == 1
+
+
+@pytest.mark.parametrize("module_name", ["rig_service", "model3d_service"])
+def test_a_cancelled_job_whose_worker_process_is_still_unwinding_keeps_the_workspace_busy(tmp_path, module_name):
+    import importlib
+
+    module = importlib.import_module(f"services.{module_name}")
+    client = _workspace_client(tmp_path, profile="full")
+    release = _seed_job_table(module, "job-1", {"workspace": "film", "status": "cancelled"})
+    try:
+        with module._lock:
+            module._processes["job-1"] = object()
+        refused = client.delete("/api/v1/workspaces/film")
+        with module._lock:
+            module._processes.clear()
+        allowed = client.delete("/api/v1/workspaces/film")
+    finally:
+        release()
+    assert refused.status_code == 409, refused.text
+    assert refused.json()["blocking"][0]["status"] == "cancelling"
+    assert allowed.status_code == 200, allowed.text
