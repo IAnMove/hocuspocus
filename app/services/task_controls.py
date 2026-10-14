@@ -14,8 +14,9 @@ never the other way round.
 """
 from __future__ import annotations
 
+import contextlib
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from typing import Any
 
 Handler = Callable[[dict], Any]
@@ -38,6 +39,19 @@ def register(adapter: str, action: str, handler: Handler) -> None:
         raise ValueError("A task control needs an adapter, an action and a callable")
     with _lock:
         _handlers[(name, verb)] = handler
+
+
+@contextlib.contextmanager
+def restored() -> Iterator[None]:
+    """Keep the table as it is and put it back afterwards, dropping what the block registered. Tests only."""
+    with _lock:
+        saved = dict(_handlers)
+    try:
+        yield
+    finally:
+        with _lock:
+            _handlers.clear()
+            _handlers.update(saved)
 
 
 def handler_for(adapter: str, action: str) -> Handler | None:

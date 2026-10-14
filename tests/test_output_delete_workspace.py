@@ -182,11 +182,20 @@ def _assert_refuses_film_then_allows_it(client, tmp_path, kind, release):
     assert not (tmp_path / "film").exists()
 
 
+def _put_editor_job(job_id, workspace, status):
+    """An editor job straight into the registry (``_register_video_editor_job`` would also publish it to whatever
+    Activity publisher an earlier test bound)."""
+    from routers import video_editor
+
+    with video_editor._video_editor_jobs_lock:
+        video_editor._video_editor_jobs[job_id] = {"job_id": job_id, "workspace": workspace, "status": status}
+
+
 def _seed_video_editor(_tmp_path):
-    from routers.video_editor import _register_video_editor_job, reset_video_editor_jobs
+    from routers.video_editor import reset_video_editor_jobs
 
     reset_video_editor_jobs()
-    _register_video_editor_job({"job_id": "export-film", "workspace": "film", "status": "running"})
+    _put_editor_job("export-film", "film", "running")
     return reset_video_editor_jobs
 
 
@@ -484,13 +493,13 @@ def test_delete_workspace_refuses_while_a_family_job_runs_in_it(tmp_path, kind, 
 
 
 def test_a_finished_editor_export_does_not_block_the_delete(tmp_path):
-    from routers.video_editor import _register_video_editor_job, reset_video_editor_jobs
+    from routers.video_editor import reset_video_editor_jobs
 
     client = _workspace_client(tmp_path, profile="full")
     reset_video_editor_jobs()
     try:
         for index, status in enumerate(("completed", "failed", "cancelled")):
-            _register_video_editor_job({"job_id": f"done-{index}", "workspace": "film", "status": status})
+            _put_editor_job(f"done-{index}", "film", status)
         deleted = client.delete("/api/v1/workspaces/film")
     finally:
         reset_video_editor_jobs()

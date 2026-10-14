@@ -115,6 +115,19 @@ def isolated() -> Iterator[None]:
             _probes.update(saved)
 
 
+@contextlib.contextmanager
+def restored() -> Iterator[None]:
+    """Keep the table as it is and put it back afterwards, dropping what the block registered. Tests only."""
+    with _lock:
+        saved = dict(_probes)
+    try:
+        yield
+    finally:
+        with _lock:
+            _probes.clear()
+            _probes.update(saved)
+
+
 def _entry(kind: str, job: Mapping[str, Any]) -> dict[str, str]:
     job_id = job.get("jobId") or job.get("job_id") or job.get("id") or ""
     workspace = job.get("workspace")

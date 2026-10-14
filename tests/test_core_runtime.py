@@ -19,6 +19,11 @@ from services import core_canonical_tasks, core_remote_image
 from services.core_remote_image import catalog_entry
 
 
+# The key core's assembly router registered its controller under when core_runtime was imported
+# (the folder of the default workspace, relative to the directory the tests start in).
+CORE_ASSEMBLY_KEY = os.path.realpath(os.path.abspath(core_runtime.core.workspace_dir("default")))
+
+
 class ImmediateThread:
     def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
         self._target = target
@@ -972,7 +977,7 @@ class CoreRuntimeTests(unittest.TestCase):
             series = self._ready_to_assemble()
             # Assembly controllers are keyed by workspace folder when the router is built. Core's folders are
             # relative to the working directory, which this test moved, so register the temp one the same way.
-            controller = next(iter(series_assembly._ASSEMBLY_CONTROLLERS.values()))
+            controller = series_assembly._ASSEMBLY_CONTROLLERS[CORE_ASSEMBLY_KEY]
             controllers = patch.dict(series_assembly._ASSEMBLY_CONTROLLERS, {
                 os.path.realpath(core.workspace_dir("default")): controller,
             })
@@ -1992,12 +1997,15 @@ class CoreRuntimeTests(unittest.TestCase):
     def test_core_refuses_to_delete_a_workspace_while_a_video_editor_export_is_running(self):
         """DELETE is new on core. A queued export still writes into the folder; deleting it
         would wipe the clips and let workspace_dir resurrect an empty workspace."""
-        from routers.video_editor import _register_video_editor_job, reset_video_editor_jobs
+        from routers import video_editor
 
-        body = self._delete_film_while(
-            lambda: _register_video_editor_job({"job_id": "export-film", "workspace": "film", "status": "queued"}),
-            reset_video_editor_jobs,
-        )
+        def seed():
+            with video_editor._video_editor_jobs_lock:
+                video_editor._video_editor_jobs["export-film"] = {
+                    "job_id": "export-film", "workspace": "film", "status": "queued",
+                }
+
+        body = self._delete_film_while(seed, video_editor.reset_video_editor_jobs)
         self.assertEqual([item["kind"] for item in body["blocking"]], ["video-editor"])
 
     def test_core_refuses_to_delete_a_workspace_while_a_3d_job_is_cancelling_or_waiting(self):
