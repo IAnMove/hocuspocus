@@ -1817,7 +1817,8 @@ def test_film_grain_rewrites_the_file_and_restores_the_decord_bridge(rig, golden
     elif case == "audio mux":
         assert error is None and _file_mark(source) == "muxed" and len(commands) == 3
         assert commands[1][commands[1].index("-vn") + 1:commands[1].index("-vn") + 3] == ["-acodec", "copy"]
-        assert "-shortest" in commands[2] and commands[2][commands[2].index("-c:a") + 1] == "aac"
+        # The own audio goes back without -shortest: it must not cut the picture (frame-exact outputs).
+        assert "-shortest" not in commands[2] and commands[2][commands[2].index("-c:a") + 1] == "aac"
     else:
         assert error is None and _file_mark(source) == "grain" and len(grain) == 1 and len(commands) == 1
     assert bridge_calls == ["torch", "native"] and bridge.current == "native" and _extras(folder, source) == []

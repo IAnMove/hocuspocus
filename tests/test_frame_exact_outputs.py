@@ -16,6 +16,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -209,3 +210,43 @@ def test_the_audio_bound_never_ends_before_the_last_frame(tmp_path, rate, frames
     _run(command)
     assert _frames(muxed) == frames, "Outpaint audio mux (picture copied) with padded source audio"
     assert _audio_seconds(muxed) == pytest.approx(frames / rate, abs=0.1)
+
+
+# -- Film grain and voice clone: the picture is copied, the audio replaced -----------------------------------------
+
+
+def _wav(path: Path, seconds: float) -> str:
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-t", f"{seconds}", "-i",
+                    "sine=frequency=330:sample_rate=22050", str(path)], check=True, capture_output=True)
+    return str(path)
+
+
+def test_voice_clone_keeps_every_frame_when_the_cloned_audio_is_shorter(tmp_path):
+    """The video is copied and the converted voice replaces the audio; ``-shortest`` cut the picture to it."""
+    _ffmpeg_remux_audio = pytest.importorskip("postprocessing.voice_clone")._ffmpeg_remux_audio
+
+    video = _make_clip(tmp_path / "clip.mp4", FRAMES, audio_seconds=FRAMES / FPS)
+    assert _ffmpeg_remux_audio(video, _wav(tmp_path / "cloned.wav", 1.6))
+    assert _frames(video) == FRAMES
+    assert _audio_seconds(video) == pytest.approx(1.6, abs=0.05)
+
+
+def test_film_grain_keeps_every_frame_when_the_clip_audio_ends_before_the_picture(tmp_path, monkeypatch):
+    """Grain re-encodes the picture and puts the clip's own audio back; ``-shortest`` cut the picture to it."""
+    torch = pytest.importorskip("torch")
+    decord = pytest.importorskip("decord")
+    save_video = pytest.importorskip("shared.utils.audio_video").save_video
+    from services import generation_postprocess
+
+    monkeypatch.setattr(generation_postprocess, "wgp", SimpleNamespace(server_config={}))
+    video = _make_clip(tmp_path / "clip.mp4", FRAMES, audio_seconds=1.6)
+    decord.bridge.set_bridge("torch")
+    try:
+        generation_postprocess._apply_film_grain_to_file_impl(
+            video, 0.3, 0.5, torch=torch, decord=decord, add_film_grain=lambda frames, *_args: frames,
+            save_video=save_video,
+        )
+    finally:
+        decord.bridge.set_bridge("native")
+    assert _frames(video) == FRAMES
+    assert _audio_seconds(video) == pytest.approx(1.6, abs=0.05)

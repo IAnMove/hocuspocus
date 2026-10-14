@@ -2376,7 +2376,6 @@
           "copy",
           "-c:a",
           "aac",
-          "-shortest",
           "<PATH>"
         ]
       ],
