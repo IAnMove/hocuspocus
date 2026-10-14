@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the LoRA guide can no longer be written outside the LoRA folder.** Asking for a guide with a file name such as `../../other/real.safetensors` or an absolute path used to write the guide and its CivitAI sidecar next to that path. Generating or reading a guide now answers 400 "Invalid filename" for any name that is not a plain file name, the same rule the LoRA delete already uses.
+
 **Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.
 
 **Storage duplicate tools, the managed LoRA download, model-file helpers, generation option helpers and the request guards left the main server file.** The duplicate scan, reclaim and linked-install removal still answer the same way. A generation still downloads a managed LoRA that is missing, and still reads the same registry. The model list still reports the same weight groups and the same missing image-model files. Prompt types, SCAIL-2 steps and guidance, the output seed and the MiniMax H3 options are still normalised the same way. A policy refusal is still a 409, a browser mutation from another origin is still refused, and a traced mutation is still recorded. LAN authentication is still the first check. The main server file is about 700 lines shorter.
