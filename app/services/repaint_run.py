@@ -1,43 +1,47 @@
 """Repaint shot assembly.
 
 The shot sidecar and the shot-generation worker. The function bodies are the
-launch functions, moved verbatim. Names that still live in launch are
-resolved when a function runs.
+ones that used to live in ``_launch_runtime``. Launch hands this module the
+objects it owns once, through :func:`bind`. The generation worker is defined
+further down in launch and the recast video helpers are leaving it, so launch
+passes forwarders that call its own names when a function runs.
 """
+import os
+import time
+import traceback
 
-from services.repaint_binding import LaunchName, bind_once
-
-_NAMESPACE: list = [None]
-
-# Free globals of the functions below, generated from the AST. The bind
-# completeness test recomputes the set and fails if this tuple drifts.
-_LAUNCH_NAMES = (
-    "_active_gen_states",
-    "_jobs",
-    "_recast_video_frame_count",
-    "_recast_video_has_audio",
-    "_run_generation",
-    "_workspace_dir",
-    "finish_job",
-    "is_cancel_requested",
-    "os",
-    "register_abort_state",
-    "time",
-    "traceback",
-    "unregister_abort_state",
-    "update_job",
-    "wgp",
+from services.job_lifecycle import (
+    finish_job,
+    is_cancel_requested,
+    register_abort_state,
+    unregister_abort_state,
+    update_job,
 )
 
+# Bound by bind(); None until the full server binds them.
+wgp = None
+_jobs = None
+_active_gen_states = None
+_workspace_dir = None
+_recast_video_has_audio = None
+_recast_video_frame_count = None
+_run_generation = None
 
-def bind_repaint_run(namespace: dict) -> None:
-    """Point this module at one launch namespace. A different dict is refused."""
-    bind_once(_NAMESPACE, namespace, "repaint run")
 
-
-for _name in _LAUNCH_NAMES:
-    globals()[_name] = LaunchName(_NAMESPACE, _name)
-del _name
+def bind(
+    *, wgp, jobs, active_gen_states, workspace_dir, recast_video_has_audio, recast_video_frame_count,
+    run_generation,
+):
+    """Take the launch objects this module reads. Launch calls this once, after it defines them."""
+    globals().update(
+        wgp=wgp,
+        _jobs=jobs,
+        _active_gen_states=active_gen_states,
+        _workspace_dir=workspace_dir,
+        _recast_video_has_audio=recast_video_has_audio,
+        _recast_video_frame_count=recast_video_frame_count,
+        _run_generation=run_generation,
+    )
 
 
 def _write_repaint_shot_aware_sidecar(

@@ -6890,28 +6890,118 @@ def _build_recast_shot_manifest(
     }
 
 
+# Repaint: planning, shot assembly, and POST /api/v1/repaint/preview + POST /api/v1/repaint. Each module takes
+# the launch objects it reads once, here. The recast helpers are leaving this module in other PRs, so Repaint
+# gets forwarders that call them by their launch names; the worker and the hardware probe are defined further
+# down (the studio forwarders).
+def _forward_repaint_build_recast_source_scene_reference(*args, **kwargs):
+    return _build_recast_source_scene_reference(*args, **kwargs)
+
+def _forward_repaint_compose_recast_cast_reference_frame(*args, **kwargs):
+    return _compose_recast_cast_reference_frame(*args, **kwargs)
+
+def _forward_repaint_compose_recast_character_masks(*args, **kwargs):
+    return _compose_recast_character_masks(*args, **kwargs)
+
+def _forward_repaint_compose_recast_group_reference_frame(*args, **kwargs):
+    return _compose_recast_group_reference_frame(*args, **kwargs)
+
+def _forward_repaint_detect_recast_shot_ranges(*args, **kwargs):
+    return _detect_recast_shot_ranges(*args, **kwargs)
+
+def _forward_repaint_plan_recast_shot_segments(*args, **kwargs):
+    return _plan_recast_shot_segments(*args, **kwargs)
+
+def _forward_repaint_quantize_recast_shot_frame_count(*args, **kwargs):
+    return _quantize_recast_shot_frame_count(*args, **kwargs)
+
+def _forward_repaint_recolor_recast_reference_mask(*args, **kwargs):
+    return _recolor_recast_reference_mask(*args, **kwargs)
+
+def _forward_repaint_remap_recast_shot_mask(*args, **kwargs):
+    return _remap_recast_shot_mask(*args, **kwargs)
+
+def _forward_repaint_resample_recast_tracking_timeline(*args, **kwargs):
+    return _resample_recast_tracking_timeline(*args, **kwargs)
+
+def _forward_repaint_resize_recast_shot_frames(*args, **kwargs):
+    return _resize_recast_shot_frames(*args, **kwargs)
+
+def _forward_repaint_save_recast_reference_pair(*args, **kwargs):
+    return _save_recast_reference_pair(*args, **kwargs)
+
+def _forward_repaint_summarize_recast_mapping_mask(*args, **kwargs):
+    return _summarize_recast_mapping_mask(*args, **kwargs)
+
+def _forward_repaint_write_recast_shot_video(*args, **kwargs):
+    return _write_recast_shot_video(*args, **kwargs)
+
+def _forward_repaint_recast_video_has_audio(*args, **kwargs):
+    return _recast_video_has_audio(*args, **kwargs)
+
+def _forward_repaint_recast_video_frame_count(*args, **kwargs):
+    return _recast_video_frame_count(*args, **kwargs)
+
+def _forward_repaint_normalize_recast_resolution_profile(*args, **kwargs):
+    return _normalize_recast_resolution_profile(*args, **kwargs)
+
+def _forward_repaint_recast_resolution_for_source(*args, **kwargs):
+    return _recast_resolution_for_source(*args, **kwargs)
+
+def _forward_repaint_recast_window_size_for_profile(*args, **kwargs):
+    return _recast_window_size_for_profile(*args, **kwargs)
+
+def _forward_repaint_resolve_recast_media(*args, **kwargs):
+    return _resolve_recast_media(*args, **kwargs)
+
+
 from services.repaint_planning import (
-    bind_repaint_planning,
-    _normalize_repaint_region_mappings,
-    _repaint_resolution_for_aspect,
-    _validate_repaint_target_aspect,
-    _prepare_repaint_target_frame,
-    _repaint_preview_data_uri,
-    _build_repaint_semantic_conditioning,
-    _build_repaint_shot_prompt,
-    _build_repaint_shot_reference_conditioning,
-    _build_repaint_shot_manifest,
+    _build_repaint_semantic_conditioning, _build_repaint_shot_manifest, _build_repaint_shot_prompt,
+    _build_repaint_shot_reference_conditioning, _normalize_repaint_region_mappings, _prepare_repaint_target_frame,
+    _repaint_preview_data_uri, _repaint_resolution_for_aspect, _validate_repaint_target_aspect,
+    bind as _bind_repaint_planning,
 )
-bind_repaint_planning(globals())
-
-
-from routers.repaint import (
-    create_repaint_router,
-    repaint_preview_endpoint,
-    repaint_endpoint,
+from services.repaint_run import (
+    _run_repaint_shot_generation, _write_repaint_shot_aware_sidecar, bind as _bind_repaint_run,
 )
+from routers.repaint import create_repaint_router, repaint_endpoint, repaint_preview_endpoint
 
-api.include_router(create_repaint_router(globals()))
+_bind_repaint_planning(
+    recast_mask_colors=_RECAST_MASK_COLORS,
+    build_recast_source_scene_reference=_forward_repaint_build_recast_source_scene_reference,
+    compose_recast_cast_reference_frame=_forward_repaint_compose_recast_cast_reference_frame,
+    compose_recast_character_masks=_forward_repaint_compose_recast_character_masks,
+    compose_recast_group_reference_frame=_forward_repaint_compose_recast_group_reference_frame,
+    detect_recast_shot_ranges=_forward_repaint_detect_recast_shot_ranges,
+    plan_recast_shot_segments=_forward_repaint_plan_recast_shot_segments,
+    quantize_recast_shot_frame_count=_forward_repaint_quantize_recast_shot_frame_count,
+    recolor_recast_reference_mask=_forward_repaint_recolor_recast_reference_mask,
+    remap_recast_shot_mask=_forward_repaint_remap_recast_shot_mask,
+    resample_recast_tracking_timeline=_forward_repaint_resample_recast_tracking_timeline,
+    resize_recast_shot_frames=_forward_repaint_resize_recast_shot_frames,
+    save_recast_reference_pair=_forward_repaint_save_recast_reference_pair,
+    summarize_recast_mapping_mask=_forward_repaint_summarize_recast_mapping_mask,
+    write_recast_shot_video=_forward_repaint_write_recast_shot_video,
+)
+_bind_repaint_run(
+    wgp=wgp, jobs=_jobs, active_gen_states=_active_gen_states, workspace_dir=_workspace_dir,
+    recast_video_has_audio=_forward_repaint_recast_video_has_audio,
+    recast_video_frame_count=_forward_repaint_recast_video_frame_count,
+    run_generation=_forward_studio_run_generation,
+)
+api.include_router(create_repaint_router(
+    wgp=wgp, recast_mask_colors=_RECAST_MASK_COLORS, active_gen_states=_active_gen_states,
+    coordinated_generation_slot=_coordinated_generation_slot, generation_job_acceptance=_generation_job_acceptance,
+    get_active_workspace=_get_active_workspace, register_manual_generation_job=_register_manual_generation_job,
+    workspace_dir=_workspace_dir, get_cached_hardware=_forward_studio_cached_hardware,
+    run_generation=_forward_studio_run_generation,
+    normalize_scail2_guidance_scale=_normalize_scail2_guidance_scale,
+    normalize_scail2_inference_steps=_normalize_scail2_inference_steps,
+    normalize_recast_resolution_profile=_forward_repaint_normalize_recast_resolution_profile,
+    recast_resolution_for_source=_forward_repaint_recast_resolution_for_source,
+    recast_window_size_for_profile=_forward_repaint_recast_window_size_for_profile,
+    resolve_recast_media=_forward_repaint_resolve_recast_media,
+))
 
 
 @api.post("/api/v1/recast/preview")
@@ -12728,14 +12818,6 @@ def _run_recast_shot_generation(job_id):
             expected_prefix = "maestro-recast-shots-"
             if os.path.basename(resolved_temp).startswith(expected_prefix):
                 shutil.rmtree(resolved_temp, ignore_errors=True)
-
-
-from services.repaint_run import (
-    bind_repaint_run,
-    _write_repaint_shot_aware_sidecar,
-    _run_repaint_shot_generation,
-)
-bind_repaint_run(globals())
 
 
 def _write_outpaint_shot_aware_sidecar(

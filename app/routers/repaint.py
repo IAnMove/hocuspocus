@@ -1,13 +1,31 @@
 """HTTP routes for Repaint.
 
 POST /api/v1/repaint/preview and POST /api/v1/repaint. The handler bodies are
-the launch functions, moved verbatim. Names that still live in launch are
-resolved when a handler runs.
+the ones that used to live in ``_launch_runtime``; they are the served
+endpoints, so the route table names this file. Launch hands this module the
+objects it owns once, as the arguments of :func:`create_repaint_router`. The
+generation worker and the hardware probe are defined further down in launch
+and the recast helpers are leaving it, so launch passes forwarders that call
+its own names when a handler runs.
 """
+import os
+import threading
+import time
+import traceback
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 
-from services.repaint_binding import LaunchName, bind_once
+from services import execution_mode
+from services.job_lifecycle import (
+    finish_job,
+    is_cancel_requested,
+    register_abort_state,
+    try_requeue,
+    try_start,
+    unregister_abort_state,
+    update_job,
+)
 from services.repaint_planning import (
     _build_repaint_semantic_conditioning,
     _build_repaint_shot_manifest,
@@ -18,51 +36,23 @@ from services.repaint_planning import (
 )
 from services.repaint_run import _run_repaint_shot_generation
 
-_NAMESPACE: list = [None]
-
-# Free globals of the functions below, generated from the AST. The bind
-# completeness test recomputes the set and fails if this tuple drifts.
-_LAUNCH_NAMES = (
-    "_RECAST_MASK_COLORS",
-    "_active_gen_states",
-    "_coordinated_generation_slot",
-    "_generation_job_acceptance",
-    "_get_active_workspace",
-    "_get_cached_hardware",
-    "_normalize_recast_resolution_profile",
-    "_normalize_scail2_guidance_scale",
-    "_normalize_scail2_inference_steps",
-    "_recast_resolution_for_source",
-    "_recast_window_size_for_profile",
-    "_register_manual_generation_job",
-    "_resolve_recast_media",
-    "_run_generation",
-    "_workspace_dir",
-    "execution_mode",
-    "finish_job",
-    "is_cancel_requested",
-    "os",
-    "register_abort_state",
-    "threading",
-    "time",
-    "traceback",
-    "try_requeue",
-    "try_start",
-    "unregister_abort_state",
-    "update_job",
-    "uuid",
-    "wgp",
-)
-
-
-def bind_repaint_routes(namespace: dict) -> None:
-    """Point this module at one launch namespace. A different dict is refused."""
-    bind_once(_NAMESPACE, namespace, "repaint routes")
-
-
-for _name in _LAUNCH_NAMES:
-    globals()[_name] = LaunchName(_NAMESPACE, _name)
-del _name
+# Set by create_repaint_router(); None until the full server mounts the routes.
+wgp = None
+_RECAST_MASK_COLORS = None
+_active_gen_states = None
+_coordinated_generation_slot = None
+_generation_job_acceptance = None
+_get_active_workspace = None
+_get_cached_hardware = None
+_normalize_recast_resolution_profile = None
+_normalize_scail2_guidance_scale = None
+_normalize_scail2_inference_steps = None
+_recast_resolution_for_source = None
+_recast_window_size_for_profile = None
+_register_manual_generation_job = None
+_resolve_recast_media = None
+_run_generation = None
+_workspace_dir = None
 
 
 async def repaint_preview_endpoint(request: Request):
@@ -777,9 +767,32 @@ async def repaint_endpoint(request: Request):
     }
 
 
-def create_repaint_router(namespace: dict) -> APIRouter:
-    """Mount the two Repaint routes and bind them once to launch."""
-    bind_repaint_routes(namespace)
+def create_repaint_router(
+    *, wgp, recast_mask_colors, active_gen_states, coordinated_generation_slot, generation_job_acceptance,
+    get_active_workspace, get_cached_hardware, normalize_recast_resolution_profile, normalize_scail2_guidance_scale,
+    normalize_scail2_inference_steps, recast_resolution_for_source, recast_window_size_for_profile,
+    register_manual_generation_job, resolve_recast_media, run_generation, workspace_dir,
+) -> APIRouter:
+    """Mount the two Repaint routes, preview then repaint. Launch calls this once; it is the one place this module
+    takes launch objects."""
+    globals().update(
+        wgp=wgp,
+        _RECAST_MASK_COLORS=recast_mask_colors,
+        _active_gen_states=active_gen_states,
+        _coordinated_generation_slot=coordinated_generation_slot,
+        _generation_job_acceptance=generation_job_acceptance,
+        _get_active_workspace=get_active_workspace,
+        _get_cached_hardware=get_cached_hardware,
+        _normalize_recast_resolution_profile=normalize_recast_resolution_profile,
+        _normalize_scail2_guidance_scale=normalize_scail2_guidance_scale,
+        _normalize_scail2_inference_steps=normalize_scail2_inference_steps,
+        _recast_resolution_for_source=recast_resolution_for_source,
+        _recast_window_size_for_profile=recast_window_size_for_profile,
+        _register_manual_generation_job=register_manual_generation_job,
+        _resolve_recast_media=resolve_recast_media,
+        _run_generation=run_generation,
+        _workspace_dir=workspace_dir,
+    )
     router = APIRouter()
     router.add_api_route(
         "/api/v1/repaint/preview",

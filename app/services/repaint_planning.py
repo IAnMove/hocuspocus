@@ -2,45 +2,57 @@
 
 Region normalisation, the aspect check, the edited frame, semantic and
 reference conditioning, the shot prompt and the shot manifest. The function
-bodies are the launch functions, moved verbatim. Names that still live in
-launch are resolved when a function runs.
+bodies are the ones that used to live in ``_launch_runtime``. Launch hands
+this module the recast mask colours and the recast helpers once, through
+:func:`bind`. The recast helpers are leaving launch in other PRs, so launch
+passes forwarders that call its own names when a function runs.
 """
+import os
+import uuid
 
-from services.repaint_binding import LaunchName, bind_once
-
-_NAMESPACE: list = [None]
-
-# Free globals of the functions below, generated from the AST. The bind
-# completeness test recomputes the set and fails if this tuple drifts.
-_LAUNCH_NAMES = (
-    "_RECAST_MASK_COLORS",
-    "_build_recast_source_scene_reference",
-    "_compose_recast_cast_reference_frame",
-    "_compose_recast_character_masks",
-    "_compose_recast_group_reference_frame",
-    "_detect_recast_shot_ranges",
-    "_plan_recast_shot_segments",
-    "_quantize_recast_shot_frame_count",
-    "_recolor_recast_reference_mask",
-    "_remap_recast_shot_mask",
-    "_resample_recast_tracking_timeline",
-    "_resize_recast_shot_frames",
-    "_save_recast_reference_pair",
-    "_summarize_recast_mapping_mask",
-    "_write_recast_shot_video",
-    "os",
-    "uuid",
-)
+# Bound by bind(); None until the full server binds them.
+_RECAST_MASK_COLORS = None
+_build_recast_source_scene_reference = None
+_compose_recast_cast_reference_frame = None
+_compose_recast_character_masks = None
+_compose_recast_group_reference_frame = None
+_detect_recast_shot_ranges = None
+_plan_recast_shot_segments = None
+_quantize_recast_shot_frame_count = None
+_recolor_recast_reference_mask = None
+_remap_recast_shot_mask = None
+_resample_recast_tracking_timeline = None
+_resize_recast_shot_frames = None
+_save_recast_reference_pair = None
+_summarize_recast_mapping_mask = None
+_write_recast_shot_video = None
 
 
-def bind_repaint_planning(namespace: dict) -> None:
-    """Point this module at one launch namespace. A different dict is refused."""
-    bind_once(_NAMESPACE, namespace, "repaint planning")
-
-
-for _name in _LAUNCH_NAMES:
-    globals()[_name] = LaunchName(_NAMESPACE, _name)
-del _name
+def bind(
+    *, recast_mask_colors, build_recast_source_scene_reference, compose_recast_cast_reference_frame,
+    compose_recast_character_masks, compose_recast_group_reference_frame, detect_recast_shot_ranges,
+    plan_recast_shot_segments, quantize_recast_shot_frame_count, recolor_recast_reference_mask,
+    remap_recast_shot_mask, resample_recast_tracking_timeline, resize_recast_shot_frames,
+    save_recast_reference_pair, summarize_recast_mapping_mask, write_recast_shot_video,
+):
+    """Take the launch objects this module reads. Launch calls this once, after it defines them."""
+    globals().update(
+        _RECAST_MASK_COLORS=recast_mask_colors,
+        _build_recast_source_scene_reference=build_recast_source_scene_reference,
+        _compose_recast_cast_reference_frame=compose_recast_cast_reference_frame,
+        _compose_recast_character_masks=compose_recast_character_masks,
+        _compose_recast_group_reference_frame=compose_recast_group_reference_frame,
+        _detect_recast_shot_ranges=detect_recast_shot_ranges,
+        _plan_recast_shot_segments=plan_recast_shot_segments,
+        _quantize_recast_shot_frame_count=quantize_recast_shot_frame_count,
+        _recolor_recast_reference_mask=recolor_recast_reference_mask,
+        _remap_recast_shot_mask=remap_recast_shot_mask,
+        _resample_recast_tracking_timeline=resample_recast_tracking_timeline,
+        _resize_recast_shot_frames=resize_recast_shot_frames,
+        _save_recast_reference_pair=save_recast_reference_pair,
+        _summarize_recast_mapping_mask=summarize_recast_mapping_mask,
+        _write_recast_shot_video=write_recast_shot_video,
+    )
 
 
 def _normalize_repaint_region_mappings(raw_mappings):

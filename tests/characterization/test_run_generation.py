@@ -109,10 +109,16 @@ POSTFX_MODULES = {
 }
 
 
+# Repaint (C6): the modules that took their launch objects, which they read under the launch names.
+REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
+
+
 def worker_modules() -> list:
-    """The modules whose globals the worker and its post-processing passes read: the full server module, and each
-    module the passes moved to once it exists. A name the passes read is an attribute of every module that reads it."""
-    return [worker_module(), *[sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]]
+    """The modules whose globals the worker, its post-processing passes and the routes that start it read: the full
+    server module, and each module that code moved to once it exists. A name they read is an attribute of every module
+    that reads it."""
+    moved = (*POSTFX_MODULES, *REPAINT_MODULES)
+    return [worker_module(), *[sys.modules[name] for name in moved if name in sys.modules]]
 
 
 @dataclass
@@ -364,7 +370,8 @@ def rig(server, clip, tmp_path, monkeypatch):
         state.returned[job_id] = result
         return result
 
-    monkeypatch.setattr(launch, "_run_generation", run_generation)
+    # Every module that holds the worker sees the wrapper, so a route that starts it names the thread after it.
+    state.patch("_run_generation", run_generation)
     clear_queue()
     job_lifecycle.set_job_state_observer(record)
     yield state

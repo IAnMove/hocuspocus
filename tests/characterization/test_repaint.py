@@ -286,109 +286,147 @@ def test_openapi_text_of_the_repaint_routes(server, golden) -> None:
     golden.check("openapi", 200, snapshot)
 
 
-# -- The wiring the move added --------------------------------------------------------------------------
-# Each Repaint module is bound once, to launch's own globals. A proxy reads that dict when the function
-# runs, so a patch of the launch name is what the moved function calls. A second bind to another dict
-# is refused and leaves the first one in place.
+# -- The wiring the move added (C6 review) ---------------------------------------------------------------------------
+# Each Repaint module imports the standard library, execution_mode and the job lifecycle itself, and takes the launch
+# objects it reads (wgp, the job registry and states, the workspace and job helpers, the mask colours, the recast and
+# SCAIL-2 helpers) from one bind() (services) or its router factory, which launch calls once. The recast helpers are
+# leaving launch in other PRs, and the generation worker and the hardware probe are defined further down, so those
+# slots hold launch's forwarders, which look the launch name up when they are called. A slot left at None, bound to a
+# copy or to another function, or a forwarder that captured its target at bind time would only show on the branch that
+# reads it, so every global each moved function reads is compared here with the object launch holds under that name
+# (or launch's forwarder for it), where the function read it before the move.
+_C6_EXPORTS = {
+    "services.repaint_planning": (
+        "_normalize_repaint_region_mappings", "_repaint_resolution_for_aspect", "_validate_repaint_target_aspect",
+        "_prepare_repaint_target_frame", "_repaint_preview_data_uri", "_build_repaint_semantic_conditioning",
+        "_build_repaint_shot_prompt", "_build_repaint_shot_reference_conditioning", "_build_repaint_shot_manifest",
+    ),
+    "services.repaint_run": ("_write_repaint_shot_aware_sidecar", "_run_repaint_shot_generation"),
+    "routers.repaint": ("create_repaint_router", "repaint_preview_endpoint", "repaint_endpoint"),
+}
+# Launch names a slot reaches through a forwarder, and the forwarder launch passes for each.
+_C6_FORWARDERS = {
+    "_run_generation": "_forward_studio_run_generation",
+    "_get_cached_hardware": "_forward_studio_cached_hardware",
+    **{name: f"_forward_repaint{name}" for name in (
+        "_build_recast_source_scene_reference", "_compose_recast_cast_reference_frame",
+        "_compose_recast_character_masks", "_compose_recast_group_reference_frame", "_detect_recast_shot_ranges",
+        "_plan_recast_shot_segments", "_quantize_recast_shot_frame_count", "_recolor_recast_reference_mask",
+        "_remap_recast_shot_mask", "_resample_recast_tracking_timeline", "_resize_recast_shot_frames",
+        "_save_recast_reference_pair", "_summarize_recast_mapping_mask", "_write_recast_shot_video",
+        "_recast_video_frame_count", "_recast_video_has_audio", "_normalize_recast_resolution_profile",
+        "_recast_resolution_for_source", "_recast_window_size_for_profile", "_resolve_recast_media",
+    )},
+}
 
-_PLANNING_EXPORTS = (
-    "bind_repaint_planning",
-    "_normalize_repaint_region_mappings",
-    "_repaint_resolution_for_aspect",
-    "_validate_repaint_target_aspect",
-    "_prepare_repaint_target_frame",
-    "_repaint_preview_data_uri",
-    "_build_repaint_semantic_conditioning",
-    "_build_repaint_shot_prompt",
-    "_build_repaint_shot_reference_conditioning",
-    "_build_repaint_shot_manifest",
-)
+
+def _global_reads(function) -> set[str]:
+    """The global names a function (and the functions nested in it) reads, from its source."""
+    import inspect
+    import symtable
+    import textwrap
+
+    names: set[str] = set()
+
+    def walk(scope) -> None:
+        names.update(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_global() and symbol.is_referenced())
+        for child in scope.get_children():
+            walk(child)
+
+    for scope in symtable.symtable(textwrap.dedent(inspect.getsource(function)), "<moved>", "exec").get_children():
+        walk(scope)
+    return names
 
 
-def _repaint_runtime_modules():
+def _bound_slots(module) -> set[str]:
+    """The module-level ``NAME = None`` placeholders that bind() or the router factory fills."""
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    return {target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)}
+
+
+def test_repaint_modules_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    import builtins
     import importlib
-
-    modules = [importlib.import_module("services.repaint_planning")]
-    try:
-        modules.append(importlib.import_module("services.repaint_run"))
-    except ModuleNotFoundError:
-        pass
-    try:
-        modules.append(importlib.import_module("routers.repaint"))
-    except ModuleNotFoundError:
-        pass
-    return modules
-
-
-def test_repaint_modules_read_the_objects_launch_gave_them(full_server, monkeypatch) -> None:
-    from services.repaint_binding import LaunchName
+    import inspect
 
     del full_server
     launch = worker_module()
-    modules = _repaint_runtime_modules()
-    planning = modules[0]
-    for module in modules:
-        assert module._NAMESPACE[0] is vars(launch), module.__name__
-        for name in module._LAUNCH_NAMES:
-            proxy = getattr(module, name)
-            assert isinstance(proxy, LaunchName), f"{module.__name__}.{name} is not a launch proxy"
-            assert proxy.resolve() is getattr(launch, name), f"{module.__name__}.{name} is not launch.{name}"
-    for name in _PLANNING_EXPORTS:
-        assert getattr(launch, name) is getattr(planning, name), name
+    compared: set[str] = set()
+    slots: set[str] = set()
+    for module_name, exported in _C6_EXPORTS.items():
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        for name in exported:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        own = {name for name, value in namespace.items()
+               if inspect.isfunction(value) and value.__module__ == module_name}
+        for function_name in sorted(own - {"bind", "create_repaint_router"}):
+            for name in sorted(_global_reads(namespace[function_name])):
+                if name in own:
+                    continue  # a helper that moved with it
+                if name not in namespace:
+                    assert hasattr(builtins, name), f"{module_name}.{function_name} reads {name}, which is not defined"
+                    continue
+                expected = vars(launch)[_C6_FORWARDERS.get(name, name)]
+                assert namespace[name] is expected, f"{module_name}.{name} is not the object launch holds"
+                compared.add(name)
+        module_slots = _bound_slots(module)
+        assert module_slots, module_name
+        for name in module_slots:
+            assert namespace[name] is not None, f"{module_name}.{name} was never bound"
+        slots |= module_slots
+    assert slots <= compared
+    # Generated from the AST: every global the moved functions read, other than the ones that moved with them.
+    assert compared == {
+        "os", "uuid", "time", "traceback", "threading", "HTTPException", "execution_mode", "wgp",
+        "finish_job", "is_cancel_requested", "register_abort_state", "unregister_abort_state", "update_job",
+        "try_start", "try_requeue", "_jobs", "_active_gen_states", "_coordinated_generation_slot",
+        "_generation_job_acceptance", "_get_active_workspace", "_register_manual_generation_job", "_workspace_dir",
+        "_RECAST_MASK_COLORS", "_normalize_scail2_guidance_scale", "_normalize_scail2_inference_steps",
+        "_normalize_repaint_region_mappings", "_validate_repaint_target_aspect", "_prepare_repaint_target_frame",
+        "_repaint_preview_data_uri", "_build_repaint_semantic_conditioning", "_build_repaint_shot_manifest",
+        "_run_repaint_shot_generation", *_C6_FORWARDERS,
+    }
+    router = importlib.import_module("routers.repaint")
+    run = importlib.import_module("services.repaint_run")
+    # The abort registry the route and the shot worker write is the one the job kernel owns, not a copy.
+    assert router._active_gen_states is launch.ctx.jobs.active_states
+    assert run._active_gen_states is launch.ctx.jobs.active_states
+    assert run._jobs is launch.ctx.jobs.registry
+    # The hardware probe stays in launch and reads launch's cache when the route calls it.
+    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
+    assert router._get_cached_hardware() == {"gpu_vram_gb": 7.0}
 
-    sentinel = ("slot-color",)
-    monkeypatch.setattr(launch, "_RECAST_MASK_COLORS", sentinel)
-    colors = planning._RECAST_MASK_COLORS
-    assert colors.resolve() is sentinel
-    assert len(colors) == 1 and colors[0] == "slot-color" and colors[:1] == sentinel
-    assert bool(colors) is True
+    # Each forwarder calls whatever launch holds under the name when it is called, not what it held at bind.
+    for name, forwarder in sorted(_C6_FORWARDERS.items()):
+        calls: list = []
+        monkeypatch.setattr(launch, name, lambda *args, _seen=calls, _name=name, **kwargs:
+                            _seen.append([_name, args, kwargs]) or _name)
+        # The hardware probe takes no arguments; every other forwarder passes its arguments through.
+        args, kwargs = ((), {}) if name == "_get_cached_hardware" else (("a",), {"key": "b"})
+        assert getattr(launch, forwarder)(*args, **kwargs) == name, forwarder
+        assert calls == [[name, args, kwargs]], forwarder
+    for module in (router, run):
+        assert module._run_generation("job-1", finalize=False) == "_run_generation"
+    # Python names a route's worker thread from the target, so the forwarder keeps the worker's name.
+    assert router._run_generation.__name__ == "_run_generation"
 
-    seen: list[str] = []
 
-    def _patched(*_args, **_kwargs):
-        seen.append("called")
-        return "patched"
-
-    monkeypatch.setattr(launch, "_detect_recast_shot_ranges", _patched)
-    assert planning._detect_recast_shot_ranges(None) == "patched"
-    assert seen == ["called"]
-    assert planning._detect_recast_shot_ranges.__name__ == "_patched"
-
-    with pytest.raises(RuntimeError, match="already bound"):
-        planning.bind_repaint_planning({})
-    assert planning._NAMESPACE[0] is vars(launch)
-
-    run = next(module for module in modules if module.__name__ == "services.repaint_run")
-    for name in (
-        "bind_repaint_run",
-        "_write_repaint_shot_aware_sidecar",
-        "_run_repaint_shot_generation",
-    ):
-        assert getattr(launch, name) is getattr(run, name), name
-
-    def _generation(*args, **kwargs):
-        return ("generation", args, kwargs)
-
-    monkeypatch.setattr(launch, "_run_generation", _generation)
-    assert run._run_generation("job", finalize=False) == ("generation", ("job",), {"finalize": False})
-    assert run._run_generation.__name__ == "_generation"
-    with pytest.raises(RuntimeError, match="already bound"):
-        run.bind_repaint_run({})
-    assert run._NAMESPACE[0] is vars(launch)
-
-    router = next(module for module in modules if module.__name__ == "routers.repaint")
-    for name in ("create_repaint_router", "repaint_preview_endpoint", "repaint_endpoint"):
-        assert getattr(launch, name) is getattr(router, name), name
-    assert router._run_generation("job-9") == ("generation", ("job-9",), {})
-    assert router._run_generation.__name__ == "_generation"
-    holder: dict = {}
-    monkeypatch.setattr(launch, "_active_gen_states", holder)
-    states = router._active_gen_states
-    states["job-9"] = {"abort": False}
-    assert holder == {"job-9": {"abort": False}}
-    assert "job-9" in states
-    del states["job-9"]
-    assert holder == {}
-    with pytest.raises(RuntimeError, match="already bound"):
-        router.bind_repaint_routes({})
-    assert router._NAMESPACE[0] is vars(launch)
+def test_a_launch_name_the_rig_patches_reaches_the_repaint_route(rig, monkeypatch) -> None:
+    """Before the move a patch of a launch name reached the route. The rig patches every module that holds the name
+    (``worker_modules()``), so the moved route still reads the patched object."""
+    _probe_as(monkeypatch)
+    _install_scail(rig)
+    folder = rig.server.root
+    video = _present(folder, "source.mp4")
+    matching = _frame(folder, "frame.png", (96, 64))
+    rig.patch("_get_active_workspace", lambda: "patched-workspace")
+    status, answer = _submit(rig, "/api/v1/repaint", {"video_path": video, "target_frame_path": matching, "seed": 1})
+    _join_repaint_workers()
+    assert status == 200, answer
+    assert rig.launch._jobs[answer["job_id"]]["workspace"] == "patched-workspace"

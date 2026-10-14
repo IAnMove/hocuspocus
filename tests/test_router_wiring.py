@@ -23,8 +23,6 @@ from collections import Counter
 from pathlib import Path
 from types import SimpleNamespace
 
-import pytest
-
 from scripts.architecture_contracts import ROOT, ROUTE_FIXTURE, _decorated_routes, _router_factory_routes
 
 
@@ -379,112 +377,133 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
         assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
 
 
-def _repaint_modules_with_bind_lists() -> list[Path]:
-    """Service and router modules that read launch names through a generated list."""
-    found = [
-        path for path in sorted((APP / "services").glob("repaint_*.py"))
-        if path.name != "repaint_binding.py"
-    ]
-    router = APP / "routers" / "repaint.py"
-    if router.is_file():
-        found.append(router)
-    return found
+# Repaint (C6): each module takes the launch objects it reads from one keyword-only function, bind() for a service and
+# the router factory for the router, which launch calls once. Launch's call is the bind list, and the list is the
+# module's free names; nothing here is written by hand.
+C6_BINDERS = {
+    APP / "services" / "repaint_planning.py": ("bind", "_bind_repaint_planning"),
+    APP / "services" / "repaint_run.py": ("bind", "_bind_repaint_run"),
+    APP / "routers" / "repaint.py": ("create_repaint_router", "create_repaint_router"),
+}
 
 
-def _statically_bound_module_names(tree: ast.AST) -> set[str]:
-    """Names a module binds in a way symtable can see: imports, defs, and assignments.
-
-    ``globals()[name] = ...`` is not one of these. A launch proxy installed that way stays free,
-    so the bind list has to name it.
-    """
-    bound: set[str] = set()
-
-    def target(node: ast.AST) -> None:
-        if isinstance(node, ast.Name):
-            bound.add(node.id)
-        elif isinstance(node, (ast.Tuple, ast.List)):
-            for item in node.elts:
-                target(item)
-
-    for node in tree.body:  # type: ignore[attr-defined]
-        if isinstance(node, (ast.Import, ast.ImportFrom)):
-            for alias in node.names:
-                if alias.name == "*":
-                    continue
-                bound.add(alias.asname or alias.name.split(".")[0])
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            bound.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for item in node.targets:
-                target(item)
-        elif isinstance(node, ast.AnnAssign):
-            target(node.target)
-        elif isinstance(node, (ast.For, ast.AsyncFor)):
-            target(node.target)
-    return bound
+def _placeholders(tree: ast.Module) -> set[str]:
+    """Module-level ``NAME = None``: the slots the binder fills."""
+    return {target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)}
 
 
-def _free_globals_of_functions(path: Path) -> set[str]:
-    """Globals the functions of ``path`` read that the module does not itself define."""
-    source = path.read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    bound = _statically_bound_module_names(tree)
-    table = symtable.symtable(source, str(path), "exec")
-    free: set[str] = set()
+def _free_reads(path: Path, skip: set[str]) -> set[str]:
+    """Global names the module's functions read (nested functions included), other than ``skip``'s."""
+    top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+    names: set[str] = set()
 
-    def walk(child: symtable.SymbolTable) -> None:
-        if child.get_type() == "function":
-            for symbol in child.get_symbols():
-                name = symbol.get_name()
-                if (
-                    symbol.is_global() and symbol.is_referenced() and not symbol.is_declared_global()
-                    and name not in bound and not hasattr(builtins, name) and not name.startswith("__")
-                ):
-                    free.add(name)
-        for nested in child.get_children():
-            walk(nested)
+    def walk(table: symtable.SymbolTable) -> None:
+        names.update(item.get_name() for item in table.get_symbols() if item.is_global() and item.is_referenced())
+        for child in table.get_children():
+            walk(child)
 
-    walk(table)
-    return free
+    for child in top.get_children():
+        if child.get_name() not in skip:
+            walk(child)
+    return {name for name in names if not hasattr(builtins, name)}
 
 
-def _declared_launch_names(path: Path) -> tuple[str, ...]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
+def _module_bindings(tree: ast.Module) -> dict[str, list[int]]:
+    """The lines at which a module statement binds each name (def, class, assignment, import)."""
+    lines: dict[str, list[int]] = {}
     for node in tree.body:
-        if not isinstance(node, ast.Assign):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names = [node.name]
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [(alias.asname or alias.name).split(".")[0] for alias in node.names]
+        elif isinstance(node, ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        else:
             continue
-        if not any(isinstance(target, ast.Name) and target.id == "_LAUNCH_NAMES" for target in node.targets):
-            continue
-        if not isinstance(node.value, ast.Tuple) or not all(isinstance(item, ast.Constant) and isinstance(item.value, str) for item in node.value.elts):
-            raise AssertionError(f"{path.name} must declare _LAUNCH_NAMES as a tuple of strings")
-        return tuple(item.value for item in node.value.elts)
-    raise AssertionError(f"{path.name} does not declare _LAUNCH_NAMES")
+        for name in names:
+            lines.setdefault(name, []).append(node.lineno)
+    return lines
 
 
-def test_repaint_bind_lists_are_exactly_the_free_globals() -> None:
-    """The bind list is generated. A name the functions read, or one they no longer read, fails this."""
-    modules = _repaint_modules_with_bind_lists()
-    assert modules, "Repaint modules with a bind list"
-    for path in modules:
-        declared = _declared_launch_names(path)
-        free = _free_globals_of_functions(path)
-        assert declared == tuple(sorted(declared)), f"{path.name} _LAUNCH_NAMES is not sorted"
-        assert len(declared) == len(set(declared)), f"{path.name} _LAUNCH_NAMES has a duplicate"
-        assert declared == tuple(sorted(free)), (
-            f"{path.name} bind list drifted: missing {sorted(free.difference(declared))}, "
-            f"extra {sorted(set(declared).difference(free))}"
+def _forwarded_name(function: ast.FunctionDef) -> str | None:
+    """``NAME`` when the def only calls it: ``def f(*args, **kwargs): return NAME(*args, **kwargs)``, or
+    ``def f(): return NAME()``, with an optional docstring."""
+    body = [node for node in function.body
+            if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant))]
+    arguments = function.args
+    if (len(body) != 1 or not isinstance(body[0], ast.Return) or not isinstance(body[0].value, ast.Call)
+            or not isinstance(body[0].value.func, ast.Name)
+            or arguments.posonlyargs or arguments.args or arguments.kwonlyargs):
+        return None
+    call = body[0].value
+    if not arguments.vararg and not arguments.kwarg:
+        passes_through = not call.args and not call.keywords
+    else:
+        passes_through = (
+            arguments.vararg is not None and arguments.kwarg is not None
+            and len(call.args) == 1 and isinstance(call.args[0], ast.Starred)
+            and getattr(call.args[0].value, "id", "") == arguments.vararg.arg
+            and len(call.keywords) == 1 and call.keywords[0].arg is None
+            and getattr(call.keywords[0].value, "id", "") == arguments.kwarg.arg
         )
+    return call.func.id if passes_through else None
 
 
-def test_repaint_bind_once_refuses_a_different_namespace() -> None:
-    """A second bind cannot hide a wrong first one. The same dict may be bound again."""
-    from services.repaint_binding import bind_once
+def test_repaint_modules_take_every_launch_object_once() -> None:
+    launch = _parse(MAIN)
+    launch_lines = _module_bindings(launch)
+    launch_defs = {node.name: node for node in launch.body if isinstance(node, ast.FunctionDef)}
+    # A name a launch function rebinds with ``global`` would leave the module holding the old object.
+    rebound = {name for node in ast.walk(launch) if isinstance(node, ast.Global) for name in node.names}
+    for path, (binder_name, launch_name) in C6_BINDERS.items():
+        source = path.read_text(encoding="utf-8")
+        # String annotations can change how FastAPI reads a route's body.
+        assert "from __future__ import annotations" not in source, path.name
+        assert _undefined_global_names(path) == {}, path.name
+        tree = _parse(path)
+        binders = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == binder_name]
+        assert len(binders) == 1, path.name
+        binder = binders[0]
+        assert not binder.args.args and not binder.args.vararg and not binder.args.kwarg, path.name
+        params = {arg.arg for arg in binder.args.kwonlyargs}
+        updates = [node for node in ast.walk(binder) if isinstance(node, ast.Call)
+                   and isinstance(node.func, ast.Attribute) and node.func.attr == "update"
+                   and isinstance(node.func.value, ast.Call) and getattr(node.func.value.func, "id", "") == "globals"]
+        assert len(updates) == 1, path.name
+        slots = {keyword.arg: keyword.value.id for keyword in updates[0].keywords}
+        assert set(slots.values()) == params, path.name
+        assert set(slots) == _placeholders(tree), path.name
+        # The slots are exactly the names the moved functions read and the module neither defines nor imports.
+        defined = set(_module_bindings(tree)) - _placeholders(tree)
+        reads = _free_reads(path, {binder_name})
+        assert reads - defined == set(slots), path.name
 
-    holder: list[dict | None] = [None]
-    first = {"kept": True}
-    bind_once(holder, first, "probe")
-    bind_once(holder, first, "probe")
-    assert holder[0] is first
-    with pytest.raises(RuntimeError, match="already bound"):
-        bind_once(holder, {}, "probe")
-    assert holder[0] is first
+        # Launch calls the binder once, by keyword, with every parameter, after each value exists.
+        calls = [node for node in ast.walk(launch) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == launch_name]
+        assert len(calls) == 1, launch_name
+        call = calls[0]
+        assert not call.args and {keyword.arg for keyword in call.keywords} == params, launch_name
+        slot_of = {param: slot for slot, param in slots.items()}
+        for keyword in call.keywords:
+            assert isinstance(keyword.value, ast.Name), (launch_name, keyword.arg)
+            value = keyword.value.id
+            # Defined above the call and never bound again; a later name needs a forwarder.
+            assert max(launch_lines[value]) < call.lineno, (launch_name, value)
+            assert value not in rebound, (launch_name, value)
+            # The slot holds launch's object of the same name, or a forwarder that calls that name.
+            slot = slot_of[keyword.arg]
+            if value != slot:
+                assert value in launch_defs and _forwarded_name(launch_defs[value]) == slot, (launch_name, value)
+
+
+def test_repaint_forwarders_only_forward() -> None:
+    """Every Repaint forwarder in launch passes its arguments to the launch name it is named after."""
+    launch = _parse(MAIN)
+    forwarders = [node for node in launch.body
+                  if isinstance(node, ast.FunctionDef) and node.name.startswith("_forward_repaint_")]
+    assert forwarders
+    for node in forwarders:
+        assert _forwarded_name(node) == node.name[len("_forward_repaint"):], node.name
