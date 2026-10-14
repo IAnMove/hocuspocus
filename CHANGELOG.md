@@ -8,6 +8,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **The generation worker left the main server file, split into small steps (no behaviour change).** One function used to run every picture, video, speech and sound job on the full server, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits into `app/services/generation_worker/`, so a job does the same things in the same order and ends the same way on a cancel or an error, and every route that starts a job still calls the same `_run_generation`. The main server file is about 1,800 lines shorter. The server hands the new package its own objects once, at start-up.
 
+**SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.
+
+**Edit-anything and inpaint left the launch module.** POST /api/v1/edit-anything and POST /api/v1/inpaint still answer the same way.
+
+**Retake and frame extraction left the launch module.** POST /api/v1/retake and POST /api/v1/extract-frames still answer the same way.
+
+**Submitting a generation left the launch module.** POST /api/v1/generate still answers the same way. A Viggle recast, a series shot and MCP still call that same function.
+
 **LoRA guide generation left the launch module.** Asking for a guide, starting a scan, and reading a scan that does not exist still answer the same way. Generating a guide still needs a loaded language model. The scan registry stays one object.
 
 **The LoRA library left the launch module.** The directory list, the installed LoRAs, a model's LoRA list and details, deleting a file, and the NSFW override still answer the same way. The update manifest still answers the same way.
