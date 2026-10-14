@@ -54,6 +54,78 @@ def test_wizard_persistence_round_trip(server, golden) -> None:
     server.check(golden, "wizard workflows loaded", "GET", "/api/v1/wizard/workflows")
 
 
+def test_storage_duplicates_scan_reclaim_and_linked_removal(server, golden, tmp_path, monkeypatch) -> None:
+    """Duplicate scan, reclaim and linked-removal guards. No weights are downloaded.
+
+    The scan reads whatever ``wgp.fl`` and the LoRA root say. Both are pointed
+    at empty-or-fixture folders under this test, so the answer does not depend
+    on the machine's model folders.
+    """
+    primary = tmp_path / "install-a" / "app" / "ckpts"
+    linked = tmp_path / "install-b" / "app" / "ckpts"
+    loras = tmp_path / "loras"
+    primary.mkdir(parents=True)
+    linked.mkdir(parents=True)
+    loras.mkdir()
+    payload = b"w" * (10 * 1024 * 1024)
+    (primary / "same.safetensors").write_bytes(payload)
+    (linked / "same.safetensors").write_bytes(payload)
+    (primary / "clash.safetensors").write_bytes(b"aaa")
+    (linked / "clash.safetensors").write_bytes(b"bbbb")
+    linked_app = str(linked.parent)
+
+    class _Files:
+        def get_checkpoints_paths(self):
+            return [str(primary), str(linked)]
+
+        def is_external_root(self, root):
+            return os.path.abspath(root) == str(linked)
+
+        def is_protected_path(self, path):
+            if not path:
+                return False
+            candidate = os.path.abspath(path)
+            try:
+                return os.path.commonpath([candidate, linked_app]) == linked_app
+            except ValueError:
+                return False
+
+    monkeypatch.setattr(server.wgp, "fl", _Files(), raising=False)
+    monkeypatch.setitem(server.wgp.server_config, "loras_root", str(loras))
+
+    same_primary = str(primary / "same.safetensors")
+    same_linked = str(linked / "same.safetensors")
+    server.check(golden, "storage duplicates", "GET", "/api/v1/storage/duplicates")
+    server.check(
+        golden, "reclaim missing path", "POST", "/api/v1/storage/duplicates/reclaim", json={"path": ""},
+    )
+    server.check(
+        golden, "reclaim absent file", "POST", "/api/v1/storage/duplicates/reclaim",
+        json={"path": str(primary / "nope.safetensors")},
+    )
+    server.check(
+        golden, "reclaim a linked file", "POST", "/api/v1/storage/duplicates/reclaim",
+        json={"path": same_linked},
+    )
+    server.check(
+        golden, "remove linked while disabled", "POST", "/api/v1/storage/duplicates/remove-linked",
+        json={"path": same_linked},
+    )
+    services = server.wgp.server_config["services"]
+    monkeypatch.setitem(services, "storage_allow_linked_removal", True)
+    server.check(
+        golden, "remove linked duplicate", "POST", "/api/v1/storage/duplicates/remove-linked",
+        json={"path": same_linked},
+    )
+    assert (linked / "same.safetensors").is_file()
+    server.check(
+        golden, "reclaim primary duplicate", "POST", "/api/v1/storage/duplicates/reclaim",
+        json={"path": same_primary},
+    )
+    assert not (primary / "same.safetensors").is_file()
+    assert (linked / "same.safetensors").is_file()
+
+
 def test_storage_usage_reads_sidecars_and_workspace_sizes(server, golden) -> None:
     """Storage usage joins generation sidecars with the bytes in each workspace."""
     (server.outputs / "clip.meta.json").write_text(
