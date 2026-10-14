@@ -161,7 +161,12 @@
           "_run_blend_generation"
         ]
       },
-      "base params that are not a dict": "dictionary update sequence element #0 has length 1; 2 is required",
+      "base params that are not a dict": {
+        "answer": {
+          "detail": "base_params must be an object"
+        },
+        "status": 422
+      },
       "clip A too small": {
         "answer": {
           "detail": "Clip A resolution too small: 16x40"
@@ -261,10 +266,14 @@
         true,
         true,
         false,
-        true,
-        false
+        true
       ],
-      "text overlap": "could not convert string to float: 'long'",
+      "text overlap": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 422
+      },
       "the body beats inherited settings": {
         "answer": {
           "frames": 25,
@@ -683,6 +692,104 @@
           "_run_blend_generation"
         ]
       }
+    },
+    "status": 200
+  },
+  "blend refuses values that are not numbers": {
+    "body": {
+      "a number inherited from base_params": {
+        "answer": {
+          "detail": "guidance_scale must be a number"
+        },
+        "status": 422
+      },
+      "anchor_frames": {
+        "answer": {
+          "detail": "anchor_frames must be a whole number"
+        },
+        "status": 422
+      },
+      "anchor_frames fraction as text": {
+        "answer": {
+          "detail": "anchor_frames must be a whole number"
+        },
+        "status": 422
+      },
+      "base_params is a list": {
+        "answer": {
+          "detail": "base_params must be an object"
+        },
+        "status": 422
+      },
+      "base_params is text": {
+        "answer": {
+          "detail": "base_params must be an object"
+        },
+        "status": 422
+      },
+      "guidance_scale": {
+        "answer": {
+          "detail": "guidance_scale must be a number"
+        },
+        "status": 422
+      },
+      "injection_strength": {
+        "answer": {
+          "detail": "injection_strength must be a number"
+        },
+        "status": 422
+      },
+      "input_video_strength": {
+        "answer": {
+          "detail": "input_video_strength must be a number"
+        },
+        "status": 422
+      },
+      "jobs registered": [],
+      "motion_prefix_sec": {
+        "answer": {
+          "detail": "motion_prefix_sec must be a number"
+        },
+        "status": 422
+      },
+      "motion_prefix_sec not a number": {
+        "answer": {
+          "detail": "motion_prefix_sec must be a number"
+        },
+        "status": 422
+      },
+      "motion_suffix_sec": {
+        "answer": {
+          "detail": "motion_suffix_sec must be a number"
+        },
+        "status": 422
+      },
+      "num_inference_steps": {
+        "answer": {
+          "detail": "num_inference_steps must be a whole number"
+        },
+        "status": 422
+      },
+      "overlap_sec": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 422
+      },
+      "overlap_sec infinity": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 422
+      },
+      "overlap_sec null": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 422
+      },
+      "temp folders made": 0,
+      "workers started": []
     },
     "status": 200
   },
