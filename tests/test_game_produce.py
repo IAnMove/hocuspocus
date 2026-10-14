@@ -11,7 +11,7 @@ from services.game_generators.base import AttemptResult
 from services.game_jobs import GameJobStore
 from services.game_library import create_game, read_library, write_library
 from services.game_list import EXAMPLE_LIST, commit_list, parse_lines
-from services.game_produce import GameProduce, ProduceDeps, ProduceError, archive_raw_outputs, build_produce
+from services.game_produce import GameProduce, ProduceDeps, ProduceError, archive_raw_outputs, leftover_root_files, build_produce
 from services.game_tools import GameToolError
 from routers.game_produce import create_game_produce_router
 
@@ -271,14 +271,78 @@ def test_resume_requeues_steps_lost_when_the_server_shut_down(tmp_path, monkeypa
     assert finished["steps"][1]["attemptId"] == "bbb"
 
 
-def test_raw_outputs_move_after_success_without_taking_a_longer_id(tmp_path):
+def test_raw_outputs_move_only_this_attempt_leftovers(tmp_path):
     (tmp_path / "hero-still.png").write_bytes(b"a")
+    (tmp_path / "hero-portrait.png").write_bytes(b"keep")
     (tmp_path / "hero-idle-still.png").write_bytes(b"b")
     game = {"id": "bosque", "assets": [_asset("hero", "item"), _asset("hero-idle", "item", "approved")]}
-    moved = archive_raw_outputs(str(tmp_path), game, "hero", "attempt")
+    moved = archive_raw_outputs(str(tmp_path), game, "hero", "attempt", ["hero-still.png"])
     assert moved == ["hero-still.png"]
     assert (tmp_path / "game" / "bosque" / "hero" / "attempt" / "raw" / "hero-still.png").is_file()
+    assert (tmp_path / "hero-portrait.png").read_bytes() == b"keep"
     assert (tmp_path / "hero-idle-still.png").is_file()
+    assert archive_raw_outputs(str(tmp_path), game, "hero", "attempt") == []
+    assert archive_raw_outputs(str(tmp_path), game, "hero", "other", ["game/bosque/hero/nested.png"]) == []
+    assert leftover_root_files({"steps": [{"leftovers": ["hero-still.png", "hero-still.png"]}]}) == ["hero-still.png"]
+
+
+def test_raw_outputs_move_with_their_metadata_and_preview_sidecars(tmp_path):
+    """Every generation output has <stem>.meta.json and <stem>.preview.png beside it; they go to raw/ with the media."""
+    for name in ("hero-still.png", "hero-still.meta.json", "hero-still.preview.png", "hero-portrait.png", "hero-portrait.meta.json"):
+        (tmp_path / name).write_bytes(b"x")
+    moved = archive_raw_outputs(str(tmp_path), {"id": "bosque"}, "hero", "attempt", ["hero-still.png"])
+    raw = tmp_path / "game" / "bosque" / "hero" / "attempt" / "raw"
+    assert moved == ["hero-still.png", "hero-still.meta.json", "hero-still.preview.png"]
+    assert sorted(path.name for path in raw.iterdir()) == ["hero-still.meta.json", "hero-still.png", "hero-still.preview.png"]
+    assert sorted(path.name for path in tmp_path.iterdir() if path.is_file()) == ["hero-portrait.meta.json", "hero-portrait.png"]
+
+
+def test_a_leftover_named_by_url_or_absolute_path_in_the_root_is_archived_and_a_folder_file_is_not(tmp_path):
+    (tmp_path / "a b.png").write_bytes(b"a")
+    (tmp_path / "c.png").write_bytes(b"c")
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "sub" / "d.png").write_bytes(b"d")
+    leftovers = ["/api/v1/file/a%20b.png?workspace=ws", str(tmp_path / "c.png"), "/api/v1/file/sub/d.png?workspace=ws", "../c.png"]
+    from services.game_tools import root_file_name
+    assert [root_file_name(item, tmp_path) for item in leftovers] == ["a b.png", "c.png", None, None]
+    assert root_file_name(str(tmp_path / "c.png")) is None, "an absolute path needs the root it must sit in"
+    moved = archive_raw_outputs(str(tmp_path), {"id": "g"}, "hero", "attempt", leftovers)
+    assert moved == ["a b.png", "c.png"] and (tmp_path / "sub" / "d.png").is_file()
+
+
+def test_leftovers_of_a_failed_attempt_stay_at_the_root_when_the_next_one_succeeds(tmp_path, monkeypatch):
+    (tmp_path / "hero-still.png").write_bytes(b"failed attempt's picture")
+    (tmp_path / "hero-win.png").write_bytes(b"the winner's picture")
+
+    def action(ctx, _calls):
+        return AttemptResult(files={"main": "game/bosque/hero/a1/main.png"}, metrics={"attemptIds": [ctx.attempt_id]}, warnings=[],
+                             provenance={"steps": [{"tool": "generation.image", "leftovers": ["hero-win.png"]}]})
+
+    store = Store([_asset("hero", "item")])
+    service = _service(tmp_path, store, Scripted(action), monkeypatch)
+    job = service.start("lab", "bosque", asset_ids=["hero"])
+    raw = tmp_path / "game" / "bosque" / "hero" / job["steps"][0]["attemptId"] / "raw"
+    assert [path.name for path in raw.iterdir()] == ["hero-win.png"] and (tmp_path / "hero-still.png").is_file()
+
+
+def test_produce_archives_only_this_attempt_leftovers(tmp_path, monkeypatch):
+    (tmp_path / "hero-still.png").write_bytes(b"raw")
+    (tmp_path / "hero-portrait.png").write_bytes(b"keep")
+
+    def action(ctx, _calls):
+        return AttemptResult(
+            files={"main": "game/bosque/hero/a1/main.png"},
+            metrics={"attemptIds": [ctx.attempt_id]},
+            warnings=[],
+            provenance={"steps": [{"tool": "generation.image", "leftovers": ["hero-still.png"]}]},
+        )
+
+    store = Store([_asset("hero", "item")])
+    service = _service(tmp_path, store, Scripted(action), monkeypatch)
+    job = service.start("lab", "bosque", asset_ids=["hero"])
+    assert job["status"] == "completed"
+    assert (tmp_path / "game" / "bosque" / "hero" / job["steps"][0]["attemptId"] / "raw" / "hero-still.png").is_file()
+    assert (tmp_path / "hero-portrait.png").read_bytes() == b"keep"
 
 
 def test_job_store_round_trip(tmp_path):

@@ -92,6 +92,7 @@ def test_image_provenance_splits_queue_from_gpu_time(tmp_path):
     assert step["num_inference_steps"] == 40
     assert step["resolution"] == "768x1024"
     assert step["refCount"] == 1
+    assert step["leftovers"] == ["hero.png"]
     assert "seconds" in step
     bare = Fake([{"status": "completed", "output_files": ["hero.png"]}])
     quiet = _ctx(tmp_path, bare)
