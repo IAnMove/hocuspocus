@@ -32,6 +32,9 @@ import services.generation_output_name  # noqa: E402,F401
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
 GENERATE = ROOT / "app" / "services" / "studio_generate.py"
+JOBS = ROOT / "app" / "services" / "generation_jobs.py"
+RECOVERY = ROOT / "app" / "services" / "generation_recovery.py"
+PREPARATION = ROOT / "app" / "services" / "generation_preparation.py"
 
 
 class _HTTPException(Exception):
@@ -346,7 +349,7 @@ def _harness(
         cancel_legacy_h3=lambda: None,
         task_publisher=lambda: namespace["_publish_generation_task"],
     ).new_job
-    _load("_run_generation_with_preparation", namespace=namespace)
+    _load("_run_generation_with_preparation", namespace=namespace, path=PREPARATION)
     _load("generate", namespace=namespace, path=GENERATE)
 
     before = time.monotonic()
@@ -452,8 +455,8 @@ def test_preplanner_exception_fails_without_leaking_a_fifo_ticket(
 
 
 def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
-    resume = _function("resume_generation_queue")
-    helper = _function("_queue_recovered_generation")
+    resume = _function("resume_generation_queue", RECOVERY)
+    helper = _function("_queue_recovered_generation", RECOVERY)
     targets = [
         keyword.value.id
         for call in ast.walk(resume)
@@ -483,4 +486,4 @@ def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
     assert "_reset_canonical_task_for_resume" in calls
     assert calls["_reset_canonical_task_for_resume"] < calls["_new_generation_job"]
     assert "duplicate_for_submit" in ast.unparse(_function("generate", GENERATE))
-    assert "status_for" in ast.unparse(_function("get_status"))
+    assert "status_for" in ast.unparse(_function("get_status", JOBS))

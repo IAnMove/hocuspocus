@@ -46,6 +46,7 @@ from typing import Any, Callable
 
 import pytest
 
+from services.hardware_probe import hardware_cache
 from tests.characterization import media
 from tests.support.fake_wgp import FakeEngine, catalog_attributes, generation_attributes
 
@@ -140,6 +141,15 @@ ROUTE_MODULES = (
 # Repaint (C6): the modules that took their launch objects, which they read under the launch names.
 REPAINT_MODULES = ("services.repaint_planning", "services.repaint_run", "routers.repaint")
 
+# Collaborators that left the server file and still read names these tests replace. Recovery and the job routes
+# hold ``_cancel_h3_idle_release`` and ``time``, which a rig patch reached in launch before the move.
+COLLABORATOR_MODULES = (
+    "services.generation_preparation",
+    "services.generation_h3_release",
+    "services.generation_recovery",
+    "services.generation_jobs",
+)
+
 
 def worker_modules() -> list:
     """The modules whose globals the worker functions, the post-processing passes, the Recast code and the Repaint,
@@ -147,8 +157,9 @@ def worker_modules() -> list:
 
     That is the full server module while any worker function or pass is still in it, each module of
     ``services.generation_worker`` that exists, each module a pass moved to (C4), each Recast helper module (C7), each
-    Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5) and each Recast route
-    module (C8b). A name they read is an attribute of every module that reads it.
+    Recast shot module (C8a), each Repaint module (C6), each outpaint and blend module (C5), each collaborator module
+    the generation-jobs slice moved and each Recast route module (C8b). A name they read is an attribute of every module
+    that reads it.
     """
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
@@ -157,8 +168,9 @@ def worker_modules() -> list:
     shots = [sys.modules[name] for name in SHOT_MODULES if name in sys.modules]
     repaint = [sys.modules[name] for name in REPAINT_MODULES if name in sys.modules]
     studio = [sys.modules[name] for name in OUTPAINT_BLEND_MODULES if name in sys.modules]
+    collaborators = [sys.modules[name] for name in COLLABORATOR_MODULES if name in sys.modules]
     routes = [sys.modules[name] for name in ROUTE_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *routes]
+    return [worker_module(), *package, *passes, *recast, *shots, *repaint, *studio, *collaborators, *routes]
 
 
 @dataclass
@@ -391,7 +403,7 @@ def rig(server, clip, tmp_path, monkeypatch):
         monkeypatch.setattr(server.wgp, name, value, raising=False)
     monkeypatch.setattr(launch._durable_generation_queue, "path", str(tmp_path / "queue.json"))
     # The per-job VRAM adjustment reads the machine's GPU the first time; a test must not depend on it.
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 0.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
     known = set(launch._jobs)
     state = Rig(server=server, engine=engine, monkeypatch=monkeypatch)
 
@@ -510,7 +522,7 @@ def test_denoising_steps_anchor_the_inference_clock(rig, golden, monkeypatch) ->
 
 
 def test_the_vram_coefficient_is_tightened_for_the_job_and_restored(rig, golden, monkeypatch) -> None:
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 24.0})
     monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.8)
     job_id = rig.run({**BODY, "resolution": "1280x720", "video_length": 241, "activated_loras": []})
     observed = rig.observe(job_id)
@@ -633,7 +645,7 @@ def test_a_failing_preparation_step_fails_the_job_before_any_model_work(rig, gol
 def test_a_queued_job_cancelled_before_it_starts_never_reaches_the_engine(rig, golden, monkeypatch) -> None:
     """The slot is not acquired (``acquired`` is False): the worker returns before its ``try`` block, so it
     does not touch the running job's VRAM coefficient, abort state or save path."""
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 24.0})
     monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.8)
     release = rig.event()
     rig.engine.script = hold_then(lambda call: call.save(), release=release)
@@ -854,6 +866,54 @@ def test_a_recovered_job_says_it_restarts_from_the_beginning(rig, golden) -> Non
     job_id = rig.direct_job(BODY, recovered=True)
     rig.call_worker(job_id)
     rig.check(golden, "recovered job", rig.observe(job_id))
+
+
+def test_resuming_the_recovery_queue_runs_the_leftover_from_the_beginning(rig, golden) -> None:
+    """``POST /api/v1/jobs/recovery/resume`` requeues a durable leftover and starts the real preparation worker."""
+    launch = rig.launch
+    job_id = "golden-resume"
+    launch._durable_generation_queue.upsert({
+        "id": job_id, "status": "running", "created_at": CREATED, "params": dict(BODY), "workspace": "default",
+    })
+    response = rig.server.client.post("/api/v1/jobs/recovery/resume")
+    assert response.status_code == 200, response.text
+    name = f"recovered-generation-{job_id}"
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline:
+        alive = [thread for thread in threading.enumerate() if thread.name == name and thread.is_alive()]
+        job = launch._jobs.get(job_id)
+        if alive:
+            alive[0].join(deadline - time.monotonic())
+            break
+        if isinstance(job, dict) and job.get("status") in {"completed", "failed", "cancelled"}:
+            break
+        time.sleep(0.01)
+    else:
+        job = launch._jobs.get(job_id)
+        if isinstance(job, dict):
+            launch.request_cancel(job, job_id=job_id, active_states=launch._active_gen_states)
+        for state in list(launch._active_gen_states.values()):
+            state["abort"] = True
+        for thread in threading.enumerate():
+            if thread.name == name:
+                thread.join(10)
+        raise AssertionError(f"{name} did not finish")
+    job = launch._jobs.get(job_id)
+    assert isinstance(job, dict) and job.get("status") in {"completed", "failed", "cancelled"}
+    rig.job_ids.append(job_id)
+    rig.check(golden, "resumed leftover", {"http": response.json(), **rig.observe(job_id)})
+
+
+def test_the_real_simulated_executor_writes_an_artifact_and_finishes_the_job(rig, golden, monkeypatch) -> None:
+    """The worker's simulated branch calls the real executor. Only the policy flag is replaced."""
+    import services.generation_worker.prepare as prepare
+
+    monkeypatch.setattr(
+        prepare, "execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")),
+    )
+    job_id = rig.direct_job({**BODY, "generation_mode": "image", "video_length": 1, "prompt": "a simulated barn"})
+    rig.call_worker(job_id)
+    rig.check(golden, "real simulated executor", rig.observe(job_id, full=True))
 
 
 # -- post-processing -------------------------------------------------------------------------------------------------
@@ -1910,7 +1970,7 @@ def test_the_per_job_coefficient_value_for_each_kind_of_job(rig, golden, tmp_pat
     for name, size in _LORA_SIZES.items():
         with open(loras / name, "wb") as handle:
             handle.truncate(size)  # sparse: the size is what the coefficient reads
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": spec.get("vram", 24.0)})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": spec.get("vram", 24.0)})
     monkeypatch.setitem(wgp.server_config, "vram_safety_coefficient", spec.get("base", 0.85))
     if spec.get("dedicated"):
         monkeypatch.setenv("MAESTRO_SCAIL2_DEDICATED_MODEL", spec["dedicated"])
@@ -1949,7 +2009,7 @@ def test_consecutive_jobs_each_start_from_the_saved_base_coefficient(rig, golden
     """One coefficient on ``wgp.args`` for the whole process: a heavy job tightens it, the worker puts the saved base
     back, a light job computes its own value from that base, a sound effect leaves it alone, and the same heavy job
     gets the same value again."""
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 24.0})
     monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.85)
     seen = _stub_mmaudio(rig, monkeypatch)
     heavy = {**BODY, "resolution": "1280x720", "video_length": 241}
@@ -2153,9 +2213,10 @@ def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkey
     import routers.tools as tools
 
     assert tools._chunked_flashvsr_upscale is launch._chunked_flashvsr_upscale
-    # The probe stays in launch and reads launch's cache when the coefficient pass calls it.
+    # The probe is one function. The coefficient pass calls it, and it reads the one cache.
     coefficients = importlib.import_module("services.generation_coefficients")
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
+    assert coefficients._get_cached_hardware is launch._get_cached_hardware
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 7.0})
     assert coefficients._get_cached_hardware() == {"gpu_vram_gb": 7.0}
 
 

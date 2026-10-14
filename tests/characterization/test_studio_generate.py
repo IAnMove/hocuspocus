@@ -29,6 +29,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from services.hardware_probe import hardware_cache
+
 from tests.characterization import media
 from tests.characterization.test_run_generation import (
     RECAST_MODULES, SHOT_MODULES, BODY, Rig, _media_writer, worker_module,
@@ -170,7 +172,7 @@ def generation(server, tmp_path, monkeypatch):
     for name, value in {**catalog_attributes(), **generation_attributes(engine, server.wgp)}.items():
         monkeypatch.setattr(server.wgp, name, value, raising=False)
     monkeypatch.setattr(launch._durable_generation_queue, "path", str(tmp_path / "queue.json"))
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 0.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
     state = Rig(server=server, engine=engine, monkeypatch=monkeypatch)
     known = set(launch._jobs)
 
@@ -1153,6 +1155,7 @@ def test_outpaint_and_blend_read_the_objects_launch_holds(full_server, monkeypat
     assert importlib.import_module("routers.outpaint")._run_generation.__name__ == "_run_generation"
     assert importlib.import_module("routers.blend")._run_blend_generation.__name__ == "_run_blend_generation"
 
+
 def test_recast_shot_modules_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
     """Every global a moved shot function reads is the launch object, or a forwarder.
 
@@ -1579,7 +1582,7 @@ def test_recast_rejects_before_a_job_exists(server, golden, monkeypatch) -> None
     _install_recast_decord(monkeypatch)
     video, reference = _recast_files(server)
     launch = worker_module()
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 0.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
     before = set(launch._jobs)
     present = {"video_path": str(video), "ref_image_path": str(reference), "prompt": "a calm lake"}
     cases = {
@@ -1601,9 +1604,9 @@ def test_recast_rejects_before_a_job_exists(server, golden, monkeypatch) -> None
             _install_recast_decord(monkeypatch, fail="unreadable clip")
         elif case == "704p below 16 GB":
             _install_recast_decord(monkeypatch)
-            monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 8.0})
+            monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 8.0})
         elif case == "the default model is the dedicated recast model":
-            monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 0.0})
+            monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
             _install_recast_decord(monkeypatch)
         response = _post(server, "/api/v1/recast", body)
         recorded[case] = {"status": response.status_code, "body": server.normalise(_answer(response))}
@@ -1994,7 +1997,7 @@ def test_recast_answers_by_model_profile_and_option(rig, golden, monkeypatch) ->
         people = int(body.get("person_count") or 1)
         stubs = _RecastStubs(rig, monkeypatch, people=people)
         _install_recast_decord(monkeypatch, fps=fps)
-        monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": vram})
+        monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": vram})
         if body.get("protect_bystanders"):
             def adaptive(generated, mask, count, folder, progress_callback=None):
                 progress_callback(1, 1)

@@ -8,6 +8,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.
 
+**Generation job status, cancel and the job list left the main server file.** GET /api/v1/status/{job_id}, POST /api/v1/cancel/{job_id} and GET /api/v1/jobs still answer the same way. The core server keeps its own copies of these routes.
+
+**Generation queue recovery left the main server file.** GET /api/v1/jobs/recovery, POST /api/v1/jobs/recovery/resume and POST /api/v1/jobs/recovery/discard still answer the same way. A recovered job still starts again from the beginning. Leftover files are still prepared, started or discarded the same way, and intermediate files are still released when the server starts.
+
+**Generation preparation and the simulated run left the main server file.** A job still prepares the same way before the worker runs. A simulated job still walks the same steps. The local GPU owner is still prepared the same way. The worker still receives those same functions.
+
+**The H3 idle-release timer and the hardware probe left the main server file.** A native H3 model still stays loaded while another H3 job is waiting and still releases after the same idle wait. The legacy H3 release and the Wan interrupt are the same functions. The hardware probe still runs once and still reports no VRAM when the probe fails. The coefficient pass and the director pipeline still call that same probe.
+
 **Recast shot planning, the shot manifest and shot generation left the launch module.** Finding the camera shots, recovering a person the first pass missed, building each shot's prompt and reference, and joining the generated clips still work the same way. The assembler still calls the same generation worker. A cancel while the clips are joined still drops the unfinished file.
 
 **Blend left the launch module.** Joining two clips with a generated transition still answers the same way. The blend worker still asks the generation worker to render the transition, then finishes the job itself.

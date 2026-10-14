@@ -380,7 +380,7 @@ class H3WindowPlannerTests(unittest.TestCase):
 
     def test_ui_and_runtime_use_explicit_prompt_arrays(self):
         handler = (APP / "wgp.py").read_text(encoding="utf-8")
-        launch = (APP / "_launch_runtime.py").read_text(encoding="utf-8")
+        preparation = (APP / "services" / "generation_preparation.py").read_text(encoding="utf-8")
         llm_router = (APP / "routers" / "llm.py").read_text(encoding="utf-8")
         store = (
             (ROOT / "ui" / "src" / "stores" / "useStore.ts").read_text(encoding="utf-8")
@@ -394,7 +394,7 @@ class H3WindowPlannerTests(unittest.TestCase):
         self.assertIn("h3_window_prompts=None", handler)
         self.assertIn("Using {len(prompts)} explicit", handler)
         self.assertIn('/api/v1/llm/plan-h3-windows', llm_router)
-        self.assertIn("h3_window_plan_signature", launch)
+        self.assertIn("h3_window_plan_signature", preparation)
         self.assertIn("api.planH3Windows", store)
         self.assertIn("t('advanced.planWindows')", advanced)
         self.assertEqual(studio["advanced"]["planWindows"], "Plan Prompt Across Windows")
@@ -405,7 +405,7 @@ class H3WindowPlannerTests(unittest.TestCase):
         self.assertNotIn("max-h-[360px] overflow-y-auto", prompt_input)
         self.assertNotIn("min-h-[118px] resize-y", prompt_input)
         self.assertIn("Exact H3 prompt", main_content)
-        self.assertIn('"h3_window_plan"', launch)
+        self.assertIn('"h3_window_plan"', preparation)
         self.assertTrue(guide.is_file())
         guide_text = guide.read_text(encoding="utf-8")
         self.assertIn("SOURCE FIDELITY", guide_text)
