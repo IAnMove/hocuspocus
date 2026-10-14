@@ -31,6 +31,7 @@ _NVFP4_PATH = _APP / "shared" / "qtypes" / "nvfp4.py"
 _INT8_CONVROT_PATH = _APP / "shared" / "qtypes" / "int8_convrot.py"
 _WGP_PATH = _APP / "wgp.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+_OPTION_HELPERS_PATH = _APP / "services" / "generation_option_helpers.py"
 _HF_IMPORT_PATH = _APP / "services" / "hf_import.py"
 _CIVITAI_PATH = _APP / "services" / "civitai.py"
 _CIVITAI_DOWNLOADS_PATH = _APP / "services" / "civitai_downloads.py"
@@ -301,7 +302,7 @@ class TestMiniMaxH3Definition(unittest.TestCase):
 
         launch = launch_and_worker_source(_read(_LAUNCH_PATH))
         self.assertIn("minimax_h3_service.generate(", launch)
-        self.assertIn("def _is_legacy_h3_model", launch)
+        self.assertIn("def _is_legacy_h3_model", _read(_OPTION_HELPERS_PATH))
         self.assertIn("_release_legacy_h3_when_queue_allows", launch)
         legacy_branch = launch.split(
             "if legacy_h3_job:", 2,
@@ -1375,7 +1376,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         types_source = _read(_TYPES_PATH)
         studio = json.loads(_STUDIO_EN_PATH.read_text(encoding="utf-8"))
 
-        self.assertIn("def _minimax_h3_turbo_option", launch)
+        self.assertIn("def _minimax_h3_turbo_option", _read(_OPTION_HELPERS_PATH))
         self.assertIn('names.update(item["filename"]', _read(_LORA_LIBRARY_PATH))
         self.assertIn("MINIMAX_H3_TURBO_LORA_FILENAME: {", launch)
         self.assertIn('"minimax_h3_turbo": _minimax_h3_turbo_option(md)', options)
@@ -1395,7 +1396,7 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
         self.assertIn("minimax_h3_turbo_mode?: boolean", types_source)
         self.assertIn("minimax_h3_runtime_advisory?:", types_source)
 
-        option = _load_source_function(_LAUNCH_PATH, "_minimax_h3_turbo_option")
+        option = _load_source_function(_OPTION_HELPERS_PATH, "_minimax_h3_turbo_option")
         sys.path.insert(0, str(_APP))
         try:
             pruned = option({
