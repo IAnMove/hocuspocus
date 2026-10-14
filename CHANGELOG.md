@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**A production resume remakes a clip when `spec.resolution` changes.** Changing only `clips` marks the kept H3 take obsolete. Changing `frames` drops the start frame so the next run draws it at the new size.
+
 **Sound-effect generation left the launch module.** A sound-effect job still prepares MMAudio, writes the clip, and publishes the same sidecar.
 
 **FlashVSR chunked upscaling left the launch module.** A long clip is still upscaled in memory-bounded chunks, and the tools upscale still uses that same function.

@@ -518,6 +518,19 @@ def test_a_changed_h3_shot_is_drawn_or_shot_again_and_an_unchanged_one_is_kept(t
     assert production.state["clips"]["a"]["obsolete"] and production.state["clips"]["b"]["obsolete"], "both are shot again"
 
 
+def test_a_resolution_change_redraws_the_frame_or_reshoots_the_clip(tmp_path):
+    production, calls = _image_production(tmp_path, [("a1.png", None), ("a2.png", None)])
+    spec = {"style": {"image": "look"}, "cast": [], "resolution": {"frames": "1280x704", "clips": "1280x704"}}
+    shots = [{"key": "a", "kind": "h3", "frame": "wide shot", "action": "waves", "camera": "camera-dolly"}]
+    production.frames(spec, shots)
+    production.state["clips"] = {"a": {"file": "a.mp4"}}
+    production.frames({**spec, "resolution": {"frames": "1280x704", "clips": "1024x576"}}, shots)
+    assert production.state["frames"] == {"a": "a1.png"} and production.state["clips"]["a"].get("obsolete")
+    assert len(calls) == 1, "a clip-only size change keeps the start frame"
+    production.frames({**spec, "resolution": {"frames": "1536x1024", "clips": "1024x576"}}, shots)
+    assert production.state["frames"] == {"a": "a2.png"} and len(calls) == 2
+
+
 def test_frames_made_before_their_source_was_recorded_are_kept(tmp_path):
     production, calls = _image_production(tmp_path, [])
     production.state.update(frames={"a": "old.png"}, clips={"a": {"file": "old.mp4"}})

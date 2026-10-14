@@ -67,23 +67,27 @@ def cast_sheets(production: Any, spec: dict) -> None:
 
 
 def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> None:
-    """An H3 shot whose spec changed is shot again: a new frame prompt drops its frame and its clip, a new action,
-    camera or singing only its clip (a scene2d background is redrawn the same way). A shot seen for the first time
-    (or made before this was recorded) keeps what it has."""
+    """An H3 shot whose spec changed is shot again: a new frame prompt or
+    frame size drops its frame and its clip; a new action, camera, singing
+    or clip size only its clip (a scene2d background is redrawn the same
+    way). A shot seen for the first time (or made before this was recorded)
+    keeps what it has."""
     import hashlib
     import json
 
     def digest(*parts: Any) -> str:
         return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
+    resolution = spec.get("resolution") if isinstance(spec.get("resolution"), dict) else {}
     sources = production.state.setdefault("h3_sources", {})
     frames, clips = production.state.setdefault("frames", {}), production.state.setdefault("clips", {})
     for window in windows:
         if not _draws_frame(window):
             continue
         key = window["key"]
-        frame = digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
-        clip = digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
+        frame = digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []),
+                       resolution.get("frames"))
+        clip = digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")), resolution.get("clips"))
         known = sources.get(key) or {"frame": frame, "clip": clip}
         if known["frame"] != frame and frames.pop(key, None):
             production.log(f"frame {key}: the shot's picture changed, drawing it again")
