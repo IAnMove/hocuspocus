@@ -58,6 +58,8 @@ REGISTERED_BY_THE_ROUTER: dict[str, str] = {
     "series-voice": "routers.series_shot_inspector",
     "series-assembly": "routers.series_assembly",
     "quick-video-batch": "routers.quick_video_batches",
+    "world3d-export": "routers.world3d_export",
+    "scene2d-export": "routers.scene2d_export",
 }
 
 

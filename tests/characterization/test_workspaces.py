@@ -26,13 +26,14 @@ def test_workspaces_lifecycle(server, golden) -> None:
 
 
 def test_the_full_server_registers_the_busy_probes_of_every_family_it_runs(server) -> None:
-    """Booting the server wires the "full" profile (workspace router) and the probes the Series and game routers push."""
+    """Booting the server wires the "full" profile (workspace router) and the probes the routers that own a service push."""
     from services import workspace_busy
 
     assert set(workspace_busy.registered()) == {
         "video-editor", "minimax-music", "minimax-image", "rig", "series-plan", "music-production",
         "model3d", "story-plan", "comic-plan", "director-plan", "series-render",
         "game-produce", "series-produce", "series-native", "series-voice", "series-assembly", "quick-video-batch",
+        "world3d-export", "scene2d-export",
     }
 
 

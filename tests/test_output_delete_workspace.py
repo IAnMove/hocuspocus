@@ -523,6 +523,49 @@ def _seed_quick_video_batch(tmp_path):
     return release
 
 
+def _seed_scene_export(service_module, service_class, router_module, router_factory):
+    """A World3D or Video 2D export whose worker thread is rendering, dispatched by the service itself."""
+    def seed(tmp_path):
+        import importlib
+        import threading
+
+        service = getattr(importlib.import_module(service_module), service_class)(
+            workspace_dir=lambda name: str(tmp_path / name), registry_for=lambda _workspace: None,
+        )
+        getattr(importlib.import_module(router_module), router_factory)(service)
+        gate = threading.Event()
+        service._run_worker = lambda _intent_id, _task_id, _workspace: gate.wait(5)
+
+        class Admissions:
+            """The task registry answers a queued admission for workspace ``film``."""
+
+            def command_admission(self, _intent_id):
+                return {"task_id": "task-export-1", "dispatch_owner": service.owner}
+
+            def get(self, _task_id):
+                return {"status": "queued", "workspace": "film"}
+
+        service._dispatch(Admissions(), "intent-export-1")
+
+        def release():
+            gate.set()
+            for thread in threading.enumerate():
+                if thread.name.startswith(f"{service.slug}-"):
+                    thread.join(2)
+
+        return release
+
+    return seed
+
+
+_seed_world3d_export = _seed_scene_export(
+    "services.world3d_export", "World3DExportService", "routers.world3d_export", "create_world3d_export_router",
+)
+_seed_scene2d_export = _seed_scene_export(
+    "services.scene2d_export", "Scene2DExportService", "routers.scene2d_export", "create_scene2d_export_router",
+)
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
@@ -546,6 +589,9 @@ BUSY_FAMILIES = [
     pytest.param("music-production", "full", _seed_music_production, id="music-production-full"),
     pytest.param("music-production", "core", _seed_music_production, id="music-production-core"),
     pytest.param("quick-video-batch", "full", _seed_quick_video_batch, id="quick-video-batch"),
+    pytest.param("world3d-export", "full", _seed_world3d_export, id="world3d-export-full"),
+    pytest.param("world3d-export", "core", _seed_world3d_export, id="world3d-export-core"),
+    pytest.param("scene2d-export", "full", _seed_scene2d_export, id="scene2d-export"),
 ]
 
 
@@ -718,6 +764,7 @@ CORE_BUSY_KINDS = {
 }
 ROUTER_BUSY_KINDS = {
     "game-produce", "series-produce", "series-native", "series-voice", "series-assembly", "quick-video-batch",
+    "world3d-export", "scene2d-export",
 }
 
 
