@@ -129,6 +129,7 @@ BOUND_SERVICES = (
     (ROOT / "app" / "services" / "generation_jobs.py", "bind_generation_jobs"),
     (ROOT / "app" / "services" / "generation_recovery.py", "bind_generation_recovery"),
     (ROOT / "app" / "services" / "generation_preparation.py", "bind_generation_preparation"),
+    (ROOT / "app" / "services" / "generation_h3_release.py", "bind_generation_h3_release"),
 )
 
 
@@ -208,3 +209,19 @@ def test_a_name_defined_after_the_bind_call_is_passed_as_a_forwarder() -> None:
     for keyword in call.keywords:
         if keyword.arg in defined_after:
             assert isinstance(keyword.value, ast.Lambda), f"{keyword.arg} is defined after the bind call; pass a forwarder"
+
+
+def test_the_hardware_probe_keeps_its_own_cache() -> None:
+    """The probe takes no server object. The machine-specific import stays inside the function."""
+    path = ROOT / "app" / "services" / "hardware_probe.py"
+    source = path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    assert injected_names(tree) == set()
+    assert not any(isinstance(node, ast.FunctionDef) and node.name == "bind" for node in tree.body)
+    assert not any(isinstance(node, (ast.Import, ast.ImportFrom)) for node in tree.body)
+    assert "_launch_runtime" not in source and "import wgp" not in source
+    function = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == "_get_cached_hardware")
+    assert any(
+        isinstance(node, ast.ImportFrom) and node.module == "services.hardware_detect"
+        for node in ast.walk(function)
+    )

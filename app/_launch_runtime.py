@@ -423,10 +423,6 @@ from services.job_lifecycle import (
 from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
 from services import resource_scheduler
 
-_H3_IDLE_RELEASE_SECONDS = 10.0
-_h3_idle_release_timer: threading.Timer | None = None
-_h3_idle_release_lock = threading.RLock()
-
 
 # Preparation, simulation and the local GPU handoff live in
 # services/generation_preparation.py. The hook is installed here; bind() runs
@@ -490,94 +486,25 @@ def _is_minimax_h3_model(model_type: str | None) -> bool:
     )
 
 
-def _cancel_h3_idle_release() -> None:
-    """Prevent a delayed native-model release from racing newly queued work."""
-    global _h3_idle_release_timer
-    with _h3_idle_release_lock:
-        timer = _h3_idle_release_timer
-        _h3_idle_release_timer = None
-        if timer is not None:
-            timer.cancel()
+# Native and legacy H3 release, and the Wan interrupt, live in
+# services/generation_h3_release.py. The lock alias is the holder's one RLock.
+from services.generation_h3_release import (
+    _cancel_h3_idle_release,
+    _h3_idle_release,
+    _interrupt_wan_model,
+    _release_h3_when_queue_allows,
+    _release_legacy_h3_when_queue_allows,
+    bind as bind_generation_h3_release,
+)
 
-
-def _release_h3_when_queue_allows(job_id: str) -> None:
-    """Keep native H3 warm for its queue, then release WGP-owned memory."""
-    global _h3_idle_release_timer
-    pending = _pending_gpu_jobs(exclude_job_id=job_id)
-    h3_pending = any(
-        _is_minimax_h3_model(candidate.get("params", {}).get("model_type"))
-        and not _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
-        for candidate in pending
-    )
-    if h3_pending:
-        _cancel_h3_idle_release()
-        print("[MiniMax H3] Keeping runtime warm for a queued H3 job.")
-        return
-
-    _cancel_h3_idle_release()
-    if pending:
-        print("[MiniMax H3] Releasing native runtime for a queued non-H3 GPU job.")
-        wgp.release_model()
-        return
-
-    print(
-        f"[MiniMax H3] Queue idle; releasing native runtime in "
-        f"{int(_H3_IDLE_RELEASE_SECONDS)}s unless another job arrives."
-    )
-
-    def _release_if_still_idle() -> None:
-        global _h3_idle_release_timer
-        with _h3_idle_release_lock:
-            _h3_idle_release_timer = None
-            if _pending_gpu_jobs(exclude_job_id=job_id) or _active_gen_states:
-                return
-            if not _is_minimax_h3_model(getattr(wgp, "transformer_type", None)):
-                return
-            wgp.release_model()
-            print("[MiniMax H3] Native WGP runtime released after idle grace period.")
-
-    with _h3_idle_release_lock:
-        timer = threading.Timer(_H3_IDLE_RELEASE_SECONDS, _release_if_still_idle)
-        timer.daemon = True
-        _h3_idle_release_timer = timer
-        timer.start()
-
-
-def _release_legacy_h3_when_queue_allows(job_id: str) -> None:
-    """Keep the isolated ConvRot runtime only for adjacent Legacy jobs."""
-    pending = _pending_gpu_jobs(exclude_job_id=job_id)
-    legacy_pending = any(
-        _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
-        for candidate in pending
-    )
-    if legacy_pending:
-        minimax_h3_service.cancel_idle_shutdown()
-        print("[H3 Legacy] Keeping ConvRot runtime warm for a queued Legacy job.")
-        return
-
-    if pending:
-        print("[H3 Legacy] Releasing ConvRot runtime for a queued non-Legacy GPU job.")
-        minimax_h3_service.stop_runtime()
-        return
-
-    print(
-        f"[H3 Legacy] Queue idle; releasing ConvRot runtime in "
-        f"{int(minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS)}s."
-    )
-    minimax_h3_service.schedule_idle_shutdown(
-        minimax_h3_service.DEFAULT_IDLE_SHUTDOWN_SECONDS,
-        lambda: any(
-            _is_legacy_h3_model(candidate.get("params", {}).get("model_type"))
-            for candidate in _pending_gpu_jobs(exclude_job_id=job_id)
-        ),
-    )
-
-
-def _interrupt_wan_model() -> None:
-    """Interrupt only the Wan run bound to the active lifecycle state."""
-    model = wgp.wan_model
-    if model is not None and hasattr(model, "_interrupt"):
-        model._interrupt = True
+bind_generation_h3_release(
+    _active_gen_states=_active_gen_states,
+    _is_legacy_h3_model=_is_legacy_h3_model,
+    _is_minimax_h3_model=_is_minimax_h3_model,
+    _pending_gpu_jobs=_pending_gpu_jobs,
+    wgp=wgp,
+)
+_h3_idle_release_lock = _h3_idle_release.lock
 
 # Director pipeline init lives with the planner routes. Music generation and
 # quick-video batches call this same function.
@@ -11574,22 +11501,9 @@ api.include_router(create_studio_inpaint_router(
 from services.studio_edit_requests import inpaint_endpoint
 
 
-# The hardware probe (for total VRAM) is cached at module level — the
-# answer doesn't change at runtime and detect_hardware() touches torch
-# which we'd rather not call per-job.
-_cached_hardware: dict | None = None
-
-
-def _get_cached_hardware() -> dict:
-    global _cached_hardware
-    if _cached_hardware is None:
-        try:
-            from services.hardware_detect import detect_hardware
-            _cached_hardware = detect_hardware()
-        except Exception as e:
-            print(f"[VRAM] hardware probe failed ({e}); per-job adjustment disabled")
-            _cached_hardware = {"gpu_vram_gb": 0.0}
-    return _cached_hardware
+# The hardware probe lives in services/hardware_probe.py. This is the same
+# function the coefficient pass and the director pipeline receive.
+from services.hardware_probe import _get_cached_hardware
 
 
 # Post-processing passes the generation worker calls by these names: the per-job

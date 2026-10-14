@@ -539,13 +539,22 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         ("async def repaint_endpoint", "async def recast_endpoint", "_run_repaint"),
         ("async def recast_endpoint", "def _outpaint_geometry", "_run_recast"),
         ("async def outpaint_endpoint", "async def blend_endpoint", "_prepare_and_run_outpaint"),
-        ("async def blend_endpoint", "def _get_cached_hardware", "_run_blend_generation"),
     )
     for start, end, real_worker in specialist_routes:
         route = source.split(start, 1)[1].split(end, 1)[0]
         assert "execution_mode.policy().simulated" in route
         assert real_worker in route
         assert "_run_generation" in route
+    # blend_endpoint used to end at ``def _get_cached_hardware``. The probe moved,
+    # so the same three checks read the function itself.
+    blend = next(
+        node for node in ast.parse(source).body
+        if isinstance(node, ast.AsyncFunctionDef) and node.name == "blend_endpoint"
+    )
+    blend_source = ast.get_source_segment(source, blend)
+    assert "execution_mode.policy().simulated" in blend_source
+    assert "_run_blend_generation" in blend_source
+    assert "_run_generation" in blend_source
     tools_source = (
         Path(__file__).parents[1] / "app" / "routers" / "tools.py"
     ).read_text(encoding="utf-8")

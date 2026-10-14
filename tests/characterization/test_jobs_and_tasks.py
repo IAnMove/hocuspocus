@@ -6,6 +6,8 @@ import threading
 
 import pytest
 
+from services.hardware_probe import hardware_cache
+
 CREATED = 1_700_000_000.0
 PARAMS = {"model_type": "golden_model", "prompt": "a golden prompt", "generation_mode": "video"}
 
@@ -451,7 +453,7 @@ def test_cached_hardware_probes_once_and_falls_back_when_the_probe_fails(server,
         return {"gpu_vram_gb": 11.0, "gpu_name": "stub"}
 
     monkeypatch.setattr(hardware_detect, "detect_hardware", detect)
-    monkeypatch.setattr(launch, "_cached_hardware", None)
+    monkeypatch.setattr(hardware_cache, "value", None)
     first = launch._get_cached_hardware()
     second = launch._get_cached_hardware()
 
@@ -460,7 +462,7 @@ def test_cached_hardware_probes_once_and_falls_back_when_the_probe_fails(server,
         raise RuntimeError("probe down")
 
     monkeypatch.setattr(hardware_detect, "detect_hardware", boom)
-    monkeypatch.setattr(launch, "_cached_hardware", None)
+    monkeypatch.setattr(hardware_cache, "value", None)
     fallback = launch._get_cached_hardware()
     again = launch._get_cached_hardware()
     golden.check("cached hardware", 200, server.normalise({

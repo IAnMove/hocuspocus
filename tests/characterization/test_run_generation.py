@@ -46,6 +46,7 @@ from typing import Any, Callable
 
 import pytest
 
+from services.hardware_probe import hardware_cache
 from tests.characterization import media
 from tests.support.fake_wgp import FakeEngine, catalog_attributes, generation_attributes
 
@@ -114,6 +115,7 @@ POSTFX_MODULES = {
 # Collaborators that left the server file and still read names these tests replace.
 COLLABORATOR_MODULES = (
     "services.generation_preparation",
+    "services.generation_h3_release",
 )
 
 
@@ -362,7 +364,7 @@ def rig(server, clip, tmp_path, monkeypatch):
         monkeypatch.setattr(server.wgp, name, value, raising=False)
     monkeypatch.setattr(launch._durable_generation_queue, "path", str(tmp_path / "queue.json"))
     # The per-job VRAM adjustment reads the machine's GPU the first time; a test must not depend on it.
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 0.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 0.0})
     known = set(launch._jobs)
     state = Rig(server=server, engine=engine, monkeypatch=monkeypatch)
 
@@ -476,7 +478,7 @@ def test_denoising_steps_anchor_the_inference_clock(rig, golden, monkeypatch) ->
 
 
 def test_the_vram_coefficient_is_tightened_for_the_job_and_restored(rig, golden, monkeypatch) -> None:
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 24.0})
     monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.8)
     job_id = rig.run({**BODY, "resolution": "1280x720", "video_length": 241, "activated_loras": []})
     observed = rig.observe(job_id)
@@ -599,7 +601,7 @@ def test_a_failing_preparation_step_fails_the_job_before_any_model_work(rig, gol
 def test_a_queued_job_cancelled_before_it_starts_never_reaches_the_engine(rig, golden, monkeypatch) -> None:
     """The slot is not acquired (``acquired`` is False): the worker returns before its ``try`` block, so it
     does not touch the running job's VRAM coefficient, abort state or save path."""
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 24.0})
     monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.8)
     release = rig.event()
     rig.engine.script = hold_then(lambda call: call.save(), release=release)
@@ -1924,7 +1926,7 @@ def test_the_per_job_coefficient_value_for_each_kind_of_job(rig, golden, tmp_pat
     for name, size in _LORA_SIZES.items():
         with open(loras / name, "wb") as handle:
             handle.truncate(size)  # sparse: the size is what the coefficient reads
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": spec.get("vram", 24.0)})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": spec.get("vram", 24.0)})
     monkeypatch.setitem(wgp.server_config, "vram_safety_coefficient", spec.get("base", 0.85))
     if spec.get("dedicated"):
         monkeypatch.setenv("MAESTRO_SCAIL2_DEDICATED_MODEL", spec["dedicated"])
@@ -1963,7 +1965,7 @@ def test_consecutive_jobs_each_start_from_the_saved_base_coefficient(rig, golden
     """One coefficient on ``wgp.args`` for the whole process: a heavy job tightens it, the worker puts the saved base
     back, a light job computes its own value from that base, a sound effect leaves it alone, and the same heavy job
     gets the same value again."""
-    monkeypatch.setattr(rig.launch, "_cached_hardware", {"gpu_vram_gb": 24.0})
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 24.0})
     monkeypatch.setitem(rig.server.wgp.server_config, "vram_safety_coefficient", 0.85)
     seen = _stub_mmaudio(rig, monkeypatch)
     heavy = {**BODY, "resolution": "1280x720", "video_length": 241}
@@ -2167,7 +2169,8 @@ def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkey
     import routers.tools as tools
 
     assert tools._chunked_flashvsr_upscale is launch._chunked_flashvsr_upscale
-    # The probe stays in launch and reads launch's cache when the coefficient pass calls it.
+    # The probe is one function. The coefficient pass calls it, and it reads the one cache.
     coefficients = importlib.import_module("services.generation_coefficients")
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
+    assert coefficients._get_cached_hardware is launch._get_cached_hardware
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 7.0})
     assert coefficients._get_cached_hardware() == {"gpu_vram_gb": 7.0}

@@ -87,6 +87,7 @@ BOUND_SERVICES = (
     "services.generation_jobs",
     "services.generation_recovery",
     "services.generation_preparation",
+    "services.generation_h3_release",
 )
 
 
@@ -113,3 +114,20 @@ def test_every_bound_service_name_is_the_servers_object(full_server, monkeypatch
                 continue
             assert value is getattr(launch, name), f"{module_name}.{name} is not the server's object"
     assert checked > 0
+
+
+def test_the_hardware_probe_and_the_h3_lock_are_the_servers_objects(full_server) -> None:
+    """The probe is one function object, and the idle-release lock is the holder's one RLock."""
+    launch = importlib.import_module("_launch_runtime")
+    probe = importlib.import_module("services.hardware_probe")
+    release = importlib.import_module("services.generation_h3_release")
+    coefficients = importlib.import_module("services.generation_coefficients")
+    director = importlib.import_module("services.director_pipeline")
+    assert launch._get_cached_hardware is probe._get_cached_hardware
+    assert coefficients._get_cached_hardware is probe._get_cached_hardware
+    assert director._get_cached_hardware is probe._get_cached_hardware
+    assert launch._h3_idle_release_lock is release._h3_idle_release.lock
+    assert launch._cancel_h3_idle_release is release._cancel_h3_idle_release
+    assert launch._interrupt_wan_model is release._interrupt_wan_model
+    assert launch._release_h3_when_queue_allows is release._release_h3_when_queue_allows
+    assert launch._release_legacy_h3_when_queue_allows is release._release_legacy_h3_when_queue_allows
