@@ -22149,12 +22149,8 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
 def _run_generation_finalize(st):
     """Post-process the produced files (outpaint, recast, upscale, grain, voice)."""
     _write_output_sidecars, clip_output_files = st._write_output_sidecars, st.clip_output_files
-    job, new_files, out_dir = st.job, st.new_files, st.out_dir
-    pp_film_grain_intensity = st.pp_film_grain_intensity
-    pp_film_grain_saturation = st.pp_film_grain_saturation
-    pp_spatial_upsampling = st.pp_spatial_upsampling
-    pp_voice_clone_enabled, pp_voice_clone_mode = st.pp_voice_clone_enabled, st.pp_voice_clone_mode
-    pp_voice_clone_refs, raw_params, success = st.pp_voice_clone_refs, st.raw_params, st.success
+    job, new_files, out_dir, raw_params = st.job, st.new_files, st.out_dir, st.raw_params
+    success = st.success
     if os.path.isdir(out_dir):
         # Post-generation outpaint cleanup: combines two operations
         # in a single ffmpeg invocation so we touch the output mp4
@@ -22546,91 +22542,101 @@ def _run_generation_finalize(st):
                     if adaptive_mask_dir:
                         import shutil
                         shutil.rmtree(adaptive_mask_dir, ignore_errors=True)
-
-        # Post-generation FlashVSR pass — whole-file upscale on the
-        # assembled video (see the pop near the top of this function
-        # for why this isn't done inline per sliding window). Ordered
-        # BEFORE film grain so grain lands on the upscaled pixels (the
-        # inline path had the same order), and before voice clone so
-        # the audio swap happens on the final video.
-        if success and pp_spatial_upsampling:
-            video_exts = {".mp4", ".webm", ".mkv"}
-            for fname in new_files:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in video_exts:
-                    continue
-                video_path = os.path.join(out_dir, fname)
-                try:
-                    if not update_job(
-                        job,
-                        message=f"Upscaling {fname} (FlashVSR)...",
-                        phase="Upscaling",
-                    ):
-                        return False
-                    print(f"  [Upscale] Applying {pp_spatial_upsampling} to {fname}")
-                    _apply_spatial_upsampling_to_file(video_path, pp_spatial_upsampling, job=job)
-                    print(f"  [Upscale] Done: {fname}")
-                except Exception as up_err:
-                    print(f"  [Upscale] Warning: failed on {fname} (keeping original): {up_err}")
-                    traceback.print_exc()
-
-        # Post-generation film grain pass (applied to output files, not during inference)
-        if success and pp_film_grain_intensity > 0:
-            video_exts = {".mp4", ".webm", ".mkv"}
-            for fname in new_files:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in video_exts:
-                    continue
-                video_path = os.path.join(out_dir, fname)
-                try:
-                    if not update_job(
-                        job, message=f"Applying film grain to {fname}...",
-                    ):
-                        return False
-                    print(f"  [Film Grain] Applying to {fname} (intensity={pp_film_grain_intensity}, saturation={pp_film_grain_saturation})")
-                    _apply_film_grain_to_file(video_path, pp_film_grain_intensity, pp_film_grain_saturation)
-                    print(f"  [Film Grain] Done: {fname}")
-                except Exception as fg_err:
-                    print(f"  [Film Grain] Warning: failed on {fname}: {fg_err}")
-                    traceback.print_exc()
-
-        # Post-generation voice clone pass (SeedVC). Replaces 1 or 2
-        # voices in the generated video's audio track with user-
-        # supplied reference voice(s). Order matters: runs AFTER
-        # film grain so the audio replacement happens on the final
-        # color-graded video. Video stream is copied through (no
-        # re-encode), so film grain is preserved.
-        #
-        # The voice-clone function leaves the video unchanged on any
-        # failure (no audio track, missing refs, SeedVC failure,
-        # remux failure) — it's safe to enable speculatively.
-        if success and pp_voice_clone_enabled and pp_voice_clone_refs:
-            video_exts = {".mp4", ".webm", ".mkv"}
-            for fname in new_files:
-                ext = os.path.splitext(fname)[1].lower()
-                if ext not in video_exts:
-                    continue
-                video_path = os.path.join(out_dir, fname)
-                try:
-                    if not update_job(
-                        job,
-                        message=f"Voice cloning ({pp_voice_clone_mode}) on {fname}...",
-                    ):
-                        return False
-                    print(f"  [Voice Clone] mode={pp_voice_clone_mode} refs={len(pp_voice_clone_refs)} on {fname}")
-                    from postprocessing.voice_clone import apply_voice_clone_to_file
-                    apply_voice_clone_to_file(
-                        video_path=video_path,
-                        voice_ref_paths=pp_voice_clone_refs,
-                        mode=pp_voice_clone_mode,
-                    )
-                    print(f"  [Voice Clone] Done: {fname}")
-                except Exception as vc_err:
-                    print(f"  [Voice Clone] Warning: failed on {fname}: {vc_err}")
-                    traceback.print_exc()
         st.new_files = new_files
-        return _run_generation_audio_and_sidecars(st)
+        return _run_generation_video_passes(st)
     return _run_generation_finish(st)
+
+
+def _run_generation_video_passes(st):
+    """FlashVSR, film grain and voice clone passes."""
+    job, new_files, out_dir = st.job, st.new_files, st.out_dir
+    pp_film_grain_intensity = st.pp_film_grain_intensity
+    pp_film_grain_saturation = st.pp_film_grain_saturation
+    pp_spatial_upsampling = st.pp_spatial_upsampling
+    pp_voice_clone_enabled, pp_voice_clone_mode = st.pp_voice_clone_enabled, st.pp_voice_clone_mode
+    pp_voice_clone_refs, success = st.pp_voice_clone_refs, st.success
+    # Post-generation FlashVSR pass — whole-file upscale on the
+    # assembled video (see the pop near the top of this function
+    # for why this isn't done inline per sliding window). Ordered
+    # BEFORE film grain so grain lands on the upscaled pixels (the
+    # inline path had the same order), and before voice clone so
+    # the audio swap happens on the final video.
+    if success and pp_spatial_upsampling:
+        video_exts = {".mp4", ".webm", ".mkv"}
+        for fname in new_files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in video_exts:
+                continue
+            video_path = os.path.join(out_dir, fname)
+            try:
+                if not update_job(
+                    job,
+                    message=f"Upscaling {fname} (FlashVSR)...",
+                    phase="Upscaling",
+                ):
+                    return False
+                print(f"  [Upscale] Applying {pp_spatial_upsampling} to {fname}")
+                _apply_spatial_upsampling_to_file(video_path, pp_spatial_upsampling, job=job)
+                print(f"  [Upscale] Done: {fname}")
+            except Exception as up_err:
+                print(f"  [Upscale] Warning: failed on {fname} (keeping original): {up_err}")
+                traceback.print_exc()
+
+    # Post-generation film grain pass (applied to output files, not during inference)
+    if success and pp_film_grain_intensity > 0:
+        video_exts = {".mp4", ".webm", ".mkv"}
+        for fname in new_files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in video_exts:
+                continue
+            video_path = os.path.join(out_dir, fname)
+            try:
+                if not update_job(
+                    job, message=f"Applying film grain to {fname}...",
+                ):
+                    return False
+                print(f"  [Film Grain] Applying to {fname} (intensity={pp_film_grain_intensity}, saturation={pp_film_grain_saturation})")
+                _apply_film_grain_to_file(video_path, pp_film_grain_intensity, pp_film_grain_saturation)
+                print(f"  [Film Grain] Done: {fname}")
+            except Exception as fg_err:
+                print(f"  [Film Grain] Warning: failed on {fname}: {fg_err}")
+                traceback.print_exc()
+
+    # Post-generation voice clone pass (SeedVC). Replaces 1 or 2
+    # voices in the generated video's audio track with user-
+    # supplied reference voice(s). Order matters: runs AFTER
+    # film grain so the audio replacement happens on the final
+    # color-graded video. Video stream is copied through (no
+    # re-encode), so film grain is preserved.
+    #
+    # The voice-clone function leaves the video unchanged on any
+    # failure (no audio track, missing refs, SeedVC failure,
+    # remux failure) — it's safe to enable speculatively.
+    if success and pp_voice_clone_enabled and pp_voice_clone_refs:
+        video_exts = {".mp4", ".webm", ".mkv"}
+        for fname in new_files:
+            ext = os.path.splitext(fname)[1].lower()
+            if ext not in video_exts:
+                continue
+            video_path = os.path.join(out_dir, fname)
+            try:
+                if not update_job(
+                    job,
+                    message=f"Voice cloning ({pp_voice_clone_mode}) on {fname}...",
+                ):
+                    return False
+                print(f"  [Voice Clone] mode={pp_voice_clone_mode} refs={len(pp_voice_clone_refs)} on {fname}")
+                from postprocessing.voice_clone import apply_voice_clone_to_file
+                apply_voice_clone_to_file(
+                    video_path=video_path,
+                    voice_ref_paths=pp_voice_clone_refs,
+                    mode=pp_voice_clone_mode,
+                )
+                print(f"  [Voice Clone] Done: {fname}")
+            except Exception as vc_err:
+                print(f"  [Voice Clone] Warning: failed on {fname}: {vc_err}")
+                traceback.print_exc()
+    return _run_generation_audio_and_sidecars(st)
 
 
 def _run_generation_audio_and_sidecars(st):
