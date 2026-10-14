@@ -34,6 +34,32 @@ _publish_generic_legacy_task = None
 _comic_plan_jobs: dict[str, dict] = {}
 _comic_plan_jobs_lock = threading.Lock()
 _comic_plan_active_jobs: set[str] = set()
+_COMIC_PLAN_TERMINAL = {"completed", "failed"}
+
+
+def any_comic_plan_job_active() -> bool:
+    """True while Comic planning still writes checkpoints into the workspace.
+
+    These jobs live in ``_comic_plan_jobs`` / ``_comic_plan_active_jobs``,
+    not ``jobs()`` or ``_active_gen_states``. Queued, loading_llm and
+    planning ones persist under ``.comic-plan-checkpoints`` via
+    ``_workspace_dir``; completed/failed ones do not. Workspace delete
+    must treat the first group as busy.
+    """
+    with _comic_plan_jobs_lock:
+        if _comic_plan_active_jobs:
+            return True
+        return any(
+            str(job.get("status") or "") not in _COMIC_PLAN_TERMINAL
+            for job in _comic_plan_jobs.values()
+        )
+
+
+def reset_comic_plan_jobs() -> None:
+    """Drop in-memory Comic plan jobs. Tests use this; production does not."""
+    with _comic_plan_jobs_lock:
+        _comic_plan_jobs.clear()
+        _comic_plan_active_jobs.clear()
 
 
 def _comic_plan_checkpoint_dir(workspace: str | None = None) -> str:

@@ -108,6 +108,23 @@ def create_workspace_router(
         busy = any(j.get("status") in ("queued", "running") for j in jobs())
         if busy or not generation_idle():
             raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        # Story Lab and Comic LLM planners write checkpoints into the
+        # workspace from their own registries, which are neither jobs()
+        # nor `_active_gen_states`. Deleting mid-plan wipes the project
+        # and lets `_workspace_dir` resurrect an empty folder for the
+        # leftover worker.
+        try:
+            from services.story_lab_jobs import any_story_plan_job_active
+            if any_story_plan_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
+        try:
+            from services.director_comic_jobs import any_comic_plan_job_active
+            if any_comic_plan_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
         # Director pipelines are alive between their generation jobs (LLM
         # planning, review pauses) with no _jobs entry — but their next step
         # would resurrect the folder via _workspace_dir().

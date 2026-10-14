@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: deleting a workspace is refused while Story Lab or Comic planning is still running.** Those planners live in their own job lists, not the local GPU queue, and they write checkpoints back into the workspace folder. A delete mid-plan used to wipe the project and then recreate an empty folder for the leftover worker.
+
 **Fixed: a generation started by a command (picture, speech, music, sound effect or video, from the Studio, the Wizard or MCP) works again on the full server.** Since the generation job core moved into the kernel, such a job was cancelled and marked interrupted ("dispatch_failed") before its worker started. The job now joins the GPU queue and starts as before.
 
 **Generation job status, cancel and the job list left the main server file.** GET /api/v1/status/{job_id}, POST /api/v1/cancel/{job_id} and GET /api/v1/jobs still answer the same way. The core server keeps its own copies of these routes.

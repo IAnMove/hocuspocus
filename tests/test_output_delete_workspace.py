@@ -114,3 +114,90 @@ def test_delete_output_rejects_traversal(tmp_path, monkeypatch, name):
 
     assert result == {"deleted": name}
     assert outside.read_bytes() == b"keep"
+
+
+def _workspace_delete_client(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers.workspace_outputs import create_workspace_router
+
+    film = tmp_path / "film"
+    film.mkdir()
+    policy = PathPolicy()
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["film"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=policy.safe_join,
+        save_path=lambda: str(tmp_path),
+    ))
+    return TestClient(app), film
+
+
+def test_delete_workspace_refuses_while_story_plan_is_running(tmp_path):
+    """Story Lab planners live in `_story_plan_jobs`, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from services.story_lab_jobs import (
+        _story_plan_jobs,
+        _story_plan_jobs_lock,
+        reset_story_plan_jobs,
+    )
+
+    client, film = _workspace_delete_client(tmp_path)
+    (film / "story.project.json").write_text("{}", encoding="utf-8")
+    reset_story_plan_jobs()
+    try:
+        with _story_plan_jobs_lock:
+            _story_plan_jobs["story-plan-abc123abc123"] = {
+                "jobId": "story-plan-abc123abc123",
+                "workspace": "film",
+                "status": "running",
+            }
+        refused = client.delete("/api/v1/workspaces/film")
+        kept_story = film.is_dir() and (film / "story.project.json").read_text(encoding="utf-8") == "{}"
+        reset_story_plan_jobs()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        reset_story_plan_jobs()
+    assert refused.status_code == 409, refused.text
+    assert "generation" in refused.json()["detail"].lower()
+    assert kept_story
+    assert deleted.status_code == 200, deleted.text
+    assert not film.is_dir()
+
+
+def test_delete_workspace_refuses_while_comic_plan_is_running(tmp_path):
+    """Comic planners live in `_comic_plan_jobs`, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from services.director_comic_jobs import (
+        _comic_plan_jobs,
+        _comic_plan_jobs_lock,
+        reset_comic_plan_jobs,
+    )
+
+    client, film = _workspace_delete_client(tmp_path)
+    (film / "page.comic.json").write_text("{}", encoding="utf-8")
+    reset_comic_plan_jobs()
+    try:
+        with _comic_plan_jobs_lock:
+            _comic_plan_jobs["comic-plan-job-abc123abc123"] = {
+                "jobId": "comic-plan-job-abc123abc123",
+                "workspace": "film",
+                "status": "planning",
+            }
+        refused = client.delete("/api/v1/workspaces/film")
+        kept_comic = film.is_dir() and (film / "page.comic.json").read_text(encoding="utf-8") == "{}"
+        reset_comic_plan_jobs()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        reset_comic_plan_jobs()
+    assert refused.status_code == 409, refused.text
+    assert "generation" in refused.json()["detail"].lower()
+    assert kept_comic
+    assert deleted.status_code == 200, deleted.text
+    assert not film.is_dir()

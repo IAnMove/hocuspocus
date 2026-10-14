@@ -29,6 +29,32 @@ from services.story_lab_schema import (
 _story_plan_jobs: dict[str, dict] = {}
 _story_plan_jobs_lock = threading.Lock()
 _story_plan_active_jobs: set[str] = set()
+_STORY_PLAN_TERMINAL = {"completed", "failed", "cancelled"}
+
+
+def any_story_plan_job_active() -> bool:
+    """True while Story Lab planning still writes checkpoints into the workspace.
+
+    These jobs live in ``_story_plan_jobs`` / ``_story_plan_active_jobs``,
+    not ``jobs()`` or ``_active_gen_states``. Queued, running and cancelling
+    ones persist under ``.story-plan-jobs`` via ``_workspace_dir``; completed
+    / failed / cancelled ones do not. Workspace delete must treat the first
+    group as busy.
+    """
+    with _story_plan_jobs_lock:
+        if _story_plan_active_jobs:
+            return True
+        return any(
+            str(job.get("status") or "") not in _STORY_PLAN_TERMINAL
+            for job in _story_plan_jobs.values()
+        )
+
+
+def reset_story_plan_jobs() -> None:
+    """Drop in-memory Story Lab plan jobs. Tests use this; production does not."""
+    with _story_plan_jobs_lock:
+        _story_plan_jobs.clear()
+        _story_plan_active_jobs.clear()
 
 # Injected by _bind_story_lab_runtime. None until the full server binds them.
 _comic_writing_llm = None
