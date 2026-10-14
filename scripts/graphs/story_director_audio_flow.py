@@ -63,6 +63,8 @@ BACKEND_SCOPE_FILES = (
 KERNEL_MEDIA_RESOLVER_FILE = "app/services/kernel/paths.py"
 # File serving moved out of launch. The route name is still ``serve_file``.
 OUTPUT_LISTING_FILE = "app/services/output_listing.py"
+# Audio routes moved out of launch. A fixture that still defines them there wins.
+AUDIO_ROUTER_FILE = "app/routers/audio.py"
 LIMITATIONS = [
     "The graph is restricted to the configured Story Lab to Director audio scope.",
     "Python edges use AST names and do not resolve dynamic imports or runtime dispatch.",
@@ -188,7 +190,7 @@ def _backend_paths(root: Path) -> list[Path]:
     """The required backend sources, plus moved helpers when this tree has them."""
     extras = [
         root / relative
-        for relative in (KERNEL_MEDIA_RESOLVER_FILE, OUTPUT_LISTING_FILE)
+        for relative in (KERNEL_MEDIA_RESOLVER_FILE, OUTPUT_LISTING_FILE, AUDIO_ROUTER_FILE)
         if (root / relative).is_file()
     ]
     return [*_required_paths(root, BACKEND_SCOPE_FILES), *extras]
@@ -257,7 +259,7 @@ def _backend_detail(target: str) -> tuple[str, str]:
         ),
         "svc.upload_pipeline": (
             "_stream_upload / _transcode_upload",
-            "app/_launch_runtime.py — spools + transcodes to PCM WAV",
+            "app/routers/audio.py — spools + transcodes to PCM WAV",
         ),
         "svc.serve_file_lookup": (
             "_safe_join / _resolve_output_file",
@@ -265,7 +267,7 @@ def _backend_detail(target: str) -> tuple[str, str]:
         ),
         "svc.publish_job": (
             "_publish_audio_analysis_job()",
-            "app/_launch_runtime.py — durable job record",
+            "app/services/audio_jobs.py — durable job record",
         ),
         "svc.resource_scheduler": (
             "resource_scheduler.*_lane()",
@@ -305,6 +307,21 @@ def extract_backend_graph(root: Path) -> dict[str, Any]:
         if moved is not None:
             functions["serve_file"] = moved
             locations["serve_file"] = root / OUTPUT_LISTING_FILE
+    # Audio route bodies now live in the audio router. A fixture launch file
+    # that still defines the name keeps that definition (setdefault above).
+    if (root / AUDIO_ROUTER_FILE).is_file():
+        try:
+            audio_tree = ast.parse(
+                (root / AUDIO_ROUTER_FILE).read_text(encoding="utf-8"),
+                filename=str(root / AUDIO_ROUTER_FILE),
+            )
+        except (OSError, SyntaxError) as exc:
+            raise ArchitectureGraphError(f"Cannot parse {AUDIO_ROUTER_FILE}: {exc}") from exc
+        audio_functions = _function_map(audio_tree)
+        for name in BACKEND_ROUTE_FUNCS:
+            if name not in functions and name in audio_functions:
+                functions[name] = audio_functions[name]
+                locations[name] = root / AUDIO_ROUTER_FILE
     missing_functions = [name for name in BACKEND_ROUTE_FUNCS if name not in functions]
     if missing_functions:
         raise ArchitectureGraphError(
