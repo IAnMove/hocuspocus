@@ -22903,97 +22903,26 @@ def discard_generation_queue():
 # API Routes: Favorites
 # ============================================================================
 
-def _favorites_path() -> str:
-    """Path to favorites JSON file for the active workspace."""
-    return os.path.join(_workspace_dir(), ".favorites.json")
+from services.scene_favorites import (
+    _character_kit_conflict,
+    _character_kit_for_scene,
+    _character_kit_workspace,
+    _load_favorites,
+    _save_favorites,
+)
+from routers.scenes_favorites import (
+    create_favorites_router,
+    create_scene_output_router,
+    create_scene_recording_router,
+    save_scene_output,
+    save_scene_recording,
+)
 
-
-def _load_favorites() -> set:
-    """Load favorites set for the active workspace."""
-    from services.win_safe_files import favorites_lock
-    fp = _favorites_path()
-    if os.path.isfile(fp):
-        try:
-            with favorites_lock:
-                with open(fp, "r", encoding="utf-8") as f:
-                    data = json.load(f)
-            return set(data) if isinstance(data, list) else set()
-        except Exception:
-            pass
-    return set()
-
-
-def _save_favorites(favs: set):
-    """Save favorites set for the active workspace.
-
-    favorites_lock (shared with director_pipeline's delete sweep, which
-    rewrites the same file) serializes read-modify-write cycles so a
-    concurrent pipeline delete can't be clobbered by a stale write."""
-    from services.win_safe_files import favorites_lock
-    fp = _favorites_path()
-    with favorites_lock:
-        with open(fp, "w", encoding="utf-8") as f:
-            json.dump(sorted(favs), f)
-
-
-@api.get("/api/v1/favorites")
-def list_favorites():
-    """List all favorited filenames in the active workspace."""
-    return {"favorites": sorted(_load_favorites())}
-
-
-@api.post("/api/v1/favorites/{name}")
-def toggle_favorite(name: str):
-    """Toggle favorite status for a file. Returns new state."""
-    from services.win_safe_files import favorites_lock
-    # Hold across the whole read-modify-write so a concurrent pipeline
-    # delete sweep can't be clobbered by this stale set (RLock — the
-    # load/save helpers re-acquire internally).
-    with favorites_lock:
-        favs = _load_favorites()
-        if name in favs:
-            favs.discard(name)
-            is_fav = False
-        else:
-            favs.add(name)
-            is_fav = True
-        _save_favorites(favs)
-    return {"name": name, "favorite": is_fav}
-
-
-@api.post("/api/v1/scenes")
-def save_scene_output(body: dict):
-    """Persist a Scene Animator project as a first-class workspace output.
-
-    The JSON keeps lightweight references to Maestro outputs/uploads while the
-    PNG is only a gallery preview. Locally imported assets are uploaded by the
-    client before this endpoint is called, so no transient blob: URL is saved.
-    """
-    from services.scene_save import save_launch_scene
-
-    return save_launch_scene(body, workspace_dir=_workspace_dir)
-
-
-
-
-def _character_kit_workspace(value) -> str:
-    workspace = str(value or _get_active_workspace()).strip()
-    if workspace != "default" and not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", workspace):
-        raise HTTPException(status_code=400, detail="Invalid Character Kit workspace")
-    return workspace
-
-
-def _character_kit_conflict(exc) -> HTTPException:
-    return HTTPException(
-        status_code=409,
-        detail={
-            "code": "character_kit_revision_conflict",
-            "message": str(exc),
-            "expectedRevision": exc.expected,
-            "currentRevision": exc.current,
-        },
-    )
-
+api.include_router(create_favorites_router(
+    _workspace_dir=_workspace_dir,
+    _get_active_workspace=_get_active_workspace,
+))
+api.include_router(create_scene_output_router(save_scene=save_scene_output))
 
 from routers.character_kit_library import (
     _bind_character_kit_library_runtime,
@@ -23016,38 +22945,12 @@ api.include_router(create_character_kit_face_router(
 
 
 
-@api.post("/api/v1/scenes/recordings")
-async def save_scene_recording(
-    file: UploadFile = File(...),
-    metadata: str = Form("{}"),
-    audio: UploadFile | None = File(None),
-):
-    """Convert a browser WebM capture to MP4 and publish it in Videos.
-
-    The sidecar deliberately keeps the exact user prompt, full LLM recipe,
-    compiled scene, and source assets so a rendered 3D clip remains fully
-    explainable and reproducible from the gallery.
-    """
-    from services.scene_save import http_error_detail, http_error_status, publish_from_form
-
-    try:
-        return await publish_from_form(
-            {"file": file, "metadata": metadata, "audio": audio},
-            workspace_dir=_workspace_dir,
-            include_workspace_query=False,
-            scan_cache=_output_scan_cache,
-            scan_cache_lock=_output_scan_cache_lock,
-            stream_upload=_stream_upload,
-            transcode_slots=_UPLOAD_TRANSCODE_SLOTS,
-            sidecar_error_prefix="Could not save recording metadata",
-            safe_join=_safe_join,
-            strip_workspace=False,
-        )
-    except HTTPException:
-        raise
-    except Exception as error:
-        raise HTTPException(status_code=http_error_status(error), detail=http_error_detail(error)) from error
-
+import routers.scenes_favorites as _scenes_favorites
+_scenes_favorites._workspace_dir = _workspace_dir
+_scenes_favorites._stream_upload = _stream_upload
+_scenes_favorites._UPLOAD_TRANSCODE_SLOTS = _UPLOAD_TRANSCODE_SLOTS
+_scenes_favorites._safe_join = _safe_join
+api.include_router(create_scene_recording_router(publish_recording=save_scene_recording))
 
 
 # ============================================================================
@@ -28999,6 +28902,8 @@ _configure_output_listing(
     safe_join=_safe_join,
     engine=wgp,
 )
+_scenes_favorites._output_scan_cache = _output_scan_cache
+_scenes_favorites._output_scan_cache_lock = _output_scan_cache_lock
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
@@ -31450,10 +31355,8 @@ api.include_router(create_series_review_router(
 ))
 
 
-def _character_kit_for_scene(workspace: str, kit_id: str) -> dict | None:
-    from services.series_shot_bridge import with_pose_sizes
-    kit = (_read_kit_library(_workspace_dir(workspace)).get("kits") or {}).get(kit_id)
-    return with_pose_sizes(kit, _workspace_dir(workspace)) if kit else None
+import services.scene_favorites as _scene_favorites_service
+_scene_favorites_service._read_kit_library = _read_kit_library
 
 
 from services.video2d_character_ops import bind_kit_reader as _bind_scene_kit_reader

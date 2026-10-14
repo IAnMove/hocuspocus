@@ -1913,6 +1913,17 @@ class CoreRuntimeTests(unittest.TestCase):
         ]
         self.assertEqual(owners, ["app/routers/series_library.py"])
 
+    def test_core_scene_routes_come_from_the_shared_router(self):
+        owners = {
+            (row["method"], row["path"]): row["source"]
+            for row in self._served_core_routes()
+            if row["path"] in {"/api/v1/scenes", "/api/v1/scenes/recordings"}
+        }
+        self.assertEqual(owners, {
+            ("POST", "/api/v1/scenes"): "app/routers/scenes_favorites.py",
+            ("POST", "/api/v1/scenes/recordings"): "app/routers/scenes_favorites.py",
+        })
+
     def test_core_llm_load_uses_the_stored_provider_key_and_routing(self):
         from services import core_workspace as core
 

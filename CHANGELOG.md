@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Favorites and scene save left the launch module.** Marking a clip as a favorite, saving a scene, and uploading a scene recording still answer the same way on the main server. The core server uses the same scene and recording routes. A core scene that is not a JSON object, and a core recording sent without a file, are rejected as invalid input.
+
 **Audio upload, trim, mix, and analysis left the launch module.** Uploading a clip, adopting one the machine already has, trimming it, mixing tracks, and reading an analysis still answer the same way. An unknown analysis job is still not found. Asking for clips or a structure without an analysis is still refused. The analysis jobs stay in the same job registry as every other job.
 
 **Director music and character-reference description left the launch module.** Asking for a song, or for a description of character reference images, still answers the same way. An empty description still asks for the images. An empty music request still stops before any track is generated.

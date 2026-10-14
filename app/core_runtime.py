@@ -29,6 +29,7 @@ from routers.production_media import create_production_media_router
 from routers.recipes import create_recipes_router
 from routers.scene_commands import create_scene_commands_router
 from routers.scene_packages import create_scene_packages_router
+from routers.scenes_favorites import create_scene_output_router, create_scene_recording_router
 from routers.series_assembly import create_series_assembly_router
 from routers.series_review import create_series_review_router
 from routers.style_library import create_style_library_router
@@ -485,10 +486,9 @@ api.include_router(create_rig_router(
 ))
 
 
-@api.post("/api/v1/scenes/recordings")
-async def save_scene_recording(request: Request):
+async def _publish_core_scene_recording(file, metadata, audio):
     try:
-        return await scene_save.publish_from_form(await request.form())
+        return await scene_save.publish_from_form({"file": file, "metadata": metadata, "audio": audio})
     except HTTPException:
         raise
     except Exception as error:
@@ -498,14 +498,14 @@ async def save_scene_recording(request: Request):
         ) from error
 
 
-@api.post("/api/v1/scenes")
-async def save_scene(request: Request):
-    body = await request.json()
-    return scene_save.save_core_scene(
+api.include_router(create_scene_recording_router(publish_recording=_publish_core_scene_recording))
+api.include_router(create_scene_output_router(
+    save_scene=lambda body: scene_save.save_core_scene(
         body,
         workspace_dir=core.workspace_dir,
         active_workspace=core.active_workspace,
-    )
+    ),
+))
 
 
 def _resolve_editor_input(value: str, workspace: str | None = None) -> str | None:
