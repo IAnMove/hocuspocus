@@ -20898,85 +20898,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
         if not acquired:
             return False
         try:
-            if not try_start(
-                job,
-                message=(
-                    "Restarting recovered job from the beginning…"
-                    if job.get("recovered") else "Preparing..."
-                ),
-                acquired_resources=[_local_gpu_lane.key],
-            ):
-                return False
-            # Active generation timing begins only after this job owns the GPU
-            # slot. Time spent waiting in the submission queue is deliberately
-            # excluded from gallery metadata and completion logs.
-            start_time = float(job.get("started_at") or time.time())
-            _persist_generation_job(job)
-            if execution_mode.policy().simulated:
-                return _run_simulated_generation(job, finalize=finalize)
-            _cancel_h3_idle_release()
-            legacy_h3_job = _is_legacy_h3_model(
-                job.get("params", {}).get("model_type")
-            )
-            # Never retain the isolated Comfy runtime beside a native WGP
-            # model. Adjacent Legacy jobs still reuse it through FIFO.
-            if legacy_h3_job:
-                minimax_h3_service.cancel_idle_shutdown()
-            else:
-                minimax_h3_service.stop_runtime()
-
-            # Per-job VRAM coefficient adjustment applies only to WGP jobs.
-            if not legacy_h3_job:
-                _apply_per_job_coefficient(job)
-
-            # Build minimal state (same structure as CLI mode, line 11935 of wgp.py)
-            state = {
-                "gen": {
-                    "queue": [],
-                    "in_progress": False,
-                    "abort": False,
-                    "file_list": [],
-                    "artifact_list": [],
-                    "file_settings_list": [],
-                    "audio_file_list": [],
-                    "audio_file_settings_list": [],
-                    "selected": 0,
-                    "audio_selected": 0,
-                    "prompt_no": 0,
-                    "prompts_max": 0,
-                    "repeat_no": 0,
-                    "total_generation": 1,
-                    "window_no": 0,
-                    "total_windows": 0,
-                    "progress_status": "",
-                    "process_status": "process:main",
-                },
-                "loras": [],
-            }
-
-            # Build task manifest from user params
-            raw_params = job["params"].copy()
-
-            # Register the exact state before any model work. Legacy owns a
-            # Comfy prompt interrupt; native models use WGP's interrupt flag.
-            abort_state = state["gen"]
-            if legacy_h3_job:
-                interrupt_model = minimax_h3_service.cancel
-            else:
-                interrupt_model = (
-                    None if raw_params.get("sfx_mode") else _interrupt_wan_model
-                )
-            if not register_abort_state(
-                job,
-                job_id,
-                _active_gen_states,
-                abort_state,
-                interrupt_model=interrupt_model,
-            ):
-                return False
-            st.legacy_h3_job, st.raw_params, st.start_time = legacy_h3_job, raw_params, start_time
-            st.state = state
-            return _run_generation_legacy_h3(st)
+            return _run_generation_start(st)
 
         except Exception as e:
             active_task_timer = st.active_task_timer
@@ -20999,6 +20921,7 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
             finish_job(job, "failed", **failure_updates)
             return False
         finally:
+            abort_state = st.abort_state
             # Restore the persisted base coefficient so the next job
             # starts from the user's auto-tuned value, not whatever
             # this job's adjustment left it at.
@@ -21034,6 +20957,93 @@ def _run_generation(job_id: str, *, finalize: bool = True) -> bool:
                 and not job.get("params", {}).get("_director_pipeline_id")
             ):
                 _release_h3_when_queue_allows(job_id)
+
+
+def _run_generation_start(st):
+    """Take the GPU slot, build the job state and register the abort handle."""
+    abort_state, finalize, job, job_id = st.abort_state, st.finalize, st.job, st.job_id
+    try:
+        if not try_start(
+            job,
+            message=(
+                "Restarting recovered job from the beginning…"
+                if job.get("recovered") else "Preparing..."
+            ),
+            acquired_resources=[_local_gpu_lane.key],
+        ):
+            return False
+        # Active generation timing begins only after this job owns the GPU
+        # slot. Time spent waiting in the submission queue is deliberately
+        # excluded from gallery metadata and completion logs.
+        start_time = float(job.get("started_at") or time.time())
+        _persist_generation_job(job)
+        if execution_mode.policy().simulated:
+            return _run_simulated_generation(job, finalize=finalize)
+        _cancel_h3_idle_release()
+        legacy_h3_job = _is_legacy_h3_model(
+            job.get("params", {}).get("model_type")
+        )
+        # Never retain the isolated Comfy runtime beside a native WGP
+        # model. Adjacent Legacy jobs still reuse it through FIFO.
+        if legacy_h3_job:
+            minimax_h3_service.cancel_idle_shutdown()
+        else:
+            minimax_h3_service.stop_runtime()
+
+        # Per-job VRAM coefficient adjustment applies only to WGP jobs.
+        if not legacy_h3_job:
+            _apply_per_job_coefficient(job)
+
+        # Build minimal state (same structure as CLI mode, line 11935 of wgp.py)
+        state = {
+            "gen": {
+                "queue": [],
+                "in_progress": False,
+                "abort": False,
+                "file_list": [],
+                "artifact_list": [],
+                "file_settings_list": [],
+                "audio_file_list": [],
+                "audio_file_settings_list": [],
+                "selected": 0,
+                "audio_selected": 0,
+                "prompt_no": 0,
+                "prompts_max": 0,
+                "repeat_no": 0,
+                "total_generation": 1,
+                "window_no": 0,
+                "total_windows": 0,
+                "progress_status": "",
+                "process_status": "process:main",
+            },
+            "loras": [],
+        }
+
+        # Build task manifest from user params
+        raw_params = job["params"].copy()
+
+        # Register the exact state before any model work. Legacy owns a
+        # Comfy prompt interrupt; native models use WGP's interrupt flag.
+        abort_state = state["gen"]
+        if legacy_h3_job:
+            interrupt_model = minimax_h3_service.cancel
+        else:
+            interrupt_model = (
+                None if raw_params.get("sfx_mode") else _interrupt_wan_model
+            )
+        if not register_abort_state(
+            job,
+            job_id,
+            _active_gen_states,
+            abort_state,
+            interrupt_model=interrupt_model,
+        ):
+            return False
+    finally:
+        st.abort_state = abort_state
+    st.legacy_h3_job, st.raw_params, st.start_time = legacy_h3_job, raw_params, start_time
+    st.state = state
+    return _run_generation_legacy_h3(st)
 
 
 def _run_generation_legacy_h3(st):
