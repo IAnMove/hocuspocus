@@ -6,6 +6,16 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a series made from a template keeps the language you picked.** A Spanish template used to keep an English language contract, so the writing helpers, the comic hand-off and the providers followed English. The contract now matches the labels.
+
+**Fixed: a story you turn into a series keeps its protected quotes.** Lyrics and dialogue the story had locked as written are no longer dropped on the way to the series.
+
+**Fixed: a series that turns portrait renders its 2D shots again.** The 2D take fingerprint did not know the frame, so the cut covered a 1920x1080 take into 1080x1920. A portrait frame, the text a pronunciation dictionary rewrites in a line and a line's cast index (which copy of a kit speaks) now count: changing one renders only the shots it touches. A dictionary entry no line of a shot uses renders nothing again. Takes you already have are read as they were saved and stay current, so the first produce after the update renders nothing again; a change of these three made to a take saved before the update is only seen once that shot is rendered again.
+
+**Fixed: a scripted video clip is made again when what it was made from changes.** A series turned portrait, a moved cast member or a replaced location plate on a "plan" start, and a start image overwritten in place or a remade pose on a named start now make a new clip; the old one stays as an attempt. Clips you already have keep matching, so the first produce after the update makes no clip again (a legacy clip that was already out of date is not detected; remake it by hand).
+
+**Fixed: producing a scripted video shot points its approval at the clip it asks for.** After a size change away and back, produce used to skip the shot and leave no approved take (the cut stopped at "Approve shot N") or the clip of the other size. It now approves the matching clip, but only when the shot has no approval or is approved on a clip produce made for another request; a clip you imported or an older clip you chose is never replaced, and language versions keep their own approvals.
+
 **Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.
 
 **Storage duplicate tools, the managed LoRA download, model-file helpers, generation option helpers and the request guards left the main server file.** The duplicate scan, reclaim and linked-install removal still answer the same way. A generation still downloads a managed LoRA that is missing, and still reads the same registry. The model list still reports the same weight groups and the same missing image-model files. Prompt types, SCAIL-2 steps and guidance, the output seed and the MiniMax H3 options are still normalised the same way. A policy refusal is still a 409, a browser mutation from another origin is still refused, and a traced mutation is still recorded. LAN authentication is still the first check. The main server file is about 700 lines shorter.
