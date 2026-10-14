@@ -245,8 +245,10 @@ def _attempt_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> list[tuple[
 def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> str:
     """Fingerprint a review compares with a take.
 
-    A take from before version 2 still carries that older digest. The approved take wins: an earlier
-    pass can share the new digest by accident while the approved one still has the old one. A changed shot returns
+    A take from an older version still carries the digest of that version. The approved take wins: an earlier
+    pass can share the new digest by accident while the approved one still has the old one. With no approved take,
+    several takes can each be current under the version they were saved at (one from before version 2 and one after,
+    nothing changed since): the newest is the one a review looks at, so its digest is returned. A changed shot returns
     the current digest."""
     current = render_inputs(series, shot, kits, root)
     saved = _attempt_inputs(shot, series.get("assets") or {})
@@ -255,8 +257,7 @@ def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str
         if attempt_id == approved and _fresh(kept, version, series, shot, kits, root):
             return kept
     legacy = [kept for _attempt_id, kept, version in saved if _fresh(kept, version, series, shot, kits, root)]
-    unique = list(dict.fromkeys(legacy))
-    return unique[0] if len(unique) == 1 else current
+    return legacy[-1] if legacy else current
 
 
 def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> list[str]:

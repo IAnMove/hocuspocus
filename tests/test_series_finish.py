@@ -202,6 +202,30 @@ def test_a_take_saved_before_the_frame_was_hashed_is_not_checked_against_it():
     assert stale_shot_ids(portrait, _taken(portrait, shot, OLD["static"][0], INPUTS_VERSION), KITS) == ["s1"]
 
 
+def test_a_preview_review_of_a_portrait_series_keeps_its_old_takes():
+    """A staged review whose silent shot has a take from before version 2 and one from version 2, nothing changed
+    since and nothing approved for the cut yet. Each take is current under the version it was saved at, so the review
+    still waits for the person's look, or promotes the preview they approved; it renders neither again."""
+    from services.series_review_gate import render_passes
+    portrait = series(**PORTRAIT)
+    shot = copy.deepcopy(SHOTS["card"])
+    older, newer = render_inputs(portrait, shot, KITS, version=1), render_inputs(portrait, shot, KITS, version=2)
+    assert len({older, newer, render_inputs(portrait, shot, KITS)}) == 3
+    portrait["assets"] = {"t1": {"metadata": {"renderInputs": older}},
+                          "t2": {"metadata": {"renderInputs": newer, "renderInputsVersion": 2}}}
+    shot["attempts"] = [{"id": "a1", "status": "completed", "outputAssetIds": ["t1"]},
+                        {"id": "a2", "status": "completed", "outputAssetIds": ["t2"]}]
+
+    def passes(entry):
+        episode = {"shots": [shot], "review": {"mode": "preview", "shots": {"s5": {"plan": "approved", **entry}}}}
+        planned, waiting = render_passes(portrait, episode, [shot], lambda value: accepted_inputs(portrait, value, KITS),
+                                         explicit=False)
+        return [(item["pass"], item.get("attemptId")) for item in planned], waiting
+
+    assert passes({"previewAttemptId": "a2"}) == ([], [{"shotId": "s5", "reason": "preview"}])
+    assert passes({"preview": "approved", "previewAttemptId": "a2"}) == ([("promote", "a2")], [])
+
+
 def test_only_2d_takes_see_the_series_finish():
     three = {"id": "s9", "productionMethod": "animation_3d", "dialogueBeats": [], "durationSeconds": 5,
              "layout2d": {"framing": "wide"}, "scene3d": {"template": "x", "cast": []}}
