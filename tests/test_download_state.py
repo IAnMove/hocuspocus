@@ -897,6 +897,254 @@ class TestCivitaiWorker(unittest.TestCase):
             self.assertEqual(reservations, {})
 
 
+_APP_DIR = os.path.join(_ROOT, "app")
+_LORA_PAYLOAD = b"lora-bytes" * 30_000  # 300,000 bytes: the fake stream yields 40,000-byte chunks
+_LORA_SHA256 = __import__("hashlib").sha256(_LORA_PAYLOAD).hexdigest()
+
+
+class TestManagedLoraDownload(unittest.TestCase):
+    """``_ensure_managed_loras_present``: the one-time download of a managed LoRA, with the network faked.
+
+    The function runs from ``services.managed_loras`` with the engine, the download registry, the managed table,
+    ``requests`` and ``time`` replaced. These cases passed on the full server before the C9c move too.
+    """
+
+    def setUp(self):
+        from types import SimpleNamespace
+        from unittest import mock
+
+        from services import managed_loras as module
+
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.tmp = temp.name
+        self.lora_dir = os.path.join(self.tmp, "engine", "loras_ltx2")
+        self.base = "acme.safetensors"
+        self.save_path = os.path.join(self.lora_dir, self.base)
+        self.gets, self.progress, self.sleeps = [], [], []
+        self.on_sleep = None
+        self.response = _FakeStream(_LORA_PAYLOAD)
+        self.registry = {}
+        self.table = {}
+        self.wgp = SimpleNamespace(
+            get_lora_dir=lambda model_type: self.lora_dir,
+            resolve_lora_path=lambda model_type, base: os.path.join(self.lora_dir, base),
+            server_config={},
+        )
+        objects = {
+            "wgp": self.wgp,
+            "_civitai_download_lock": threading.Lock(),
+            "_civitai_downloads": self.registry,
+            "_MANAGED_LORAS": self.table,
+            "requests": SimpleNamespace(get=self._get),
+            "time": SimpleNamespace(sleep=self._sleep),
+        }
+        for name, value in objects.items():
+            patcher = mock.patch.object(module, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        self.ensure = module._ensure_managed_loras_present
+
+    def _get(self, url, stream=False, timeout=None):
+        self.gets.append((url, stream, timeout))
+        return self.response
+
+    def _sleep(self, seconds):
+        self.sleeps.append(seconds)
+        if self.on_sleep:
+            self.on_sleep(len(self.sleeps))
+
+    def _spec(self, **extra):
+        spec = {"repo_id": "acme/loras", "label": "Acme", "support_url": "https://example.test/acme"}
+        spec.update(extra)
+        self.table[self.base] = spec
+        return spec
+
+    def _run(self, names=None):
+        return self.ensure([self.base] if names is None else names, "ltx2_test", progress=self.progress.append)
+
+    def _read(self, path):
+        with open(path, "rb") as handle:
+            return handle.read()
+
+    def test_nothing_is_fetched_without_a_missing_managed_lora(self):
+        self._spec()
+        self.assertEqual(self.ensure([], "ltx2_test"), [])
+        self.assertEqual(self.ensure(None, "ltx2_test"), [])
+        self.assertEqual(self._run(["other.safetensors", "dir/other.safetensors"]), [])
+        linked = os.path.join(self.tmp, "linked", self.base)
+        os.makedirs(os.path.dirname(linked))
+        with open(linked, "wb") as handle:
+            handle.write(b"linked copy")
+        self.wgp.resolve_lora_path = lambda model_type, base: linked
+        self.assertEqual(self._run(["some/folder/" + self.base]), [])
+        self.assertEqual((self.gets, self.progress, self.sleeps), ([], [], []))
+        self.assertFalse(os.path.exists(self.lora_dir))
+
+    def test_a_missing_lora_is_downloaded_checked_and_published_into_the_engine_folder(self):
+        self._spec(revision="abc123", remote_path="sub/acme-src.safetensors",
+                   size=len(_LORA_PAYLOAD), sha256=_LORA_SHA256.upper())
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self.gets, [
+            ("https://huggingface.co/acme/loras/resolve/abc123/sub/acme-src.safetensors", True, 30),
+        ])
+        self.assertEqual(self._read(self.save_path), _LORA_PAYLOAD)
+        self.assertEqual(os.listdir(self.lora_dir), [self.base])
+        self.assertEqual(self.progress, ["Downloading Acme model (one-time setup)…"] + [
+            f"Downloading Acme model (one-time setup)… {pct}%" for pct in (13, 26, 40, 53, 66, 80, 93, 100)
+        ])
+
+    def test_a_plain_entry_downloads_its_own_name_from_main(self):
+        self.table[self.base] = {"repo_id": "acme/loras"}
+        self.response = _FakeStream(_LORA_PAYLOAD, headers={})
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self.gets, [("https://huggingface.co/acme/loras/resolve/main/acme.safetensors", True, 30)])
+        # Without a content length there is no percentage, only the start message, named after the file.
+        self.assertEqual(self.progress, ["Downloading acme.safetensors model (one-time setup)…"])
+
+    def test_a_size_mismatch_publishes_nothing_and_leaves_no_partial(self):
+        self._spec(size=len(_LORA_PAYLOAD) + 1, sha256=_LORA_SHA256)
+        with self.assertRaises(RuntimeError) as caught:
+            self._run()
+        self.assertEqual(str(caught.exception), (
+            f"Could not download the Acme model automatically: download size mismatch (expected "
+            f"{len(_LORA_PAYLOAD) + 1} bytes, got {len(_LORA_PAYLOAD)}). Check your internet connection. "
+            "Try again, or import it manually from https://example.test/acme."
+        ))
+        self.assertEqual(os.listdir(self.lora_dir), [])
+
+    def test_a_sha256_mismatch_publishes_nothing_and_leaves_no_partial(self):
+        self._spec(size=len(_LORA_PAYLOAD), sha256="0" * 64)
+        with self.assertRaises(RuntimeError) as caught:
+            self._run()
+        self.assertIn("download SHA-256 mismatch; the checkpoint was not published", str(caught.exception))
+        self.assertEqual(os.listdir(self.lora_dir), [])
+
+    def test_an_http_error_points_at_the_repository_page_when_there_is_no_support_link(self):
+        self.table[self.base] = {"repo_id": "acme/loras", "label": "Acme"}
+        self.response = _FakeStream(b"", status=503)
+        with self.assertRaises(RuntimeError) as caught:
+            self._run()
+        self.assertEqual(str(caught.exception), (
+            "Could not download the Acme model automatically: HTTP 503. Check your internet connection. "
+            "Try again, or import it manually from https://huggingface.co/acme/loras."
+        ))
+        self.assertIsInstance(caught.exception.__cause__, IOError)
+        self.assertEqual(os.listdir(self.lora_dir), [])
+
+    def _fake_converter(self, outcome):
+        import sys
+        from types import ModuleType
+        from unittest import mock
+
+        calls = []
+
+        def convert(source, target, expected_sha256=None):
+            calls.append((source, target, expected_sha256, self._read(source)))
+            if isinstance(outcome, Exception):
+                raise outcome
+            with open(target, "wb") as handle:
+                handle.write(outcome)
+            return 7
+
+        fake = ModuleType("services.scail2_lora")
+        fake.convert_scail2_sat_lora = convert
+        patcher = mock.patch.dict(sys.modules, {"services.scail2_lora": fake})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        return calls
+
+    def test_a_converted_lora_is_converted_from_the_downloaded_source_then_published(self):
+        self._spec(converter="scail2_sat_lora", size=len(_LORA_PAYLOAD), sha256=_LORA_SHA256)
+        calls = self._fake_converter(b"converted tensors")
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self._read(self.save_path), b"converted tensors")
+        self.assertEqual(os.listdir(self.lora_dir), [self.base])
+        [(source, target, expected, downloaded)] = calls
+        self.assertTrue(source.startswith(self.save_path + ".") and source.endswith(".source.part"))
+        self.assertTrue(target.startswith(self.save_path + ".") and target.endswith(".part"))
+        self.assertNotIn(".source.", target)
+        self.assertEqual((expected, downloaded), (_LORA_SHA256, _LORA_PAYLOAD))
+        self.assertEqual(self.progress[-1], "Converting Acme model (one-time setup)…")
+
+    def test_a_failed_conversion_names_the_manual_conversion_and_leaves_no_partial(self):
+        self._spec(converter="scail2_sat_lora", sha256=_LORA_SHA256)
+        self._fake_converter(ValueError("bad tensors"))
+        with self.assertRaises(RuntimeError) as caught:
+            self._run()
+        self.assertEqual(str(caught.exception), (
+            "Could not download the Acme model automatically: bad tensors. Check your internet connection. "
+            "Retry the automatic setup, or download the official source from https://example.test/acme and "
+            "convert it with SCAIL-2's convert_lora.py."
+        ))
+        self.assertEqual(os.listdir(self.lora_dir), [])
+
+    def test_it_waits_for_the_same_file_downloading_elsewhere_instead_of_racing_it(self):
+        self._spec()
+        # A finished record for the same name comes after the in-flight one; the in-flight one is waited on.
+        self.registry["d1"] = {"filename": os.path.join("x", self.base), "status": "downloading", "progress": 40}
+        self.registry["d0"] = {"filename": self.base, "status": "completed", "progress": 100}
+
+        def finish_elsewhere(count):
+            os.makedirs(self.lora_dir, exist_ok=True)
+            with open(self.save_path, "wb") as handle:
+                handle.write(b"from elsewhere")
+            self.registry["d1"]["status"] = "completed"
+
+        self.on_sleep = finish_elsewhere
+        self.assertEqual(self._run(), [])
+        self.assertEqual((self.gets, self.sleeps), ([], [2]))
+        self.assertEqual(self.progress, ["Downloading Acme model (one-time setup)… 40%"])
+        self.assertEqual(self._read(self.save_path), b"from elsewhere")
+
+    def test_a_failed_download_elsewhere_drops_its_partial_and_downloads_again(self):
+        self._spec()
+        os.makedirs(self.lora_dir)
+        with open(self.save_path, "wb") as handle:
+            handle.write(b"partial")
+        self.wgp.resolve_lora_path = lambda model_type, base: os.path.join(self.tmp, "elsewhere", base)
+        self.registry["d1"] = {"filename": self.base, "status": "downloading", "progress": 10}
+        self.on_sleep = lambda count: self.registry["d1"].update(status="failed")
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self.sleeps, [2])
+        self.assertEqual(len(self.gets), 1)
+        self.assertEqual(self._read(self.save_path), _LORA_PAYLOAD)
+
+    def test_the_wait_for_another_download_gives_up_after_ten_minutes(self):
+        self._spec()
+        self.registry["d1"] = {"filename": self.base, "status": "downloading"}
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self.sleeps, [2] * 300)
+        self.assertEqual(self.progress[:2], ["Downloading Acme model (one-time setup)… 0%"] * 2)
+        self.assertEqual(len(self.gets), 1)
+
+    def test_without_an_engine_folder_it_downloads_under_the_configured_root(self):
+        self._spec()
+
+        def no_folder(*_args):
+            raise RuntimeError("no LoRA folder for this model")
+
+        self.wgp.get_lora_dir = no_folder
+        self.wgp.resolve_lora_path = no_folder
+        absolute = os.path.join(self.tmp, "absolute-root")
+        self.wgp.server_config = {"loras_root": absolute}
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self._read(os.path.join(absolute, "ltx2", self.base)), _LORA_PAYLOAD)
+        # A relative root is under the app folder (the folder of the full server), not the working directory.
+        # The working directory is deeper than the app folder, so resolving from it lands somewhere else.
+        try:
+            relative = os.path.relpath(os.path.join(self.tmp, "relative-root"), _APP_DIR)
+        except ValueError:
+            self.skipTest("the temporary folder is on another drive than the app folder")
+        deep = os.path.join(self.tmp, *["cwd"] * (len(os.path.abspath(_APP_DIR).split(os.sep)) + 2))
+        os.makedirs(deep)
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(deep)
+        self.wgp.server_config = {"loras_root": relative}
+        self.assertEqual(self._run(), [self.base])
+        self.assertEqual(self._read(os.path.join(self.tmp, "relative-root", "ltx2", self.base)), _LORA_PAYLOAD)
+
+
 class TestCheckpointRegistration(unittest.TestCase):
     """Registering a downloaded checkpoint as a finetune of a supported architecture."""
 

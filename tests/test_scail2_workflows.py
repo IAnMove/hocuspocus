@@ -23,6 +23,7 @@ _requires_torch = unittest.skipUnless(
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 _LAUNCH_PATH = os.path.join(_ROOT, "app", "_launch_runtime.py")
+_OPTION_HELPERS_PATH = os.path.join(_ROOT, "app", "services", "generation_option_helpers.py")
 _REPAINT_PLANNING_PATH = os.path.join(_ROOT, "app", "services", "repaint_planning.py")
 _REPAINT_RUN_PATH = os.path.join(_ROOT, "app", "services", "repaint_run.py")
 _REPAINT_ROUTER_PATH = os.path.join(_ROOT, "app", "routers", "repaint.py")
@@ -1157,11 +1158,8 @@ class TestMultiPersonRecast(unittest.TestCase):
             (
                 "_normalize_recast_person_count",
                 "_normalize_recast_resolution_profile",
-                "_normalize_scail2_inference_steps",
-                "_normalize_scail2_guidance_scale",
                 "_recast_window_size_for_profile",
                 "_build_recast_prompt",
-                "_extract_output_seed",
                 "_count_recast_mask_people",
                 "_align_recast_reference_mask",
                 "_recast_color_region",
@@ -1221,6 +1219,14 @@ class TestMultiPersonRecast(unittest.TestCase):
                     (255, 0, 255), (0, 255, 255),
                 ],
             },
+        ))
+        cls.helpers.update(_load_functions(
+            _OPTION_HELPERS_PATH,
+            (
+                "_normalize_scail2_inference_steps",
+                "_normalize_scail2_guidance_scale",
+                "_extract_output_seed",
+            ),
         ))
 
     def test_person_count_is_clamped_to_scail2_range(self):

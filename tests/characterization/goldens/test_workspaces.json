@@ -380,6 +380,45 @@
     },
     "status": 404
   },
+  "reclaim a linked file": {
+    "body": {
+      "detail": "That file is in a linked install (read-only)."
+    },
+    "status": 403
+  },
+  "reclaim absent file": {
+    "body": {
+      "detail": "File not found."
+    },
+    "status": 404
+  },
+  "reclaim missing path": {
+    "body": {
+      "detail": "File not found."
+    },
+    "status": 404
+  },
+  "reclaim primary duplicate": {
+    "body": {
+      "deferred": false,
+      "freed_bytes": 10485760,
+      "status": "ok",
+      "surviving_copy": "<STATE>/install-b/app/ckpts/same.safetensors"
+    },
+    "status": 200
+  },
+  "remove linked duplicate": {
+    "body": {
+      "detail": "Could not move the file to the Recycle Bin (it may be locked, or too large for the Bin). Nothing was deleted."
+    },
+    "status": 423
+  },
+  "remove linked while disabled": {
+    "body": {
+      "detail": "Removing files from linked installs is disabled. Enable it in the Storage Manager first."
+    },
+    "status": 403
+  },
   "serve a missing audio upload": {
     "body": {
       "detail": "File not found"
@@ -407,6 +446,37 @@
       "detail": "Invalid workspace name. Use letters, numbers, hyphens, underscores."
     },
     "status": 400
+  },
+  "storage duplicates": {
+    "body": {
+      "conflicts": [
+        {
+          "filename": "clash.safetensors",
+          "kind": "checkpoint",
+          "linked_install": "install-b",
+          "linked_path": "<STATE>/install-b/app/ckpts/clash.safetensors",
+          "linked_size_bytes": 4,
+          "primary_path": "<STATE>/install-a/app/ckpts/clash.safetensors",
+          "rel_path": "clash.safetensors",
+          "size_bytes": 3
+        }
+      ],
+      "duplicates": [
+        {
+          "filename": "same.safetensors",
+          "kind": "checkpoint",
+          "linked_install": "install-b",
+          "linked_path": "<STATE>/install-b/app/ckpts/same.safetensors",
+          "linked_size_bytes": 10485760,
+          "primary_path": "<STATE>/install-a/app/ckpts/same.safetensors",
+          "rel_path": "same.safetensors",
+          "size_bytes": 10485760
+        }
+      ],
+      "shared_via_link": 0,
+      "total_reclaimable_bytes": 10485760
+    },
+    "status": 200
   },
   "storage usage": {
     "body": {

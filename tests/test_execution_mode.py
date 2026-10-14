@@ -254,7 +254,10 @@ def test_simulated_generation_writes_canonical_asset_manifest(tmp_path):
         "os": os,
         "time": time,
     }
-    _load_launch_function("_publish_generation_sidecar_for_studio_job", namespace)
+    _load_launch_function(
+        "_publish_generation_sidecar_for_studio_job", namespace,
+        relative="app/services/canonical_task_publishers.py",
+    )
     worker = _load_launch_function(
         "_run_simulated_generation", namespace, relative="app/services/generation_preparation.py",
     )
@@ -558,7 +561,7 @@ def test_launch_runtime_has_one_global_policy_boundary_before_inference():
         encoding="utf-8",
     )
     ast.parse(source)
-    assert "@api.exception_handler(execution_mode.ExecutionModeError)" in source
+    assert "api.add_exception_handler(execution_mode.ExecutionModeError, execution_mode_error_handler)" in source
     worker = generation_source()
     simulated = worker.index("if execution_mode.policy().simulated:")
     native_model = worker.index("_cancel_h3_idle_release()")

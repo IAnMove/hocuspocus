@@ -266,13 +266,13 @@ api = FastAPI(title="HocusPocus Lab API", version=APP_VERSION or "0.0.0")
 api.state.runtime = ctx
 
 
-@api.exception_handler(execution_mode.ExecutionModeError)
-async def execution_mode_error_handler(
-    _request: Request,
-    exc: execution_mode.ExecutionModeError,
-):
-    """Keep policy refusals explicit across every specialist submission route."""
-    return JSONResponse(status_code=409, content={"detail": str(exc)})
+from services.request_guards import (  # noqa: E402
+    execution_mode_error_handler,
+    protect_cross_origin_mutations,
+    trace_user_mutations,
+)
+
+api.add_exception_handler(execution_mode.ExecutionModeError, execution_mode_error_handler)
 
 debug_trace.configure(
     enabled=lambda: bool(
@@ -307,86 +307,8 @@ api.add_middleware(
 api.include_router(create_lan_auth_router())
 
 
-@api.middleware("http")
-async def protect_cross_origin_mutations(request: Request, call_next):
-    """Reject browser mutations from a different origin, including on LAN."""
-    if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
-        origin = request.headers.get("origin")
-        if origin:
-            from urllib.parse import urlsplit
-
-            try:
-                origin_host = (urlsplit(origin).netloc or "").casefold()
-            except ValueError:
-                origin_host = ""
-            request_host = str(request.headers.get("host") or "").casefold()
-            local_hosts = {"localhost", "127.0.0.1", "[::1]"}
-            origin_name = origin_host.rsplit(":", 1)[0]
-            request_name = request_host.rsplit(":", 1)[0]
-            same_origin_host = bool(origin_host and origin_host == request_host)
-            local_proxy = origin_name in local_hosts and request_name in local_hosts
-            pinokio_proxy = bool(re.fullmatch(r"\d+\.localhost(?::\d+)?", origin_host))
-            if not (same_origin_host or local_proxy or pinokio_proxy):
-                return JSONResponse(
-                    status_code=403,
-                    content={"detail": "Cross-origin API mutations are not allowed"},
-                )
-    return await call_next(request)
-
-
-@api.middleware("http")
-async def trace_user_mutations(request: Request, call_next):
-    """Record reconstructible user/API actions while debug tracing is on."""
-    should_trace = (
-        debug_trace.is_enabled()
-        and request.method in {"POST", "PUT", "PATCH", "DELETE"}
-        and request.url.path != "/api/v1/debug/user-action"
-    )
-    event_id = uuid.uuid4().hex if should_trace else ""
-    started = time.monotonic()
-    if should_trace:
-        content_type = request.headers.get("content-type", "")
-        request_body = None
-        if "application/json" in content_type:
-            try:
-                raw_body = await request.body()
-                request_body = json.loads(raw_body) if raw_body else None
-            except Exception as exc:
-                request_body = {"parse_error": str(exc)}
-        elif content_type:
-            request_body = f"<{content_type}; body omitted>"
-        from services.task_manager import redact_sensitive_data
-
-        debug_trace.trace_event(
-            "user_action", "api_request", event_id=event_id, phase="request",
-            method=request.method, path=request.url.path,
-            query=redact_sensitive_data(dict(request.query_params)),
-            body=redact_sensitive_data(request_body),
-        )
-    try:
-        with debug_trace.context_scope(
-            request_id=event_id or None,
-            http_method=request.method,
-            http_path=request.url.path,
-        ):
-            response = await call_next(request)
-    except Exception as exc:
-        if should_trace:
-            debug_trace.trace_event(
-                "user_action", "api_request", event_id=event_id, phase="error",
-                method=request.method, path=request.url.path,
-                duration_ms=round((time.monotonic() - started) * 1000, 2),
-                error={"type": type(exc).__name__, "message": str(exc)},
-            )
-        raise
-    if should_trace:
-        debug_trace.trace_event(
-            "user_action", "api_request", event_id=event_id, phase="response",
-            method=request.method, path=request.url.path,
-            status_code=response.status_code,
-            duration_ms=round((time.monotonic() - started) * 1000, 2),
-        )
-    return response
+api.middleware("http")(protect_cross_origin_mutations)
+api.middleware("http")(trace_user_mutations)
 
 
 # Who a loopback call (an MCP tool through these routes) or the Wizard says it is
@@ -440,50 +362,47 @@ resource_scheduler.coordinator.set_prepare_hook(
 )
 
 
-def _publish_generation_sidecar_for_studio_job(
-    job: dict,
-    output_path: str,
-    sidecar: dict,
-    *,
-    tool: str = "studio",
-) -> None:
-    """Publish one Studio result with its initiating command and real location."""
-    from services.asset_manifest import publish_generation_job_sidecar
-    publish_generation_job_sidecar(
-        job,
-        output_path,
-        sidecar,
-        job_id_key="id",
-        output_folder=job.get("workspace"),
-        tool=tool,
-    )
+from services import canonical_task_publishers
+
+canonical_task_publishers.bind(
+    _task_registry=_task_registry,
+)
+from services.canonical_task_publishers import (
+    _GENERIC_TASK_CONFIG,
+    _observe_generation_job_state,
+    _publish_director_task,
+    _publish_generation_sidecar_for_studio_job,
+    _publish_generation_task,
+    _publish_generic_legacy_task,
+    _publish_moved_studio_task,
+    _publish_series_assembly_task,
+    _publish_series_task,
+)
 
 
-def _is_legacy_h3_model(model_type: str | None) -> bool:
-    return str(model_type or "").strip() == minimax_h3_service.MODEL_ID
+from services.generation_option_helpers import (  # noqa: E402
+    _IPT_REQUIRED_INPUTS,
+    _VPT_REQUIRED_INPUTS,
+    _extract_output_seed,
+    _is_character_sheet_engine,
+    _is_legacy_h3_model,
+    _is_minimax_h3_model,
+    _minimax_h3_runtime_advisory,
+    _minimax_h3_turbo_option,
+    _normalize_image_prompt_type,
+    _normalize_scail2_guidance_scale,
+    _normalize_scail2_inference_steps,
+    _normalize_video_prompt_type,
+    _recommended_minimax_h3_encoder,
+    bind as bind_generation_option_helpers,
+)
+bind_generation_option_helpers(
+    wgp=wgp,
+    # Defined further down. The helper looks the name up when it runs.
+    _get_cached_hardware=lambda *args, **kwargs: _get_cached_hardware(*args, **kwargs),
+)
 
 
-def _is_character_sheet_engine(body: dict | None) -> bool:
-    return (
-        isinstance(body, dict)
-        and str(body.get("character_sheet_engine") or "").strip()
-        == minimax_h3_service.CHARACTER_SHEET_ENGINE
-    )
-
-
-def _is_minimax_h3_model(model_type: str | None) -> bool:
-    """Recognize every native H3 variant from the current model registry."""
-    candidate = str(model_type or "").strip()
-    if not candidate:
-        return False
-    try:
-        model_def = wgp.get_model_def(candidate) or {}
-    except Exception:
-        model_def = {}
-    return (
-        candidate.lower().startswith("minimax_h3")
-        or str(model_def.get("architecture") or "").lower().startswith("minimax_h3")
-    )
 
 
 # Native and legacy H3 release, and the Wan interrupt, live in
@@ -523,81 +442,17 @@ from routers.director import (
 # API Routes: /api/v1/*
 # ============================================================================
 
-def _variant_group_filenames(urls) -> list:
-    """Flatten one weight group (list of variant URLs / dict entries) to file names."""
-    names = []
-    for url_entry in urls:
-        url_str = url_entry
-        if isinstance(url_entry, dict):
-            inner = url_entry.get("URLs", url_entry.get("url", []))
-            url_str = inner[0] if isinstance(inner, list) and inner else (inner if isinstance(inner, str) else "")
-        if not isinstance(url_str, str) or not url_str:
-            continue
-        names.append(url_str.rstrip("/").split("/")[-1])
-    return names
+from services.model_file_groups import (  # noqa: E402
+    _missing_image_model_files,
+    _model_weight_groups,
+    _variant_group_downloaded,
+    _variant_group_filenames,
+    bind as bind_model_file_groups,
+    mcp_model_list,
+)
+bind_model_file_groups(wgp=wgp)
 
 
-def _variant_group_downloaded(urls) -> bool:
-    """True when ANY variant (full bf16 vs quantized int8...) of one weight
-    group exists locally. Resolves through the files locator so checkpoints
-    in linked model folders (Settings -> System -> Linked Model Folders)
-    light up too — a hardcoded ckpts_dir check misses every secondary root."""
-    for filename in _variant_group_filenames(urls):
-        if wgp.fl.locate_file(filename, error_if_none=False) is not None:
-            return True
-    return False
-
-
-def _model_weight_groups(model_type: str, owned_only: bool = False) -> list:
-    """All weight groups a model needs on disk: main URLs + weight modules.
-
-    "URLs" may be a string pointer to another model type (finetunes such as
-    z_image_control or scail2_14B_fast use "URLs": "<base_model>"). Resolve
-    recursively like the engine does — iterating the raw value would walk
-    the characters of the string and permanently report not-downloaded.
-
-    owned_only=True returns only groups this entry itself declares (skips a
-    string-pointer base). Used by delete: removing a finetune must not pull
-    the shared base transformer out from under its sibling entries — the
-    base is deleted from the base model's own row instead.
-
-    String-named modules resolve through the engine's module registry and
-    are intentionally left out (they were never counted here).
-    """
-    md = wgp.get_model_def(model_type) or {}
-    groups = []
-    raw_urls = md.get("URLs", None)
-    if isinstance(raw_urls, str):
-        if not owned_only:
-            urls = wgp.get_model_recursive_prop(model_type, "URLs", return_list=True)
-            if urls:
-                groups.append(urls)
-    elif raw_urls:
-        groups.append(raw_urls)
-    for module in md.get("modules", []):
-        if isinstance(module, list):
-            groups.append(module)
-        elif isinstance(module, dict):
-            group = module.get("URLs", [])
-            if group:
-                groups.append(group)
-    return groups
-
-
-def _missing_image_model_files(model_type: str) -> list[str]:
-    """Explain readiness using the same checkpoint roots and variant groups."""
-    missing = [" or ".join(_variant_group_filenames(group))
-               for group in _model_weight_groups(model_type) if not _variant_group_downloaded(group)]
-    definition = wgp.get_model_def(model_type) or {}
-    required = list(definition.get("required_model_assets", []))
-    if definition.get("vision_encoder_filename"):
-        required.append(definition["vision_encoder_filename"])
-    missing.extend(path for path in required if wgp.fl.locate_file(path, error_if_none=False) is None)
-    for url in wgp.get_model_recursive_prop(model_type, "loras", return_list=True):
-        filename = url.split("/")[-1]
-        if not os.path.isfile(wgp.resolve_lora_path(model_type, filename)):
-            missing.append(filename)
-    return list(dict.fromkeys(name for name in missing if name))
 
 
 # The catalog, the download check and the pre-download map. These names are
@@ -626,15 +481,6 @@ from routers.model_catalog import create_model_list_router  # noqa: E402
 
 api.include_router(create_model_list_router())
 
-
-def mcp_model_list(args):
-    """models and models.list: summaries unless detail is true or one id is named."""
-    if not isinstance(args, dict):
-        args = {}
-    model_type = args.get("model_type")
-    if isinstance(model_type, str) and model_type.strip():
-        return get_model_options(model_type)
-    return list_models(detail=args.get("detail") is True)
 
 
 # Model visibility, selections and the production profile. These names are the
@@ -724,115 +570,6 @@ api.include_router(create_lora_library_router())
 
 
 
-# ── video_prompt_type normalization ─────────────────────────────────
-# Maestro's video_prompt_type is a string of single-letter mode flags
-# the wgp.py pipeline uses to decide what optional inputs are needed
-# (e.g. "I" → image_refs required, "V" → video/image guide required).
-# wgp.py rejects the job with a friendly UI error if a flag is set but
-# the corresponding input is missing.
-#
-# Without this normalization, stale UI state can leave a flag set after
-# its input got cleared — most commonly "I" persisting in localStorage
-# after the user removed their reference image, causing every subsequent
-# text-to-image gen to fail with "You must provide at least one
-# Reference Image". The frontend should already be keeping the flag in
-# sync with the inputs, but this defense-in-depth strip lets us recover
-# from any UI bug that lets the inconsistent state through.
-#
-# The set is conservative — only flags where (a) we know the required
-# input field name with confidence and (b) the wgp.py validation rejects
-# the job rather than silently degrading. Adding too many strips here
-# could mask other bugs, so we extend on demand.
-_VPT_REQUIRED_INPUTS = {
-    # flag → (param key in body, friendly label for log line)
-    "I": ("image_refs", "image references"),
-}
-
-
-def _normalize_video_prompt_type(body: dict) -> None:
-    """Strip video_prompt_type flags whose required input is missing.
-
-    Mutates `body` in place. No-op when video_prompt_type isn't set or
-    when all flags have their inputs.
-    """
-    vpt = body.get("video_prompt_type")
-    if not isinstance(vpt, str) or not vpt:
-        return
-
-    new_vpt = vpt
-    for flag, (input_key, label) in _VPT_REQUIRED_INPUTS.items():
-        if flag not in new_vpt:
-            continue
-        input_val = body.get(input_key)
-        # Treat missing, None, empty string, and empty list as absent.
-        is_absent = (
-            input_val is None
-            or (isinstance(input_val, (list, tuple, str)) and len(input_val) == 0)
-        )
-        if is_absent:
-            new_vpt = new_vpt.replace(flag, "")
-            print(
-                f"[Generate] Stripped '{flag}' from video_prompt_type "
-                f"(no {label} attached) — was {vpt!r}, now {new_vpt!r}"
-            )
-
-    if new_vpt != vpt:
-        body["video_prompt_type"] = new_vpt
-
-
-# ── image_prompt_type normalization ──────────────────────────────────
-# Sibling to video_prompt_type. wgp's image_prompt_type controls whether
-# I2V (image-to-video) start/end frames are expected. When "S" is set
-# but no image_start is attached, wgp rejects the job with "You must
-# provide a Start Image" instead of falling back to T2V — even though
-# Maestro's UX promises "no start image → T2V automatically."
-#
-# Stale UI state is the usual cause: model defaults, sidecar metadata
-# from a previous re-roll, or the user clearing the start-image
-# preview after the prompt_type was set. Strip the flag when its
-# input is absent so the user gets the T2V fallback they expected.
-_IPT_REQUIRED_INPUTS = {
-    # flag → (param key in body, friendly label for log line)
-    "S": ("image_start", "start image"),
-    "E": ("image_end", "end image"),
-}
-
-
-def _normalize_image_prompt_type(body: dict) -> None:
-    """Strip image_prompt_type flags whose required input is missing.
-
-    Mutates `body` in place. No-op when image_prompt_type isn't set or
-    when all flags have their inputs.
-
-    Effect: a body with image_prompt_type='S' but no image_start gets
-    its prompt_type rewritten to '' (or stripped of just 'S' if other
-    flags survive), turning the job into T2V — matching Maestro's
-    documented behavior of auto-falling-back to T2V when no start
-    image is provided.
-    """
-    ipt = body.get("image_prompt_type")
-    if not isinstance(ipt, str) or not ipt:
-        return
-
-    new_ipt = ipt
-    for flag, (input_key, label) in _IPT_REQUIRED_INPUTS.items():
-        if flag not in new_ipt:
-            continue
-        input_val = body.get(input_key)
-        is_absent = (
-            input_val is None
-            or (isinstance(input_val, (list, tuple, str)) and len(input_val) == 0)
-        )
-        if is_absent:
-            new_ipt = new_ipt.replace(flag, "")
-            print(
-                f"[Generate] Stripped '{flag}' from image_prompt_type "
-                f"(no {label} attached) — was {ipt!r}, now {new_ipt!r}. "
-                f"Falling back to {'T2V' if not new_ipt else 'I2V with remaining flags'}."
-            )
-
-    if new_ipt != ipt:
-        body["image_prompt_type"] = new_ipt
 
 
 
@@ -841,9 +578,8 @@ def _normalize_image_prompt_type(body: dict) -> None:
 
 
 
-def _minimax_h3_turbo_option(model_def: dict) -> dict | None:
-    from services.h3_runtime_policy import turbo_option
-    return turbo_option(model_def)
+
+
 
 
 
@@ -921,37 +657,8 @@ api.include_router(create_lora_guide_scan_router())
 
 
 
-def _recommended_minimax_h3_encoder(model_type: str, model_def: dict) -> str:
-    """Resolve H3's default encoder from actual kernel support and RAM."""
-
-    variants = model_def.get("minimax_h3_text_encoder_variants") or {}
-    fallback = str(model_def.get("minimax_h3_text_encoder_default") or "nvfp4_awq")
-    if not variants:
-        return fallback
-    try:
-        handler = wgp.get_model_handler(wgp.get_base_model_type(model_type))
-        selected = handler.recommend_text_encoder(_get_cached_hardware(), model_def)
-        if selected in variants:
-            return selected
-    except Exception as error:
-        print(f"[MiniMax H3] Hardware-aware encoder recommendation failed: {error}")
-    return fallback if fallback in variants else next(iter(variants))
 
 
-def _minimax_h3_runtime_advisory(model_def: dict) -> dict | None:
-    """Return a non-blocking Full-H3 hardware warning for Studio."""
-
-    if not str((model_def or {}).get("architecture") or "").startswith(
-        "minimax_h3"
-    ):
-        return None
-    try:
-        from models.minimax_h3.minimax_h3_handler import h3_runtime_preflight
-
-        return h3_runtime_preflight(model_def, _get_cached_hardware())
-    except Exception as error:
-        print(f"[MiniMax H3] Runtime preflight unavailable: {error}")
-        return None
 
 
 from services.model_options import (  # noqa: E402
@@ -1097,11 +804,6 @@ class _LaunchCollectionLookup:
         return globals()["_workspace_collection_registry"].get(key)
 
 
-def _publish_moved_studio_task(record, adapter):
-    """Activity publish stays the launch function, which is defined further down."""
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(record, adapter)
 
 
 def _launch_model3d_engine():
@@ -1154,260 +856,27 @@ api.include_router(create_workspace_router(
 # API Routes: Storage (duplicate finder + usage analytics)
 # ============================================================================
 
-_STORAGE_WEIGHT_EXTS = (".safetensors", ".sft", ".gguf", ".pth", ".ckpt", ".pt", ".bin", ".onnx")
-_STORAGE_MIN_DUP_BYTES = 10 * 1024 * 1024  # skip configs/tokenizers — reclaim noise
+from services.storage_tools import (  # noqa: E402
+    _STORAGE_MIN_DUP_BYTES,
+    _STORAGE_WEIGHT_EXTS,
+    _files_probably_identical,
+    _same_physical_file,
+    _storage_roots,
+    _walk_sized,
+    bind as bind_storage_tools,
+    storage_duplicates,
+    storage_reclaim,
+    storage_remove_linked,
+)
+from routers.storage_tools import create_storage_tools_router  # noqa: E402
 
-
-def _walk_sized(root: str) -> dict:
-    """normcased relpath -> (abs_path, size) for weight files under root."""
-    out: dict = {}
-    root_abs = os.path.abspath(root)
-    for dirpath, _dirnames, filenames in os.walk(root_abs):
-        for f in filenames:
-            if not f.lower().endswith(_STORAGE_WEIGHT_EXTS):
-                continue
-            full = os.path.join(dirpath, f)
-            try:
-                size = os.path.getsize(full)
-            except OSError:
-                continue
-            out[os.path.normcase(os.path.relpath(full, root_abs))] = (full, size)
-    return out
-
-
-def _same_physical_file(a: str, b: str) -> bool:
-    """True when two paths reference the same on-disk data: junctions and
-    symlinks resolve via realpath; NTFS hardlinks (which realpath does NOT
-    resolve) via matching (st_dev, st_ino)."""
-    if os.path.normcase(os.path.realpath(a)) == os.path.normcase(os.path.realpath(b)):
-        return True
-    try:
-        sa, sb = os.stat(a), os.stat(b)
-        return sa.st_ino != 0 and (sa.st_dev, sa.st_ino) == (sb.st_dev, sb.st_ino)
-    except OSError:
-        return False
-
-
-def _files_probably_identical(a: str, b: str, size: int) -> bool:
-    """Sampled content comparison (1MB head/middle/tail) — same-size files
-    can still be divergent weights (a retrained LoRA at the same rank is
-    byte-size-identical), and reading multi-GB files fully is not viable
-    per scan."""
-    chunk = 1024 * 1024
-    offsets = [0]
-    if size > chunk * 3:
-        offsets += [size // 2, max(0, size - chunk)]
-    elif size > chunk:
-        offsets.append(max(0, size - chunk))
-    try:
-        with open(a, "rb") as fa, open(b, "rb") as fb:
-            for off in offsets:
-                fa.seek(off)
-                fb.seek(off)
-                if fa.read(chunk) != fb.read(chunk):
-                    return False
-        return True
-    except OSError:
-        return False
-
-
-def _storage_roots() -> dict:
-    """Primary + linked roots for both file kinds, resolved once."""
-    ckpt_roots = wgp.fl.get_checkpoints_paths()
-    # The "." search root is the whole app folder — walking it would sweep
-    # the entire repo; only the real primary (index 0) is the reclaim target.
-    primary_ckpts = os.path.abspath(ckpt_roots[0]) if ckpt_roots else None
-    linked_ckpts = [os.path.abspath(r) for r in ckpt_roots[1:] if wgp.fl.is_external_root(r)]
-    lora_primary = _resolve_lora_root()
-    return {
-        "checkpoint": (primary_ckpts, linked_ckpts),
-        "lora": (os.path.abspath(lora_primary) if lora_primary else None, _linked_lora_roots()),
-    }
-
-
-@api.get("/api/v1/storage/duplicates")
-def storage_duplicates():
-    """Primary-root files that also exist (same relative path AND size) in
-    a linked install. Deleting the PRIMARY copy is pure reclaim — the
-    files locator keeps resolving the linked copy afterwards. Same-path
-    different-size pairs are conflicts, not duplicates: the primary copy
-    currently shadows a divergent linked file and deleting it would
-    silently change behavior."""
-    duplicates = []
-    conflicts = []
-    shared_via_link = 0
-    for kind, (primary_root, linked_roots) in _storage_roots().items():
-        if not primary_root or not os.path.isdir(primary_root):
-            continue
-        primary_files = _walk_sized(primary_root)
-        for linked_root in linked_roots:
-            if not os.path.isdir(linked_root):
-                continue
-            linked_files = _walk_sized(linked_root)
-            for rel, (ppath, psize) in primary_files.items():
-                hit = linked_files.get(rel)
-                if not hit:
-                    continue
-                lpath, lsize = hit
-                if psize == lsize:
-                    # Same physical data (junction, symlink, or hardlink)
-                    # is zero reclaimable bytes — "deleting one copy"
-                    # would delete the only copy.
-                    if _same_physical_file(ppath, lpath):
-                        shared_via_link += 1
-                        continue
-                # Both roots derive from <install>/app/<ckpts|loras>, so the
-                # install name is two levels up from the ROOT (deriving it
-                # from the file path mislabels subfoldered loras).
-                row = {
-                    "kind": kind, "filename": os.path.basename(ppath), "rel_path": rel,
-                    "primary_path": ppath, "size_bytes": psize,
-                    "linked_path": lpath, "linked_size_bytes": lsize,
-                    "linked_install": os.path.basename(os.path.dirname(os.path.dirname(linked_root))),
-                }
-                if psize == lsize and psize >= _STORAGE_MIN_DUP_BYTES:
-                    # Same size is not same content: a retrained LoRA at the
-                    # same rank is byte-size-identical. Divergent pairs are
-                    # conflicts (the primary is the one actually in use).
-                    if _files_probably_identical(ppath, lpath, psize):
-                        duplicates.append(row)
-                    else:
-                        conflicts.append(row)
-                elif psize != lsize:
-                    conflicts.append(row)
-    # One primary file can match several linked installs — count it once,
-    # keyed by PHYSICAL identity so a junctioned root can't double-list.
-    seen = set()
-    unique = []
-    for d in duplicates:
-        key = os.path.normcase(os.path.realpath(d["primary_path"]))
-        if key not in seen:
-            seen.add(key)
-            unique.append(d)
-    return {
-        "duplicates": sorted(unique, key=lambda d: -d["size_bytes"]),
-        "conflicts": conflicts,
-        "shared_via_link": shared_via_link,
-        "total_reclaimable_bytes": sum(d["size_bytes"] for d in unique),
-    }
-
-
-@api.post("/api/v1/storage/duplicates/reclaim")
-async def storage_reclaim(request: Request):
-    """Delete ONE primary-root duplicate. Revalidates from scratch: the
-    path must live under a primary root and a same-relpath same-size
-    linked copy must exist right now — a stale scan result can't delete
-    anything that isn't still redundant."""
-    body = await request.json()
-    path = body.get("path", "")
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="File not found.")
-    target = os.path.abspath(path)
-    if wgp.fl.is_protected_path(target):
-        raise HTTPException(status_code=403, detail="That file is in a linked install (read-only).")
-    # All comparisons happen in realpath space: a junctioned primary root
-    # (e.g. ckpts linked into another install to share storage) makes
-    # abspath and physical location disagree, and a "linked copy" reached
-    # through the junction is the SAME file — deleting the primary would
-    # delete the only copy.
-    target_real = os.path.realpath(target)
-    try:
-        psize = os.path.getsize(target_real)
-    except OSError:
-        raise HTTPException(status_code=404, detail="File not found.")
-    matched = False
-    for kind, (primary_root, linked_roots) in _storage_roots().items():
-        if not primary_root:
-            continue
-        proot_real = os.path.realpath(primary_root)
-        if not os.path.normcase(target_real).startswith(os.path.normcase(proot_real + os.sep)):
-            continue
-        rel_key = os.path.relpath(target_real, proot_real)
-        for linked_root in linked_roots:
-            candidate = os.path.join(linked_root, rel_key)
-            try:
-                if not os.path.isfile(candidate) or os.path.getsize(candidate) != psize:
-                    continue
-                # Same physical data (junction/symlink/hardlink) is not a
-                # copy, and same size is not same content — a retrained
-                # LoRA at the same rank is byte-size-identical.
-                if _same_physical_file(candidate, target_real):
-                    continue
-                if not _files_probably_identical(target_real, candidate, psize):
-                    continue
-                matched = candidate
-                break
-            except OSError:
-                continue
-        break
-    if not matched:
-        raise HTTPException(status_code=409, detail="No identical linked copy exists (anymore) — refusing to delete the only copy.")
-    from services.win_safe_files import safe_delete
-    result = safe_delete(target)
-    if not result.get("deleted"):
-        raise HTTPException(status_code=423, detail="The file is locked by another process. Try again in a moment.")
-    # Audit line names the exact surviving copy — if it ever turns out to
-    # be gone afterwards, this line is the forensic anchor.
-    print(f"[Storage] Reclaimed duplicate: {target} ({psize} bytes; surviving copy: {matched})")
-    if not os.path.isfile(matched):
-        print(f"[Storage] CRITICAL: surviving copy vanished immediately after reclaim: {matched}")
-    return {"status": "ok", "freed_bytes": psize, "deferred": bool(result.get("deferred")), "surviving_copy": matched}
-
-
-@api.post("/api/v1/storage/duplicates/remove-linked")
-async def storage_remove_linked(request: Request):
-    """The inverse of reclaim: keep Maestro's copy, remove the LINKED
-    install's duplicate — to the Recycle Bin, never a hard delete.
-
-    Gated on the opt-in services.storage_allow_linked_removal flag:
-    deleting from another install is the one sanctioned exception to the
-    is_protected_path rule, and only with an identical different-physical
-    copy verified in Maestro's primary root at this exact moment."""
-    services = wgp.server_config.get("services", {})
-    if not services.get("storage_allow_linked_removal", False):
-        raise HTTPException(status_code=403, detail="Removing files from linked installs is disabled. Enable it in the Storage Manager first.")
-    body = await request.json()
-    path = body.get("path", "")
-    if not path or not os.path.isfile(path):
-        raise HTTPException(status_code=404, detail="File not found.")
-    target = os.path.abspath(path)
-    if not wgp.fl.is_protected_path(target):
-        raise HTTPException(status_code=400, detail="That file is not in a linked install — use Reclaim for HocusPocus Lab's own copies.")
-    target_real = os.path.realpath(target)
-    try:
-        psize = os.path.getsize(target_real)
-    except OSError:
-        raise HTTPException(status_code=404, detail="File not found.")
-    surviving = None
-    for kind, (primary_root, linked_roots) in _storage_roots().items():
-        if not primary_root:
-            continue
-        for linked_root in linked_roots:
-            lroot_real = os.path.realpath(linked_root)
-            if not os.path.normcase(target_real).startswith(os.path.normcase(lroot_real + os.sep)):
-                continue
-            rel_key = os.path.relpath(target_real, lroot_real)
-            candidate = os.path.join(primary_root, rel_key)
-            try:
-                if not os.path.isfile(candidate) or os.path.getsize(candidate) != psize:
-                    continue
-                if _same_physical_file(candidate, target_real):
-                    continue
-                if not _files_probably_identical(target_real, candidate, psize):
-                    continue
-                surviving = os.path.abspath(candidate)
-                break
-            except OSError:
-                continue
-        if surviving:
-            break
-    if not surviving:
-        raise HTTPException(status_code=409, detail="HocusPocus Lab does not hold an identical copy of that file — refusing to remove the linked install's only version.")
-    from services.win_safe_files import recycle_file
-    if not recycle_file(target):
-        raise HTTPException(status_code=423, detail="Could not move the file to the Recycle Bin (it may be locked, or too large for the Bin). Nothing was deleted.")
-    print(f"[Storage] Removed linked duplicate to Recycle Bin: {target} ({psize} bytes; HocusPocus Lab's copy: {surviving})")
-    return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
+# Registered here, before storage usage, so the three routes keep their ordinals.
+bind_storage_tools(
+    wgp=wgp,
+    _resolve_lora_root=_resolve_lora_root,
+    _linked_lora_roots=_linked_lora_roots,
+)
+api.include_router(create_storage_tools_router())
 
 
 from services.storage_usage import configure as _configure_storage_usage
@@ -1720,181 +1189,16 @@ _MANAGED_LORAS = {
 from services.h3_runtime_policy import managed_turbo_downloads
 _MANAGED_LORAS.update(managed_turbo_downloads())
 
-def _ensure_managed_loras_present(activated_loras, model_type, progress=None):
-    """Download any managed auto-download LoRA in `activated_loras` that is
-    missing from disk, blocking until each finishes.
-
-    The file is written into the exact directory wgp loads LoRAs from for
-    this model (`wgp.get_lora_dir`), so the pipeline finds it immediately
-    after we return. Downloads to a .part file and atomically renames on
-    success so a crashed/partial download can't masquerade as a valid LoRA.
-
-    `progress(msg)` — optional callback used to surface a status string
-    while a download is in flight (we point it at the job's `message` so the
-    polling UI shows "Downloading … model").
-
-    Returns the list of filenames downloaded this call (empty if everything
-    was already present). Raises RuntimeError on download failure.
-    """
-    if not activated_loras:
-        return []
-
-    try:
-        target_dir = wgp.get_lora_dir(model_type)
-    except Exception:
-        # Fall back to the configured loras_root if the model dir can't be
-        # resolved (shouldn't happen for the ltx2 models these LoRAs target).
-        lora_root = wgp.server_config.get("loras_root", "loras") if hasattr(wgp, "server_config") else "loras"
-        if not os.path.isabs(lora_root):
-            lora_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), lora_root)
-        target_dir = os.path.join(lora_root, "ltx2")
-
-    def _find_download_record(name):
-        """Snapshot of the active-downloads entry for `name`, preferring an
-        in-flight ("downloading") record over a finished one. Used to detect
-        the frontend's proactive fetch so we wait on it instead of racing."""
-        with _civitai_download_lock:
-            match = None
-            for rec in _civitai_downloads.values():
-                if os.path.basename(str(rec.get("filename", ""))) == name:
-                    if rec.get("status") == "downloading":
-                        return dict(rec)
-                    match = dict(rec)
-            return match
-
-    downloaded = []
-    for fname in activated_loras:
-        base = os.path.basename(str(fname))
-        spec = _MANAGED_LORAS.get(base)
-        if not spec:
-            continue
-        save_path = os.path.join(target_dir, base)
-        label = spec.get("label", base)
-
-        # A linked installation's verified converted file is a valid runtime
-        # source too; don't reclaim another 1.2 GB in the primary install.
-        try:
-            resolved_path = wgp.resolve_lora_path(model_type, base)
-        except Exception:
-            resolved_path = save_path
-        if os.path.isfile(resolved_path):
-            continue
-
-        # If another part of the app is already fetching this exact file (the
-        # frontend pre-downloads it when the panel mounts), wait for that to
-        # finish rather than starting a second concurrent download — on
-        # Windows a parallel write / atomic rename onto the open file would
-        # fail or corrupt it.
-        rec = _find_download_record(base)
-        if rec is not None and rec.get("status") == "downloading":
-            print(f"[ManagedLoRA] {label} already downloading elsewhere — waiting for it")
-            waited = 0.0
-            while waited < 600:
-                rec = _find_download_record(base)
-                if rec is None or rec.get("status") != "downloading":
-                    break
-                if progress:
-                    pct = int(rec.get("progress") or 0)
-                    progress(f"Downloading {label} model (one-time setup)… {pct}%")
-                time.sleep(2)
-                waited += 2
-            # A legacy or externally-created failed record may still point at
-            # an in-place partial. Drop it so the presence check below can
-            # re-fetch a clean copy.
-            if rec is not None and rec.get("status") == "failed":
-                try:
-                    if os.path.isfile(save_path):
-                        os.remove(save_path)
-                except Exception:
-                    pass
-
-        if os.path.isfile(save_path):
-            continue
-
-        os.makedirs(target_dir, exist_ok=True)
-        remote_path = spec.get("remote_path", base)
-        revision = spec.get("revision", "main")
-        url = f"https://huggingface.co/{spec['repo_id']}/resolve/{revision}/{remote_path}"
-        # Unique temp + atomic rename: a partial/failed download can never be
-        # mistaken for a valid LoRA, and we don't clobber another writer.
-        tmp_path = save_path + f".{uuid.uuid4().hex[:8]}.part"
-        source_tmp_path = (
-            save_path + f".{uuid.uuid4().hex[:8]}.source.part"
-            if spec.get("converter") else tmp_path
-        )
-        print(f"[ManagedLoRA] {label} not found — downloading {url} -> {save_path}")
-        if progress:
-            progress(f"Downloading {label} model (one-time setup)…")
-        try:
-            import hashlib
-
-            resp = requests.get(url, stream=True, timeout=30)
-            resp.raise_for_status()
-            total = int(resp.headers.get("content-length", 0))
-            done = 0
-            last_pct = -1
-            digest = hashlib.sha256()
-            with open(source_tmp_path, "wb") as out:
-                for chunk in resp.iter_content(chunk_size=1024 * 1024):
-                    if not chunk:
-                        continue
-                    out.write(chunk)
-                    digest.update(chunk)
-                    done += len(chunk)
-                    if progress and total > 0:
-                        pct = int(done * 100 / total)
-                        if pct >= last_pct + 5:
-                            last_pct = pct
-                            progress(f"Downloading {label} model (one-time setup)… {pct}%")
-
-            expected_size = spec.get("size")
-            if expected_size is not None and done != int(expected_size):
-                raise RuntimeError(
-                    f"download size mismatch (expected {int(expected_size)} bytes, got {done})"
-                )
-            expected_sha256 = spec.get("sha256")
-            actual_sha256 = digest.hexdigest()
-            if expected_sha256 and actual_sha256.lower() != str(expected_sha256).lower():
-                raise RuntimeError("download SHA-256 mismatch; the checkpoint was not published")
-
-            if spec.get("converter") == "scail2_sat_lora":
-                if progress:
-                    progress(f"Converting {label} model (one-time setup)…")
-                print(f"[ManagedLoRA] Converting official SAT LoRA -> {tmp_path}")
-                from services.scail2_lora import convert_scail2_sat_lora
-                tensor_count = convert_scail2_sat_lora(
-                    source_tmp_path,
-                    tmp_path,
-                    expected_sha256=str(expected_sha256),
-                )
-                print(f"[ManagedLoRA] Converted {tensor_count} SCAIL-2 Relighting tensors")
-                os.remove(source_tmp_path)
-            elif source_tmp_path != tmp_path:
-                os.replace(source_tmp_path, tmp_path)
-            os.replace(tmp_path, save_path)
-            downloaded.append(base)
-            print(f"[ManagedLoRA] {label} downloaded -> {save_path}")
-        except Exception as e:
-            for partial_path in {tmp_path, source_tmp_path}:
-                try:
-                    if os.path.isfile(partial_path):
-                        os.remove(partial_path)
-                except Exception:
-                    pass
-            support_url = spec.get("support_url", f"https://huggingface.co/{spec['repo_id']}")
-            if spec.get("converter"):
-                recovery_hint = (
-                    f"Retry the automatic setup, or download the official source from "
-                    f"{support_url} and convert it with SCAIL-2's convert_lora.py."
-                )
-            else:
-                recovery_hint = f"Try again, or import it manually from {support_url}."
-            raise RuntimeError(
-                f"Could not download the {label} model automatically: {e}. "
-                f"Check your internet connection. {recovery_hint}"
-            ) from e
-
-    return downloaded
+from services.managed_loras import (  # noqa: E402
+    _ensure_managed_loras_present,
+    bind as bind_managed_loras,
+)
+bind_managed_loras(
+    wgp=wgp,
+    _civitai_download_lock=_civitai_download_lock,
+    _civitai_downloads=_civitai_downloads,
+    _MANAGED_LORAS=_MANAGED_LORAS,
+)
 
 
 from routers.studio_edit_requests import create_studio_edit_anything_router
@@ -1943,35 +1247,6 @@ from services.recast_reference_compose import (
 _bind_recast_matte(app_dir=_app_dir)
 _bind_recast_reference_prepare(workspace_dir=_workspace_dir)
 
-
-def _normalize_scail2_inference_steps(value, default):
-    """Clamp dedicated SCAIL-2 edit jobs to the UI's supported step range."""
-    try:
-        steps = int(float(value))
-    except (TypeError, ValueError, OverflowError):
-        steps = int(default)
-    return min(50, max(1, steps))
-
-
-def _normalize_scail2_guidance_scale(value, default=5.0):
-    """Return a finite SCAIL-2 HQ guidance value accepted by the UI."""
-    import math
-
-    try:
-        guidance = float(value)
-    except (TypeError, ValueError, OverflowError):
-        guidance = float(default)
-    if not math.isfinite(guidance):
-        guidance = float(default)
-    return min(20.0, max(0.0, guidance))
-
-def _extract_output_seed(filename):
-    """Return the resolved seed embedded in a generated media filename."""
-    import os
-    import re
-
-    match = re.search(r"(?:^|_)seed(\d+)(?:_|$)", os.path.splitext(filename)[0])
-    return int(match.group(1)) if match else None
 
 from services.recast_shot_planning import (
     _recast_probe_needs_bystander_tracking,
@@ -2434,7 +1709,7 @@ api.include_router(create_comics_router(
     get_active_workspace=_get_active_workspace,
     safe_join=_safe_join,
     get_services_config=lambda: wgp.server_config.get("services") or {},
-    publish_legacy_task=lambda job, adapter: _publish_generic_legacy_task(job, adapter),
+    publish_legacy_task=lambda job, adapter: canonical_task_publishers._publish_generic_legacy_task(job, adapter),
 ))
 
 
@@ -2526,11 +1801,11 @@ from routers.series_plan import (
 
 
 def _forward_series_plan_publish(job, adapter):
-    return _publish_series_task(job, adapter)
+    return canonical_task_publishers._publish_series_task(job, adapter)
 
 
 def _forward_series_plan_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_series_plan_runtime(
@@ -2567,11 +1842,11 @@ from routers.series_render import (
 
 
 def _forward_series_render_publish(job, adapter):
-    return _publish_series_task(job, adapter)
+    return canonical_task_publishers._publish_series_task(job, adapter)
 
 
 def _forward_series_render_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_series_render_runtime(
@@ -2741,11 +2016,11 @@ from routers.story_lab import (
 
 
 def _forward_story_plan_publish(record, adapter):
-    return _publish_generic_legacy_task(record, adapter)
+    return canonical_task_publishers._publish_generic_legacy_task(record, adapter)
 
 
 def _forward_story_plan_reset(workspace, task_id):
-    return _reset_canonical_task_for_resume(workspace, task_id)
+    return canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id)
 
 
 _bind_story_lab_runtime(
@@ -2767,7 +2042,7 @@ _story_music_jobs = bind_story_music_jobs(
     workspace_dir=_workspace_dir,
     list_workspaces=_list_workspaces,
     wgp_module=wgp,
-    publish_legacy_task=lambda record, adapter: _publish_generic_legacy_task(record, adapter),
+    publish_legacy_task=lambda record, adapter: canonical_task_publishers._publish_generic_legacy_task(record, adapter),
 )
 _minimax_music_jobs = _story_music_jobs.minimax_music_jobs
 _minimax_music_jobs_lock = _story_music_jobs.minimax_music_jobs_lock
@@ -2808,8 +2083,8 @@ bind_director_comic_runtime(
     effective_llm_routing=_effective_llm_routing,
     workspace_dir=_workspace_dir,
     get_active_workspace=_get_active_workspace,
-    publish_legacy_task=lambda snapshot, adapter: _publish_generic_legacy_task(snapshot, adapter),
-    reset_task=lambda workspace, task_id: _reset_canonical_task_for_resume(workspace, task_id),
+    publish_legacy_task=lambda snapshot, adapter: canonical_task_publishers._publish_generic_legacy_task(snapshot, adapter),
+    reset_task=lambda workspace, task_id: canonical_task_sync._reset_canonical_task_for_resume(workspace, task_id),
 )
 api.include_router(create_director_comic_router())
 
@@ -2951,8 +2226,8 @@ api.include_router(create_video_editor_router(
     workspace_dir=_workspace_dir,
     get_active_workspace=_get_active_workspace,
     resolve_input_path=_resolve_model3d_input_path,
-    # Defined further down: looked up on each publish, as the inline routes did.
-    publish_legacy_task=lambda snapshot, adapter: _publish_generic_legacy_task(snapshot, adapter),
+    # Looked up on the publishers module at each publish, as the inline routes did.
+    publish_legacy_task=lambda snapshot, adapter: canonical_task_publishers._publish_generic_legacy_task(snapshot, adapter),
     thumbnail_cache_dir=_MEDIA_THUMBNAIL_CACHE_DIR,
 ))
 
@@ -2995,660 +2270,84 @@ api.include_router(create_uploads_router(
 # Canonical task registry and compatibility adapters
 # ============================================================================
 
-def _reset_canonical_task_for_resume(workspace: str, task_id: str) -> None:
-    """Explicitly reopen a terminal adapter task before its worker publishes."""
-    if not task_id:
-        return
-    try:
-        registry = _task_registry(workspace)
-        existing = registry.get(task_id)
-        if existing and str(existing.get("status") or "") in {
-            "failed", "cancelled", "interrupted",
-        }:
-            registry.update(
-                task_id,
-                status="queued",
-                phase="queued",
-                message="Resume requested",
-                error=None,
-                completed_at=None,
-                event_type="task.resume_requested",
-                force=True,
-            )
-    except Exception as exc:
-        print(f"[Task registry] Could not reopen {task_id}: {exc}")
+from services import canonical_task_sync
+
+canonical_task_sync.bind(
+    _comic_plan_jobs=_comic_plan_jobs,
+    _comic_plan_jobs_lock=_comic_plan_jobs_lock,
+    _jobs=_jobs,
+    _minimax_music_jobs=_minimax_music_jobs,
+    _minimax_music_jobs_lock=_minimax_music_jobs_lock,
+    _publish_minimax_music_job=_publish_minimax_music_job,
+    _series_plan_jobs=_series_plan_jobs,
+    _series_plan_jobs_lock=_series_plan_jobs_lock,
+    _series_render_jobs=_series_render_jobs,
+    _series_render_jobs_lock=_series_render_jobs_lock,
+    _story_plan_jobs=_story_plan_jobs,
+    _story_plan_jobs_lock=_story_plan_jobs_lock,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+    cancel_audio_analysis_job=cancel_audio_analysis_job,
+    cancel_comic_minimax_job=cancel_comic_minimax_job,
+    cancel_job=cancel_job,
+    cancel_model3d_job=cancel_model3d_job,
+    cancel_rig_job=cancel_rig_job,
+    cancel_series_episode_plan=cancel_series_episode_plan,
+    cancel_series_render_job=cancel_series_render_job,
+    cancel_story_lab_generation=cancel_story_lab_generation,
+    cancel_story_music_candidates_job=cancel_story_music_candidates_job,
+    cancel_video_editor_export=cancel_video_editor_export,
+    control_quick_video_batch_job=control_quick_video_batch_job,
+    control_series_assembly_job=control_series_assembly_job,
+    director_pipeline_resume=director_pipeline_resume,
+    director_pipeline_stop=director_pipeline_stop,
+    list_minimax_image_jobs=list_minimax_image_jobs,
+    list_video_editor_jobs=list_video_editor_jobs,
+    resume_director_comic_plan=resume_director_comic_plan,
+    resume_series_episode_plan=resume_series_episode_plan,
+    resume_series_render_job=resume_series_render_job,
+    resume_story_lab_generation=resume_story_lab_generation,
+    wgp=wgp,
+)
+from services.canonical_task_sync import (
+    _control_canonical_task,
+    _list_canonical_production_pipelines,
+    _reset_canonical_task_for_resume,
+    _sync_canonical_tasks,
+)
 
 
-def _task_legacy_id(record: dict) -> str:
-    return str(record.get("jobId") or record.get("job_id") or record.get("id") or "")
+from services import canonical_task_fields
 
-
-def _task_status(value: object) -> str:
-    from services.canonical_task_helpers import task_status
-    return task_status(value)
-
-
-def _task_timestamp(record: dict, *keys: str) -> float | None:
-    for key in keys:
-        value = record.get(key)
-        if isinstance(value, (int, float)) and value > 0:
-            return float(value)
-        if isinstance(value, str) and value:
-            try:
-                return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
-            except ValueError:
-                continue
-    return None
-
-
-def _canonical_legacy_progress(current: object, total: object, progress: object) -> float:
-    """Convert legacy counters/percentages to the canonical 0..1 scale."""
-    try:
-        total_value = float(total)
-    except (TypeError, ValueError):
-        total_value = 0.0
-    if math.isfinite(total_value) and total_value > 0:
-        try:
-            current_value = float(current)
-        except (TypeError, ValueError):
-            current_value = 0.0
-        value = current_value / total_value if math.isfinite(current_value) else 0.0
-    else:
-        try:
-            percent_value = float(progress)
-        except (TypeError, ValueError):
-            percent_value = 0.0
-        value = percent_value / 100.0 if math.isfinite(percent_value) else 0.0
-    return max(0.0, min(1.0, value))
-
-
-def _upsert_canonical_task(
-    workspace: str,
-    task_id: str,
-    *,
-    event_exclude_fields: set[str] | frozenset[str] | None = None,
-    **fields,
-) -> dict:
-    from services.canonical_task_helpers import upsert_canonical_task
-    return upsert_canonical_task(
-        _task_registry(workspace),
-        workspace,
-        task_id,
-        event_exclude_fields=event_exclude_fields,
-        **fields,
-    )
-
-
-def _generation_task_fields(job: dict) -> dict:
-    from services.activity_media import activity_reference_images
-    legacy_id = str(job.get("id") or "")
-    workspace = str(job.get("workspace") or "default")
-    details = _public_generation_details(job.get("params"))
-    mode = str(details.get("generation_mode") or "generation")
-    model_type = str(details.get("model_type") or "")
-    is_remote = model_type.startswith("minimax:")
-    task_id = f"task-generation-{legacy_id}"
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    owner_id = str(params.get("_director_pipeline_id") or "")
-    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    from services.generation_provenance import task_fields_from_provenance
-    from services.generation_memory import performance_fields
-
-    task_identity = task_fields_from_provenance(
-        provenance,
-        pipeline_id=owner_id if owner_id and not owner_id.startswith("series:") else None,
-    )
-    task_metadata = {
-        "adapter": "generation", "generation_details": details,
-        "display_prompt": details.get("prompt", ""),
-        "reference_images": activity_reference_images(params, workspace,
-            uploads_dir=os.path.join(os.getcwd(), "uploads"), workspace_dir=_workspace_dir(workspace)),
-        "inference_started_at": job.get("inference_started_at"),
-        "inference_start_step": job.get("inference_start_step"),
-        "owner_pipeline_id": owner_id,
-        "actor": provenance.get("actor") or "unknown",
-        "tool": provenance.get("tool") or "studio",
-        "capability": provenance.get("capability"),
-        "command_id": command.get("command_id"),
-        "workflow_id": command.get("workflow_id"),
-        "run_id": command.get("run_id"),
-        "output_name_requested": params.get("output_filename") or params.get("output_name") or None,
-    }
-    task_metadata.update(task_identity.pop("metadata", {}))
-    task_metadata.update(performance_fields(job.get("performance")))
-    if owner_id.startswith("series:"):
-        series_job_id = owner_id.split(":", 1)[1]
-        parent_task_id = f"task-series-render-{series_job_id}"
-    elif owner_id:
-        parent_task_id = f"task-director-{owner_id}"
-    else:
-        parent_task_id = None
-    root_task_id = parent_task_id or task_id
-    status = _task_status(job.get("status"))
-    current = int(job.get("step") or 0)
-    total = int(job.get("total_steps") or 0)
-    error = job.get("error")
-    if status in {"completed", "failed", "cancelled", "interrupted"}:
-        acquired_resources = []
-    elif "acquired_resources" in job:
-        acquired_resources = list(job.get("acquired_resources") or [])
-    else:
-        # Compatibility for older in-memory tool jobs. Newly-created jobs
-        # always carry the field, which lets planning remain visibly distinct
-        # from actual GPU ownership.
-        acquired_resources = (
-            [] if status in {"created", "queued", "waiting_resource"}
-            else ["remote:https://api.minimax.io" if is_remote else _local_gpu_lane.key]
-        )
-    task_title = {
-        "image": "Image generation", "video": "Video generation",
-        "audio": "Audio generation", "music": "Music generation",
-        "model3d": "3D generation", "avatar": "Video edit",
-    }.get(mode, "Generation job")
-    if str(provenance.get("capability") or "") == "remove_background":
-        task_title = "Tools · Remove background"
-    elif str(provenance.get("capability") or "") in {"upscale", "tools.upscale"}:
-        task_title = "Tools · Upscale"
-    elif str(provenance.get("capability") or "") == "revoice":
-        task_title = "Tools · Revoice"
-    return dict(
-        workspace=workspace,
-        id=task_id,
-        root_id=root_task_id,
-        parent_id=parent_task_id,
-        kind=mode,
-        workflow="generation",
-        title=task_title,
-        status=status,
-        phase=str(job.get("phase") or status),
-        message=str(job.get("message") or status.replace("_", " ").title()),
-        current=current,
-        total=total,
-        progress=_canonical_legacy_progress(current, total, job.get("progress")),
-        created_at=_task_timestamp(job, "created_at") or time.time(),
-        started_at=_task_timestamp(job, "started_at"),
-        completed_at=_task_timestamp(job, "finished_at"),
-        provider="minimax" if is_remote else "local",
-        model=str(details.get("model_name") or model_type),
-        server_origin="https://api.minimax.io" if is_remote else "local",
-        resource_requirements=["remote:https://api.minimax.io" if is_remote else "local_gpu:0"],
-        acquired_resources=acquired_resources,
-        backend_job_id=legacy_id,
-        cancelable=(
-            status in {"created", "queued", "waiting_resource", "running"}
-            and str(job.get("status") or "").lower() != "cancelling"
-        ),
-        recoverable=_is_durable_generation_job(job),
-        error=({"message": str(error), "retryable": True} if error else None),
-        result_refs=list(job.get("output_files") or []),
-        **task_identity,
-        metadata=task_metadata,
-    )
-
-
-def _publish_generation_task(job: dict) -> dict:
-    fields = _generation_task_fields(job)
-    workspace, task_id = fields.pop("workspace"), fields.pop("id")
-    return _upsert_canonical_task(workspace, task_id, **fields)
-
-
-def _observe_generation_job_state(record: dict) -> None:
-    """Forward atomic lifecycle changes to the canonical task event stream."""
-    job = dict(record)
-    params = job.get("params") if isinstance(job.get("params"), dict) else {}
-    if not str(params.get("model_type") or "").strip():
-        return
-    _publish_generation_task(job)
-
+canonical_task_fields.bind(
+    _is_durable_generation_job=_is_durable_generation_job,
+    _local_gpu_lane=_local_gpu_lane,
+    _public_generation_details=_public_generation_details,
+    _task_registry=_task_registry,
+    _workspace_dir=_workspace_dir,
+)
+from services.canonical_task_fields import (
+    _canonical_legacy_progress,
+    _generation_task_fields,
+    _task_legacy_id,
+    _task_status,
+    _task_timestamp,
+    _upsert_canonical_task,
+)
 
 set_job_state_observer(_observe_generation_job_state)
-
-
-def _publish_series_task(job: dict, adapter: str) -> dict:
-    legacy_id = _task_legacy_id(job)
-    workspace = str(job.get("workspace") or "default")
-    is_render = adapter == "series-render"
-    is_known = job.get("bootstrapKnownSeries") is True
-    status = _task_status(job.get("status"))
-    provider = job.get("provider") if isinstance(job.get("provider"), dict) else {}
-    request_body = job.get("request") if isinstance(job.get("request"), dict) else {}
-    model = str(job.get("model") or request_body.get("writingModel") or provider.get("videoModel") or "")
-    provider_name = str(request_body.get("writingProvider") or "local")
-    server = "local" if is_render else str(request_body.get("writingBaseUrl") or "")
-    lane = (
-        resource_scheduler.local_gpu_lane(0)
-        if is_render
-        else resource_scheduler.llm_lane(
-            provider_name,
-            base_url=server,
-            device=str(request_body.get("writingDevice") or "cpu"),
-        )
-    )
-    task_id = f"task-{adapter}-{legacy_id}"
-    return _upsert_canonical_task(
-        workspace,
-        task_id,
-        root_id=task_id,
-        kind="video" if is_render else "llm-planning",
-        workflow=adapter,
-        title=("Series Lab · Video generation" if is_render else
-               "Series Lab · Known-series bible" if is_known else
-               "Series Lab · Canon" if job.get("jobType") == "canon" else
-               "Series Lab · Episode planning"),
-        status=status,
-        phase=str(job.get("stage") or status),
-        message=str(job.get("message") or "Series Lab is working…"),
-        detail=str(job.get("validationError") or ""),
-        current=int(job.get("current") or 0),
-        total=int(job.get("total") or 0),
-        created_at=_task_timestamp(job, "createdAt") or time.time(),
-        completed_at=_task_timestamp(job, "finishedAt"),
-        provider="local" if is_render else provider_name,
-        model=model,
-        server_origin=server,
-        resource_requirements=[lane.key],
-        # Parent workflows span parsing/checkpoint phases as well as provider
-        # calls. Only observable child operations publish an acquired lease;
-        # inferring one from the parent's broad "running" state is misleading.
-        acquired_resources=[],
-        attempt=max(1, int(job.get("retryCount") or job.get("validationAttempt") or 0) + 1),
-        project_id=str(job.get("seriesId") or ""),
-        entity_type="episode",
-        entity_id=str(job.get("episodeId") or ""),
-        backend_job_id=legacy_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
-        resumable=True,
-        recoverable=True,
-        error=({"message": str(job.get("error")), "retryable": True} if job.get("error") else None),
-        result_refs=list(job.get("outputAssetIds") or []),
-        metadata={"adapter": adapter, "settings": job.get("settings") or {}},
-    )
-
-
-def _publish_series_assembly_task(job: dict) -> dict:
-    """Publish persisted Series Assembly checkpoints to canonical Activity."""
-    legacy_id = _task_legacy_id(job)
-    if not legacy_id:
-        return {}
-    workspace = str(job.get("workspace") or "default")
-    raw_status = str(job.get("status") or "queued")
-    status = "running" if raw_status == "cancelling" else _task_status(raw_status)
-    task_id = str(job.get("taskId") or f"task-series-assembly-{legacy_id}")
-    return _upsert_canonical_task(
-        workspace, task_id,
-        root_id=task_id,
-        kind="assembly", workflow="series-assembly",
-        title="Series Lab · Episode assembly",
-        status=status, phase=str(job.get("stage") or status),
-        message=str(job.get("message") or "Joining approved Series clips…"),
-        current=int(job.get("current") or 0), total=int(job.get("total") or 0),
-        created_at=_task_timestamp(job, "createdAt") or time.time(),
-        started_at=_task_timestamp(job, "startedAt"),
-        completed_at=_task_timestamp(job, "finishedAt"),
-        provider="local", model="FFmpeg", server_origin="local",
-        resource_requirements=["cpu:ffmpeg"],
-        acquired_resources=["cpu:ffmpeg"] if status == "running" else [],
-        project_id=str(job.get("seriesId") or ""), entity_type="episode",
-        entity_id=str(job.get("episodeId") or ""), backend_job_id=legacy_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
-        resumable=status in {"failed", "cancelled", "interrupted"},
-        recoverable=True,
-        error=({"message": str(job.get("error")), "retryable": True}
-               if job.get("error") else None),
-        result_refs=[str(job["assetId"])] if job.get("assetId") else [],
-        metadata={"adapter": "series-assembly"},
-    )
-
-
-_GENERIC_TASK_CONFIG = {
-    "story-plan": ("Story Lab planning", "llm-planning", True),
-    "comic-plan": ("Comic planning", "llm-planning", True),
-    "video-editor": ("Video editor", "ffmpeg", False),
-    "model3d": ("3D generation", "model3d", False),
-    "rig": ("Character rigging", "rig", False),
-    "minimax-image": ("MiniMax Image-01", "image", False),
-    "audio-analysis": ("Audio analysis", "audio-analysis", False),
-    "minimax-music": ("MiniMax Music", "music", False),
-    "minimax-music-candidate": ("MiniMax Music candidate", "music", False),
-}
-
-
-def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
-    legacy_id = _task_legacy_id(record)
-    if not legacy_id:
-        return None
-    workspace = str(record.get("workspace") or "default")
-    title, kind, resumable = _GENERIC_TASK_CONFIG.get(adapter, (adapter.replace("-", " ").title(), adapter, False))
-    status = _task_status(record.get("status"))
-    phase = str(record.get("stage") or record.get("phase") or record.get("status") or status)
-    task_id = str(
-        record.get("task_id")
-        or record.get("taskId")
-        or f"task-{adapter}-{legacy_id}"
-    )
-    root_task_id = str(
-        record.get("root_task_id")
-        or record.get("rootTaskId")
-        or task_id
-    )
-    parent_task_id = str(
-        record.get("parent_task_id")
-        or record.get("parentTaskId")
-        or ""
-    ) or None
-    request_body = record.get("request") if isinstance(record.get("request"), dict) else {}
-    provenance = record.get("provenance") if isinstance(record.get("provenance"), dict) else {}
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    provider = str(
-        record.get("provider")
-        or request_body.get("writingProvider")
-        or "local"
-    )
-    model = str(record.get("model") or record.get("model_id") or record.get("modelId") or "")
-    explicit_lane = str(record.get("resource_lane") or "").strip()
-    if explicit_lane:
-        lane_key = explicit_lane
-    elif adapter == "model3d":
-        lane_key = resource_scheduler.local_gpu_lane(0).key
-    elif adapter == "rig":
-        lane_key = (
-            resource_scheduler.local_gpu_lane(0).key
-            if str(record.get("engine") or request_body.get("engine") or "").lower() == "unirig"
-            else resource_scheduler.cpu_lane("rig").key
-        )
-    elif adapter in {"story-plan", "comic-plan"}:
-        lane_key = resource_scheduler.llm_lane(
-            provider,
-            base_url=str(
-                record.get("writingBaseUrl")
-                or request_body.get("writingBaseUrl")
-                or ""
-            ),
-            device=str(
-                record.get("writingDevice")
-                or request_body.get("writingDevice")
-                or "cpu"
-            ),
-        ).key
-    elif adapter == "video-editor":
-        lane_key = resource_scheduler.cpu_lane("ffmpeg").key
-    else:
-        lane_key = resource_scheduler.cpu_lane(adapter).key
-    current = int(record.get("current") or record.get("step") or 0)
-    total = int(record.get("total") or record.get("total_steps") or 0)
-    return _upsert_canonical_task(
-        workspace, task_id,
-        root_id=root_task_id, parent_id=parent_task_id,
-        kind=kind, workflow=adapter, title=title,
-        status=status, phase=phase,
-        message=str(record.get("message") or phase.replace("_", " ").title()),
-        current=current,
-        total=total,
-        progress=_canonical_legacy_progress(current, total, record.get("progress")),
-        detail_current=int(record.get("detailCurrent") or 0),
-        detail_total=int(record.get("detailTotal") or 0),
-        created_at=_task_timestamp(record, "createdAt", "created_at") or time.time(),
-        started_at=_task_timestamp(record, "startedAt", "started_at"),
-        completed_at=_task_timestamp(record, "finishedAt", "finished_at"),
-        provider=provider, model=model,
-        server_origin=str(record.get("server_origin") or record.get("writingBaseUrl") or "local"),
-        resource_requirements=[lane_key],
-        acquired_resources=list(record.get("acquired_resources") or []),
-        backend_job_id=legacy_id,
-        cancelable=(status in {"created", "queued", "waiting_resource", "running"}
-                    and str(record.get("status") or "").lower() != "cancelling"
-                    and adapter != "comic-plan"),
-        resumable=resumable, recoverable=resumable,
-        error=({"message": str(record.get("error")), "retryable": resumable} if record.get("error") else None),
-        result_refs=list(record.get("output_files") or (
-            [record["output"]] if record.get("output") else
-            [record["filename"]] if record.get("filename") else []
-        )),
-        metadata={
-            "adapter": adapter,
-            "cancel_mode": record.get("cancel_mode"),
-            "safe_boundary": record.get("safe_boundary"),
-            "actor": provenance.get("actor") or "unknown",
-            "tool": provenance.get("tool") or adapter,
-            "capability": provenance.get("capability"),
-            "command_id": (
-                command.get("command_id")
-                or record.get("commandId")
-                or record.get("command_id")
-            ),
-            "workflow_id": command.get("workflow_id"),
-            "run_id": command.get("run_id"),
-            "generation_id": record.get("generationId") or record.get("generation_id"),
-            "candidate_id": record.get("candidateId") or record.get("candidate_id"),
-            "idempotency_key": record.get("idempotencyKey") or record.get("idempotency_key"),
-        },
-    )
-
 
 import services.audio_jobs as _audio_jobs_service
 _audio_jobs_service._publish_generic_legacy_task = _publish_generic_legacy_task
 
 
-def _publish_director_task(pipeline: dict, workspace: str) -> dict | None:
-    pipeline_id = str(pipeline.get("id") or pipeline.get("pipeline_id") or "")
-    if not pipeline_id:
-        return None
-    progress = pipeline.get("progress") if isinstance(pipeline.get("progress"), dict) else {}
-    details = pipeline.get("generation_details") if isinstance(pipeline.get("generation_details"), dict) else {}
-    snapshot = pipeline.get("_params_snapshot") if isinstance(pipeline.get("_params_snapshot"), dict) else {}
-    params = pipeline.get("params") if isinstance(pipeline.get("params"), dict) else {}
-    provenance = pipeline.get("provenance") if isinstance(pipeline.get("provenance"), dict) else {}
-    if not provenance:
-        provenance = snapshot.get("provenance") if isinstance(snapshot.get("provenance"), dict) else {}
-    if not provenance:
-        provenance = params.get("provenance") if isinstance(params.get("provenance"), dict) else {}
-    from services.generation_provenance import task_fields_from_provenance
-
-    task_identity = task_fields_from_provenance(
-        provenance,
-        pipeline_id=pipeline_id,
-    )
-    canonical_pipeline_id = task_identity.pop("pipeline_id", pipeline_id)
-    schedule = pipeline.get("resource_schedule") if isinstance(pipeline.get("resource_schedule"), dict) else {}
-    schedule_lanes = schedule.get("lanes") if isinstance(schedule.get("lanes"), dict) else {}
-    resource_requirements = list(dict.fromkeys(
-        str(lane.get("key") or "")
-        for lane in schedule_lanes.values()
-        if isinstance(lane, dict) and str(lane.get("key") or "")
-    ))
-    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
-    task_metadata = {
-        "adapter": "director", "generation_details": details,
-        "resource_schedule": schedule,
-        "actor": provenance.get("actor") or "unknown",
-        "tool": provenance.get("tool") or "director",
-        "capability": provenance.get("capability"),
-        "command_id": command.get("command_id"),
-        "workflow_id": command.get("workflow_id"),
-        "run_id": command.get("run_id"),
-    }
-    task_metadata.update(task_identity.pop("metadata", {}))
-    raw_status = str(pipeline.get("status") or "").strip().lower()
-    status = {
-        "crashed": "interrupted",
-        "preview_ready": "completed",
-    }.get(raw_status, _task_status(raw_status))
-    task_id = f"task-director-{pipeline_id}"
-    # Director checkpoints survive Activity dismissal.  Do not recreate a
-    # terminal card on every snapshot just because its source JSON still
-    # exists; an explicit resume creates a new task event and makes it visible
-    # again.
-    if status in {"completed", "failed", "cancelled", "interrupted"}:
-        try:
-            if _task_registry(workspace).is_dismissed(task_id):
-                return None
-        except Exception:
-            # A task registry failure must not hide the underlying pipeline.
-            pass
-    completed_at = _task_timestamp(
-        pipeline,
-        "finished_at",
-        "_completed_at",
-        "completed_at",
-    )
-    if completed_at is None and status in {
-        "completed", "failed", "cancelled", "interrupted",
-    }:
-        completed_at = _task_timestamp(pipeline, "updated_at")
-    return _upsert_canonical_task(
-        workspace, task_id,
-        root_id=task_id, kind="director", workflow="director",
-        title="Music video" if pipeline.get("pipeline_type") == "music_video" else "Director pipeline",
-        status=status, phase=str(pipeline.get("phase") or status),
-        message=str(pipeline.get("error") or progress.get("message") or "Director is working…"),
-        current=int(progress.get("current") or progress.get("step") or 0),
-        total=int(progress.get("total") or progress.get("total_steps") or 0),
-        detail_current=int(progress.get("detail_current") or 0),
-        detail_total=int(progress.get("detail_total") or 0),
-        created_at=_task_timestamp(pipeline, "created_at") or time.time(),
-        started_at=_task_timestamp(pipeline, "phase_started_at", "created_at"),
-        completed_at=completed_at,
-        provider=str(details.get("text_provider") or ""),
-        model=str(details.get("text_model") or details.get("video_model_name") or ""),
-        server_origin=str(details.get("text_server") or ""),
-        resource_requirements=resource_requirements,
-        pipeline_id=canonical_pipeline_id, backend_job_id=pipeline_id,
-        cancelable=status in {"created", "queued", "waiting_resource", "running"},
-        resumable=True, recoverable=True,
-        error=({"message": str(pipeline.get("error")), "retryable": True} if pipeline.get("error") else None),
-        result_refs=list(pipeline.get("output_files") or []),
-        **task_identity,
-        metadata=task_metadata,
-    )
 
 
-def _sync_canonical_tasks(workspace: str) -> None:
-    for job in list(_jobs.values()):
-        if str(job.get("workspace") or "default") == workspace:
-            snapshot = snapshot_job(job)
-            if str(job.get("id") or "").startswith("audio-analysis-"):
-                _publish_generic_legacy_task(snapshot, "audio-analysis")
-            else:
-                _publish_generation_task(snapshot)
-    try:
-        from services.director_pipeline import list_recent_pipelines
-        director_base = wgp.server_config.get("save_path", "outputs")
-        for pipeline in list_recent_pipelines(director_base, workspace):
-            _publish_director_task(pipeline, workspace)
-    except Exception:
-        pass
-    with _series_plan_jobs_lock:
-        series_plans = [copy.deepcopy(job) for job in _series_plan_jobs.values()]
-    with _series_render_jobs_lock:
-        series_renders = [copy.deepcopy(job) for job in _series_render_jobs.values()]
-    for job in series_plans:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_series_task(job, "series-plan")
-    for job in series_renders:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_series_task(job, "series-render")
-    try:
-        from services.series_jobs import SeriesJobStore
-        assembly_jobs = SeriesJobStore(_workspace_dir(workspace), "assembly").list()
-    except (OSError, ValueError, json.JSONDecodeError):
-        assembly_jobs = []
-    for job in assembly_jobs:
-        if str(job.get("workspace") or workspace) == workspace:
-            _publish_series_assembly_task(job)
-    with _story_plan_jobs_lock:
-        story_jobs = [copy.deepcopy(job) for job in _story_plan_jobs.values()]
-    with _comic_plan_jobs_lock:
-        comic_jobs = [copy.deepcopy(job) for job in _comic_plan_jobs.values()]
-    for job in story_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "story-plan")
-    for job in comic_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "comic-plan")
-    video_editor_jobs = list_video_editor_jobs()
-    for job in video_editor_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "video-editor")
-    for job in list_minimax_image_jobs():
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_generic_legacy_task(job, "minimax-image")
-    with _minimax_music_jobs_lock:
-        minimax_music_jobs = [copy.deepcopy(job) for job in _minimax_music_jobs.values()]
-    for job in minimax_music_jobs:
-        if str(job.get("workspace") or "default") == workspace:
-            _publish_minimax_music_job(job)
-    try:
-        with model3d_service._lock:
-            model3d_jobs = [copy.deepcopy(job) for job in model3d_service._jobs.values()]
-        for job in model3d_jobs:
-            if str(job.get("workspace") or "default") == workspace:
-                _publish_generic_legacy_task(job, "model3d")
-    except Exception:
-        pass
-    try:
-        from services import rig_service
-        with rig_service._lock:
-            rig_jobs = [copy.deepcopy(job) for job in rig_service._jobs.values()]
-        for job in rig_jobs:
-            if str(job.get("workspace") or "default") == workspace:
-                _publish_generic_legacy_task(job, "rig")
-    except Exception:
-        pass
 
 
 api.include_router(create_system_resources_router())
 
 
-def _control_canonical_task(task: dict, action: str):
-    adapter = str((task.get("metadata") or {}).get("adapter") or "")
-    legacy_id = str(task.get("backend_job_id") or task.get("pipeline_id") or "")
-    if action == "cancel":
-        if adapter == "generation": return cancel_job(legacy_id)
-        if adapter == "director": return director_pipeline_stop(legacy_id)
-        if adapter == "series-plan": return cancel_series_episode_plan(legacy_id)
-        if adapter == "series-render": return cancel_series_render_job(legacy_id)
-        if adapter == "story-plan": return cancel_story_lab_generation(legacy_id)
-        if adapter == "video-editor": return cancel_video_editor_export(legacy_id)
-        if adapter == "model3d": return cancel_model3d_job(legacy_id)
-        if adapter == "rig": return cancel_rig_job(legacy_id)
-        if adapter == "minimax-image": return cancel_comic_minimax_job(legacy_id)
-        if adapter == "audio-analysis": return cancel_audio_analysis_job(legacy_id)
-        if adapter == "minimax-music": return cancel_story_music_candidates_job(legacy_id)
-        if adapter == "minimax-music-candidate":
-            root_backend_id = str(task.get("root_id") or "").removeprefix(
-                "task-minimax-music-"
-            )
-            return cancel_story_music_candidates_job(root_backend_id)
-        if adapter == "series-assembly":
-            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "cancel")
-        if adapter == "quick-video-batch":
-            return control_quick_video_batch_job(
-                _workspace_dir(str(task.get("workspace") or "default")),
-                legacy_id,
-                "cancel",
-            )
-    if action in {"retry", "resume"}:
-        if adapter == "director": return director_pipeline_resume(legacy_id)
-        if adapter == "series-plan": return resume_series_episode_plan(legacy_id)
-        if adapter == "series-render": return resume_series_render_job(legacy_id)
-        if adapter == "story-plan": return resume_story_lab_generation(legacy_id)
-        if adapter == "comic-plan": return resume_director_comic_plan(legacy_id)
-        if adapter == "series-assembly":
-            return control_series_assembly_job(_workspace_dir(str(task.get("workspace") or "default")), legacy_id, "resume")
-        if adapter == "quick-video-batch":
-            return control_quick_video_batch_job(
-                _workspace_dir(str(task.get("workspace") or "default")),
-                legacy_id,
-                "resume",
-            )
-    if action == "discard" and adapter == "series-assembly":
-        return control_series_assembly_job(
-            _workspace_dir(str(task.get("workspace") or "default")),
-            legacy_id,
-            "discard",
-        )
-    raise HTTPException(status_code=409, detail=f"Task does not support {action}")
 
 
 from routers.canonical_tasks import create_canonical_tasks_router
@@ -3695,7 +2394,7 @@ def _start_remove_background_job(job: dict) -> None:
             unregister_abort_state=unregister_abort_state,
             acknowledge_cancel=acknowledge_cancel,
             active_states=_active_gen_states,
-            publish_sidecar=lambda current, path, sidecar: _publish_generation_sidecar_for_studio_job(
+            publish_sidecar=lambda current, path, sidecar: canonical_task_publishers._publish_generation_sidecar_for_studio_job(
                 current,
                 path,
                 sidecar,
@@ -3730,9 +2429,6 @@ api.include_router(create_projects_router(
 
 from routers.productions import create_productions_router
 
-def _list_canonical_production_pipelines(workspace: str):
-    from services.director_pipeline import list_pipeline_states
-    return list_pipeline_states(wgp.server_config.get("save_path", "outputs"), workspace)
 
 api.include_router(create_productions_router(
     list_workspaces=_list_workspaces,

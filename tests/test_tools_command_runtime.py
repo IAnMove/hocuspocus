@@ -151,8 +151,9 @@ def test_image_admission_cannot_be_relabelled_as_a_tool_worker(tmp_path):
 
 @pytest.mark.parametrize("capability", ["upscale", "tools.upscale"])
 def test_native_task_projection_identifies_upscale_for_activity(tmp_path, capability):
-    source = Path(__file__).resolve().parents[1] / "app" / "_launch_runtime.py"
-    tree = ast.parse(source.read_text(encoding="utf-8"))
+    root = Path(__file__).resolve().parents[1]
+    source = root / "app" / "services" / "canonical_task_fields.py"
+    tree = ast.parse(source.read_text(encoding="utf-8"), filename=str(source))
     definition = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
                       and node.name == "_generation_task_fields")
     namespace = {
