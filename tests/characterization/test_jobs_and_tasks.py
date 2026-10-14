@@ -556,3 +556,300 @@ def test_canonical_sync_lists_every_kind_and_control_answers(server, golden, tmp
     reopened = launch._task_registry("default").get("task-golden-reset")
     golden.check("reset reopens a failed task before the next sync", 200, server.normalise(reopened))
     server.check(golden, "reset task after a later sync", "GET", "/api/v1/tasks/task-golden-reset", params=workspace)
+
+
+# The canonical task cluster (C10a review): a workspace of its own, so that jobs other tests leave in the shared
+# registries (they use "default") never reach these listings, and a fresh task registry, so event ids are fixed.
+ACTIVITY_WORKSPACE = "activity-golden"
+ISO_CREATED = "2023-11-14T22:13:20Z"  # the same instant as CREATED, written as text
+
+
+def _registry_rows(launch, workspace: str) -> dict:
+    """Every row of the workspace's task registry file: what a restart would read back."""
+    import json
+    import sqlite3
+
+    path = launch._task_registry(workspace).path
+    connection = sqlite3.connect(path)
+    connection.row_factory = sqlite3.Row
+    try:
+        tasks = [
+            {**dict(row), "snapshot": json.loads(row["snapshot"])}
+            for row in connection.execute("SELECT * FROM tasks ORDER BY id")
+        ]
+        events = [
+            {**dict(row), "changes": json.loads(row["changes"]), "context": json.loads(row["context"])}
+            for row in connection.execute("SELECT * FROM task_events ORDER BY event_id")
+        ]
+    finally:
+        connection.close()
+    return {"tasks": tasks, "events": events}
+
+
+def _seed_activity_kinds(launch, server, monkeypatch) -> None:
+    """One idle record per field branch of every publisher, all in ``ACTIVITY_WORKSPACE``."""
+    from services import director_pipeline, model3d_service, rig_service
+    from services.series_jobs import SeriesJobStore
+    import routers.comics as comics
+    import routers.video_editor as video_editor
+
+    workspace = ACTIVITY_WORKSPACE
+
+    def generation(job_id: str, params: dict, **fields: object) -> None:
+        job = {
+            "id": job_id, "workspace": workspace, "status": "queued", "step": 0, "total_steps": 0,
+            "params": {"model_type": "golden_model", "prompt": f"prompt of {job_id}", "generation_mode": "video", **params},
+            "created_at": CREATED, "output_files": [],
+        }
+        job.update(fields)
+        monkeypatch.setitem(launch._jobs, job_id, job)
+
+    # Generation: a Series child running without the acquired_resources field (the compatibility lane), with a text
+    # creation time; a Director child on MiniMax; a cancelling remote job; a failed tool job; a job of another
+    # workspace that the sync must skip.
+    generation(
+        "act-gen-series", {"_director_pipeline_id": "series:act-render"}, status="running", step=3, total_steps=12,
+        created_at=ISO_CREATED, started_at=CREATED + 5, phase="denoising", message="Step 3 of 12",
+        provenance={"actor": "agent", "tool": "tools", "capability": "remove_background",
+                    "command": {"command_id": "cmd-1", "workflow_id": "wf-1", "run_id": "run-1"}},
+    )
+    generation(
+        "act-gen-director", {"_director_pipeline_id": "act-director-run", "model_type": "minimax:image-01",
+                             "generation_mode": "image"},
+        provenance={"actor": "user", "capability": "upscale"}, progress=40,
+    )
+    generation(
+        "act-gen-cancelling", {"model_type": "minimax:video-01"}, status="cancelling",
+        provenance={"capability": "revoice"}, progress="n/a",
+    )
+    generation(
+        "act-gen-failed", {"generation_mode": "music"}, status="failed", error="engine stopped",
+        finished_at=CREATED + 60, output_files=["act_failed_partial.wav"], acquired_resources=["local_gpu:0"],
+        provenance={"capability": "tools.upscale"},
+    )
+    generation("act-gen-elsewhere", {}, workspace="default-elsewhere")
+
+    # Series: a known-series bible, a canon job and a running render, each with its own lane inputs.
+    known = _plain_job(
+        "act-plan-known", workspace=workspace, status="waiting", stage="bible", bootstrapKnownSeries=True,
+        request={"writingProvider": "openai", "writingBaseUrl": "https://llm.example", "writingDevice": "gpu",
+                 "writingModel": "gpt-golden"},
+        validationError="needs a title", retryCount=2, seriesId="series-act", episodeId="episode-act",
+        outputAssetIds=["asset-1"], settings={"tone": "dry"},
+    )
+    canon = _plain_job(
+        "act-plan-canon", workspace=workspace, status="failed", jobType="canon", error="canon broke",
+        validationAttempt=1, model="canon-model", createdAt=ISO_CREATED, finishedAt="not a time",
+    )
+    render = _plain_job(
+        "act-render", workspace=workspace, status="running", seriesId="series-act", episodeId="episode-act",
+        provider={"videoModel": "golden-video"}, current=2, total=5,
+    )
+    other = _plain_job("act-plan-other", workspace="default-elsewhere")
+    for job in (known, canon, other):
+        monkeypatch.setitem(launch._series_plan_jobs, job["jobId"], job)
+    monkeypatch.setitem(launch._series_render_jobs, render["jobId"], render)
+
+    # Series assembly checkpoints: cancelling counts as running; a failed one is resumable; a custom task id.
+    store = SeriesJobStore(launch._workspace_dir(workspace), "assembly")
+    store.save(_plain_job(
+        "act-asm-cancelling", workspace=workspace, status="cancelling", stage="joining", assetId="asset-joined",
+        startedAt=ISO_CREATED, updatedAt=CREATED + 3, seriesId="series-act", episodeId="episode-act",
+    ))
+    store.save(_plain_job(
+        "act-asm-failed", workspace=workspace, status="failed", error="ffmpeg exited 1", finishedAt=CREATED + 9,
+        updatedAt=CREATED + 2, taskId="task-act-assembly-custom",
+    ))
+
+    # Story and comic plans with explicit task identities, lane inputs and command fields.
+    story = _plain_job(
+        "act-story", workspace=workspace, status="failed", error="model refused",
+        request={"writingProvider": "ollama", "writingBaseUrl": "http://127.0.0.1:11434", "writingDevice": "gpu"},
+        taskId="task-act-story", rootTaskId="task-act-story-root", parentTaskId="task-act-story-parent",
+        detailCurrent=2, detailTotal=7, current=1, total=3, provider="ollama", model_id="llama-golden",
+        provenance={"actor": "wizard", "tool": "story", "capability": "plan", "command": {"workflow_id": "wf-s"}},
+        commandId="cmd-story", generationId="gen-1", candidateId="cand-1", idempotencyKey="idem-1",
+        createdAt=ISO_CREATED, startedAt=CREATED + 1, finishedAt=CREATED + 2,
+    )
+    story_done = _plain_job("act-story-done", workspace=workspace, status="completed", message="Story ready")
+    comic = _plain_job(
+        "act-comic", workspace=workspace, status="running", writingBaseUrl="http://127.0.0.1:8080",
+        writingDevice="cpu", progress=55, server_origin="http://127.0.0.1:8080",
+    )
+    monkeypatch.setitem(launch._story_plan_jobs, story["jobId"], story)
+    monkeypatch.setitem(launch._story_plan_jobs, story_done["jobId"], story_done)
+    monkeypatch.setitem(launch._comic_plan_jobs, comic["jobId"], comic)
+
+    # The other legacy kinds: a cancelling export with an output, a finished image with a file name, an explicit
+    # lane, a UniRig rig on the GPU and a procedural one on the CPU.
+    editor = _plain_job("act-editor", workspace=workspace, status="cancelling", output="act_export.mp4",
+                        cancel_mode="cooperative", safe_boundary="segment")
+    image = _plain_job("act-image", workspace=workspace, status="completed", filename="act_image.png",
+                       provider="minimax", model="image-01", finished_at=CREATED + 4)
+    monkeypatch.setitem(video_editor._video_editor_jobs, editor["id"], editor)
+    monkeypatch.setitem(comics._minimax_image_jobs, image["jobId"], image)
+    monkeypatch.setitem(model3d_service._jobs, "act-model3d", _plain_job(
+        "act-model3d", workspace=workspace, resource_lane="remote:https://3d.example", status="paused",
+        step=1, total_steps=4,
+    ))
+    monkeypatch.setitem(rig_service._jobs, "act-rig-gpu", _plain_job(
+        "act-rig-gpu", workspace=workspace, request={"engine": "UniRig"}, output_files=["rigged.glb"],
+    ))
+    monkeypatch.setitem(rig_service._jobs, "act-rig-cpu", _plain_job("act-rig-cpu", workspace=workspace, engine="procedural"))
+
+    # MiniMax Music: a candidate whose root is its parent job (cancel reaches the parent through the root id).
+    music = _plain_job(
+        "minimax-music-112233445566", workspace=workspace, message="Waiting for MiniMax Music",
+        children=[_plain_job("act-candidate", workspace=workspace, parentTaskId="task-minimax-music-minimax-music-112233445566",
+                             rootTaskId="task-minimax-music-minimax-music-112233445566")],
+    )
+    monkeypatch.setitem(launch._minimax_music_jobs, music["jobId"], music)
+
+    # Director pipelines held in memory: a running music video with a resource schedule and provenance, a crashed
+    # run, a PRE preview, a failed run that only has updated_at, and a completed run the test dismisses.
+    def pipeline(pipeline_id: str, status: str, **fields: object) -> None:
+        record = {"id": pipeline_id, "workspace": workspace, "status": status, "phase": status,
+                  "created_at": CREATED, "progress": {"current": 0, "total": 0}, "clip_plans": [], "output_files": []}
+        record.update(fields)
+        monkeypatch.setitem(director_pipeline._pipelines, pipeline_id, record)
+
+    pipeline(
+        "act-director-run", "running", pipeline_type="music_video", phase="rendering", phase_started_at=CREATED + 7,
+        progress={"step": 2, "total_steps": 6, "detail_current": 1, "detail_total": 3, "message": "Rendering clip 2"},
+        params={"pipeline_type": "music_video", "writing_provider": "ollama", "writing_model": "llama-golden",
+                "video_model": "golden_video"},
+        resource_schedule={"lanes": {"video": {"key": "local_gpu:0"}, "text": {"key": "remote:https://llm.example"},
+                                     "again": {"key": "local_gpu:0"}, "empty": {"key": ""}, "bad": "lane"}},
+        provenance={"actor": "agent", "tool": "mcp", "capability": "director.run",
+                    "command": {"command_id": "cmd-d", "workflow_id": "wf-d", "run_id": "run-d"}},
+    )
+    pipeline("act-director-crashed", "crashed", error="backend restarted", updated_at=CREATED + 11)
+    pipeline("act-director-pre", "preview_ready", completed_at=CREATED + 12)
+    pipeline("act-director-failed", "failed", updated_at=CREATED + 13, error="no clips")
+    pipeline("act-director-done", "completed", _completed_at=CREATED + 14)
+
+
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_canonical_activity_maps_every_publisher_branch_and_keeps_its_registry_rows(server, golden, monkeypatch) -> None:
+    """Activity over one record per publisher branch, its idempotent resync, task details, events and the registry file.
+
+    Recorded on development cda915466, where the canonical task cluster was still in ``_launch_runtime.py``.
+    """
+    launch = _launch()
+    _seed_activity_kinds(launch, server, monkeypatch)
+    params = {"workspace": ACTIVITY_WORKSPACE, "status": "all"}
+    server.check(golden, "activity every branch", "GET", "/api/v1/tasks", params=params)
+    # A second sync of unchanged records writes no event.
+    server.check(golden, "activity resync", "GET", "/api/v1/tasks", params=params)
+    workspace = {"workspace": ACTIVITY_WORKSPACE}
+    server.check(golden, "series render parent and its generation child", "GET",
+                 "/api/v1/tasks/task-series-render-act-render", params=workspace)
+    server.check(golden, "director run parent and its generation child", "GET",
+                 "/api/v1/tasks/task-director-act-director-run", params=workspace)
+    server.check(golden, "story task events", "GET", "/api/v1/tasks/task-act-story/events", params=workspace)
+    # A terminal Director card the user dismissed is not rebuilt from its checkpoint by later syncs.
+    server.check(golden, "dismiss completed director", "DELETE", "/api/v1/tasks/task-director-act-director-done",
+                 params=workspace)
+    server.check(golden, "activity after the dismissal", "GET", "/api/v1/tasks", params=params)
+    golden.check("activity registry rows", 200, server.normalise(_registry_rows(launch, ACTIVITY_WORKSPACE)))
+
+
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_canonical_control_reaches_each_adapter_and_resume_reopens_only_terminal_tasks(server, golden, monkeypatch, capsys) -> None:
+    """Cancel, retry, resume and dismiss for the adapters the first control golden does not reach, and the reset edges.
+
+    Recorded on development cda915466, where the canonical task cluster was still in ``_launch_runtime.py``. The
+    Assembly and Quick Video controllers are the routers' own registries, filled with a recorder for this workspace,
+    so each answer names the action the control function asked for.
+    """
+    import os
+
+    import routers.quick_video_batches as quick_video_batches
+    import routers.series_assembly as series_assembly
+
+    launch = _launch()
+    _seed_activity_kinds(launch, server, monkeypatch)
+    workspace = {"workspace": ACTIVITY_WORKSPACE}
+    server.check(golden, "control seed", "GET", "/api/v1/tasks", params={**workspace, "status": "all"})
+
+    calls: list = []
+    directory = os.path.realpath(os.path.abspath(launch._workspace_dir(ACTIVITY_WORKSPACE)))
+    monkeypatch.setitem(series_assembly._ASSEMBLY_CONTROLLERS, directory,
+                        lambda job_id, action: calls.append(["assembly", job_id, action]) or {"assembly": job_id, "action": action})
+    monkeypatch.setitem(quick_video_batches._CONTROLLERS, directory,
+                        lambda job_id, action, item_index=None: calls.append(["quick", job_id, action, item_index])
+                        or {"quick": job_id, "action": action})
+    for task_id, status in (("task-quick-video-batch-act-q1", "running"), ("task-quick-video-batch-act-q2", "failed")):
+        launch._upsert_canonical_task(
+            ACTIVITY_WORKSPACE, task_id, root_id=task_id, kind="video", workflow="quick-video-batch",
+            title="Quick Video batch", status=status, phase=status, message=status, created_at=CREATED,
+            backend_job_id=task_id.rsplit("-", 1)[-1], cancelable=status == "running",
+            metadata={"adapter": "quick-video-batch"},
+        )
+    launch._upsert_canonical_task(
+        ACTIVITY_WORKSPACE, "task-act-frontend", root_id="task-act-frontend", kind="foreground", workflow="frontend",
+        title="Frontend", status="failed", phase="failed", message="Failed", created_at=CREATED, cancelable=False,
+        metadata={"adapter": "frontend"},
+    )
+
+    for case, method, task_id, action in (
+        ("cancel music candidate through its root", "POST", "task-minimax-music-candidate-act-candidate", "cancel"),
+        ("cancel quick video batch", "POST", "task-quick-video-batch-act-q1", "cancel"),
+        ("retry quick video batch", "POST", "task-quick-video-batch-act-q2", "retry"),
+        ("cancel running assembly", "POST", "task-series-assembly-act-asm-cancelling", "cancel"),
+        ("resume failed assembly", "POST", "task-act-assembly-custom", "resume"),
+        ("retry failed assembly", "POST", "task-act-assembly-custom", "retry"),
+        ("dismiss assembly discards it", "DELETE", "task-act-assembly-custom", ""),
+        ("resume completed story", "POST", "task-story-plan-act-story-done", "resume"),
+        ("retry series render without its project", "POST", "task-series-render-act-render", "retry"),
+        ("resume missing director run", "POST", "task-director-act-director-crashed", "resume"),
+        ("cancel frontend task", "POST", "task-act-frontend", "cancel"),
+        ("retry video editor", "POST", "task-video-editor-act-editor", "retry"),
+        ("retry rig", "POST", "task-rig-act-rig-cpu", "retry"),
+        ("dismiss failed frontend task", "DELETE", "task-act-frontend", ""),
+    ):
+        path = f"/api/v1/tasks/{task_id}" + (f"/{action}" if action else "")
+        server.check(golden, case, method, path, params=workspace)
+    golden.check("controller calls", 200, calls)
+
+    registry = launch._task_registry(ACTIVITY_WORKSPACE)
+    before = registry.get("task-generation-act-gen-series")
+    launch._reset_canonical_task_for_resume(ACTIVITY_WORKSPACE, "")
+    launch._reset_canonical_task_for_resume(ACTIVITY_WORKSPACE, "task-generation-act-gen-series")
+    launch._reset_canonical_task_for_resume(ACTIVITY_WORKSPACE, "task-does-not-exist")
+    launch._reset_canonical_task_for_resume("../outside", "task-generation-act-gen-series")
+    golden.check("reset leaves a running task alone", 200, registry.get("task-generation-act-gen-series") == before)
+    printed = [line for line in capsys.readouterr().out.splitlines() if line.startswith("[Task registry]")]
+    golden.check("reset of a bad workspace is printed", 200, server.normalise(printed))
+    launch._reset_canonical_task_for_resume(ACTIVITY_WORKSPACE, "task-generation-act-gen-failed")
+    golden.check("reset reopens a failed generation", 200, server.normalise(registry.get("task-generation-act-gen-failed")))
+    golden.check("control registry rows", 200, server.normalise(_registry_rows(launch, ACTIVITY_WORKSPACE)))
+
+
+@pytest.mark.usefixtures("empty_generation_queue")
+def test_canonical_activity_skips_a_registry_it_cannot_read_and_lists_the_rest(server, golden, monkeypatch) -> None:
+    """A Director listing, an Assembly folder, a 3D or a rig registry that raises drops that kind only.
+
+    Recorded on development cda915466, where the canonical task cluster was still in ``_launch_runtime.py``.
+    """
+    import threading
+
+    from services import director_pipeline, model3d_service, rig_service
+    from services.series_jobs import SeriesJobStore
+
+    launch = _launch()
+    workspace = ACTIVITY_WORKSPACE
+    monkeypatch.setitem(launch._story_plan_jobs, "act-story-ok", _plain_job("act-story-ok", workspace=workspace))
+    # The Director listing measures clip_plans with len(); a number there makes the listing raise.
+    monkeypatch.setitem(director_pipeline._pipelines, "act-director-broken", {
+        "id": "act-director-broken", "workspace": workspace, "status": "running", "params": {}, "clip_plans": 5,
+    })
+    # The Assembly store sorts by float(updatedAt or createdAt); a text creation time makes the listing raise.
+    SeriesJobStore(launch._workspace_dir(workspace), "assembly").save(
+        _plain_job("act-asm-text-time", workspace=workspace, createdAt=ISO_CREATED),
+    )
+    # A lock cannot be deep-copied: the 3D and rig snapshots raise.
+    monkeypatch.setitem(model3d_service._jobs, "act-model3d-lock", _plain_job("act-model3d-lock", workspace=workspace, lock=threading.Lock()))
+    monkeypatch.setitem(rig_service._jobs, "act-rig-lock", _plain_job("act-rig-lock", workspace=workspace, lock=threading.Lock()))
+    server.check(golden, "activity without the unreadable registries", "GET", "/api/v1/tasks",
+                 params={"workspace": workspace, "status": "all"})
