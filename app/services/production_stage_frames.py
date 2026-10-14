@@ -41,8 +41,81 @@ def frame_prompt(production: Any, spec: dict, window: dict) -> str:
     return f"{style} {window['frame']}{guard}".strip()
 
 
+def _digest(*parts: Any) -> str:
+    import hashlib
+    import json
+    return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
+
+
+def _cast_source(entry: dict, style: dict) -> str:
+    """What a resume compares to decide the sheet or portrait is still the one this spec asked for."""
+    if entry.get("group"):
+        return _digest("group", list(entry.get("group") or []))
+    return _digest(entry.get("sheet_prompt"), entry.get("single_prompt"), entry.get("seed"),
+                   image_choice(entry, style), style.get("image"))
+
+
+def forget_changed_cast(production: Any, spec: dict) -> set[str]:
+    """A cast member whose look changed is drawn again. A member seen for the first time
+    (or made before this was recorded) keeps what it has."""
+    sources = production.state.setdefault("cast_sources", {})
+    cast = production.state.setdefault("cast", {})
+    singles = production.state.setdefault("cast_single", {})
+    cutouts = production.state.get("cast_cutouts") if isinstance(production.state.get("cast_cutouts"), dict) else {}
+    style = spec.get("style") or {}
+    dirty: set[str] = set()
+    for entry in spec.get("cast") or []:
+        if not isinstance(entry, dict):
+            continue
+        cid = entry.get("id")
+        if not isinstance(cid, str) or not cid:
+            continue
+        current = _cast_source(entry, style)
+        known = sources.get(cid)
+        sources[cid] = current
+        if known is None or known == current:
+            continue
+        cast.pop(cid, None)
+        singles.pop(cid, None)
+        cutouts.pop(cid, None)
+        dirty.add(cid)
+        production.log(f"cast {cid}: the look changed, drawing it again")
+    for entry in spec.get("cast") or []:      # a group plate is the members' portraits; remake it when one of them moved
+        if not isinstance(entry, dict):
+            continue
+        cid, members = entry.get("id"), entry.get("group") or []
+        if members and cid in cast and any(member in dirty for member in members):
+            cast.pop(cid, None)
+            dirty.add(cid)
+            production.log(f"cast {cid}: a member's look changed, composing the group again")
+    pending = dirty | set(production.state.get("cast_dirty") or ())
+    if pending:
+        production.state["cast_dirty"] = sorted(pending)
+    else:
+        production.state.pop("cast_dirty", None)
+    return dirty
+
+
+def forget_shots_using_cast(production: Any, windows: list[dict]) -> None:
+    """H3 shots that still show a remade character are drawn and shot again."""
+    dirty = set(production.state.pop("cast_dirty", ()) or ())
+    if not dirty:
+        return
+    frames, clips = production.state.setdefault("frames", {}), production.state.setdefault("clips", {})
+    for window in windows:
+        if window.get("kind") != "h3" or not any(cid in dirty for cid in (window.get("cast") or [])):
+            continue
+        key = window["key"]
+        if frames.pop(key, None):
+            production.log(f"frame {key}: the cast look changed, drawing it again")
+        if isinstance(clips.get(key), dict):
+            clips[key]["obsolete"] = True
+            production.log(f"clip {key}: the cast look changed, shooting it again")
+
+
 def cast_sheets(production: Any, spec: dict) -> None:
     host = _host()
+    forget_changed_cast(production, spec)
     cast = production.state.setdefault("cast", {})
     settings = spec.get("style") or {}
     style = settings.get("image", "")
@@ -70,20 +143,14 @@ def forget_changed_shots(production: Any, spec: dict, windows: list[dict]) -> No
     """An H3 shot whose spec changed is shot again: a new frame prompt drops its frame and its clip, a new action,
     camera or singing only its clip (a scene2d background is redrawn the same way). A shot seen for the first time
     (or made before this was recorded) keeps what it has."""
-    import hashlib
-    import json
-
-    def digest(*parts: Any) -> str:
-        return hashlib.sha256(json.dumps(parts, sort_keys=True, default=str).encode()).hexdigest()[:16]
-
     sources = production.state.setdefault("h3_sources", {})
     frames, clips = production.state.setdefault("frames", {}), production.state.setdefault("clips", {})
     for window in windows:
         if not _draws_frame(window):
             continue
         key = window["key"]
-        frame = digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
-        clip = digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
+        frame = _digest(production.frame_prompt(spec, window), window.get("seed"), sorted(window.get("cast") or []))
+        clip = _digest(frame, window.get("action"), window.get("camera"), bool(window.get("sing")))
         known = sources.get(key) or {"frame": frame, "clip": clip}
         if known["frame"] != frame and frames.pop(key, None):
             production.log(f"frame {key}: the shot's picture changed, drawing it again")
@@ -105,6 +172,7 @@ def shoot_frames(production: Any, spec: dict, windows: list[dict]) -> None:
     host = _host()
     windows = production._unlocked(windows)
     forget_changed_shots(production, spec, windows)
+    forget_shots_using_cast(production, windows)
     frames = production.state.setdefault("frames", {})
     failures = production.state.setdefault("frame_failures", {})
     settings = spec.get("style") or {}

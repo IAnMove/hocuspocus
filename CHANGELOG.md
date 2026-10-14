@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: editing a cast member's look now redraws it.** Rewriting a character's `sheet_prompt` or `single_prompt`, changing its seed or image model, or editing `style.image` used to keep the old reference sheet and portrait, so every shot built on it kept the old character. A resumed production now draws that character again (a new job, not the old one), redraws a group plate when a member changed, and redraws and re-shoots only the H3 shots that show it. A production made before this was recorded keeps what it has.
+
 **Fixed: a production no longer overwrites another production's montage.** When two productions once shared a title, the second one's saved montage pointer could still name the first one's timeline, and a rerun, a re-package or a shot retake then wrote over it. Now the production keeps the file only if its own clips are in it. Otherwise it writes its own `<id>.montage.json`. A shot edit on such a pointer is refused with `montage_foreign` and asks you to run the montage stage again.
 
 **Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.
