@@ -164,7 +164,7 @@ async function installReviewRoutes(page: Page, state: ReviewRouteState): Promise
 async function openGallery(page: Page): Promise<void> {
   await page.goto('/scene-template-review')
   await expect(page.locator('section[aria-label="Video3D candidate template gallery"]')).toBeVisible()
-  await expect(page.locator('[data-template-id]')).toHaveCount(41)
+  await expect(page.locator('[data-template-id]')).toHaveCount(48)
 }
 
 async function readAutosave(page: Page): Promise<SceneLike | null> {
@@ -387,7 +387,7 @@ test('keeps review decisions across reload and exports catalog/template versions
       templates: Array<{ id: string; templateVersion: number; decision: string }>
     }
     expect(exported.catalogVersion).toBe(EXPANDED_CATALOG_VERSION)
-    expect(exported.templates).toHaveLength(41)
+    expect(exported.templates).toHaveLength(48)
     expect(exported.templates.find(template => template.id === 'cinema-establishing')).toMatchObject({
       templateVersion: 1,
       decision: 'keep',

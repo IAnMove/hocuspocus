@@ -130,7 +130,7 @@ test('Crear starts the server job, shows its poses as they are made and, when it
 })
 
 test('a job still running when the page loads is shown and blocks new ones, and a failed one says so and keeps the poses it made', async () => {
-  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { render, screen, cleanup, waitFor } = await import('@testing-library/react')
   const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
   await withModel()
   const job = (id: string, animation: string, status: string, extra: Record<string, unknown> = {}) => ({ jobId: id, workspace: 'w', kitId: 'ana', animationId: animation, title: animation, model: 'qwen_image_21',

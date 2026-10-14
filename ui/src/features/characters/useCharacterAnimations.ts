@@ -26,7 +26,7 @@ export function useCharacterAnimations(workspace: string, kitId: string | undefi
   const [error, setError] = useState('')
   const [saved, setSaved] = useState('')
   const known = useRef<Record<string, string>>({})
-  const openedAt = useRef(Date.now())
+  const openedAt = useRef(0)
 
   const refresh = useCallback(async () => {
     if (!kitId) return
