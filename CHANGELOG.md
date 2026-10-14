@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Canonical task fields left the main server file (no behaviour change).** The helpers that read a job's id, status, time and progress, and the fields a generation task stores, moved unchanged into `app/services/canonical_task_fields.py`. The server hands that module its own objects once, and the old names on the server are those same functions.
+
 **The generation worker left the main server file, split into small steps (no behaviour change).** One function used to run every picture, video, speech and sound job on the full server, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits into `app/services/generation_worker/`, so a job does the same things in the same order and ends the same way on a cancel or an error, and every route that starts a job still calls the same `_run_generation`. The main server file is about 1,800 lines shorter. The server hands the new package its own objects once, at start-up.
 
 **Sound-effect generation left the launch module.** A sound-effect job still prepares MMAudio, writes the clip, and publishes the same sidecar.

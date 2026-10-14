@@ -123,7 +123,14 @@ def worker_modules() -> list:
     package = [sys.modules[f"services.generation_worker.{name}"] for name in WORKER_PACKAGE
                if f"services.generation_worker.{name}" in sys.modules]
     passes = [sys.modules[name] for name in POSTFX_MODULES if name in sys.modules]
-    return [worker_module(), *package, *passes]
+    # Canonical task modules publish during a generation. A patch of ``time`` (or any other name they hold)
+    # has to land on them too, or the task clock diverges from the launch name the test patched.
+    canonical = [sys.modules[name] for name in (
+        "services.canonical_task_fields",
+        "services.canonical_task_publishers",
+        "services.canonical_task_sync",
+    ) if name in sys.modules]
+    return [worker_module(), *package, *passes, *canonical]
 
 
 @dataclass
