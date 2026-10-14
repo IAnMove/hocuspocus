@@ -32,6 +32,9 @@ _RECAST_SERVICE_PATHS = (
     os.path.join(_ROOT, "app", "services", "recast_matte.py"),
     os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"),
     os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_planning.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_manifest.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_run.py"),
 )
 _OUTPUT_OPS_PATH = os.path.join(_ROOT, "app", "services", "output_ops.py")
 _WGP_PATH = os.path.join(_ROOT, "app", "wgp.py")
@@ -3812,7 +3815,10 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn('body.get("preserve_scene_reference") is True', launch)
         self.assertIn('preserve_bystanders = True', launch)
         self.assertIn("_build_recast_native_people_conditioning(", launch)
-        self.assertIn("_compose_recast_group_reference_frame(", launch)
+        # Recast's shot references and manifest moved to recast_shot_manifest (C8a); launch's remaining copies of the
+        # composer and scene-reference calls are Repaint's forwarders (C6).
+        shot_manifest = _read(os.path.join(_ROOT, "app", "services", "recast_shot_manifest.py"))
+        self.assertIn("_compose_recast_group_reference_frame(", shot_manifest)
         compose = _read(os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"))
         self.assertIn("recast_group_ref_", compose)
         self.assertIn("recast_group_mask_", compose)
@@ -3829,7 +3835,8 @@ class TestMultiPersonRecast(unittest.TestCase):
         self.assertIn("native_people['conditioning_count']", launch)
         self.assertNotIn("recast_bystanders_matted_ref_", launch)
         self.assertNotIn("recast_bystanders_matted_ref_", compose)
-        self.assertIn("_build_recast_source_scene_reference(", launch)
+        self.assertNotIn("recast_bystanders_matted_ref_", shot_manifest)
+        self.assertIn("_build_recast_source_scene_reference(", shot_manifest)
         self.assertIn(
             "_enable_recast_dynamic_source_scene_reference(",
             launch,
@@ -3841,9 +3848,10 @@ class TestMultiPersonRecast(unittest.TestCase):
             '"edit_recast_source_scene_reference"',
             compose,
         )
+        # The Recast shot manifest moved to recast_shot_manifest (C8a); launch's other copy was Repaint's (C6).
         self.assertIn(
             '"scail2_dynamic_source_scene_reference"',
-            launch,
+            shot_manifest,
         )
         self.assertIn(
             '"scail2_dynamic_source_scene_reference"',
@@ -3883,12 +3891,15 @@ class TestMultiPersonRecast(unittest.TestCase):
         sam3 = _read(_SAM3_PREPROCESSOR_PATH)
         studio = json.loads(_read(_STUDIO_EN_PATH))
 
+        planning = _read(os.path.join(
+            _ROOT, "app", "services", "recast_shot_planning.py",
+        ))
         masks = _read(os.path.join(_ROOT, "app", "services", "recast_masks.py"))
-        self.assertIn("def _detect_recast_shot_ranges(", launch)
+        self.assertIn("def _detect_recast_shot_ranges(", planning)
         # The character mask builder moved to recast_masks (C7); the launch
         # copies of these two strings are Repaint's, pinned by its own test.
         self.assertIn("tracking_segments=shot_ranges", masks)
-        self.assertIn("def _recover_recast_unmapped_shots(", launch)
+        self.assertIn("def _recover_recast_unmapped_shots(", planning)
         self.assertIn(
             "running generic-person appearance recovery",
             masks,
@@ -3930,13 +3941,19 @@ class TestMultiPersonRecast(unittest.TestCase):
             "_select_scail2_window_reference_indices(",
             scail2,
         )
+        manifest = _read(os.path.join(
+            _ROOT, "app", "services", "recast_shot_manifest.py",
+        ))
         self.assertIn(
             "def _build_recast_shot_manifest(",
-            launch,
+            manifest,
         )
+        shot_run = _read(os.path.join(
+            _ROOT, "app", "services", "recast_shot_run.py",
+        ))
         self.assertIn(
             "def _run_recast_shot_generation(",
-            launch,
+            shot_run,
         )
         self.assertIn(
             '"_recast_shot_manifest"',

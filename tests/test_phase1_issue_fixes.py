@@ -99,21 +99,46 @@ def _read(path: str) -> str:
         return handle.read()
 
 
+_RECAST_SERVICE_PATHS = (
+    os.path.join(_ROOT, "app", "services", "recast_shot_planning.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_manifest.py"),
+    os.path.join(_ROOT, "app", "services", "recast_shot_run.py"),
+    os.path.join(_ROOT, "app", "services", "recast_masks.py"),
+    os.path.join(_ROOT, "app", "services", "recast_matte.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_compose.py"),
+    os.path.join(_ROOT, "app", "services", "recast_reference_prepare.py"),
+)
+
+
 def _load_functions(path: str, names: tuple[str, ...], namespace=None) -> dict:
-    source = _read(path)
-    tree = ast.parse(source, filename=os.path.relpath(path, _ROOT))
-    selected = [
-        node
-        for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name in names
-    ]
-    if len(selected) != len(names):
-        found = {node.name for node in selected}
-        raise AssertionError(f"Missing functions: {set(names) - found}")
-    module = ast.Module(body=selected, type_ignores=[])
-    ast.fix_missing_locations(module)
+    """Exec ``names`` from ``path``, or from the recast service that now defines them."""
+    pools = [path]
+    for service in _RECAST_SERVICE_PATHS:
+        if service not in pools and os.path.isfile(service):
+            pools.append(service)
+    parsed = {}
+    for item in pools:
+        tree = ast.parse(_read(item), filename=os.path.relpath(item, _ROOT))
+        parsed[item] = {
+            node.name: node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+        }
+    grouped: dict[str, list[ast.FunctionDef]] = {}
+    missing = []
+    for name in names:
+        home = next((item for item in pools if name in parsed[item]), None)
+        if home is None:
+            missing.append(name)
+            continue
+        grouped.setdefault(home, []).append(parsed[home][name])
+    if missing:
+        raise AssertionError(f"Missing functions: {set(missing)}")
     loaded = dict(namespace or {})
-    exec(compile(module, os.path.relpath(path, _ROOT), "exec"), loaded)
+    for home, nodes in grouped.items():
+        module = ast.Module(body=nodes, type_ignores=[])
+        ast.fix_missing_locations(module)
+        exec(compile(module, os.path.relpath(home, _ROOT), "exec"), loaded)
     return loaded
 
 

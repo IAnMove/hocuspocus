@@ -1,41 +1,12 @@
 """Recast masks: palette colors, character masks, and the mask-locked video.
 
-Function bodies are the launch module's, moved verbatim. The shot helpers the
-character mask calls still live in launch, below the point where launch binds
-this module, so launch hands over forwarders that look each one up when it is
-called (:func:`bind`). Helpers that moved with this slice are imported from
-their modules at the bottom of this file.
+Function bodies are the launch module's, moved verbatim. They read no launch
+name. The helpers they call moved too (this slice, and the Recast shot helpers
+in :mod:`services.recast_shot_planning`) and are imported from their modules at
+the bottom of this file.
 """
 
 import os
-
-# Bound by bind(); None until the full server binds them.
-_detect_recast_shot_ranges = None
-_find_recast_unmapped_shots = None
-_normalize_recast_tracking_target = None
-_recover_recast_unmapped_shots = None
-_select_recast_timeline_anchor = None
-_summarize_recast_mapping_mask = None
-
-
-def bind(
-    *,
-    detect_recast_shot_ranges,
-    find_recast_unmapped_shots,
-    normalize_recast_tracking_target,
-    recover_recast_unmapped_shots,
-    select_recast_timeline_anchor,
-    summarize_recast_mapping_mask,
-):
-    """Take the launch shot helpers the character mask calls. Launch calls this once."""
-    globals().update(
-        _detect_recast_shot_ranges=detect_recast_shot_ranges,
-        _find_recast_unmapped_shots=find_recast_unmapped_shots,
-        _normalize_recast_tracking_target=normalize_recast_tracking_target,
-        _recover_recast_unmapped_shots=recover_recast_unmapped_shots,
-        _select_recast_timeline_anchor=select_recast_timeline_anchor,
-        _summarize_recast_mapping_mask=summarize_recast_mapping_mask,
-    )
 
 
 # --- moved verbatim ---
@@ -769,4 +740,12 @@ def _recolor_recast_reference_mask(
 from services.recast_reference_prepare import (
     _resolve_recast_media,
     _recast_video_has_audio,
+)
+from services.recast_shot_planning import (
+    _detect_recast_shot_ranges,
+    _find_recast_unmapped_shots,
+    _normalize_recast_tracking_target,
+    _recover_recast_unmapped_shots,
+    _select_recast_timeline_anchor,
+    _summarize_recast_mapping_mask,
 )
