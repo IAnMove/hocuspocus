@@ -2557,6 +2557,76 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(job.json()["status"], "completed", job.text)
         self.assertEqual(job.json()["episodeResult"]["outline"]["beats"], ["The lantern wakes."])
 
+    def test_core_keeps_one_task_registry_per_workspace_folder(self):
+        """A second TaskRegistry for the same database re-ran interrupt_unfinished() and flipped the running tasks."""
+        from services import core_workspace as core, task_manager
+        from services.core_generation_commands import registry_for
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            registry = registry_for("default")
+            registry.create(
+                id="running-task", root_id="running-task", workspace="default", kind="series-plan",
+                workflow="series", title="Plan", status="running", phase="running",
+            )
+            shared = task_manager.get_task_registry(core.workspace_dir("default"))
+            status = registry.get("running-task")["status"]
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(status, "running")
+        self.assertIs(registry, shared)
+
+    def test_core_plan_reports_the_provider_error_not_a_cancelled_task(self):
+        """The first plan job of a workspace used to be cancelled at birth by the registry the LLM call opened."""
+        import requests
+
+        def writing(_request):
+            return {"model": "local-model", "base_url": "http://127.0.0.1:9", "api_key": ""}
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(writing=writing, patch_generator=False), patch(
+                "services.llm_service._post_with_backoff",
+                side_effect=requests.exceptions.ConnectionError("provider down"),
+            ):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{started.json()['jobId']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.json()["status"], "failed", job.text)
+        self.assertIn("OpenAI-compatible request failed", job.json()["error"])
+        self.assertNotIn("cancelled", job.json()["error"])
+
+    def test_recreated_workspace_gets_a_working_task_registry(self):
+        """Delete, then create the same name again: the tasks routes must not answer 500 (A5b on core)."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            created = self.client.post("/api/v1/workspaces", json={"name": "again"})
+            first_list = self.client.get("/api/v1/tasks", params={"workspace": "again"})
+            first_upsert = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "a5b-one", "workspace": "again", "status": "queued", "title": "t",
+            })
+            deleted = self.client.delete("/api/v1/workspaces/again")
+            recreated = self.client.post("/api/v1/workspaces", json={"name": "again"})
+            second_list = self.client.get("/api/v1/tasks", params={"workspace": "again"})
+            second_upsert = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "a5b-two", "workspace": "again", "status": "queued", "title": "t",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        for label, response in (
+            ("create", created), ("list", first_list), ("upsert", first_upsert), ("delete", deleted),
+            ("recreate", recreated), ("list again", second_list), ("upsert again", second_upsert),
+        ):
+            self.assertEqual(response.status_code, 200, f"{label}: {response.text}")
+        self.assertEqual(second_list.json()["tasks"], [])
+
     def test_core_plan_streams_the_writing_model(self):
         folder, previous = self._in_temp_workspace()
         try:
