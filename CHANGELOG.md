@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Blend left the launch module.** Joining two clips with a generated transition still answers the same way. The blend worker still asks the generation worker to render the transition, then finishes the job itself.
+
+**Outpaint left the launch module.** Extending a picture or a clip, including the official LTX-2 path and a clip with several camera shots, still answers the same way. The generation worker still does the outpaint audio and pixel pass itself.
+
 **Repaint planning left the launch module.** Checking region mappings, the edited frame's aspect, the prepared frame, the preview image, and the shot prompt, conditioning and manifest still works the same way. The Repaint routes call those same functions.
 
 **Repaint shot assembly left the launch module.** Writing the shot sidecar and assembling the shot videos still work the same way. The Repaint route calls that same assembly.
