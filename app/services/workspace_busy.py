@@ -49,6 +49,26 @@ def is_active(status: object) -> bool:
     return str(status or "").strip().lower() in ACTIVE_STATUSES
 
 
+def claimed(claims: Iterable[str], records: Mapping[str, Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """The jobs whose id is in a live claim set, with the workspace and status of their stored record.
+
+    A claim is taken before a worker thread starts and released in its ``finally``, so it is the
+    liveness proof for the planners; the record (a persisted checkpoint cached in memory, often
+    with whatever status the crashed process wrote) is only used to say which workspace the job
+    writes into. A claim with no record has no workspace and so blocks every workspace.
+    """
+    found = []
+    for job_id in sorted(claims):
+        record = records.get(job_id) or {}
+        status = record.get("status")
+        found.append({
+            "jobId": job_id,
+            "status": status if is_active(status) else "running",
+            "workspace": record.get("workspace"),
+        })
+    return found
+
+
 def register(kind: str, probe: Probe) -> None:
     """Set the probe for ``kind``. The last one wins.
 

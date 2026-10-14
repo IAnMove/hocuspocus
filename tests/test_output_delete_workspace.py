@@ -246,6 +246,37 @@ def _seed_model3d(_tmp_path):
     return _seed_job_table(model3d_service, "model3d-1", {"workspace": "film", "status": "queued", "model_id": "m"})
 
 
+def _seed_claimed_planner(module, jobs_name, claims_name, lock_name, job_id):
+    """A planner running in ``film``: its record is in the job table and its id is in the claim set."""
+
+    def reset():
+        with getattr(module, lock_name):
+            getattr(module, jobs_name).clear()
+            getattr(module, claims_name).clear()
+
+    reset()
+    with getattr(module, lock_name):
+        getattr(module, jobs_name)[job_id] = {"jobId": job_id, "workspace": "film", "status": "running"}
+        getattr(module, claims_name).add(job_id)
+    return reset
+
+
+def _seed_story_plan(_tmp_path):
+    from services import story_lab_jobs
+
+    return _seed_claimed_planner(
+        story_lab_jobs, "_story_plan_jobs", "_story_plan_active_jobs", "_story_plan_jobs_lock", "story-plan-aaaaaaaaaaaa",
+    )
+
+
+def _seed_comic_plan(_tmp_path):
+    from services import director_comic_jobs
+
+    return _seed_claimed_planner(
+        director_comic_jobs, "_comic_plan_jobs", "_comic_plan_active_jobs", "_comic_plan_jobs_lock", "comic-plan-job-aaaaaaaaaaaa",
+    )
+
+
 # (kind, profile, seeder). Each seeder fills the family's real registry for workspace "film"
 # and returns the function that ends that job.
 BUSY_FAMILIES = [
@@ -254,6 +285,8 @@ BUSY_FAMILIES = [
     pytest.param("minimax-image", "full", _seed_minimax_image, id="minimax-image"),
     pytest.param("rig", "full", _seed_rig, id="rig"),
     pytest.param("model3d", "full", _seed_model3d, id="model3d"),
+    pytest.param("story-plan", "full", _seed_story_plan, id="story-plan"),
+    pytest.param("comic-plan", "full", _seed_comic_plan, id="comic-plan"),
 ]
 
 
@@ -423,3 +456,45 @@ def test_the_busy_profiles_name_real_probes_and_core_runs_only_what_it_mounts():
 def test_the_core_root_passes_the_core_busy_profile_to_the_workspace_router():
     # The full server's side of this is checked after a real boot, in tests/characterization/test_workspaces.py.
     assert 'busy_profile="core"' in (ROOT / "app" / "core_runtime.py").read_text(encoding="utf-8")
+
+
+def test_a_story_plan_checkpoint_a_crash_left_as_running_does_not_block_even_after_a_poll(tmp_path):
+    """A status poll after a restart caches the persisted checkpoint (status ``running``) in memory.
+    Only the claim set proves a worker, so that record must not keep the workspace undeletable."""
+    import json
+
+    from services import story_lab_jobs
+
+    client = _workspace_client(tmp_path, profile="full")
+    checkpoints = tmp_path / "film" / ".story-plan-jobs"
+    checkpoints.mkdir()
+    job_id = "story-plan-bbbbbbbbbbbb"
+    (checkpoints / f"{job_id}.json").write_text(
+        json.dumps({"jobId": job_id, "workspace": "film", "status": "running"}), encoding="utf-8",
+    )
+    saved = (story_lab_jobs._workspace_dir, story_lab_jobs._list_workspaces)
+    story_lab_jobs._workspace_dir = lambda workspace=None: str(tmp_path / (workspace or "film"))
+    story_lab_jobs._list_workspaces = lambda: [{"name": "film"}]
+    try:
+        polled = story_lab_jobs._load_story_plan_job(job_id)
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        story_lab_jobs._workspace_dir, story_lab_jobs._list_workspaces = saved
+        with story_lab_jobs._story_plan_jobs_lock:
+            story_lab_jobs._story_plan_jobs.pop(job_id, None)
+    assert polled["status"] == "running"
+    assert deleted.status_code == 200, deleted.text
+
+
+def test_a_comic_plan_without_a_claim_does_not_block(tmp_path):
+    from services import director_comic_jobs as comic
+
+    client = _workspace_client(tmp_path, profile="full")
+    with comic._comic_plan_jobs_lock:
+        comic._comic_plan_jobs["comic-plan-job-cccccccccccc"] = {"workspace": "film", "status": "planning"}
+    try:
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        with comic._comic_plan_jobs_lock:
+            comic._comic_plan_jobs.clear()
+    assert deleted.status_code == 200, deleted.text
