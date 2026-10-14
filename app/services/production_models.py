@@ -164,9 +164,11 @@ def _text(value: Any) -> bool:
 
 
 def workspace_rel(path: str) -> str | None:
-    """A relative file path inside the workspace (``pack/ape.glb``), or None if it climbs out or is absolute."""
+    """A relative file path inside the workspace (``pack/ape.glb``), or None if it climbs out or is absolute (a
+    Windows drive such as ``C:/x.glb`` or ``c:x.glb`` is absolute there: ``root / "C:/x.glb"`` is ``C:/x.glb``)."""
+    import ntpath
     text = str(path).replace("\\", "/").split("?", 1)[0]
-    if not text or text.startswith("/") or "\x00" in text:
+    if not text or text.startswith("/") or "\x00" in text or ntpath.splitdrive(text)[0]:
         return None
     parts = [part for part in text.split("/") if part]
     if not parts or any(part in (".", "..") for part in parts):

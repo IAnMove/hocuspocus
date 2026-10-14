@@ -360,6 +360,17 @@ def test_a_glb_that_climbs_out_of_the_workspace_is_refused(tmp_path):
         outside.unlink(missing_ok=True)
 
 
+def test_a_glb_on_a_windows_drive_is_refused_and_a_nested_pack_path_is_kept():
+    """On Windows ``root / "C:/x.glb"`` is ``C:/x.glb``: a drive (or drive-relative) path leaves the workspace too."""
+    from services.production_models import workspace_rel
+    for glb in ("C:/Windows/x.glb", r"C:\Windows\x.glb", "c:x.glb", r"D:pack\x.glb"):
+        assert workspace_rel(glb) is None, glb
+        with pytest.raises(ModelError, match="climbs out"):
+            check_models({"models": {"x": {"glb": glb}}})
+    assert workspace_rel(r"pack\ape.glb") == "pack/ape.glb" and workspace_rel("pack//ape.glb?v=2") == "pack/ape.glb"
+    assert workspace_rel("%2e%2e/ape.glb") == "%2e%2e/ape.glb", "not decoded: a folder named %2e%2e, inside the workspace"
+
+
 def test_up_to_twelve_models_are_made_and_up_to_forty_counting_glbs(tmp_path):
     glbs = {f"g{n}": {"glb": f"pack/g{n}.glb", "rig": "prop"} for n in range(28)}
     made = {f"m{n}": {"prompt": "a lamp"} for n in range(12)}
