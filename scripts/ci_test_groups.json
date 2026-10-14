@@ -16,6 +16,7 @@
         "tests/characterization/test_series.py",
         "tests/characterization/test_studio_generate.py",
         "tests/characterization/test_workspaces.py",
+        "tests/test_recast_helpers.py",
         "tests/test_about.py",
         "tests/test_access_log_filter.py",
         "tests/test_activity_generation_details.py",
