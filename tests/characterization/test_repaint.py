@@ -19,6 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from services.hardware_probe import hardware_cache
 from tests.characterization import media
 from tests.characterization.test_run_generation import WAIT, worker_module
 # Fixtures, used by name: the C0 rig (fake engine, hardware cache, queue) and its clip.
@@ -213,9 +214,9 @@ def test_repaint_prepares_a_job_for_the_worker(rig, golden, monkeypatch, tmp_pat
     reject("source cannot be decoded", {"video_path": video, "target_frame_path": matching})
     _probe_as(monkeypatch)
     reject("edited frame aspect does not match", {"video_path": video, "target_frame_path": square})
-    rig.launch._cached_hardware = {"gpu_vram_gb": 8.0}
+    hardware_cache.value = {"gpu_vram_gb": 8.0}
     reject("704p below 16 GB", {"video_path": video, "target_frame_path": matching, "resolution_profile": "704p"})
-    rig.launch._cached_hardware = {"gpu_vram_gb": 0.0}
+    hardware_cache.value = {"gpu_vram_gb": 0.0}
     reject("model is not SCAIL-2", {"video_path": video, "target_frame_path": matching, "model_type": "fake_t2v"})
     rig.set_wgp("get_model_def", lambda _model_type: None)
     reject("SCAIL-2 is not installed", {"video_path": video, "target_frame_path": matching})
@@ -732,8 +733,9 @@ def test_repaint_modules_read_the_objects_launch_holds(full_server, monkeypatch)
     assert router._active_gen_states is launch.ctx.jobs.active_states
     assert run._active_gen_states is launch.ctx.jobs.active_states
     assert run._jobs is launch.ctx.jobs.registry
-    # The hardware probe stays in launch and reads launch's cache when the route calls it.
-    monkeypatch.setattr(launch, "_cached_hardware", {"gpu_vram_gb": 7.0})
+    # The hardware probe is one function in services/hardware_probe.py. The route reaches it through launch's
+    # forwarder, and it reads the one cache.
+    monkeypatch.setattr(hardware_cache, "value", {"gpu_vram_gb": 7.0})
     assert router._get_cached_hardware() == {"gpu_vram_gb": 7.0}
 
     # Each forwarder calls whatever launch holds under the name when it is called, not what it held at bind.

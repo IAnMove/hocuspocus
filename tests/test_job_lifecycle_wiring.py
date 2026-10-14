@@ -141,7 +141,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 self.assertTrue(required <= calls, required - calls)
 
     def test_cancel_endpoint_routes_through_shared_helper(self):
-        cancel = _function(self.launch, "cancel_job")
+        cancel = _function(_parse("app/services/generation_jobs.py"), "cancel_job")
         self.assertIn("request_cancel", _called_names(cancel))
         self.assertIn("_remove_persisted_generation_job", _called_names(cancel))
         self.assertFalse(any(
@@ -150,7 +150,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         ))
 
     def test_generation_lifecycle_is_connected_to_canonical_task_events(self):
-        observer = _function(self.launch, "_observe_generation_job_state")
+        observer = _function(_parse("app/services/canonical_task_publishers.py"), "_observe_generation_job_state")
         self.assertIn("_publish_generation_task", _called_names(observer))
         registrations = [
             node for node in ast.walk(self.launch)

@@ -56,11 +56,30 @@ def _tree() -> ast.Module:
 
 
 def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    found: list[ast.FunctionDef | ast.AsyncFunctionDef] = []
     for node in _tree().body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             selected = copy.deepcopy(node)
             selected.decorator_list = []
-            return selected
+            found.append(selected)
+    for relative in (
+        "app/services/canonical_task_fields.py",
+        "app/services/canonical_task_publishers.py",
+        "app/services/canonical_task_sync.py",
+    ):
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in tree.body:
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+                selected = copy.deepcopy(node)
+                selected.decorator_list = []
+                found.append(selected)
+    if len(found) == 1:
+        return found[0]
+    if found:
+        raise AssertionError(f"Function {name!r} found {len(found)} times")
     if name == "start_comic_animatic":
         comics = ast.parse(COMICS.read_text(encoding="utf-8"), filename=str(COMICS))
         for node in ast.walk(comics):

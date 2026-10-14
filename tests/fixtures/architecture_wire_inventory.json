@@ -2,12 +2,6 @@
   "version": 1,
   "entries": [
     {
-      "file": "tests/test_activity_generation_details.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
       "file": "tests/test_api_workspace_security.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -26,16 +20,16 @@
       "reason": "Tests the static graph extractor against synthetic launch-source fixtures, without importing runtime."
     },
     {
-      "file": "tests/test_audio_analysis_jobs.py",
+      "file": "tests/test_cancellable_model_downloads.py",
       "target": "app/_launch_runtime.py",
       "classification": "fragile_source",
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_cancellable_model_downloads.py",
+      "file": "tests/test_canonical_task_bind.py",
       "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+      "classification": "architecture_rule",
+      "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
       "file": "tests/test_character_kit_library_router.py",
@@ -81,21 +75,9 @@
     },
     {
       "file": "tests/test_h3_window_planner.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
-      "file": "tests/test_h3_window_planner.py",
       "target": "ui/src/stores/useStore.ts",
       "classification": "fragile_source",
       "reason": "Python inspects TypeScript source; splitting useStore requires converting or relocating this contract."
-    },
-    {
-      "file": "tests/test_image_generation_commands.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
       "file": "tests/test_import_layers.py",
@@ -255,12 +237,6 @@
     },
     {
       "file": "tests/test_task_adapter_helpers.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_tools_command_runtime.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."

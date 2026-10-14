@@ -360,8 +360,8 @@ def test_core_server_routes_exist_in_the_main_server() -> None:
     assert missing == [], "The UI calls the same paths on both servers; serve these in the main server too."
 
 
-def _undefined_global_names(path: Path) -> dict[str, list[str]]:
-    """Global names some function reads that the module never defines, with the functions that read them."""
+def _defined_module_names(path: Path) -> tuple[symtable.SymbolTable, set[str]]:
+    """The module's symbol table and the names it defines: assigned, imported, a def or a class, or a ``global`` set."""
     top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
     bound = {item.get_name() for item in top.get_symbols() if item.is_assigned() or item.is_imported() or item.is_namespace()}
 
@@ -372,6 +372,12 @@ def _undefined_global_names(path: Path) -> dict[str, list[str]]:
             declare(child)
 
     declare(top)
+    return top, bound
+
+
+def _undefined_global_names(path: Path) -> dict[str, list[str]]:
+    """Global names some function reads that the module never defines, with the functions that read them."""
+    top, bound = _defined_module_names(path)
     missing: dict[str, list[str]] = {}
 
     def walk(table: symtable.SymbolTable) -> None:
@@ -395,6 +401,49 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
     # route tables and to every test that extracts launch functions.
     for server in (MAIN, CORE):
         assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
+
+
+# The main server hands its own ``globals()`` to ``create_image_generation_commands``, which reads command collaborators
+# out of that dict by key and passes it on to the operation factories. A key launch does not define is a ``KeyError``
+# the first time a command runs, and nothing else sees it: the kernel PR (#1059) stopped defining
+# ``register_generation_job`` in launch and every command-started job (image, speech, music, sfx, video) failed to
+# dispatch, while the tests kept passing because they hand ``dispatch`` a runtime dict of their own. The first module
+# also reads optional keys with ``.get``: an undefined one silently leaves the operation (sfx, upscale) out. The other
+# three are checked for ``runtime["key"]`` only: ``tools_upscale_commands`` reads optional hooks with ``.get`` and falls
+# back to a default (or ``None``) when launch has no such name, and launch has never defined seven of them
+# (``_probe_tool_video``, ``_tools_processor_capabilities``, ``_tools_processor_parameters``, ``_uploads_dir``,
+# ``_validate_tools_processors``, ``_validated_tools_processor_settings``, ``resolve_tool_source``).
+RUNTIME_DICT_READERS = {
+    APP / "services" / "image_generation_runtime.py": True,
+    APP / "services" / "video_generation_commands.py": False,
+    APP / "services" / "studio_sfx_commands.py": False,
+    APP / "services" / "tools_upscale_commands.py": False,
+}
+
+
+def _runtime_keys(path: Path, *, with_get: bool) -> set[str]:
+    """String keys the module reads from its ``runtime`` argument: ``runtime["key"]``, and ``runtime.get("key")``."""
+    keys: set[str] = set()
+    for node in ast.walk(_parse(path)):
+        if isinstance(node, ast.Subscript):
+            target, key = node.value, node.slice
+        elif with_get and isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "get":
+            target, key = node.func.value, node.args[0] if node.args else None
+        else:
+            continue
+        if isinstance(target, ast.Name) and target.id == "runtime" and isinstance(key, ast.Constant) and isinstance(key.value, str):
+            keys.add(key.value)
+    return keys
+
+
+def test_the_command_runtime_only_reads_keys_the_main_server_defines() -> None:
+    _, defined = _defined_module_names(MAIN)
+    for path, with_get in RUNTIME_DICT_READERS.items():
+        keys = _runtime_keys(path, with_get=with_get)
+        assert keys, f"{path.name} reads no key from `runtime`: if it renamed the argument, follow it here"
+        assert sorted(keys - defined) == [], (
+            f"{path.name} reads keys the main server does not define: import the shared service directly instead"
+        )
 
 
 # Repaint (C6): each module takes the launch objects it reads from one keyword-only function, bind() for a service and

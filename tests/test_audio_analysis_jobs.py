@@ -19,7 +19,6 @@ import routers.audio as audio_routes
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
 
 
 class _DeferredThread:
@@ -270,9 +269,9 @@ def test_get_and_cancel_do_not_cross_workspace_boundaries(monkeypatch):
 
 
 def test_legacy_reconnect_and_cancel_cover_all_audio_active_states():
-    source = LAUNCH.read_text(encoding="utf-8")
-    cancel = source.split("def cancel_job", 1)[1].split("@api.get(\"/api/v1/jobs\")", 1)[0]
-    listing = source.split("def list_jobs", 1)[1].split("def _recovery_job_summary", 1)[0]
+    source = (ROOT / "app" / "services" / "generation_jobs.py").read_text(encoding="utf-8")
+    cancel = source.split("def cancel_job", 1)[1].split("def list_jobs", 1)[0]
+    listing = source.split("def list_jobs", 1)[1]
 
     assert "return cancel_audio_analysis_job(job_id)" in cancel
     assert '("queued", "waiting_resource", "running", "cancelling")' in listing
