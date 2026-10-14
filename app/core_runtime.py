@@ -295,13 +295,13 @@ def _core_persist_active(name, apply_save_paths=True):
     return path
 
 
-def _core_workspace_jobs():
-    """Image and 3D jobs that should keep a workspace from being deleted."""
-    from services import core_remote_3d, core_remote_image
-    return [
-        *core_remote_image.list_active(),
-        *(job for job in core_remote_3d._JOBS.values() if isinstance(job, dict)),
-    ]
+def _core_generation_idle():
+    from services import core_remote_3d, core_remote_image, rig_service
+    from routers.video_editor import list_video_editor_jobs
+    busy = {"queued", "running", "waiting", "waiting_resource", "cancelling"}
+    return not (core_remote_image.list_active() or core_remote_3d.list_active()
+                or rig_service.has_active_jobs()
+                or any(j.get("status") in busy for j in list_video_editor_jobs()))
 
 
 from types import SimpleNamespace
@@ -324,8 +324,8 @@ api.include_router(create_workspace_router(
     get_active_workspace=core.active_workspace,
     persist_active=_core_persist_active,
     workspace_dir=core.workspace_dir,
-    generation_idle=lambda: True,
-    jobs=_core_workspace_jobs,
+    generation_idle=_core_generation_idle,
+    jobs=lambda: [],
     safe_join=core.safe_join,
     save_path=lambda: str(core.outputs_root()),
 ))

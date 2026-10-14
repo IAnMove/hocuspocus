@@ -1770,6 +1770,63 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertIn("\n  \"services\"", text)
         self.assertIn("\n    \"active_workspace\"", text)
 
+    def test_core_refuses_to_delete_a_workspace_while_a_video_editor_export_is_running(self):
+        """DELETE is new on core. A queued export still writes into the folder; deleting it
+        would wipe the clips and let workspace_dir resurrect an empty workspace."""
+        from routers.video_editor import reset_video_editor_jobs
+        from services import core_workspace as core
+
+        class DeferredThread:
+            def __init__(self, target=None, args=(), kwargs=None, daemon=None, name=None):
+                pass
+
+            def start(self):
+                return None
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            workspace = core.workspace_dir("film")
+            Path(workspace, "clip.mp4").write_bytes(b"clip")
+            with patch("routers.video_editor.threading.Thread", DeferredThread):
+                started = self.client.post("/api/v1/video-editor/export", json={
+                    "clips": [{"source": "clip.mp4"}],
+                    "name": "Harbour cut",
+                    "workspace": "film",
+                })
+            refused = self.client.delete("/api/v1/workspaces/film")
+            reset_video_editor_jobs()
+            deleted = self.client.delete("/api/v1/workspaces/film")
+        finally:
+            reset_video_editor_jobs()
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(started.status_code, 202, started.text)
+        self.assertEqual(refused.status_code, 409, refused.text)
+        self.assertIn("generation", refused.json()["detail"].lower())
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+        self.assertFalse(Path(workspace).is_dir())
+
+    def test_core_refuses_to_delete_a_workspace_while_a_3d_job_is_cancelling(self):
+        """cancelling still calls the paid provider and may write a GLB; the old jobs()
+        filter only treated queued/running as busy."""
+        from services import core_remote_3d
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            created = self.client.post("/api/v1/workspaces", json={"name": "film"})
+            Path(core_runtime.core.workspace_dir("film"), "keep.png").write_bytes(b"png")
+            core_remote_3d._JOBS["cancelling-3d"] = {
+                "job_id": "cancelling-3d", "status": "cancelling", "workspace": "film",
+            }
+            refused = self.client.delete("/api/v1/workspaces/film")
+            core_remote_3d._JOBS.pop("cancelling-3d", None)
+            deleted = self.client.delete("/api/v1/workspaces/film")
+        finally:
+            core_remote_3d._JOBS.pop("cancelling-3d", None)
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(created.status_code, 200, created.text)
+        self.assertEqual(refused.status_code, 409, refused.text)
+        self.assertEqual(deleted.status_code, 200, deleted.text)
+
     def test_wizard_image_executor_fails_when_minimax_job_fails(self):
         from services import core_generation_commands
 

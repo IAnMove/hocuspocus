@@ -43,9 +43,18 @@ def cancel_job(job_id: str) -> dict[str, Any] | None:
         return _public(dict(job))
 
 
+_ACTIVE_JOB_STATES = {"queued", "running", "cancelling", "waiting_resource"}
+
+
+def list_active() -> list[dict[str, Any]]:
+    """Queued, running, cancelling or waiting 3D jobs. Workspace delete must treat these as busy."""
+    with _LOCK:
+        return [_public(dict(job)) for job in _JOBS.values() if job.get("status") in _ACTIVE_JOB_STATES]
+
+
 def capabilities() -> dict[str, Any]:
     with _LOCK:
-        active = sum(1 for job in _JOBS.values() if job.get("status") in {"queued", "running", "cancelling"})
+        active = sum(1 for job in _JOBS.values() if job.get("status") in _ACTIVE_JOB_STATES)
     return {
         "runtime": {"installed": False, "isolated_runtime": False, "releases_vram_after_job": True, "install_hint": None},
         "models": [],
