@@ -32,6 +32,7 @@ from services.provider_profile import resolve_minimax_key
 _minimax_image_jobs: dict[str, dict] = {}
 _minimax_image_jobs_lock = threading.RLock()
 _publish_legacy_task: Callable[..., Any] | None = None
+_MINIMAX_IMAGE_TERMINAL = {"completed", "failed", "cancelled", "interrupted"}
 
 
 def _validate_comic_project(project: dict) -> None:
@@ -236,6 +237,27 @@ def list_minimax_image_jobs() -> list[dict]:
     """Snapshot MiniMax image jobs for Activity's canonical sync."""
     with _minimax_image_jobs_lock:
         return [copy.deepcopy(job) for job in _minimax_image_jobs.values()]
+
+
+def any_minimax_image_job_active() -> bool:
+    """True while a Comics MiniMax Image-01 request still writes into the workspace.
+
+    These jobs live in ``_minimax_image_jobs``, not ``jobs()`` or
+    ``_active_gen_states``. Queued, waiting and running ones persist the
+    panel into ``workspace_dir``; completed/failed/cancelled/interrupted
+    ones do not. Workspace delete must treat the first group as busy.
+    """
+    with _minimax_image_jobs_lock:
+        return any(
+            str(job.get("status") or "") not in _MINIMAX_IMAGE_TERMINAL
+            for job in _minimax_image_jobs.values()
+        )
+
+
+def reset_minimax_image_jobs() -> None:
+    """Drop in-memory MiniMax image jobs. Tests use this; production does not."""
+    with _minimax_image_jobs_lock:
+        _minimax_image_jobs.clear()
 
 
 def _cancel_comic_minimax_job(job_id: str) -> dict:

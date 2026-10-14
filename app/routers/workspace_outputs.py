@@ -108,6 +108,17 @@ def create_workspace_router(
         busy = any(j.get("status") in ("queued", "running") for j in jobs())
         if busy or not generation_idle():
             raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        # Comics MiniMax Image-01 jobs write panels into the workspace from
+        # `_minimax_image_jobs`, which is neither jobs() nor
+        # `_active_gen_states`. Deleting mid-request wipes the comic and
+        # lets workspace_dir resurrect an empty folder for the leftover
+        # worker.
+        try:
+            from routers.comics import any_minimax_image_job_active
+            if any_minimax_image_job_active():
+                raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
+        except ImportError:
+            pass
         # Director pipelines are alive between their generation jobs (LLM
         # planning, review pauses) with no _jobs entry — but their next step
         # would resurrect the folder via _workspace_dir().

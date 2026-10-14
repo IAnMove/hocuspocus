@@ -114,3 +114,53 @@ def test_delete_output_rejects_traversal(tmp_path, monkeypatch, name):
 
     assert result == {"deleted": name}
     assert outside.read_bytes() == b"keep"
+
+
+def test_delete_workspace_refuses_while_minimax_image_is_running(tmp_path):
+    """Comics MiniMax panels live in `_minimax_image_jobs`, not jobs()
+    or `_active_gen_states`. The shared delete route must still treat them as busy."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from routers.comics import (
+        _minimax_image_jobs,
+        _minimax_image_jobs_lock,
+        reset_minimax_image_jobs,
+    )
+    from routers.workspace_outputs import create_workspace_router
+
+    film = tmp_path / "film"
+    film.mkdir()
+    (film / "page.comic.json").write_text("{}", encoding="utf-8")
+    policy = PathPolicy()
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=lambda: ["film"],
+        get_active_workspace=lambda: "default",
+        persist_active=lambda name, apply_save_paths=True: str(tmp_path / name),
+        workspace_dir=lambda name: str(tmp_path / name),
+        generation_idle=lambda: True,
+        jobs=lambda: [],
+        safe_join=policy.safe_join,
+        save_path=lambda: str(tmp_path),
+    ))
+    client = TestClient(app)
+    reset_minimax_image_jobs()
+    try:
+        with _minimax_image_jobs_lock:
+            _minimax_image_jobs["minimax-image-abc123abc123"] = {
+                "jobId": "minimax-image-abc123abc123",
+                "workspace": "film",
+                "status": "waiting_resource",
+            }
+        refused = client.delete("/api/v1/workspaces/film")
+        kept_comic = film.is_dir() and (film / "page.comic.json").read_text(encoding="utf-8") == "{}"
+        reset_minimax_image_jobs()
+        deleted = client.delete("/api/v1/workspaces/film")
+    finally:
+        reset_minimax_image_jobs()
+    assert refused.status_code == 409, refused.text
+    assert "generation" in refused.json()["detail"].lower()
+    assert kept_comic
+    assert deleted.status_code == 200, deleted.text
+    assert not film.is_dir()
