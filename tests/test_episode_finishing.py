@@ -89,6 +89,24 @@ def test_the_note_says_what_was_done_and_why_not():
                                        "No subtitles: No approved take has dialogue beats in its scene document.")
 
 
+def _silent_report():
+    """What ffmpeg's loudnorm prints for a mix with no sound at all."""
+    return {"input_i": "-inf", "input_tp": "-inf", "input_lra": "0.00", "input_thresh": "-inf", "target_offset": "inf"}
+
+
+def test_a_silent_episode_stores_a_loudness_report_json_can_carry(monkeypatch):
+    """-inf became float("-inf") in the series asset metadata, which was saved as -Infinity: every Series read
+    of the workspace then answered 500 (Starlette refuses non-finite numbers)."""
+    from services import episode_finishing as finishing
+
+    monkeypatch.setattr(finishing, "probe_has_audio", lambda *_a, **_k: True)
+    monkeypatch.setattr(finishing, "measure_loudness", lambda *_a, **_k: _silent_report())
+    result = finishing.normalize_loudness("episode.mp4", ffmpeg="ffmpeg")
+    assert result["applied"] is False and result["reason"] == "The episode audio is silent"
+    assert result["before"] == {"lufs": None, "truePeakDb": None, "rangeLu": 0.0}
+    json.dumps(result, allow_nan=False)
+
+
 def _clip(path: Path, duration: float, volume: float) -> None:
     completed = subprocess.run([
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
@@ -192,3 +210,20 @@ def test_lines_without_timing_share_their_clip_by_length_inside_a_margin():
     cues = episode_cues([{"offset": 12.0, "duration": 10.0, "beats": beats},
                          {"offset": 22.0, "duration": 4.0, "beats": [{"text": "Timed", "start": 1.0, "end": 2.0}]}])
     assert cues[0]["start"] == 12.25 and cues[0]["text"] == "Hola" and cues[-1] == {"start": 23.0, "end": 24.0, "text": "Timed"}
+
+
+
+@pytest.mark.skipif(not HAS_FFMPEG, reason="ffmpeg/ffprobe required")
+def test_real_silence_gives_a_result_that_json_can_carry(tmp_path):
+    from services.episode_finishing import normalize_loudness
+
+    clip = tmp_path / "silent.mp4"
+    made = subprocess.run([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=160x120:rate=24",
+        "-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono", "-t", "1", "-c:v", "libx264", "-preset", "ultrafast",
+        "-pix_fmt", "yuv420p", "-c:a", "aac", str(clip)], capture_output=True, text=True, timeout=60)
+    assert made.returncode == 0, made.stderr[-400:]
+    result = normalize_loudness(str(clip), ffmpeg="ffmpeg")
+    assert result["applied"] is False
+    json.dumps(result, allow_nan=False)
+
