@@ -286,6 +286,308 @@ def test_openapi_text_of_the_repaint_routes(server, golden) -> None:
     golden.check("openapi", 200, snapshot)
 
 
+
+# -- Mapped Repaint end to end on the fake engine (C6 review) --------------------------------------------------------
+# Recorded on development before the move. Magic Mask is replaced by a painter that finds coloured rectangles by
+# keyword, so the route, region tracking, the shot manifest, the per-shot worker and the assembly all run on the CPU
+# with small frames: WanGP is the C0 fake engine and the clip joiner is a fake that copies the first shot. What each
+# case records is what a move must keep: the route's answer, every Magic Mask call, the mask video, the shot tasks the
+# engine ran (prompts, lengths, references, guides), the joined call, the abort states, the job and its sidecar.
+_H, _W, _T = 64, 96, 48
+# keyword -> (top, bottom, left, right)
+_RECTANGLES = {
+    "subject one": (4, 20, 4, 24),
+    "subject two": (4, 20, 36, 56),
+    "subject three": (4, 20, 68, 88),
+    "subject four": (36, 56, 4, 24),
+    "subject five": (36, 56, 36, 56),
+}
+
+
+class _Painter:
+    """Magic Mask for one scene: which subject is visible in which source frame, and in the edited first frame."""
+
+    def __init__(self, rig, *, present: dict, edited: set, cuts: tuple = (), cancel_on_call: int | None = None):
+        self.rig, self.present, self.edited, self.cuts = rig, present, edited, cuts
+        self.cancel_on_call = cancel_on_call
+        self.calls: list = []
+        self.saved: list = []
+        self.abort_states: list = []
+
+    def frames(self):
+        import numpy
+
+        frames = numpy.zeros((_T, _H, _W, 3), dtype=numpy.uint8)
+        bounds = [0, *self.cuts, _T]
+        shades = [(40, 60, 90), (220, 200, 120), (90, 200, 60), (200, 60, 200)]
+        for shot, (start, end) in enumerate(zip(bounds, bounds[1:])):
+            frames[start:end] = shades[shot % len(shades)]
+            frames[start:end, :, (shot * 7) % _W:(shot * 7) % _W + 8] = 255 - numpy.array(shades[shot % len(shades)])
+        for keyword, indexes in self.present.items():
+            top, bottom, left, right = _RECTANGLES[keyword]
+            for index in indexes:
+                frames[index, top:bottom, left:right] = (250, 250, 250)
+        return frames
+
+    def prepare(self, source_video):
+        return source_video, self.frames(), 24.0
+
+    def masks(self, video, keyword, *, color_palette=None, progress_callback=None, tracking_segments=None, **kwargs):
+        import numpy
+
+        launch = self.rig.launch
+        running = [job_id for job_id, job in launch._jobs.items()
+                   if job.get("status") == "running" and job_id in launch._active_gen_states]
+        self.abort_states.append(sorted(running))
+        self.calls.append({
+            "keyword": keyword, "frames": int(video.shape[0]), "color": list(color_palette[0]),
+            "tracking_segments": [list(segment) for segment in tracking_segments] if tracking_segments else None,
+            "options": sorted(kwargs),
+        })
+        if self.cancel_on_call is not None and len(self.calls) == self.cancel_on_call:
+            job_id = running[0]
+            launch.request_cancel(launch._jobs[job_id], job_id=job_id, active_states=launch._active_gen_states)
+        painted = numpy.zeros_like(video)
+        subject = keyword.replace("edited ", "")
+        if subject in _RECTANGLES:
+            top, bottom, left, right = _RECTANGLES[subject]
+            indexes = ([0] if subject in self.edited else []) if video.shape[0] == 1 else self.present.get(subject, [])
+            for index in indexes:
+                painted[index, top:bottom, left:right] = color_palette[0]
+        if progress_callback is not None:
+            progress_callback(int(video.shape[0]) // 2, int(video.shape[0]))
+            progress_callback(int(video.shape[0]), int(video.shape[0]))
+        return painted
+
+    def save(self, source_path, mask, fps, keywords, output_dir=None, abort_callback=None, background_color=None):
+        import os
+
+        import numpy
+
+        colors = sorted({tuple(int(value) for value in pixel) for pixel in numpy.unique(mask.reshape(-1, 3), axis=0)})
+        self.saved.append({"source": os.path.basename(source_path), "shape": list(mask.shape), "fps": fps,
+                           "keywords": list(keywords), "background": list(background_color), "colors": colors})
+        path = os.path.join(output_dir, "repaint_semantic_mask_stub.mp4")
+        os.makedirs(output_dir, exist_ok=True)
+        with open(path, "wb") as handle:
+            handle.write(b"mask")
+        return path
+
+
+def _mapped_repaint(rig, monkeypatch, painter: _Painter, mappings: list, *, frame_count_offset: int = 0,
+                    engine_script=None) -> dict:
+    """POST one mapped Repaint, let the request thread and the shot worker finish, and return what they did."""
+    import os
+    import shutil
+
+    from PIL import Image
+
+    from shared import magic_mask
+
+    _probe_as(monkeypatch)
+    _install_scail(rig)
+    monkeypatch.setattr(magic_mask, "prepare_video_mask_input", painter.prepare)
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", painter.masks)
+    monkeypatch.setattr(magic_mask, "save_mask_video", painter.save)
+    joined: list = []
+
+    def concatenate(paths, output, audio, **options):
+        joined.append({"clips": [os.path.basename(path) for path in paths], "output": os.path.basename(output),
+                       "audio": os.path.basename(audio) if audio else None,
+                       "options": {key: value for key, value in sorted(options.items()) if key != "abort_callback"}})
+        shutil.copyfile(paths[0], output)
+        return True
+
+    def frame_count(_path):
+        bundles = [job["params"]["_repaint_shot_bundle"] for job in rig.launch._jobs.values()
+                   if isinstance(job.get("params"), dict) and job["params"].get("_repaint_shot_bundle")]
+        return int(bundles[-1]["frame_count"]) + frame_count_offset
+
+    rig.set_wgp("concatenate_multi_clip_videos", concatenate)
+    rig.patch("_recast_video_frame_count", frame_count)
+    rig.engine.script = engine_script or (lambda call: call.save())
+    folder = rig.server.root
+    video = _present(folder, "source.mp4")
+    edited = folder / "edited.png"
+    canvas = Image.new("RGB", (_W, _H), (40, 60, 90))
+    for subject in painter.edited:
+        top, bottom, left, right = _RECTANGLES[subject]
+        canvas.paste((240, 20, 20), (left, top, right, bottom))
+    canvas.save(edited)
+    since = len(rig.engine.calls)
+    status, answer = _submit(rig, "/api/v1/repaint", {
+        "video_path": video, "target_frame_path": "edited.png", "seed": 7, "prompt": "the edited regions",
+        "region_mappings": mappings,
+    })
+    _join_repaint_workers()
+    observed = {"status": status, "answer": answer, "mask calls": painter.calls, "saved mask": painter.saved,
+                "abort states seen by Magic Mask": painter.abort_states, "joined": joined}
+    if status == 200 and isinstance(answer, dict) and "job_id" in answer:
+        observed["job"] = _job(rig, answer["job_id"], since)
+    return observed
+
+
+def _check_mapped(rig, golden, case: str, observed: dict) -> None:
+    import tempfile
+
+    text = __import__("json").dumps(observed, default=str)
+    text = text.replace(tempfile.gettempdir(), "<TMP>")
+    text = re.sub(r"maestro-repaint-shots-[A-Za-z0-9_]+", "maestro-repaint-shots-<RANDOM>", text)
+    text = re.sub(r"repaint_reference_mask_[0-9a-f]{8}", "repaint_reference_mask_<HEX>", text)
+    text = re.sub(r"\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m\d{2}s", "<STAMP>", text)
+    rig.check(golden, case, __import__("json").loads(text))
+
+
+def _mapping(*subjects: str) -> list:
+    return [{"source": subject, "target": f"edited {subject}"} for subject in subjects]
+
+
+def test_mapped_repaint_with_one_region_generates_both_camera_shots(rig, golden, monkeypatch) -> None:
+    painter = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one"}, cuts=(24,))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one"))
+    _check_mapped(rig, golden, "mapped repaint, one region, two camera shots", observed)
+
+
+def test_mapped_repaint_with_two_regions_fails_when_the_joined_timeline_is_short(rig, golden, monkeypatch) -> None:
+    painter = _Painter(rig, present={"subject one": range(_T), "subject two": range(_T)},
+                       edited={"subject one", "subject two"})
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one", "subject two"),
+                               frame_count_offset=-1)
+    _check_mapped(rig, golden, "mapped repaint, two regions, joined timeline one frame short", observed)
+
+
+def test_mapped_repaint_with_three_regions_passes_a_shot_without_regions_through(rig, golden, monkeypatch) -> None:
+    painter = _Painter(rig, present={"subject one": range(0, 16), "subject two": range(0, 32),
+                                     "subject three": range(16, 32)},
+                       edited={"subject one", "subject two", "subject three"}, cuts=(16, 32))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one", "subject two", "subject three"))
+    _check_mapped(rig, golden, "mapped repaint, three regions, a passthrough shot", observed)
+
+
+def test_mapped_repaint_with_four_regions_in_every_frame(rig, golden, monkeypatch) -> None:
+    subjects = ("subject one", "subject two", "subject three", "subject four")
+    painter = _Painter(rig, present={subject: range(_T) for subject in subjects}, edited=set(subjects), cuts=(24,))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping(*subjects))
+    _check_mapped(rig, golden, "mapped repaint, four regions in every frame", observed)
+
+
+def test_mapped_repaint_with_five_regions_uses_a_region_sheet_when_they_never_meet(rig, golden, monkeypatch) -> None:
+    subjects = tuple(_RECTANGLES)
+    present = {subject: range(0, 24) for subject in subjects}
+    present["subject one"] = [*range(0, 24), *range(24, 36)]
+    present["subject two"] = [*range(0, 24), *range(36, 48)]
+    painter = _Painter(rig, present=present, edited=set(subjects), cuts=(24,))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping(*subjects))
+    _check_mapped(rig, golden, "mapped repaint, five regions, a shot whose regions never meet", observed)
+
+
+def test_mapped_repaint_fails_when_a_region_is_missing(rig, golden, monkeypatch) -> None:
+    missing_source = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one", "subject two"})
+    observed = {"from the video": _mapped_repaint(rig, monkeypatch, missing_source,
+                                                  _mapping("subject one", "subject two"))}
+    missing_edit = _Painter(rig, present={"subject one": range(_T), "subject two": range(_T)},
+                            edited={"subject one"})
+    observed["from the edited frame"] = _mapped_repaint(rig, monkeypatch, missing_edit,
+                                                        _mapping("subject one", "subject two"))
+    _check_mapped(rig, golden, "mapped repaint, a region missing", observed)
+
+
+def test_mapped_repaint_cancelled_while_mapping_regions(rig, golden, monkeypatch) -> None:
+    painter = _Painter(rig, present={"subject one": range(_T), "subject two": range(_T)},
+                       edited={"subject one", "subject two"}, cancel_on_call=2)
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one", "subject two"))
+    _check_mapped(rig, golden, "mapped repaint, cancelled while mapping", observed)
+
+
+def test_mapped_repaint_cancelled_during_the_first_shot(rig, golden, monkeypatch) -> None:
+    def script(call) -> None:
+        call.save()
+        if call.index == 0:
+            job_id = rig.running_job_id()
+            rig.launch.request_cancel(rig.launch._jobs[job_id], job_id=job_id,
+                                      active_states=rig.launch._active_gen_states)
+
+    painter = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one"}, cuts=(24,))
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one"), engine_script=script)
+    _check_mapped(rig, golden, "mapped repaint, cancelled during the first shot", observed)
+
+
+def test_mapped_repaint_removes_its_shot_folder_when_the_manifest_fails(rig, golden, monkeypatch) -> None:
+    import glob
+    import os
+    import tempfile
+
+    def refuse(path, *_args, **_kwargs):
+        raise OSError(f"cannot write {os.path.basename(path)}")
+
+    def shot_folders() -> set:
+        return set(glob.glob(os.path.join(tempfile.gettempdir(), "maestro-repaint-shots-*")))
+
+    rig.patch("_write_recast_shot_video", refuse)
+    painter = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one"}, cuts=(24,))
+    before = shot_folders()
+    observed = _mapped_repaint(rig, monkeypatch, painter, _mapping("subject one"))
+    observed["shot folders left"] = len(shot_folders() - before)
+    _check_mapped(rig, golden, "mapped repaint, the shot manifest fails", observed)
+
+def test_repaint_preview_maps_five_regions(rig, golden, monkeypatch) -> None:
+    from shared import magic_mask
+
+    _probe_as(monkeypatch)
+    subjects = tuple(_RECTANGLES)
+    painter = _Painter(rig, present={subject: range(_T) for subject in subjects}, edited=set(subjects))
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", painter.masks)
+    folder = rig.server.root
+    video = _present(folder, "source.mp4")
+    matching = _frame(folder, "frame.png", (96, 64))
+    response = rig.server.client.post("/api/v1/repaint/preview", json={
+        "video_path": video, "target_frame_path": matching, "time": 1.0, "region_mappings": _mapping(*subjects)})
+    answer = response.json()
+    if isinstance(answer, dict) and "source_preview" in answer:
+        answer = _preview_pixels(answer)
+    golden.check("preview maps five regions", 200, rig.server.normalise(
+        {"status": response.status_code, "body": answer, "mask calls": painter.calls}))
+
+
+def test_repaint_paths_that_climb_out_of_the_workspace(rig, golden, monkeypatch) -> None:
+    """Media names are looked up by their base name in the workspace, uploads and outputs; an absolute path that
+    exists is taken as it is."""
+    from shared import magic_mask
+
+    _probe_as(monkeypatch)
+    _install_scail(rig)
+    painter = _Painter(rig, present={"subject one": range(_T)}, edited={"subject one"})
+    monkeypatch.setattr(magic_mask, "generate_keyword_masks", painter.masks)
+    folder = rig.server.root
+    (folder / "uploads").mkdir(exist_ok=True)
+    _present(folder / "uploads", "source.mp4")
+    _frame(folder / "uploads", "frame.png", (96, 64))
+    outside = folder / "outside"
+    outside.mkdir()
+    _frame(outside, "frame.png", (96, 64))
+    answers = {}
+    for case, body in {
+        "climbing names resolve to uploads": {"video_path": "../../source.mp4", "target_frame_path": "../frame.png"},
+        "a missing climbing name": {"video_path": "../../nothing.mp4", "target_frame_path": "../frame.png"},
+        "an absolute frame outside the workspace": {"video_path": "../../source.mp4",
+                                                    "target_frame_path": str(outside / "frame.png")},
+    }.items():
+        for route in _ROUTES:
+            payload = {**body, "seed": 3}
+            if route.endswith("/preview"):
+                payload["region_mappings"] = _mapping("subject one")
+            status, answer = _submit(rig, route, payload)
+            _join_repaint_workers()
+            if isinstance(answer, dict) and "source_preview" in answer:
+                answer = _preview_pixels(answer)
+            answers[f"{route} {case}"] = {"status": status, "answer": answer}
+            if status == 200 and isinstance(answer, dict) and "job_id" in answer:
+                params = rig.launch._jobs[answer["job_id"]]["params"]
+                answers[f"{route} {case}"]["inputs"] = {key: params.get(key) for key in (
+                    "video_guide", "image_start", "edit_video_path", "edit_repaint_target_frame")}
+    rig.check(golden, "paths that climb out of the workspace", answers)
+
+
 # -- The wiring the move added (C6 review) ---------------------------------------------------------------------------
 # Each Repaint module imports the standard library, execution_mode and the job lifecycle itself, and takes the launch
 # objects it reads (wgp, the job registry and states, the workspace and job helpers, the mask colours, the recast and
