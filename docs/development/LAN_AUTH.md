@@ -33,7 +33,9 @@ The core server mounts only the handshake routes (`/api/v1/auth/lan/status`,
   answer `200` to that peer with no token. `LOREFRAME_LAN_AUTH` changes only
   what the status route reports, not what core serves.
 - The React gate (`LanAuthGate`) reads that status, so the UI would ask for a
-  token that core neither checks nor prints.
+  token that core never enforces on its `/api/…` routes and does not print
+  (the login route would accept a configured `LOREFRAME_LAN_TOKEN` and set a
+  cookie, but nothing reads that cookie).
 
 Do not share the core server on a network you do not trust. Closing this gap
 (mounting the middleware in core, refusing a non-loopback bind, or reporting
