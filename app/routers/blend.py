@@ -1,15 +1,28 @@
 """POST /api/v1/blend.
 
-The handler body is the one that used to live in ``_launch_runtime``.
-This module is bound once, inside ``create_blend_router``.
+The handler body is the one that used to live in ``_launch_runtime``; it is
+the served endpoint, so the route table names this file. Launch hands this
+module the objects it owns once, as the arguments of
+:func:`create_blend_router`. The generation worker is defined further down
+in launch, so launch passes a forwarder that calls launch's
+``_run_generation``.
 """
-
-import sys
+import os
+import threading
+import time
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 
+from services import execution_mode
 from services.blend_run import _run_blend_generation
-from services.studio_launch_names import bind
+
+# Set by create_blend_router(); None until the full server mounts the route.
+_get_active_workspace = None
+_workspace_dir = None
+_register_manual_generation_job = None
+_generation_job_acceptance = None
+_run_generation = None
 
 
 async def blend_endpoint(request: Request):
@@ -467,9 +480,17 @@ async def blend_endpoint(request: Request):
         raise
 
 
-def create_blend_router(namespace: dict) -> APIRouter:
-    """Mount POST /api/v1/blend. This is the one bind of this module."""
-    bind(sys.modules[__name__], namespace)
+def create_blend_router(
+    *, get_active_workspace, workspace_dir, register_manual_generation_job, generation_job_acceptance, run_generation,
+) -> APIRouter:
+    """Mount POST /api/v1/blend. Launch calls this once; it is the one place this module takes launch objects."""
+    globals().update(
+        _get_active_workspace=get_active_workspace,
+        _workspace_dir=workspace_dir,
+        _register_manual_generation_job=register_manual_generation_job,
+        _generation_job_acceptance=generation_job_acceptance,
+        _run_generation=run_generation,
+    )
     router = APIRouter()
     router.add_api_route(
         "/api/v1/blend",

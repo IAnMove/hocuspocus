@@ -92,6 +92,17 @@ def worker_module():
     return sys.modules["_launch_runtime"]
 
 
+# Outpaint and blend (C5): the modules that took their launch objects, which they read under the launch names.
+OUTPAINT_BLEND_MODULES = ("services.outpaint_planning", "services.outpaint_run", "routers.outpaint",
+                          "services.blend_run", "routers.blend")
+
+
+def worker_modules() -> list:
+    """The modules whose globals the worker and the code it runs read: the full server module, and each module the
+    outpaint and blend code moved to once it exists. A name they read is an attribute of every module that reads it."""
+    return [worker_module(), *[sys.modules[name] for name in OUTPAINT_BLEND_MODULES if name in sys.modules]]
+
+
 @dataclass
 class Rig:
     """One test's server, scripted engine and the lifecycle events of its jobs."""
@@ -110,7 +121,10 @@ class Rig:
         return worker_module()
 
     def patch(self, name: str, value: Any) -> None:
-        self.monkeypatch.setattr(worker_module(), name, value)
+        holders = [module for module in worker_modules() if hasattr(module, name)]
+        assert holders, f"no worker module has a global named {name!r}"
+        for module in holders:
+            self.monkeypatch.setattr(module, name, value)
 
     def event(self) -> threading.Event:
         """An event the engine script waits on; the fixture sets it at teardown so a failed test never hangs."""
@@ -338,7 +352,8 @@ def rig(server, clip, tmp_path, monkeypatch):
         state.returned[job_id] = result
         return result
 
-    monkeypatch.setattr(launch, "_run_generation", run_generation)
+    # Every module that holds the worker sees the wrapper, so a route that starts it names the thread after it.
+    state.patch("_run_generation", run_generation)
     clear_queue()
     job_lifecycle.set_job_state_observer(record)
     yield state

@@ -1,8 +1,29 @@
 """Outpaint sampling, timing, canvas geometry and shot planning.
 
 The function bodies are the ones that used to live in ``_launch_runtime``.
-Names they still read from launch are bound once, at call time.
+Launch hands this module its ``wgp`` and the recast shot helpers once,
+through :func:`bind`. ``_recast_video_frame_count`` is defined further down
+in launch, so launch passes a forwarder that calls launch's function.
 """
+import math
+import os
+
+# Bound by bind(); None until the full server binds them.
+wgp = None
+_detect_recast_shot_ranges = None
+_quantize_recast_shot_frame_count = None
+_recast_video_frame_count = None
+
+
+def bind(*, wgp, detect_recast_shot_ranges, quantize_recast_shot_frame_count, recast_video_frame_count):
+    """Take the launch objects this module reads. Launch calls this once, after it defines them."""
+    globals().update(
+        wgp=wgp,
+        _detect_recast_shot_ranges=detect_recast_shot_ranges,
+        _quantize_recast_shot_frame_count=quantize_recast_shot_frame_count,
+        _recast_video_frame_count=recast_video_frame_count,
+    )
+
 
 def _resolve_outpaint_sampling(
     body, base_model_type, model_def, model_defaults,

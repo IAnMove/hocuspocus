@@ -377,80 +377,94 @@ def test_a_server_never_reads_a_name_it_does_not_define() -> None:
         assert _undefined_global_names(server) == {}, f"{server.name} reads names it does not define"
 
 
-def _bind_calls(path: Path, function_name: str) -> list[ast.Call]:
-    tree = _parse(path)
-    scope = tree.body
-    if function_name:
-        scope = [
-            node for node in tree.body
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name
-        ]
-        assert len(scope) == 1, function_name
-        scope = scope[0].body
-    found = []
-    for node in scope:
-        for child in ast.walk(node):
-            if isinstance(child, ast.Call) and isinstance(child.func, ast.Name) and child.func.id in {
-                "bind", "bind_launch_names",
-            }:
-                found.append(child)
-    return found
+# Outpaint and blend (C5): each module takes the launch objects it reads from one keyword-only function, bind() for
+# a service and the router factory for a router, which launch calls once. Launch's call is the bind list, and the
+# list is the module's free names; nothing here is written by hand.
+C5_BINDERS = {
+    APP / "services" / "outpaint_planning.py": ("bind", "_bind_outpaint_planning"),
+    APP / "services" / "outpaint_run.py": ("bind", "_bind_outpaint_run"),
+    APP / "routers" / "outpaint.py": ("create_outpaint_router", "create_outpaint_router"),
+    APP / "services" / "blend_run.py": ("bind", "_bind_blend_run"),
+    APP / "routers" / "blend.py": ("create_blend_router", "create_blend_router"),
+}
 
 
-def test_outpaint_modules_bind_every_free_name_once() -> None:
-    """The bind list is the free names of the written source, and each outpaint and blend module is bound once.
+def _placeholders(tree: ast.Module) -> set[str]:
+    """Module-level ``NAME = None``: the slots the binder fills."""
+    return {target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)}
 
-    This does not call bind on the imported modules. Doing that would replace the slots the
-    running server tests read.
-    """
-    from services.studio_launch_names import LaunchName, free_launch_names
 
-    modules = {
-        "outpaint_planning": APP / "services" / "outpaint_planning.py",
-        "outpaint_run": APP / "services" / "outpaint_run.py",
-        "outpaint": APP / "routers" / "outpaint.py",
-        "blend_run": APP / "services" / "blend_run.py",
-        "blend": APP / "routers" / "blend.py",
-    }
-    for name, path in modules.items():
+def _free_reads(path: Path, skip: set[str]) -> set[str]:
+    """Global names the module's functions read (nested functions included), other than ``skip``'s."""
+    top = symtable.symtable(path.read_text(encoding="utf-8"), str(path), "exec")
+    names: set[str] = set()
+
+    def walk(table: symtable.SymbolTable) -> None:
+        names.update(item.get_name() for item in table.get_symbols() if item.is_global() and item.is_referenced())
+        for child in table.get_children():
+            walk(child)
+
+    for child in top.get_children():
+        if child.get_name() not in skip:
+            walk(child)
+    return {name for name in names if not hasattr(builtins, name)}
+
+
+def _module_bindings(tree: ast.Module) -> dict[str, list[int]]:
+    """The lines at which a module statement binds each name (def, class, assignment, import)."""
+    lines: dict[str, list[int]] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names = [node.name]
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            names = [(alias.asname or alias.name).split(".")[0] for alias in node.names]
+        elif isinstance(node, ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        else:
+            continue
+        for name in names:
+            lines.setdefault(name, []).append(node.lineno)
+    return lines
+
+
+def test_outpaint_and_blend_modules_take_every_launch_object_once() -> None:
+    launch = _parse(MAIN)
+    launch_lines = _module_bindings(launch)
+    # A name a launch function rebinds with ``global`` would leave the module holding the old object.
+    rebound = {name for node in ast.walk(launch) if isinstance(node, ast.Global) for name in node.names}
+    for path, (binder_name, launch_name) in C5_BINDERS.items():
         source = path.read_text(encoding="utf-8")
-        assert "from __future__ import annotations" not in source, name
-        assert "LAUNCH_NAMES" not in source, name
-        independent = tuple(sorted(_undefined_global_names(path)))
-        assert independent == free_launch_names(source), name
-        assert independent, name
+        # String annotations can change how FastAPI reads a route's body.
+        assert "from __future__ import annotations" not in source, path.name
+        assert _undefined_global_names(path) == {}, path.name
+        tree = _parse(path)
+        binders = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == binder_name]
+        assert len(binders) == 1, path.name
+        binder = binders[0]
+        assert not binder.args.args and not binder.args.vararg and not binder.args.kwarg, path.name
+        params = {arg.arg for arg in binder.args.kwonlyargs}
+        updates = [node for node in ast.walk(binder) if isinstance(node, ast.Call)
+                   and isinstance(node.func, ast.Attribute) and node.func.attr == "update"
+                   and isinstance(node.func.value, ast.Call) and getattr(node.func.value.func, "id", "") == "globals"]
+        assert len(updates) == 1, path.name
+        slots = {keyword.arg: keyword.value.id for keyword in updates[0].keywords}
+        assert set(slots.values()) == params, path.name
+        assert set(slots) == _placeholders(tree), path.name
+        # The slots are exactly the names the moved functions read and the module neither defines nor imports.
+        defined = set(_module_bindings(tree)) - _placeholders(tree)
+        reads = _free_reads(path, {binder_name})
+        assert reads - defined == set(slots), path.name
 
-    launch_binds = _bind_calls(MAIN, "")
-    bound = [call.args[0].id for call in launch_binds if call.args and isinstance(call.args[0], ast.Name)]
-    assert bound.count("outpaint_planning") == 1
-    assert bound.count("outpaint_run") == 1
-    assert bound.count("blend_run") == 1
-    assert bound.count("outpaint") == 0
-    assert bound.count("blend") == 0
-    for factory, module_name in (
-        ("create_outpaint_router", "outpaint"),
-        ("create_blend_router", "blend"),
-    ):
-        router_binds = _bind_calls(modules[module_name], factory)
-        assert len(router_binds) == 1, factory
-        assert isinstance(router_binds[0].args[0], ast.Subscript), factory
-        created = [
-            node for node in ast.walk(_parse(MAIN))
-            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == factory
-        ]
-        assert len(created) == 1, factory
-
-    def _run_generation(job):
-        return job
-
-    namespace = {"_jobs": {"a": 1}, "_run_generation": _run_generation}
-    jobs = LaunchName(namespace, "_jobs")
-    runner = LaunchName(namespace, "_run_generation")
-    assert jobs["a"] == 1
-    namespace["_jobs"] = {"a": 2}
-    assert jobs["a"] == 2
-    assert "a" in jobs
-    assert runner("job") == "job"
-    assert runner.__name__ == "_run_generation"
-    namespace["_run_generation"] = lambda job: "later"
-    assert runner(job="x") == "later"
+        # Launch calls the binder once, by keyword, with every parameter, after each value exists.
+        calls = [node for node in ast.walk(launch) if isinstance(node, ast.Call)
+                 and isinstance(node.func, ast.Name) and node.func.id == launch_name]
+        assert len(calls) == 1, launch_name
+        call = calls[0]
+        assert not call.args and {keyword.arg for keyword in call.keywords} == params, launch_name
+        for keyword in call.keywords:
+            assert isinstance(keyword.value, ast.Name), (launch_name, keyword.arg)
+            # Defined above the call and never bound again; a later name needs a forwarder.
+            assert max(launch_lines[keyword.value.id]) < call.lineno, (launch_name, keyword.value.id)
+            assert keyword.value.id not in rebound, (launch_name, keyword.value.id)

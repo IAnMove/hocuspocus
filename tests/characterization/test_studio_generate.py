@@ -886,50 +886,118 @@ def test_the_moved_handlers_read_the_objects_launch_gave_them(full_server, monke
     assert studio_generate._workspace_collection_registry.get("c-1") == ("found", "c-1")
 
 
-def test_outpaint_slots_are_the_objects_launch_holds(full_server, monkeypatch) -> None:
-    """Each outpaint and blend module is bound once, and every slot is the launch object at call time."""
-    import routers.blend as blend_router
-    import routers.outpaint as outpaint_router
-    import services.blend_run as blend_run
-    import services.outpaint_planning as planning
-    import services.outpaint_run as outpaint_run
+# -- The wiring the C5 move added (C5 review) ------------------------------------------------------------------------
+# Each outpaint and blend module imports the standard library, execution_mode and the job lifecycle itself, and takes
+# the launch objects it reads (wgp, the job registry and states, the workspace and job helpers, the recast helpers)
+# from one bind() (services) or its router factory (routers), which launch calls once. The generation worker and
+# _recast_video_frame_count are defined further down in launch, so those two slots hold launch's forwarders, which
+# look the launch name up when they are called. A slot left at None, bound to a copy or to another function, or a
+# forwarder that captured its target at bind time would only show on the branch that reads it, so every global each
+# moved function reads is compared here with the object the same name holds in launch, where it read it before.
+_C5_EXPORTS = {
+    "services.outpaint_planning": (
+        "_resolve_outpaint_sampling", "_resolve_outpaint_video_timing", "_resolve_ltx2_outpaint_reference_model",
+        "_cap_outpaint_single_stage_window", "_resolve_outpaint_canvas_geometry", "_format_outpaint_percentage",
+        "_detect_outpaint_video_shot_ranges", "_build_outpaint_shot_filter", "_write_outpaint_shot_guide",
+        "_build_outpaint_shot_manifest", "_OUTPAINT_PIXEL_BUDGETS", "_OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS",
+        "_OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES",
+    ),
+    "services.outpaint_run": (
+        "_prepare_and_run_outpaint", "_write_outpaint_shot_aware_sidecar", "_run_outpaint_shot_generation",
+    ),
+    "routers.outpaint": ("outpaint_endpoint",),
+    "services.blend_run": ("_run_blend_generation",),
+    "routers.blend": ("blend_endpoint",),
+}
+# The launch names defined below the mount block, and the forwarder launch passes for each.
+_C5_FORWARDERS = {
+    "_run_generation": "_forward_studio_run_generation",
+    "_recast_video_frame_count": "_forward_outpaint_recast_video_frame_count",
+}
+
+
+def _global_reads(function) -> set[str]:
+    """The global names a function (and the functions nested in it) reads, from its source."""
+    import inspect
+    import symtable
+    import textwrap
+
+    names: set[str] = set()
+
+    def walk(scope) -> None:
+        names.update(symbol.get_name() for symbol in scope.get_symbols() if symbol.is_global() and symbol.is_referenced())
+        for child in scope.get_children():
+            walk(child)
+
+    for scope in symtable.symtable(textwrap.dedent(inspect.getsource(function)), "<moved>", "exec").get_children():
+        walk(scope)
+    return names
+
+
+def _bound_slots(module) -> set[str]:
+    """The module-level ``NAME = None`` placeholders that bind() or the router factory fills."""
+    import ast
+    import inspect
+
+    tree = ast.parse(inspect.getsource(module))
+    return {target.id for node in tree.body if isinstance(node, ast.Assign)
+            and isinstance(node.value, ast.Constant) and node.value.value is None
+            for target in node.targets if isinstance(target, ast.Name)}
+
+
+def test_outpaint_and_blend_read_the_objects_launch_holds(full_server, monkeypatch) -> None:
+    import builtins
+    import importlib
+    import inspect
 
     launch = worker_module()
-    assert launch.outpaint_endpoint is outpaint_router.outpaint_endpoint
-    assert launch.blend_endpoint is blend_router.blend_endpoint
-    assert launch._prepare_and_run_outpaint is outpaint_run._prepare_and_run_outpaint
-    assert launch._run_outpaint_shot_generation is outpaint_run._run_outpaint_shot_generation
-    assert launch._run_blend_generation is blend_run._run_blend_generation
-    assert launch._resolve_outpaint_sampling is planning._resolve_outpaint_sampling
-    assert launch._OUTPAINT_PIXEL_BUDGETS is planning._OUTPAINT_PIXEL_BUDGETS
-    assert launch._OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS is planning._OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS
-    assert launch._OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES is planning._OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES
-    for module in (planning, outpaint_run, outpaint_router, blend_run, blend_router):
-        assert module.LAUNCH_NAMES, module.__name__
-        for name in module.LAUNCH_NAMES:
-            slot = getattr(module, name)
-            assert slot.value() is getattr(launch, name), f"{module.__name__}.{name}"
+    compared: set[str] = set()
+    slots: set[str] = set()
+    for module_name, exported in _C5_EXPORTS.items():
+        module = importlib.import_module(module_name)
+        namespace = vars(module)
+        for name in exported:
+            assert getattr(launch, name) is namespace[name], f"launch.{name} is not {module_name}.{name}"
+        own = {name for name, value in namespace.items()
+               if inspect.isfunction(value) and value.__module__ == module_name}
+        plumbing = {"bind", "create_outpaint_router", "create_blend_router"}
+        for function_name in sorted(own - plumbing):
+            for name in sorted(_global_reads(namespace[function_name])):
+                if name in own:
+                    continue  # a helper that moved with it
+                if name not in namespace:
+                    assert hasattr(builtins, name), f"{module_name}.{function_name} reads {name}, which is not defined"
+                    continue
+                expected = vars(launch)[_C5_FORWARDERS.get(name, name)]
+                assert namespace[name] is expected, f"{module_name}.{name} is not the object launch holds"
+                compared.add(name)
+        module_slots = _bound_slots(module)
+        assert module_slots, module_name
+        for name in module_slots:
+            assert namespace[name] is not None, f"{module_name}.{name} was never bound"
+        slots |= module_slots
+    assert slots <= compared
+    assert {"os", "math", "time", "threading", "uuid", "traceback", "wgp", "execution_mode", "HTTPException",
+            "_jobs", "_active_gen_states", "_coordinated_generation_slot", "_workspace_dir", "_get_active_workspace",
+            "_register_manual_generation_job", "_generation_job_acceptance", "_recast_video_has_audio",
+            "_detect_recast_shot_ranges", "_quantize_recast_shot_frame_count", "_recast_video_frame_count",
+            "_run_generation", "update_job", "finish_job", "is_cancel_requested", "register_abort_state",
+            "unregister_abort_state", "try_start", "try_requeue", "record_job_outputs"} <= compared
 
+    # The two forwarders call whatever launch holds under the name when they are called, not what it held at bind.
     calls = []
-
-    def _run_generation(*args, **kwargs):
-        calls.append(args)
-        return "ran"
-
-    monkeypatch.setattr(launch, "_run_generation", _run_generation)
-    assert outpaint_router._run_generation("job") == "ran"
-    assert outpaint_run._run_generation("job-2") == "ran"
-    assert blend_router._run_generation("job-3") == "ran"
-    assert blend_run._run_generation("job-4") == "ran"
-    assert calls == [("job",), ("job-2",), ("job-3",), ("job-4",)]
-    # Python names the worker thread from the live target, so a patched worker keeps its own name.
-    assert outpaint_router._run_generation.__name__ == "_run_generation"
-    assert outpaint_run._run_generation.__name__ == "_run_generation"
-    assert blend_run._run_generation.__name__ == "_run_generation"
-    # The blend route starts this function directly, so its thread name stays the real one.
-    assert blend_router._run_blend_generation.__name__ == "_run_blend_generation"
-    monkeypatch.setattr(launch, "_jobs", {"job-1": {"id": "job-1"}})
-    assert outpaint_run._jobs["job-1"]["id"] == "job-1"
-    assert blend_run._jobs["job-1"]["id"] == "job-1"
-    assert "job-1" in outpaint_run._jobs
-    assert "job-1" in blend_run._jobs
+    monkeypatch.setattr(launch, "_run_generation",
+                        lambda job_id, **kwargs: calls.append(["worker", job_id, kwargs]) or "ran")
+    monkeypatch.setattr(launch, "_recast_video_frame_count", lambda path: calls.append(["frames", path]) or 9)
+    for module_name in ("routers.outpaint", "services.outpaint_run", "routers.blend", "services.blend_run"):
+        assert importlib.import_module(module_name)._run_generation(module_name, finalize=False) == "ran"
+    for module_name in ("services.outpaint_planning", "services.outpaint_run"):
+        assert importlib.import_module(module_name)._recast_video_frame_count(module_name) == 9
+    assert calls == [
+        ["worker", "routers.outpaint", {"finalize": False}], ["worker", "services.outpaint_run", {"finalize": False}],
+        ["worker", "routers.blend", {"finalize": False}], ["worker", "services.blend_run", {"finalize": False}],
+        ["frames", "services.outpaint_planning"], ["frames", "services.outpaint_run"],
+    ]
+    # Python names a route's worker thread from the target, so the forwarder keeps the worker's name.
+    assert importlib.import_module("routers.outpaint")._run_generation.__name__ == "_run_generation"
+    assert importlib.import_module("routers.blend")._run_blend_generation.__name__ == "_run_blend_generation"

@@ -1,8 +1,37 @@
 """The blend worker.
 
 The function body is the one that used to live in ``_launch_runtime``.
-Names it still reads from launch are bound once, at call time.
+Launch hands this module the objects it owns once, through :func:`bind`.
+The generation worker is defined further down in launch, so launch passes
+a forwarder that calls launch's ``_run_generation``.
 """
+import os
+
+from services.job_lifecycle import (
+    finish_job,
+    is_cancel_requested,
+    record_job_outputs,
+    register_abort_state,
+    unregister_abort_state,
+    update_job,
+)
+
+# Bound by bind(); None until the full server binds them.
+_jobs = None
+_active_gen_states = None
+_workspace_dir = None
+_run_generation = None
+
+
+def bind(*, jobs, active_gen_states, workspace_dir, run_generation):
+    """Take the launch objects this module reads. Launch calls this once, after it defines them."""
+    globals().update(
+        _jobs=jobs,
+        _active_gen_states=active_gen_states,
+        _workspace_dir=workspace_dir,
+        _run_generation=run_generation,
+    )
+
 
 def _run_blend_generation(job_id: str):
     """Background thread: run VG blend generation, then concatenate

@@ -1,13 +1,20 @@
 """POST /api/v1/outpaint.
 
-The handler body is the one that used to live in ``_launch_runtime``.
-This module is bound once, inside ``create_outpaint_router``.
+The handler body is the one that used to live in ``_launch_runtime``; it is
+the served endpoint, so the route table names this file. Launch hands this
+module the objects it owns once, as the arguments of
+:func:`create_outpaint_router`. The generation worker is defined further
+down in launch, so launch passes a forwarder that calls launch's
+``_run_generation``.
 """
-
-import sys
+import os
+import threading
+import time
+import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 
+from services import execution_mode
 from services.outpaint_planning import (
     _cap_outpaint_single_stage_window,
     _format_outpaint_percentage,
@@ -17,7 +24,14 @@ from services.outpaint_planning import (
     _resolve_outpaint_video_timing,
 )
 from services.outpaint_run import _prepare_and_run_outpaint
-from services.studio_launch_names import bind
+
+# Set by create_outpaint_router(); None until the full server mounts the route.
+wgp = None
+_get_active_workspace = None
+_workspace_dir = None
+_register_manual_generation_job = None
+_generation_job_acceptance = None
+_run_generation = None
 
 
 async def outpaint_endpoint(request: Request):
@@ -550,9 +564,19 @@ async def outpaint_endpoint(request: Request):
     }
 
 
-def create_outpaint_router(namespace: dict) -> APIRouter:
-    """Mount POST /api/v1/outpaint. This is the one bind of this module."""
-    bind(sys.modules[__name__], namespace)
+def create_outpaint_router(
+    *, wgp, get_active_workspace, workspace_dir, register_manual_generation_job,
+    generation_job_acceptance, run_generation,
+) -> APIRouter:
+    """Mount POST /api/v1/outpaint. Launch calls this once; it is the one place this module takes launch objects."""
+    globals().update(
+        wgp=wgp,
+        _get_active_workspace=get_active_workspace,
+        _workspace_dir=workspace_dir,
+        _register_manual_generation_job=register_manual_generation_job,
+        _generation_job_acceptance=generation_job_acceptance,
+        _run_generation=run_generation,
+    )
     router = APIRouter()
     router.add_api_route(
         "/api/v1/outpaint",

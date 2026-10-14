@@ -9650,56 +9650,56 @@ async def recast_endpoint(request: Request):
     }
 
 
-# Outpaint planning, the outpaint run, and POST /api/v1/outpaint.
-# Each module is bound once. The router factory binds only the router.
-# A proxy looks the launch name up when it is used, including a name this
-# module defines further down and a name a test patches on _launch_runtime.
-import services.outpaint_planning as outpaint_planning
-import services.outpaint_run as outpaint_run
-from services.studio_launch_names import bind as bind_launch_names
+# Outpaint (planning, run, POST /api/v1/outpaint) and blend (run, POST /api/v1/blend). Each module takes the launch
+# objects it reads once, here. The generation worker and _recast_video_frame_count are defined further down, so the
+# modules get forwarders that call them (the worker's is the retake routes' forwarder, named for the thread).
+def _forward_outpaint_recast_video_frame_count(*args, **kwargs):
+    """Defined further down in this module. Call it when outpaint runs."""
+    return _recast_video_frame_count(*args, **kwargs)
 
-bind_launch_names(outpaint_planning, globals())
-bind_launch_names(outpaint_run, globals())
-
-from routers.outpaint import create_outpaint_router
-
-api.include_router(create_outpaint_router(globals()))
 
 from services.outpaint_planning import (
-    _OUTPAINT_PIXEL_BUDGETS,
-    _OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES,
-    _OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS,
-    _build_outpaint_shot_filter,
-    _build_outpaint_shot_manifest,
-    _cap_outpaint_single_stage_window,
-    _detect_outpaint_video_shot_ranges,
-    _format_outpaint_percentage,
-    _resolve_ltx2_outpaint_reference_model,
-    _resolve_outpaint_canvas_geometry,
-    _resolve_outpaint_sampling,
-    _resolve_outpaint_video_timing,
-    _write_outpaint_shot_guide,
+    _OUTPAINT_PIXEL_BUDGETS, _OUTPAINT_SINGLE_STAGE_REFERENCE_FRAMES, _OUTPAINT_SINGLE_STAGE_REFERENCE_PIXELS,
+    _build_outpaint_shot_filter, _build_outpaint_shot_manifest, _cap_outpaint_single_stage_window,
+    _detect_outpaint_video_shot_ranges, _format_outpaint_percentage, _resolve_ltx2_outpaint_reference_model,
+    _resolve_outpaint_canvas_geometry, _resolve_outpaint_sampling, _resolve_outpaint_video_timing,
+    _write_outpaint_shot_guide, bind as _bind_outpaint_planning,
 )
 from services.outpaint_run import (
-    _prepare_and_run_outpaint,
-    _run_outpaint_shot_generation,
-    _write_outpaint_shot_aware_sidecar,
+    _prepare_and_run_outpaint, _run_outpaint_shot_generation, _write_outpaint_shot_aware_sidecar,
+    bind as _bind_outpaint_run,
 )
-from routers.outpaint import outpaint_endpoint
+from routers.outpaint import create_outpaint_router, outpaint_endpoint
+
+_bind_outpaint_planning(
+    wgp=wgp, detect_recast_shot_ranges=_detect_recast_shot_ranges,
+    quantize_recast_shot_frame_count=_quantize_recast_shot_frame_count,
+    recast_video_frame_count=_forward_outpaint_recast_video_frame_count,
+)
+_bind_outpaint_run(
+    wgp=wgp, jobs=_jobs, active_gen_states=_active_gen_states, coordinated_generation_slot=_coordinated_generation_slot,
+    workspace_dir=_workspace_dir, recast_video_has_audio=_recast_video_has_audio,
+    recast_video_frame_count=_forward_outpaint_recast_video_frame_count, run_generation=_forward_studio_run_generation,
+)
+api.include_router(create_outpaint_router(
+    wgp=wgp, get_active_workspace=_get_active_workspace, workspace_dir=_workspace_dir,
+    register_manual_generation_job=_register_manual_generation_job,
+    generation_job_acceptance=_generation_job_acceptance, run_generation=_forward_studio_run_generation,
+))
 
 
-# Blend generation and POST /api/v1/blend.
-# The run module is bound once. The router factory binds only the router.
-import services.blend_run as blend_run
+from services.blend_run import _run_blend_generation, bind as _bind_blend_run
+from routers.blend import blend_endpoint, create_blend_router
 
-bind_launch_names(blend_run, globals())
-
-from routers.blend import create_blend_router
-
-api.include_router(create_blend_router(globals()))
-
-from services.blend_run import _run_blend_generation
-from routers.blend import blend_endpoint
+_bind_blend_run(
+    jobs=_jobs, active_gen_states=_active_gen_states, workspace_dir=_workspace_dir,
+    run_generation=_forward_studio_run_generation,
+)
+api.include_router(create_blend_router(
+    get_active_workspace=_get_active_workspace, workspace_dir=_workspace_dir,
+    register_manual_generation_job=_register_manual_generation_job,
+    generation_job_acceptance=_generation_job_acceptance, run_generation=_forward_studio_run_generation,
+))
 
 
 from routers.studio_segmentation import create_studio_segmentation_router
