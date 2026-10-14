@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.
+
 **Edit-anything and inpaint left the launch module.** POST /api/v1/edit-anything and POST /api/v1/inpaint still answer the same way.
 
 **Retake and frame extraction left the launch module.** POST /api/v1/retake and POST /api/v1/extract-frames still answer the same way.
