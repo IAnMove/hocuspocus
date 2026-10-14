@@ -15,11 +15,22 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException
 
+from services import workspace_busy
 from services.comic_director_json import _generate_comic_director_json
 
 _series_plan_jobs: dict[str, dict] = {}
 _series_plan_jobs_lock = threading.RLock()
 _series_plan_active_jobs: set[str] = set()
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Series planners that are running now, on either server (``services.workspace_busy`` probe).
+
+    The claim set is the proof of life (released in the planner's ``finally``). A plan checkpoint
+    that a crash left as ``running`` is cached here on read but holds no claim, so it never blocks.
+    """
+    with _series_plan_jobs_lock:
+        return workspace_busy.claimed(_series_plan_active_jobs, _series_plan_jobs)
 
 # Injected by _bind_series_plan_runtime. None until a server binds them.
 _workspace_dir = None

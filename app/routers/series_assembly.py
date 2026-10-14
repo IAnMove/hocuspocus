@@ -23,7 +23,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.asset_manifest import publish_generation_sidecar
 from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
-from services import series_hearing
+from services import series_hearing, workspace_busy
 from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
 from services.series_language_versions import localized_view
@@ -208,6 +208,13 @@ def create_series_assembly_router(
     jobs: dict[str, dict[str, Any]] = {}
     active_job_ids: set[str] = set()
     jobs_lock = threading.RLock()
+
+    def busy_jobs(_workspace: str, _folder: str) -> list[dict[str, Any]]:
+        """The assemblies running now: the claim set is the proof of life, the cached job names the workspace."""
+        with jobs_lock:
+            return workspace_busy.claimed(active_job_ids, jobs)
+
+    workspace_busy.register("series-assembly", busy_jobs)
 
     def canonical_task_id(job_id: str) -> str:
         return f"task-series-assembly-{job_id}"

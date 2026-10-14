@@ -28,6 +28,7 @@ COMMON: tuple[tuple[str, str], ...] = (
     ("minimax-music", "services.story_music_jobs"),
     ("minimax-image", "routers.comics"),
     ("rig", "services.rig_service"),
+    ("series-plan", "services.series_plan_jobs"),
 )
 # The full server (NVIDIA / WanGP) only.
 FULL_ONLY: tuple[tuple[str, str], ...] = (
@@ -35,6 +36,7 @@ FULL_ONLY: tuple[tuple[str, str], ...] = (
     ("story-plan", "services.story_lab_jobs"),
     ("comic-plan", "services.director_comic_jobs"),
     ("director-plan", "services.director_plan_jobs"),
+    ("series-render", "services.series_render_jobs"),
 )
 # The core server (Apple Silicon / remote providers) only.
 CORE_ONLY: tuple[tuple[str, str], ...] = (
@@ -50,6 +52,10 @@ PROFILES: dict[str, tuple[tuple[str, str], ...]] = {
 # kind -> the router module whose factory registers it with the object it was given.
 REGISTERED_BY_THE_ROUTER: dict[str, str] = {
     "game-produce": "routers.game_produce",
+    "series-produce": "routers.series_produce",
+    "series-native": "routers.series_native_render",
+    "series-voice": "routers.series_shot_inspector",
+    "series-assembly": "routers.series_assembly",
 }
 
 
