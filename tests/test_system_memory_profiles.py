@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def load_functions(path, names, namespace):
     tree = ast.parse((ROOT / path).read_text(encoding="utf-8"))
     functions = []
-    for node in tree.body:
+    for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in names:
             node.decorator_list = []
             functions.append(node)
@@ -44,7 +44,8 @@ def settings_runtime(tmp_path):
         "wgp": wgp, "Request": object, "HTTPException": HTTPException, "json": json, "os": os, "uuid": uuid,
         "_save_server_config": ConfigStore(lambda: wgp).save,
     }
-    load_functions("app/_launch_runtime.py", ["_validated_memory_profile_updates", "update_system_config"], namespace)
+    load_functions("app/services/settings_store.py", ["_validated_memory_profile_updates"], namespace)
+    load_functions("app/routers/settings.py", ["update_system_config"], namespace)
 
     def update(body):
         async def read_body():

@@ -44,12 +44,6 @@
       "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
-      "file": "tests/test_character_sheet.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
-    },
-    {
       "file": "tests/test_code_health.py",
       "target": "app/_launch_runtime.py",
       "classification": "architecture_rule",
@@ -374,12 +368,6 @@
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
     },
     {
-      "file": "tests/test_system_memory_profiles.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "symbol_importable",
-      "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
       "file": "tests/test_task_adapter_helpers.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -414,12 +402,6 @@
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
       "reason": "Extracts selected launch symbols with AST/exec; migrate to direct imports when that domain moves."
-    },
-    {
-      "file": "tests/test_voice_reference_settings.py",
-      "target": "app/_launch_runtime.py",
-      "classification": "fragile_source",
-      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
     },
     {
       "file": "tests/test_voxcpm2_tts.py",

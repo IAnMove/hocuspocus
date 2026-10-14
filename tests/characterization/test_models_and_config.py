@@ -93,9 +93,126 @@ def test_the_server_keeps_temp_files_and_libraries_in_its_state_folder(full_serv
 def test_settings_reads(server, golden) -> None:
     server.check(golden, "services config", "GET", "/api/v1/services-config")
     server.check(golden, "presets", "GET", "/api/v1/presets")
+    server.check(
+        golden,
+        "services config empty update",
+        "PUT",
+        "/api/v1/services-config",
+        json={},
+    )
+    server.check(
+        golden,
+        "system config empty update",
+        "PUT",
+        "/api/v1/system-config",
+        json={},
+    )
     server.check(golden, "mcp settings", "GET", "/api/v1/settings/mcp")
     server.check(golden, "llm status", "GET", "/api/v1/llm/status")
     server.check(golden, "lan auth status", "GET", "/api/v1/auth/lan/status")
+
+
+def test_system_reads_and_release(server, golden) -> None:
+    """Cheap system routes before they leave the launch module.
+
+    Hardware, free disk and the live gauges depend on the machine, so those
+    fields are masked or asserted only by shape. Applying a detected profile
+    writes the real recommendation and is left for a GPU check.
+    """
+    import sys
+
+    server.check(
+        golden,
+        "system detect",
+        "GET",
+        "/api/v1/system-detect",
+        mask=("hardware", "recommended"),
+    )
+    server.check(
+        golden,
+        "system stats",
+        "GET",
+        "/api/v1/system-stats",
+        mask=("cpu", "ram", "gpu", "runtime"),
+    )
+    server.check(golden, "debug user action", "POST", "/api/v1/debug/user-action", json={})
+    server.check(golden, "release model idle", "POST", "/api/v1/system/release-model")
+
+    launch = sys.modules["_launch_runtime"]
+    launch._jobs["golden-running"] = {"id": "golden-running", "status": "running"}
+    try:
+        server.check(golden, "release model busy", "POST", "/api/v1/system/release-model")
+    finally:
+        launch._jobs.pop("golden-running", None)
+
+    preflight = server.client.get("/api/v1/system/preflight")
+    assert preflight.status_code == 200
+    body = preflight.json()
+    assert isinstance(body.get("ok"), bool)
+    assert isinstance(body.get("checks"), list)
+
+    capabilities = server.client.get("/api/v1/runtime-capabilities")
+    assert capabilities.status_code == 200
+    detected = capabilities.json()
+    assert isinstance(detected.get("engines"), dict)
+    assert isinstance(detected.get("platform"), str)
+
+    wangp = server.client.get("/api/v1/wangp/capabilities")
+    assert wangp.status_code == 200
+    processors = wangp.json()
+    assert processors["revision"] == "362c3467a70e1136ceb52eec95907205a8f88543"
+    assert {"rife2", "rife4"} <= {item["value"] for item in processors["processors"]}
+
+
+def test_tools_reject_invalid_input(server, golden) -> None:
+    """Upscale and revoice refuse a bad request before any model work.
+
+    A real upscale or revoice needs a clip and a GPU, so only the validation
+    answers are recorded here.
+    """
+    server.check(
+        golden,
+        "upscale unsupported method",
+        "POST",
+        "/api/v1/tools/upscale",
+        json={"method": "not-a-method"},
+    )
+    server.check(
+        golden,
+        "upscale missing source",
+        "POST",
+        "/api/v1/tools/upscale",
+        json={},
+    )
+    server.check(
+        golden,
+        "revoice missing source",
+        "POST",
+        "/api/v1/tools/revoice",
+        json={},
+    )
+
+
+def test_director_and_describe_refuse_an_empty_request(server, golden) -> None:
+    """Director music and character description refuse an empty body before any model work.
+
+    A real song or a description needs a loaded model and, for music, a GPU.
+    These are the answers the full server gives first.
+    """
+    server.check(
+        golden,
+        "describe refs missing images",
+        "POST",
+        "/api/v1/characters/describe-refs",
+        json={},
+    )
+    server.check(
+        golden,
+        "generate music empty",
+        "POST",
+        "/api/v1/director/generate-music",
+        json={},
+    )
 
 
 def test_mcp_transport_while_access_is_disabled(server, golden) -> None:
