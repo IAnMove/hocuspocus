@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import json
 
+from tests.characterization import director_lifecycle
+
 
 def _save_one_clip(server, pid: str = "savedclip") -> str:
     """One saved pipeline with a single clip, so an out-of-range index fails before generation."""
@@ -78,3 +80,11 @@ def test_director_routes_answer_the_recorded_errors(server, golden) -> None:
         golden, "v2 plan progress for a missing activity", "GET",
         "/api/v1/director/v2/plan/progress/missing-activity",
     )
+
+
+def test_director_pipeline_and_v2_plan_lifecycle_through_the_routes(server, golden, monkeypatch) -> None:
+    """A pipeline from start to delete and the v2 plan jobs, with the engine and the language model faked.
+
+    The goldens hold the status, the body and the calls into the fakes of every step; see ``director_lifecycle``.
+    """
+    director_lifecycle.record(server, golden, monkeypatch)
