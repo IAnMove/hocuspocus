@@ -1386,69 +1386,29 @@ _model_downloads_lock = threading.Lock()
 def _download_model_files(model_type: str):
     """Resolve and fetch every file load_models() would download.
 
-    Mirrors the file-resolution block at the top of wgp.load_models()
-    (wgp.py:4041-4143) — keep the two in sync.
+    The file list is ``services.engine.model_files.resolve_model_files``, the
+    mirror of the file-resolution block of ``wgp.load_models``. ``wgp.py`` is
+    vendored and is not edited. This name stays so the pre-download route
+    keeps calling it.
     """
-    if _is_legacy_h3_model(model_type):
-        minimax_h3_service.ensure_quality_assets(
-            lambda message: print(f"[H3 Legacy] {message}")
-        )
-        if not minimax_h3_service.is_model_downloaded():
-            raise RuntimeError(
-                "Legacy download finished but the exact ConvRot files are still missing."
-            )
-        return
+    from services.engine.model_files import download_model_files
 
-    model_def = wgp.get_model_def(model_type)
-    quantization = wgp.transformer_quantization
-    dtype_policy = wgp.transformer_dtype_policy
-    transformer_dtype = wgp.get_transformer_dtype(model_type, dtype_policy)
-
-    model_file_list = [wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy)]
-    source_type_list = [0]
-    submodel_no_list = [1]
-    if "URLs2" in model_def:
-        model_file_list.append(wgp.get_model_filename(model_type=model_type, quantization=quantization, dtype_policy=dtype_policy, submodel_no=2))
-        source_type_list.append(0)
-        submodel_no_list.append(2)
-    modules = wgp.get_model_recursive_prop(model_type, "modules", return_list=True)
-    modules = [wgp.get_model_recursive_prop(module, "modules", sub_prop_name="_list", return_list=True) if isinstance(module, str) else module for module in modules]
-    for module_type in modules:
-        if isinstance(module_type, dict):
-            for urls_key, submodel_no in (("URLs", 1), ("URLs2", 2)):
-                urls = module_type.get(urls_key, None)
-                if urls is None:
-                    raise Exception(f"No {urls_key} defined for Module {module_type}")
-                model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, URLs=urls))
-                source_type_list.append(1)
-                submodel_no_list.append(submodel_no)
-        else:
-            model_file_list.append(wgp.get_model_filename(model_type, quantization, transformer_dtype, module_type=module_type))
-            source_type_list.append(1)
-            submodel_no_list.append(0)
-
-    fetched = False
-    for filename, source_type, submodel_no in zip(model_file_list, source_type_list, submodel_no_list):
-        if len(filename) == 0:
-            continue
-        wgp.download_models(filename, model_type, source_type, submodel_no)
-        fetched = True
-    if not fetched:
-        # No main file: the handler's own file list is the whole download (load_models does the same).
-        wgp.download_models("", model_type, 0, -1)
-
-    text_encoder_URLs = wgp.get_model_recursive_prop(model_type, "text_encoder_URLs", return_list=True)
-    if text_encoder_URLs is not None:
-        te_quant = (model_def.get("text_encoder_quantization", None) if model_def else None) or wgp.text_encoder_quantization
-        text_encoder_filename = wgp.get_model_filename(model_type=model_type, quantization=te_quant, dtype_policy=dtype_policy, URLs=text_encoder_URLs)
-        if text_encoder_filename is not None and len(text_encoder_filename):
-            text_encoder_folder = model_def.get("text_encoder_folder", None)
-            wgp.download_models(text_encoder_filename, model_type, 2, -1, force_path=text_encoder_folder)
-            if wgp.get_local_model_filename(text_encoder_filename, extra_paths=text_encoder_folder) is None:
-                raise Exception(f"Text encoder '{os.path.basename(text_encoder_filename)}' could not be located after download.")
-
-    if not _check_model_downloaded(model_type):
-        raise Exception("Download finished but the checkpoint could not be located — check disk space and earlier terminal output.")
+    download_model_files(
+        model_type,
+        is_legacy_h3_model=_is_legacy_h3_model,
+        ensure_quality_assets=minimax_h3_service.ensure_quality_assets,
+        is_h3_downloaded=minimax_h3_service.is_model_downloaded,
+        get_model_def=wgp.get_model_def,
+        transformer_quantization=wgp.transformer_quantization,
+        transformer_dtype_policy=wgp.transformer_dtype_policy,
+        get_transformer_dtype=wgp.get_transformer_dtype,
+        get_model_filename=wgp.get_model_filename,
+        get_model_recursive_prop=wgp.get_model_recursive_prop,
+        download_models=wgp.download_models,
+        get_local_model_filename=wgp.get_local_model_filename,
+        text_encoder_quantization=wgp.text_encoder_quantization,
+        check_model_downloaded=_check_model_downloaded,
+    )
 
 
 @api.post("/api/v1/models/{model_type}/download")
@@ -6925,283 +6885,64 @@ async def wangp_capabilities():
     return {"revision": "362c3467a70e1136ceb52eec95907205a8f88543", "processors": processors}
 
 
-@api.get("/api/v1/model3d/capabilities")
-def model3d_capabilities():
-    from services import model3d_service
-    return model3d_service.capabilities()
+class _LaunchCollectionLookup:
+    """The collections registry is created later in this module; look it up per request."""
+
+    def get(self, key):
+        return globals()["_workspace_collection_registry"].get(key)
 
 
-@api.post("/api/v1/model3d/generate")
-async def generate_model3d(request: Request):
-    from services import model3d_service
-    from services.generation_provenance import normalize_submission_provenance
-
-    body = await request.json()
-    body["provenance"] = normalize_submission_provenance(body.pop("provenance", None), trusted_tool=getattr(request, "trusted_tool", None))
-    collection_id = body["provenance"].get("workspace_id")
-    if collection_id and not _workspace_collection_registry.get(collection_id):
-        raise HTTPException(status_code=400, detail="Unknown Workspace collection")
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    try:
-        execution_mode.validate_generation(workspace)
-    except execution_mode.ExecutionModeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    raw_images = body.get("images") or {}
-    if not isinstance(raw_images, dict):
-        raise HTTPException(status_code=400, detail="images must be an object keyed by front/left/right/back")
-    # Backward-compatible single-image input becomes the front view.
-    if body.get("image_path") and not raw_images.get("front"):
-        raw_images["front"] = body["image_path"]
-    image_paths = {}
-    for view, value in raw_images.items():
-        if view not in {"front", "left", "right", "back"} or not value:
-            continue
-        resolved = _resolve_model3d_input_path(str(value), workspace)
-        if not resolved or not os.path.isfile(resolved):
-            raise HTTPException(status_code=400, detail=f"3D {view} image not found")
-        image_paths[view] = resolved
-    source_mesh_path = None
-    if str(body.get("operation") or "generate").lower() == "retexture":
-        source_mesh_path = _resolve_model3d_input_path(
-            str(body.get("source_model") or ""), workspace,
-        )
-        if not source_mesh_path or not os.path.isfile(source_mesh_path):
-            raise HTTPException(status_code=400, detail="Source GLB not found")
-    try:
-        job = model3d_service.start_job(
-            body=body,
-            image_paths=image_paths,
-            output_dir=_workspace_dir(workspace),
-            source_mesh_path=source_mesh_path,
-            workspace=workspace,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "model3d")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/model3d/status/{job_id}")
-def model3d_job_status(job_id: str):
-    from services import model3d_service
-    job = model3d_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
+def _publish_moved_studio_task(record, adapter):
+    """Activity publish stays the launch function, which is defined further down."""
     publisher = globals().get("_publish_generic_legacy_task")
     if callable(publisher):
-        publisher(job, "model3d")
-    return job
+        publisher(record, adapter)
 
 
-@api.post("/api/v1/model3d/jobs/{job_id}/cancel")
-def cancel_model3d_job(job_id: str):
+def _launch_model3d_engine():
     from services import model3d_service
-    job = model3d_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="3D generation job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "model3d")
-    return job
+    return model3d_service
 
 
-@api.post("/api/v1/model3d/unload")
-def unload_model3d():
-    """Stop active workers. Completed jobs already release all Hunyuan VRAM."""
-    from services import model3d_service
-    cancelled = model3d_service.cancel_all_jobs()
-    return {"status": "ok", "cancelled_jobs": cancelled, "model_loaded": False}
+from routers.model3d import create_model3d_router
+from routers.rig import create_rig_router
 
-
-# ============================================================================
-# API Routes: Rig & Animate (procedural skeletons for 3D outputs)
-# ============================================================================
-
-@api.get("/api/v1/rig/capabilities")
-def rig_capabilities():
-    from services import rig_service
-    return rig_service.capabilities()
-
-
-@api.post("/api/v1/rig/generate")
-async def generate_rig(request: Request):
-    from services import rig_service
-    from services.generation_provenance import normalize_submission_provenance
-    body = await request.json()
-    raw_provenance, trusted = body.pop("provenance", None), getattr(request, "trusted_tool", None)
-    # A UI rig keeps its historical "rig" origin; an agent or Wizard request carries who asked.
-    provenance = normalize_submission_provenance(raw_provenance, trusted_tool=trusted) if raw_provenance or trusted else None
-    workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
-    _workspace_dir(workspace)
-    source_name = str(body.get("source") or "").strip()
-    if not source_name:
-        raise HTTPException(status_code=400, detail="source is required (a generated .glb output name)")
-    if not source_name.lower().endswith(".glb"):
-        raise HTTPException(status_code=400, detail="Rigging currently supports GLB sources only")
-    source_path = _safe_join(_workspace_dir(workspace), source_name)
-    if not source_path or not os.path.isfile(source_path):
-        # Also accept absolute/upload paths through the shared 3D resolver.
-        source_path = _resolve_model3d_input_path(source_name, workspace)
-    if not source_path or not os.path.isfile(source_path):
-        raise HTTPException(status_code=400, detail="Source 3D model not found")
-    try:
-        job = rig_service.start_job(
-            body=body,
-            source_path=source_path,
-            output_dir=_workspace_dir(workspace),
-            workspace=workspace,
-            provenance=provenance,
-        )
-        publisher = globals().get("_publish_generic_legacy_task")
-        if callable(publisher):
-            publisher(job, "rig")
-        return job
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
-    except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@api.get("/api/v1/rig/status/{job_id}")
-def rig_job_status(job_id: str):
-    from services import rig_service
-    job = rig_service.get_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
-
-
-@api.post("/api/v1/rig/jobs/{job_id}/cancel")
-def cancel_rig_job(job_id: str):
-    from services import rig_service
-    job = rig_service.cancel_job(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Rig job not found")
-    publisher = globals().get("_publish_generic_legacy_task")
-    if callable(publisher):
-        publisher(job, "rig")
-    return job
+api.include_router(create_model3d_router(
+    engine=_launch_model3d_engine,
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    validate_generation=lambda workspace: execution_mode.validate_generation(workspace),
+    collection_registry=_LaunchCollectionLookup(),
+    publish_task=_publish_moved_studio_task,
+))
+from routers.model3d import cancel_model3d_job, generate_model3d, model3d_job_status
+api.include_router(create_rig_router(
+    resolve_input_path=_resolve_model3d_input_path,
+    workspace_dir=_workspace_dir,
+    get_active_workspace=_get_active_workspace,
+    safe_join=_safe_join,
+    publish_task=_publish_moved_studio_task,
+))
+from routers.rig import cancel_rig_job, generate_rig, rig_job_status
 
 
 # ============================================================================
 # API Routes: Workspaces
 # ============================================================================
 
-@api.get("/api/v1/workspaces")
-def list_workspaces_endpoint():
-    """List all workspaces and the active one."""
-    return {
-        "workspaces": _list_workspaces(),
-        "active": _get_active_workspace(),
-    }
+from routers.workspace_outputs import create_workspace_router
 
-
-@api.put("/api/v1/workspaces/active")
-async def set_active_workspace(request: Request):
-    """Switch to a different workspace."""
-    body = await request.json()
-    name = body.get("name", "default")
-
-    # Validate name (alphanumeric, hyphens, underscores)
-    import re
-    if name != "default" and not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name. Use letters, numbers, hyphens, underscores.")
-
-    # Persist the switch; only touch wgp.save_path when idle. If a job is
-    # in progress it has locked wgp.save_path to its target workspace —
-    # overwriting mid-generation scatters clips across workspaces. The
-    # config is saved either way, so the next job or restart picks it up.
-    idle = not _active_gen_states
-    ws_dir = _persist_active_workspace(name, apply_save_paths=idle)
-    if idle:
-        print(f"[Workspace] Switched to: {name} ({ws_dir})")
-    else:
-        print(f"[Workspace] Config switched to: {name} (save_path deferred — generation in progress)")
-    return {"status": "ok", "active": name, "path": ws_dir}
-
-
-@api.post("/api/v1/workspaces")
-async def create_workspace(request: Request):
-    """Create a new workspace."""
-    body = await request.json()
-    name = body.get("name", "").strip()
-
-    if not name:
-        raise HTTPException(status_code=400, detail="Workspace name is required")
-
-    import re
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name. Use letters, numbers, hyphens, underscores.")
-
-    ws_dir = _workspace_dir(name)
-    os.makedirs(ws_dir, exist_ok=True)
-
-    return {"status": "ok", "name": name, "path": ws_dir}
-
-
-@api.delete("/api/v1/workspaces/{name}")
-def delete_workspace(name: str):
-    """Delete a workspace folder and every asset inside it.
-
-    Refused while anything is queued or generating: jobs capture their
-    workspace at submit time and _workspace_dir() recreates folders on
-    demand, so a mid-generation delete would silently resurrect the
-    workspace and scatter files into it.
-    """
-    import re
-    if name == "default":
-        raise HTTPException(status_code=400, detail="The default workspace is the outputs folder itself and cannot be deleted.")
-    if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_-]*$', name):
-        raise HTTPException(status_code=400, detail="Invalid workspace name.")
-    base = os.path.abspath(wgp.server_config.get("save_path", "outputs"))
-    # _safe_join resolves symlinks/junctions before the containment check —
-    # the regex blocks traversal but not a junction inside outputs/.
-    ws_dir = _safe_join(base, name)
-    if ws_dir is None:
-        raise HTTPException(status_code=400, detail="Invalid workspace path.")
-    if not os.path.isdir(ws_dir):
-        raise HTTPException(status_code=404, detail=f"Workspace not found: {name}")
-
-    busy = any(j.get("status") in ("queued", "running") for j in _jobs.values())
-    if busy or _active_gen_states:
-        raise HTTPException(status_code=409, detail="A generation is queued or running. Wait for it to finish before deleting a workspace.")
-    # Director pipelines are alive between their generation jobs (LLM
-    # planning, review pauses) with no _jobs entry — but their next step
-    # would resurrect the folder via _workspace_dir().
-    try:
-        from services.director_pipeline import any_pipeline_active
-        if any_pipeline_active():
-            raise HTTPException(status_code=409, detail="A Director pipeline is running or paused. Stop it before deleting a workspace.")
-    except ImportError:
-        pass
-
-    # Deleting the active workspace switches to default first. Safe to write
-    # wgp.save_path directly here: nothing is generating (guards above).
-    switched = False
-    if _get_active_workspace() == name:
-        _persist_active_workspace("default")
-        switched = True
-        print(f"[Workspace] Active workspace deleted — switched to default")
-
-    from services.win_safe_files import safe_delete_dir
-    result = safe_delete_dir(ws_dir)
-    print(f"[Workspace] Deleted '{name}': {result['files_deleted']} files removed, "
-          f"{result['files_deferred']} deferred, dir_removed={result['removed']}")
-    return {
-        "status": "ok", "name": name,
-        "files_deleted": result["files_deleted"], "files_deferred": result["files_deferred"],
-        "dir_removed": result["removed"], "switched_to_default": switched, "errors": result["errors"],
-    }
+api.include_router(create_workspace_router(
+    list_workspaces=_list_workspaces,
+    get_active_workspace=_get_active_workspace,
+    persist_active=_persist_active_workspace,
+    workspace_dir=_workspace_dir,
+    generation_idle=lambda: not _active_gen_states,
+    jobs=lambda: _jobs.values(),
+    safe_join=_safe_join,
+    save_path=lambda: wgp.server_config.get("save_path", "outputs"),
+))
 
 
 # ============================================================================
@@ -7464,153 +7205,18 @@ async def storage_remove_linked(request: Request):
     return {"status": "ok", "freed_bytes": psize, "recycled": True, "surviving_copy": surviving}
 
 
-@api.get("/api/v1/storage/usage")
-def storage_usage():
-    """Usage analytics backfilled from generation sidecars: every job ever
-    run left a .meta.json with model_type, activated_loras, and created_at.
-    Joined with on-disk sizes so 'largest, least used' is one sort away."""
-    base = wgp.server_config.get("save_path", "outputs")
-    scan_dirs = [w["path"] for w in _list_workspaces()]
-    model_usage: dict = {}
-    lora_usage: dict = {}
-    sidecars = 0
-    for d in scan_dirs:
-        try:
-            entries = os.listdir(d)
-        except OSError:
-            continue
-        for n in entries:
-            if not n.endswith(".meta.json"):
-                continue
-            try:
-                with open(os.path.join(d, n), "r", encoding="utf-8") as f:
-                    meta = json.load(f)
-            except Exception:
-                continue
-            sidecars += 1
-            params = meta.get("params") or {}
-            created = meta.get("created_at") or 0
-            mt = params.get("model_type")
-            if mt:
-                agg = model_usage.setdefault(mt, {"count": 0, "last_used": 0})
-                agg["count"] += 1
-                agg["last_used"] = max(agg["last_used"], created)
-            for lora in params.get("activated_loras") or []:
-                if isinstance(lora, str) and lora:
-                    agg = lora_usage.setdefault(lora, {"count": 0, "last_used": 0})
-                    agg["count"] += 1
-                    agg["last_used"] = max(agg["last_used"], created)
+from services.storage_usage import configure as _configure_storage_usage
+from routers.workspace_outputs import create_storage_usage_router
 
-    models = []
-    # Shared weights (pointer-resolved base transformers, common text
-    # encoders) appear in MANY models' groups — per-model sizes overlap by
-    # design, so the dashboard's total comes from this global dedupe, not
-    # from summing rows.
-    global_seen = set()
-    models_total_bytes = 0
-    for mt in wgp.displayed_model_types:
-        md = wgp.get_model_def(mt)
-        if md is None:
-            continue
-        total = 0
-        primary_bytes = 0
-        seen_paths = set()
-        try:
-            for group in _model_weight_groups(mt):
-                for fname in _variant_group_filenames(group):
-                    p = wgp.fl.locate_file(fname, error_if_none=False)
-                    if not p:
-                        continue
-                    key = os.path.normcase(os.path.abspath(p))
-                    if key in seen_paths:
-                        continue
-                    seen_paths.add(key)
-                    try:
-                        size = os.path.getsize(p)
-                    except OSError:
-                        continue
-                    total += size
-                    if key not in global_seen:
-                        global_seen.add(key)
-                        models_total_bytes += size
-            # What the row's Delete actually frees: DELETE /models/{mt}
-            # removes owned files only (a finetune's alias never deletes
-            # the shared base) — mirror that here or the button lies.
-            for group in _model_weight_groups(mt, owned_only=True):
-                for fname in _variant_group_filenames(group):
-                    p = wgp.fl.locate_file(fname, error_if_none=False)
-                    if p and not wgp.fl.is_protected_path(p):
-                        try:
-                            primary_bytes += os.path.getsize(p)
-                        except OSError:
-                            pass
-        except Exception:
-            pass
-        usage = model_usage.get(mt, {})
-        # Rows without deletable bytes need to say WHY: a finetune whose
-        # def aliases another model's weights frees nothing when deleted
-        # (delete the base row instead), and weights living only in
-        # linked installs are read-only here.
-        _raw_urls = md.get("URLs")
-        _alias_of = None
-        if isinstance(_raw_urls, str):
-            _alias_md = wgp.get_model_def(_raw_urls)
-            _alias_of = (_alias_md or {}).get("name", _raw_urls)
-        models.append({
-            "model_type": mt, "name": md.get("name", mt),
-            "size_bytes": total, "primary_bytes": primary_bytes,
-            "alias_of": _alias_of,
-            "use_count": usage.get("count", 0),
-            "last_used": usage.get("last_used") or None,
-        })
-
-    loras = []
-    lora_root = _resolve_lora_root()
-    walk_roots = ([(lora_root, False)] if lora_root else []) + [(r, True) for r in _linked_lora_roots()]
-    seen_keys = set()
-    for root, linked in walk_roots:
-        for dirpath, _dn, fns in os.walk(root):
-            for f in fns:
-                if not f.endswith((".safetensors", ".sft")):
-                    continue
-                rel_dir = os.path.relpath(dirpath, root)
-                key = os.path.normcase(os.path.normpath(os.path.join(rel_dir, f)))
-                if key in seen_keys:
-                    continue
-                seen_keys.add(key)
-                try:
-                    size = os.path.getsize(os.path.join(dirpath, f))
-                except OSError:
-                    size = 0
-                usage = lora_usage.get(f, {})
-                loras.append({
-                    "filename": f, "directory": rel_dir, "linked": linked, "size_bytes": size,
-                    "use_count": usage.get("count", 0),
-                    "last_used": usage.get("last_used") or None,
-                })
-
-    workspaces = []
-    for w in _list_workspaces():
-        ws_bytes = 0
-        try:
-            with os.scandir(w["path"]) as it:
-                for e in it:
-                    if e.is_file() and not e.name.startswith("."):
-                        try:
-                            ws_bytes += e.stat().st_size
-                        except OSError:
-                            pass
-        except OSError:
-            pass
-        workspaces.append({"name": w["name"], "file_count": w.get("file_count", 0), "size_bytes": ws_bytes})
-
-    return {
-        "models": sorted(models, key=lambda m: -m["size_bytes"]),
-        "models_total_bytes": models_total_bytes,
-        "loras": sorted(loras, key=lambda l: -l["size_bytes"]),
-        "workspaces": workspaces,
-        "scanned_sidecars": sidecars,
-    }
+_configure_storage_usage(
+    engine=wgp,
+    list_workspaces=_list_workspaces,
+    model_weight_groups=_model_weight_groups,
+    variant_group_filenames=_variant_group_filenames,
+    resolve_lora_root=_resolve_lora_root,
+    linked_lora_roots=_linked_lora_roots,
+)
+api.include_router(create_storage_usage_router())
 
 
 # ============================================================================
@@ -29449,9 +29055,20 @@ def get_latest_completed_director_comic_plan():
     return max(completed, key=lambda job: job.get("finishedAt") or job.get("updatedAt") or 0)
 
 
-_output_scan_cache_lock = threading.Lock()
-_output_scan_cache: dict[str, dict] = {}
-_OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+from services.output_listing import (
+    _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS,
+    _output_scan_cache,
+    _output_scan_cache_lock,
+    _resolve_output_file,
+    configure as _configure_output_listing,
+    serve_file,
+)
+_configure_output_listing(
+    workspace_dir=_workspace_dir,
+    load_favorites=_load_favorites,
+    safe_join=_safe_join,
+    engine=wgp,
+)
 _MEDIA_THUMBNAIL_CACHE_DIR = os.path.join(
     os.path.dirname(_app_dir), "cache", "media-thumbnails"
 )
@@ -29459,375 +29076,9 @@ from services.media_dimensions import configure as _configure_media_facts, note_
 
 _configure_media_facts(_MEDIA_THUMBNAIL_CACHE_DIR)
 
+from routers.workspace_outputs import create_list_outputs_router
 
-def _resolve_output_file(filename: str, workspace: str | None = None) -> str | None:
-    """Resolve one output only inside its explicit or active workspace."""
-    root = _workspace_dir(workspace)
-    candidate = _safe_join(root, filename)
-    return candidate if candidate and os.path.isfile(candidate) else None
-
-
-@api.get("/api/v1/outputs")
-def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_only: bool = False, multiclip_only: bool = False, edits_only: bool = False, search: str = "", workspace: str = "", media_type: str = "", result_kind: str = "", order: str = "", origin: str = ""):
-    """List generated output files (newest first) from the active workspace.
-
-    Each row carries ``origin`` ({actor: agent | wizard, capability}) when an agent or the Wizard asked for the file,
-    and ``origin=agent`` keeps only those (``mcp`` or ``wizard`` one of them; services/output_origin.py).
-
-    Supports pagination via limit/offset query params.
-    Returns {outputs, total} where total is the full count before pagination.
-    When limit=0 (default), returns all items (backwards compatible).
-
-    workspace="__uploads__" lists the uploads folder instead (the gallery's
-    virtual "Uploads" view) so user-supplied media can be previewed and
-    reused. Browse-only: the server-side active workspace is untouched and
-    generations never save here. Uploads have no sidecars, so the metadata
-    passes below fall through naturally.
-    """
-    response.headers["Cache-Control"] = "no-store"
-    if workspace == "__uploads__":
-        out_dir = os.path.join(os.getcwd(), "uploads")
-    else:
-        out_dir = _workspace_dir(workspace or None)
-    workspace_suffix = (
-        f"?workspace={quote(workspace, safe='')}" if workspace else ""
-    )
-    workspace_extra = (
-        f"&workspace={quote(workspace, safe='')}" if workspace else ""
-    )
-    if not os.path.isdir(out_dir):
-        return {"outputs": [], "total": 0}
-
-    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
-    video_exts = {".mp4", ".webm", ".gif"}
-    audio_exts = {".wav", ".mp3"}
-    model3d_exts = {".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
-
-    def model3d_thumbnail_url(name: str, params: dict) -> str | None:
-        """Return a cheap static image preview for a 3D output card.
-
-        The gallery must never instantiate a second ``model-viewer`` for its
-        80px history cards: parsing many GLB files there is surprisingly
-        expensive.  The Hunyuan3D worker saves the normalized front view as a
-        ``<output>.preview.png`` sibling (for text-only jobs that is the
-        generated conditioning image), so prefer it.  Older outputs fall back
-        to the input views recorded in the sidecar; when neither exists the
-        client renders a lightweight 3D icon instead.
-        """
-        preview_name = os.path.splitext(name)[0] + ".preview.png"
-        if os.path.isfile(os.path.join(out_dir, preview_name)):
-            return f"/api/v1/file/{preview_name}{workspace_suffix}"
-        images = params.get("images")
-        if not isinstance(images, dict):
-            return None
-        front = images.get("front")
-        if not isinstance(front, str) or not front:
-            return None
-        try:
-            source = os.path.realpath(front)
-            if not os.path.isfile(source):
-                return None
-            uploads_root = os.path.realpath(os.path.join(os.getcwd(), "uploads"))
-            outputs_root = os.path.realpath(wgp.server_config.get("save_path", "outputs"))
-            filename = os.path.basename(source)
-            if source.startswith(uploads_root + os.sep):
-                return f"/api/v1/uploads/{filename}"
-            if source.startswith(outputs_root + os.sep):
-                return f"/api/v1/file/{filename}{workspace_suffix}"
-        except OSError:
-            pass
-        return None
-
-    favs = _load_favorites()
-
-    # Building the gallery index requires stat'ing every media file and
-    # parsing every metadata sidecar. The UI polls while a generation is
-    # active, so doing that work on each heartbeat caused unnecessary disk
-    # load and visible layout churn. Reuse a workspace snapshot while the
-    # directory is unchanged, with a short TTL as a safety net for in-place
-    # metadata edits that do not update the directory mtime.
-    try:
-        directory_signature = os.stat(out_dir).st_mtime_ns
-    except OSError:
-        return {"outputs": [], "total": 0}
-    now = time.monotonic()
-    with _output_scan_cache_lock:
-        cached_snapshot = _output_scan_cache.get(out_dir)
-        cache_is_fresh = (
-            cached_snapshot is not None
-            and cached_snapshot.get("signature") == directory_signature
-            and now - float(cached_snapshot.get("created_at", 0)) < _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS
-        )
-
-    if cache_is_fresh:
-        raw_entries = cached_snapshot["raw_entries"]
-        sidecar_cache = cached_snapshot["sidecar_cache"]
-        clip_groups = cached_snapshot["clip_groups"]
-    else:
-        raw_entries = []
-        for name in os.listdir(out_dir):
-            # Director's historical H3 builds wrote soundtrack slices beside
-            # user assets. They are private model inputs, not generated songs.
-            # New runs use the hidden .director-tmp directory; retain these
-            # prefix guards so scratch files left by an interrupted old run do
-            # not displace the real soundtrack in the media library.
-            if name.startswith((
-                ".trash_",
-                ".",
-                "_director_h3_audio_",
-                "_rerun_audio_",
-            )):
-                continue
-            # 3D preview sidecars are served as card thumbnails, not gallery items.
-            if name.endswith(".preview.png"):
-                continue
-            # Atomic image writes keep a media extension for PIL. They are
-            # incomplete until renamed and must never become gallery tiles.
-            if re.search(r"\.tmp_[0-9a-f]{8}\.[^.]+$", name):
-                continue
-            filepath = os.path.join(out_dir, name)
-            if not os.path.isfile(filepath):
-                continue
-            ext = os.path.splitext(name)[1].lower()
-            if ext not in media_exts and not name.endswith(".scene.json") and not name.endswith(".comic.json"):
-                continue
-            try:
-                raw_entries.append((name, filepath, ext, os.path.getmtime(filepath)))
-            except OSError:
-                continue
-
-        # Sort by creation time (newest first) before any filtering.
-        raw_entries.sort(key=lambda e: e[3], reverse=True)
-
-        # Read each sidecar once per snapshot and retain only the fields used
-        # by the gallery. Favorites remain outside the cache so toggles are
-        # reflected immediately.
-        sidecar_cache: dict[str, dict] = {}
-        clip_groups: dict[str, dict] = {}
-        try:
-            from services.output_result_kind import classify_output_result_kind, production_cuts, production_result_kind
-            cuts = production_cuts(out_dir)
-        except Exception:
-            def classify_output_result_kind(name, params=None, metadata=None):
-                return None
-            def production_result_kind(name, params, cuts):
-                return None
-            cuts = {}
-        from services.output_origin import output_origin
-        for name, filepath, ext, mtime in raw_entries:
-            meta_path = os.path.join(out_dir, os.path.splitext(name)[0] + ".meta.json")
-            if not os.path.isfile(meta_path):
-                continue
-            try:
-                with open(meta_path, "r", encoding="utf-8") as mf:
-                    meta = json.load(mf)
-            except Exception:
-                continue
-            params = meta.get("params") if isinstance(meta.get("params"), dict) else {}
-            sidecar_cache[name] = {
-                "origin": output_origin(meta),
-                "mode": meta.get("generation_mode"),
-                "edit_sub_mode": params.get("edit_sub_mode"),
-                "multi_clip_info": params.get("multi_clip_info"),
-                "resolution": params.get("resolution"),
-                "result_kind": classify_output_result_kind(name, params, meta) or production_result_kind(name, params, cuts),
-                "thumbnail_url": model3d_thumbnail_url(name, params) if ext in model3d_exts else None,
-                # Output sidecars are written only after the generated asset
-                # has been published.  Their historical ``created_at`` field
-                # therefore represents completion time, despite the old name.
-                # Prefer an explicit completion field when newer producers
-                # provide one and retain mtime as the legacy/import fallback.
-                "completed_at": next((
-                    float(meta[key])
-                    for key in ("completed_at", "finished_at", "created_at")
-                    if isinstance(meta.get(key), (int, float)) and float(meta[key]) > 0
-                ), None),
-            }
-            mci = sidecar_cache[name]["multi_clip_info"]
-            if mci and mci.get("group_id"):
-                gid = mci["group_id"]
-                if gid not in clip_groups:
-                    clip_groups[gid] = {"total": mci.get("total", 0), "highest_index": -1, "has_final": False}
-                clip_groups[gid]["highest_index"] = max(clip_groups[gid]["highest_index"], mci.get("index", 0))
-
-        for info in clip_groups.values():
-            if info["highest_index"] >= info["total"] - 1:
-                info["has_final"] = True
-
-        with _output_scan_cache_lock:
-            if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
-                oldest = min(
-                    _output_scan_cache,
-                    key=lambda key: float(_output_scan_cache[key].get("created_at", 0)),
-                )
-                _output_scan_cache.pop(oldest, None)
-            _output_scan_cache[out_dir] = {
-                "signature": directory_signature,
-                "created_at": now,
-                "raw_entries": raw_entries,
-                "sidecar_cache": sidecar_cache,
-                "clip_groups": clip_groups,
-            }
-
-    # Second pass: build the file list using the cached sidecar data.
-    from services.media_dimensions import listing_fields as media_listing_fields
-    files = []
-    for name, filepath, ext, mtime in raw_entries:
-        is_scene = name.endswith(".scene.json")
-        is_comic = name.endswith(".comic.json")
-        ftype = "comic" if is_comic else ("scene" if is_scene else ("video" if ext in video_exts else ("audio" if ext in audio_exts else ("model3d" if ext in model3d_exts else "image"))))
-        cached = sidecar_cache.get(name) or {}
-        mode = cached.get("mode")
-        edit_sub_mode = cached.get("edit_sub_mode")
-        metadata_completed_at = cached.get("completed_at")
-        mci = cached.get("multi_clip_info")
-        is_intermediate_clip = False
-        if mci and mci.get("group_id"):
-            gid = mci["group_id"]
-            group = clip_groups.get(gid, {})
-            if group.get("has_final"):
-                is_intermediate_clip = True
-            elif mci.get("index", 0) < group.get("highest_index", 0):
-                is_intermediate_clip = True
-
-        if is_intermediate_clip:
-            continue
-        # The file may vanish between os.scandir() and here (temp files renamed
-        # mid-generation, etc.). Skip the entry rather than crashing the endpoint.
-        try:
-            size = os.path.getsize(filepath)
-        except (FileNotFoundError, OSError):
-            continue
-        files.append({
-            "name": name,
-            "type": ftype,
-            "mode": mode,
-            # Surface edit_sub_mode so the gallery's Edits filter can
-            # identify retake/inpaint/outpaint/restyle/edit_anything outputs.
-            "edit_sub_mode": edit_sub_mode,
-            "result_kind": cached.get("result_kind"),
-            "origin": cached.get("origin"),
-            "favorite": name in favs,
-            "size": size,
-            "created_at": mtime,
-            "completed_at": metadata_completed_at or mtime,
-            "completion_time_source": "metadata" if metadata_completed_at else "file",
-            "url": f"/api/v1/file/{name}{workspace_suffix}",
-            "thumbnail_url": (
-                f"/api/v1/file/{name[:-len('.comic.json')]}.comic.preview.png{workspace_suffix}"
-                if is_comic and os.path.isfile(os.path.join(out_dir, name[:-len(".comic.json")] + ".comic.preview.png"))
-                else (f"/api/v1/file/{os.path.splitext(name)[0]}.preview.png{workspace_suffix}"
-                      if is_scene and os.path.isfile(os.path.join(out_dir, os.path.splitext(name)[0] + ".preview.png"))
-                      else (f"/api/v1/outputs/thumbnail/{quote(name, safe='')}?v={int(mtime * 1_000_000)}-{size}{workspace_extra}"
-                            if ftype in {"image", "video"}
-                            else cached.get("thumbnail_url")))
-            ),
-        })
-
-    def listed_result(selected, total):
-        # Read image headers and schedule colour/size work only for this page,
-        # not the entire workspace on every gallery heartbeat.
-        for item in selected:
-            item.update(media_listing_fields(
-                item["type"], os.path.join(out_dir, item["name"]),
-                item["size"], item["created_at"],
-                (sidecar_cache.get(item["name"]) or {}).get("resolution"),
-            ))
-        return {"outputs": selected, "total": total}
-
-    if media_type:
-        files = [item for item in files if item["type"] == media_type]
-    from services.output_origin import filter_by_origin
-    files = filter_by_origin(files, origin)
-    # Ordered before paging so every page follows the gallery's chosen order.
-    if order == "oldest":
-        files.reverse()
-    elif order == "favorites":
-        files.sort(key=lambda item: not item["favorite"])
-
-    wanted_kind = str(result_kind or "").strip()
-    if wanted_kind:
-        try:
-            from services.output_result_kind import result_kind_matches_filter
-        except Exception:
-            def result_kind_matches_filter(kind, wanted):
-                return str(kind or "") == str(wanted or "")
-        files = [
-            item for item in files
-            if item.get("type") == "video"
-            and result_kind_matches_filter(item.get("result_kind"), wanted_kind)
-        ]
-        return listed_result(files, len(files))
-
-    # Special filters: return ALL matches, bypass pagination
-    if edits_only:
-        files = [
-            item for item in files
-            if item.get("edit_sub_mode") or item.get("mode") == "avatar"
-        ]
-        return listed_result(files, len(files))
-    if favorites_only:
-        files = [f for f in files if f["favorite"]]
-        return listed_result(files, len(files))
-    if multiclip_only:
-        # 1. Explicit multiclip files
-        multiclips = [f for f in files if "multiclip" in f["name"].lower() and f["type"] == "video"]
-        multiclip_names = {f["name"] for f in multiclips}
-
-        # 2. Sliding window final outputs: group videos by seed+prompt, keep only the largest
-        # Filename pattern: datetime_seedNNNN_prompt_text.mp4
-        import re as _re_mc
-        seed_pattern = _re_mc.compile(r'^\d{4}-\d{2}-\d{2}-\d{2}h\d{2}m\d{2}s_(seed\d+_.+)\.(mp4|webm|mkv)$', _re_mc.IGNORECASE)
-        groups: dict[str, list[dict]] = {}
-        for f in files:
-            if f["type"] != "video" or f["name"] in multiclip_names:
-                continue
-            # Skip tmp files
-            if "_tmp." in f["name"]:
-                continue
-            m = seed_pattern.match(f["name"])
-            if m:
-                group_key = m.group(1)  # seed123_prompt text
-                groups.setdefault(group_key, []).append(f)
-
-        # From groups with multiple files (sliding window), keep only the largest
-        sw_finals = []
-        print(f"[Multiclip] Found {len(groups)} seed+prompt groups from {len(files)} total files")
-        for group_key, group_files in groups.items():
-            if len(group_files) > 1:
-                # Verify files are close in time (within 2 hours)
-                times = [f["created_at"] for f in group_files]
-                time_span = max(times) - min(times)
-                if time_span < 7200:
-                    largest = max(group_files, key=lambda f: f["size"])
-                    print(f"[Multiclip] SW group '{group_key[:60]}': {len(group_files)} files, span={time_span:.0f}s, largest={largest['name'][:60]}")
-                    sw_finals.append(largest)
-                else:
-                    print(f"[Multiclip] SW group '{group_key[:60]}': {len(group_files)} files, SKIPPED (time span {time_span:.0f}s > 7200)")
-
-        combined = multiclips + sw_finals
-        combined.sort(key=lambda f: f["created_at"], reverse=True)
-        print(f"[Multiclip] Result: {len(multiclips)} multiclips + {len(sw_finals)} sliding window finals = {len(combined)} total")
-        return listed_result(combined, len(combined))
-    if search:
-        from services.search_index import get_search_index
-        idx = get_search_index()
-        matching_names = idx.search(search, out_dir)
-        # Combine index results with filename fallback (in case index missed
-        # a file that was created between index builds)
-        query_lower = search.lower()
-        # The index is keyed by sidecar stem ("clip" for clip.mp4 and
-        # clip.meta.json); comparing full names never matched a prompt.
-        files = [
-            f for f in files
-            if os.path.splitext(f["name"])[0] in matching_names or query_lower in f["name"].lower()
-        ]
-        return listed_result(files, len(files))
-
-    total = len(files)
-    if limit > 0:
-        files = files[offset:offset + limit]
-    return listed_result(files, total)
+api.include_router(create_list_outputs_router())
 
 
 def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
@@ -29873,29 +29124,9 @@ def serve_output_thumbnail(filename: str, workspace: str | None = None, size: st
     )
 
 
-@api.get("/api/v1/file/{filename:path}")
-def serve_file(filename: str, workspace: str | None = None, sha256: str | None = None):
-    """Serve an output file from the explicit or active workspace.
+from routers.workspace_outputs import create_serve_file_router
 
-    Uses share_delete_file_response so that on Windows the file can be
-    deleted/renamed by the gallery delete button even while the browser
-    is actively streaming it (e.g. mid-video playback). Without share-
-    delete, Python's default open() locks the file for delete and the
-    user has to close the entire app to clean up.
-    """
-    from services.win_safe_files import share_delete_file_response
-    filepath = _resolve_output_file(filename, workspace)
-    if filepath:
-        return share_delete_file_response(filepath, expected_sha256=sha256)
-    # Uploads folder — the gallery's virtual "Uploads" view lists these
-    #    files with the same /api/v1/file/ URLs every other gallery flow
-    #    builds (thumbnails, playback, send-to-input). Upload names are
-    #    hash-uniquified at upload time, and outputs are checked first, so
-    #    an output name can never be shadowed by an upload.
-    filepath = _safe_join(os.path.join(os.getcwd(), "uploads"), filename) if workspace in {None, "", "__uploads__"} else None
-    if filepath and os.path.isfile(filepath):
-        return share_delete_file_response(filepath, expected_sha256=sha256)
-    raise HTTPException(status_code=404, detail="File not found")
+api.include_router(create_serve_file_router())
 
 
 @api.get("/api/v1/outputs/{name}/metadata")

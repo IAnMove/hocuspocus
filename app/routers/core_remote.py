@@ -1,12 +1,13 @@
 """Remote providers, production profile and Director planning for core/remote."""
 from __future__ import annotations
 
+import os
 from typing import Any
 from types import SimpleNamespace
 
 from fastapi import APIRouter, HTTPException, Request
 
-from services import core_remote_3d, core_workspace as core
+from services import core_workspace as core
 from services.core_canonical_tasks import publish_music_activity
 from services.story_music_jobs import bind_story_music_jobs
 from routers.story_music import create_story_music_router
@@ -88,6 +89,43 @@ def _core_story_music_binding():
     return jobs, music_wgp
 
 
+class _CoreCollectionLookup:
+    """The collections file, opened on the request so boot does not create ``outputs/``."""
+
+    def get(self, key: str):
+        from services.workspace_registry import WorkspaceRegistry
+        registry = WorkspaceRegistry(os.path.join(str(core.outputs_root()), "_hocuspocus", "workspaces-v1.json"))
+        return registry.get(key)
+
+
+def _core_model3d_engine():
+    from services.engine import core_model3d
+    return core_model3d
+
+
+def _core_model3d_input(value: str, workspace: str | None = None) -> str | None:
+    from services.model3d_input_path import resolve_model3d_input_path
+    return resolve_model3d_input_path(
+        value,
+        workspace,
+        safe_join=core.safe_join,
+        workspace_dir=core.workspace_dir,
+        save_path=lambda: str(core.outputs_root()),
+    )
+
+
+def _core_model3d_gate(body: dict) -> None:
+    from services.core_production import production_profile_response
+    from services.provider_profile import alias_model3d_provider
+
+    profile = production_profile_response()["profile"]
+    provider = alias_model3d_provider(str(
+        (body or {}).get("provider") or profile.get("model3d", {}).get("provider") or "local",
+    ).strip().lower())
+    if provider not in {"meshy", "hi3d"}:
+        require_capability_http("hunyuan3d_local")
+
+
 def create_core_remote_router() -> APIRouter:
     router = APIRouter()
 
@@ -103,39 +141,20 @@ def create_core_remote_router() -> APIRouter:
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
 
-    @router.get("/api/v1/model3d/capabilities")
-    def model3d_capabilities():
-        return core_remote_3d.capabilities()
+    from services import execution_mode
+    from services.core_canonical_tasks import publish_studio_activity
+    from routers.model3d import create_model3d_router
 
-    @router.post("/api/v1/model3d/generate")
-    async def generate_model3d(request: Request):
-        try:
-            body = await request.json()
-        except Exception:
-            body = {}
-        if not isinstance(body, dict):
-            body = {}
-        workspace = _workspace(body.get("workspace"))
-        try:
-            return core_remote_3d.start_job(body, workspace=workspace, output_dir=core.workspace_dir(workspace))
-        except HTTPException:
-            raise
-        except ValueError as error:
-            raise HTTPException(status_code=400, detail=str(error)) from error
-
-    @router.get("/api/v1/model3d/status/{job_id}")
-    def model3d_status(job_id: str):
-        job = core_remote_3d.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="3D generation job not found")
-        return job
-
-    @router.post("/api/v1/model3d/jobs/{job_id}/cancel")
-    def model3d_cancel(job_id: str):
-        job = core_remote_3d.cancel_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="3D generation job not found")
-        return job
+    router.include_router(create_model3d_router(
+        engine=_core_model3d_engine,
+        resolve_input_path=_core_model3d_input,
+        workspace_dir=core.workspace_dir_or_400,
+        get_active_workspace=core.active_workspace,
+        validate_generation=lambda workspace: execution_mode.validate_generation(workspace),
+        collection_registry=_CoreCollectionLookup(),
+        publish_task=publish_studio_activity,
+        engine_gate=_core_model3d_gate,
+    ))
 
     music_jobs, music_wgp = _core_story_music_binding()
     router.include_router(create_story_music_router(

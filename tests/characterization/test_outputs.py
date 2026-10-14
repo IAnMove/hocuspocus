@@ -104,6 +104,28 @@ def test_gallery_listing(server, golden) -> None:
     server.check(golden, "list uploads view", "GET", "/api/v1/outputs", **ENCODED, params={"workspace": "__uploads__"})
 
 
+def test_gallery_origin_result_kind_edits_and_multiclip(server, golden) -> None:
+    """Origin, result kind, edits and multiclip filters, recorded before the gallery move."""
+    folder = server.outputs
+    media.video(folder / "harbour_multiclip.mp4")
+    media.sidecar(folder / "harbour_multiclip.mp4", {
+        "generation_mode": "video",
+        "origin": {"actor": "wizard", "tool": "wizard", "capability": "generation.video"},
+        "params": {"prompt": "harbour chapter", "model_type": "fake_t2v", "resolution": "64x36"},
+    })
+    media.image(folder / "retake.png")
+    media.sidecar(folder / "retake.png", {
+        "generation_mode": "image",
+        "params": {"prompt": "a retake", "edit_sub_mode": "retake", "resolution": "8x8"},
+    })
+    media.stamp(folder / "harbour_multiclip.mp4", 1)
+    media.stamp(folder / "retake.png", 2)
+    server.check(golden, "list origin wizard", "GET", "/api/v1/outputs", **ENCODED, params={"origin": "wizard"})
+    server.check(golden, "list result kind chapter", "GET", "/api/v1/outputs", **ENCODED, params={"result_kind": "chapter"})
+    server.check(golden, "list edits", "GET", "/api/v1/outputs", **ENCODED, params={"edits_only": "true"})
+    server.check(golden, "list multiclip", "GET", "/api/v1/outputs", **ENCODED, params={"multiclip_only": "true"})
+
+
 def test_output_files_and_metadata(server, golden) -> None:
     _outputs(server)
     served = server.client.get(f"/api/v1/file/{IMAGE}")
