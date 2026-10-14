@@ -449,3 +449,70 @@ def test_the_mcp_model_list_answers_summaries_details_or_one_model(full_server, 
     assert launch.mcp_model_list({"detail": "yes", "model_type": "  "}) == summaries
     assert launch.mcp_model_list({"detail": True}) == details
     assert launch.mcp_model_list({"model_type": "fake_i2v", "detail": True}) == get_model_options("fake_i2v")
+
+
+def test_the_h3_and_seed_helpers_the_server_exports(full_server, monkeypatch) -> None:
+    """The MiniMax H3, character-sheet and output-seed helpers other clusters call through the server's names."""
+    import sys
+    from types import ModuleType, SimpleNamespace
+
+    from services import minimax_h3_service
+
+    launch = importlib.import_module("_launch_runtime")
+    definitions = {"h3_by_arch": {"architecture": "MiniMax_H3_v2"}, "other": {"architecture": "wan"}}
+    monkeypatch.setattr(full_server.wgp, "get_model_def", lambda model_type: definitions.get(model_type))
+    is_h3 = launch._is_minimax_h3_model
+    assert [is_h3(name) for name in ("minimax_h3", "MiniMax_H3_turbo", " minimax_h3_x ", "h3_by_arch",
+                                     "other", "", None, "my_minimax_h3")] == [
+        True, True, True, True, False, False, False, False]
+    legacy = minimax_h3_service.MODEL_ID
+    assert [launch._is_legacy_h3_model(name) for name in (legacy, f" {legacy} ", legacy + "_x", None)] == [
+        True, True, False, False]
+    engine = minimax_h3_service.CHARACTER_SHEET_ENGINE
+    sheet = launch._is_character_sheet_engine
+    assert [sheet({"character_sheet_engine": f" {engine} "}), sheet({"character_sheet_engine": "other"}),
+            sheet({}), sheet(None), sheet([engine])] == [True, False, False, False, False]
+
+    seed = launch._extract_output_seed
+    assert [seed(name) for name in ("clip_seed42_x.mp4", "seed7.png", "a_seed9", "clip_seed42x.mp4",
+                                    "clipseed42_x.mp4", "clip_seed.mp4", "clip_seed12_seed34.mp4")] == [
+        42, 7, 9, None, None, None, 12]
+
+    # Encoder recommendation: the hardware-aware choice when the model offers it, else the model's default
+    # when offered, else the first variant.
+    monkeypatch.setattr(launch, "_get_cached_hardware", lambda: {"gpu_vram_gb": 12})
+    chosen = []
+
+    def handler_for(answer):
+        def recommend(hardware, model_def):
+            chosen.append(hardware)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
+        return SimpleNamespace(recommend_text_encoder=recommend)
+
+    monkeypatch.setattr(full_server.wgp, "get_base_model_type", lambda model_type: model_type, raising=False)
+    encoder = launch._recommended_minimax_h3_encoder
+    variants = {"nvfp4_awq": {}, "int8": {}}
+    for answer, model_def, expected in (
+        ("int8", {"minimax_h3_text_encoder_variants": variants}, "int8"),
+        ("fp4", {"minimax_h3_text_encoder_variants": variants}, "nvfp4_awq"),
+        (RuntimeError("no kernel"), {"minimax_h3_text_encoder_variants": variants}, "nvfp4_awq"),
+        ("fp4", {"minimax_h3_text_encoder_variants": {"int8": {}, "bf16": {}}}, "int8"),
+        ("fp4", {"minimax_h3_text_encoder_variants": variants, "minimax_h3_text_encoder_default": "int8"}, "int8"),
+        ("int8", {}, "nvfp4_awq"),
+        ("int8", {"minimax_h3_text_encoder_default": "bf16"}, "bf16"),
+    ):
+        monkeypatch.setattr(full_server.wgp, "get_model_handler", lambda base, _a=answer: handler_for(_a), raising=False)
+        assert encoder("h3_by_arch", model_def) == expected, (answer, model_def)
+    assert chosen and all(hardware == {"gpu_vram_gb": 12} for hardware in chosen)
+
+    # Runtime advisory: only for an H3 architecture; a preflight failure is no advisory.
+    preflight = ModuleType("models.minimax_h3.minimax_h3_handler")
+    preflight.h3_runtime_preflight = lambda model_def, hardware: {"warn": model_def["architecture"], **hardware}
+    monkeypatch.setitem(sys.modules, "models.minimax_h3.minimax_h3_handler", preflight)
+    advisory = launch._minimax_h3_runtime_advisory
+    assert advisory({"architecture": "minimax_h3_full"}) == {"warn": "minimax_h3_full", "gpu_vram_gb": 12}
+    assert [advisory({"architecture": "wan"}), advisory({}), advisory(None)] == [None, None, None]
+    preflight.h3_runtime_preflight = lambda model_def, hardware: 1 / 0
+    assert advisory({"architecture": "minimax_h3_full"}) is None
