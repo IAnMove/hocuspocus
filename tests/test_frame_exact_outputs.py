@@ -239,6 +239,7 @@ def test_film_grain_keeps_every_frame_when_the_clip_audio_ends_before_the_pictur
     from services import generation_postprocess
 
     monkeypatch.setattr(generation_postprocess, "wgp", SimpleNamespace(server_config={}))
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)  # grain on the CPU: a test never touches the GPU
     video = _make_clip(tmp_path / "clip.mp4", FRAMES, audio_seconds=1.6)
     decord.bridge.set_bridge("torch")
     try:
