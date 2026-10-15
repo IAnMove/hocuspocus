@@ -842,6 +842,35 @@ def list_loras_details(model_type: str):
     }
 
 
+def _read_sidecar(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as sf:
+            sidecar = json.load(sf)
+    except Exception:
+        return {}
+    return sidecar if isinstance(sidecar, dict) else {}
+
+
+def _locate_lora_sidecar(filename: str, lora_root: str) -> tuple[str, str | None] | None:
+    """Where the override of one LoRA is kept: ``(sidecar to write, the linked file's own sidecar or None)``.
+
+    Same enumeration as the listing: the primary root first, then each linked install's, so the file the
+    caller sees in /loras/installed is the one found. A linked file is never written to: its override lives
+    at the primary-mirror base the listing reads before the file's own sidecar.
+    """
+    for walk_root, is_linked in [(lora_root, False)] + [(root, True) for root in _linked_lora_roots()]:
+        for dirpath, _dirnames, filenames in os.walk(walk_root):
+            if filename not in filenames:
+                continue
+            stem = os.path.splitext(filename)[0]
+            own_sidecar = os.path.join(dirpath, stem + ".civitai.json")
+            if not is_linked:
+                return own_sidecar, None
+            mirror_base = os.path.normpath(os.path.join(lora_root, os.path.relpath(dirpath, walk_root), stem))
+            return mirror_base + ".civitai.json", own_sidecar
+    return None
+
+
 async def set_lora_nsfw_override(request: Request):
     """Manually flag a LoRA as SFW or NSFW, overriding CivitAI's nsfw value.
 
@@ -874,33 +903,31 @@ async def set_lora_nsfw_override(request: Request):
 
     # Locate the sidecar by walking the tree — LoRAs live in subdirectories
     # by architecture, and the caller doesn't necessarily know which.
-    target_safetensors: str | None = None
-    for dirpath, _dirnames, filenames in os.walk(lora_root):
-        if filename in filenames:
-            target_safetensors = os.path.join(dirpath, filename)
-            break
-    if not target_safetensors:
+    located = _locate_lora_sidecar(filename, lora_root)
+    if not located:
         raise HTTPException(status_code=404, detail=f"LoRA not found: {filename}")
+    sidecar_path, linked_sidecar_path = located
 
-    sidecar_path = os.path.splitext(target_safetensors)[0] + ".civitai.json"
     if os.path.isfile(sidecar_path):
-        try:
-            with open(sidecar_path, "r", encoding="utf-8") as sf:
-                sidecar = json.load(sf)
-            if not isinstance(sidecar, dict):
-                sidecar = {}
-        except Exception:
-            sidecar = {}
+        sidecar = _read_sidecar(sidecar_path)
+    elif linked_sidecar_path:
+        # A linked file keeps its metadata in its own install, which is read-only. The override goes to the
+        # primary mirror the listing reads FIRST, so that file must start as a copy of the linked sidecar or
+        # the row would lose its name, trigger words and preview.
+        sidecar = _read_sidecar(linked_sidecar_path)
     else:
         # Create a minimal sidecar so the override has somewhere to live.
         sidecar = {}
 
     if nsfw_value is None:
+        if linked_sidecar_path and not os.path.isfile(sidecar_path) and "nsfw_override" not in sidecar:
+            return {"filename": filename, "nsfw": bool(sidecar.get("nsfw", False)), "nsfw_overridden": False}
         sidecar.pop("nsfw_override", None)
     else:
         sidecar["nsfw_override"] = bool(nsfw_value)
 
     try:
+        os.makedirs(os.path.dirname(sidecar_path), exist_ok=True)
         with open(sidecar_path, "w", encoding="utf-8") as sf:
             json.dump(sidecar, sf, indent=2)
     except Exception as e:

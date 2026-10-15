@@ -191,6 +191,15 @@ def _canonical_url(filename: str, workspace: str) -> str:
     return f"/api/v1/file/{quote(filename, safe='')}?workspace={quote(workspace, safe='')}"
 
 
+def canonical_file_url(filename: str, workspace: str | None) -> str:
+    """``/api/v1/file/<name>?workspace=<workspace>``: serves a produced file from the workspace it was written in.
+
+    A bare ``/api/v1/file/<name>`` is looked up in the ACTIVE workspace only, so a job that ran in another
+    workspace must say which one.
+    """
+    return _canonical_url(filename, workspace or "default")
+
+
 def _produced_file(filename: object, workspace: str, workspace_dir: str) -> dict[str, str] | None:
     name = str(filename or "").strip()
     if not name or _forbidden_character(name) or _escapes_workspace(name):

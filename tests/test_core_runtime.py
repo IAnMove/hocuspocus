@@ -236,6 +236,23 @@ class CoreRuntimeTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(published)
 
+    def test_finished_remote_3d_job_reports_a_url_that_names_its_workspace(self):
+        """A bare /api/v1/file/<name> is served from the ACTIVE workspace only; the job says where it ran."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.meshy_3d_service.generate_model", return_value={"filename": "meshy-where.glb"}), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_3d.threading.Thread", ImmediateThread):
+                started = self.client.post("/api/v1/model3d/generate", json={
+                    "provider": "meshy", "prompt": "a clay robot", "workspace": "default",
+                })
+            status = self.client.get(f"/api/v1/model3d/status/{started.json()['job_id']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(status.json()["status"], "completed", status.text)
+        self.assertEqual(status.json()["url"], "/api/v1/file/meshy-where.glb?workspace=default")
+
     def test_model3d_job_publishes_an_activity_task(self):
         folder, previous = self._in_temp_workspace()
         try:
