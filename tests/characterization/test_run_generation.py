@@ -629,11 +629,56 @@ def test_a_manifest_the_engine_cannot_parse_fails_the_job(rig, golden) -> None:
     rig.check(golden, "manifest errors", {"error": rig.observe(first), "empty queue": rig.observe(second)})
 
 
-def test_oddity_a_job_whose_tasks_are_all_skipped_completes_with_nothing(rig, golden) -> None:
-    """``completed == total - skipped`` holds at 0 == 0, so the job reports success and has no output."""
-    rig.set_wgp("validate_task", lambda task, state: None)
+def test_a_job_whose_tasks_are_all_skipped_fails_with_the_reason_wangp_gave(rig, golden) -> None:
+    """Owner decision 2026-10-15 (c7): when every task fails WanGP validation nothing ran, so the job fails and
+    carries WanGP's reason. WanGP gives the reason only through ``gr.Info``; the last notice before the skip is it."""
+    wgp = rig.server.wgp
+    notices: list[str] = []
+
+    def validate(task, state):
+        wgp.gr.Info("With Denoising Strength 0.5, Denoising will start at Step no 4")
+        wgp.gr.Info("Qwen Image 2.1 Official Turbo requires its fixed 8-step schedule.")
+        return None
+
+    rig.set_wgp("gr", types.SimpleNamespace(Info=lambda message, *args, **kwargs: notices.append(message)))
+    rig.set_wgp("validate_task", validate)
     job_id = rig.run(BODY)
-    rig.check(golden, "all tasks skipped", rig.observe(job_id))
+    observed = rig.observe(job_id)
+    rig.check(golden, "all tasks skipped", observed)
+    assert observed["status"]["status"] == "failed"
+    assert observed["status"]["error"] == "Qwen Image 2.1 Official Turbo requires its fixed 8-step schedule."
+    assert len(notices) == 2, "the notices still reach WanGP's own Info"
+
+
+def test_all_tasks_skipped_without_a_reported_reason_still_fails_the_job(rig) -> None:
+    rig.set_wgp("validate_task", lambda task, state: None)
+    observed = rig.observe(rig.run(BODY))
+    assert observed["status"]["status"] == "failed" and observed["status"]["error"]
+    assert "validation" in observed["status"]["error"].lower() and observed["files"] == []
+
+
+def test_the_validation_notice_recorder_forwards_every_call_and_hears_only_its_own_thread() -> None:
+    from services.generation_validation_notices import all_skipped_error, recorded_notices, skip_reason
+
+    heard: list[str] = []
+    fake = SimpleNamespace(gr=SimpleNamespace(Info=lambda message, *args, **kwargs: heard.append(message)))
+    with recorded_notices(fake) as first:
+        fake.gr.Info("hint")
+        other = threading.Thread(target=lambda: fake.gr.Info("from another thread"))
+        other.start()
+        other.join()
+        fake.gr.Info("the complaint", duration=3)
+    with recorded_notices(fake) as second:  # the tap is installed once, not wrapped again
+        fake.gr.Info("later")
+    fake.gr.Info("outside")
+    assert first == ["hint", "the complaint"] and second == ["later"]
+    assert heard == ["hint", "from another thread", "the complaint", "later", "outside"]
+    assert skip_reason(first) == "the complaint" and skip_reason([]) == ""
+    with recorded_notices(SimpleNamespace()) as nothing:  # a WanGP without gradio records nothing and still works
+        assert nothing == []
+    assert all_skipped_error(["a reason"]) == "a reason"
+    assert all_skipped_error(["a", "a", ""]) == "WanGP skipped all 3 tasks during validation: a"
+    assert "no reason" in all_skipped_error([""])
 
 
 @pytest.mark.parametrize("stage", ["depth", "h3_lora", "managed_lora"])

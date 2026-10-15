@@ -91,6 +91,7 @@ class _GenerationRun:
         self.job_id, self.job, self.finalize = job_id, job, finalize
         self.AsyncStream, self.async_run, self.inspect = AsyncStream, async_run, inspect
         self.active_task_timer = self.abort_state = None
+        self.failure_error = None  # why a job with nothing to blame an engine error on failed (every task skipped)
 
 
 def _run_generation(job_id: str, *, finalize: bool = True) -> bool:

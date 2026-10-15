@@ -663,6 +663,7 @@ def _run_generation_finish(st):
             **deferred_updates,
         )
 
+    failure_error = None if success else st.failure_error
     finish_job(
         job,
         "completed" if success else "failed",
@@ -670,6 +671,7 @@ def _run_generation_finish(st):
         step=0,
         total_steps=0,
         phase="",
-        message="Done" if success else (job.get("error") or "Generation failed"),
+        message="Done" if success else (failure_error or job.get("error") or "Generation failed"),
+        **({"error": failure_error} if failure_error else {}),
     )
     return success and job.get("status") == "completed"

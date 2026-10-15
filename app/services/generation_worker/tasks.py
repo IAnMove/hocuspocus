@@ -24,6 +24,7 @@ from services.job_lifecycle import (
 from shared.utils.generation_timing import GenerationTaskTimer
 from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 from services.generation_worker.finalize import _run_generation_finalize
+from services.generation_validation_notices import all_skipped_error, recorded_notices, skip_reason
 
 # Injected by bind(); None until the full server binds them.
 _extract_output_seed = None
@@ -201,6 +202,7 @@ def _run_generation_tasks(st):
     gen, inspect, is_multiclip, job, job_id = st.gen, st.inspect, st.is_multiclip, st.job, st.job_id
     join_output_file, out_dir, queue = st.join_output_file, st.out_dir, st.queue
     skipped, start_time, state, total_tasks = st.skipped, st.start_time, st.state, st.total_tasks
+    skip_reasons: list[str] = []
     try:
         for task_idx, task in enumerate(queue):
             if is_cancel_requested(job):
@@ -234,8 +236,10 @@ def _run_generation_tasks(st):
                     cancelled = True
                     break
 
-            validated_params = wgp.validate_task(task, state)
+            with recorded_notices(wgp) as notices:
+                validated_params = wgp.validate_task(task, state)
             if validated_params is None:
+                skip_reasons.append(skip_reason(notices))
                 print(f"  [SKIP] Task {task_no} failed validation")
                 active_task_timer.finish("skipped")
                 active_task_timer = None
@@ -266,6 +270,9 @@ def _run_generation_tasks(st):
             summary += f" ({skipped} skipped)"
         print(summary)
         success = not cancelled and completed == (total_tasks - skipped)
+        if success and total_tasks > 0 and skipped == total_tasks:
+            # Nothing ran and nothing was made: "0 == 0" is not a success (owner decision 2026-10-15).
+            success, st.failure_error = False, all_skipped_error(skip_reasons)
     finally:
         st.active_task_timer = active_task_timer
     st.cancelled, st.join_output_file, st.success = cancelled, join_output_file, success
