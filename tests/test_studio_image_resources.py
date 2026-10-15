@@ -463,3 +463,47 @@ def test_lora_multiplier_phases_are_validated_without_normalizing_or_mutating_in
             },
             maximum_phases=2,
         )
+
+
+def _rgba(path: Path, opaque_color=(255, 255, 255), size=(32, 20)):
+    """What ``media.compose`` writes: an RGBA PNG, here with an opaque left half and a transparent right half."""
+    picture = Image.new("RGBA", size, (*opaque_color, 255))
+    picture.paste((9, 9, 9, 0), (size[0] // 2, 0, size[0], size[1]))
+    picture.save(path)
+
+
+def test_a_guide_and_a_mask_with_alpha_reach_the_engine_as_three_channel_pictures(resources_fixture):
+    """Sol 2026-10-15: inpaint/outpaint with an RGBA PNG failed in 0.3 s (``shapes (480,864,4,1) (480,864,4)``, ``expanded size (4) must
+    match the existing size (3)``): the engine reads a guide and a mask as three-channel frames."""
+    fixture = resources_fixture
+    _rgba(fixture["uploads"] / "mask.png", (255, 255, 255))
+    _rgba(fixture["uploads"] / "room.png", (200, 100, 50))
+    write_image(fixture["uploads"] / "plain.png", (1, 2, 3))
+    params = {"workspace": "output", "image_guide": canonical_upload("room.png"), "image_mask": canonical_upload("mask.png"),
+              "image_refs": [canonical_upload("plain.png")]}
+
+    working, resources = fixture["service"].prepare_media(params)
+
+    with Image.open(working["image_mask"]) as mask, Image.open(working["image_guide"]) as guide:
+        assert mask.mode == guide.mode == "RGB" and mask.size == guide.size == (32, 20)
+        assert mask.getpixel((4, 4)) == (255, 255, 255) and mask.getpixel((28, 4)) == (0, 0, 0), "transparent is not masked: black"
+        assert guide.getpixel((4, 4)) == (200, 100, 50) and guide.getpixel((28, 4)) == (127, 127, 127), "transparent is neutral grey"
+    assert working["image_refs"] == [str((fixture["uploads"] / "plain.png").resolve())], "a picture without alpha is passed as it is"
+    # The recorded identity is still the picture the person chose, and that file is not touched.
+    assert [item["sha256"] for item in resources if item["role"] == "image_mask"] == [hashlib.sha256((fixture["uploads"] / "mask.png").read_bytes()).hexdigest()]
+    with Image.open(fixture["uploads"] / "mask.png") as original:
+        assert original.mode == "RGBA"
+    # The same picture is flattened once: the second request finds the copy.
+    again, _ = fixture["service"].prepare_media(params)
+    assert again["image_mask"] == working["image_mask"] and again["image_guide"] == working["image_guide"]
+
+
+def test_an_opaque_rgba_mask_made_by_the_app_keeps_its_shape_and_a_picture_without_alpha_is_untouched(resources_fixture):
+    fixture = resources_fixture
+    Image.new("RGBA", (16, 8), (0, 0, 0, 255)).save(fixture["uploads"] / "canvas.png")
+    write_image(fixture["uploads"] / "photo.png", (20, 30, 40))
+    working, _ = fixture["service"].prepare_media({"workspace": "output", "image_mask": canonical_upload("canvas.png"),
+                                                   "image_guide": canonical_upload("photo.png")})
+    with Image.open(working["image_mask"]) as mask:
+        assert mask.mode == "RGB" and mask.size == (16, 8) and mask.getpixel((3, 3)) == (0, 0, 0)
+    assert working["image_guide"] == str((fixture["uploads"] / "photo.png").resolve())
