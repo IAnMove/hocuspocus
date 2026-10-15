@@ -2,7 +2,7 @@
 the room, and a shot that shows the previous shot's picture goes on from its camera instead of cutting back."""
 from services.series_continuity import CAMERA_LIMIT, camera_start, focus, inputs, ordered, same_picture_warnings
 from services.series_shot_plan import background_point, build_shot_spec, normalize_layout2d
-from services.series_take_inputs import INPUTS_VERSION, render_inputs, stale_shot_ids
+from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
 
 
 def series():
@@ -119,7 +119,9 @@ def test_an_episode_made_before_the_neighbours_counted_renders_nothing_again():
     assert inputs(value, ep, second), "this shot does take something from its neighbour"
     before = render_inputs(value, second, kits, version=INPUTS_VERSION - 1)
     assert before != render_inputs(value, second, kits, episode=ep)
-    assert "s2" not in stale_shot_ids(value, _taken(value, ep, "s2", before, INPUTS_VERSION - 1), kits)
+    old_take = _taken(value, ep, "s2", before, INPUTS_VERSION - 1)
+    assert "s2" not in stale_shot_ids(value, old_take, kits)
+    assert accepted_inputs(value, old_take["shots"][1], kits, episode=ep) == before, "the review compares with what the old take kept"
     now = render_inputs(value, second, kits, episode=ep)
     assert "s2" not in stale_shot_ids(value, _taken(value, ep, "s2", now, INPUTS_VERSION), kits)
     static_first = episode({**ep["shots"][0], "layout2d": {**ep["shots"][0]["layout2d"], "camera": "static"}}, second)
