@@ -427,7 +427,7 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
         cls.resolve_geometry = staticmethod(
             _load_functions(
                 _OUTPAINT_PLANNING,
-                ("_resolve_outpaint_canvas_geometry",),
+                ("_resolve_outpaint_canvas_geometry", "_format_outpaint_percentage"),
                 {
                     "math": math,
                     "_OUTPAINT_PIXEL_BUDGETS": {
@@ -455,6 +455,21 @@ class TestMaskPreservingOutpaint(unittest.TestCase):
                 ("get_outpainting_dims",),
             )["get_outpainting_dims"]
         )
+
+    @_requires_torch
+    def test_planning_and_inference_agree_on_the_protected_rectangle(self):
+        """edit-05: planning resolved the exact floats (383 px), the job carries 8-decimal text and the model parses
+        that (384 px). Both must read the text the job carries."""
+        from services.outpaint_planning import _format_outpaint_percentage
+        from shared.utils.utils import get_outpainting_frame_location
+
+        geometry = self.resolve_geometry(384, 256, 0, 0, 128, 128, "auto", 64)
+        self.assertEqual((geometry["final_w"], geometry["final_h"]), (640, 256))
+        carried = [float(_format_outpaint_percentage(value)) for value in geometry["dims"]]
+        inferred = get_outpainting_frame_location(geometry["final_h"], geometry["final_w"], carried, 1)
+        planned = (geometry["overlay_h"], geometry["overlay_w"], geometry["overlay_y"], geometry["overlay_x"])
+        self.assertEqual(planned, inferred)
+        self.assertEqual(geometry["overlay_w"], 384)
 
     @_requires_torch
     def test_portrait_canvas_is_aligned_before_mask_geometry(self):

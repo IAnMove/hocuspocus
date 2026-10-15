@@ -958,3 +958,26 @@ def test_the_editor_shows_the_same_default_cycle():
     block = re.search(r"DEFAULT_COVERAGE_CYCLE[^=]*=\s*\[(.*?)\]", source, re.S)
     assert block, "DEFAULT_COVERAGE_CYCLE not found"
     assert re.findall(r"'([^']+)'", block.group(1)) == list(COVERAGE_SEQUENCE)
+
+
+def test_a_wrongly_typed_plan_field_is_a_422_that_names_it_before_any_job_or_activity_exists(tmp_path, monkeypatch):
+    """lyrics as a string was accepted, made a durable job and answered a 500 with "'str' object has no attribute 'get'"
+    from inside the planner (and a resume repeated it)."""
+    import asyncio
+
+    from fastapi import HTTPException
+
+    from app.services import director_v2_plan as plan
+    from app.services import llm_service
+
+    tracked = []
+    monkeypatch.setattr(llm_service, "begin_activity_tracking", lambda *a, **k: tracked.append(a))
+    monkeypatch.setattr(plan, "_workspace_dir", lambda workspace=None: str(tmp_path))
+    monkeypatch.setattr(plan, "_get_active_workspace", lambda: "default")
+    for field, value in (("lyrics", "la la la"), ("lyrics", [{"text": "ok", "start": 0, "end": 1}, "bad"]),
+                         ("clips", "one clip"), ("characters", {"name": "Ana"})):
+        body = {"skill_type": "music_video", "activity_id": "act-1", "scene_description": "x", "clips": [{"start": 0}], field: value}
+        with pytest.raises(HTTPException) as raised:
+            asyncio.run(plan._director_v2_plan_body(body))
+        assert raised.value.status_code == 422 and field in str(raised.value.detail), (field, raised.value.detail)
+    assert list(tmp_path.iterdir()) == [] and tracked == [], "no job directory and no Activity row were made"

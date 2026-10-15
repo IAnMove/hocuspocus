@@ -8,6 +8,7 @@ the same objects the rest of the server uses; this module does not import WanGP,
 """
 
 import gc
+import math
 import os
 import time
 import traceback
@@ -19,6 +20,37 @@ _apply_spatial_upsampling_to_file = None
 _build_recast_adaptive_mask = None
 _render_recast_mask_locked_video = None
 wgp = None
+
+
+def _source_audio_args(picture_seconds):
+    """Source audio muxed into the finished Outpaint file.
+
+    It is re-encoded, so it can be shorter than the picture: pad it, and let
+    ``-shortest`` bound only a longer track. A bare ``-shortest`` cut the last
+    frames of the picture instead. ``-t`` (just after the picture ends, when its
+    length is known) bounds the pad: with an endless pad ffmpeg 7+ lets the
+    audio run on for up to its 10 s ``-shortest`` buffer when the machine is
+    busy. The bound is rounded UP to the next millisecond: audio that ends even
+    a fraction of one before the last frame ends makes ``-shortest`` drop it
+    (100 frames at 30 fps last 3.3333 s; "3.333" cost a copied picture 2 frames).
+    """
+    args = ["-map", "1:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+    if picture_seconds > 0:
+        args += ["-t", f"{(math.floor(round(picture_seconds * 1000, 6)) + 1) / 1000:.3f}"]
+    return args
+
+
+def _picture_seconds(subprocess, path):
+    """Length in seconds of the first video stream, 0 when it cannot be read."""
+    try:
+        probe = subprocess.run(
+            ["ffprobe", "-v", "quiet", "-select_streams", "v:0",
+             "-show_entries", "stream=duration", "-of", "csv=p=0", path],
+            capture_output=True, text=True, timeout=10,
+        )
+        return max(0.0, float(str(probe.stdout).strip().split(",")[0]))
+    except Exception:
+        return 0.0
 
 
 def bind(**names):
@@ -267,8 +299,8 @@ def _run_generation_outpaint_command(
         cut_end = (_trim_boundary + _trim_count) / _fps
         # ffmpeg trim+concat: keep [0, cut_start) and [cut_end, end).
         # asetpts on source audio resets PTS so it starts at 0
-        # in the output timeline; -shortest will clamp the audio
-        # to the (now shorter by N frames) trimmed video duration.
+        # in the output timeline; the padded audio + -shortest clamp
+        # it to the (now shorter by N frames) trimmed video duration.
         filter_str = (
             f"[0:v]trim=0:{cut_start:.6f},setpts=PTS-STARTPTS[v0];"
             f"[0:v]trim={cut_end:.6f},setpts=PTS-STARTPTS[v1];"
@@ -277,7 +309,8 @@ def _run_generation_outpaint_command(
         cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
         if _do_audio and src_has_audio:
-            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+            _kept = _picture_seconds(subprocess, out_video)
+            cmd += _source_audio_args(_kept - _trim_count / _fps if _kept > 0 else 0)
         else:
             cmd += ["-an"]  # drop audio if we can't replace it
     elif _do_overlay:
@@ -315,18 +348,21 @@ def _run_generation_outpaint_command(
         cmd += ["-filter_complex", filter_str, "-map", "[outv]"]
         cmd += ["-c:v", "libx264", "-crf", "18", "-preset", "fast", "-pix_fmt", "yuv420p"]
         if _do_audio and src_has_audio:
-            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+            cmd += _source_audio_args(_picture_seconds(subprocess, out_video))
         else:
             cmd += ["-map", "0:a?", "-c:a", "copy"]
     else:
         # Audio mux only — no video filter
         cmd += ["-map", "0:v:0", "-c:v", "copy"]
         if _do_audio and src_has_audio:
-            cmd += ["-map", "1:a:0", "-c:a", "aac", "-b:a", "192k"]
+            cmd += _source_audio_args(_picture_seconds(subprocess, out_video))
         else:
             cmd += ["-map", "0:a?", "-c:a", "copy"]
 
-    cmd += ["-shortest", muxed_path]
+    # No trailing ``-shortest``: it belongs only to the re-encoded source
+    # audio above (padded first). Copied audio keeps its own length and the
+    # picture must never be cut to it.
+    cmd += [muxed_path]
     return _do_overlay, cmd
 
 

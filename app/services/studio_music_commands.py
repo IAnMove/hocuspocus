@@ -16,9 +16,11 @@ def music_command_catalog():
         "mutation": True,
         "description": (
             "Admit one local music generation with literal lyrics and caption "
-            "through the canonical generation queue. The selected ACE-Step or "
-            "MiniMax-Music3 model must already be installed; retries reuse the "
-            "same intent receipt."
+            "through the canonical generation queue. input.params.model_type "
+            "must be one of "
+            + ", ".join(schema["music_model_types"])
+            + " (ACE-Step, MiniMax-Music3 local, YuE2) and that model must "
+            "already be installed; retries reuse the same intent receipt."
         ),
         "musicModelTypes": list(schema["music_model_types"]),
         "guideRevision": schema["guide_revision"],

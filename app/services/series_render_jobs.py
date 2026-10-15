@@ -12,6 +12,7 @@ import copy
 import hashlib
 import json
 import os
+import re
 import threading
 import time
 import uuid
@@ -22,6 +23,7 @@ from services.job_lifecycle import snapshot_job
 _series_render_jobs: dict[str, dict] = {}
 _series_render_jobs_lock = threading.RLock()
 _series_render_active_jobs: set[str] = set()
+INTERRUPTED = "The server restarted during this render; resume to continue"
 
 
 def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
@@ -53,20 +55,56 @@ _release_h3_when_queue_allows = None
 _cancel_series_render_job = None
 
 
+def _clip_name(shot_id: str, child_job_id: str) -> str:
+    """The file stem a render asks WanGP for: only ``[A-Za-z0-9_-]``, unique to this child job.
+
+    WanGP names an unnamed clip after its prompt (spaces and brackets stay) and adds ``(2)`` when a name is taken;
+    ``validate_series_asset_uri`` accepts neither, so the finished clip was registered as a failure.
+    Like ``series_native_render``, a Series render names its outputs. The whole stem stays within 50 bytes, where
+    WanGP cuts names on Windows (``truncate_for_filesystem``): a planner shot id (``shot_`` + 32 hex) would push the
+    child job id, the part that makes the name unique, past that cut."""
+    shot = re.sub(r"[^A-Za-z0-9_-]+", "_", str(shot_id)).strip("_")[:24] or "shot"
+    return f"series-{shot}-{child_job_id}"
+
+
 def _series_render_store(workspace: str):
     from services.series_jobs import SeriesJobStore
 
     return SeriesJobStore(_workspace_dir(workspace), "render")
 
+
+def _reconcile_series_render_job(job: dict) -> dict:
+    """A checkpoint that says running without a worker in this process was cut by a restart: interrupted, once.
+
+    A render this process started is in ``_series_render_jobs`` and, while it works, in ``_series_render_active_jobs``;
+    anything else read from disk is dead. Like ``series_native_render._reconcile`` only the job's status, message and
+    end time change: its items stay as they were, which is what ``cancel_series_render_job`` and
+    ``resume_series_render_job`` already handle after a restart (they cancel, or append a new attempt for, a running item).
+    The interrupted job still owns its episode (``_active_series_render_for_episode``) until it is resumed, cancelled
+    or discarded."""
+    job_id = str(job.get("jobId") or "")
+    if job.get("status") != "running":
+        return job
+    with _series_render_jobs_lock:
+        if job_id in _series_render_active_jobs or job_id in _series_render_jobs:
+            return job
+    settled = copy.deepcopy(job)
+    now = time.time()
+    settled.update(status="interrupted", message=INTERRUPTED, finishedAt=now, updatedAt=now)
+    _series_render_store(str(settled.get("workspace") or "default")).save(settled)
+    return settled
+
 def _active_series_render_for_episode(
     workspace: str, series_id: str, episode_id: str,
 ) -> dict | None:
     """Return the one queue that owns an episode, including after restart."""
-    active_statuses = {"queued", "running", "cancelling"}
+    # An interrupted queue (a restart cut it, see _reconcile_series_render_job) still owns the episode: its attempts are
+    # not settled until it is resumed, cancelled or discarded, and a second render would append duplicates.
+    active_statuses = {"queued", "running", "cancelling", "interrupted"}
     with _series_render_jobs_lock:
         cached = [copy.deepcopy(job) for job in _series_render_jobs.values()]
     try:
-        persisted = _series_render_store(workspace).list()
+        persisted = [_reconcile_series_render_job(job) for job in _series_render_store(workspace).list()]
     except (OSError, ValueError, json.JSONDecodeError):
         persisted = []
     by_id = {
@@ -93,6 +131,7 @@ def _load_series_render_job(job_id: str) -> dict | None:
         except (OSError, ValueError, json.JSONDecodeError):
             continue
         if job:
+            job = _reconcile_series_render_job(job)
             with _series_render_jobs_lock:
                 _series_render_jobs[job_id] = job
             return copy.deepcopy(job)
@@ -314,6 +353,7 @@ def _run_series_render_job_inner(job_id: str) -> None:
                     json.dumps(params, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")
                 ).hexdigest()
                 child_job_id = f"sr{uuid.uuid4().hex[:10]}"
+                params["output_filename"] = _clip_name(current_item["shotId"], child_job_id)
                 child = _new_generation_job(
                     params, str(latest["workspace"]), job_id=child_job_id,
                 )

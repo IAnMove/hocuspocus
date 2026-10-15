@@ -7,7 +7,8 @@ location that is not its scene's, is ``location_differs_from_scene``. A 3D
 template whose backdrop is another location's image is
 ``template_backdrop_other_location``. The shot checks group theirs the same way
 (``group_warning``): a document too long to read is ``document_text_too_long``
-by its title, and video shots past ``videoBudget.maxShots`` are ``video_budget``.
+by its title, video shots past ``videoBudget.maxShots`` are ``video_budget``, and video shots on
+a series that does not allow ``imported_video`` are ``imported_video_not_allowed`` (writing the script allows it).
 None of them stops ``check``. A line in the episode language whose kit has no voice
 (``voicesByLanguage`` or ``kit.voice``) is an error, because the render would
 fail; a video or generated shot is not voiced, so it is not checked. ``castIndex`` must point at the shot's cast.

@@ -514,6 +514,7 @@ def test_the_sidecar_keeps_upload_names_of_lists_and_drops_the_private_keys(monk
             "_recast_shot_bundle": {},
             "_defer_output_publication": True,
             "_recast_source_video": "/tmp/in/source.mp4",
+            "_recast_protect_bystanders": True,
         },
     }
     write(job, "/out/final.mp4", {"frame_count": "24", "resolved_seed": "7", "published_shots": [{"id": 1}]}, 2.6)
@@ -521,8 +522,9 @@ def test_the_sidecar_keeps_upload_names_of_lists_and_drops_the_private_keys(monk
     assert path == "/out/final.mp4"
     assert kwargs == {"workspace_id": "ws", "tool": "recast"}
     assert sidecar["upload_filenames"] == {"video_guide": "source.mp4", "audio_guide": ["one.wav", "", "", ""]}
+    # edit-11: the worker-private source path and protection flag are dropped like the other private keys.
     assert sorted(sidecar["params"]) == [
-        "_recast_source_video", "audio_guide", "edit_recast_shot_aware", "edit_recast_shot_plan", "generation_mode",
+        "audio_guide", "edit_recast_shot_aware", "edit_recast_shot_plan", "generation_mode",
         "image_start", "prompt", "seed", "video_guide", "video_length",
     ]
     assert (sidecar["params"]["video_length"], sidecar["params"]["seed"]) == (24, 7)

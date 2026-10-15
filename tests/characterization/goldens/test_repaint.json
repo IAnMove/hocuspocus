@@ -4,6 +4,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -34,6 +35,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -187,6 +189,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -216,6 +219,7 @@
           "accepted": {
             "frames": 48,
             "generation_details": {
+              "edit_sub_mode": "restyle",
               "execution_mode": "real",
               "flow_shift": 5,
               "frames": 48,
@@ -445,6 +449,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -474,6 +479,7 @@
           "accepted": {
             "frames": 48,
             "generation_details": {
+              "edit_sub_mode": "restyle",
               "execution_mode": "real",
               "flow_shift": 5,
               "frames": 48,
@@ -689,6 +695,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -718,6 +725,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -1391,6 +1399,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -1420,6 +1429,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -1635,6 +1645,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -1664,6 +1675,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -3502,6 +3514,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -3531,6 +3544,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -5222,6 +5236,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -5251,6 +5266,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -5982,6 +5998,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -6011,6 +6028,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -7211,6 +7229,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -7240,6 +7259,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -7515,6 +7535,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -7544,6 +7565,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -9205,6 +9227,7 @@
       "answer": {
         "frames": 48,
         "generation_details": {
+          "edit_sub_mode": "restyle",
           "execution_mode": "real",
           "flow_shift": 5,
           "frames": 48,
@@ -9234,6 +9257,7 @@
         "accepted": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -9914,6 +9938,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -9951,6 +9976,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -10717,6 +10743,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -10746,6 +10773,7 @@
           "accepted": {
             "frames": 48,
             "generation_details": {
+              "edit_sub_mode": "restyle",
               "execution_mode": "real",
               "flow_shift": 5,
               "frames": 48,
@@ -11110,6 +11138,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 48,
@@ -11139,6 +11168,7 @@
           "accepted": {
             "frames": 48,
             "generation_details": {
+              "edit_sub_mode": "restyle",
               "execution_mode": "real",
               "flow_shift": 3,
               "frames": 48,
@@ -11601,6 +11631,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -11630,6 +11661,7 @@
           "accepted": {
             "frames": 48,
             "generation_details": {
+              "edit_sub_mode": "restyle",
               "execution_mode": "real",
               "flow_shift": 5,
               "frames": 48,
@@ -12126,6 +12158,7 @@
         "answer": {
           "frames": 48,
           "generation_details": {
+            "edit_sub_mode": "restyle",
             "execution_mode": "real",
             "flow_shift": 5,
             "frames": 48,
@@ -12155,6 +12188,7 @@
           "accepted": {
             "frames": 48,
             "generation_details": {
+              "edit_sub_mode": "restyle",
               "execution_mode": "real",
               "flow_shift": 5,
               "frames": 48,

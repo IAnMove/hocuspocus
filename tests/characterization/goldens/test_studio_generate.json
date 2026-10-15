@@ -284,6 +284,115 @@
     },
     "status": 200
   },
+  "edit routes refuse values that are not numbers": {
+    "body": {
+      "edit anything guidance_scale": {
+        "answer": {
+          "detail": "guidance_scale must be a number"
+        },
+        "status": 400
+      },
+      "edit anything lora_strength": {
+        "answer": {
+          "detail": "lora_strength must be a number"
+        },
+        "status": 400
+      },
+      "edit anything num_inference_steps": {
+        "answer": {
+          "detail": "num_inference_steps must be a whole number"
+        },
+        "status": 400
+      },
+      "edit anything retake_strength": {
+        "answer": {
+          "detail": "retake_strength must be a number"
+        },
+        "status": 400
+      },
+      "edit anything start_time": {
+        "answer": {
+          "detail": "start_time must be a number"
+        },
+        "status": 400
+      },
+      "extract frames end_time": {
+        "answer": {
+          "detail": "end_time must be a number"
+        },
+        "status": 400
+      },
+      "extract frames start_time": {
+        "answer": {
+          "detail": "start_time must be a number"
+        },
+        "status": 400
+      },
+      "inpaint guidance_scale": {
+        "answer": {
+          "detail": "guidance_scale must be a number"
+        },
+        "status": 400
+      },
+      "inpaint mask_padding": {
+        "answer": {
+          "detail": "mask_padding must be a whole number"
+        },
+        "status": 400
+      },
+      "inpaint num_inference_steps": {
+        "answer": {
+          "detail": "num_inference_steps must be a whole number"
+        },
+        "status": 400
+      },
+      "inpaint retake_strength": {
+        "answer": {
+          "detail": "retake_strength must be a number"
+        },
+        "status": 400
+      },
+      "inpaint start_time": {
+        "answer": {
+          "detail": "start_time must be a number"
+        },
+        "status": 400
+      },
+      "jobs registered": [],
+      "recast end_time alone": {
+        "answer": {
+          "detail": "end_time must be a number"
+        },
+        "status": 400
+      },
+      "recast start_time": {
+        "answer": {
+          "detail": "start_time must be a number"
+        },
+        "status": 400
+      },
+      "retake end_time": {
+        "answer": {
+          "detail": "end_time must be a number"
+        },
+        "status": 400
+      },
+      "retake retake_strength": {
+        "answer": {
+          "detail": "retake_strength must be a number"
+        },
+        "status": 400
+      },
+      "retake start_time": {
+        "answer": {
+          "detail": "start_time must be a number"
+        },
+        "status": 400
+      },
+      "uploads": []
+    },
+    "status": 200
+  },
   "edit-anything requires a model": {
     "body": {
       "detail": "model_type is required"
@@ -2468,6 +2577,7 @@
       "cached mask and explicit target": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "inpaint",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -2491,6 +2601,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "inpaint",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -2708,6 +2819,7 @@
       "sam mask, parsed intent, inverted": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "inpaint",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -2731,6 +2843,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "inpaint",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -3110,6 +3223,7 @@
       "job": {
         "accepted": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -3508,6 +3622,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 1,
               "generation_mode": "image",
@@ -3812,6 +3927,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 24,
               "generation_mode": "video",
@@ -4313,6 +4429,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -4530,6 +4647,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -4731,6 +4849,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 8,
@@ -4934,6 +5053,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5135,6 +5255,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5336,6 +5457,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5549,6 +5671,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5774,6 +5897,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5936,6 +6060,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6224,6 +6349,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6492,6 +6618,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6644,6 +6771,7 @@
       "answer": {
         "frames": 17,
         "generation_details": {
+          "edit_sub_mode": "recast",
           "execution_mode": "real",
           "flow_shift": 3,
           "frames": 17,
@@ -6674,6 +6802,7 @@
         "accepted": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 17,
@@ -6849,6 +6978,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "simulate",
             "flow_shift": 1,
             "frames": 17,
@@ -7003,6 +7133,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -7300,6 +7431,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -7592,6 +7724,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -7844,6 +7977,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -8142,6 +8276,7 @@
       "answer": {
         "frames": 17,
         "generation_details": {
+          "edit_sub_mode": "recast",
           "execution_mode": "real",
           "flow_shift": 3,
           "frames": 17,
@@ -8172,6 +8307,7 @@
         "accepted": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 17,
@@ -8640,6 +8776,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -8907,6 +9044,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9164,6 +9302,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9426,6 +9565,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9684,6 +9824,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9923,6 +10064,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -10765,6 +10907,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11055,6 +11198,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11216,6 +11360,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11466,6 +11611,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11697,6 +11843,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11928,6 +12075,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -12127,9 +12275,11 @@
         "status": 200
       },
       "trim times that are not numbers": {
-        "calls": [],
+        "answer": {
+          "detail": "start_time must be a number"
+        },
         "ffmpeg": [],
-        "server error": "ValueError: could not convert string to float: 'soon'"
+        "status": 400
       }
     },
     "status": 200
@@ -12289,6 +12439,7 @@
         "answer": {
           "edit_range": "0-24/48",
           "generation_details": {
+            "edit_sub_mode": "edit_anything",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -12316,6 +12467,7 @@
           "accepted": {
             "edit_range": "0-24/48",
             "generation_details": {
+              "edit_sub_mode": "edit_anything",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -12646,6 +12798,7 @@
         "answer": {
           "edit_range": "0-48/48",
           "generation_details": {
+            "edit_sub_mode": "edit_anything",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -12672,6 +12825,7 @@
           "accepted": {
             "edit_range": "0-48/48",
             "generation_details": {
+              "edit_sub_mode": "edit_anything",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -13145,6 +13299,7 @@
       "retake": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "retake",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -13167,6 +13322,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "retake",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -13456,6 +13612,12 @@
           }
         ]
       ],
+      "end time that is not a number": {
+        "body": {
+          "detail": "end_time must be a number"
+        },
+        "status": 400
+      },
       "full video": {
         "body": {
           "frames": 2,
@@ -13485,6 +13647,12 @@
         "status": 200
       },
       "mask inverted": true,
+      "mask padding that is not a number, full video": {
+        "body": {
+          "detail": "mask_padding must be a whole number"
+        },
+        "status": 400
+      },
       "other error": {
         "body": {
           "detail": "bad frame"
@@ -13519,13 +13687,19 @@
       },
       "sam not available": {
         "body": {
-          "detail": "503: SAM service not available. Check installation."
+          "detail": "SAM service not available. Check installation."
         },
-        "status": 500
+        "status": 503
       },
       "sam status": {
         "model_loaded": true,
         "status": "ready"
+      },
+      "start time that is not a number": {
+        "body": {
+          "detail": "start_time must be a number"
+        },
+        "status": 400
       }
     },
     "status": 200
