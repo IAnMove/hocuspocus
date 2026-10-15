@@ -258,3 +258,102 @@ def test_a_port_left_in_time_wait_by_the_previous_server_is_bound_again():
         assert bound == port, "the same port again, not the next one"
     finally:
         listener.close()
+
+
+STALLING_SERVER = textwrap.dedent(
+    """
+    import ctypes, os, sys, threading, time
+    sys.path.insert(0, os.environ["APP_DIR"])
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    native = ctypes.PyDLL(None)  # PyDLL keeps the GIL for the whole call, like a long native model call
+
+    @app.get("/status")
+    def status():
+        return {"ok": True}
+
+    @app.post("/stall")
+    async def stall():
+        threading.Thread(target=lambda: (time.sleep(0.5), native.sleep(int(os.environ["STALL_SECONDS"]))), daemon=True).start()
+        return {"started": True}
+
+    from services.server_lifecycle import run_until_stopped
+    run_until_stopped(app, host="127.0.0.1", port=int(os.environ["PORT"]))
+    """
+)
+
+
+def test_the_server_keeps_idle_connections_longer_than_a_native_stall(tmp_path):
+    """gen-03: a polling client lost requests during model loads (ConnectionResetError, a lost Cancel).
+
+    Another thread held the GIL in one long native call, so the whole interpreter stood still for longer than
+    Uvicorn's default 5 s keep-alive. When it woke, the expired keep-alive timer closed the socket with the
+    client's unread request in it. The server runs in its own process here (a GIL hog in the test's own process
+    would freeze the poller too); the stall outlasts the old 5 s timeout. Cause of the stall: unknown, it needs a
+    GPU run; this is the mitigation.
+    """
+    script = tmp_path / "stalling_server.py"
+    script.write_text(STALLING_SERVER, encoding="utf-8")
+    port = _free_port()
+    process = subprocess.Popen(
+        [sys.executable, str(script)],
+        env={**os.environ, "APP_DIR": str(APP_DIR), "PORT": str(port), "STALL_SECONDS": "7",
+             "HOCUSPOCUS_GRACEFUL_SECONDS": "1"},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline:
+            try:
+                socket.create_connection(("127.0.0.1", port), 0.2).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        else:
+            pytest.fail("server did not start")
+        poller = http.client.HTTPConnection("127.0.0.1", port, timeout=40)
+        poller.request("GET", "/status")
+        assert poller.getresponse().read() == b'{"ok":true}'  # the connection is now idle and kept alive
+        starter = http.client.HTTPConnection("127.0.0.1", port, timeout=10)
+        starter.request("POST", "/stall")
+        assert starter.getresponse().status == 200
+        starter.close()
+        time.sleep(1.5)  # the interpreter is frozen from here on; the next request waits in the socket
+        poller.request("GET", "/status")
+        answer = poller.getresponse()
+        assert answer.status == 200 and answer.read() == b'{"ok":true}'
+        poller.close()
+    finally:
+        process.send_signal(signal.SIGTERM)
+        assert _wait_gone(process.pid, 15)
+
+
+def test_the_server_is_configured_to_keep_idle_connections_for_75_seconds(monkeypatch):
+    """The quick form of the test above: the Config the server is built with."""
+    import uvicorn
+    from fastapi import FastAPI
+
+    from services import server_lifecycle
+
+    class Stop(Exception):
+        pass
+
+    built = {}
+
+    class RecordingConfig(uvicorn.Config):
+        def __init__(self, *args, **kwargs):
+            built.update(kwargs)
+            super().__init__(*args, **kwargs)
+
+    def stop(_code):
+        raise Stop
+
+    monkeypatch.setattr(uvicorn, "Config", RecordingConfig)
+    monkeypatch.setattr(uvicorn.Server, "run", lambda self, sockets=None: None)
+    monkeypatch.setattr(server_lifecycle.signal, "signal", lambda *_args: None)
+    monkeypatch.setattr(server_lifecycle, "stop_with_parent", lambda: None)
+    monkeypatch.setattr(server_lifecycle, "finish_process", stop)
+    with pytest.raises(Stop):
+        server_lifecycle.run_until_stopped(FastAPI(), host="127.0.0.1", port=0)
+    assert built["timeout_keep_alive"] == 75

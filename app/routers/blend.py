@@ -25,6 +25,30 @@ _generation_job_acceptance = None
 _run_generation = None
 
 
+def _read_blend_numbers(body):
+    """Every number the request may carry, read before any clip is decoded.
+
+    A value that is not a number, or ``base_params`` that is not an object, answers 400 here; they used to raise
+    in the middle of the route and answer 500 (validation edit-03).
+    """
+    from services.request_numbers import NOT_A_NUMBER_STATUS, number_field
+
+    base = body.get("base_params")
+    if base is not None and not isinstance(base, dict):
+        raise HTTPException(status_code=NOT_A_NUMBER_STATUS, detail="base_params must be an object")
+    base = base or {}
+    return {
+        "overlap_sec": number_field(body, "overlap_sec", 3),
+        "motion_prefix_sec": number_field(body, "motion_prefix_sec", 1.0),
+        "motion_suffix_sec": number_field(body, "motion_suffix_sec", 1.0),
+        "anchor_frames": number_field(body, "anchor_frames", 0, int),
+        "injection_strength": number_field(body, "injection_strength", 0.4),
+        "guidance_scale": number_field(body, "guidance_scale", base.get("guidance_scale", 1.0)),
+        "num_inference_steps": number_field(body, "num_inference_steps", base.get("num_inference_steps", 15), int),
+        "input_video_strength": number_field(body, "input_video_strength", base.get("input_video_strength", 1.0)),
+    }
+
+
 async def blend_endpoint(request: Request):
     """Blend two clips with an AI-generated transition (Sora-1 style overlap).
 
@@ -94,7 +118,8 @@ async def blend_endpoint(request: Request):
         raise HTTPException(status_code=400, detail="model_type is required")
 
     blend_mode = body.get("blend_mode", "overlap")
-    overlap_sec = float(body.get("overlap_sec", 3))
+    numbers = _read_blend_numbers(body)
+    overlap_sec = numbers["overlap_sec"]
 
     import tempfile
     import math
@@ -194,7 +219,7 @@ async def blend_endpoint(request: Request):
         # The "still-frame joggers" regression was caused by image_mode
         # from base_params coercing the pipeline into image-only output,
         # not by VE mode itself.
-        motion_prefix_sec = float(body.get("motion_prefix_sec", 1.0))
+        motion_prefix_sec = numbers["motion_prefix_sec"]
         motion_prefix_sec = max(0.0, min(motion_prefix_sec, overlap_sec_eff * 0.8))
         K_prefix = int(round(motion_prefix_sec * fps)) if motion_prefix_sec > 0 else 0
         K_prefix = max(0, min(K_prefix, len(frames_a) - 2))  # leave room for generation
@@ -230,7 +255,7 @@ async def blend_endpoint(request: Request):
         # They are EXACTLY the frames of B's overlap zone that B_post was
         # going to skip anyway, so the blend → B_post seam stays frame-
         # perfect (blend[N-1] = B[O-1] → B_post[0] = B[O]).
-        motion_suffix_sec = float(body.get("motion_suffix_sec", 1.0))
+        motion_suffix_sec = numbers["motion_suffix_sec"]
         motion_suffix_sec = max(0.0, min(motion_suffix_sec, overlap_sec_eff * 0.8))
         K_suffix = int(round(motion_suffix_sec * fps)) if motion_suffix_sec > 0 else 0
         # Cap so suffix + prefix don't exceed transition length with no room
@@ -254,7 +279,7 @@ async def blend_endpoint(request: Request):
         #
         # Default 0 = pure SE (proven to produce great creative bridges).
         # Try 2-3 with injection_strength=0.3 to carry some motion context.
-        n_anchors = int(body.get("anchor_frames", 0))
+        n_anchors = numbers["anchor_frames"]
         max_anchors = min(len(frames_a) - 1, len(frames_b) - 1, max(1, transition_frames // 4))
         n_anchors = max(0, min(n_anchors, max_anchors))
 
@@ -280,7 +305,7 @@ async def blend_endpoint(request: Request):
                 extra_refs.append(p)
                 extra_positions.append(transition_frames - i)
 
-        injection_strength = float(body.get("injection_strength", 0.4))
+        injection_strength = numbers["injection_strength"]
         injection_strength = max(0.0, min(1.0, injection_strength))
 
         # Diagnostic: show what the UI actually sent us.
@@ -354,8 +379,8 @@ async def blend_endpoint(request: Request):
             "negative_prompt": body.get("negative_prompt", base_params.get("negative_prompt", default_neg)),
             "seed": body.get("seed", -1),
             # guidance_scale / num_inference_steps: explicit body wins > studio value > safe default
-            "guidance_scale": float(body.get("guidance_scale", base_params.get("guidance_scale", 1.0))),
-            "num_inference_steps": int(body.get("num_inference_steps", base_params.get("num_inference_steps", 15))),
+            "guidance_scale": numbers["guidance_scale"],
+            "num_inference_steps": numbers["num_inference_steps"],
             "video_length": transition_frames,
             "resolution": f"{src_w}x{src_h}",
             "generation_mode": "video",
@@ -416,7 +441,7 @@ async def blend_endpoint(request: Request):
         # between the anchors instead of interpolating pixels.
         # Handler description: "you may try values lower value than 1 to
         # get more motion" (ltx2_handler.py:181).
-        input_video_strength = float(body.get("input_video_strength", base_params.get("input_video_strength", 1.0)))
+        input_video_strength = numbers["input_video_strength"]
         input_video_strength = max(0.1, min(1.0, input_video_strength))
         gen_params["input_video_strength"] = input_video_strength
 

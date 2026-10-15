@@ -22,6 +22,7 @@ from services.media_dimensions import (
     listing_fields,
     parse_resolution,
     probe_video_size,
+    produced_resolution,
     prune_thumbnail_cache,
 )
 from services.media_thumbnails import ensure_fitted_thumbnail
@@ -93,6 +94,32 @@ def test_image_header_size_follows_file_versions(tmp_path):
     os.utime(path, ns=(10**18, 10**18))
     assert image_header_size(str(path)) == (1200, 400)
     assert image_header_size(str(tmp_path / "missing.png")) is None
+
+
+def test_produced_resolution_names_the_size_only_when_the_engine_changed_it(tmp_path):
+    """gen-06: WanGP fits the canvas to a start image; the sidecar says what it made next to what was asked."""
+    still = tmp_path / "fitted.png"
+    Image.new("RGB", (480, 480)).save(still)
+    assert produced_resolution(str(still), "640x480") == "480x480"
+    assert produced_resolution(str(still), "480x480") is None
+    assert produced_resolution(str(still), "480 x 480") is None
+    # Nothing to compare with, or nothing to read: no claim.
+    for requested in ("auto", "", None, 480, "832x"):
+        assert produced_resolution(str(still), requested) is None
+    assert produced_resolution(str(tmp_path / "missing.png"), "640x480") is None
+    sound = tmp_path / "voice.wav"
+    sound.write_bytes(b"RIFF")
+    assert produced_resolution(str(sound), "640x480") is None
+
+
+@pytest.mark.skipif(not _FFMPEG, reason="ffmpeg and ffprobe are required to probe a video")
+def test_produced_resolution_probes_a_video(tmp_path):
+    video = tmp_path / "fitted.mp4"
+    _video(video)
+    made = probe_video_size(str(video))
+    assert made is not None
+    assert produced_resolution(str(video), f"{made[0] + 32}x{made[1]}") == f"{made[0]}x{made[1]}"
+    assert produced_resolution(str(video), f"{made[0]}x{made[1]}") is None
 
 
 def test_listing_prefers_real_image_size_and_uses_sidecars_for_video(tmp_path):

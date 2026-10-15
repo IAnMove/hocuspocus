@@ -161,7 +161,12 @@
           "_run_blend_generation"
         ]
       },
-      "base params that are not a dict": "dictionary update sequence element #0 has length 1; 2 is required",
+      "base params that are not a dict": {
+        "answer": {
+          "detail": "base_params must be an object"
+        },
+        "status": 400
+      },
       "clip A too small": {
         "answer": {
           "detail": "Clip A resolution too small: 16x40"
@@ -261,10 +266,14 @@
         true,
         true,
         false,
-        true,
-        false
+        true
       ],
-      "text overlap": "could not convert string to float: 'long'",
+      "text overlap": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 400
+      },
       "the body beats inherited settings": {
         "answer": {
           "frames": 25,
@@ -683,6 +692,104 @@
           "_run_blend_generation"
         ]
       }
+    },
+    "status": 200
+  },
+  "blend refuses values that are not numbers": {
+    "body": {
+      "a number inherited from base_params": {
+        "answer": {
+          "detail": "guidance_scale must be a number"
+        },
+        "status": 400
+      },
+      "anchor_frames": {
+        "answer": {
+          "detail": "anchor_frames must be a whole number"
+        },
+        "status": 400
+      },
+      "anchor_frames fraction as text": {
+        "answer": {
+          "detail": "anchor_frames must be a whole number"
+        },
+        "status": 400
+      },
+      "base_params is a list": {
+        "answer": {
+          "detail": "base_params must be an object"
+        },
+        "status": 400
+      },
+      "base_params is text": {
+        "answer": {
+          "detail": "base_params must be an object"
+        },
+        "status": 400
+      },
+      "guidance_scale": {
+        "answer": {
+          "detail": "guidance_scale must be a number"
+        },
+        "status": 400
+      },
+      "injection_strength": {
+        "answer": {
+          "detail": "injection_strength must be a number"
+        },
+        "status": 400
+      },
+      "input_video_strength": {
+        "answer": {
+          "detail": "input_video_strength must be a number"
+        },
+        "status": 400
+      },
+      "jobs registered": [],
+      "motion_prefix_sec": {
+        "answer": {
+          "detail": "motion_prefix_sec must be a number"
+        },
+        "status": 400
+      },
+      "motion_prefix_sec not a number": {
+        "answer": {
+          "detail": "motion_prefix_sec must be a number"
+        },
+        "status": 400
+      },
+      "motion_suffix_sec": {
+        "answer": {
+          "detail": "motion_suffix_sec must be a number"
+        },
+        "status": 400
+      },
+      "num_inference_steps": {
+        "answer": {
+          "detail": "num_inference_steps must be a whole number"
+        },
+        "status": 400
+      },
+      "overlap_sec": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 400
+      },
+      "overlap_sec infinity": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 400
+      },
+      "overlap_sec null": {
+        "answer": {
+          "detail": "overlap_sec must be a number"
+        },
+        "status": 400
+      },
+      "temp folders made": 0,
+      "workers started": []
     },
     "status": 200
   },
@@ -1814,7 +1921,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -2014,7 +2121,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -2201,7 +2308,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -2432,7 +2539,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -2632,7 +2739,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -2819,7 +2926,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -3010,7 +3117,7 @@
         "_outpaint_canvas_w": 128,
         "_outpaint_generation_fps": 8.0,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -3157,7 +3264,7 @@
         "_outpaint_canvas_w": 128,
         "_outpaint_generation_fps": 8.0,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -3326,7 +3433,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -3526,7 +3633,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -3731,7 +3838,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -4040,7 +4147,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -4240,7 +4347,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -4445,7 +4552,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -4754,7 +4861,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -4954,7 +5061,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -5159,7 +5266,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -5468,7 +5575,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -5668,7 +5775,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -5870,7 +5977,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -6096,7 +6203,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -6296,7 +6403,7 @@
             "_outpaint_final_out_dir": "<TMP>/outputs",
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": false,
-            "_outpaint_overlay_h": 36,
+            "_outpaint_overlay_h": 35,
             "_outpaint_overlay_w": 64,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 14,
@@ -6498,7 +6605,7 @@
         "_outpaint_canvas_h": 64,
         "_outpaint_canvas_w": 128,
         "_outpaint_lock_source_pixels": false,
-        "_outpaint_overlay_h": 36,
+        "_outpaint_overlay_h": 35,
         "_outpaint_overlay_w": 64,
         "_outpaint_overlay_x": 0,
         "_outpaint_overlay_y": 14,
@@ -6705,9 +6812,9 @@
           "final_h": 736,
           "final_w": 1280,
           "overlay_h": 702,
-          "overlay_w": 1249,
-          "overlay_x": 15,
-          "overlay_y": 17,
+          "overlay_w": 1248,
+          "overlay_x": 16,
+          "overlay_y": 16,
           "requested_h": 376,
           "requested_w": 656
         }
@@ -6760,7 +6867,7 @@
           "final_w": 1856,
           "overlay_h": 704,
           "overlay_w": 1252,
-          "overlay_x": 302,
+          "overlay_x": 301,
           "overlay_y": 0,
           "requested_h": 720,
           "requested_w": 1840
@@ -6779,7 +6886,7 @@
           "overlay_h": 648,
           "overlay_w": 1152,
           "overlay_x": 0,
-          "overlay_y": 92,
+          "overlay_y": 91,
           "requested_h": 920,
           "requested_w": 1280
         }
@@ -6795,9 +6902,9 @@
           "final_h": 1088,
           "final_w": 1920,
           "overlay_h": 1079,
-          "overlay_w": 1918,
+          "overlay_w": 1919,
           "overlay_x": 0,
-          "overlay_y": 4,
+          "overlay_y": 3,
           "requested_h": 1080,
           "requested_w": 1921
         }
@@ -6814,7 +6921,7 @@
           "final_w": 1920,
           "overlay_h": 1052,
           "overlay_w": 1869,
-          "overlay_x": 24,
+          "overlay_x": 25,
           "overlay_y": 36,
           "requested_h": 1117,
           "requested_w": 1920
@@ -6830,10 +6937,10 @@
           ],
           "final_h": 1152,
           "final_w": 1856,
-          "overlay_h": 1017,
+          "overlay_h": 1018,
           "overlay_w": 1722,
-          "overlay_x": 109,
-          "overlay_y": 82,
+          "overlay_x": 108,
+          "overlay_y": 81,
           "requested_h": 217,
           "requested_w": 359
         }
@@ -6848,12 +6955,30 @@
           ],
           "final_h": 544,
           "final_w": 928,
-          "overlay_h": 494,
-          "overlay_w": 835,
+          "overlay_h": 493,
+          "overlay_w": 834,
           "overlay_x": 67,
-          "overlay_y": 33,
+          "overlay_y": 32,
           "requested_h": 217,
           "requested_w": 359
+        }
+      },
+      "(384, 256, 0, 0, 128, 128, 'auto', 64)": {
+        "value": {
+          "dims": [
+            0.0,
+            0.0,
+            33.333333333333336,
+            33.333333333333336
+          ],
+          "final_h": 256,
+          "final_w": 640,
+          "overlay_h": 256,
+          "overlay_w": 384,
+          "overlay_x": 127,
+          "overlay_y": 0,
+          "requested_h": 256,
+          "requested_w": 640
         }
       },
       "(64, 64, 0, 0, 0, 64, 'auto', 32)": {
@@ -6902,8 +7027,8 @@
           ],
           "final_h": 640,
           "final_w": 640,
-          "overlay_h": 620,
-          "overlay_w": 349,
+          "overlay_h": 621,
+          "overlay_w": 348,
           "overlay_x": 145,
           "overlay_y": 10,
           "requested_h": 1280,
@@ -6921,9 +7046,9 @@
           "final_h": 64,
           "final_w": 128,
           "overlay_h": 46,
-          "overlay_w": 91,
-          "overlay_x": 18,
-          "overlay_y": 9,
+          "overlay_w": 90,
+          "overlay_x": 17,
+          "overlay_y": 8,
           "requested_h": 70,
           "requested_w": 120
         }
@@ -6973,7 +7098,7 @@
           "_outpaint_canvas_w": 64,
           "_outpaint_lock_source_pixels": false,
           "_outpaint_overlay_h": 43,
-          "_outpaint_overlay_w": 56,
+          "_outpaint_overlay_w": 57,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 11,
           "_outpaint_preserve_audio": false,
@@ -7064,7 +7189,7 @@
           "_outpaint_canvas_w": 64,
           "_outpaint_lock_source_pixels": false,
           "_outpaint_overlay_h": 43,
-          "_outpaint_overlay_w": 56,
+          "_outpaint_overlay_w": 57,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 11,
           "_outpaint_preserve_audio": false,
@@ -7250,8 +7375,8 @@
           "_outpaint_canvas_h": 736,
           "_outpaint_canvas_w": 1248,
           "_outpaint_lock_source_pixels": false,
-          "_outpaint_overlay_h": 491,
-          "_outpaint_overlay_w": 654,
+          "_outpaint_overlay_h": 490,
+          "_outpaint_overlay_w": 653,
           "_outpaint_overlay_x": 338,
           "_outpaint_overlay_y": 164,
           "_outpaint_preserve_audio": false,
@@ -7347,7 +7472,7 @@
           "_outpaint_canvas_w": 64,
           "_outpaint_lock_source_pixels": false,
           "_outpaint_overlay_h": 43,
-          "_outpaint_overlay_w": 56,
+          "_outpaint_overlay_w": 57,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 11,
           "_outpaint_preserve_audio": false,
@@ -7530,7 +7655,7 @@
           "_outpaint_lock_source_pixels": false,
           "_outpaint_overlay_h": 32,
           "_outpaint_overlay_w": 19,
-          "_outpaint_overlay_x": 3,
+          "_outpaint_overlay_x": 2,
           "_outpaint_overlay_y": 0,
           "_outpaint_preserve_audio": false,
           "_outpaint_smear_boundary_frame": 233,
@@ -7710,8 +7835,8 @@
           "_outpaint_canvas_h": 32,
           "_outpaint_canvas_w": 32,
           "_outpaint_lock_source_pixels": false,
-          "_outpaint_overlay_h": 26,
-          "_outpaint_overlay_w": 26,
+          "_outpaint_overlay_h": 25,
+          "_outpaint_overlay_w": 25,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 3,
           "_outpaint_preserve_audio": false,
@@ -7817,7 +7942,7 @@
           "_outpaint_canvas_w": 128,
           "_outpaint_generation_fps": 8.0,
           "_outpaint_lock_source_pixels": true,
-          "_outpaint_overlay_h": 36,
+          "_outpaint_overlay_h": 35,
           "_outpaint_overlay_w": 64,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 14,
@@ -7916,7 +8041,7 @@
           "_outpaint_overlay_h": 365,
           "_outpaint_overlay_w": 649,
           "_outpaint_overlay_x": 12,
-          "_outpaint_overlay_y": 41,
+          "_outpaint_overlay_y": 40,
           "_outpaint_preserve_audio": false,
           "_outpaint_smear_boundary_frame": 9,
           "_outpaint_smear_count": 9,
@@ -8101,7 +8226,7 @@
           "_outpaint_generation_fps": 8.0,
           "_outpaint_lock_source_pixels": false,
           "_outpaint_overlay_h": 32,
-          "_outpaint_overlay_w": 56,
+          "_outpaint_overlay_w": 57,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 0,
           "_outpaint_preserve_audio": true,
@@ -8194,7 +8319,7 @@
           "_outpaint_canvas_w": 128,
           "_outpaint_generation_fps": 8.0,
           "_outpaint_lock_source_pixels": false,
-          "_outpaint_overlay_h": 36,
+          "_outpaint_overlay_h": 35,
           "_outpaint_overlay_w": 64,
           "_outpaint_overlay_x": 64,
           "_outpaint_overlay_y": 14,
@@ -8288,7 +8413,7 @@
           "_outpaint_canvas_w": 64,
           "_outpaint_generation_fps": 8.0,
           "_outpaint_lock_source_pixels": false,
-          "_outpaint_overlay_h": 36,
+          "_outpaint_overlay_h": 35,
           "_outpaint_overlay_w": 64,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 78,
@@ -8476,7 +8601,7 @@
           "_outpaint_canvas_w": 128,
           "_outpaint_generation_fps": 8.0,
           "_outpaint_lock_source_pixels": false,
-          "_outpaint_overlay_h": 36,
+          "_outpaint_overlay_h": 35,
           "_outpaint_overlay_w": 64,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 14,
@@ -8570,7 +8695,7 @@
           "_outpaint_canvas_w": 128,
           "_outpaint_generation_fps": 8.0,
           "_outpaint_lock_source_pixels": false,
-          "_outpaint_overlay_h": 36,
+          "_outpaint_overlay_h": 35,
           "_outpaint_overlay_w": 64,
           "_outpaint_overlay_x": 0,
           "_outpaint_overlay_y": 14,
@@ -9485,7 +9610,7 @@
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": true,
             "_outpaint_overlay_h": 32,
-            "_outpaint_overlay_w": 56,
+            "_outpaint_overlay_w": 57,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 0,
             "_outpaint_preserve_audio": true,
@@ -9581,7 +9706,7 @@
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": true,
             "_outpaint_overlay_h": 32,
-            "_outpaint_overlay_w": 56,
+            "_outpaint_overlay_w": 57,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 0,
             "_outpaint_preserve_audio": true,
@@ -9677,7 +9802,7 @@
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": true,
             "_outpaint_overlay_h": 32,
-            "_outpaint_overlay_w": 56,
+            "_outpaint_overlay_w": 57,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 0,
             "_outpaint_preserve_audio": true,
@@ -9773,7 +9898,7 @@
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": true,
             "_outpaint_overlay_h": 32,
-            "_outpaint_overlay_w": 56,
+            "_outpaint_overlay_w": 57,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 0,
             "_outpaint_preserve_audio": true,
@@ -9869,7 +9994,7 @@
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": true,
             "_outpaint_overlay_h": 32,
-            "_outpaint_overlay_w": 56,
+            "_outpaint_overlay_w": 57,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 0,
             "_outpaint_preserve_audio": true,
@@ -9965,7 +10090,7 @@
             "_outpaint_generation_fps": 8.0,
             "_outpaint_lock_source_pixels": true,
             "_outpaint_overlay_h": 32,
-            "_outpaint_overlay_w": 56,
+            "_outpaint_overlay_w": 57,
             "_outpaint_overlay_x": 0,
             "_outpaint_overlay_y": 0,
             "_outpaint_preserve_audio": true,

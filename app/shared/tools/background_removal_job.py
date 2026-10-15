@@ -223,7 +223,8 @@ def run_remove_background_job(
                 params.get("_execution_mode") or "real"
             ) == "simulate":
                 output_path = hooks.simulated_artifact(
-                    {**params, "generation_mode": media_kind},
+                    # The simulation picks picture or clip like WanGP: from image_mode.
+                    {**params, "generation_mode": media_kind, "image_mode": 1 if media_kind == "image" else 0},
                     output_dir,
                     job_id,
                     progress=progress,

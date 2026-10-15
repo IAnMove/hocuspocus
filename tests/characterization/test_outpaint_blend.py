@@ -150,6 +150,7 @@ GEOMETRY_CASES = [
     (1920, 1080, 0, 0, 0, 1, "weird", 64),
     (1920, 1080, 37, 0, 0, 0, "auto", 64),
     (10, 10, 0, 0, 0, 0, None, 64),
+    (384, 256, 0, 0, 128, 128, "auto", 64),  # edit-05: 8-decimal percentages put the rectangle at 384 px, not 383
     (0, -5, -3, 2, 0, 1, "AUTO", 0),
     ("640", "360", "8", "8", "8", "8", "720P", "32"),
 ]
@@ -712,16 +713,49 @@ def test_blend_hands_the_worker_each_mode(rig, golden, tmp_path, monkeypatch) ->
     answers["simulated"] = _hand_off(rig, "/api/v1/blend", {
         "clip_a_path": str(still_a), "clip_b_path": str(still_b), "model_type": "fake_t2v", "motion_prefix_sec": 0,
         "motion_suffix_sec": 0}, started, temp=temp)
-    with pytest.raises(ValueError) as refused:
-        rig.server.client.post("/api/v1/blend", json={"clip_a_path": str(still_a), "clip_b_path": str(still_b),
-                                                      "model_type": "fake_t2v", "overlap_sec": "long"})
-    answers["text overlap"] = str(refused.value)
-    with pytest.raises(ValueError) as refused:
-        rig.server.client.post("/api/v1/blend", json={"clip_a_path": str(still_a), "clip_b_path": str(still_b),
-                                                      "model_type": "fake_t2v", "base_params": "not a dict"})
-    answers["base params that are not a dict"] = str(refused.value)
+    # A value that is not a number answers 400 before any clip is read (it used to raise inside the route: a 500).
+    for case, extra in (("text overlap", {"overlap_sec": "long"}),
+                        ("base params that are not a dict", {"base_params": "not a dict"})):
+        refused = rig.server.client.post("/api/v1/blend", json={
+            "clip_a_path": str(still_a), "clip_b_path": str(still_b), "model_type": "fake_t2v", **extra})
+        answers[case] = {"status": refused.status_code, "answer": refused.json()}
     answers["temp folders made, and still there"] = temp.left()
     rig.check(golden, "blend hands the worker each mode", _scrub(answers, (str(tmp_path), "<TMP>"), *temp.pairs()))
+
+
+def test_blend_refuses_a_value_that_is_not_a_number(rig, golden, tmp_path, monkeypatch) -> None:
+    """Every numeric field answers 400 and names itself; no clip is read, no temp folder made, no job started."""
+    _block_network(monkeypatch)
+    temp = _TempDirs(monkeypatch)
+    started = _capture_workers(rig)
+    still_a = media.image(tmp_path / "a.png", size=(64, 64))
+    still_b = media.image(tmp_path / "b.png", size=(96, 64))
+    base = {"clip_a_path": str(still_a), "clip_b_path": str(still_b), "model_type": "fake_t2v"}
+    jobs_before = set(rig.launch._jobs)
+    answers = {}
+    for case, extra in {
+        "overlap_sec": {"overlap_sec": "abc"},
+        "overlap_sec null": {"overlap_sec": None},
+        "overlap_sec infinity": {"overlap_sec": "inf"},
+        "motion_prefix_sec not a number": {"motion_prefix_sec": "nan"},
+        "motion_prefix_sec": {"motion_prefix_sec": "x"},
+        "motion_suffix_sec": {"motion_suffix_sec": [1]},
+        "anchor_frames": {"anchor_frames": "x"},
+        "anchor_frames fraction as text": {"anchor_frames": "1.5"},
+        "injection_strength": {"injection_strength": {}},
+        "guidance_scale": {"guidance_scale": "high"},
+        "num_inference_steps": {"num_inference_steps": "many"},
+        "input_video_strength": {"input_video_strength": "full"},
+        "a number inherited from base_params": {"base_params": {"guidance_scale": "high"}},
+        "base_params is a list": {"base_params": [1, 2]},
+        "base_params is text": {"base_params": ""},
+    }.items():
+        response = rig.server.client.post("/api/v1/blend", json={**base, **extra})
+        answers[case] = {"status": response.status_code, "answer": response.json()}
+    answers["workers started"] = list(started)
+    answers["temp folders made"] = len(temp.made)
+    answers["jobs registered"] = sorted(set(rig.launch._jobs) - jobs_before)
+    rig.check(golden, "blend refuses values that are not numbers", answers)
 
 
 # -- jobs the fake engine runs ------------------------------------------------------------------------------------
