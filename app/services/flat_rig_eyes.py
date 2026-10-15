@@ -146,10 +146,13 @@ def _eye_components(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float):
 
 
 def _hinted_pair(parts, near) -> tuple[dict[str, int], dict[str, int]] | None:
-    """The largest pair of similar light blobs side by side whose box, grown by a quarter of its width, holds ``near``.
-    The largest, not the nearest: a pupil's two highlights are a smaller pair at the same place."""
+    """The pair of similar light blobs side by side that lines up with ``near``: its box, grown by a quarter of its
+    width, holds it, and its middle row is about as close to it as the closest pair's (a tenth of the pair's width).
+    Light hair either side of a face is a bigger pair whose grown box reaches down to the eyes, but its middle is
+    above them. Of the pairs left, the largest, not the nearest: a pupil's two highlights are a smaller pair at the
+    same place."""
     hx, hy = near
-    best = None
+    found = []
     for i, a in enumerate(parts):
         for b in parts[i + 1:]:
             tall = max(a["y1"] - a["y0"], b["y1"] - b["y0"])
@@ -159,9 +162,14 @@ def _hinted_pair(parts, near) -> tuple[dict[str, int], dict[str, int]] | None:
             x0, y0 = min(a["x0"], b["x0"]), min(a["y0"], b["y0"])
             x1, y1 = max(a["x1"], b["x1"]), max(a["y1"], b["y1"])
             grow = (x1 - x0) * 0.25
-            if x0 - grow <= hx <= x1 + grow and y0 - grow <= hy <= y1 + grow and (not best or a["size"] + b["size"] > best[0]):
-                best = (a["size"] + b["size"], a, b)
-    return (best[1], best[2]) if best else None
+            if x0 - grow <= hx <= x1 + grow and y0 - grow <= hy <= y1 + grow:
+                off = abs((_centre(a)[1] + _centre(b)[1]) / 2 - hy) / max(x1 - x0, 1)
+                found.append((off, a["size"] + b["size"], a, b))
+    if not found:
+        return None
+    closest = min(item[0] for item in found)
+    _, _, a, b = max((item for item in found if item[0] <= closest + 0.1), key=lambda item: item[1])
+    return a, b
 
 
 def _with_fragments(labels: np.ndarray, eye: dict[str, int], parts, other: dict[str, int]) -> dict[str, int]:
