@@ -29,8 +29,7 @@ Characters: a new pose goes on the screen its character was made on, an eyes hin
 both halves of an eye blink, `blink: false` is a hint per pose (transparent glasses), a kit keeps the whole animation
 catalog (48 per kit; a full kit refuses a new one before any GPU work), the animations panel lists only models that
 accept a picture reference, and a `jobs.wait` HTTP error ends the animation job instead of holding the GPU lock. Scene 3D
-export hides an empty cast mark like an empty cutout, MCP intent records survive a power cut, and Linux installs use
-`eva-decord` (decord 0.6.0 has no cp310 manylinux wheel; Windows and macOS keep `decord`).
+export hides an empty cast mark like an empty cutout, and MCP intent records survive a power cut.
 
 **Fixed: a workspace cannot be deleted while a character animation is being made.** The new
 animation job writes poses, keyed pictures, the sprite sheet and the kit into the workspace
