@@ -23,6 +23,7 @@ No step fails the assembly. A step that cannot run says why.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -377,9 +378,16 @@ def measure_loudness(path: str, ffmpeg: str, timeout: float = 1800) -> dict[str,
     return _loudnorm_report(completed.stderr) if completed.returncode == 0 else None
 
 
-def _summary(report: dict[str, Any], prefix: str) -> dict[str, float]:
-    return {"lufs": float(report[f"{prefix}_i"]), "truePeakDb": float(report[f"{prefix}_tp"]),
-            "rangeLu": float(report[f"{prefix}_lra"])}
+def _finite(value: Any) -> float | None:
+    """The number, or None for the ``-inf`` / ``nan`` ffmpeg prints for a mix with no sound: JSON cannot carry them
+    (a ``-Infinity`` saved in the Series library made every Series read of the workspace answer 500)."""
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _summary(report: dict[str, Any], prefix: str) -> dict[str, float | None]:
+    return {"lufs": _finite(report[f"{prefix}_i"]), "truePeakDb": _finite(report[f"{prefix}_tp"]),
+            "rangeLu": _finite(report[f"{prefix}_lra"])}
 
 
 def normalize_loudness(path: str, *, ffmpeg: str, abort_callback: Callable[[], bool] | None = None) -> dict[str, Any]:
@@ -392,7 +400,7 @@ def normalize_loudness(path: str, *, ffmpeg: str, abort_callback: Callable[[], b
         before = _summary(measured, "input")
     except (KeyError, TypeError, ValueError):
         return {"applied": False, "reason": "ffmpeg returned an unreadable loudness report"}
-    if before["lufs"] < -70:
+    if before["lufs"] is None or before["lufs"] < -70:
         return {"applied": False, "reason": "The episode audio is silent", "before": before}
     temporary = f"{os.path.splitext(path)[0]}.loudnorm-tmp.mp4"
     command = [
