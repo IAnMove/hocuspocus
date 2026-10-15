@@ -24,6 +24,9 @@ line already had one renders once. The portrait frame is different: every take o
 counts only for takes saved at version 3 or later (``renderInputsVersion``); an older take is compared with the digest
 of the version it was saved at and never sees the frame.
 Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
+Given the ``episode``, a 2D shot also depends on what it takes from its neighbours (``series_continuity.inputs``: a
+lone character's place in the room, a camera that goes on from the previous shot) from version 4 on; a shot that takes
+nothing keeps its digest, and a take saved at an older version never sees it (``_legacy_inputs``).
 """
 from __future__ import annotations
 
@@ -31,7 +34,7 @@ import hashlib
 import json
 from typing import Any
 
-from services import series_finish, series_shot3d
+from services import series_continuity, series_finish, series_shot3d
 from services.series_ambience import shot_sound_design
 from services.series_hearing import hearing_of
 from services.series_layers import digest_location
@@ -50,23 +53,28 @@ _KIT_VOLATILE = ("createdAt", "updatedAt", "provenance", "revision")
 # Version 1 stored the raw ``durationSeconds``, which the render then rewrote, so the next pass looked stale.
 # Version 3 adds the series frame when it is portrait. A take saved at version 2 or 1 never recorded it, so it is read
 # as it was saved: ``_legacy_inputs`` offers its older digests.
-INPUTS_VERSION = 3
+# Version 4 adds what a 2D shot takes from its neighbours (``series_continuity``). A take saved before never recorded it,
+# so an episode that already exists renders nothing again: its takes keep matching the digest of the version they have.
+INPUTS_VERSION = 4
 _PLANNED_LENGTH_VERSION = 2
 # The portrait frame is hashed only from this version on.
 _FRAME_VERSION = 3
+# What a shot takes from its neighbours is hashed only from this version on.
+_CONTINUITY_VERSION = 4
 # A version-1 take asked for a length on this step; the planner moves it by under one frame.
 _DURATION_STEP = 0.05
 
 
 def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None,
-                  version: int = INPUTS_VERSION) -> str:
+                  version: int = INPUTS_VERSION, episode: dict[str, Any] | None = None) -> str:
     """Fingerprint of everything a shot's render depends on: its layout and lines in this language, the location, the
     sound design, its foley and the kits of the people seen or heard. It is kept on the take, so a production renders again only
     the shots whose inputs changed. ``root`` includes mutable 3D source documents in the fingerprint.
 
     A silent shot's length is the planner's frame count (version 2), not the value the render writes back into
     ``durationSeconds``. Version 1 is that raw value, so a take saved before this change still matches. A portrait
-    series frame is part of the digest from version 3 on; versions 1 and 2 never hashed it."""
+    series frame is part of the digest from version 3 on; versions 1 and 2 never hashed it. What the shot takes from
+    its neighbours (the ``episode`` it is in) counts from version 4 on."""
     beats = [_beat_row(beat) for beat in shot.get("dialogueBeats") or []]
     people = _people(shot, beats)
     characters = {item.get("id"): item for item in series.get("characters") or []}
@@ -83,6 +91,9 @@ def render_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, 
         **({"foley": shot["foley"]} if shot.get("foley") else {}),
     }
     payload.update(_extra_inputs(series, shot, root, version))
+    neighbours = series_continuity.inputs(series, episode, shot) if version >= _CONTINUITY_VERSION else None
+    if neighbours:
+        payload["continuity"] = neighbours
     return hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:16]
 
 
@@ -218,16 +229,19 @@ def _kept_take(shot: dict[str, Any], assets: dict[str, Any]) -> tuple[Any, Any]:
 
 
 def _fresh(kept: Any, version: Any, series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any],
-           root: str | None) -> bool:
+           root: str | None, episode: dict[str, Any] | None = None) -> bool:
     """A current-version take matches the current digest. An older take still matches the digest of the version it was
-    saved with (version 2 never hashed the series frame; version 1 held the raw length, or the planned length snapped
-    to 0.05 s, so the render's write-back of that length does not make it stale)."""
+    saved with (version 3 never hashed the neighbours; version 2 never hashed the series frame; version 1 held the raw
+    length, or the planned length snapped to 0.05 s, so the render's write-back of that length does not make it stale).
+    So an episode made before the continuity existed renders nothing again until a shot itself changes."""
     if not isinstance(kept, str):
         return False
-    if kept == render_inputs(series, shot, kits, root):
+    if kept == render_inputs(series, shot, kits, root, episode=episode):
         return True
     if version == INPUTS_VERSION:
         return False
+    if version == _FRAME_VERSION:  # it hashed the frame but not the neighbours, and nothing older matches it
+        return kept == render_inputs(series, shot, kits, root, version=_FRAME_VERSION)
     return kept in _legacy_inputs(series, shot, kits, root)
 
 
@@ -243,7 +257,8 @@ def _attempt_inputs(shot: dict[str, Any], assets: dict[str, Any]) -> list[tuple[
     return found
 
 
-def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None) -> str:
+def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str, Any], root: str | None = None,
+                    episode: dict[str, Any] | None = None) -> str:
     """Fingerprint a review compares with a take.
 
     A take from an older version still carries the digest of that version. The approved take wins: an earlier
@@ -251,13 +266,13 @@ def accepted_inputs(series: dict[str, Any], shot: dict[str, Any], kits: dict[str
     several takes can each be current under the version they were saved at (one from before version 2 and one after,
     nothing changed since): the newest is the one a review looks at, so its digest is returned. A changed shot returns
     the current digest."""
-    current = render_inputs(series, shot, kits, root)
+    current = render_inputs(series, shot, kits, root, episode=episode)
     saved = _attempt_inputs(shot, series.get("assets") or {})
     approved = shot.get("approvedAttemptId")
     for attempt_id, kept, version in saved:
-        if attempt_id == approved and _fresh(kept, version, series, shot, kits, root):
+        if attempt_id == approved and _fresh(kept, version, series, shot, kits, root, episode):
             return kept
-    legacy = [kept for _attempt_id, kept, version in saved if _fresh(kept, version, series, shot, kits, root)]
+    legacy = [kept for _attempt_id, kept, version in saved if _fresh(kept, version, series, shot, kits, root, episode)]
     return legacy[-1] if legacy else current
 
 
@@ -268,4 +283,4 @@ def stale_shot_ids(series: dict[str, Any], episode: dict[str, Any], kits: dict[s
     assets = series.get("assets") or {}
     shots = sorted(episode.get("shots") or [], key=lambda value: value.get("order", 0))
     return [shot["id"] for shot in shots if series_shot3d.wants_render(shot)
-            and not _fresh(*_kept_take(shot, assets), series, shot, kits, root)]
+            and not _fresh(*_kept_take(shot, assets), series, shot, kits, root, episode)]

@@ -627,7 +627,8 @@
         "tests/test_launch_misc_bind.py",
         "tests/test_production_stage_frames.py",
         "tests/test_frame_exact_outputs.py",
-        "tests/test_request_numbers.py"
+        "tests/test_request_numbers.py",
+        "tests/test_series_continuity.py"
       ]
     }
   ],
@@ -2421,7 +2422,18 @@
       "prefix": "app/services/series_take_inputs.py",
       "paths": [
         "tests/test_series_native_render.py",
-        "tests/test_series_voice_rooms.py"
+        "tests/test_series_voice_rooms.py",
+        "tests/test_series_continuity.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_continuity.py",
+      "paths": [
+        "tests/test_series_continuity.py",
+        "tests/test_series_shot_plan.py",
+        "tests/test_series_layers.py",
+        "tests/test_series_native_render.py",
+        "tests/test_series_finish.py"
       ]
     },
     {
