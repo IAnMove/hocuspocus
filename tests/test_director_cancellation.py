@@ -2984,6 +2984,112 @@ class TestDirectorCancellation(unittest.TestCase):
             pipeline._pipelines[pid]["params"],
         )
 
+    def _h3_resumable_state(self, pid: str) -> None:
+        """Save a 2-shot, plan-and-images-done Director run for a resume."""
+        plans = [
+            {"image_prompt": f"image {i}", "video_prompt": f"video {i}",
+             "_director_duration_sec": 5.17}
+            for i in range(2)
+        ]
+        planned = [
+            {"start": 0, "end": 5.167, "duration_sec": 5.167,
+             "duration_frames": 124},
+            {"start": 5.167, "end": 10.333, "duration_sec": 5.167,
+             "duration_frames": 124},
+        ]
+        clips = []
+        for index, plan in enumerate(plans):
+            name = f"h3-start-{index}.png"
+            self._write_media(name, b"image")
+            clips.append({
+                "index": index, "planned_clip": planned[index],
+                "image_prompt": plan["image_prompt"],
+                "video_prompt": plan["video_prompt"],
+                "start_image_filename": name, "end_image_filename": None,
+                "video_filename": None,
+            })
+        state = {
+            "version": 2, "pipeline_id": pid, "status": "failed",
+            "phase": "failed", "created_at": 1.0, "output_files": [],
+            "pipeline_type": "short_film_story", "video_model": "minimax_h3",
+            "clip_plans": plans, "planned_clips": planned, "clips": clips,
+            "_params_snapshot": {
+                "pipeline_type": "short_film_story", "auto_mode": True,
+                "scene_description": "A keeper climbs the lighthouse.",
+                "image_model": "qwen_image_21_turbo",
+                "video_model": "minimax_h3",
+                "provided_clip_plans": plans, "planned_clips": planned,
+            },
+        }
+        path = os.path.join(self.temp_dir.name, f"_director_pipeline_{pid}.json")
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(state, handle)
+
+    def test_finished_run_accepts_edits_and_delete_during_h3_unload(self):
+        # PG20/PG21 (final unattended GPU pass): a run says ``completed`` while
+        # its worker still unloads the H3 model (1-6 s on real hardware), and
+        # every edit answered 409 and DELETE "still running" until it ended.
+        pid = "pipe-h3-unload"
+        self._h3_resumable_state(pid)
+        in_teardown = threading.Event()
+        finish_teardown = threading.Event()
+
+        def release_model():
+            in_teardown.set()
+            finish_teardown.wait(timeout=10)
+
+        def fake_video(pipeline_id, params, clip_plans, *args, **kwargs):
+            names = [f"h3-clip-{i}.mp4" for i in range(len(clip_plans))]
+            for name in names:
+                self._write_media(name, b"video")
+            return pipeline._DirectorOutputs(names, dict(enumerate(names)))
+
+        pipeline._wgp = SimpleNamespace(
+            save_path=self.temp_dir.name, image_save_path=self.temp_dir.name,
+            server_config={"save_path": self.temp_dir.name},
+            wan_model=object(), release_model=release_model,
+            get_model_def=lambda model: {"architecture": "minimax_h3"},
+        )
+        gen_lock = threading.Lock()
+        try:
+            with (
+                patch.object(pipeline, "_gen_lock", gen_lock),
+                patch.object(pipeline, "_validate_director_models"),
+                patch.object(
+                    pipeline, "_create_director_video_execution_profile",
+                    return_value={},
+                ),
+                patch.object(
+                    pipeline, "_run_video_generation", side_effect=fake_video,
+                ),
+            ):
+                try:
+                    ok, _message = pipeline.resume_pipeline(
+                        pid, self.temp_dir.name,
+                    )
+                    self.assertTrue(ok)
+                    self.assertTrue(in_teardown.wait(timeout=10))
+                    # Only the model is still unloading, under the GPU lock.
+                    self.assertFalse(gen_lock.acquire(blocking=False))
+                    self.assertEqual(
+                        pipeline.get_pipeline(pid)["status"], "completed",
+                    )
+                    pipeline.update_clip_tag(
+                        self.temp_dir.name, pid, 0, "good",
+                    )
+                    self.assertTrue(
+                        pipeline.delete_pipeline(self.temp_dir.name, pid)["ok"],
+                    )
+                finally:
+                    finish_teardown.set()
+                    deadline = time.time() + 5
+                    while (
+                        gen_lock.locked() and time.time() < deadline
+                    ):
+                        time.sleep(0.005)
+        finally:
+            finish_teardown.set()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
