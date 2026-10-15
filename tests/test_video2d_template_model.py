@@ -52,8 +52,8 @@ def _png(mode: str, color, kind: str = "PNG") -> bytes:
     return buffer.getvalue()
 
 
-def test_the_catalog_lists_41_cards_and_the_contract_aliases():
-    assert len(CATALOG["entries"]) == 41
+def test_the_catalog_lists_47_cards_and_the_contract_aliases():
+    assert len(CATALOG["entries"]) == 48
     assert {alias: (row["card"], row["preset"]) for alias, row in CATALOG["aliases"].items()} == MERGES
     assert sorted(CATALOG["retired"]) == ["lyric-vertical", "trailer-teaser"]
     ids = {entry["id"] for entry in CATALOG["entries"]}

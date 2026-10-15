@@ -984,6 +984,12 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
 }
 
 
+# The character animation tools live in their own module (services/character_animation_commands.py).
+from services.character_animation_commands import OPERATIONS as _ANIMATION_OPERATIONS, RUNNERS as _ANIMATION_RUNNERS  # noqa: E402
+OPERATIONS.update(_ANIMATION_OPERATIONS)
+_RUNNERS.update(_ANIMATION_RUNNERS)
+
+
 def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:
     if name == "series.asset.import":
         return _import_asset(data, request, workspace_file=workspace_file, uploads_dir=uploads_dir)

@@ -1,5 +1,5 @@
 /**
- * Video 2D scene templates: the 41 cards of app/shared/scene_templates.json.
+ * Video 2D scene templates: the 48 cards of app/shared/scene_templates.json.
  *
  * Data lives in the JSON; this module is the checked view the gallery, composer and compilers import. A merged id
  * is an alias (its card plus a control preset) and a retired id names what to use instead
@@ -16,7 +16,7 @@ export const CATALOG_VERSION = '2026-09-review-1' as const
 export const EXPANDED_CATALOG_VERSION = '2026-09-music-motion-1' as const
 
 export type TemplateFamily = 'cinema' | 'music' | 'space'
-export type TemplateGroup = 'candidate' | 'video2d' | 'music-motion'
+export type TemplateGroup = 'candidate' | 'video2d' | 'music-motion' | 'walk'
 export type TemplateSlotName = 'subject_1' | 'subject_2' | 'background' | 'prop_1' | 'prop_2' | 'foreground'
 /** Names from before the 2026-10-12 slot vocabulary; accepted at every entry and translated once. */
 export type LegacySlotName = 'hero' | 'plate' | 'prop'
@@ -62,7 +62,7 @@ export type SceneTemplateAlias = { readonly card: string; readonly preset: Reado
 export type RetiredSceneTemplate = { readonly useInstead: readonly string[]; readonly note: string }
 
 const FAMILIES = ['cinema', 'music', 'space'] as const
-const GROUPS = ['candidate', 'video2d', 'music-motion'] as const
+const GROUPS = ['candidate', 'video2d', 'music-motion', 'walk'] as const
 const STATUSES = ['candidate', 'approved'] as const
 const SLOT_IDS = ['subject_1', 'subject_2', 'background', 'prop_1', 'prop_2', 'foreground'] as const
 const LEGACY_SLOT_IDS = ['hero', 'plate', 'prop', 'foreground'] as const
@@ -207,6 +207,8 @@ const templatesIn = (group: TemplateGroup) => ALL_SCENE_TEMPLATES.filter(templat
 export const CANDIDATE_SCENE_TEMPLATES = templatesIn('candidate')
 export const VIDEO2D_SCENE_TEMPLATES = templatesIn('video2d')
 export const MUSIC_MOTION_TEMPLATES = templatesIn('music-motion')
+/** The walking cards (2026-10-13): a figure that enters on foot without showing legs that never move. */
+export const WALK_SCENE_TEMPLATES = templatesIn('walk')
 /** The «crear con mis assets» shelf: a card with narrative twins lives on the narrative grid instead. */
 export const COMPOSER_SCENE_TEMPLATES = ALL_SCENE_TEMPLATES.filter(template => !template.twins.length)
 
@@ -241,7 +243,7 @@ export function templateCatalogVersion(template: SceneTemplateDefinition): strin
   return EXPANDED_TEMPLATE_IDS.has(template.id) ? EXPANDED_CATALOG_VERSION : CATALOG_VERSION
 }
 
-/** One of the 41 cards by its own id; aliases and retired ids are not cards. */
+/** One of the 48 cards by its own id; aliases and retired ids are not cards. */
 export function getCandidateSceneTemplate(id: string): SceneTemplateDefinition {
   const template = byId.get(id)
   if (!template) {

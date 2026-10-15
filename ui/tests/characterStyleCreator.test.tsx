@@ -175,6 +175,8 @@ function creatorServer(t: TestContext, rig: (kit: Record<string, unknown>) => Re
 /** Name and describe a character, create three options, pick the second and save it: the rig's review appears. */
 async function createAndRig(creatorStyle: typeof style) {
   const { render, fireEvent, waitFor, screen } = await import('@testing-library/react')
+  const { forgetCreatorSessions } = await import('../src/features/characters/characterCreatorSession')
+  forgetCreatorSessions(); localStorage.clear() // the creator keeps its draft between visits: each test starts from a new one
   const { CharacterStyleCreator } = await import('../src/features/characters/CharacterStyleCreator')
   const view = render(<CharacterStyleCreator workspace="cast" style={creatorStyle} model="qwen_image_21" />)
   fireEvent.change(view.getByLabelText('Character name'), { target: { value: 'Kevin' } })

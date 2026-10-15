@@ -613,9 +613,15 @@
   "styleCreator": {
     "style": "Style",
     "free": "Free (describe everything)",
-    "hint": "Describe the character. Three options are made on a plain screen, the background is removed, and the one you pick is saved ready to talk.",
+    "hint": "Describe the character. Up to three options are drawn on a plain screen; pick one and its background is removed and it is saved ready to talk.",
     "placeholder": "Kevin, a nervous 24-year-old founder, messy red hair, freckles, orange hoodie…",
-    "createOptions": "Create 3 options",
+    "createOptions_one": "Create 1 option",
+    "createOptions_other": "Create {{count}} options",
+    "count": "Options",
+    "drawn": "Drawn · background still on",
+    "cancelledOption": "cancelled",
+    "startOver": "Start over",
+    "peekHint": "Hover an option (or press and hold it) to see it large.",
     "generating": "Creating…",
     "keying": "Removing background…",
     "option": "Option {{number}}",
@@ -634,7 +640,7 @@
     "failed": "This option failed: {{error}}",
     "pick": "Pick the option you like.",
     "noneReady": "No option finished. Try again or change the description.",
-    "empty": "The three options will appear here.",
+    "empty": "The options will appear here.",
     "saveAndRig": "Save and make it talk",
     "ready": "Ready to talk. Check the mouths and the blink below.",
     "reviewAlt": "Mouth and blink review",
@@ -649,9 +655,10 @@
     "addPose": "Add this pose",
     "poseAdded": "Pose added and ready to talk.",
     "busy": {
-      "options": "Creating three options on a plain screen…",
+      "options": "Drawing the options on a plain screen…",
+      "keying": "Removing the background…",
       "rig": "Drawing the mouths and the blink…",
-      "pose": "Creating three pose options…",
+      "pose": "Drawing the pose options…",
       "addPose": "Adding the pose and its mouths…"
     }
   },
@@ -748,5 +755,77 @@
     "noIdentity": "The kit has no identity reference to build the base pose.",
     "visemePacks": "I could not load the viseme packs.",
     "presetMissing": "Animation preset “{{name}}” does not exist."
+  },
+  "animations": {
+    "title": "Character animations",
+    "loading": "Loading animations…",
+    "intro": "Small animations of a saved character: walking, gestures and the most common anime expressions. Each one is a few poses of the same character, made with Qwen from its own picture, keyed and joined into a sprite sheet that the Video 2D cards play. Review each animation before approving it.",
+    "noKits": "Create and save a character first: animations are made from its picture.",
+    "kit": "Character",
+    "state": {
+      "none": "Not made",
+      "pending": "To review",
+      "approved": "Approved",
+      "rejected": "Rejected"
+    },
+    "make": "Make",
+    "makeAgain": "Make all again",
+    "tryAgain": "Try again",
+    "working": "Making…",
+    "cancel": "Cancel",
+    "approve": "Approve",
+    "reject": "Reject",
+    "delete": "Delete",
+    "remake": "Redo",
+    "remakePose": "Redo the {{pose}} pose",
+    "posesCount_one": "{{count}} pose",
+    "posesCount_other": "{{count}} poses",
+    "job": {
+      "queued": "Queued: it is made when the GPU is free.",
+      "running": "Making…",
+      "cancelling": "Cancelling…",
+      "completed": "Done.",
+      "failed": "It stopped. The poses already made are kept: trying again makes only the missing ones.",
+      "cancelled": "Cancelled. The poses already made are kept.",
+      "interrupted": "The server restarted while it was being made. The poses already made are kept."
+    },
+    "stage": {
+      "poses": "Making the poses, one after another…",
+      "sheet": "Joining the poses into the sheet…"
+    },
+    "pose": {
+      "waiting": "waiting",
+      "reused": "kept",
+      "generating": "generating",
+      "keying": "keying",
+      "ready": "ready",
+      "failed": "failed"
+    },
+    "plays": "Plays with the {{template}} card ({{controls}}).",
+    "saved": "Animation saved on the character. Review it and approve it.",
+    "play": "Play",
+    "pause": "Pause",
+    "nextFrame": "Next",
+    "frameOf": "Pose {{frame}} of {{count}}",
+    "view": {
+      "bust": "Bust (head and shoulders)",
+      "front": "Whole figure, front",
+      "side": "Whole figure, side"
+    },
+    "custom": {
+      "title": "Make your own",
+      "hint": "Invent your own animation: name it, pick the framing and write one pose per line (up to {{max}}). The character is the reference of each pose, like the others. You can review it and make one pose again alone.",
+      "name": "Name",
+      "view": "Framing",
+      "poses": "Poses, one per line",
+      "placeholder": "Anime expression: a lopsided grin with one eyebrow raised\nAnime expression: the same grin, now with a wink",
+      "create_one": "Make with {{count}} pose",
+      "create_other": "Make with {{count}} poses",
+      "summary": "Custom · {{count}} poses · {{view}}",
+      "tooMany": "At most {{max}} poses per animation.",
+      "tooLong": "Each pose takes up to {{max}} characters.",
+      "full": "This character already has the most animations; delete one to make another."
+    },
+    "groupCount": "{{done}} of {{total}} made"
   }
 }

@@ -10,6 +10,7 @@ import {
   RETIRED_SCENE_TEMPLATES,
   SCENE_TEMPLATE_ALIASES,
   VIDEO2D_SCENE_TEMPLATES,
+  WALK_SCENE_TEMPLATES,
   canonicalBindings,
   getCandidateSceneTemplate,
   parseSceneTemplateEntry,
@@ -35,21 +36,25 @@ const MERGES = {
   'space-shield': ['space-broadside', { outcome: 'shield' }],
   'space-explosion': ['space-broadside', { outcome: 'explode' }],
 }
+// The five walking cards (2026-10-13) wait for the owner's review of their renders: candidates until then.
+const WALK_IDS = ['walk-follow-back', 'walk-toward-camera', 'walk-behind-foreground', 'walk-shadow-first', 'walk-two-pose', 'walk-cycle-sheet', 'character-reaction']
 const SLOT_NAMES = new Set(['subject_1', 'subject_2', 'background', 'prop_1', 'prop_2', 'foreground'])
 const slot = (template, id) => template.slots.find(candidate => candidate.id === id)
 const codeOf = fn => { try { fn() } catch (error) { return error.code } return undefined }
 
-test('the catalog holds the 41 cards: 17 originals, 2 titled cards and 22 choreographies', () => {
+test('the catalog holds the 48 cards: 17 originals, 7 walking and reaction cards, 2 titled cards and 22 choreographies', () => {
   assert.equal(CATALOG_VERSION, '2026-09-review-1')
-  assert.equal(ALL_SCENE_TEMPLATES.length, 41)
-  assert.equal(new Set(ALL_SCENE_TEMPLATES.map(template => template.id)).size, 41)
+  assert.equal(ALL_SCENE_TEMPLATES.length, 48)
+  assert.equal(new Set(ALL_SCENE_TEMPLATES.map(template => template.id)).size, 48)
   assert.deepEqual(CANDIDATE_SCENE_TEMPLATES.map(template => template.id), ORIGINAL_IDS)
+  assert.deepEqual(WALK_SCENE_TEMPLATES.map(template => template.id), WALK_IDS, 'the walking cards are their own group, after the choreographies')
+  assert.deepEqual(ALL_SCENE_TEMPLATES.slice(-WALK_IDS.length).map(template => template.id), WALK_IDS)
   assert.deepEqual(VIDEO2D_SCENE_TEMPLATES.map(template => template.id), ['documentary-history', 'city-postcard'])
   assert.equal(MUSIC_MOTION_TEMPLATES.length, 22)
   assert.deepEqual(ALL_SCENE_TEMPLATES.map(template => template.id), catalogJson.entries.map(entry => entry.id))
   for (const template of ALL_SCENE_TEMPLATES) {
     assert.equal(template.version, 1)
-    assert.equal(template.status, 'approved', `${template.id} passed its real-asset render review (2026-10-12)`)
+    assert.equal(template.status, WALK_IDS.includes(template.id) ? 'candidate' : 'approved', `${template.id} review status`)
     assert.equal(getCandidateSceneTemplate(template.id), template)
     assert.match(template.promptExample, new RegExp(template.id.replaceAll('-', '\\-')))
     assert.ok(template.title && template.description && template.limits.length >= 5, template.id)
@@ -156,7 +161,8 @@ test('cinema cards name their narrative twins and stay off the composer shelf', 
   const shelf = COMPOSER_SCENE_TEMPLATES.map(template => template.id)
   assert.equal(shelf.some(id => id.startsWith('cinema-')), false)
   assert.ok(shelf.includes('documentary-history') && shelf.includes('city-postcard'))
-  assert.equal(shelf.length, 34)
+  assert.equal(shelf.length, 41)
+  assert.ok(WALK_IDS.every(id => shelf.includes(id)), 'the walking cards are on the composer shelf: none has a narrative twin')
 })
 
 test('the loader accepts candidate and approved and rejects any other status', () => {
