@@ -194,3 +194,66 @@ def test_story_lab_job_lifecycle_with_a_fake_writer(server, golden, monkeypatch)
         ):
             time.sleep(0.02)
         launch._story_plan_jobs.clear()
+
+
+def test_a_cancelled_story_job_resumes_and_its_activity_row_follows(server, monkeypatch) -> None:
+    """Owner decision 2026-10-15: cancel, then resume, restarts the job and reopens its Activity row. No golden: the
+    states asserted here are the contract. The writing provider is a fake."""
+    from services import llm_service
+
+    base = "/api/v1/stories/generate"
+    entered, gate = threading.Event(), threading.Event()
+    mode = {"now": "block"}
+
+    def fake_writer(**_request):
+        if mode["now"] == "block":
+            entered.set()
+            assert gate.wait(30), "the test never released the writer"
+        return json.dumps(OVERVIEW)
+
+    def get(path: str) -> dict:
+        return server.client.get(path).json()
+
+    def activity(task_id: str) -> dict:
+        tasks = server.client.get("/api/v1/tasks", params={"workspace": "default", "status": "all"}).json()["tasks"]
+        return next(task for task in tasks if task["id"] == task_id)
+
+    def settle(job: str, *states: str) -> dict:
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            status = get(f"{base}/status/{job}")
+            if status.get("status") in states:
+                return status
+            time.sleep(0.02)
+        raise AssertionError(f"{job} never reached {states}")
+
+    monkeypatch.setattr(llm_service, "generate_openai_compatible", fake_writer)
+    monkeypatch.setattr(llm_service, "generate_streaming", lambda **_request: (_ for _ in ()).throw(AssertionError("no local model")))
+    body = {"scope": "overview", "premise": "A harbour.", "project": {"projectType": "full_story"}, **WRITER}
+    try:
+        started = server.client.post(f"{base}/start", json=body).json()
+        job, task_id = started["jobId"], started["taskId"]
+        assert entered.wait(30)
+        assert server.client.post(f"{base}/cancel/{job}").json()["status"] == "cancelling"
+        gate.set()
+        settle(job, "cancelled")
+        assert activity(task_id)["status"] == "cancelled"
+
+        mode["now"] = "good"
+        answered = server.client.post(f"{base}/resume/{job}", json={})
+        assert answered.status_code == 200 and answered.json()["status"] == "queued"
+        done = settle(job, "completed", "failed")
+        assert done["status"] == "completed" and done["error"] is None and done["result"]["result"]["overview"]
+        deadline = time.time() + 30
+        while time.time() < deadline and activity(task_id)["status"] != "completed":
+            time.sleep(0.02)
+        row = activity(task_id)
+        assert row["status"] == "completed" and not row.get("error"), row
+    finally:
+        gate.set()
+        deadline = time.time() + 30
+        while time.time() < deadline and any(
+            thread.name.startswith("story-plan-") and thread.is_alive() for thread in threading.enumerate()
+        ):
+            time.sleep(0.02)
+        sys.modules["_launch_runtime"]._story_plan_jobs.clear()
