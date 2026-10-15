@@ -30,6 +30,7 @@ from typing import Any
 
 from . import resource_scheduler
 from .asset_manifest import publish_generation_sidecar_best_effort
+from .generation_output_name import canonical_file_url
 
 APP_DIR = Path(__file__).resolve().parents[1]
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
@@ -908,7 +909,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message="Rigged model saved",
             progress=1.0,
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
             size=output_path.stat().st_size,
             animations=result_summary.get("animations") or request_data["animations"],
             rig_profile=result_summary.get("rig_profile", request_data.get("rig_profile", DEFAULT_RIG_PROFILE)),

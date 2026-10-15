@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app_identity import startup_identity
 from app.services import model3d_service, rig_service
 from app.services.asset_manifest import SCHEMA_NAME, AssetManifestError, read_asset_manifest
 from app.services.generation_provenance import provenance_from_manifest
@@ -38,6 +39,9 @@ class _SuccessfulWorker:
 
 @pytest.fixture(autouse=True)
 def isolated_job_registries():
+    # The sidecar writer reads the app identity through `git` once; the tests below replace the shared
+    # `subprocess.Popen`, so that first read must not happen inside them (the file would fail when run alone).
+    startup_identity()
     registries = (
         (model3d_service._lock, model3d_service._jobs, model3d_service._processes),
         (rig_service._lock, rig_service._jobs, rig_service._processes),
@@ -114,6 +118,7 @@ def test_model3d_job_and_sidecar_share_the_canonical_task_identity(tmp_path, mon
     assert completed["status"] == "completed"
     assert completed["task_id"] == expected_task_id
     assert completed["root_task_id"] == expected_task_id
+    assert completed["url"] == f"/api/v1/file/{completed['filename']}?workspace=studio-a"
     output = output_dir / completed["filename"]
     metadata = json.loads(output.with_suffix(".meta.json").read_text(encoding="utf-8"))
     assert metadata["schema"] == SCHEMA_NAME
@@ -182,6 +187,7 @@ def test_rig_job_and_sidecar_share_the_canonical_task_identity(tmp_path, monkeyp
     assert completed["status"] == "completed"
     assert completed["task_id"] == expected_task_id
     assert completed["root_task_id"] == expected_task_id
+    assert completed["url"] == f"/api/v1/file/{completed['filename']}?workspace=studio-b"
     output = output_dir / completed["filename"]
     metadata = json.loads(output.with_suffix(".meta.json").read_text(encoding="utf-8"))
     assert metadata["schema"] == SCHEMA_NAME
@@ -446,3 +452,64 @@ def test_a_second_install_sharing_ckpts_does_not_kill_the_first_installs_rig_wor
         for process in (first, orphan_of_b):
             process.kill()
             process.wait()
+
+
+# --- the file URL a finished job reports names the workspace the job ran in (assets-08) ---------------------
+# GET /api/v1/file/<name> serves a bare name from the ACTIVE workspace only; a job that ran in another
+# workspace reported a URL that answered 404. The MCP doors already added `?workspace=`; the job now says it.
+
+def _model3d_job(job_id, **extra):
+    request = model3d_service._prepare_request({"model_id": "hunyuan3d-2-turbo"}, {"front": "reference.png"})
+    job = {"job_id": job_id, "task_id": model3d_service._canonical_task_id(job_id), "status": "waiting_resource",
+           "progress": 0, "request": request, "updated_at": 0, **extra}
+    model3d_service._jobs[job_id] = job
+    return job
+
+
+def test_simulated_model3d_job_reports_a_url_with_its_workspace(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        model3d_service.execution_mode, "POLICY",
+        SimpleNamespace(simulated=True, fail_kind="", fail_count=1, step_delay=0.0),
+    )
+    job_id = "sim-url-workspace"
+    _model3d_job(job_id, workspace="studio c")
+    model3d_service._run_job_serialized(job_id, str(tmp_path))
+    done = model3d_service.get_job(job_id)
+    assert done["status"] == "completed"
+    assert done["url"] == f"/api/v1/file/{done['filename']}?workspace=studio%20c"
+
+
+def test_remote_model3d_job_reports_a_url_with_its_workspace(monkeypatch, tmp_path):
+    from app.services import meshy_3d_service
+
+    job_id = "meshy-url-workspace"
+    monkeypatch.setattr(model3d_service.execution_mode, "validate_generation", lambda *_a, **_k: None)
+    monkeypatch.setattr(model3d_service.execution_mode, "validate_remote_provider", lambda *_a, **_k: None)
+    monkeypatch.setattr(model3d_service, "_active_profile", lambda: {"model3d_provider": "meshy"})
+    monkeypatch.setattr(model3d_service, "_services", lambda: {"meshy_api_key": "key"})
+    monkeypatch.setattr(model3d_service.uuid, "uuid4", lambda: SimpleNamespace(hex=job_id))
+    monkeypatch.setattr(model3d_service.threading, "Thread", _DeferredThread)
+    monkeypatch.setattr(model3d_service, "_publish_model3d_result", lambda *_a, **_k: None)
+
+    def _generate(*, output_dir, filename_stem, **_kwargs):
+        (Path(output_dir) / f"{filename_stem}.glb").write_bytes(b"glb")
+        return {"filename": f"{filename_stem}.glb"}
+
+    monkeypatch.setattr(meshy_3d_service, "generate_model", _generate)
+    model3d_service.start_job(body={"provider": "meshy", "prompt": "a lamp"}, image_paths={},
+                              output_dir=str(tmp_path), workspace="studio-c")
+    model3d_service._run_remote_job(job_id, str(tmp_path))
+    done = model3d_service.get_job(job_id)
+    assert done["status"] == "completed"
+    assert done["url"] == f"/api/v1/file/{done['filename']}?workspace=studio-c"
+
+
+def test_a_job_without_a_workspace_reports_the_default_one(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        model3d_service.execution_mode, "POLICY",
+        SimpleNamespace(simulated=True, fail_kind="", fail_count=1, step_delay=0.0),
+    )
+    job_id = "sim-url-default"
+    _model3d_job(job_id)
+    model3d_service._run_job_serialized(job_id, str(tmp_path))
+    assert model3d_service.get_job(job_id)["url"].endswith("?workspace=default")

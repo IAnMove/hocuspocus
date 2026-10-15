@@ -8,6 +8,7 @@ import uuid
 from typing import Any
 
 from services import core_workspace as core, workspace_busy
+from services.generation_output_name import canonical_file_url
 from services.provider_profile import alias_model3d_provider, refuse_remote_retexture
 
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -270,7 +271,7 @@ def _run(job_id: str) -> None:
         filename = result["filename"]
         _publish_asset_manifest(job_id, filename, provider)
         _patch(job_id, status="completed", phase="completed", progress=1.0,
-               message="3D model ready", filename=filename, url=f"/api/v1/file/{filename}")
+               message="3D model ready", filename=filename, url=canonical_file_url(filename, job.get("workspace")))
     except Exception as exc:
         if cancelled():
             _patch(job_id, status="cancelled", phase="cancelled", message="Cancelled")
