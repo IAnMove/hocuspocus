@@ -15,7 +15,9 @@ from routers.character_animation_jobs import create_character_animation_jobs_rou
 from services.character_animations import MAX_ANIMATIONS
 from services.character_animation_job import AnimationJobDeps, AnimationJobError, CharacterAnimationJobs, reference_of
 from services.character_kit_library import patch_character_kit, read_character_kit_library, write_character_kit_library
-from services.local_generation import ToolError, payload_of
+from services.local_generation import LocalTools, ToolError, payload_of
+from services.local_mcp import LocalMcp
+from services.studio_key import command_handlers as studio_key_handlers
 
 WS = "demo"
 
@@ -54,7 +56,10 @@ class FakeServer:
             source = arguments["input"]["source"]
             name = f"{Path(source).stem}-key.png"
             _picture(self.root / name, keyed=True, shift=len(self.of("studio.key")) % 5)
-            return {"result": {"url": f"/api/v1/file/{name}?workspace={WS}", "file": name}}
+            # The shape the real handler answers (services/studio_key.py ``command_handlers``): an operation envelope that is itself
+            # "completed", with the keyed file inside ``result``.
+            return {"version": 1, "status": "completed", "operation": "studio.key", "result": {
+                "file": name, "url": f"/api/v1/file/{name}?workspace={WS}", "sha256": "0" * 64, "frames": 1, "report": {"transparentShare": 0.77}}}
         return {"result": {"status": "cancelled"}}
 
 
@@ -242,6 +247,22 @@ def test_payload_of_does_not_treat_an_http_error_status_as_a_running_job():
     assert payload_of({"result": {"url": "/api/v1/file/a.png", "file": "a.png"}}) == {"url": "/api/v1/file/a.png", "file": "a.png"}
     # The old timeout envelope still names the job.
     assert payload_of({"_is_error": True, "error": {"job_id": "gen-1", "status": "running", "timed_out": True}})["job_id"] == "gen-1"
+
+
+def test_the_real_studio_key_reply_is_read_as_the_keyed_file(world):
+    """Sol 2026-10-15: ``characters.animation.make`` failed with ``studio.key returned no file`` although the key had been written.
+    The real ``studio.key`` answers an operation envelope whose own ``status`` is "completed"; reading it as a finished generation job
+    hid the file inside ``result``. This one runs the real handler through the real ``LocalMcp``, not a fake reply."""
+    root, _server, _jobs = world
+    _picture(root / "pose.png", keyed=False)
+    mcp = LocalMcp(lambda: studio_key_handlers(lambda workspace: str(root), lambda: str(root / "uploads"), find_model=lambda: None))
+    reply = mcp.call("studio.key", {"version": 1, "intent_id": "k-1", "input": {"workspace": WS, "source": "pose.png", "mode": "green"}})
+    assert reply["status"] == "completed" and reply["result"]["file"] == "pose-key.png"  # the envelope that used to win
+    keyed = LocalTools(mcp.call, WS, str(root)).key("k-2", "pose.png", "green")
+    assert keyed.startswith("/api/v1/file/") and "pose-key" in keyed
+    # An intent that is asked again answers the stored result, flagged as replayed: still the keyed file.
+    again = LocalTools(mcp.call, WS, str(root)).key("k-1", "pose.png", "green")
+    assert again == reply["result"]["url"]
 
 
 def test_a_picture_the_server_could_not_start_is_discarded_from_the_queue_and_the_job_says_to_try_again(world):
