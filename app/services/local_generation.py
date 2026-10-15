@@ -67,6 +67,17 @@ def payload_of(reply: dict[str, Any]) -> dict[str, Any]:
     return _job_payload(inner) or _job_payload(reply) or (inner if isinstance(inner, dict) else reply)
 
 
+def result_of(reply: dict[str, Any]) -> dict[str, Any]:
+    """What a tool that is not a generation job answered: its ``result``.
+
+    An operation tool (``studio.key``) answers an envelope ``{"status": "completed", "operation": ..., "result": {...}}``. The envelope's
+    ``status`` is the call's, not a job's, so ``payload_of`` would take the envelope for a finished job and hide the file inside ``result``.
+    """
+    raise_if_error(reply)
+    inner = reply.get("result")
+    return inner if isinstance(inner, dict) else reply
+
+
 def job_id_of(submitted: dict[str, Any]) -> str:
     raise_if_error(submitted)
     if str(submitted.get("status") or "") == "failed":
@@ -166,7 +177,7 @@ class LocalTools:
         self._check()
         reply = self.call("studio.key", {"version": 1, "intent_id": intent_id,
                                          "input": {"workspace": self.workspace, "source": source, "mode": mode}})
-        payload = payload_of(reply)
+        payload = result_of(reply)
         url = payload.get("url") or (file_url(str(payload["file"]), self.workspace) if payload.get("file") else "")
         if not url:
             raise ToolError("key_failed", "studio.key returned no file")
