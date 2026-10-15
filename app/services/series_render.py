@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from .h3_prompt_policy import tagged_dialogue
+from services.character_speech_definition import PLACEHOLDER_DELIVERY, PLACEHOLDER_EMOTION
 from services.h3_frame_lattice import frames_for_seconds
 
 
@@ -349,8 +350,8 @@ def _h3_dialogue_description(series: dict, shot: dict, character_names: dict[str
         character_id = str(beat.get("characterId") or beat.get("speaker") or "Speaker")
         speaker_ids.setdefault(character_id, f"S{len(speaker_ids) + 1}")
         speaker = character_names.get(character_id, str(beat.get("speaker") or character_id))
-        emotion = " ".join(str(beat.get("emotion") or "natural").split())
-        delivery = " ".join(str(beat.get("delivery") or "natural delivery").split())
+        emotion = " ".join(str(beat.get("emotion") or PLACEHOLDER_EMOTION).split())
+        delivery = " ".join(str(beat.get("delivery") or PLACEHOLDER_DELIVERY).split())
         dialogue = str(beat.get("text") or "").strip()
         lines.append(
             f"{speaker} ({speaker_ids[character_id]}), {emotion}, {delivery}: "
