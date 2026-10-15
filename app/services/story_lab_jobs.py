@@ -318,15 +318,21 @@ def _persist_story_plan_job(job: dict) -> None:
         except OSError:
             pass
 
-def _story_job_update(job_id: str, *, reopen: bool = False, **patch) -> dict | None:
+def _story_job_update(
+    job_id: str, *, reopen: bool = False, settle_cancel: bool = False, **patch
+) -> dict | None:
     """Patch a job and publish it. A cancelled job ignores every worker patch; only ``reopen=True`` (the explicit
-    resume route, like a cancelled Series plan) lets it leave ``cancelling``/``cancelled``."""
+    resume route, like a cancelled Series plan) lets it leave ``cancelling``/``cancelled``. ``settle_cancel=True``
+    is the dying worker writing ``cancelled``: it applies only while the job is still ``cancelling``, so it cannot
+    overwrite a Resume that already queued a replacement."""
     with _story_plan_jobs_lock:
         job = _story_plan_jobs.get(job_id)
         if not job:
             return None
         # A live worker owns the job: a resume that lost the race for it must not undo the cancel sent to that worker.
         reopen = reopen and job_id not in _story_plan_active_jobs
+        if settle_cancel and job.get("status") != "cancelling":
+            return copy.deepcopy(job)
         next_status = str(patch.get("status") or job.get("status") or "")
         if (
             not reopen
@@ -482,22 +488,27 @@ def _run_story_plan_job(job_id: str) -> None:
         ):
             _run_story_plan_job_inner(job_id)
     finally:
-        with _story_plan_jobs_lock:
-            _story_plan_active_jobs.discard(job_id)
-        settling = _load_story_plan_job(job_id) or {}
-        if settling.get("status") == "cancelling":
-            _story_job_update(
-                job_id,
-                status="cancelled",
-                stage="cancelled",
-                message=_planning_cancel_message(
-                    "Story generation",
-                    settling.get("cancellationAbortSupported")
-                    if isinstance(settling.get("cancellationAbortSupported"), bool)
-                    else None,
-                ),
-                finishedAt=time.time(),
-            )
+        # Keep the claim until cancelled is persisted. Dropping it first left a window where Resume
+        # saw cancelling with no worker, queued a replacement, and this settle then overwrote it.
+        try:
+            settling = _load_story_plan_job(job_id) or {}
+            if settling.get("status") == "cancelling":
+                _story_job_update(
+                    job_id,
+                    settle_cancel=True,
+                    status="cancelled",
+                    stage="cancelled",
+                    message=_planning_cancel_message(
+                        "Story generation",
+                        settling.get("cancellationAbortSupported")
+                        if isinstance(settling.get("cancellationAbortSupported"), bool)
+                        else None,
+                    ),
+                    finishedAt=time.time(),
+                )
+        finally:
+            with _story_plan_jobs_lock:
+                _story_plan_active_jobs.discard(job_id)
 
 def _start_story_plan_worker(job_id: str) -> bool:
     """Claim a Story planner before Thread.start so resume cannot duplicate it."""

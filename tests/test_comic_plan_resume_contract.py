@@ -348,3 +348,67 @@ def test_a_resume_that_lost_the_race_for_the_worker_cannot_undo_a_cancel(monkeyp
     kept = jobs._story_job_update(job_id, reopen=True, status="queued", message="late resume")
     assert kept["status"] == "cancelling" and kept["message"] != "late resume"
     assert jobs._load_story_plan_job(job_id)["status"] == "cancelling"
+
+
+def test_settling_a_cancel_does_not_overwrite_a_resume_that_already_left_cancelling(monkeypatch, tmp_path):
+    """The dying worker's cancelled write applies only while the job is still cancelling. Resume after Cancel
+    can queue a replacement in the window after the old worker dropped its claim; that queued job must not be
+    flipped back to cancelled (and a completed replacement must not be lost)."""
+    job_id = "story-plan-eeeeeeeeeeee"
+    jobs, *_ = _cancelled_story_job(monkeypatch, tmp_path, job_id, "queued")
+    jobs._story_plan_active_jobs.add(job_id)
+    kept = jobs._story_job_update(
+        job_id, settle_cancel=True, status="cancelled", message="stale settle",
+    )
+    assert kept["status"] == "queued" and kept["message"] != "stale settle"
+    assert jobs._load_story_plan_job(job_id)["status"] == "queued"
+
+
+def test_settling_a_cancel_still_writes_cancelled_while_the_job_is_cancelling(monkeypatch, tmp_path):
+    job_id = "story-plan-ffffffffffff"
+    jobs, *_ = _cancelled_story_job(monkeypatch, tmp_path, job_id, "cancelling")
+    jobs._story_plan_active_jobs.add(job_id)
+    kept = jobs._story_job_update(
+        job_id, settle_cancel=True, status="cancelled", stage="cancelled",
+        message="Story generation cancelled.", finishedAt=1.0,
+    )
+    assert kept["status"] == "cancelled" and kept["stage"] == "cancelled"
+    assert jobs._load_story_plan_job(job_id)["status"] == "cancelled"
+
+
+def test_resume_during_cancel_settle_is_already_running_until_cancelled_is_persisted(monkeypatch, tmp_path):
+    """Cancel then Resume in one beat: the dying worker keeps its claim until ``cancelled`` is on disk,
+    so Resume cannot start a replacement that the settle write would then overwrite."""
+    import time
+
+    import routers.story_lab as lab
+
+    job_id = "story-plan-gggggggggggg"
+    jobs, _published, stages, resets = _cancelled_story_job(monkeypatch, tmp_path, job_id, "cancelling")
+    monkeypatch.setattr(lab, "_story_plan_active_jobs", jobs._story_plan_active_jobs)
+    monkeypatch.setattr(lab, "_reset_canonical_task_for_resume", lambda *args: resets.append(args))
+    entered, release = threading.Event(), threading.Event()
+    real_update = jobs._story_job_update
+
+    def gated(*args, **kwargs):
+        if kwargs.get("status") == "cancelled" and kwargs.get("settle_cancel"):
+            entered.set()
+            assert release.wait(20), "the test never released the settle write"
+        return real_update(*args, **kwargs)
+
+    monkeypatch.setattr(jobs, "_story_job_update", gated)
+    try:
+        assert jobs._start_story_plan_worker(job_id)
+        assert entered.wait(10), "the dying worker never reached the cancelled settle"
+        assert job_id in jobs._story_plan_active_jobs
+        again = lab.resume_story_lab_generation(job_id, {})
+        assert again["message"] == "Story generation is already running."
+        assert (jobs._load_story_plan_job(job_id) or {}).get("status") == "cancelling"
+        assert stages == [] and resets == []
+    finally:
+        release.set()
+    deadline = time.time() + 20
+    while time.time() < deadline and job_id in jobs._story_plan_active_jobs:
+        time.sleep(0.02)
+    assert job_id not in jobs._story_plan_active_jobs
+    assert (jobs._load_story_plan_job(job_id) or {}).get("status") == "cancelled"
