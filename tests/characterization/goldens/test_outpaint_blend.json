@@ -459,7 +459,7 @@
           "frames": 73,
           "generation_details": {
             "execution_mode": "real",
-            "frames": 73,
+            "frames": 49,
             "generation_mode": "video",
             "guidance": 1.0,
             "lora_count": 0,
@@ -500,7 +500,7 @@
             ]
           },
           "video_source": {
-            "frames": 24,
+            "frames": 25,
             "shape": [
               64,
               64,
@@ -537,7 +537,7 @@
           "settings_version": 2.52,
           "sliding_window_size": 83,
           "video_end": "<TEMP0>/motion_suffix.mp4",
-          "video_length": 73,
+          "video_length": 49,
           "video_source": "<TEMP0>/motion_prefix.mp4"
         },
         "status": 200,
@@ -623,16 +623,14 @@
               ]
             }
           ],
-          "video_end": {
-            "frames": 2,
-            "shape": [
-              32,
+          "image_start": {
+            "size": [
               64,
-              3
+              32
             ]
           },
-          "video_source": {
-            "frames": 4,
+          "video_end": {
+            "frames": 2,
             "shape": [
               32,
               64,
@@ -660,7 +658,7 @@
           "guidance_scale": 2.5,
           "image_end": "<TEMP1>/b_overlap_end.png",
           "image_mode": 0,
-          "image_prompt_type": "VE",
+          "image_prompt_type": "SE",
           "image_refs": [
             "<TEMP1>/a_hint_01.png",
             "<TEMP1>/a_hint_02.png",
@@ -669,6 +667,7 @@
             "<TEMP1>/b_hint_02.png",
             "<TEMP1>/b_hint_03.png"
           ],
+          "image_start": "<TEMP1>/a_overlap_start.png",
           "injection_strength": 1.0,
           "input_video_strength": 0.1,
           "loras_multipliers": "1 0.8",
@@ -684,8 +683,7 @@
           "stage2_steps": 3,
           "video_end": "<TEMP1>/motion_suffix.mp4",
           "video_length": 17,
-          "video_prompt_type": "KFI",
-          "video_source": "<TEMP1>/motion_prefix.mp4"
+          "video_prompt_type": "KFI"
         },
         "status": 200,
         "worker": [
@@ -839,7 +837,6 @@
             "resolution": "64x32",
             "seed": 9,
             "sliding_window_size": 27,
-            "trim_tail_frames": 4,
             "video_length": 17
           },
           "params": {
@@ -871,7 +868,6 @@
             "seed": 9,
             "settings_version": 2.52,
             "sliding_window_size": 27,
-            "trim_tail_frames": 4,
             "video_length": 17
           },
           "prompt": "the road turns into a river",
@@ -1148,7 +1144,6 @@
             "resolution": "64x32",
             "seed": 9,
             "sliding_window_size": 27,
-            "trim_tail_frames": 4,
             "video_length": 17
           },
           "params": {
@@ -1180,7 +1175,6 @@
             "seed": 9,
             "settings_version": 2.52,
             "sliding_window_size": 27,
-            "trim_tail_frames": 4,
             "video_length": 17
           },
           "prompt": "the road turns into a river",
@@ -1297,7 +1291,6 @@
             "resolution": "64x32",
             "seed": 9,
             "sliding_window_size": 27,
-            "trim_tail_frames": 4,
             "video_length": 17
           },
           "params": {
@@ -1329,7 +1322,6 @@
             "seed": 9,
             "settings_version": 2.52,
             "sliding_window_size": 27,
-            "trim_tail_frames": 4,
             "video_length": 17
           },
           "prompt": "the road turns into a river",

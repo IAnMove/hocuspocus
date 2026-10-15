@@ -49,6 +49,21 @@ def _read_blend_numbers(body):
     }
 
 
+def _fit_motion_prefix(transition_frames, prefix_frames):
+    """Return ``(prefix_frames, video_length)`` whose output is exactly ``transition_frames`` long.
+
+    With a motion prefix the model returns ``prefix + video_length - 1`` frames and ``video_length`` must be on
+    LTX's 8k+1 schedule with at least 17. When the overlap is too short for the prefix plus those 17 frames the
+    prefix gives way (and when the schedule rounds ``video_length`` down it takes the spare frames), so the
+    assembled blend stays A + B - overlap long (final-edit E3). A prefix left with one frame is the start image
+    already, so that case is plain SE: ``(0, transition_frames)``.
+    """
+    wanted = transition_frames - prefix_frames + 1
+    video_length = max(17, 17 + 8 * ((wanted - 17) // 8))
+    fitted = transition_frames - video_length + 1
+    return (fitted, video_length) if fitted > 1 else (0, transition_frames)
+
+
 async def blend_endpoint(request: Request):
     """Blend two clips with an AI-generated transition (Sora-1 style overlap).
 
@@ -223,6 +238,15 @@ async def blend_endpoint(request: Request):
         motion_prefix_sec = max(0.0, min(motion_prefix_sec, overlap_sec_eff * 0.8))
         K_prefix = int(round(motion_prefix_sec * fps)) if motion_prefix_sec > 0 else 0
         K_prefix = max(0, min(K_prefix, len(frames_a) - 2))  # leave room for generation
+        # The replayed prefix comes out on top of ``video_length`` (output =
+        # prefix + video_length - 1), so size both to give exactly
+        # ``transition_frames``; SE (no prefix) already outputs video_length.
+        generated_frames = transition_frames
+        if K_prefix > 0:
+            K_prefix, generated_frames = _fit_motion_prefix(
+                transition_frames, K_prefix,
+            )
+            motion_prefix_sec = K_prefix / fps
 
         def _write_mp4(path: str, frames: list, fps_val: float):
             import imageio
@@ -381,7 +405,7 @@ async def blend_endpoint(request: Request):
             # guidance_scale / num_inference_steps: explicit body wins > studio value > safe default
             "guidance_scale": numbers["guidance_scale"],
             "num_inference_steps": numbers["num_inference_steps"],
-            "video_length": transition_frames,
+            "video_length": generated_frames,
             "resolution": f"{src_w}x{src_h}",
             "generation_mode": "video",
             "image_mode": 0,  # defensive: blend is always a video job

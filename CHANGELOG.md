@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a Blend now comes out exactly as long as the overlap it announces.** The finished Blend was 0.32 s short (no motion prefix) or 0.44 s long (the default mode) against "A + B - overlap": the engine dropped 8 landing frames off every transition and the motion-prefix frames were counted twice. Blend transitions are no longer trimmed at the tail, and the prefix and the generated length are sized together so the transition has exactly the overlap's frames. When the overlap is too short for the prefix plus the model's 17-frame minimum, the motion prefix is shortened (or dropped in favour of a single start frame) instead of lengthening the clip. Insert mode is unchanged.
+
 **Fixed: Outpaint on the legacy LTX path now fails clearly when its IC-LoRA cannot be downloaded.** Without that LoRA file (offline, a failed download, a full disk) the legacy path only printed a warning and carried on, so the job spent the GPU time and published an unrelated picture as "Done". It now stops with "Legacy Outpaint IC-LoRA ... is unavailable", like the official stack already did.
 
 **Fixed: a finished Director run can be edited and deleted at once, without waiting for the video model to unload.** A run already said `completed` while its worker was still unloading the H3 model, and for 1-6 seconds every edit (prompt, tag, Repeat, rerun, rejoin, repair) answered "Pipeline is still active" and DELETE said "still running, stop it first". The worker now leaves the registry before the unload, which only touches the model under the GPU lock.

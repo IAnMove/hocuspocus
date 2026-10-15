@@ -809,6 +809,45 @@ def test_blend_assembles_a_before_the_transition_and_b_after(rig, golden, tmp_pa
     }, (str(tmp_path), "<TMP>"), *temp.pairs()))
 
 
+def test_blend_transition_is_as_long_as_the_overlap_it_announces(rig, tmp_path, monkeypatch) -> None:
+    """The motion-prefix frames come out of the model's output on top of ``video_length`` (output = prefix +
+    video_length - 1), so the route sizes both to give exactly the transition length at every overlap: that is what
+    makes the assembled blend A + B - overlap long. final-edit E3 measured 36 frames for a 25-frame transition."""
+    _block_network(monkeypatch)
+    temp = _TempDirs(monkeypatch)
+    started = _capture_workers(rig)
+    clip_a = media.video(tmp_path / "a.mp4", seconds=3, size="64x36", fps=25)
+    clip_b = media.video(tmp_path / "b.mp4", seconds=3, size="64x36", fps=25)
+    for overlap_sec, expected in ((1.0, 25), (2.0, 57), (0.4, 17)):
+        for prefix_sec in (0, 0.4, 1.0):
+            observed = _hand_off(rig, "/api/v1/blend", _blend_body(
+                clip_a, clip_b, overlap_sec=overlap_sec, motion_prefix_sec=prefix_sec), started, temp=temp)
+            params, media_seen = observed["params"], observed["media"]
+            video_length = params["video_length"]
+            prefix = media_seen["video_source"]["frames"] if "video_source" in media_seen else 0
+            where = f"overlap {overlap_sec}s, prefix {prefix_sec}s"
+            assert video_length >= 17 and (video_length - 17) % 8 == 0, where
+            assert round(params["_blend_overlap_sec"] * params["_blend_fps"]) == expected, where
+            assert prefix + video_length - (1 if prefix else 0) == expected, where
+            assert (prefix > 0) == (params["image_prompt_type"] == "VE"), where
+
+
+def test_blend_transition_is_not_trimmed_at_the_tail(rig, tmp_path, monkeypatch) -> None:
+    """The tail trim of a single start+end generation would cut 8 landing frames off every transition."""
+    _block_network(monkeypatch)
+    temp = _TempDirs(monkeypatch)
+    clip_a = media.video(tmp_path / "a.mp4", seconds=3, size="64x36", fps=8)
+    clip_b = media.video(tmp_path / "b.mp4", seconds=3, size="64x36", fps=8)
+    _blend_tools(monkeypatch, audio_in=(), concat_ok=True)
+    status, answer = _submit(rig, "/api/v1/blend", _blend_body(clip_a, clip_b))
+    assert status == 200, answer
+    _join_route_workers(rig)
+    sent = rig.observe(answer["job_id"])["engine_calls"]
+    assert len(sent) == 1
+    assert not sent[0]["kwargs"].get("trim_tail_frames"), sent[0]["kwargs"]
+    assert sent[0]["kwargs"]["video_length"] == 17
+
+
 def test_blend_cancelled_while_the_transition_renders(rig, golden, tmp_path, monkeypatch) -> None:
     _block_network(monkeypatch)
     temp = _TempDirs(monkeypatch)

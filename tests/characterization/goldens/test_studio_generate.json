@@ -58,7 +58,6 @@
               "resolution": "64x64",
               "seed": 7,
               "sliding_window_size": 27,
-              "trim_tail_frames": 4,
               "video_length": 17
             },
             "params": {
@@ -90,7 +89,6 @@
               "seed": 7,
               "settings_version": 2.52,
               "sliding_window_size": 27,
-              "trim_tail_frames": 4,
               "video_length": 17
             },
             "prompt": "the lake becomes a field",
