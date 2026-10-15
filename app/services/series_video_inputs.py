@@ -7,13 +7,20 @@ were never in it; they travel in one more optional digest per take:
 * ``orientation``: the series frame is portrait (704x1280, not 1280x704);
 * ``plan``: for ``start: "plan"``, the pose image each cast member's kit gives and where it stands, and the location
   plate: what the start frame is composed from (a member with no image is not drawn and counts for nothing);
-* ``start``: for a named start (``pose:<character>/<pose>``, a workspace file or an asset), the pixels of that file.
+* ``start``: for a named start (``pose:<character>/<pose>``, a workspace file or an asset), the pixels of that file;
+* ``end``: for a named end (a workspace file or an asset; not ``same`` or omitted), the pixels of that file. H3
+  interpolates towards it, so a file replaced in place needs a new clip.
+
+``end`` is not hashed with the others: a take made with a named end carries it as a suffix of its digest
+(``<digest>+end:<digest>``), so the first part stays exactly what it always was and a take made before ``end`` was
+seen carries none. Such a take (and any take of a shot with no named end, whose digest has no suffix at all) is not
+remade because of its end image: that is the same cost as for the other legacy takes.
 
 Only the parts that apply are hashed, and a take always records the digest it was made with, even when no part
 applied, so a cast member added later is seen. A take without ``videoInputs`` was made before this existed: it
 matches on ``videoRequest`` alone. That is the cost of not generating again what is probably right: a legacy take
 that was already out of date (a series turned portrait last week, a plate overwritten) is not seen; remake it by
-hand. ``inputs`` is None when a current part cannot be read (a named start that resolves to no file); nothing is
+hand. ``inputs`` is None when a current part cannot be read (a named start or end that resolves to no file); nothing is
 then compared, because remaking a clip on a read that failed would spend a generation for nothing.
 
 ``matching_attempts`` is the one matcher: completed takes that asked for this request with these inputs.
@@ -31,6 +38,7 @@ REQUEST_KEY = "videoRequest"
 INPUTS_KEY = "videoInputs"
 # Who approves a take on purpose (``approvedBy``); ``server`` is a produce or render run approving what it made.
 _PEOPLE = ("user", "agent", "wizard")
+_END_MARK = "+end:"
 
 
 def inputs_digest(parts: dict[str, Any]) -> str:
@@ -38,10 +46,21 @@ def inputs_digest(parts: dict[str, Any]) -> str:
     return hashlib.sha1(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:12]
 
 
+def with_end(inputs: str, end_pixels: str) -> str:
+    """``inputs`` with the digest of a named end frame's file added as its suffix."""
+    return f"{inputs}{_END_MARK}{end_pixels}"
+
+
 def inputs_match(metadata: dict[str, Any], inputs: str | None) -> bool:
-    """A take without ``videoInputs`` is a legacy take and matches; so does any take when ``inputs`` is unknown."""
+    """A take without ``videoInputs`` is a legacy take and matches; so does any take when ``inputs`` is unknown.
+
+    The end frame is compared only when both the take and the shot have one (see ``with_end``)."""
     stored = metadata.get(INPUTS_KEY)
-    return stored is None or inputs is None or stored == inputs
+    if stored is None or inputs is None:
+        return True
+    stored_main, _, stored_end = stored.partition(_END_MARK)
+    main, _, end = inputs.partition(_END_MARK)
+    return stored_main == main and (not stored_end or not end or stored_end == end)
 
 
 def matching_attempts(series: dict[str, Any], shot: dict[str, Any], request: str, inputs: str | None) -> list[dict[str, Any]]:
