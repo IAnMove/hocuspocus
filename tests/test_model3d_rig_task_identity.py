@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -341,3 +343,106 @@ def test_rig_refusals_keep_their_code_and_crashes_keep_their_trace(tmp_path, mon
     assert failed["status"] == "failed"
     assert shown in failed["error"]
     assert failed.get("error_code") == code
+
+
+# --- rig job control belongs to this install (assets-05) ---------------------------------------------------
+# Several installs (the live one, worktrees, a validation or a lent instance) link the SAME ckpts folder, so
+# a pid file in it is not proof the process is ours. Job control lives in the install's own settings/ folder
+# (like the 3D jobs) and only a worker started with THIS install's request file is ever signalled.
+
+def _sleeping_worker(*argv: str) -> subprocess.Popen:
+    """A process that only sleeps; its command line carries ``argv`` like a real worker's does."""
+    return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", *argv],
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def _survives(process: subprocess.Popen, seconds: float = 0.6) -> bool:
+    try:
+        process.wait(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        return True
+    return False
+
+
+def test_rig_job_folder_is_inside_this_install_and_not_in_the_shared_ckpts():
+    settings = rig_service.APP_DIR / "settings"
+    assert rig_service.JOBS_DIR.is_relative_to(settings)
+    assert "ckpts" not in rig_service.JOBS_DIR.parts
+    assert rig_service.HF_CACHE_DIR.is_relative_to(rig_service.APP_DIR / "ckpts")  # weights stay shared
+
+
+def test_reaping_leaves_a_worker_of_another_install_alone_and_ends_our_own(tmp_path, monkeypatch):
+    jobs_dir = tmp_path / "rig-jobs"
+    jobs_dir.mkdir()
+    monkeypatch.setattr(rig_service, "JOBS_DIR", jobs_dir)
+    foreign_worker = str(tmp_path / "other" / "app" / "services" / "hunyuan3d" / "rig_worker.py")
+    elsewhere = _sleeping_worker(foreign_worker, "--request", str(tmp_path / "shared" / "rig" / "jobs" / "x.json"))
+    ours = _sleeping_worker(foreign_worker, "--request", str(jobs_dir / "ours.json"))
+    humanoid = _sleeping_worker("-m", "services.humanoid_rig.worker", "--request", str(jobs_dir / "human.json"))
+    try:
+        (jobs_dir / "x.pid").write_text(str(elsewhere.pid))
+        (jobs_dir / "ours.pid").write_text(str(ours.pid))
+        (jobs_dir / "human.pid").write_text(str(humanoid.pid))
+        rig_service._reap_stale_jobs()
+        assert _survives(elsewhere), "a pid whose command line names another folder is never ours to signal"
+        assert ours.wait(timeout=10) is not None
+        assert humanoid.wait(timeout=10) is not None
+        assert list(jobs_dir.iterdir()) == []
+    finally:
+        for process in (elsewhere, ours, humanoid):
+            process.kill()
+            process.wait()
+
+
+def test_a_pid_file_does_not_vouch_for_a_worker_of_another_job(tmp_path, monkeypatch):
+    """The request file must be the one of the pid file's own job, not just any file of this folder."""
+    jobs_dir = tmp_path / "rig-jobs"
+    jobs_dir.mkdir()
+    monkeypatch.setattr(rig_service, "JOBS_DIR", jobs_dir)
+    worker = str(tmp_path / "app" / "services" / "rigging" / "rig_worker_unirig.py")
+    other_job = _sleeping_worker(worker, "--request", str(jobs_dir / "job-b.json"))
+    try:
+        (jobs_dir / "job-a.pid").write_text(str(other_job.pid))
+        rig_service._reap_stale_jobs()
+        assert _survives(other_job)
+    finally:
+        other_job.kill()
+        other_job.wait()
+
+
+def test_a_second_install_sharing_ckpts_does_not_kill_the_first_installs_rig_worker(tmp_path):
+    """The real hazard: install B imports rig_service while install A's worker is listed in the shared ckpts."""
+    shared_jobs = tmp_path / "shared-ckpts" / "rig" / "jobs"
+    shared_jobs.mkdir(parents=True)
+    app_b = tmp_path / "install-b" / "app"
+    app_b.mkdir(parents=True)
+    (app_b / "ckpts").symlink_to(tmp_path / "shared-ckpts", target_is_directory=True)
+    own_jobs = app_b / "settings" / "rig-jobs"
+    own_jobs.mkdir(parents=True)
+    worker_a = str(tmp_path / "install-a" / "app" / "services" / "hunyuan3d" / "rig_worker.py")
+    worker_b = str(app_b / "services" / "hunyuan3d" / "rig_worker.py")
+    first = _sleeping_worker(worker_a, "--request", str(shared_jobs / "jobA.json"))
+    orphan_of_b = _sleeping_worker(worker_b, "--request", str(own_jobs / "jobB.json"))
+    try:
+        (shared_jobs / "jobA.json").write_text("{}")
+        (shared_jobs / "jobA.pid").write_text(str(first.pid))
+        (own_jobs / "jobB.pid").write_text(str(orphan_of_b.pid))
+        app_dir = Path(rig_service.__file__).resolve().parents[1]
+        code = (
+            "import sys\nsys.path.insert(0, sys.argv[1])\n"
+            "source = open(sys.argv[2], encoding='utf-8').read()\n"
+            "scope = {'__name__': 'services.rig_service', '__package__': 'services', '__file__': sys.argv[3]}\n"
+            "exec(compile(source, sys.argv[3], 'exec'), scope)\n"
+        )
+        boot = subprocess.run(
+            [sys.executable, "-c", code, str(app_dir), str(Path(rig_service.__file__)), str(app_b / "services" / "rig_service.py")],
+            capture_output=True, text=True, timeout=120, cwd=str(tmp_path),
+        )
+        assert boot.returncode == 0, boot.stderr[-800:]
+        assert _survives(first), "install B must not signal the worker install A listed in the shared ckpts"
+        assert orphan_of_b.wait(timeout=10) is not None, "install B ends its own previous run's worker"
+        assert sorted(path.name for path in shared_jobs.iterdir()) == ["jobA.json", "jobA.pid"]
+    finally:
+        for process in (first, orphan_of_b):
+            process.kill()
+            process.wait()
