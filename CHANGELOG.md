@@ -6,6 +6,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a workspace cannot be deleted while a character animation is being made.** The new
+animation job writes poses, keyed pictures, the sprite sheet and the kit into the workspace
+folder, but it lived only in `.character-animation-jobs-v1` — not in `jobs()` or the busy
+registry. Deleting the folder while a pose was being keyed (or the sheet saved) wiped the
+library; `_workspace_dir()` then recreated an empty folder for the leftover worker. Delete
+now waits for that job, the same way it waits for game produce or a Director plan. A
+checkpoint a restart left as `running` still does not block.
+
 **The Character Creator keeps your work, and its options are easier to judge.**
 Leaving the tab (or the page) used to cancel the three options that were being
 drawn and forget the name and description. The creator's work now belongs to a
