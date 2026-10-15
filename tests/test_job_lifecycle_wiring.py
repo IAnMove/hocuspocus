@@ -633,6 +633,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 "get_mp4_audio_codec_settings": lambda _key: {
                     "codec": "aac", "bitrate": None,
                 },
+                # The picture probe is its own helper in the module; "input.mp4" does not exist, so no bound.
+                "_picture_bound_seconds": lambda _path: None,
             },
         )
         with tempfile.TemporaryDirectory() as directory:
