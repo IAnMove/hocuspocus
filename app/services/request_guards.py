@@ -11,9 +11,14 @@ import time
 import uuid
 
 from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from services import debug_trace, execution_mode
+from services.host_guard import install_host_guard
+
+# Pages that may call the API from a browser: the app on loopback, or behind Pinokio's https://<port>.localhost proxy.
+LOCAL_ORIGIN_REGEX = r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$"
 
 async def execution_mode_error_handler(
     _request: Request,
@@ -99,3 +104,20 @@ async def trace_user_mutations(request: Request, call_next):
             duration_ms=round((time.monotonic() - started) * 1000, 2),
         )
     return response
+
+
+def install_local_browser_guards(api) -> None:
+    """The browser-facing guards of the core server, stacked as the full server stacks them (outermost last).
+
+    The Host check comes first, then CORS for local pages, then the cross-origin mutation check on the outside
+    of CORS. A page of another origin can still send a simple POST (``text/plain``) to a loopback port; routes
+    that read the body by hand would accept it without the third guard.
+    """
+    install_host_guard(api)
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=LOCAL_ORIGIN_REGEX,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+    api.middleware("http")(protect_cross_origin_mutations)
