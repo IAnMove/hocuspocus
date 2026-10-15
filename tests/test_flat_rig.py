@@ -326,6 +326,20 @@ def test_a_pose_in_sunglasses_is_saved_without_a_blink(tmp_path):
     assert rigged["poses"]["cool"]["blinks"] is False
 
 
+def test_a_pose_hinted_not_to_blink_keeps_its_eyes_open_on_later_rigs(tmp_path):
+    # Clear spectacles are not covered eyes: a closed lid would paint over their frames, so the pose is told not to blink.
+    folder = _workspace(tmp_path)
+    rigged = rig_character(str(folder), WORKSPACE, "kevin", base_revision=1, hints={"shrug": {"blink": False}})
+    anchors = rigged["character"]["anchors"]
+    assert anchors["shrug"]["blink"] is False and "blinkSource" not in anchors["shrug"]
+    assert rigged["poses"]["shrug"]["blinks"] is False and "blink" not in anchors["base"]
+    again = rig_character(str(folder), WORKSPACE, "kevin", base_revision=rigged["revision"])
+    assert again["character"]["anchors"]["shrug"]["blink"] is False
+    cleared = rig_character(str(folder), WORKSPACE, "kevin", base_revision=again["revision"], hints={"shrug": None})
+    assert "blink" not in cleared["character"]["anchors"]["shrug"]
+    assert cleared["character"]["anchors"]["shrug"]["blinkSource"].startswith("/api/v1/file/")
+
+
 def test_rigging_needs_a_workspace_base_pose(tmp_path):
     folder = _workspace(tmp_path)
     library = read_character_kit_library(str(folder))

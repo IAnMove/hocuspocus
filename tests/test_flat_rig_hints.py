@@ -79,3 +79,11 @@ def test_a_blink_closes_both_halves_of_an_eye_its_pupil_cut():
     openings = eye_openings(pixels[..., :3], pixels[..., 3], mask, (232, 190, 160))
     for label, (outer, inner) in ((1, (145, 178)), (2, (255, 222))):
         assert openings[168, outer] == label and openings[168, inner] == label, f"eye {label} opens whole"
+
+
+def test_blink_is_a_boolean_hint_key_and_survives_a_dropped_mouth():
+    assert rig_hints({"busto": {"blink": False}}) == {"busto": {"blink": False}}
+    with pytest.raises(FlatRigError):
+        rig_hints({"busto": {"blink": "no"}})
+    kept, ignored = flat_rig_hints.trusted({**_hint(175, 245), "blink": False}, SURE, SIZE)
+    assert kept == {"blink": False} and ignored["far"]
