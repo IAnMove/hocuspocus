@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: Outpaint on the legacy LTX path now fails clearly when its IC-LoRA cannot be downloaded.** Without that LoRA file (offline, a failed download, a full disk) the legacy path only printed a warning and carried on, so the job spent the GPU time and published an unrelated picture as "Done". It now stops with "Legacy Outpaint IC-LoRA ... is unavailable", like the official stack already did.
+
 **Fixed: a finished Director run can be edited and deleted at once, without waiting for the video model to unload.** A run already said `completed` while its worker was still unloading the H3 model, and for 1-6 seconds every edit (prompt, tag, Repeat, rerun, rejoin, repair) answered "Pipeline is still active" and DELETE said "still running, stop it first". The worker now leaves the registry before the unload, which only touches the model under the GPU lock.
 
 **Fixed: the file link a finished 3D or rig job reports now works when the job ran in another workspace.** The `url` in `GET /api/v1/model3d/status/{id}` and `GET /api/v1/rig/status/{id}` was a bare `/api/v1/file/<name>`, which is looked up in the active workspace only, so a REST client reading a job that ran in a different workspace got a 404 from its own link (the MCP commands already added the workspace themselves). The job now reports `/api/v1/file/<name>?workspace=<workspace>` for local, simulated and Meshy/Hi3D jobs, on the full and the core server.
