@@ -99,6 +99,12 @@ character's ink.
 5. **Nothing else changes.** `from_script` and `produce` show each pose its own mouths; after a re-rig, `produce`
    renders again the shots that use that kit.
 
+## Small animations of a character
+
+`characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
+makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
+approves. Cards `walk-cycle-sheet`, `character-reaction` play it.
+
 ## The script
 
 ```json

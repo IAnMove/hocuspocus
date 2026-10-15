@@ -120,7 +120,7 @@ test('gizmo converts translation, yaw and uniform scale into document transforms
   assert.deepEqual(transformPatch(proxy, 'scale', 'XYZ'), { scale: 0.05 })
 })
 
-test('all 41 cards get an editable finish without rewriting prompts or assets', () => {
+test('all 48 cards get an editable finish without rewriting prompts or assets', () => {
   for (const template of ALL_SCENE_TEMPLATES) {
     const scene = candidateDemoScene(template.id)
     assert.equal(scene.narrative.controls.finishVersion, 2)

@@ -132,14 +132,14 @@ async function selectHeroAndPlate(view: Awaited<ReturnType<typeof renderDialog>>
   view.fireEvent.click(view.screen.getByRole('checkbox', { name: /I have saved what I need/ }))
 }
 
-test('lista 34 fichas sin cine y habilita BPM/intensidad según el flag exposed de la ficha', { concurrency: false }, async () => {
+test('lista 41 fichas sin cine y habilita BPM/intensidad según el flag exposed de la ficha', { concurrency: false }, async () => {
   const installed = installAssetFetch()
   try {
     const view = await renderDialog()
     const selector = view.screen.getByRole('combobox', { name: 'Action / template' }) as HTMLSelectElement
     const listed = [...selector.options].map(option => option.value)
     assert.equal(listed.length, COMPOSER_SCENE_TEMPLATES.length)
-    assert.equal(listed.length, 34)
+    assert.equal(listed.length, 41)
     assert.equal(listed.some(id => id.startsWith('cinema-')), false, 'cinema intents live on the narrative grid')
     assert.ok(listed.includes('documentary-history') && listed.includes('city-postcard'))
     assert.equal(selector.value, 'music-pulse')

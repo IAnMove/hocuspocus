@@ -1,6 +1,6 @@
 """scenes.catalog template rows carry derived traits, ES/EN copy, aliases, twins and review status, and filter by trait.
 
-The contract is docs/development/VIDEO2D_TEMPLATE_MODEL.md: 41 cards, nine merged ids that compile to a surviving card
+The contract is docs/development/VIDEO2D_TEMPLATE_MODEL.md: 48 cards (41 and the seven walk and reaction cards), nine merged ids that compile to a surviving card
 with a preset, two retired ids, and traits derived by ui/scripts/export-video2d-traits.mjs.
 """
 from __future__ import annotations
@@ -31,10 +31,10 @@ def _rows(**query) -> list[dict]:
 def test_the_catalog_lists_the_surviving_cards_only():
     rows = _rows()
     assert [row["id"] for row in rows] == LISTED
-    assert len(LISTED) == 41
+    assert len(LISTED) == 48
     assert not {row["id"] for row in rows} & (set(cards.ALIASES) | set(cards.RETIRED))
     counts = {row["kind"]: row["count"] for row in query_catalog({})["result"]["kinds"]}
-    assert counts["templates"] == 41
+    assert counts["templates"] == 48
 
 
 def test_every_card_has_derived_traits_and_one_line_in_each_language():
@@ -118,8 +118,8 @@ def test_a_trait_filter_keeps_the_cards_that_have_it(name, value, key):
 def test_subjects_is_at_least_and_format_is_exact_and_filters_join_q_and_family():
     two = _rows(subjects=2)
     assert two and all(row["subjects"] >= 2 for row in two)
-    assert len(_rows(subjects=0)) == 41
-    assert len(_rows(format="landscape")) == 41 and _rows(format="portrait") == []
+    assert len(_rows(subjects=0)) == 48
+    assert len(_rows(format="landscape")) == 48 and _rows(format="portrait") == []
     bouncing = query_catalog({"kind": "templates", "q": "rebota", "use": "dance", "family": "music"})["result"]
     assert bouncing["entries"] and all("dance" in row["uses"] and row["family"] == "music" for row in bouncing["entries"])
     counted = {row["kind"]: row["count"] for row in query_catalog({"use": "space"})["result"]["kinds"]}
@@ -154,3 +154,24 @@ def test_2d_words_mean_one_thing_and_override_the_3d_groups():
     assert "cannon" in cards.expand2d("canon") and "canyon" not in cards.expand2d("canon")
     assert "music" in cards.expand2d("concierto"), "a word the 2D groups do not list keeps its 3D synonyms"
     assert query_catalog({"kind": "templates", "q": "cae al vacío"})["result"]["entries"][0]["id"] == "music-infinite-fall"
+
+
+WALK_CARDS = ["walk-follow-back", "walk-toward-camera", "walk-behind-foreground", "walk-shadow-first", "walk-two-pose", "walk-cycle-sheet"]
+
+
+def test_the_walk_cards_are_found_by_walking_words_and_are_not_dances():
+    assert sorted(row["id"] for row in _rows(use="walk")) == sorted(WALK_CARDS)
+    assert not {row["id"] for row in _rows(use="dance")} & set(WALK_CARDS)
+    for words in ("camina de espaldas", "caminar hacia cámara", "walk toward camera", "pasos tras un mostrador"):
+        found = [row["id"] for row in _rows(q=words)]
+        assert set(found) & set(WALK_CARDS), words
+    assert cards.traits_of("walk-follow-back")["uses"] == ["walk"]
+    assert "entrance" in cards.traits_of("walk-behind-foreground")["uses"]
+
+
+def test_the_reaction_card_is_found_by_gesture_and_expression_words_and_is_not_a_dance():
+    assert [row["id"] for row in _rows(use="reaction")] == ["character-reaction"]
+    assert "dance" not in cards.traits_of("character-reaction")["uses"]
+    for words in ("un personaje se enfada", "saluda con la mano", "angry anime expression", "cara de sorpresa", "wave hello"):
+        assert "character-reaction" in [row["id"] for row in _rows(q=words)], words
+    assert "walk" not in cards.traits_of("character-reaction")["uses"]

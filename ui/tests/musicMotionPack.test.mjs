@@ -123,7 +123,7 @@ const assetBySlot = scene => new Map((scene.narrative?.assets ?? []).map(asset =
 test('the catalog keeps the 17 original grammars first and lists 22 music choreographies', () => {
   assert.equal(CANDIDATE_SCENE_TEMPLATES.length, 17)
   assert.equal(MUSIC_MOTION_TEMPLATES.length, 22)
-  assert.equal(ALL_SCENE_TEMPLATES.length, 41)
+  assert.equal(ALL_SCENE_TEMPLATES.length, 48)
   assert.deepEqual(
     ALL_SCENE_TEMPLATES.slice(0, CANDIDATE_SCENE_TEMPLATES.length),
     CANDIDATE_SCENE_TEMPLATES,

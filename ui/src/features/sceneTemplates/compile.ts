@@ -9,6 +9,7 @@ import { resolveControls, type TemplateControlInput, type TemplateControlValues 
 import { TemplateError } from './templateErrors'
 import { withCameraDrift } from './cameraDrift'
 import { cinemaScenes } from './cinemaScenes'
+import { walkPlates, walkScenes } from './walkScenes'
 import { musicScenes } from './musicScenes'
 import { spaceScenes } from './spaceScenes'
 import { musicMotionSolo } from './musicMotionSolo'
@@ -21,7 +22,7 @@ export type { TemplateControlInput } from './templateControls'
 /** Bindings as callers send them: the slot names of the card, or the old names (hero, plate, prop). */
 export type TemplateBindingsInput = Readonly<Record<string, TemplateAsset | undefined>>
 
-const builders = { ...cinemaScenes, ...musicScenes, ...spaceScenes, ...musicMotionSolo, ...musicMotionEnsemble }
+const builders = { ...cinemaScenes, ...walkScenes, ...musicScenes, ...spaceScenes, ...musicMotionSolo, ...musicMotionEnsemble }
 const DISTINCT_MUSIC_SLOTS = ['subject_1', 'subject_2', 'prop_1'] as const
 
 function validateAsset(value: TemplateAsset) {
@@ -77,8 +78,10 @@ type SceneBody = Pick<Scene, 'width' | 'height' | 'fps' | 'layers'> & Partial<Pi
 function layerScene(template: SceneTemplateDefinition, ctx: BuildContext): SceneBody {
   const build = builders[template.id]
   if (!build) throw new TemplateError('template_unknown', i18n.t('scene3d:templateCompile.noCompiler', { id: template.id }))
-  const background = template.group === 'music-motion' ? musicMotionBackground(template.id, ctx) : [backdrop(ctx)]
-  const built = withCameraDrift([...background, ...build(ctx), ...foreground(ctx)], ctx)
+  const walk = walkPlates[template.id]?.(ctx)
+  const background = template.group === 'music-motion' ? musicMotionBackground(template.id, ctx) : [{ ...backdrop(ctx), ...walk?.plate }]
+  const front = foreground(ctx).map(item => ({ ...item, ...walk?.foreground }))
+  const built = withCameraDrift([...background, ...build(ctx), ...front], ctx)
   return { width: 1280, height: 720, fps: 30, layers: finishTemplateLayers(built, template.family, ctx.intensity) }
 }
 

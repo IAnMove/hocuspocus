@@ -18,6 +18,65 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a finished Director run can be edited and deleted at once, without waiting for the video model to unload.** A run already said `completed` while its worker was still unloading the H3 model, and for 1-6 seconds every edit (prompt, tag, Repeat, rerun, rejoin, repair) answered "Pipeline is still active" and DELETE said "still running, stop it first". The worker now leaves the registry before the unload, which only touches the model under the GPU lock.
 
+**The Character Creator keeps your work, and its options are easier to judge.**
+Leaving the tab (or the page) used to cancel the three options that were being
+drawn and forget the name and description. The creator's work now belongs to a
+session that goes on while you look at something else, and is saved in the
+browser per workspace: coming back shows the name, the options and the pick, and
+a reloaded page follows the image jobs that were still drawing. *Start over*
+begins a new character. You can ask for 1, 2 or 3 options (3 by default; the
+same count is used for a new pose). All the pictures are drawn first and the
+backgrounds are removed afterwards, one at a time, so the keying no longer
+interrupts the image model between pictures; as soon as you pick one, only that
+one has its background removed (a drawn option you pick later is keyed then).
+The options sit in a full-width row, and each opens large when the mouse rests
+on it, when it is pressed and held on a touch screen, or when it has the
+keyboard focus. Code: `characterCandidates.ts`, `characterCreatorSession.ts`,
+`CandidateGrid.tsx`; the style prompts no longer leave `{screen}` unreplaced
+(`replaceAll`), which made every graphic-novel run fail, and an option whose eye
+white was cut away by its limits no longer makes `/rig-check` answer 500 (it
+lost that option's "Ready for the rig" note).
+
+**Six Video 2D cards for a figure that walks into a shot (candidates, for the
+owner's review).** A cut-out figure that slides in with a bob shows legs that
+never move. These cards hide the legs, or move them, instead of faking them:
+`walk-follow-back` (from behind, waist up: the figure keeps its size and the
+room comes toward it with parallax), `walk-toward-camera` (reverse tracking from
+the front, the camera backs away), `walk-behind-foreground` (a whole figure in
+profile crosses behind a counter or wall that covers its legs), `walk-shadow-first` (a
+huge shadow crosses the wall, then the figure is already on its mark: cut on
+action), `walk-two-pose` (a wide shot where a two-cell sheet of a
+figure in profile, the stride and the legs together, changes cell every half step
+over a contact shadow that beats, paced so the boots do not skate) and `walk-cycle-sheet` (a
+sprite sheet of the gait, four poses by default, plays at the step's pace: with
+`walk-two-pose`, the cards whose legs move). Profile figures walk the way they
+look (`facing`). A figure held on screen takes `parallax: 0` with
+`parallaxZoom`, so the camera move belongs to the room. A walk takes a whole
+number of steps and a longer shot takes more steps, not slower ones. New
+`walk` trait (derived from the card id, as `product` and `documentary` are),
+walking words in the 2D search groups and a built-in `shadow` graphic. The
+cards have no narrative twin, so they sit on the composer shelf; they stay
+`candidate` until their real-asset renders are reviewed. Production shots
+(`scene2d`) still reach only the `music-*` cards: giving Series entrances these
+grammars is a separate decision (docs/development/VIDEO2D_TEMPLATE_MODEL.md).
+
+**Small animations of a character (walk, gestures, anime expressions) and the cards that play them (candidates, for the
+owner's review).** Characters › *Animaciones del personaje* makes, for a saved character, a few poses of the same figure joined
+into a sprite sheet: `walk` and `run` in four poses of the gait (side view), `step` (two poses), `idle` and `jump`, `wave`, `nod`, `shake`, `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm` and `think`, and eighteen anime
+expressions in two poses each (`angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`,
+`tired`, `love`, `disgusted`, `bored`, `worried`, `nervous`, `laughing`, `wink`, `pout`). Each pose is one Qwen picture made with the character's own picture as the identity reference, keyed on its
+screen as it arrives; a failed pose stops the run and the retry keeps the ones already made, and one pose can be made again
+alone. **One server job, three ways in:** the panel, any MCP client (`characters.animation.make`, `.status`, `.cancel`) and Ask to the
+Wizard (`make_character_animation`, with confirmation) start the same job (`POST /character-kits/animations/make`, `GET .../jobs`),
+so what an agent makes is reviewed in the app and a run survives a reload or a restart; nothing approves an animation but a person.
+The sheet is built on the server (the poses cropped and scaled so the figure keeps its size by its height, the width of its legs (a gesture) or the size of its head (a bust, read with the face landmarks), boots on one line, torso centred) and the animation
+joins the kit as `animations.<id>`, pending until a person plays and approves it. The catalog is
+`app/shared/character_animations.json`; HTTP `GET /character-kits/animations/catalog`, `POST .../prompt` and `POST .../sheet`;
+MCP `characters.animations` and `characters.animation.sheet` for an agent that makes the poses itself. New Video 2D card `character-reaction` (a figure on its mark plays
+a sheet once or in a loop and breathes) next to `walk-cycle-sheet`; the walking cards that move the legs are `walk-two-pose`
+(a two-cell sheet, one cell per half step, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
+way they look (`facing`). New `reaction` trait and gesture/expression words in the 2D search groups.
+
 **Fixed: the file link a finished 3D or rig job reports now works when the job ran in another workspace.** The `url` in `GET /api/v1/model3d/status/{id}` and `GET /api/v1/rig/status/{id}` was a bare `/api/v1/file/<name>`, which is looked up in the active workspace only, so a REST client reading a job that ran in a different workspace got a 404 from its own link (the MCP commands already added the workspace themselves). The job now reports `/api/v1/file/<name>?workspace=<workspace>` for local, simulated and Meshy/Hi3D jobs, on the full and the core server.
 
 **Fixed: the NSFW switch now works for a LoRA that comes from a linked model folder.** `/api/v1/loras/nsfw-override` looked only in the primary LoRA folder, so a LoRA shown in the installed list because another install's folder is linked answered "LoRA not found". It now finds linked LoRAs too and keeps the setting in the primary folder (a linked install stays read-only), starting from a copy of the linked LoRA's own information so the row keeps its name, trigger words and preview; clearing the switch goes back to CivitAI's flag.
