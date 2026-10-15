@@ -68,11 +68,11 @@ function MadeAnimation({ def, made, actions }: { def: AnimationDef; made: KitAni
 }
 
 /** Crear, or Reintentar after a stop (keeping the poses made), and Cancelar while it runs. */
-function MakeButtons({ def, run, actions }: { def: AnimationDef; run?: AnimationJob; actions: Actions }) {
+function MakeButtons({ def, run, actions, full }: { def: AnimationDef; run?: AnimationJob; actions: Actions; full: boolean }) {
   const { t } = useUiTranslation('characters')
   const working = run ? isActiveJob(run) : false
   return <div className="flex gap-2">
-    <button type="button" disabled={actions.busy} className={`${small} text-cyan-200`} onClick={() => actions.make(def, run?.remake ?? undefined)}>
+    <button type="button" disabled={actions.busy || full} className={`${small} text-cyan-200`} onClick={() => actions.make(def, run?.remake ?? undefined)}>
       {working ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
       {t(run ? (working ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
     {run && working && run.status !== 'cancelling' && <button type="button" className={small} onClick={() => actions.cancel(run.jobId)}>{t('animations.cancel')}</button>}
@@ -95,7 +95,7 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
     {run && <RunProgress def={def} run={run} />}
     {made && !(run && isActiveJob(run)) && <MadeAnimation def={def} made={made} actions={actions} />}
     {!made && !run && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
-    {(!made || run) && <MakeButtons def={def} run={run} actions={actions} />}
+    {(!made || run) && <MakeButtons def={def} run={run} actions={actions} full={!made && !canAddAnimation(kit)} />}
   </article>
 }
 

@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from routers.character_animation_jobs import create_character_animation_jobs_router
+from services.character_animations import MAX_ANIMATIONS
 from services.character_animation_job import AnimationJobDeps, AnimationJobError, CharacterAnimationJobs, reference_of
 from services.character_kit_library import patch_character_kit, read_character_kit_library, write_character_kit_library
 from services.local_generation import ToolError, payload_of
@@ -165,6 +166,17 @@ def test_a_character_with_no_persistent_picture_cannot_make_poses(world, monkeyp
     with pytest.raises(AnimationJobError) as error:
         jobs.start(WS, "hero", "wave")
     assert error.value.code == "no_reference" and not server.calls
+
+
+def test_a_kit_at_the_animation_limit_refuses_a_new_animation_before_any_gpu_work(world, monkeypatch):
+    root, server, jobs = world
+    full = {**_kit(root), "animations": {f"a{index}": {} for index in range(MAX_ANIMATIONS)}}
+    monkeypatch.setattr(jobs, "_kit", lambda workspace, kit_id: full)
+    with pytest.raises(AnimationJobError) as error:
+        jobs.start(WS, "hero", "wave")
+    assert error.value.code == "animation_limit" and not server.calls, "the limit is checked before any picture is asked for"
+    full["animations"]["wave"] = {"reviewState": "pending"}
+    assert jobs._definition(full, "wave", None, None)["id"] == "wave", "an animation the kit already has may be made again"
 
 
 def test_a_wait_http_error_is_not_a_live_job_and_does_not_hang(world):

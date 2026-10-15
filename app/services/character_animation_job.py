@@ -22,7 +22,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from services.character_animations import CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations, pose_prompt
+from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
+                                           pose_prompt)
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.local_generation import LocalTools, ToolError, file_url
 
@@ -170,6 +171,9 @@ class CharacterAnimationJobs:
             raise AnimationJobError("pose_not_found", f"{animation_id} has no made pose {pose} to make again", 404)
         if not reference_of(kit):
             raise AnimationJobError("no_reference", f"Character Kit {kit.get('name') or kit['id']} has no persistent picture to make poses from")
+        if not made and len(kit.get("animations") or {}) >= MAX_ANIMATIONS:
+            # A new id at the cap would spend every GPU pose and only then fail to save on the kit. Making one again is fine.
+            raise AnimationJobError("animation_limit", f"Character Kit {kit.get('name') or kit['id']} already has {MAX_ANIMATIONS} animations, the most a kit keeps")
         return definition
 
     def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None) -> dict[str, Any]:
