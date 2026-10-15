@@ -9,7 +9,7 @@
       ],
       "domain": "studio",
       "mutation": true,
-      "description": "Admit one local music generation with literal lyrics and caption through the canonical generation queue. The selected ACE-Step or MiniMax-Music3 model must already be installed; retries reuse the same intent receipt.",
+      "description": "Admit one local music generation with literal lyrics and caption through the canonical generation queue. input.params.model_type must be one of ace_step_v1_5_xl_sft_lm_4b, minimax_music3, yue2 (ACE-Step, MiniMax-Music3 local, YuE2) and that model must already be installed; retries reuse the same intent receipt.",
       "musicModelTypes": [
         "ace_step_v1_5_xl_sft_lm_4b",
         "minimax_music3",

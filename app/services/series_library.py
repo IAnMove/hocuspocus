@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 from datetime import datetime, timezone
 import json
+import math
 import os
 import re
 import uuid
@@ -1125,17 +1126,35 @@ def series_library_path(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, SERIES_LIBRARY_FILENAME)
 
 
+def without_non_finite(value: Any) -> Any:
+    """``value`` with every ``inf`` / ``nan`` replaced by None. JSON cannot carry them, and Starlette answers 500 for
+    a response that holds one, so a single ``-Infinity`` in the library file broke every Series read of the workspace."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: without_non_finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [without_non_finite(item) for item in value]
+    return value
+
+
 def read_series_library(workspace_dir: str, workspace_id: str = "default") -> dict[str, Any]:
     path = series_library_path(workspace_dir)
     if not os.path.isfile(path):
         return empty_series_library(workspace_id)
     with open(path, "r", encoding="utf-8") as handle:
-        return normalize_series_library(json.load(handle), workspace_id)
+        # A file written before non-finite numbers were repaired may hold -Infinity / Infinity / NaN: read them as null.
+        return normalize_series_library(json.load(handle, parse_constant=lambda _name: None), workspace_id)
 
 
 def write_series_library(workspace_dir: str, value: Any, workspace_id: str = "default") -> dict[str, Any]:
     library = normalize_series_library(value, workspace_id)
-    encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"))
+    try:
+        encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except ValueError:
+        # Repair rather than refuse: the work a caller is saving (a finished cut) is worth more than a metadata number.
+        library = without_non_finite(library)
+        encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     if len(encoded.encode("utf-8")) > MAX_SERIES_LIBRARY_BYTES:
         raise ValueError("Series library is too large to save")
     os.makedirs(workspace_dir, exist_ok=True)

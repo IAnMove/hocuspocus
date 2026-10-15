@@ -10198,7 +10198,7 @@ def _generate_minimax_director_image(
             description="Simulated MiniMax Image-01 Director frame",
         ):
             simulated = execution_mode.create_artifact(
-                {"generation_mode": "image", "prompt": prompt},
+                {"generation_mode": "image", "image_mode": 1, "prompt": prompt},
                 output_dir,
                 f"director-minimax-{time.time_ns()}",
             )

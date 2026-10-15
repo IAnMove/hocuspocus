@@ -176,14 +176,17 @@ def test_character_mappings_keep_the_legacy_shape_and_refuse_a_bad_explicit_list
         )
 
 
-def _probe(width, height, monkeypatch):
+def _probe(width, height, monkeypatch, duration=None):
     import subprocess
 
     def run(command, **_kwargs):
         if command[0] == "ffprobe":
+            stream = {"width": width, "height": height}
+            if duration is not None:
+                stream["duration"] = duration
             return subprocess.CompletedProcess(
                 command, 0,
-                stdout=json.dumps({"streams": [{"width": width, "height": height}]}),
+                stdout=json.dumps({"streams": [stream]}),
                 stderr="",
             )
         raise AssertionError(command)
@@ -217,10 +220,22 @@ def test_mask_lock_command_keeps_generated_audio_then_source_audio_then_none(tmp
     audio["generated"] = False
     audio["source"] = True
     with_source = build("source.mp4", "mask.mp4", "generated.mp4", output)
-    assert ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"] == [
+    # Re-encoded source audio is padded before ``-shortest`` so it can never cut the picture (edit-10).
+    assert ["-map", "0:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"] == [
         with_source[index]
-        for index in range(with_source.index("0:a:0") - 1, with_source.index("0:a:0") + 5)
+        for index in range(with_source.index("0:a:0") - 1, with_source.index("0:a:0") + 8)
     ]
+    assert "-shortest" not in silent and "-shortest" not in with_generated
+    assert "-t" not in with_source  # the probe gave no duration: nothing to bound the padded audio with
+
+    # With the generated picture's length the padded source audio is bounded just after it, rounded up to the next
+    # millisecond so it never ends before the last frame (ffmpeg 7+ may otherwise let
+    # an endless pad run for up to 10 s past the picture on a busy machine).
+    _probe(64, 48, monkeypatch, duration="1.960000")
+    timed = build("source.mp4", "mask.mp4", "generated.mp4", output)
+    assert timed[timed.index("-shortest") + 1:timed.index("-shortest") + 3] == ["-t", "1.961"]
+    _probe(64, 48, monkeypatch, duration="N/A")
+    assert "-t" not in build("source.mp4", "mask.mp4", "generated.mp4", output)
 
     monkeypatch.setattr(
         __import__("subprocess"), "run",

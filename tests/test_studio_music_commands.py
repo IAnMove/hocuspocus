@@ -17,6 +17,16 @@ from tests.test_studio_music_preparation import ACE_DEFINITION
 from tests.test_studio_speech_resources import write_wave
 
 
+def test_the_catalog_description_names_every_model_type_the_command_accepts():
+    """gen-04: the description named two of the three registered models, so an agent never tried yue2."""
+    from services.studio_music_spec import STUDIO_MUSIC_MODEL_TYPES
+
+    catalog = music_command_catalog()
+    assert set(catalog["musicModelTypes"]) == set(STUDIO_MUSIC_MODEL_TYPES)
+    for model_type in STUDIO_MUSIC_MODEL_TYPES:
+        assert model_type in catalog["description"], model_type
+
+
 def music_command(intent="music-intent"):
     return {"version": 2, "operation": "generation.music", "intent_id": intent,
             "input": {"workspace": "music-test", "params": {

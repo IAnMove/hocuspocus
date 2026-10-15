@@ -12,6 +12,68 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: starting a second HocusPocus no longer kills the first one's rig job.** Several copies of the app (the live one, a worktree, a test or lent instance) can link the same `ckpts` folder, and each one used to end whatever rig worker was listed in the shared `ckpts/rig/jobs` the first time it looked at rigging, so a rigging job running in another copy failed with "exited with code -15" (for UniRig, after minutes of GPU time). Rig job files now live in the copy's own `settings/rig-jobs` folder, like the 3D jobs, and a restart only ends workers that this copy started (it checks the worker's request file, not only its name). The old shared folder is left alone, and the humanoid rig worker an interrupted run left behind is now ended on restart as well.
 
+**Fixed: on the core server, the gallery shows picture previews again.** Core listed every image and video with a preview address that it did not serve, and the gallery tiles asked for a sized preview route that core did not have, so each tile showed a text placeholder after three retries (and the pickers of the Series and Wizard screens showed a broken image). Core now serves `/api/v1/outputs/thumbnail/...` for the outputs and for the Uploads view, with the same code as the full server.
+
+**Fixed: on the core server, a web page from another site can no longer create, switch or delete workspaces.** The full server already refused browser POST, PUT, PATCH and DELETE requests that carry another site's `Origin`, but the core server (Apple Silicon and machines without a local AI recipe) did not. A page could send a plain-text POST to the local port and make a workspace folder. Core now installs the same check, from the same code, so the app, Pinokio's `https://<port>.localhost` address, other local tools and scripts without an `Origin` header work as before.
+
+**Fixed: a song you queue in Story Lab is no longer marked interrupted by the next task screen that opens its workspace.** Queuing a song wrote its task through a private second task registry for the workspace folder. The first time anything else opened the shared registry of that folder, the queued song was treated as a leftover from a crash and flipped to interrupted. Queuing now uses the folder's one shared registry.
+
+**Fixed: on the core server, the first Series plan or canon job of a workspace is no longer cancelled the moment it starts, and a workspace you delete and create again works.** The core server kept two task registries for the same workspace database. The first time the second one was built (for example when the planner made its first model call) it marked every running task of that workspace as interrupted, so the first plan job after each start ended with "was cancelled while waiting for remote". The registries are now one per folder, as on the full server, so the same fix lets a workspace deleted and created again with the same name answer its task routes instead of failing with an internal error.
+
+**Fixed: producing the video shots of a script now starts their clips.** `series.episode.produce` asked the video tool for each scripted H3 clip and then looked for the job in the wrong place of the answer, so every take failed with "generation.video returned no job" and no scripted clip was ever made. It now reads the job from the receipt the tool really returns (`receipt.result.job_id`).
+
+**Fixed: a script with video shots no longer makes the clip before checking the series may use it.** A video shot is an `imported_video` shot, but a new series allows `generated_video` only, so the clip was generated and its take refused afterwards. `from-script` with `check: true` now warns (`imported_video_not_allowed`), writing the script turns the method on for the series, and `produce` refuses before it composes the start frame or asks for the clip.
+
+**Fixed: a finished Series H3 render is registered instead of marked failed.** The clip was named after its prompt, with spaces and brackets, which the Series asset path refuses, so every real shot failed after its GPU time. The render now names its clip `series-<shot>-<job>`, unique for each run.
+
+**Fixed: a silent episode cut no longer stops the Series Lab from loading.** A cut with no sound stored a loudness of minus infinity, which the library saved as `-Infinity`; from then on every Series read of that workspace answered 500. The loudness is now stored as null, a non-finite number is repaired when the library is written, and a library saved by an older version loads again.
+
+**Fixed: a Series render that a restart interrupted is shown as interrupted.** Its checkpoint kept saying running, so the recovery list showed it running and the series and its episode could not be deleted. It is now settled as interrupted (once). It still owns its episode: resume it (each unfinished shot gets a new attempt), or cancel or discard it, before rendering that episode again.
+
+**Fixed: a known-series bible whose ids collide still ends as a draft you can review.** A small model that reuses one id for a character, a location and a fact made the ten-minute job fail while applying its own draft. Repeated ids now get distinct ones, and if the library still refuses the draft the job completes with `autoApplied: false`, the reason in `applyError` and the proposal kept.
+
+**Fixed: a wrongly typed Director v2 plan field is refused with a 422.** `lyrics`, `clips` or `characters` that are not lists of objects used to create a plan job and fail inside it with a Python error (and again on every resume). The answer now names the field and no job is made.
+
+**Fixed: resuming a cancelled Story Lab generation says it cannot be resumed.** The route answered "Story generation resumed" and reopened the Activity row as queued, but nothing ran. It now answers 409 and leaves the row as it was; failed and interrupted generations resume as before.
+
+**Fixed: a protected Recast and the finished Outpaint no longer lose their last frames.** The ffmpeg pass that restores the people around a Recast target, and the pass that puts the source audio and pixels back on an Outpaint, ended the file when the audio ended. The video encoder still held the last 1 to 6 frames at that moment, so a protected Recast came out shorter than the clip WanGP made, and an Outpaint whose source audio was shorter than the picture lost more than a third of it in the worst case. Copied audio is now left alone, and re-encoded source audio is padded first, so it can only shorten a longer track, never cut the picture. Film grain and voice clone, which copy the picture and put an audio track back, no longer cut the picture to that track either. Real-ffmpeg tests check 8.1 and 6.1.
+
+**Fixed: a generation asked for as an image now saves an image.** WanGP chooses a picture or a clip from `image_mode`, and a request that only said `generation_mode: "image"` came back as an MP4. The submission door now adds `image_mode=1` and `video_length=1` to such requests (REST and MCP), and the simulation decides picture or clip the same way WanGP does, so it can no longer hide this. Image jobs also stop paying the two-stage VRAM penalty meant for video. Studio's image Outpaint on LTX-2 still saves a one-frame MP4: WanGP drops the outpainting settings of that model unless `image_mode` is 0, so it is left as it was.
+
+**Fixed: a polling client no longer loses a request while a model loads.** During model loads the whole server could stand still for 5 to 30 seconds, longer than Uvicorn's 5-second idle limit, and the expired timer then closed the connection with the client's request unread: polls failed with a connection reset and a scripted or MCP Cancel was lost. Idle connections now stay open for 75 seconds. This is a mitigation: what freezes the server is still unknown and needs a GPU session to find.
+
+**Fixed: Blend, Retake, Edit Anything, Inpaint, frame extraction, segment preview and Recast answer 400 with the field name for a value that is not a number, not 500.** Thirty numeric request fields were cast without a check. The segment preview also turned its own 503 "SAM service not available" into a 500, and Inpaint read its sampling numbers only after SAM had run. All numbers are now read first by one helper, so a bad value is refused before any clip is decoded, SAM starts or a job is registered.
+
+**Fixed: the Outpaint source-lock overlay uses the rectangle the model receives.** Planning resolved the protected rectangle from exact numbers while the job carries the percentages as 8-decimal text, so the two disagreed by one pixel (a 384-pixel source planned as 383).
+
+**Fixed: a shot-aware Recast sidecar no longer keeps the worker's private source path and protection flag.**
+
+**Fixed: the `generation.music` tool text names `yue2` too.** It listed two of the three model types the command accepts.
+
+**Fixed: a generation's sidecar records the size that was produced.** WanGP fits the canvas to the start image (a 640x480 request with a square image gives 480x480); the sidecar now adds `output_resolution` next to the unchanged requested `params.resolution` when they differ.
+
+**Fixed: re-generating or loading the settings of a Speech or Music output works again.** The pencil and the re-generate button on a Speech or Music output used to fail before anything was sent, because restoring the settings left video and H3 values in the form that the Speech and Music commands refuse. Restoring an audio output now clears them.
+
+**Fixed: Edit-tab jobs show up in the Edit tab queue.** The "Submitting…" and queued cards of Retake, Inpaint, Edit Anything, Outpaint, Recast and Repaint were hidden on the Edit tab, and the running card vanished after the first status update or a page reload. The server now reports which edit a job is (`edit_sub_mode`), and the cards carry it from the moment you press Generate.
+
+**Fixed: visiting Tools no longer breaks the saved model choices.** Leaving the Tools area recorded a `tools` model that the server refuses, so every later save of your per-mode model choices failed, and the bad entry came back on every start. Only the five generation modes are saved now, a stored `tools` entry is dropped on load, and a recipe's model is saved the moment you apply it.
+
+**Fixed: the first SFX generation after Speech no longer fails on duration.** The SFX slider showed 20 s while the request carried the Speech model's leftover duration (60 s, or 0 for auto), which the SFX command refuses. A text-only SFX request now sends the 1–20 s the slider shows.
+
+**Changed: Load settings and Re-generate are switched off for Extend and Blend outputs.** Restoring such an output landed on the plain Frames tab with no source video, so re-generating it silently produced a text-to-video instead of an extension (wasted GPU time). The two buttons are disabled for those outputs, with a tooltip, until the Extend and Blend working sets can be restored; use "Extend this video" or start a new Extend or Blend.
+
+**Fixed: an uploaded SFX video clip stays attached when you switch sub-tabs.** Coming back to SFX from Speech, Music or Mixer used to show the raw upload URL instead of the clip you had chosen.
+
+**Fixed: the SFX and Mixer tabs no longer request LoRAs for the virtual MMAudio model.** Each visit produced two 404 errors in the network log.
+
+**Fixed: a Director repair that was running when you reloaded the page shows its progress again** without opening the Productions dashboard.
+
+**Fixed: an LLM provider failure is reported as a bad gateway, not an internal error.** A missing or rejected provider key made `POST /api/v1/llm/generate` answer 500; it now answers 502 with the same readable `detail` and a stable code in the `X-Hocus-Error-Code` header (`provider_auth_failed` for a 401/403, `provider_failed` otherwise). The MCP `analyze` tool still reports the provider's message.
+
+**Fixed: the Wizard keeps snake_case names intact and long tokens wrap.** Names such as `qwen_image_21` or `http_code` used to lose their underscores and turn italic, and a long unbroken token (a provider error, a path) pushed the Wizard bubble wider than the panel.
+
+**Fixed: the SIMULATE pill no longer blocks clicks.** In simulation mode it floated over the header buttons of full-screen panels such as the Director dashboard.
+
 **Fixed: a Story Lab song in Cover mode now goes to MiniMax with the reference you uploaded.** A new project starts on the local ACE-Step model, so switching the Manual song panel to Cover used to make Generate write an original local song and ignore the reference (or fail asking for a story cue). In Cover mode Generate now always asks for MiniMax `music-cover` after the paid confirmation, the button waits for the MiniMax key, and the readiness line says MiniMax instead of "ACE local ready". An old save with an unchosen paid model still reads as the local default, as before.
 
 **Fixed: the LAN, video-command and operator documentation now matches the code.** The README said LAN token protection was optional; on the full server it is on by default whenever the app is shared, and the new LAN authentication page says so, with the token, cookie and MCP exceptions. It also says plainly that the core server has no LAN gate and prints no token, so it should not be shared on an untrusted network. A new page documents the `generation.video` command (Wan 2.1 version 2, H3 and LTX-2.3 version 3, validate-only checks) and who calls it; the Wizard and MCP guide no longer says the command is unpublished. The guides also describe VoxCPM2 as the default voice engine, Qwen 2.1 Turbo, and the ground styles of Video 3D.

@@ -24,7 +24,7 @@ from services.image_generation_spec import ImageGenerationSpecError, freeze_imag
 from services.job_lifecycle import take_submission_priority
 from services.minimax_image_service import MiniMaxImageError, prepare_prompt
 from services.task_command_admission import TaskCommandConflict
-from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES, TaskRegistry
+from services.task_manager import ACTIVE_STATUSES, TERMINAL_STATUSES, TaskRegistry, get_task_registry
 from routers.system_capabilities import require_capability_http
 
 _JOB_STATUS = {
@@ -38,8 +38,6 @@ _JOB_STATUS = {
     "interrupted": "interrupted",
 }
 
-_REGISTRIES: dict[str, TaskRegistry] = {}
-_LOCK = threading.Lock()
 _DISPATCH_OWNER = f"core-{uuid.uuid4().hex}"
 _DISPATCH_LOCK = threading.Lock()
 
@@ -54,13 +52,10 @@ def _registry(workspace: str) -> TaskRegistry:
         folder = core.workspace_dir(workspace)
     except ValueError as error:
         raise command_error(422, "invalid_workspace", "Use an explicit valid output workspace") from error
-    with _LOCK:
-        existing = _REGISTRIES.get(folder)
-        if existing is not None:
-            return existing
-        registry = TaskRegistry(folder, interrupt_stale=True)
-        _REGISTRIES[folder] = registry
-        return registry
+    # One registry per folder for the whole process (task_manager's cache). A second TaskRegistry for the same
+    # database runs interrupt_unfinished() again the first time it is built and flips the tasks the first one is
+    # running; the delete route's forget_task_registry() also clears only that cache.
+    return get_task_registry(folder)
 
 
 def _job_status(value: Any) -> str | None:

@@ -68,7 +68,11 @@ export function applyStudioSfxSubmitParams(
   params._mmaudio_variant = sfxModel === 'mmaudio_nsfw' ? 'nsfw' : 'v2'
   params.prompt = typeof params.MMAudio_prompt === 'string' ? params.MMAudio_prompt : ''
   params.sfx_mode = true
-  params.duration_seconds = state.durationSeconds
+  // Text-only SFX is 1-20 s, the range its slider shows. The store can still hold the
+  // previous model's duration (60 s Speech, 0 = auto); a video guide sets its own length.
+  params.duration_seconds = params.video_guide
+    ? state.durationSeconds
+    : Math.min(20, Math.max(1, state.durationSeconds))
   params.video_length = 0
   params.num_inference_steps = 25
   params.image_mode = 0

@@ -84,6 +84,8 @@ def _public_generation_details(params: dict | None) -> dict:
 
     public_values = {
         "generation_mode": params.get("generation_mode"),
+        # Every edit job reports generation_mode 'video'; this is what the Edit tab filters on.
+        "edit_sub_mode": params.get("edit_sub_mode"),
         "execution_mode": params.get("_execution_mode"),
         "simulated": params.get("_execution_mode") == "simulate",
         "capability": params.get("capability"),

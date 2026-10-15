@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import unittest
 
 from tests.api_client_source import api_client_source
@@ -112,6 +113,22 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("api.fetchModelSelections()", models)
         self.assertIn("api.updateModelSelections(payload)", _source(PERSISTENCE_PATH))
         self.assertIn("durableSelections?.selected_models || {}", models)
+
+    def test_client_sends_exactly_the_modes_the_server_accepts(self):
+        """The server refuses the whole PUT when one mode is unknown, so the UI's hand-kept
+        allow-list must name the same modes as the server's (a new mode needs both)."""
+        server = None
+        for node in ast.walk(ast.parse(_source(VISIBILITY_PATH))):
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "_MODEL_SELECTION_MODES" for target in node.targets
+            ):
+                server = {element.value for element in node.value.args[0].elts}
+        persistence = _source(PERSISTENCE_PATH)
+        declaration = persistence[persistence.index("const MODEL_SELECTION_MODES"):]
+        declaration = declaration[:declaration.index("\n")]
+        client = set(re.findall(r"'([a-z0-9]+)'", declaration[declaration.index("new Set("):]))
+        self.assertTrue(server)
+        self.assertEqual(client, server)
 
     def test_story_lab_explains_the_ltx_gemma_dependency(self):
         story = _story_ui()

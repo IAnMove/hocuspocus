@@ -147,7 +147,13 @@ def run_until_stopped(app: Any, *, host: str, port: int, sockets: list[socket.so
                 self.force_exit = True
             super().handle_exit(sig, frame)
 
-    config = uvicorn.Config(app, host=host, port=port, timeout_graceful_shutdown=GRACEFUL_SECONDS)
+    # Uvicorn closes an idle keep-alive connection after 5 s. During a model load another thread has held the GIL
+    # in one native call for 15-30 s; when the interpreter woke, the expired timer closed the socket with the
+    # client's request still unread (ConnectionResetError, a lost Cancel; validation gen-03). A longer timeout keeps
+    # that request alive. The holder of the GIL is still unknown (see test_server_lifecycle).
+    config = uvicorn.Config(
+        app, host=host, port=port, timeout_graceful_shutdown=GRACEFUL_SECONDS, timeout_keep_alive=75,
+    )
     server = _Server(config)
     # Uvicorn swaps in its own handlers while serving, then restores the
     # previous ones and re-raises each captured signal. With the defaults in

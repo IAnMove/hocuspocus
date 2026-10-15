@@ -470,10 +470,10 @@ def test_the_script_sizes_a_video_shot_and_refuses_a_size_elsewhere():
     tools = Series()
     apply_script(tools, tools.read, KITS, FILES, "cast",
                  _script({"kind": "video", "resolution": "720", "video": {"prompt": "Ana waves once"}}))
-    assert tools.calls[1][1]["episode"]["shots"][0]["resolution"] == "720p"
+    assert tools.episode_patch()["episode"]["shots"][0]["resolution"] == "720p"
     tools = Series()
     apply_script(tools, tools.read, KITS, FILES, "cast", _script({"kind": "generated"}))
-    assert tools.calls[1][1]["episode"]["shots"][0]["resolution"] is None, "a rewrite without it clears it"
+    assert tools.episode_patch()["episode"]["shots"][0]["resolution"] is None, "a rewrite without it clears it"
     for shot, problem in (({"resolution": "720p"}, "resolution is only for kind video or generated"),
                           ({"kind": "video", "resolution": "4k"}, "resolution must be one of 480p, 540p, 720p, 768p")):
         tools = Series()

@@ -279,6 +279,13 @@ def resume_story_lab_generation(job_id: str, body: dict | None = None):
             "status": job.get("status"),
             "message": "Story generation is already running.",
         }
+    if job.get("status") in {"cancelled", "cancelling"}:
+        # _story_job_update ignores every patch to a cancelled job, so a resume would reopen the Activity task and
+        # then run nothing. Answered before anything is touched; a cancelled generation is started again.
+        raise HTTPException(
+            status_code=409,
+            detail="A cancelled Story Lab generation cannot be resumed; start a new generation.",
+        )
     request = _story_resume_request(job.get("request") or {}, body)
     # Resolve the profile before mutating the durable checkpoint so invalid
     # model names or missing credentials fail without damaging recovery.

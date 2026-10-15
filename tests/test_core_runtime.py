@@ -529,6 +529,136 @@ class CoreRuntimeTests(unittest.TestCase):
         closed = self.client.post("/api/v1/wangp/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "ping"})
         self.assertEqual(closed.status_code, 503)
 
+    def test_core_gallery_serves_the_thumbnails_its_rows_point_at(self):
+        """Every row's thumbnail_url (and the sized route the gallery tiles ask for) answered 404 on core."""
+        from PIL import Image
+        from services import output_ops
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            Path("uploads").mkdir()
+            Image.new("RGB", (64, 48), (200, 30, 30)).save(Path("outputs") / "still.png")
+            Image.new("RGB", (32, 32), (30, 30, 200)).save(Path("uploads") / "reference.png")
+            Image.new("RGB", (8, 8), (0, 0, 0)).save("outside.png")
+            Path("outputs", "notes.wav").write_bytes(b"RIFF")
+            with patch.object(output_ops, "_MEDIA_THUMBNAIL_CACHE_DIR", str(Path(folder.name) / "thumbnails")):
+                listings = {
+                    workspace: self.client.get("/api/v1/outputs", params={"workspace": workspace})
+                    for workspace in ("default", "__uploads__")
+                }
+                rows = [
+                    row for response in listings.values() for row in response.json()["outputs"]
+                    if row["type"] == "image"
+                ]
+                row_answers = {row["name"]: self.client.get(row["thumbnail_url"]).status_code for row in rows}
+                sized = {
+                    workspace: self.client.get(
+                        f"/api/v1/outputs/thumbnail/{name}", params={"size": "sm", "workspace": workspace},
+                    )
+                    for workspace, name in (("default", "still.png"), ("__uploads__", "reference.png"))
+                }
+                escaped = self.client.get(
+                    "/api/v1/outputs/thumbnail/..%2Foutside.png", params={"workspace": "__uploads__"},
+                )
+                missing = self.client.get("/api/v1/outputs/thumbnail/nothing.png", params={"workspace": "default"})
+                audio = self.client.get("/api/v1/outputs/thumbnail/notes.wav", params={"workspace": "default"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(sorted(row_answers), ["reference.png", "still.png"])
+        self.assertEqual(set(row_answers.values()), {200}, row_answers)
+        for workspace, response in sized.items():
+            self.assertEqual(response.status_code, 200, f"{workspace}: {response.text}")
+            self.assertEqual(response.headers["content-type"], "image/webp")
+        self.assertEqual(escaped.status_code, 404, escaped.text)
+        self.assertEqual(missing.status_code, 404, missing.text)
+        self.assertEqual(audio.status_code, 400, audio.text)
+
+    def test_core_gallery_answers_400_for_a_bad_workspace_name_on_every_route(self):
+        """The thumbnail route has no ValueError mapping of its own (the full server's lookup raises a 400 itself)."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            answers = {
+                (route, workspace): self.client.get(route, params={"workspace": workspace})
+                for route in ("/api/v1/outputs/thumbnail/still.png", "/api/v1/file/still.png", "/api/v1/outputs")
+                for workspace in ("../outside", "bad name", "")
+                if (route, workspace) != ("/api/v1/outputs", "")  # an empty name lists the active workspace
+            }
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        for (route, workspace), response in answers.items():
+            self.assertEqual(response.status_code, 400, f"{route} workspace={workspace!r}: {response.text}")
+            self.assertEqual(response.json(), {"detail": "Invalid workspace name"})
+
+    def test_core_thumbnail_binding_leaves_the_other_output_ops_slots_alone(self):
+        """Both servers can be imported in one process; core binds only safe_join, never the full server's slots."""
+        from services import output_ops
+
+        sentinel = object()
+        with patch.object(output_ops, "_load_favorites", sentinel), patch.object(output_ops, "_safe_join", None):
+            output_ops.configure_thumbnails(safe_join="join")
+            self.assertEqual(output_ops._safe_join, "join")
+            self.assertIs(output_ops._load_favorites, sentinel)
+
+    def test_core_refuses_browser_mutations_from_another_origin(self):
+        """A foreign page can send a simple POST (text/plain) to a loopback port; core must refuse it like the full server."""
+        evil = {"Origin": "http://evil.example"}
+        folder, previous = self._in_temp_workspace()
+        try:
+            kept = self.client.post("/api/v1/workspaces", json={"name": "keep-me"})
+            simple_post = self.client.post(
+                "/api/v1/workspaces", content='{"name": "csrf-made"}', headers={**evil, "Content-Type": "text/plain"},
+            )
+            switched = self.client.put("/api/v1/workspaces/active", json={"name": "keep-me"}, headers=evil)
+            deleted = self.client.delete("/api/v1/workspaces/keep-me", headers=evil)
+            read = self.client.get("/api/v1/workspaces", headers=evil)
+            same_origin = self.client.post(
+                "/api/v1/workspaces", json={"name": "made-here"}, headers={"Origin": "http://testserver"},
+            )
+            pinokio_proxy = self.client.post(
+                "/api/v1/workspaces", json={"name": "made-by-proxy"}, headers={"Origin": "https://42003.localhost"},
+            )
+            outputs = Path("outputs")
+            created = sorted(item.name for item in outputs.iterdir())
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(kept.status_code, 200, kept.text)
+        for label, response in (("simple POST", simple_post), ("PUT", switched), ("DELETE", deleted)):
+            self.assertEqual(response.status_code, 403, f"{label}: {response.text}")
+            self.assertEqual(response.json(), {"detail": "Cross-origin API mutations are not allowed"})
+        self.assertEqual(read.status_code, 200, read.text)
+        self.assertEqual(same_origin.status_code, 200, same_origin.text)
+        self.assertEqual(pinokio_proxy.status_code, 200, pinokio_proxy.text)
+        self.assertEqual(created, ["keep-me", "made-by-proxy", "made-here"])
+
+    def test_core_stacks_the_browser_guards_like_the_full_server(self):
+        """Outermost first: the cross-origin check wraps CORS, which wraps the Host check."""
+        names = [getattr(item.kwargs.get("dispatch"), "__name__", item.cls.__name__) for item in api.user_middleware]
+        guards = ("protect_cross_origin_mutations", "CORSMiddleware", "guard_host")
+        self.assertEqual([name for name in names if name in guards], list(guards))
+
+    def test_core_answers_the_full_servers_origin_matrix(self):
+        """The characterization test drives the same cases through the full server; the two must stay equal."""
+        from tests.support.origin_cases import ORIGIN_CASES, REFUSED, answer, refused_by_origin
+
+        client = TestClient(api, raise_server_exceptions=False)
+        self.assertEqual(refused_by_origin(client), list(ORIGIN_CASES))
+        evil = {"origin": "http://evil.example", "host": "127.0.0.1:42003"}
+        form = 'name=x'
+        multipart = '--b\r\nContent-Disposition: form-data; name="file"; filename="a.png"\r\n\r\nx\r\n--b--\r\n'
+        for label, headers, body in (
+            ("urlencoded form", {**evil, "content-type": "application/x-www-form-urlencoded"}, form),
+            ("multipart upload", {**evil, "content-type": "multipart/form-data; boundary=b"}, multipart),
+            ("agent token with a page origin", {**evil, "authorization": "Bearer agent"}, None),
+        ):
+            self.assertEqual(answer(client.post("/api/v1/upload", headers=headers, content=body)), REFUSED, label)
+        referer_only = client.post("/api/v1/__guard_probe__", headers={"referer": "http://evil.example/"})
+        self.assertEqual(referer_only.status_code, 404)  # no Origin: a script or MCP client, as on the full server
+        rebound = client.post("/api/v1/__guard_probe__", headers={"origin": "http://evil.example:42003",
+                                                                  "host": "evil.example:42003"})
+        self.assertEqual(rebound.status_code, 421)  # DNS rebinding passes the origin check; the Host guard stops it
+
     def test_settings_token_gates_core_mcp_and_closes_when_disabled(self):
         folder = tempfile.TemporaryDirectory()
         original_path = core_runtime._mcp_access.path
@@ -1515,9 +1645,12 @@ class CoreRuntimeTests(unittest.TestCase):
         try:
             Path("outputs").mkdir()
             fake = {"name": "minimax.jpg", "path": "minimax.jpg", "prompt": "a lantern", "aspect_ratio": "1:1"}
+            # The job's worker runs inline, like the other MiniMax image tests: a real daemon thread reads the
+            # process cwd (core_workspace.root) while this test removes its temp folder, and a directory it
+            # creates in that moment makes the cleanup fail with "Directory not empty".
             with patch("services.core_remote_image.generate_image", return_value=fake), patch(
                 "services.execution_mode.validate_remote_provider",
-            ):
+            ), patch("services.core_remote_image.threading.Thread", ImmediateThread):
                 response = self.client.post("/api/v1/generate", json={
                     "model_type": "minimax:image-01",
                     "generation_mode": "image",
@@ -2573,6 +2706,124 @@ class CoreRuntimeTests(unittest.TestCase):
             self._leave_temp_workspace(folder, previous)
         self.assertEqual(job.json()["status"], "completed", job.text)
         self.assertEqual(job.json()["episodeResult"]["outline"]["beats"], ["The lantern wakes."])
+
+    def test_core_keeps_one_task_registry_per_workspace_folder(self):
+        """A second TaskRegistry for the same database re-ran interrupt_unfinished() and flipped the running tasks."""
+        from services import core_workspace as core, task_manager
+        from services.core_generation_commands import registry_for
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            registry = registry_for("default")
+            registry.create(
+                id="running-task", root_id="running-task", workspace="default", kind="series-plan",
+                workflow="series", title="Plan", status="running", phase="running",
+            )
+            shared = task_manager.get_task_registry(core.workspace_dir("default"))
+            status = registry.get("running-task")["status"]
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(status, "running")
+        self.assertIs(registry, shared)
+
+    def test_core_interrupts_a_dead_process_tasks_once_and_never_its_own(self):
+        """Startup recovery stays: the rows a previous process left active are interrupted once, by the first registry
+        of the folder. Every later accessor (Activity, Series plan/LLM, music reservation, 3D, remote image, a workspace
+        switch) returns that same registry and leaves this process's own tasks alone."""
+        from services import core_generation_commands, core_workspace as core, task_manager
+        from services.music_submission import submit_music_generation
+
+        orphans = ("orphan-running", "orphan-queued")
+        folder, previous = self._in_temp_workspace()
+        try:
+            workspace_dir = core.workspace_dir("default")
+            left_on_disk = task_manager.TaskRegistry(workspace_dir, interrupt_stale=False)  # the dead process's rows
+            for task_id, state in zip(orphans, ("running", "queued")):
+                left_on_disk.create(id=task_id, root_id=task_id, workspace="default", kind="series-plan",
+                                    workflow="series", title=task_id, status=state, phase=state)
+            registry = core_generation_commands.registry_for("default")
+            recovered = {task_id: registry.get(task_id)["status"] for task_id in orphans}
+            registry.create(id="live-plan", root_id="live-plan", workspace="default", kind="series-plan",
+                            workflow="series", title="Plan", status="running", phase="running")
+            song = submit_music_generation(workspace_dir=workspace_dir, request={
+                "prompt": "dream pop", "lyrics": "[Verse]\nLa", "model": "music-3.0", "count": 1,
+                "output_folder": "default", "idempotency_key": "recovery-once",
+            })
+            model = core_canonical_tasks.publish_studio_activity(
+                {"task_id": "live-3d", "status": "running", "workspace": "default"}, "model3d",
+            )
+            touched = [
+                self.client.get("/api/v1/tasks", params={"workspace": "default"}).status_code,
+                self.client.put("/api/v1/workspaces/active", json={"name": "default"}).status_code,
+            ]
+            accessors = {
+                id(task_manager.get_task_registry(workspace_dir)),  # Series plan LLM calls, assembly, quick video
+                id(core_generation_commands._registry("default")),  # remote and MiniMax image commands
+                id(core_generation_commands.registry_for("default")),  # Activity, uploads, 3D, music publish
+            }
+            live = {task_id: registry.get(task_id)["status"] for task_id in ("live-plan", song["task_id"], model["id"])}
+            interrupted_events = {
+                task_id: [event["type"] for event in registry.events(task_id)].count("task.interrupted")
+                for task_id in orphans
+            }
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(recovered, {"orphan-running": "interrupted", "orphan-queued": "interrupted"})
+        self.assertEqual(interrupted_events, {"orphan-running": 1, "orphan-queued": 1})
+        self.assertEqual(live, {"live-plan": "running", song["task_id"]: "queued", "live-3d": "running"})
+        self.assertEqual(accessors, {id(registry)})
+        self.assertEqual(touched, [200, 200])
+
+    def test_core_plan_reports_the_provider_error_not_a_cancelled_task(self):
+        """The first plan job of a workspace used to be cancelled at birth by the registry the LLM call opened."""
+        import requests
+
+        def writing(_request):
+            return {"model": "local-model", "base_url": "http://127.0.0.1:9", "api_key": ""}
+
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            series_id, episodes = self._series_ready_to_plan()
+            with self._plan_patches(writing=writing, patch_generator=False), patch(
+                "services.llm_service._post_with_backoff",
+                side_effect=requests.exceptions.ConnectionError("provider down"),
+            ):
+                started = self.client.post(
+                    f"/api/v1/series/{series_id}/episodes/{episodes[0]['id']}/plan/start",
+                    json={"workspace": "default", "scope": "outline"},
+                )
+            self.assertEqual(started.status_code, 200, started.text)
+            job = self.client.get(f"/api/v1/series/plan/jobs/{started.json()['jobId']}")
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(job.json()["status"], "failed", job.text)
+        self.assertIn("OpenAI-compatible request failed", job.json()["error"])
+        self.assertNotIn("cancelled", job.json()["error"])
+
+    def test_recreated_workspace_gets_a_working_task_registry(self):
+        """Delete, then create the same name again: the tasks routes must not answer 500 (A5b on core)."""
+        folder, previous = self._in_temp_workspace()
+        try:
+            created = self.client.post("/api/v1/workspaces", json={"name": "again"})
+            first_list = self.client.get("/api/v1/tasks", params={"workspace": "again"})
+            first_upsert = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "a5b-one", "workspace": "again", "status": "queued", "title": "t",
+            })
+            deleted = self.client.delete("/api/v1/workspaces/again")
+            recreated = self.client.post("/api/v1/workspaces", json={"name": "again"})
+            second_list = self.client.get("/api/v1/tasks", params={"workspace": "again"})
+            second_upsert = self.client.post("/api/v1/tasks/upsert", json={
+                "id": "a5b-two", "workspace": "again", "status": "queued", "title": "t",
+            })
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        for label, response in (
+            ("create", created), ("list", first_list), ("upsert", first_upsert), ("delete", deleted),
+            ("recreate", recreated), ("list again", second_list), ("upsert again", second_upsert),
+        ):
+            self.assertEqual(response.status_code, 200, f"{label}: {response.text}")
+        self.assertEqual(second_list.json()["tasks"], [])
 
     def test_core_plan_streams_the_writing_model(self):
         folder, previous = self._in_temp_workspace()
