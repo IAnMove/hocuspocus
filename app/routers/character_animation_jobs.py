@@ -18,6 +18,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.character_animation_job import AnimationJobError, CharacterAnimationJobs
 
 
@@ -45,6 +46,8 @@ class JobAction(BaseModel):
 
 def create_character_animation_jobs_router(jobs: CharacterAnimationJobs, *, bind_loop: Callable[[asyncio.AbstractEventLoop], Any] | None = None) -> APIRouter:
     router = APIRouter(prefix="/animations", tags=["Character kits"])  # mounted under /api/v1/character-kits
+    # The probe closes over this service: it is the only one that knows which job threads are alive.
+    workspace_busy.register("character-animation", lambda _workspace, folder: jobs.live_jobs(folder))
 
     async def run(function, *args: Any, **kwargs: Any) -> Any:
         try:

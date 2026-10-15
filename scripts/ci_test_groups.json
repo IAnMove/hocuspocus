@@ -953,7 +953,8 @@
       "prefix": "app/services/character_animation_job.py",
       "paths": [
         "tests/test_character_animation_job.py",
-        "tests/test_character_animations.py"
+        "tests/test_character_animations.py",
+        "tests/test_output_delete_workspace.py"
       ]
     },
     {
@@ -966,7 +967,8 @@
       "prefix": "app/routers/character_animation_jobs.py",
       "paths": [
         "tests/test_character_animation_job.py",
-        "tests/test_architecture_contracts.py"
+        "tests/test_architecture_contracts.py",
+        "tests/test_output_delete_workspace.py"
       ]
     },
     {

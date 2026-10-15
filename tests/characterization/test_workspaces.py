@@ -33,7 +33,7 @@ def test_the_full_server_registers_the_busy_probes_of_every_family_it_runs(serve
         "video-editor", "minimax-music", "minimax-image", "rig", "series-plan", "music-production",
         "model3d", "story-plan", "comic-plan", "director-plan", "series-render",
         "game-produce", "series-produce", "series-native", "series-voice", "series-assembly", "quick-video-batch",
-        "world3d-export", "scene2d-export",
+        "world3d-export", "scene2d-export", "character-animation",
     }
 
 

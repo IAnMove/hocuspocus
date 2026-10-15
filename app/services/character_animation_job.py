@@ -121,6 +121,23 @@ class CharacterAnimationJobs:
             raise AnimationJobError("kit_not_found", f"Character Kit {kit_id} is not in the {workspace} workspace", 404)
         return kit
 
+    def _alive(self, job_id: str) -> bool:
+        """Whether a worker thread of this service still owns the job (one that has not started yet counts)."""
+        thread = self._threads.get(job_id)
+        return thread is not None and (thread.ident is None or thread.is_alive())
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The jobs in this folder that a worker of this service is running (``services.workspace_busy`` probe).
+
+        Reads only. A checkpoint that says running without a thread was cut by a restart: it is not
+        busy, and ``jobs()`` turns it into ``interrupted`` the next time something reads it.
+        """
+        return [
+            {"jobId": job["jobId"], "status": job["status"], "workspace": job.get("workspace")}
+            for job in JobStore(workspace_dir).list()
+            if job.get("status") in ACTIVE and self._alive(str(job.get("jobId") or ""))
+        ]
+
     def jobs(self, workspace: str, kit_id: str | None = None) -> list[dict[str, Any]]:
         listed = [self._reconcile(workspace, job) for job in self._store(workspace).list()]
         return [public(job) for job in listed if not kit_id or job.get("kitId") == kit_id]
@@ -133,10 +150,9 @@ class CharacterAnimationJobs:
 
     def _reconcile(self, workspace: str, job: dict[str, Any]) -> dict[str, Any]:
         """A job that says it is active but has no thread here was cut by a restart: it is interrupted, its poses kept."""
-        thread = self._threads.get(job.get("jobId", ""))
-        if job.get("status") not in ACTIVE or (thread is not None and (thread.ident is None or thread.is_alive())):
+        if job.get("status") not in ACTIVE or self._alive(job.get("jobId", "")):
             return job
-        if thread is not None:
+        if job.get("jobId") in self._threads:
             stored = self._store(workspace).load(job["jobId"]) or job
             if stored.get("status") not in ACTIVE:
                 return stored

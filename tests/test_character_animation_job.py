@@ -249,6 +249,26 @@ def test_a_request_for_an_animation_being_made_returns_that_job_and_a_restart_ma
     assert cut["status"] == "interrupted" and "restarted" in cut["error"] and cut["takes"][0]["status"] == "waiting"
 
 
+def test_a_live_animation_job_is_visible_to_the_workspace_busy_probe_and_a_stale_one_is_not(world):
+    root, server, jobs = world
+    release = threading.Event()
+    server.during = lambda: release.wait(10)
+    jobs.deps.inline = False
+    job = jobs.start(WS, "hero", "wave")
+    try:
+        live = jobs.live_jobs(str(root))
+        assert len(live) == 1 and live[0]["jobId"] == job["jobId"] and live[0]["workspace"] == WS
+        assert live[0]["status"] in ("queued", "running")
+        stale = jobs._store(WS).load(job["jobId"])
+        stale.update(status="running", jobId="anim-stale")
+        jobs._store(WS).save(stale)
+        assert all(item["jobId"] != "anim-stale" for item in jobs.live_jobs(str(root)))
+        assert jobs._store(WS).load("anim-stale")["status"] == "running", "the probe does not reconcile"
+    finally:
+        release.set()
+        jobs._threads[job["jobId"]].join(10)
+
+
 def test_the_http_routes_start_follow_and_cancel_a_job_and_say_why_they_refuse(world):
     root, server, jobs = world
     app = FastAPI()
