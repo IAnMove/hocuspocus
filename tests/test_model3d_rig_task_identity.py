@@ -433,17 +433,7 @@ def test_a_second_install_sharing_ckpts_does_not_kill_the_first_installs_rig_wor
         (shared_jobs / "jobA.json").write_text("{}")
         (shared_jobs / "jobA.pid").write_text(str(first.pid))
         (own_jobs / "jobB.pid").write_text(str(orphan_of_b.pid))
-        app_dir = Path(rig_service.__file__).resolve().parents[1]
-        code = (
-            "import sys\nsys.path.insert(0, sys.argv[1])\n"
-            "source = open(sys.argv[2], encoding='utf-8').read()\n"
-            "scope = {'__name__': 'services.rig_service', '__package__': 'services', '__file__': sys.argv[3]}\n"
-            "exec(compile(source, sys.argv[3], 'exec'), scope)\n"
-        )
-        boot = subprocess.run(
-            [sys.executable, "-c", code, str(app_dir), str(Path(rig_service.__file__)), str(app_b / "services" / "rig_service.py")],
-            capture_output=True, text=True, timeout=120, cwd=str(tmp_path),
-        )
+        boot = _boot_rig_service_as(app_b, tmp_path)
         assert boot.returncode == 0, boot.stderr[-800:]
         assert _survives(first), "install B must not signal the worker install A listed in the shared ckpts"
         assert orphan_of_b.wait(timeout=10) is not None, "install B ends its own previous run's worker"
@@ -452,6 +442,48 @@ def test_a_second_install_sharing_ckpts_does_not_kill_the_first_installs_rig_wor
         for process in (first, orphan_of_b):
             process.kill()
             process.wait()
+
+
+def test_installs_sharing_one_settings_folder_still_never_signal_each_others_workers(tmp_path):
+    """Defence in depth if a settings/ folder is ever shared (nothing links one today): the reaper compares THIS
+    install's own request path, unresolved, so a worker listed through the shared folder stays another install's.
+    A recycled pid that now runs the animate worker (its request lives in a temporary folder) is not ours either."""
+    shared = tmp_path / "shared-settings"
+    (shared / "rig-jobs").mkdir(parents=True)
+    app_a, app_b = tmp_path / "install-a" / "app", tmp_path / "install-b" / "app"
+    for app_dir in (app_a, app_b):
+        app_dir.mkdir(parents=True)
+        (app_dir / "settings").symlink_to(shared, target_is_directory=True)
+    worker_a = _sleeping_worker(str(app_a / "services" / "hunyuan3d" / "rig_worker.py"),
+                                "--request", str(app_a / "settings" / "rig-jobs" / "jobA.json"))
+    animate = _sleeping_worker("-m", "services.humanoid_rig.worker",
+                               "--request", str(tmp_path / "humanoid-animate-x" / "request.json"))
+    try:
+        (shared / "rig-jobs" / "jobA.pid").write_text(str(worker_a.pid))
+        (shared / "rig-jobs" / "stale.pid").write_text(str(animate.pid))
+        boot = _boot_rig_service_as(app_b, tmp_path)
+        assert boot.returncode == 0, boot.stderr[-800:]
+        assert _survives(worker_a), "a worker listed through a shared settings folder is still another install's"
+        assert _survives(animate), "the animate worker is never started from the rig job folder"
+    finally:
+        for process in (worker_a, animate):
+            process.kill()
+            process.wait()
+
+
+def _boot_rig_service_as(app_dir: Path, cwd: Path) -> subprocess.CompletedProcess:
+    """Import the REAL rig_service source in a fresh interpreter as if it lived in ``app_dir`` (another install)."""
+    code = (
+        "import sys\nsys.path.insert(0, sys.argv[1])\n"
+        "source = open(sys.argv[2], encoding='utf-8').read()\n"
+        "scope = {'__name__': 'services.rig_service', '__package__': 'services', '__file__': sys.argv[3]}\n"
+        "exec(compile(source, sys.argv[3], 'exec'), scope)\n"
+    )
+    real_app = Path(rig_service.__file__).resolve().parents[1]
+    return subprocess.run(
+        [sys.executable, "-c", code, str(real_app), str(Path(rig_service.__file__)), str(app_dir / "services" / "rig_service.py")],
+        capture_output=True, text=True, timeout=120, cwd=str(cwd),
+    )
 
 
 # --- the file URL a finished job reports names the workspace the job ran in (assets-08) ---------------------
