@@ -325,6 +325,8 @@ def _story_job_update(job_id: str, *, reopen: bool = False, **patch) -> dict | N
         job = _story_plan_jobs.get(job_id)
         if not job:
             return None
+        # A live worker owns the job: a resume that lost the race for it must not undo the cancel sent to that worker.
+        reopen = reopen and job_id not in _story_plan_active_jobs
         next_status = str(patch.get("status") or job.get("status") or "")
         if (
             not reopen
