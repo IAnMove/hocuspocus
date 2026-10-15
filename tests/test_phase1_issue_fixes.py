@@ -2802,5 +2802,76 @@ class TestFramesControlVideoAudio(unittest.TestCase):
         self.assertNotIn("supportsControlVid && !hasSoundtrack", source)
 
 
+class LtxOutpaintLoraTests(unittest.TestCase):
+    """The Outpaint IC-LoRA is mandatory on both LTX stacks (final-edit E2)."""
+
+    def _resolve(self, *, official: bool):
+        import tempfile
+
+        with open(_LTX2_PATH, encoding="utf-8") as handle:
+            tree = ast.parse(handle.read())
+        method = next(
+            node for node in ast.walk(tree)
+            if isinstance(node, ast.FunctionDef)
+            and node.name == "get_loras_transformer"
+        )
+        handler = types.SimpleNamespace(
+            _get_arch_spec=lambda _base: {
+                "outpaint_ic_lora": "outpaint-ic-lora.safetensors",
+                "inpaint_ic_lora": "inpaint-ic-lora.safetensors",
+            },
+        )
+        package = types.ModuleType("models.ltx2")
+        package.__path__ = []
+        package.ltx2_handler = handler
+        hub = types.ModuleType("huggingface_hub")
+
+        def offline(**_kwargs):
+            raise OSError("download failed")
+
+        hub.hf_hub_download = offline
+        with tempfile.TemporaryDirectory() as folder:
+            namespace = {
+                "__name__": "models.ltx2.ltx2",
+                "__package__": "models.ltx2",
+                "os": os,
+                "fl": types.SimpleNamespace(
+                    locate_file=lambda *_a, **_k: None,
+                    get_download_location=lambda: folder,
+                ),
+                "_normalize_outpainting_dims": lambda _dims: None,
+            }
+            exec(
+                compile(
+                    ast.Module(body=[method], type_ignores=[]),
+                    "<ltx2 get_loras_transformer>",
+                    "exec",
+                ),
+                namespace,
+            )
+            with mock.patch.dict(sys.modules, {
+                "models.ltx2": package, "huggingface_hub": hub,
+            }):
+                return namespace["get_loras_transformer"](
+                    types.SimpleNamespace(base_model_type="ltx2_22B"),
+                    lambda *_args: [],
+                    "ltx2_22B_distilled",
+                    "",
+                    base_model_type="ltx2_22B",
+                    model_def={"ltx2_pipeline": "distilled"},
+                    video_guide_outpainting="0 0 25 25",
+                    outpaint_official_stack=official,
+                    outpaint_mask_preserve=official,
+                )
+
+    def test_legacy_outpaint_without_its_lora_fails_instead_of_continuing(self):
+        with self.assertRaisesRegex(FileNotFoundError, "unavailable"):
+            self._resolve(official=False)
+
+    def test_official_outpaint_without_its_lora_still_fails(self):
+        with self.assertRaises(FileNotFoundError):
+            self._resolve(official=True)
+
+
 if __name__ == "__main__":
     unittest.main()

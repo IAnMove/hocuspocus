@@ -37,7 +37,7 @@ def _read_blend_numbers(body):
     if base is not None and not isinstance(base, dict):
         raise HTTPException(status_code=NOT_A_NUMBER_STATUS, detail="base_params must be an object")
     base = base or {}
-    return {
+    numbers = {
         "overlap_sec": number_field(body, "overlap_sec", 3),
         "motion_prefix_sec": number_field(body, "motion_prefix_sec", 1.0),
         "motion_suffix_sec": number_field(body, "motion_suffix_sec", 1.0),
@@ -47,6 +47,34 @@ def _read_blend_numbers(body):
         "num_inference_steps": number_field(body, "num_inference_steps", base.get("num_inference_steps", 15), int),
         "input_video_strength": number_field(body, "input_video_strength", base.get("input_video_strength", 1.0)),
     }
+    if body.get("blend_mode") == "insert":
+        # Insert adds the transition between A and B and keeps both whole. ``overlap_sec`` is then the length of that
+        # transition (``transition_sec``, or ``overlap_sec`` from a caller that only sends the old field), and the
+        # motion prefix/suffix and the weak hints are off: they replay frames A and B already keep.
+        numbers["overlap_sec"] = number_field(body, "transition_sec", numbers["overlap_sec"])
+        numbers.update(motion_prefix_sec=0.0, motion_suffix_sec=0.0, anchor_frames=0)
+    return numbers
+
+
+def _fit_motion_prefix(transition_frames, prefix_frames):
+    """Return ``(prefix_frames, video_length)`` whose output is exactly ``transition_frames`` long.
+
+    With a motion prefix the model returns ``prefix + video_length - 1`` frames and ``video_length`` must be on
+    LTX's 8k+1 schedule with at least 17. When the overlap is too short for the prefix plus those 17 frames the
+    prefix gives way (and when the schedule rounds ``video_length`` down it takes the spare frames), so the
+    assembled blend stays A + B - overlap long (final-edit E3). A prefix left with one frame is the start image
+    already, so that case is plain SE: ``(0, transition_frames)``.
+    """
+    wanted = transition_frames - prefix_frames + 1
+    video_length = max(17, 17 + 8 * ((wanted - 17) // 8))
+    fitted = transition_frames - video_length + 1
+    return (fitted, video_length) if fitted > 1 else (0, transition_frames)
+
+
+def _zone_frames(blend_mode, seconds, fps):
+    """Frames taken from the end of A / the start of B: the overlap zone, or in Insert mode just the one frame the
+    transition starts from (A's last) / lands on (B's first)."""
+    return 1 if blend_mode == "insert" else max(1, int(round(seconds * fps)))
 
 
 async def blend_endpoint(request: Request):
@@ -55,6 +83,11 @@ async def blend_endpoint(request: Request):
     For `overlap` mode: the last `overlap_sec` of Clip A blends with the
     first `overlap_sec` of Clip B during a shared window. Total output
     duration = len(A) + len(B) - overlap_sec.
+
+    For `insert` mode: both clips are kept whole and the transition is added
+    between them (A's last frame to B's first frame), so the total duration
+    = len(A) + transition_sec + len(B). It is a plain start+end generation:
+    motion_prefix_sec, motion_suffix_sec and anchor_frames are not used.
 
     Pipeline: sparse keyframe injection — A's last N frames anchored at
     blend positions 1..N, B's first N frames anchored at blend positions
@@ -68,6 +101,8 @@ async def blend_endpoint(request: Request):
         prompt?: str — describe the *transition itself*, not just "smooth blend".
         model_type: str,
         blend_mode?: 'insert'|'overlap', overlap_sec?: float (default 3),
+        transition_sec?: float — insert mode only: seconds of generated
+            transition between A and B (default: overlap_sec),
         motion_prefix_sec?: float (default 1.0) — seconds of A's overlap-zone
             start used as `video_source`, switching the pipeline from SE to
             VE mode. Gives the model real motion history to extrapolate so
@@ -174,7 +209,7 @@ async def blend_endpoint(request: Request):
 
         # ── Extract A's tail (last overlap_sec_eff seconds) ──────────────
         if info_a["is_video"]:
-            src_frames_a = max(1, int(round(overlap_sec_eff * info_a["fps"])))
+            src_frames_a = _zone_frames(blend_mode, overlap_sec_eff, info_a["fps"])
             start_idx_a = max(0, info_a["frames"] - src_frames_a)
             raw_a = [info_a["reader"][i].asnumpy() for i in range(start_idx_a, info_a["frames"])]
             del info_a["reader"]
@@ -183,7 +218,7 @@ async def blend_endpoint(request: Request):
 
         # ── Extract B's head (first overlap_sec_eff seconds) ─────────────
         if info_b["is_video"]:
-            src_frames_b = max(1, int(round(overlap_sec_eff * info_b["fps"])))
+            src_frames_b = _zone_frames(blend_mode, overlap_sec_eff, info_b["fps"])
             end_idx_b = min(src_frames_b, info_b["frames"])
             raw_b = [info_b["reader"][i].asnumpy() for i in range(end_idx_b)]
             del info_b["reader"]
@@ -223,6 +258,15 @@ async def blend_endpoint(request: Request):
         motion_prefix_sec = max(0.0, min(motion_prefix_sec, overlap_sec_eff * 0.8))
         K_prefix = int(round(motion_prefix_sec * fps)) if motion_prefix_sec > 0 else 0
         K_prefix = max(0, min(K_prefix, len(frames_a) - 2))  # leave room for generation
+        # The replayed prefix comes out on top of ``video_length`` (output =
+        # prefix + video_length - 1), so size both to give exactly
+        # ``transition_frames``; SE (no prefix) already outputs video_length.
+        generated_frames = transition_frames
+        if K_prefix > 0:
+            K_prefix, generated_frames = _fit_motion_prefix(
+                transition_frames, K_prefix,
+            )
+            motion_prefix_sec = K_prefix / fps
 
         def _write_mp4(path: str, frames: list, fps_val: float):
             import imageio
@@ -381,7 +425,7 @@ async def blend_endpoint(request: Request):
             # guidance_scale / num_inference_steps: explicit body wins > studio value > safe default
             "guidance_scale": numbers["guidance_scale"],
             "num_inference_steps": numbers["num_inference_steps"],
-            "video_length": transition_frames,
+            "video_length": generated_frames,
             "resolution": f"{src_w}x{src_h}",
             "generation_mode": "video",
             "image_mode": 0,  # defensive: blend is always a video job

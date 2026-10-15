@@ -11,9 +11,9 @@ import time
 import traceback
 
 from services.job_lifecycle import (
+    collect_job_outputs,
     finish_job,
     is_cancel_requested,
-    new_media_files,
     record_job_outputs,
     update_job,
 )
@@ -59,7 +59,6 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
         os.makedirs(out_dir, exist_ok=True)
         wgp.save_path = out_dir
         print(f"[SFX {job.get('job_id', '')}] save_path locked to: {out_dir}")
-        before = set(os.listdir(out_dir)) if os.path.isdir(out_dir) else set()
 
         variant = raw_params.get("_mmaudio_variant")
         prompt = raw_params.get("MMAudio_prompt", "") or raw_params.get("prompt", "")
@@ -169,7 +168,9 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
         )
         # Publish files even when cancellation arrived during MMAudio's
         # non-cooperative call; terminal status/message remain untouched.
-        new_files = new_media_files(out_dir, before)
+        # Only the file this job wrote: a before/after scan of the workspace also
+        # claimed what another operation (a studio.key) saved there meanwhile.
+        new_files = collect_job_outputs({"file_list": [output_path]}, out_dir)
         record_job_outputs(job, new_files)
         if is_cancel_requested(job):
             return False

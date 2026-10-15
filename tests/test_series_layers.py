@@ -132,9 +132,9 @@ def test_the_spec_carries_the_set_layers_placed_on_the_framed_background():
     assert (fog["kind"], fog["drift"], fog["opacity"]) == ("video", 14.0, 0.5), "a workspace .webm loops as a video layer"
     assert (smoke["kind"], smoke["source"]) == ("video", "/api/v1/file/smoke.mp4?workspace=cast")
     assert [layer["id"] for layer in planned["layers"]] == ["layer-1", "layer-2", "layer-3", "layer-4"], "the missing asset is left out"
-    # A tighter framing zooms and pans the background; a layer stays on its spot of it.
+    # A tighter framing zooms and pans the background (a lone close-up toward kevin's home, 30); a layer stays on its spot of it.
     close = spec(value, {**TWO, "visibleCharacterIds": ["kevin"], "layout2d": {"framing": "close"}})
-    assert close["layers"][1]["x"] == background_point("close", 50.0, 0.1, 0.6)[0] and close["layers"][0]["scale"] == BACKGROUND_ZOOM["close"]
+    assert close["layers"][1]["x"] == background_point("close", 30.0, 0.1, 0.6)[0] and close["layers"][0]["scale"] == BACKGROUND_ZOOM["close"]
 
 
 def test_a_video_layer_plans_its_own_clock_and_an_image_layer_none():

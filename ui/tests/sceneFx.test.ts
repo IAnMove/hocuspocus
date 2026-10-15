@@ -183,3 +183,45 @@ test('an empty editor still opens the stock showcase, and apply/speech documents
   assert.equal(isFxShowcaseDocument(preparedApply), false)
   assert.equal(adoptPreparedSceneDocument(current, preparedApply as typeof current).mode, 'replace')
 })
+
+test('an effect speed runs its own time slower or faster, identically in 2D and 3D exports', async () => {
+  const { paintSceneFx } = await import('../src/features/sceneFx/paint')
+  const [slow] = parseSceneFx([{ id: 'slow', kind: 'speedlines', start: 0, end: 4, speed: 0.5 }])
+  assert.equal(slow.speed, 0.5)
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 1 }])[0].speed, undefined, 'normal speed is not stored')
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 0 }])[0].speed, 0.02)
+  assert.equal(parseSceneFx([{ kind: 'rain', speed: 99 }])[0].speed, 4)
+  const draw = (seconds: number, cue: typeof slow) => {
+    const log: string[] = []
+    const ctx = new Proxy({}, {
+      get: (_target, key) => (...args: unknown[]) => { log.push(`${String(key)}(${args.map(arg => typeof arg === 'number' ? arg.toFixed(4) : typeof arg).join(',')})`) },
+      set: (_target, key, value) => { log.push(`${String(key)}=${typeof value === 'number' ? value.toFixed(4) : String(value)}`); return true },
+    }) as unknown as CanvasRenderingContext2D
+    paintSceneFx(ctx, 640, 360, seconds, [cue])
+    return log
+  }
+  const normal = { ...slow, speed: undefined }
+  assert.deepEqual(draw(1, slow), draw(0.5, normal))
+  assert.notDeepEqual(draw(1, slow), draw(1, normal))
+})
+
+test('a fast one-shot effect ends early instead of painting NaN, and the schema keeps speed', async () => {
+  const { paintSceneFx } = await import('../src/features/sceneFx/paint')
+  const { SCENE_FX_SCHEMA } = await import('../src/features/sceneFx/types')
+  const values: number[] = []
+  // A canvas that keeps what is set on it (globalAlpha, lineWidth...) and records every number it is given.
+  const state: Record<string, unknown> = { globalAlpha: 1, lineWidth: 1 }
+  const ctx = new Proxy(state, {
+    get: (target, key) => key in target ? target[key as string] : (...args: unknown[]) => {
+      for (const arg of args) if (typeof arg === 'number') values.push(arg)
+      return String(key).endsWith('Gradient') ? { addColorStop: (offset: number) => { values.push(offset) } } : undefined
+    },
+    set: (target, key, value) => { if (typeof value === 'number') values.push(value); target[key as string] = value; return true },
+  }) as unknown as CanvasRenderingContext2D
+  for (const kind of ['confetti', 'sparks', 'explosion', 'fireworks']) {
+    const [cue] = parseSceneFx([{ id: kind, kind, start: 0, end: 2, speed: 4 }])
+    for (const seconds of [0.3, 1.0, 1.9]) paintSceneFx(ctx, 640, 360, seconds, [cue])
+  }
+  assert.ok(values.length > 0 && values.every(Number.isFinite), 'every painted number is finite')
+  assert.deepEqual(SCENE_FX_SCHEMA.items.properties.speed, { type: 'number', minimum: 0.02, maximum: 4 })
+})

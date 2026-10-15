@@ -251,3 +251,55 @@ def test_film_grain_keeps_every_frame_when_the_clip_audio_ends_before_the_pictur
         decord.bridge.set_bridge("native")
     assert _frames(video) == FRAMES
     assert _audio_seconds(video) == pytest.approx(1.6, abs=0.05)
+
+
+# -- wgp's final audio mux (vendored shared/utils/audio_video.py) ---------------------------------------------------
+
+
+def _generated_picture(path: Path, frames: int, fps: int) -> str:
+    """The temp picture wgp saves before the mux: ``save_video`` with the default H.264 codec, content that moves."""
+    torch = pytest.importorskip("torch")
+    save_video = pytest.importorskip("shared.utils.audio_video").save_video
+    generator = torch.Generator().manual_seed(7)
+    height, width = 64, 96
+    ramp = torch.linspace(-1, 1, width).view(1, 1, 1, width)
+    drift = torch.linspace(-1, 1, frames).view(1, frames, 1, 1)
+    noise = torch.rand(3, frames, height, width, generator=generator) * 0.3
+    video = ((ramp + drift) / 2 + noise).clamp(-1, 1).expand(3, frames, height, width).contiguous()
+    save_video(tensor=video, save_file=str(path), fps=fps, nrow=1, normalize=True, value_range=(-1, 1),
+               codec_type="libx264_8", container="mp4")
+    return str(path)
+
+
+def _stereo_wav(path: Path, seconds: float, rate: int = 32000) -> str:
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-t", f"{seconds}", "-i",
+                    f"sine=frequency=330:sample_rate={rate}", "-ac", "2", str(path)], check=True, capture_output=True)
+    return str(path)
+
+
+def _mux(tmp_path: Path, frames: int, fps: int, audio_seconds: float, *, start_image: bool) -> str:
+    mux = pytest.importorskip("shared.utils.audio_video").combine_and_concatenate_video_with_audio_tracks
+    picture = _generated_picture(tmp_path / "picture.mp4", frames, fps)
+    audio = _stereo_wav(tmp_path / "generated.wav", audio_seconds)
+    out = str(tmp_path / "out.mp4")
+    # wgp passes ``source_video_frames_count / fps``: a start image counts as a one-frame source, plain text-to-video as 0.
+    mux(out, picture, [], [audio], (1 / fps) if start_image else 0, 48000, new_audio_from_start=True)
+    return out
+
+
+@pytest.mark.parametrize("frames, fps, audio_seconds, label", [
+    (49, 25, 1.89, "LTX image-to-video: 49 frames, the audio model made 1.89 s"),
+    (49, 25, 1.80, "LTX image-to-video, a shorter audio"),
+    (49, 25, 3.0, "an audio longer than the picture is bounded to it"),
+    (226, 24, 9.2, "H3 image-to-video: 226 frames (9.4167 s), a shorter audio"),
+    (81, 16, 4.9, "81 frames at 16 fps last 5.0625 s, not a whole number of milliseconds"),
+])
+@pytest.mark.parametrize("start_image", [True, False], ids=["image-to-video", "text-to-video"])
+def test_the_final_audio_mux_keeps_every_generated_frame(tmp_path, frames, fps, audio_seconds, label, start_image):
+    """With a start image the picture was cut to the generated audio when that was shorter: 49 -> 45 (LTX) and 226 ->
+    222 (H3). The text-to-video branch pads the audio and never lost a frame; both branches now pad the audio and
+    bound it to the picture (final-edit, wgp's mux)."""
+    out = _mux(tmp_path, frames, fps, audio_seconds, start_image=start_image)
+    assert _frames(out) == frames, label
+    audio = _audio_seconds(out)
+    assert audio is not None and audio <= frames / fps + 1 / fps, (label, audio)

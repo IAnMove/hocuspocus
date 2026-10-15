@@ -6,6 +6,40 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: an image-to-video clip no longer loses its last frames when the model's audio is shorter than the picture.** With a start image the final audio step cut the finished video to the generated audio: LTX clips came out 49 -> 45 frames and H3 clips 226 -> 222, so Series and Director shots ran a little short and the Blend assembly drifted. The audio is now padded in both branches and bound to the end of the picture (rounded up to the next millisecond), so the clip keeps every frame the model made; text-to-video was already correct. This patches the vendored `shared/utils/audio_video.py` (one filter option and a `-t` bound).
+
+**Added: Blend "Insert" mode now does what its label says.** Insert adds new footage between the two clips and keeps both whole, so the result is Clip A + the transition + Clip B. Until now the mode was only stored: the server always overlapped the clips (A + B - overlap) and the Transition Duration slider was never sent. The transition now starts on A's last frame, lands on B's first frame and is as long as the slider (the length snaps to the model's frame schedule, 17 frames at least); the motion-prefix, motion-suffix and hint controls do not apply to Insert and are not used. The API takes the length as `transition_sec` (an old caller that only sends `overlap_sec` keeps working). Overlap mode is unchanged.
+
+**Fixed: a scripted Series video is remade when its named end frame is replaced in place.** The clip is interpolated to `video.end`, but only the start frame's pixels were compared, so overwriting the end image kept the old clip. The end file's pixels now count too (carried from Cursor #1119, reworked). Clips made before this, and shots with no named end, are never remade because of it: nothing regenerates after the upgrade.
+
+**Fixed: a Blend now comes out exactly as long as the overlap it announces.** The finished Blend was 0.32 s short (no motion prefix) or 0.44 s long (the default mode) against "A + B - overlap": the engine dropped 8 landing frames off every transition and the motion-prefix frames were counted twice. Blend transitions are no longer trimmed at the tail, and the prefix and the generated length are sized together so the transition has exactly the overlap's frames. When the overlap is too short for the prefix plus the model's 17-frame minimum, the motion prefix is shortened (or dropped in favour of a single start frame) instead of lengthening the clip. Insert mode is unchanged.
+
+**Fixed: Outpaint on the legacy LTX path now fails clearly when its IC-LoRA cannot be downloaded.** Without that LoRA file (offline, a failed download, a full disk) the legacy path only printed a warning and carried on, so the job spent the GPU time and published an unrelated picture as "Done". It now stops with "Legacy Outpaint IC-LoRA ... is unavailable", like the official stack already did.
+
+**Fixed: a finished Director run can be edited and deleted at once, without waiting for the video model to unload.** A run already said `completed` while its worker was still unloading the H3 model, and for 1-6 seconds every edit (prompt, tag, Repeat, rerun, rejoin, repair) answered "Pipeline is still active" and DELETE said "still running, stop it first". The worker now leaves the registry before the unload, which only touches the model under the GPU lock.
+
+**Fixed: the owner's pending pull requests, in one go.** Series: a line's delivery (`emotion`, `delivery`) now
+reaches the voices that take a direction (VoxCPM2 references and Qwen3 presets) and changes the recording only then;
+the library's `natural` placeholders are not a direction. A 2D shot that shows the picture of the shot before it goes on
+from that shot's camera (or frames a `detail` of the plate), a lone close-up shows its side of the room, and
+`from_script` warns about the same picture twice in a row; an episode made before this regenerates nothing, because the
+new neighbour fingerprint (take version 4) only counts for takes made from now on. A screen effect can run slower or
+faster (`speed`), a 3D set can choose its light (a night street), and a sound effect job owns only the file it wrote.
+Characters: a new pose goes on the screen its character was made on, an eyes hint keeps light hair out of the eyes and
+both halves of an eye blink, `blink: false` is a hint per pose (transparent glasses), a kit keeps the whole animation
+catalog (48 per kit; a full kit refuses a new one before any GPU work), the animations panel lists only models that
+accept a picture reference, and a `jobs.wait` HTTP error ends the animation job instead of holding the GPU lock. Scene 3D
+export hides an empty cast mark like an empty cutout, MCP intent records survive a power cut, and Linux installs use
+`eva-decord` (decord 0.6.0 has no cp310 manylinux wheel; Windows and macOS keep `decord`).
+
+**Fixed: a workspace cannot be deleted while a character animation is being made.** The new
+animation job writes poses, keyed pictures, the sprite sheet and the kit into the workspace
+folder, but it lived only in `.character-animation-jobs-v1` — not in `jobs()` or the busy
+registry. Deleting the folder while a pose was being keyed (or the sheet saved) wiped the
+library; `_workspace_dir()` then recreated an empty folder for the leftover worker. Delete
+now waits for that job, the same way it waits for game produce or a Director plan. A
+checkpoint a restart left as `running` still does not block.
+
 **The Character Creator keeps your work, and its options are easier to judge.**
 Leaving the tab (or the page) used to cancel the three options that were being
 drawn and forget the name and description. The creator's work now belongs to a
@@ -64,6 +98,7 @@ MCP `characters.animations` and `characters.animation.sheet` for an agent that m
 a sheet once or in a loop and breathes) next to `walk-cycle-sheet`; the walking cards that move the legs are `walk-two-pose`
 (a two-cell sheet, one cell per half step, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
 way they look (`facing`). New `reaction` trait and gesture/expression words in the 2D search groups.
+
 **Fixed: the file link a finished 3D or rig job reports now works when the job ran in another workspace.** The `url` in `GET /api/v1/model3d/status/{id}` and `GET /api/v1/rig/status/{id}` was a bare `/api/v1/file/<name>`, which is looked up in the active workspace only, so a REST client reading a job that ran in a different workspace got a 404 from its own link (the MCP commands already added the workspace themselves). The job now reports `/api/v1/file/<name>?workspace=<workspace>` for local, simulated and Meshy/Hi3D jobs, on the full and the core server.
 
 **Fixed: the NSFW switch now works for a LoRA that comes from a linked model folder.** `/api/v1/loras/nsfw-override` looked only in the primary LoRA folder, so a LoRA shown in the installed list because another install's folder is linked answered "LoRA not found". It now finds linked LoRAs too and keeps the setting in the primary folder (a linked install stays read-only), starting from a copy of the linked LoRA's own information so the row keeps its name, trigger words and preview; clearing the switch goes back to CivitAI's flag.

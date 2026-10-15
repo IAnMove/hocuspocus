@@ -58,6 +58,23 @@ def test_small_eyes_keep_the_lower_sclera_for_mouth_and_blink_anchors():
     assert box[3] >= 130
 
 
+def test_an_eyes_hint_takes_the_eyes_under_light_hair_either_side():
+    """White hair tufts either side of the head make a bigger light pair whose box reaches the eyes below them."""
+    image = Image.new("RGBA", (400, 520), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((130, 60, 270, 260), fill=SKIN)
+    draw.ellipse((100, 50, 150, 135), fill=(236, 236, 232, 255))
+    draw.ellipse((250, 50, 300, 135), fill=(236, 236, 232, 255))
+    for x in (160, 212):
+        draw.rectangle((x, 150, x + 28, 162), fill=(250, 250, 250, 255))
+        draw.ellipse((x + 10, 151, x + 18, 161), fill=(20, 20, 20, 255))
+    draw.rectangle((140, 260, 260, 500), fill=(230, 214, 170, 255))
+    data = np.array(image)
+    box, _ = find_eyes(data[..., :3], data[..., 3], near=(200, 156))
+    assert 150 <= box[1] and box[3] <= 163, box
+    assert 155 <= box[0] <= 165 and 235 <= box[2] <= 245, box
+
+
 def test_small_face_mouth_does_not_merge_with_a_nearby_moustache():
     image = Image.fromarray(_full_body_anime())
     draw = ImageDraw.Draw(image)
@@ -324,6 +341,20 @@ def test_a_pose_in_sunglasses_is_saved_without_a_blink(tmp_path):
     assert anchors["cool"]["blink"] is False and "blink" not in anchors["base"]
     assert "blinkSource" not in anchors["cool"] and anchors["base"]["blinkSource"].startswith("/api/v1/file/")
     assert rigged["poses"]["cool"]["blinks"] is False
+
+
+def test_a_pose_hinted_not_to_blink_keeps_its_eyes_open_on_later_rigs(tmp_path):
+    # Clear spectacles are not covered eyes: a closed lid would paint over their frames, so the pose is told not to blink.
+    folder = _workspace(tmp_path)
+    rigged = rig_character(str(folder), WORKSPACE, "kevin", base_revision=1, hints={"shrug": {"blink": False}})
+    anchors = rigged["character"]["anchors"]
+    assert anchors["shrug"]["blink"] is False and "blinkSource" not in anchors["shrug"]
+    assert rigged["poses"]["shrug"]["blinks"] is False and "blink" not in anchors["base"]
+    again = rig_character(str(folder), WORKSPACE, "kevin", base_revision=rigged["revision"])
+    assert again["character"]["anchors"]["shrug"]["blink"] is False
+    cleared = rig_character(str(folder), WORKSPACE, "kevin", base_revision=again["revision"], hints={"shrug": None})
+    assert "blink" not in cleared["character"]["anchors"]["shrug"]
+    assert cleared["character"]["anchors"]["shrug"]["blinkSource"].startswith("/api/v1/file/")
 
 
 def test_rigging_needs_a_workspace_base_pose(tmp_path):

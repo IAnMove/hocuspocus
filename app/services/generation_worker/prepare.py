@@ -630,9 +630,12 @@ def _run_generation_manifest(st):
             ) or {}
         except Exception:
             _single_model_def = {}
+        # A Blend transition is sized to the frame (the clips around it are cut
+        # by the overlap), so it keeps the landing frames this trim would drop.
         if (
             has_end_image
             and raw_params.get("video_length")
+            and "_blend_mode" not in raw_params
             and bool(_single_model_def.get("director_trim_end_frames", True))
         ):
             model_type = raw_params.get("model_type", "")

@@ -74,15 +74,16 @@ SCREEN_CAVITY = (10, 22, 70, 255)
 MAX_PIXELS = 16_777_216
 
 
-HINT_KEYS = ("mouth", "eyes", "mouthWidth", "exact")
+HINT_KEYS = ("mouth", "eyes", "mouthWidth", "exact", "blink")
 
 
 def _hint_value(pose: str, key: str, value: Any):
     """A hint point ``[x, y]`` in % of the pose image, ``mouthWidth``: the mouth corner to corner in % of its width, or
-    ``exact``: true when a person placed the mouth on the image (``flat_rig_hints``)."""
-    if key == "exact":
+    ``exact``: true when a person placed the mouth on the image (``flat_rig_hints``), or ``blink``: false for a pose
+    whose eyes must not blink (clear spectacles, whose frames a closed lid would paint over)."""
+    if key in ("exact", "blink"):
         if not isinstance(value, bool):
-            raise FlatRigError("invalid_hints", f"hints.{pose}.exact must be true or false")
+            raise FlatRigError("invalid_hints", f"hints.{pose}.{key} must be true or false")
         return value
     if key == "mouthWidth":
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0.5 <= value <= 100:
@@ -725,7 +726,7 @@ def _pose_guides(image: Image.Image, crop, size, hint, landmarks) -> tuple[dict[
     def inside(x, y):
         return min(max(x - crop[0], 0), size[0] - 1), min(max(y - crop[1], 0), size[1] - 1)
     hint, ignored = flat_rig_hints.trusted(hint, landmarks, image.size)
-    points = {key: point for key, point in (hint or {}).items() if key not in ("mouthWidth", "exact")}
+    points = {key: point for key, point in (hint or {}).items() if key not in ("mouthWidth", "exact", "blink")}
     near = {key: inside(point[0] / 100 * image.width, point[1] / 100 * image.height) for key, point in points.items()}
     guide = {key: value for key, value in face_landmarks.guides(landmarks).items() if key not in near}
     for key in ("eyes", "mouth"):
@@ -820,7 +821,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     bx0, by0, bx1, by1 = _blink_box(max(0, ox0 - pad), max(0, oy0 - pad), min(width, ox1 + pad), min(height, oy1 + pad), height)
     return {
         "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "found": found,
-        "realistic": realistic, "ink": colour, "skin": tuple(int(v) for v in background), "blinks": not covered,
+        "realistic": realistic, "ink": colour, "skin": tuple(int(v) for v in background),
+        "blinks": not covered and (hint or {}).get("blink") is not False,
         "warnings": warnings,
         "mouth": _anchor(mx, my, sprite_width * SPRITE[1] / SPRITE[0], width, height),
         "eyes": _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, width, height),

@@ -145,7 +145,7 @@ def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
     assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
     schema = OPERATIONS["characters.rig.flat"][0]
     assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink", "warp"]} and "hints" in schema
-    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth", "exact"}
+    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth", "exact", "blink"}
 
 
 def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
@@ -194,6 +194,9 @@ def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp
     built = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "character",
                                                  "description": "Ana, green jacket"})["result"]["prompt"]
     assert built["screen"] == "magenta" and "Ana, green jacket" in built["prompt"]
+    pose = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "pose", "description": "waving",
+                                                "screen": "magenta"})["result"]["prompt"]
+    assert pose["screen"] == "magenta" and "magenta" in pose["prompt"], "a pose keeps its character's screen"
     assert calls == []
     with pytest.raises(HTTPException) as error:
         call(handlers, "characters.styles", {"style": "oil-painting", "kind": "character"})

@@ -32,11 +32,11 @@ from services.series_video_foley import VIDEO_METHODS
 SCRIPT_KEYS = ("scene", "location", "variant", "framing", "camera", "cast", "lines", "card", "music", "sfx", "fx",
                "props", "timing", "voiceRoom", "layers", "castDepth", "clipAudio", "clipVolume", "clipFit", "kind",
                "scene3d", "foley", "duration", "lookRoom", "transitionIn", "hearing", "motionStep", "stopMotionJitter",
-               "resolution", "finish")
+               "resolution", "finish", "detail")
 LIST_KEYS = ("cast", "lines", "sfx", "fx", "props", "layers")
 LAYOUT_KEYS = ("framing", "camera", "cast", "card", "music", "sfx", "fx", "props", "timing", "voiceRoom", "layers",
                "castDepth", "clipAudio", "clipVolume", "clipFit", "lookRoom", "hearing", "motionStep", "stopMotionJitter",
-               "finish")
+               "finish", "detail")
 # What a generated or imported take gets at the cut: changing only these keeps its approval.
 CUT_KEYS = frozenset({"sfx", "music", "clipAudio", "clipVolume", "clipFit", "foley"})
 KIND_OF = {method: kind for kind, method in METHODS.items()}

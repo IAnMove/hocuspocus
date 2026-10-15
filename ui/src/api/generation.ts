@@ -840,7 +840,8 @@ export async function submitBlend(params: {
   num_inference_steps?: number;
   guidance_scale?: number;
   negative_prompt?: string;
-  /** @deprecated no longer used; kept for back-compat with existing call sites */
+  /** Insert mode: seconds of generated footage added between A and B (the "Transition Duration" slider).
+   *  Overlap mode ignores it; the server falls back to `overlap_sec` when it is missing. */
   transition_sec?: number;
   /** @deprecated bell-curve weighting is applied automatically */
   strength_a?: number;

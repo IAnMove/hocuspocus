@@ -326,6 +326,47 @@ def _save_game_job(tmp_path, job_id="game-produce-aaaaaaaa", status="running"):
     GameJobStore(str(tmp_path / "film")).save({"jobId": job_id, "workspace": "film", "gameId": "g", "status": status, "steps": []})
 
 
+def _character_animation_jobs(tmp_path):
+    """A real CharacterAnimationJobs behind the real router factory, which is what registers the busy probe."""
+    from routers.character_animation_jobs import create_character_animation_jobs_router
+    from services.character_animation_job import AnimationJobDeps, CharacterAnimationJobs
+
+    jobs = CharacterAnimationJobs(AnimationJobDeps(
+        call=lambda _tool, _args: {},
+        workspace_dir=lambda name: str(tmp_path / name),
+        uploads_root=lambda: str(tmp_path / "uploads"),
+    ))
+    create_character_animation_jobs_router(jobs)
+    return jobs
+
+
+def _save_animation_job(tmp_path, job_id="anim-aaaaaaaaaaaa", status="running"):
+    from services.character_animation_job import JobStore
+
+    JobStore(str(tmp_path / "film")).save({
+        "jobId": job_id, "workspace": "film", "kitId": "hero", "animationId": "wave",
+        "status": status, "takes": [],
+    })
+
+
+def _seed_character_animation(tmp_path):
+    """An animation job whose worker thread is alive, as the service itself would register it."""
+    import threading
+
+    jobs = _character_animation_jobs(tmp_path)
+    _save_animation_job(tmp_path)
+    stop = threading.Event()
+    worker = threading.Thread(target=stop.wait, daemon=True)
+    worker.start()
+    jobs._threads["anim-aaaaaaaaaaaa"] = worker
+
+    def release():
+        stop.set()
+        worker.join(2)
+
+    return release
+
+
 def _seed_game_produce(tmp_path):
     """A produce job whose worker thread is alive, as the service itself would register it."""
     import threading
@@ -578,6 +619,7 @@ BUSY_FAMILIES = [
     pytest.param("comic-plan", "full", _seed_comic_plan, id="comic-plan"),
     pytest.param("director-plan", "full", _seed_director_plan, id="director-plan"),
     pytest.param("game-produce", "full", _seed_game_produce, id="game-produce"),
+    pytest.param("character-animation", "full", _seed_character_animation, id="character-animation"),
     pytest.param("series-plan", "full", _seed_series_plan, id="series-plan-full"),
     pytest.param("series-plan", "core", _seed_series_plan, id="series-plan-core"),
     pytest.param("series-render", "full", _seed_series_render, id="series-render"),
@@ -764,7 +806,7 @@ CORE_BUSY_KINDS = {
 }
 ROUTER_BUSY_KINDS = {
     "game-produce", "series-produce", "series-native", "series-voice", "series-assembly", "quick-video-batch",
-    "world3d-export", "scene2d-export",
+    "world3d-export", "scene2d-export", "character-animation",
 }
 
 
@@ -939,6 +981,29 @@ def test_a_game_produce_checkpoint_a_restart_left_as_running_does_not_block(tmp_
     deleted = client.delete("/api/v1/workspaces/film")
 
     assert deleted.status_code == 200, deleted.text
+
+
+def test_a_character_animation_checkpoint_a_restart_left_as_running_does_not_block(tmp_path):
+    """The record says running, no worker thread exists in this process: the restart cut it."""
+    client = _workspace_client(tmp_path, profile="full")
+    _character_animation_jobs(tmp_path)
+    _save_animation_job(tmp_path, status="running")
+
+    deleted = client.delete("/api/v1/workspaces/film")
+
+    assert deleted.status_code == 200, deleted.text
+
+
+def test_character_animation_checkpoints_stay_untouched_when_the_busy_probe_reads_them(tmp_path):
+    from services.character_animation_job import JobStore
+
+    jobs = _character_animation_jobs(tmp_path)
+    _save_animation_job(tmp_path, status="running")
+
+    assert jobs.live_jobs(str(tmp_path / "film")) == []
+
+    assert JobStore(str(tmp_path / "film")).load("anim-aaaaaaaaaaaa")["status"] == "running"
+    assert jobs.jobs("film")[0]["status"] == "interrupted", "jobs() still reconciles, as before"
 
 
 def test_game_produce_checkpoints_stay_untouched_when_the_busy_probe_reads_them(tmp_path):

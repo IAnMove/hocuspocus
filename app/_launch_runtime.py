@@ -331,7 +331,6 @@ from services.job_lifecycle import (
     finish_job,
     generation_queue_position,
     is_cancel_requested,
-    new_media_files,
     record_job_outputs,
     register_abort_state,
     request_cancel,
