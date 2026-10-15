@@ -47,6 +47,7 @@ from services.series_shot_foley import normalize_foley
 from services import series_hearing
 from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
+from services.series_continuity import same_picture_warnings
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
 from services.series_render import SERIES_RESOLUTIONS, series_resolution_preset
@@ -378,7 +379,8 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom", "finish"):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom", "finish",
+                    "detail"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
         layout.update(series_hearing.layout_hearing(shot))
@@ -479,7 +481,8 @@ def _tool_caller(call: Callable[[str, dict], dict], workspace: str, series_id: s
 
 def _summary(built: EpisodeScript, shots: list[dict[str, Any]], series: dict[str, Any], kits: dict[str, Any], root: str | None) -> dict[str, Any]:
     return {"number": built.number, "shots": [shot["id"] for shot in shots], "original": built.original,
-            "languages": built.languages, "warnings": built.warnings, "estimate": estimate_episode(series, shots),
+            "languages": built.languages, "warnings": [*built.warnings, *same_picture_warnings(series, shots)],
+            "estimate": estimate_episode(series, shots),
             **keep_look_room(series, kits, shots, root)}
 
 

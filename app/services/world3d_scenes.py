@@ -103,7 +103,7 @@ def _set_soundtrack(document: dict, tracks, workspace: str) -> None:
 
 SHOT_FX_PREFIX = "shot-"
 _SCREEN_FX_NUMBERS = {"start": (0, 600), "end": (0, 600), "x": (0, 100), "y": (0, 100), "size": (1, 200), "intensity": (0.1, 2),
-                      "volume": (0, 1), "rotation": (-180, 180)}
+                      "volume": (0, 1), "rotation": (-180, 180), "speed": (0.02, 4)}
 
 
 def _screen_fx_kinds(aimed: bool = False) -> frozenset:

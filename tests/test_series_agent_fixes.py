@@ -167,9 +167,10 @@ def test_a_compact_episode_keeps_layout_lines_and_takes():
 
 
 def test_the_guide_names_the_production_lessons():
-    """Lessons that cost hours, and the real series.update merge. Growth stays within 15% of 40364 bytes."""
+    """Lessons that cost hours, and the real series.update merge. Growth stays within 20% of 40364 bytes
+    (15% until the owner PRs #1003, #1004, #1006, #1007 and #1015 each added a few lines to the guide: 47626 bytes together)."""
     guide = guide_text()
-    assert len(guide.encode()) <= int(40364 * 1.15)
+    assert len(guide.encode()) <= int(40364 * 1.2)
     for phrase in (
         "keeps every top-level field you omit",
         "ambienceByLocation",

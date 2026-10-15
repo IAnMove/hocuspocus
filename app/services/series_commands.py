@@ -61,13 +61,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "characters.styles": (
         {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
-         "description": {"type": "string", "maxLength": 2000}},
+         "description": {"type": "string", "maxLength": 2000}, "screen": {"enum": ["green", "blue", "magenta"]}},
         [], False,
         "List character style presets (prompt fragments, kit style, rig: the default look for characters.rig.flat). "
         "paper-cutout makes paper mouths; graphic-novel (painted art, bold ink, flat black shadows, clear white eyes, "
         "the rest mouth painted as one line) rigs with warp mouths: each pose talks with its own drawing. "
         "With style, kind and description, also returns the prompt, negative prompt and screen colour to generate "
-        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode. "
+        "with: magenta when the description has green in it, else green, or the screen you pass. A new pose of a "
+        "character goes on the screen its character was made on (the screen of its character prompt): the pose text "
+        "alone rarely names the clothes. Key the result with studio.key in that mode. "
         "Save the kit with provenance [{\"method\": \"character-style-create\", \"style\": \"<style id>\"}] and "
         "characters.rig.flat uses that style's rig with no style given (or pass the rig as its style).",
     ),
@@ -79,7 +81,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
              "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
-                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"}}}]}},
+                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"},
+                 "blink": {"type": "boolean"}}}]}},
          "poses": {"type": "array", "items": ID, "maxItems": 32}},
         ["workspace", "character_id", "base_revision"], True,
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
@@ -106,7 +109,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "realistic proportions (small eyes in a wide head) is detected and its mouth taken lower down, past eye bags and "
         "spectacles. Closed lids cover each eye's whole white in the face colour under the eyes, or in the shadow's "
         "colour when the eye sits in a flat black shadow. "
-        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w}} in % of that pose image "
+        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w, \"blink\": false}} in % of that pose image "
         "(before cropping; mouthWidth corner to corner in % of its width) search only there; a mouth hint with no mark "
         "there places the mouth at it, nothing wiped (with warp mouths it is a point on the line between the lips). "
         "A mouth hint is followed as given only with exact: true (you looked at the image, as the Face Rig editor does); "
@@ -121,7 +124,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
         "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
-        "is saved with anchors.<pose>.blink false and never blinks.",
+        "is saved with anchors.<pose>.blink false and never blinks; so is one hinted blink: false (clear spectacles, "
+        "whose frames a closed lid would paint over), and like other hints it is kept for later rigs.",
     ),
     "characters.rig.flat.preview": (
         {"workspace": WORKSPACE, "character_id": ID, "pose": ID, "mouth": POINT, "mouthWidth": MOUTH_WIDTH,
@@ -620,7 +624,7 @@ def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_ext
     result: dict[str, Any] = {"styles": style_catalog()["styles"], "screens": sorted(style_catalog()["screens"])}
     if data.get("style") and data.get("kind"):
         try:
-            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "")
+            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "", data.get("screen"))
         except KeyError as error:
             raise SeriesCommandError(f"Unknown style {data['style']}", status=404) from error
     return result

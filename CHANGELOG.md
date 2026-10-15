@@ -18,6 +18,28 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a finished Director run can be edited and deleted at once, without waiting for the video model to unload.** A run already said `completed` while its worker was still unloading the H3 model, and for 1-6 seconds every edit (prompt, tag, Repeat, rerun, rejoin, repair) answered "Pipeline is still active" and DELETE said "still running, stop it first". The worker now leaves the registry before the unload, which only touches the model under the GPU lock.
 
+**Fixed: the owner's pending pull requests, in one go.** Series: a line's delivery (`emotion`, `delivery`) now
+reaches the voices that take a direction (VoxCPM2 references and Qwen3 presets) and changes the recording only then;
+the library's `natural` placeholders are not a direction. A 2D shot that shows the picture of the shot before it goes on
+from that shot's camera (or frames a `detail` of the plate), a lone close-up shows its side of the room, and
+`from_script` warns about the same picture twice in a row; an episode made before this regenerates nothing, because the
+new neighbour fingerprint (take version 4) only counts for takes made from now on. A screen effect can run slower or
+faster (`speed`), a 3D set can choose its light (a night street), and a sound effect job owns only the file it wrote.
+Characters: a new pose goes on the screen its character was made on, an eyes hint keeps light hair out of the eyes and
+both halves of an eye blink, `blink: false` is a hint per pose (transparent glasses), a kit keeps the whole animation
+catalog (48 per kit; a full kit refuses a new one before any GPU work), the animations panel lists only models that
+accept a picture reference, and a `jobs.wait` HTTP error ends the animation job instead of holding the GPU lock. Scene 3D
+export hides an empty cast mark like an empty cutout, MCP intent records survive a power cut, and Linux installs use
+`eva-decord` (decord 0.6.0 has no cp310 manylinux wheel; Windows and macOS keep `decord`).
+
+**Fixed: a workspace cannot be deleted while a character animation is being made.** The new
+animation job writes poses, keyed pictures, the sprite sheet and the kit into the workspace
+folder, but it lived only in `.character-animation-jobs-v1` — not in `jobs()` or the busy
+registry. Deleting the folder while a pose was being keyed (or the sheet saved) wiped the
+library; `_workspace_dir()` then recreated an empty folder for the leftover worker. Delete
+now waits for that job, the same way it waits for game produce or a Director plan. A
+checkpoint a restart left as `running` still does not block.
+
 **The Character Creator keeps your work, and its options are easier to judge.**
 Leaving the tab (or the page) used to cancel the three options that were being
 drawn and forget the name and description. The creator's work now belongs to a

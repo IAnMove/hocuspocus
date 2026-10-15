@@ -114,8 +114,9 @@ export async function keyStudioImage(details: { workspace: string; source: strin
 
 /** A pose's hint for the flat rig: points in % of the pose image, `mouthWidth` corner to corner in % of its width. */
 /** A pose's placement hints in % of its keyed image. `exact`: a person placed the mouth on the image, so the rig keeps it
- * where it is; without it the rig snaps it onto the painted lips, and sure face landmarks overrule a far one. */
-export type FlatRigHint = { mouth?: [number, number]; eyes?: [number, number]; mouthWidth?: number; exact?: boolean }
+ * where it is; without it the rig snaps it onto the painted lips, and sure face landmarks overrule a far one.
+ * `blink: false`: the pose never blinks (clear spectacles, whose frames a closed lid would paint over). */
+export type FlatRigHint = { mouth?: [number, number]; eyes?: [number, number]; mouthWidth?: number; exact?: boolean; blink?: boolean }
 /** How a pose's face was read and warped: its head's size class and pixels, whether the face points were read on the
  * head alone (`pass: 'head'`) and how many times the face was enlarged to warp it (1: not at all). */
 export type FlatRigFaceSize = { size: 'small' | 'normal'; head: number; pass?: 'head' | 'whole' | null; upscale: number }

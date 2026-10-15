@@ -2269,7 +2269,7 @@ def test_the_post_processing_passes_read_the_objects_launch_holds(server, monkey
                 assert namespace[name] is vars(launch)[name], f"{module_name}.{name} is not launch.{name}"
                 compared.add(name)
     assert {"wgp", "os", "time", "copy", "traceback", "update_job", "finish_job", "is_cancel_requested",
-            "new_media_files", "record_job_outputs", "_task_registry", "_publish_generation_sidecar_for_studio_job",
+            "collect_job_outputs", "record_job_outputs", "_task_registry", "_publish_generation_sidecar_for_studio_job",
             "_get_cached_hardware", "_chunked_flashvsr_upscale"} == compared
 
     import routers.tools as tools
