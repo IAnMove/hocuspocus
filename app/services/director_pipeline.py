@@ -8780,12 +8780,24 @@ def _run_pipeline(pid: str, resume: bool = False):
                 params.pop("_planning_gpu_lease_held", None)
             except Exception:
                 pass
+        # Every write to this run's state is done: publish a pending Stop and
+        # leave the worker registry BEFORE the model teardown below. The
+        # teardown only touches WGP / the isolated H3 runtime (under
+        # ``_gen_lock``), never the pipeline file, so it must not keep a run
+        # that already says ``completed`` refusing Dashboard edits and DELETE.
+        if _pipeline_cancel_requested(pid):
+            _acknowledge_pipeline_cancel(pid, force=True)
+        with _pipeline_lock:
+            # Read the model before leaving: a DELETE may drop the run next.
+            finished_params = dict(
+                (_pipelines.get(pid) or {}).get("params") or {}
+            )
+            current = _pipeline_threads.get(pid)
+            if current is threading.current_thread():
+                _pipeline_threads.pop(pid, None)
         # H3 has two mutually exclusive owners: WGP for native variants and
         # isolated ComfyUI for Legacy ConvRot. Keep only a queued job that can
         # reuse the same owner; otherwise release before the next FIFO item.
-        with _pipeline_lock:
-            finished_pipeline = _pipelines.get(pid) or {}
-            finished_params = finished_pipeline.get("params") or {}
         finished_video_model = str(finished_params.get("video_model") or "")
         try:
             finished_model_def = _wgp.get_model_def(finished_video_model) or {}
@@ -8843,12 +8855,6 @@ def _run_pipeline(pid: str, resume: bool = False):
                         )
                 finally:
                     _gen_lock.release()
-        if _pipeline_cancel_requested(pid):
-            _acknowledge_pipeline_cancel(pid, force=True)
-        with _pipeline_lock:
-            current = _pipeline_threads.get(pid)
-            if current is threading.current_thread():
-                _pipeline_threads.pop(pid, None)
 
 
 def _wait_for_resume(pid: str, poll_interval: float = 1.0):

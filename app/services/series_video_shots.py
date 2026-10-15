@@ -26,7 +26,7 @@ still match their shot and are not made again.
 
 ``videoRequest`` is not the whole request. What else chooses the picture (a portrait series
 frame, the cast and location plate a ``plan`` start is composed from, the pixels of a named
-start) is kept in a second digest, ``videoInputs`` (``series_video_inputs``). A take made
+start or end) is kept in a second digest, ``videoInputs`` (``series_video_inputs``). A take made
 before it existed has none and matches on ``videoRequest`` alone, so an upgrade makes no
 clip again. When the approved take is not the one the shot asks for now, produce points the
 approval at the matching take unless a person chose the approved one.
@@ -51,7 +51,8 @@ from services.series_render import (
 from services.series_review import episode_mode, shot_entry
 from services.series_script_warnings import listed_shots
 from services.series_shot_plan import frame_size
-from services.series_video_inputs import INPUTS_KEY, REQUEST_KEY, inputs_digest, matching_attempts, repair_approval
+from services.series_video_inputs import (INPUTS_KEY, REQUEST_KEY, inputs_digest, matching_attempts, repair_approval,
+                                          with_end)
 
 # H3 publishes 24 fps and lengths 124, then +17, through 345 (minimax_h3_handler).
 FRAME_RATE = 24
@@ -500,7 +501,7 @@ def _take_matches(series: dict[str, Any], shot: dict[str, Any], *, root: str | N
 
 
 def _video_inputs(series: dict[str, Any], shot: dict[str, Any], request: dict[str, Any], space: _Space) -> str | None:
-    """The ``videoInputs`` digest (see ``series_video_inputs``). None when a named start resolves to no file."""
+    """The ``videoInputs`` digest (see ``series_video_inputs``). None when a named start or end resolves to no file."""
     parts: dict[str, Any] = {}
     width, height = frame_size(series)
     if height > width:
@@ -512,7 +513,12 @@ def _video_inputs(series: dict[str, Any], shot: dict[str, Any], request: dict[st
         if pixels is None:
             return None
         parts["start"] = pixels
-    return inputs_digest(parts)
+    digest = inputs_digest(parts)
+    end = request.get("end")
+    if end in (None, "same"):
+        return digest
+    end_pixels = _start_pixels(series, end, space)
+    return None if end_pixels is None else with_end(digest, end_pixels)
 
 
 def _plan_part(series: dict[str, Any], shot: dict[str, Any], space: _Space) -> dict[str, Any]:
@@ -527,7 +533,7 @@ def _plan_part(series: dict[str, Any], shot: dict[str, Any], space: _Space) -> d
 
 
 def _start_pixels(series: dict[str, Any], name: str, space: _Space) -> str | None:
-    """The digest of a named start frame's file, or None when the name resolves to no readable file."""
+    """The digest of a named start or end frame's file, or None when the name resolves to no readable file."""
     relative = named_frame_file(series, space.kits if name.startswith("pose:") else {}, space.root, name)
     return (_file_digest(os.path.join(space.root, relative)) or None) if relative else None
 

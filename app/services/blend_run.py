@@ -37,6 +37,7 @@ def _run_blend_generation(job_id: str):
     """Background thread: run VG blend generation, then concatenate
     A[:L_a - O] + generated_blend + B[O:] so the blend replaces the
     last O seconds of A and the first O seconds of B (overlap semantics).
+    In insert mode nothing is cut: A + generated_blend + B.
 
     Uses filter_complex with explicit scale+fps normalization so the three
     segments (A at native res/fps, LTX output at snapped res/fps, B at
@@ -118,10 +119,13 @@ def _run_blend_generation(job_id: str):
 
         dur_a = _duration(clip_a)
         dur_b = _duration(clip_b)
-        a_pre_dur = max(0.0, dur_a - overlap_sec)
+        # Insert keeps both clips whole; overlap lets the transition replace the last/first ``overlap_sec``.
+        insert = blend_params.get("_blend_mode") == "insert"
+        trim_sec = 0.0 if insert else overlap_sec
+        a_pre_dur = max(0.0, dur_a - trim_sec)
 
         print(f"[Blend] Post: A={dur_a:.2f}s (pre={a_pre_dur:.2f}s), "
-              f"B={dur_b:.2f}s (post={max(0.0, dur_b - overlap_sec):.2f}s), "
+              f"B={dur_b:.2f}s (post={max(0.0, dur_b - trim_sec):.2f}s), "
               f"blend gen={out_w}x{out_h} → concat={concat_w}x{concat_h}@{out_fps:.2f}fps")
 
         # ── Build ffmpeg filter_complex concat pipeline ──────────────────
@@ -135,7 +139,7 @@ def _run_blend_generation(job_id: str):
         blend_path = os.path.join(out_dir, blend_name)
 
         have_pre = a_pre_dur > 0.05
-        have_post = dur_b > overlap_sec + 0.05
+        have_post = dur_b > trim_sec + 0.05
 
         # Video normalization filters — all targeting concat_w × concat_h
         # (A's native dimensions, even). Using fully-named args for scale
@@ -190,9 +194,9 @@ def _run_blend_generation(job_id: str):
             except Exception:
                 return False
 
-        # A_pre (trimmed A)
+        # A_pre (trimmed A; whole A in insert mode)
         if have_pre:
-            inputs += ["-t", f"{a_pre_dur:.4f}", "-i", clip_a]
+            inputs += ([] if insert else ["-t", f"{a_pre_dur:.4f}"]) + ["-i", clip_a]
             filter_parts.append(_norm_v(f"{input_idx}:v:0", f"v{input_idx}"))
             concat_v_labels.append(f"v{input_idx}")
             if _has_audio(clip_a):
@@ -216,10 +220,10 @@ def _run_blend_generation(job_id: str):
         concat_a_labels.append(f"a{input_idx}")
         input_idx += 1
 
-        # B_post (B skipped by overlap_sec)
+        # B_post (B skipped by overlap_sec; whole B in insert mode)
         if have_post:
-            b_post_dur = dur_b - overlap_sec
-            inputs += ["-ss", f"{overlap_sec:.4f}", "-i", clip_b]
+            b_post_dur = dur_b - trim_sec
+            inputs += ([] if insert else ["-ss", f"{overlap_sec:.4f}"]) + ["-i", clip_b]
             filter_parts.append(_norm_v(f"{input_idx}:v:0", f"v{input_idx}"))
             concat_v_labels.append(f"v{input_idx}")
             if _has_audio(clip_b):

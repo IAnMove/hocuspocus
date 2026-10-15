@@ -680,7 +680,7 @@ def test_blend_hands_the_worker_each_mode(rig, golden, tmp_path, monkeypatch) ->
                                       "model_type": "fake_t2v"},
         "two videos, anchors and inherited settings": {
             "clip_a_path": str(video_a), "clip_b_path": str(video_b), "model_type": "fake_t2v",
-            "prompt": "a door opens", "seed": 5, "blend_mode": "insert", "overlap_sec": 1.0,
+            "prompt": "a door opens", "seed": 5, "blend_mode": "overlap", "overlap_sec": 1.0,
             "motion_prefix_sec": 0.5, "motion_suffix_sec": 0.25, "anchor_frames": 3, "injection_strength": 1.5,
             "activated_loras": ["x.safetensors"], "loras_multipliers": "1;0.5 0.8",
             "base_params": {"video_length": 99, "image_mode": 1, "repeat_generation": 4, "reference_pipeline": True,
@@ -807,6 +807,125 @@ def test_blend_assembles_a_before_the_transition_and_b_after(rig, golden, tmp_pa
     rig.check(golden, f"blend run: {case}", _scrub({
         **rig.observe(job_id), "tools": tools, "temp folders left": temp.left(),
     }, (str(tmp_path), "<TMP>"), *temp.pairs()))
+
+
+def test_blend_transition_is_as_long_as_the_overlap_it_announces(rig, tmp_path, monkeypatch) -> None:
+    """The motion-prefix frames come out of the model's output on top of ``video_length`` (output = prefix +
+    video_length - 1), so the route sizes both to give exactly the transition length at every overlap: that is what
+    makes the assembled blend A + B - overlap long. final-edit E3 measured 36 frames for a 25-frame transition."""
+    _block_network(monkeypatch)
+    temp = _TempDirs(monkeypatch)
+    started = _capture_workers(rig)
+    clip_a = media.video(tmp_path / "a.mp4", seconds=3, size="64x36", fps=25)
+    clip_b = media.video(tmp_path / "b.mp4", seconds=3, size="64x36", fps=25)
+    for overlap_sec, expected in ((1.0, 25), (2.0, 57), (0.4, 17)):
+        for prefix_sec in (0, 0.4, 1.0):
+            observed = _hand_off(rig, "/api/v1/blend", _blend_body(
+                clip_a, clip_b, overlap_sec=overlap_sec, motion_prefix_sec=prefix_sec), started, temp=temp)
+            params, media_seen = observed["params"], observed["media"]
+            video_length = params["video_length"]
+            prefix = media_seen["video_source"]["frames"] if "video_source" in media_seen else 0
+            where = f"overlap {overlap_sec}s, prefix {prefix_sec}s"
+            assert video_length >= 17 and (video_length - 17) % 8 == 0, where
+            assert round(params["_blend_overlap_sec"] * params["_blend_fps"]) == expected, where
+            assert prefix + video_length - (1 if prefix else 0) == expected, where
+            assert (prefix > 0) == (params["image_prompt_type"] == "VE"), where
+
+
+def test_blend_transition_is_not_trimmed_at_the_tail(rig, tmp_path, monkeypatch) -> None:
+    """The tail trim of a single start+end generation would cut 8 landing frames off every transition."""
+    _block_network(monkeypatch)
+    temp = _TempDirs(monkeypatch)
+    clip_a = media.video(tmp_path / "a.mp4", seconds=3, size="64x36", fps=8)
+    clip_b = media.video(tmp_path / "b.mp4", seconds=3, size="64x36", fps=8)
+    _blend_tools(monkeypatch, audio_in=(), concat_ok=True)
+    status, answer = _submit(rig, "/api/v1/blend", _blend_body(clip_a, clip_b))
+    assert status == 200, answer
+    _join_route_workers(rig)
+    sent = rig.observe(answer["job_id"])["engine_calls"]
+    assert len(sent) == 1
+    assert not sent[0]["kwargs"].get("trim_tail_frames"), sent[0]["kwargs"]
+    assert sent[0]["kwargs"]["video_length"] == 17
+
+
+def _moving_clip(path: Path, source: str, *, seconds: int = 3, fps: int = 8, size: str = "128x72") -> Path:
+    """A clip whose every frame differs, so a test can tell WHICH frame became an anchor."""
+    media.need_ffmpeg()
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"{source}=s={size}:r={fps}:d={seconds}",
+         "-c:v", "mpeg4", "-pix_fmt", "yuv420p", "-an", str(path)], check=True, timeout=60)
+    return path
+
+
+def _nearest_frame(clip: Path, picture: str) -> int:
+    """Index of the frame of ``clip`` that looks most like the anchor picture the route wrote."""
+    import decord
+    import numpy as np
+    from PIL import Image
+
+    with Image.open(picture) as image:
+        anchor = np.asarray(image.convert("RGB"), dtype=float)
+    reader = decord.VideoReader(str(clip))
+    try:
+        distances = []
+        for index in range(len(reader)):
+            frame = Image.fromarray(reader[index].asnumpy()).resize((anchor.shape[1], anchor.shape[0]), Image.LANCZOS)
+            distances.append(float(np.abs(np.asarray(frame, dtype=float) - anchor).mean()))
+    finally:
+        del reader
+    return int(np.argmin(distances))
+
+
+@pytest.mark.parametrize("seconds_field, expected_frames", [
+    ({"transition_sec": 3, "overlap_sec": 1.0}, 25),   # the Transition Duration slider is what Insert reads
+    ({"overlap_sec": 2.0}, 17),                        # a caller that only sends overlap_sec still gets a transition
+])
+def test_blend_insert_generates_a_transition_between_the_two_whole_clips(
+    rig, tmp_path, monkeypatch, seconds_field, expected_frames,
+) -> None:
+    """Insert is 'adds new footage between clips': the transition runs from A's LAST frame to B's FIRST frame, as long
+    as the slider says, with no motion prefix/suffix or hints (they would replay frames that A and B keep)."""
+    _block_network(monkeypatch)
+    started = _capture_workers(rig)
+    clip_a = _moving_clip(tmp_path / "a.mp4", "testsrc")
+    clip_b = _moving_clip(tmp_path / "b.mp4", "testsrc2")
+    body = _blend_body(clip_a, clip_b, blend_mode="insert", motion_prefix_sec=1.0, motion_suffix_sec=1.0,
+                       anchor_frames=2, **seconds_field)
+    status, answer = _submit(rig, "/api/v1/blend", body)
+    assert status == 200, answer
+    rig.wait_until(lambda: len(started) == 1, "the route started its worker")
+    params = rig.launch._jobs[answer["job_id"]]["params"]
+    assert answer["frames"] == expected_frames and params["video_length"] == expected_frames
+    assert round(params["_blend_overlap_sec"] * params["_blend_fps"]) == expected_frames
+    assert params["_blend_mode"] == "insert"
+    assert params["image_prompt_type"] == "SE", params["image_prompt_type"]
+    for key in ("video_source", "video_end", "image_refs", "frames_positions"):
+        assert key not in params, key
+    assert _nearest_frame(clip_a, params["image_start"]) == 23   # A has 24 frames
+    assert _nearest_frame(clip_b, params["image_end"]) == 0
+
+
+def test_blend_insert_assembles_a_whole_then_the_transition_then_b_whole(rig, tmp_path, monkeypatch) -> None:
+    """Nothing is trimmed in Insert: the overlap's ``-t`` on A and ``-ss`` on B are not in the concat command, so the
+    result is A + transition + B (an overlap Blend is A + B - overlap)."""
+    _block_network(monkeypatch)
+    clip_a = media.video(tmp_path / "a.mp4", seconds=3, size="64x36", fps=8)
+    clip_b = media.video(tmp_path / "b.mp4", seconds=3, size="64x36", fps=8)
+    commands = _blend_tools(monkeypatch, audio_in=(), concat_ok=True)
+    commands_by_mode = {}
+    for mode in ("insert", "overlap"):
+        del commands[:]
+        status, answer = _submit(rig, "/api/v1/blend", _blend_body(clip_a, clip_b, blend_mode=mode, transition_sec=3))
+        assert status == 200, answer
+        _join_route_workers(rig)
+        assert rig.launch._jobs[answer["job_id"]]["status"] == "completed"
+        commands_by_mode[mode] = next(entry[1] for entry in commands if entry[0] == "ffmpeg")
+    for mode, command in commands_by_mode.items():
+        assert command.count("-i") == 3, (mode, command)
+    insert, overlap = commands_by_mode["insert"], commands_by_mode["overlap"]
+    assert "-t" not in insert and "-ss" not in insert, insert
+    assert insert[insert.index("-i") + 1] == str(clip_a)
+    assert "-t" in overlap and "-ss" in overlap, overlap
 
 
 def test_blend_cancelled_while_the_transition_renders(rig, golden, tmp_path, monkeypatch) -> None:
