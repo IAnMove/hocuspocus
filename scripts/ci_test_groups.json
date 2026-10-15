@@ -134,6 +134,7 @@
         "tests/test_lipsync_span.py",
         "tests/test_llm_request_cancellation.py",
         "tests/test_local_mcp.py",
+        "tests/test_lora_nsfw_override.py",
         "tests/test_ltx_gemma_prompt_batching.py",
         "tests/test_ltx_prompt_queue.py",
         "tests/test_mcp_compact_responses.py",
