@@ -1628,9 +1628,12 @@ class CoreRuntimeTests(unittest.TestCase):
         try:
             Path("outputs").mkdir()
             fake = {"name": "minimax.jpg", "path": "minimax.jpg", "prompt": "a lantern", "aspect_ratio": "1:1"}
+            # The job's worker runs inline, like the other MiniMax image tests: a real daemon thread reads the
+            # process cwd (core_workspace.root) while this test removes its temp folder, and a directory it
+            # creates in that moment makes the cleanup fail with "Directory not empty".
             with patch("services.core_remote_image.generate_image", return_value=fake), patch(
                 "services.execution_mode.validate_remote_provider",
-            ):
+            ), patch("services.core_remote_image.threading.Thread", ImmediateThread):
                 response = self.client.post("/api/v1/generate", json={
                     "model_type": "minimax:image-01",
                     "generation_mode": "image",
