@@ -12,12 +12,27 @@ from starlette.concurrency import run_in_threadpool
 from services.mcp_intent import check_intent_id, intent_digest, load_intent, store_intent, IntentConflict
 from services.prop_library import atomic_json
 from services.production_rooms import prop_objects, validate_props
-from services.set_molds import resolve_mold
+from services.set_molds import light_presets, resolve_mold
 from services.set_skins import build_skin, validate_skin
 from services.series_shot_edit import reset_approvals
 from services.series_set_items import merged_items
 
 _LOCK=threading.RLock()
+
+
+def validate_light(entry,mold):
+    """A set may light its mold with another preset of the mold's kind (a night street, a dusk rooftop)."""
+    light=entry.get('light')
+    if light is None: return
+    names=light_presets()[mold['kind']]
+    if light not in names: raise ValueError(f"unknown light for a {mold['kind']} set: {light} (use one of {', '.join(sorted(names))})")
+
+
+def lit_mold(entry):
+    """The resolved mold with the set's own light, when it chose one."""
+    mold=resolve_mold(entry['mold'],entry.get('size','medium'))
+    if entry.get('light'): mold['lights']=entry['light']
+    return mold
 
 
 def location_for(series,shot):
@@ -114,9 +129,9 @@ class SeriesSets:
         return series,location
 
     def _start(self,data,intent):
-        series,location=self._location(data);entry={key:data[key] for key in ('mold','size','skin','props') if key in data}
+        series,location=self._location(data);entry={key:data[key] for key in ('mold','size','skin','props','light') if key in data}
         entry.setdefault('size','medium');entry.setdefault('skin',{});entry.setdefault('props',[])
-        mold=resolve_mold(entry['mold'],entry['size']);validate_skin(mold,entry['skin']);validate_props(entry,mold)
+        mold=resolve_mold(entry['mold'],entry['size']);validate_skin(mold,entry['skin']);validate_props(entry,mold);validate_light(entry,mold)
         digest=intent_digest([entry,series_style(series)])
         def store(project):
             loc=next(l for l in project['locations'] if l['id']==data['location_id'])
@@ -141,7 +156,7 @@ class SeriesSets:
                 found=background_for(series,{'locationId':location['id']},data['workspace'],('image',))
                 location_image=found['source'] if found else None
             skin=build_skin(entry['mold'],entry['size'],entry['skin'],series_style(series),root=root,workspace=data['workspace'],call=self.call,location_image=location_image)
-            room={'mold':resolve_mold(entry['mold'],entry['size']),'skin':skin}
+            room={'mold':lit_mold(entry),'skin':skin}
             templates=self._templates(room,digest,data['workspace'])
             built={'room':room,'templates':templates,'objects':prop_objects(entry,root)}
             status={'status':'completed','fingerprint':digest}
@@ -195,7 +210,8 @@ class SeriesSets:
 
 def command_catalog():
     fields={key:{'type':'string'} for key in ('workspace','series_id','location_id','mold','size')}
-    fields.update(skin={'type':'object'},props={'type':'array','items':{'type':'object'}})
+    fields.update(skin={'type':'object'},props={'type':'array','items':{'type':'object'}},
+                  light={'type':'string','description':'Optional light preset of the mold kind: interior office_day, bar_warm, studio, clinical; exterior daylight, dusk, night_sky.'})
     output=[]
     for status in (False,True):
         name='series.location.set3d'+('.status' if status else '')
