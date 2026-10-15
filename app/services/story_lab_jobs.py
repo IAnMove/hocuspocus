@@ -318,19 +318,25 @@ def _persist_story_plan_job(job: dict) -> None:
         except OSError:
             pass
 
-def _story_job_update(job_id: str, **patch) -> dict | None:
+def _story_job_update(job_id: str, *, reopen: bool = False, **patch) -> dict | None:
+    """Patch a job and publish it. A cancelled job ignores every worker patch; only ``reopen=True`` (the explicit
+    resume route, like a cancelled Series plan) lets it leave ``cancelling``/``cancelled``."""
     with _story_plan_jobs_lock:
         job = _story_plan_jobs.get(job_id)
         if not job:
             return None
+        # A live worker owns the job: a resume that lost the race for it must not undo the cancel sent to that worker.
+        reopen = reopen and job_id not in _story_plan_active_jobs
         next_status = str(patch.get("status") or job.get("status") or "")
         if (
-            job.get("status") == "cancelling"
+            not reopen
+            and job.get("status") == "cancelling"
             and next_status not in {"cancelling", "cancelled"}
         ):
             return copy.deepcopy(job)
         if (
-            job.get("status") == "cancelled"
+            not reopen
+            and job.get("status") == "cancelled"
             and next_status != "cancelled"
         ):
             return copy.deepcopy(job)

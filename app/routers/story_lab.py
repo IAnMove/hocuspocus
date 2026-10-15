@@ -279,13 +279,9 @@ def resume_story_lab_generation(job_id: str, body: dict | None = None):
             "status": job.get("status"),
             "message": "Story generation is already running.",
         }
-    if job.get("status") in {"cancelled", "cancelling"}:
-        # _story_job_update ignores every patch to a cancelled job, so a resume would reopen the Activity task and
-        # then run nothing. Answered before anything is touched; a cancelled generation is started again.
-        raise HTTPException(
-            status_code=409,
-            detail="A cancelled Story Lab generation cannot be resumed; start a new generation.",
-        )
+    # A cancelled generation is resumable (owner decision 2026-10-15), like a cancelled Series plan. With no worker
+    # claimed, "cancelling" is a cancel a restart cut short. Only this explicit resume may reopen the job.
+    reopening = job.get("status") in {"cancelled", "cancelling"}
     request = _story_resume_request(job.get("request") or {}, body)
     # Resolve the profile before mutating the durable checkpoint so invalid
     # model names or missing credentials fail without damaging recovery.
@@ -297,11 +293,13 @@ def resume_story_lab_generation(job_id: str, body: dict | None = None):
     )
     _story_job_update(
         job_id,
+        reopen=reopening,
         request=request,
         status="queued",
         message="Resuming from the last completed Story Lab stage…",
         error=None,
         finishedAt=None,
+        **({"stage": "queued", "cancellationAbortSupported": None} if reopening else {}),
     )
     if not _start_story_plan_worker(job_id):
         current = _load_story_plan_job(job_id) or job

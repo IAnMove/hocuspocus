@@ -663,6 +663,13 @@ def _run_generation_finish(st):
             **deferred_updates,
         )
 
+    if not success and st.failure_error:
+        # Every task was skipped by WanGP's validation: the reason is the job's error and its message (c7, 2026-10-15).
+        finish_job(
+            job, "failed", progress=0, step=0, total_steps=0, phase="",
+            message=st.failure_error, error=st.failure_error,
+        )
+        return False
     finish_job(
         job,
         "completed" if success else "failed",

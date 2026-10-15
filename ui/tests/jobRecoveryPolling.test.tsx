@@ -180,3 +180,21 @@ test('an interrupted tile offers resume and discard through the recovery queue',
     globalThis.fetch = previousFetch
   }
 })
+
+test('a job WanGP skipped on validation shows a failed tile with the reason', { concurrency: false }, async () => {
+  const { render, screen, cleanup } = await import('@testing-library/react')
+  const { JobPlaceholder } = await import('../src/components/MainContent/MainContent.tsx')
+  const reason = 'Qwen Image 2.1 Official Turbo requires its fixed 8-step schedule.'
+  const job = {
+    id: 'job-1', status: 'failed' as const, progress: 0, step: 0, totalSteps: 0, phase: '',
+    message: reason, outputFiles: [], error: reason,
+  }
+  try {
+    render(<JobPlaceholder job={job} onStop={() => {}} onDismiss={() => {}} />)
+    assert.ok(screen.getByText('Generation Failed'))
+    assert.ok(screen.getByText(reason))
+    assert.equal(screen.queryByRole('button', { name: /Stop/ }), null)
+  } finally {
+    cleanup()
+  }
+})

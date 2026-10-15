@@ -249,32 +249,102 @@ def test_storyboard_page_check_works_without_the_full_server():
     assert result.stdout.strip() == _comic_page_problem({}, 1) == "the panels field is not an array"
 
 
-def test_resuming_a_cancelled_story_generation_is_a_409_that_leaves_the_activity_task_alone(monkeypatch):
-    """_story_job_update ignores every patch to a cancelled (or cancelling) job, so the resume used to answer 200
-    "Story generation resumed", reopen the Activity task as queued, and then run nothing."""
-    import copy
+def _cancelled_story_job(monkeypatch, tmp_path, job_id: str, status: str):
+    """A Story Lab job cancelled after its first stage, in the real job store; the writer and the Activity hooks are fakes."""
+    import services.story_lab_jobs as jobs
 
-    import pytest
-    from fastapi import HTTPException
+    published, stages, resets = [], [], []
+    monkeypatch.setattr(jobs, "_workspace_dir", lambda _workspace=None: str(tmp_path))
+    monkeypatch.setattr(jobs, "_list_workspaces", lambda: [{"name": "film"}])
+    monkeypatch.setattr(jobs, "_publish_generic_legacy_task", lambda job, adapter: published.append(job["status"]))
+    monkeypatch.setattr(jobs, "_generate_story_lab_stage", lambda body, stage: stages.append(stage) or {stage: {"title": stage}})
+    monkeypatch.setattr(jobs, "_story_plan_active_jobs", set())
+    monkeypatch.setattr(jobs, "_story_plan_jobs", {})
+    job = {
+        "jobId": job_id, "status": status, "stage": "cancelled", "workspace": "film", "taskId": "task-story-plan-1",
+        "message": "Story generation cancelled.", "finishedAt": 123.0, "cancellationAbortSupported": True,
+        "completedStages": {"overview": {"overview": {"title": "kept"}}},
+        "request": {"scope": "all", "premise": "A harbour.", "project": {"projectType": "quick_video"}},
+    }
+    jobs._story_plan_jobs[job_id] = job
+    jobs._persist_story_plan_job(job)
+    return jobs, published, stages, resets
+
+
+def test_resuming_a_cancelled_story_generation_restarts_it_from_its_checkpoint(monkeypatch, tmp_path):
+    """Owner decision 2026-10-15: a cancelled Story Lab generation is resumable, like a cancelled Series plan.
+    _story_job_update used to drop the queued patch of a cancelled job, so the resume answered 200 and ran nothing."""
+    import time
 
     import routers.story_lab as lab
 
     job_id = "story-plan-aaaaaaaaaaaa"
-    job = {"jobId": job_id, "status": "cancelled", "workspace": "film", "taskId": "task-story-plan-1",
-           "request": {"premise": "A harbour."}}
-    reopened, updates, started = [], [], []
-    monkeypatch.setattr(lab, "_load_story_plan_job", lambda _job_id: copy.deepcopy(job))
-    monkeypatch.setattr(lab, "_story_plan_active_jobs", set())
-    monkeypatch.setattr(lab, "_story_resume_request", lambda request, _body: request)
-    monkeypatch.setattr(lab, "_reset_canonical_task_for_resume", lambda *args: reopened.append(args))
-    monkeypatch.setattr(lab, "_story_job_update", lambda *args, **patch: updates.append((args, patch)))
-    monkeypatch.setattr(lab, "_start_story_plan_worker", lambda *args, **kwargs: started.append(args) or True)
-    for status in ("cancelled", "cancelling"):
-        job["status"] = status
-        with pytest.raises(HTTPException) as refused:
-            lab.resume_story_lab_generation(job_id, {})
-        assert refused.value.status_code == 409 and "cancelled" in refused.value.detail
-    assert reopened == [] and updates == [] and started == [], "nothing was touched"
-    job["status"] = "failed"
-    answered = lab.resume_story_lab_generation(job_id, {})
-    assert answered["status"] == "queued" and reopened == [("film", "task-story-plan-1")] and started == [(job_id,)]
+    for status in ("cancelled", "cancelling"):  # a restart in the middle of a cancel leaves "cancelling" with no worker
+        jobs, published, stages, resets = _cancelled_story_job(monkeypatch, tmp_path, job_id, status)
+        monkeypatch.setattr(lab, "_reset_canonical_task_for_resume", lambda *args: resets.append(args))
+        answered = lab.resume_story_lab_generation(job_id, {})
+        assert answered["status"] == "queued" and resets == [("film", "task-story-plan-1")]
+        deadline = time.time() + 20
+        while time.time() < deadline and (jobs._load_story_plan_job(job_id) or {}).get("status") != "completed":
+            time.sleep(0.02)
+        final = jobs._load_story_plan_job(job_id)
+        assert final["status"] == "completed", (status, final.get("status"), final.get("message"))
+        assert stages == ["characters", "world", "structure"], "it continues from the checkpoint, the finished stage is not redone"
+        assert final["finishedAt"] and final["finishedAt"] != 123.0 and final["error"] is None
+        assert "queued" in published and published[-1] == "completed", "the Activity task follows the job"
+        persisted = lab.json.load(open(jobs._story_plan_checkpoint_path(job_id, "film"), encoding="utf-8"))
+        assert persisted["status"] == "completed"
+
+
+def test_a_late_patch_still_cannot_reopen_a_cancelled_story_generation(monkeypatch, tmp_path):
+    """Only an explicit resume reopens a cancelled job; a worker's late progress write is still dropped."""
+    jobs, *_ = _cancelled_story_job(monkeypatch, tmp_path, "story-plan-bbbbbbbbbbbb", "cancelled")
+    kept = jobs._story_job_update("story-plan-bbbbbbbbbbbb", status="running", message="late write")
+    assert kept["status"] == "cancelled" and kept["message"] == "Story generation cancelled."
+
+
+def test_resuming_a_cancelled_story_generation_twice_runs_one_worker(monkeypatch, tmp_path):
+    """A second Resume (a double click, a retry) while the first worker runs answers "already running" and starts no
+    second worker: every stage is generated once."""
+    import time
+
+    import routers.story_lab as lab
+
+    job_id = "story-plan-cccccccccccc"
+    jobs, _published, stages, resets = _cancelled_story_job(monkeypatch, tmp_path, job_id, "cancelled")
+    monkeypatch.setattr(lab, "_story_plan_active_jobs", jobs._story_plan_active_jobs)
+    monkeypatch.setattr(lab, "_reset_canonical_task_for_resume", lambda *args: resets.append(args))
+    entered, release = threading.Event(), threading.Event()
+
+    def slow_stage(_body, stage):
+        stages.append(stage)
+        entered.set()
+        assert release.wait(20), "the test never released the writer"
+        return {stage: {"title": stage}}
+
+    monkeypatch.setattr(jobs, "_generate_story_lab_stage", slow_stage)
+    try:
+        assert lab.resume_story_lab_generation(job_id, {})["message"] == "Story generation resumed."
+        assert entered.wait(10)
+        again = lab.resume_story_lab_generation(job_id, {})
+        assert again["message"] == "Story generation is already running."
+        workers = [t for t in threading.enumerate() if t.name.startswith("story-plan-")]
+        assert len(workers) == 1, workers
+    finally:
+        release.set()
+    deadline = time.time() + 20
+    while time.time() < deadline and (jobs._load_story_plan_job(job_id) or {}).get("status") != "completed":
+        time.sleep(0.02)
+    assert (jobs._load_story_plan_job(job_id) or {}).get("status") == "completed"
+    assert stages == ["characters", "world", "structure"], "each unfinished stage was generated exactly once"
+
+
+def test_a_resume_that_lost_the_race_for_the_worker_cannot_undo_a_cancel(monkeypatch, tmp_path):
+    """Resume 2 read ``cancelled`` before Resume 1 claimed the worker and a Cancel then marked the live job
+    ``cancelling``: Resume 2's reopening patch must not turn that cancel back into ``queued``."""
+    job_id = "story-plan-dddddddddddd"
+    jobs, *_ = _cancelled_story_job(monkeypatch, tmp_path, job_id, "cancelling")
+    jobs._story_plan_active_jobs.add(job_id)  # a worker is live: the cancel is addressed to it
+    kept = jobs._story_job_update(job_id, reopen=True, status="queued", message="late resume")
+    assert kept["status"] == "cancelling" and kept["message"] != "late resume"
+    assert jobs._load_story_plan_job(job_id)["status"] == "cancelling"
