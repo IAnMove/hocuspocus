@@ -386,11 +386,16 @@ def _run_series_canon_plan_job_inner(job_id: str) -> None:
                 return
             try:
                 applied = _apply_series_canon_proposal(job, proposal)
-            except HTTPException as exc:
+            except (HTTPException, ValueError) as exc:
+                # An HTTPException is "the series moved on"; a ValueError is the library refusing the draft
+                # (validate_series_ids, a revision conflict). The proposal stays reviewable either way.
+                moved_on = isinstance(exc, HTTPException)
                 _series_plan_update(
                     job_id, status="completed", stage="completed", current=1, total=1,
-                    autoApplied=False, applyError=str(exc.detail), error=None,
-                    message="Known-series proposal generated, but the project changed before it could be applied.",
+                    autoApplied=False, applyError=str(exc.detail if moved_on else exc), error=None,
+                    message=("Known-series proposal generated, but the project changed before it could be applied."
+                             if moved_on else
+                             "Known-series proposal generated, but the library could not be applied as a draft; review the proposal."),
                     finishedAt=time.time(),
                 )
                 return

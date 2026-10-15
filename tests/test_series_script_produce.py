@@ -50,6 +50,10 @@ class Series:
     def read(self):
         return self.series
 
+    def episode_patch(self):
+        """The ``input`` of the ``series.episode.update`` call (a script that adds a method to the series calls ``series.update`` first)."""
+        return next(data for tool, data in self.calls if tool == "series.episode.update")
+
     def __call__(self, tool, arguments):
         data = arguments["input"]
         self.calls.append((tool, data))
@@ -62,6 +66,11 @@ class Series:
             return {"result": {"episode": {"id": data["episode_id"]}}}
         if tool == "series.episode.language_version.set":
             return {"result": {"missingLines": []}}
+        if tool == "series.update":
+            assert data["base_revision"] == self.series["revision"]
+            self.series.update(data["series"])
+            self.series["revision"] += 1
+            return {"result": {"series": {"id": self.series["id"], "revision": self.series["revision"]}}}
         raise AssertionError(tool)
 
 

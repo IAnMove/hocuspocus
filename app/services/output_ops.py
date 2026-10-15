@@ -59,6 +59,16 @@ def configure(
     _ensure_llm_loaded = ensure_llm_loaded
 
 
+def configure_thumbnails(*, safe_join) -> None:
+    """Bind only what the thumbnail route reads, for a server that mounts no other route of this module.
+
+    ``_resolve_gallery_file`` joins an Uploads view name with ``safe_join``; the core server calls this instead of
+    ``configure``, which would also reset the favorites, seed and model-loader slots the other routes use.
+    """
+    global _safe_join
+    _safe_join = safe_join
+
+
 def _resolve_gallery_file(filename: str, workspace: str | None = None) -> str | None:
     """An output in ``workspace``, or an upload for the virtual Uploads view."""
     if workspace == "__uploads__":

@@ -4,6 +4,7 @@ import type { GenerationJob } from '../../types'
 import { prependJob, updateJob, withJobs } from '../../stores/jobReducers'
 import type { SliceGet, SliceSet } from '../../stores/storeApi'
 import type { AppState } from '../../stores/useStore'
+import { editJobGenerationDetails } from './editJobDetails'
 import { _jobTimingPatch } from './store/toolsSlice'
 import { viggleSubmissionOptions } from '../../lib/wangpUi'
 
@@ -24,6 +25,7 @@ export async function submitRecastEdit(
       const newJob: GenerationJob = {
         id: '', status: 'queued', progress: 0, step: 0, totalSteps: 0,
         phase: '', message: 'Submitting recast...', outputFiles: [], error: null, oomInfo: null,
+      generationDetails: editJobGenerationDetails(state),
       }
       set(s => {
         return prependJob(s.jobs, newJob)

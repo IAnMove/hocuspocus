@@ -56,8 +56,11 @@ async def retake_video_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
-    start_time = float(body.get("start_time", 0))
-    end_time = float(body.get("end_time", -1))
+    from services.request_numbers import number_field
+
+    start_time = number_field(body, "start_time", 0)
+    end_time = number_field(body, "end_time", -1)
+    retake_strength = number_field(body, "retake_strength", 1.0)
     model_type = body.get("model_type")
     if not model_type:
         raise HTTPException(status_code=400, detail="model_type is required")
@@ -96,7 +99,7 @@ async def retake_video_endpoint(request: Request):
         "retake_video": video_path,
         "retake_start_frame": start_frame,
         "retake_end_frame": end_frame,
-        "retake_strength": float(body.get("retake_strength", 1.0)),
+        "retake_strength": retake_strength,
         "retake_engine": body.get("retake_engine", "native"),
         "regenerate_audio": body.get("regenerate_audio", True),
         "activated_loras": body.get("activated_loras", []),
@@ -176,8 +179,10 @@ async def extract_frames_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
-    start_time = body.get("start_time")
-    end_time = body.get("end_time")
+    from services.request_numbers import optional_number
+
+    start_time = optional_number(body, "start_time")
+    end_time = optional_number(body, "end_time")
     if start_time is None and end_time is None:
         raise HTTPException(status_code=400, detail="At least one of start_time or end_time is required")
 
@@ -192,7 +197,7 @@ async def extract_frames_endpoint(request: Request):
         # creep into the boundary anchor.
         out = os.path.join(uploads, f"frame_{base_id}_{suffix}.png")
         cmd = [
-            "ffmpeg", "-y", "-ss", f"{float(t):.3f}", "-i", video_path,
+            "ffmpeg", "-y", "-ss", f"{t:.3f}", "-i", video_path,
             "-frames:v", "1", "-q:v", "2", out,
         ]
         proc = _sp.run(cmd, capture_output=True, text=True, timeout=30)
@@ -202,11 +207,11 @@ async def extract_frames_endpoint(request: Request):
 
     response: dict = {}
     if start_time is not None:
-        sp = _extract(float(start_time), "start")
+        sp = _extract(start_time, "start")
         response["start_path"] = sp
         response["start_url"] = f"/api/v1/uploads/{os.path.basename(sp)}"
     if end_time is not None:
-        ep = _extract(float(end_time), "end")
+        ep = _extract(end_time, "end")
         response["end_path"] = ep
         response["end_url"] = f"/api/v1/uploads/{os.path.basename(ep)}"
     if body.get("wangp_media"):
@@ -286,6 +291,16 @@ async def edit_anything_endpoint(request: Request):
     if not model_type:
         raise HTTPException(status_code=400, detail="model_type is required")
 
+    # Optional time range (default = full video), and the other numbers, before the video is read
+    from services.request_numbers import number_field
+
+    start_time = number_field(body, "start_time", 0)
+    end_time = number_field(body, "end_time", -1)
+    lora_strength = number_field(body, "lora_strength", 1.0)
+    guidance_scale = number_field(body, "guidance_scale", 1.0)
+    num_inference_steps = number_field(body, "num_inference_steps", 8, int)
+    retake_strength = number_field(body, "retake_strength", 1.0)
+
     # Probe video dimensions and length
     try:
         import decord
@@ -297,9 +312,6 @@ async def edit_anything_endpoint(request: Request):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Cannot read video: {e}")
 
-    # Optional time range (default = full video)
-    start_time = float(body.get("start_time", 0))
-    end_time = float(body.get("end_time", -1))
     start_frame = max(0, int(start_time * fps))
     end_frame = int(end_time * fps) if end_time > 0 else total_frames
     end_frame = min(end_frame, total_frames)
@@ -309,7 +321,6 @@ async def edit_anything_endpoint(request: Request):
     # Merge user's activated LoRAs with the Edit Anything LoRA.
     # If the user already has it toggled on, we don't duplicate — just ensure
     # its multiplier reflects the lora_strength from the request.
-    lora_strength = float(body.get("lora_strength", 1.0))
     lora_strength = max(0.1, min(2.0, lora_strength))
     user_activated = list(body.get("activated_loras") or [])
     user_mults_raw = (body.get("loras_multipliers", "") or "").split()
@@ -331,7 +342,7 @@ async def edit_anything_endpoint(request: Request):
 
     print(f"[EditAnything] prompt='{prompt[:80]}', lora={EDIT_ANYTHING_LORA_FILENAME}, "
           f"strength={lora_strength:.2f}, range=[{start_frame}-{end_frame}]/{total_frames}, "
-          f"cfg={body.get('guidance_scale', 1.0)}, steps={body.get('num_inference_steps', 8)}")
+          f"cfg={guidance_scale}, steps={num_inference_steps}")
 
     gen_params = {
         "prompt": prompt,
@@ -341,8 +352,8 @@ async def edit_anything_endpoint(request: Request):
         # Distilled LTX + Edit Anything LoRA is designed for CFG=1.
         # Per the card: "Starting point: Distilled model with CFG = 1.
         # If edit is too weak: Increase CFG."
-        "guidance_scale": float(body.get("guidance_scale", 1.0)),
-        "num_inference_steps": int(body.get("num_inference_steps", 8)),
+        "guidance_scale": guidance_scale,
+        "num_inference_steps": num_inference_steps,
         "video_length": total_frames,
         "resolution": body.get("resolution") or f"{src_w}x{src_h}",
         "generation_mode": "video",
@@ -356,7 +367,7 @@ async def edit_anything_endpoint(request: Request):
         "retake_video": video_path,
         "retake_start_frame": start_frame,
         "retake_end_frame": end_frame,
-        "retake_strength": float(body.get("retake_strength", 1.0)),
+        "retake_strength": retake_strength,
         "retake_engine": "native",
         "regenerate_audio": body.get("regenerate_audio", True),
         "activated_loras": activated_loras,
@@ -456,9 +467,20 @@ async def inpaint_endpoint(request: Request):
 
     from services.inpaint_service import check_sam_status, parse_inpaint_intent, segment_video, unload_sam, ensure_sam_running, shutdown_sam
 
-    start_time = float(body.get("start_time", 0))
-    end_time = float(body.get("end_time", -1))
-    mask_padding = int(body.get("mask_padding", 20))
+    from services.request_numbers import number_field
+
+    start_time = number_field(body, "start_time", 0)
+    end_time = number_field(body, "end_time", -1)
+    mask_padding = number_field(body, "mask_padding", 20, int)
+    # These three used to be read after SAM had run; a bad one failed there as a 500.
+    # CFG default bumped 1.0 → 3.5 for inpaint. At 1.0 the retake pipeline
+    # runs a single unconditional pass, so the prompt barely influences the
+    # regenerated masked region — the output looks ~identical to the source.
+    # CFG > 1.0 triggers dual (positive + negative) prompt encoding inside
+    # retake.py's new CFG branch, enabling prompt-driven replacement.
+    _inpaint_cfg = number_field(body, "guidance_scale", 3.5)
+    _inpaint_steps = number_field(body, "num_inference_steps", 8, int)
+    _inpaint_retake_strength = number_field(body, "retake_strength", 0.85)
     cached_masks_path = body.get("masks_path")
 
     # Step 1: Determine SAM target and LTX prompt
@@ -558,14 +580,6 @@ async def inpaint_endpoint(request: Request):
     # Use user's resolution if provided, otherwise source
     resolution = body.get("resolution") or f"{src_w}x{src_h}"
 
-    # CFG default bumped 1.0 → 3.5 for inpaint. At 1.0 the retake pipeline
-    # runs a single unconditional pass, so the prompt barely influences the
-    # regenerated masked region — the output looks ~identical to the source.
-    # CFG > 1.0 triggers dual (positive + negative) prompt encoding inside
-    # retake.py's new CFG branch, enabling prompt-driven replacement.
-    _inpaint_cfg = float(body.get("guidance_scale", 3.5))
-    _inpaint_steps = int(body.get("num_inference_steps", 8))
-    _inpaint_retake_strength = float(body.get("retake_strength", 0.85))
     # Inpaint-specific default negative prompt. Distilled LTX-2.3's positive
     # and unconditional predictions are nearly identical, so CFG with an
     # empty negative gives `delta = (cond - uncond) ≈ 0` — no push. A concrete

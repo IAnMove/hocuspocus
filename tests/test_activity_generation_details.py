@@ -127,3 +127,14 @@ def test_activity_reference_images_reject_foreign_urls_paths_and_traversal(tmp_p
         str(workspace / 'video.mp4'), None, {'path': 'image.png'},
     ]
     assert activity_reference_images({'image_refs': values}, 'art', uploads_dir=uploads, workspace_dir=workspace) == []
+
+
+def test_public_generation_details_publish_the_edit_sub_mode():
+    """The Edit tab's queue filter reads `edit_sub_mode`; every edit job reports generation_mode 'video'."""
+    from services.kernel.jobs import _public_generation_details
+
+    edit = _public_generation_details({'model_type': 'ltxv_13B', 'generation_mode': 'video', 'edit_sub_mode': 'retake'})
+    assert edit['edit_sub_mode'] == 'retake'
+    assert edit['generation_mode'] == 'video'
+    assert 'edit_sub_mode' not in _public_generation_details({'model_type': 'ltxv_13B', 'generation_mode': 'video'})
+    assert 'edit_sub_mode' not in _public_generation_details({'model_type': 'ltxv_13B', 'edit_sub_mode': ''})

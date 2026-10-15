@@ -40,12 +40,13 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
     without giving the model room to alter neighboring people.
     """
     import json
+    import math
     import subprocess
 
     probe = subprocess.run(
         [
             "ffprobe", "-v", "error", "-select_streams", "v:0",
-            "-show_entries", "stream=width,height", "-of", "json",
+            "-show_entries", "stream=width,height,duration", "-of", "json",
             generated_video,
         ],
         capture_output=True,
@@ -59,6 +60,10 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
         width, height = 0, 0
     if width <= 0 or height <= 0:
         raise ValueError(f"Could not read generated Recast dimensions: {generated_video}")
+    try:
+        picture_seconds = float(stream.get("duration") or 0)
+    except (TypeError, ValueError):
+        picture_seconds = 0.0
     filter_graph = (
         f"[0:v]scale={width}:{height}:flags=lanczos,setsar=1,setpts=PTS-STARTPTS[base];"
         f"[1:v]scale={width}:{height}:flags=neighbor,format=rgba,"
@@ -81,12 +86,26 @@ def _build_recast_mask_lock_command(source_video, mask_video, generated_video, o
         "-pix_fmt", "yuv420p",
     ]
     if _recast_video_has_audio(generated_video):
+        # The generated clip's own audio is copied, so there is nothing to
+        # pad and nothing to cut: the protected file keeps exactly the
+        # generated picture. ``-shortest`` here dropped the last 1-6 frames
+        # whenever that audio ended a little before the picture.
         command += ["-map", "2:a:0", "-c:a", "copy"]
     elif _recast_video_has_audio(source_video):
-        command += ["-map", "0:a:0", "-c:a", "aac", "-b:a", "192k"]
+        # Re-encoded source audio may be shorter than the picture: pad it,
+        # and let ``-shortest`` only bound a longer track to the picture.
+        # ``-t`` fixes that bound just after the generated picture ends: with
+        # an endless pad ffmpeg 7+ lets the audio run on for up to its 10 s
+        # ``-shortest`` buffer when the machine is busy. It is rounded UP to
+        # the next millisecond: audio that ends even a fraction of one before
+        # the last frame ends makes ``-shortest`` drop that frame (81 frames
+        # at 16 fps last 5.0625 s, and "5.062" cost the file its last frame).
+        command += ["-map", "0:a:0", "-af", "apad", "-c:a", "aac", "-b:a", "192k", "-shortest"]
+        if picture_seconds > 0:
+            command += ["-t", f"{(math.floor(round(picture_seconds * 1000, 6)) + 1) / 1000:.3f}"]
     else:
         command += ["-an"]
-    return command + ["-shortest", "-movflags", "+faststart", output_path]
+    return command + ["-movflags", "+faststart", output_path]
 
 def _render_recast_mask_locked_video(source_video, mask_video, generated_video):
     """Render a protected sibling file and return its path."""

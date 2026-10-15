@@ -113,16 +113,49 @@ def test_plan_mode_stops_before_queue(monkeypatch):
 
 
 @pytest.mark.parametrize(
-    ("generation_mode", "extension"),
-    [("image", ".png"), ("audio", ".wav"), ("3d", ".glb")],
+    ("params", "kind"),
+    [
+        # WanGP writes a picture only when image_mode > 0; the simulation must answer the same.
+        ({"generation_mode": "image", "image_mode": 1}, "image"),
+        ({"generation_mode": "image", "image_mode": 2}, "image"),
+        ({"generation_mode": "video", "image_mode": 1}, "image"),
+        ({"generation_mode": "image", "image_mode": "1"}, "image"),
+        ({"image_mode": 1}, "image"),
+        # gen-01: generation_mode=image alone is a clip for the engine (the submission door adds image_mode).
+        ({"generation_mode": "image"}, "video"),
+        ({"generation_mode": "image", "image_mode": 0}, "video"),
+        ({"generation_mode": "image", "image_mode": None}, "video"),
+        ({"generation_mode": "image", "image_mode": "x"}, "video"),
+        ({"generation_mode": "video"}, "video"),
+        ({}, "video"),
+        ({"generation_mode": "audio", "image_mode": 0}, "audio"),
+        # An audio-only model makes audio whatever image_mode a body carries (wgp.get_output_type_for_model).
+        ({"generation_mode": "audio", "image_mode": 1}, "audio"),
+        ({"generation_mode": "3d", "image_mode": 1}, "model3d"),
+        ({"generation_mode": "AUDIO "}, "audio"),
+        ({"generation_mode": "3d"}, "model3d"),
+        ({"generation_mode": "model3d"}, "model3d"),
+    ],
+)
+def test_the_simulation_keys_the_result_kind_like_the_engine(monkeypatch, params, kind):
+    assert load_policy(monkeypatch).result_kind(params) == kind
+
+
+@pytest.mark.parametrize(
+    ("params", "extension"),
+    [
+        ({"generation_mode": "image", "image_mode": 1}, ".png"),
+        ({"generation_mode": "audio"}, ".wav"),
+        ({"generation_mode": "3d"}, ".glb"),
+    ],
 )
 def test_simulated_executor_writes_valid_chainable_artifacts(
-    monkeypatch, tmp_path, generation_mode, extension,
+    monkeypatch, tmp_path, params, extension,
 ):
     module = load_policy(monkeypatch)
     progress = []
     output = module.create_artifact(
-        {"generation_mode": generation_mode},
+        params,
         str(tmp_path),
         "job123",
         progress=lambda *values: progress.append(values),
@@ -154,7 +187,7 @@ def test_failure_injection_is_kind_specific(monkeypatch, tmp_path):
         {"generation_mode": "audio"}, str(tmp_path), "retry",
     ).endswith(".wav")
     assert module.create_artifact(
-        {"generation_mode": "image"}, str(tmp_path), "ok",
+        {"generation_mode": "image", "image_mode": 1}, str(tmp_path), "ok",
     ).endswith(".png")
 
 

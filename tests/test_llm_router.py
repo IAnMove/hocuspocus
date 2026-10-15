@@ -96,6 +96,65 @@ def test_generate_returns_llm_text_without_loading_wgp():
     generate.assert_called_once()
 
 
+def test_generate_reports_a_provider_failure_as_502_with_a_stable_code_and_keeps_500_for_the_rest():
+    from services.llm_service import LLMProviderError
+
+    app = FastAPI()
+    app.include_router(_core_router())
+    client = TestClient(app)
+    message = 'OpenAI-compatible request failed: {"type":"authorized_error","http_code":"401"}'
+    with patch("services.llm_service.generate", side_effect=LLMProviderError(message, status=401)):
+        response = client.post("/api/v1/llm/generate", json={"prompt": "Say hi"})
+    assert response.status_code == 502
+    # `detail` stays the plain message (the UI and the MCP tools show it); the code rides in a header.
+    assert response.json() == {"detail": message}
+    assert response.headers["x-hocus-error-code"] == "provider_auth_failed"
+    with patch("services.llm_service.generate", side_effect=LLMProviderError("down", status=503)):
+        assert client.post("/api/v1/llm/generate", json={"prompt": "Say hi"}).headers["x-hocus-error-code"] == "provider_failed"
+    with patch("services.llm_service.generate", side_effect=RuntimeError("boom")):
+        response = client.post("/api/v1/llm/generate", json={"prompt": "Say hi"})
+    assert response.status_code == 500 and response.json() == {"detail": "boom"}
+    assert "x-hocus-error-code" not in response.headers
+
+
+def test_mcp_analyze_still_reports_the_provider_message_when_the_provider_fails(tmp_path):
+    """The MCP `analyze` tool calls this route function directly, not through ASGI: a returned
+    JSONResponse reached its journal as an object ("Object of type JSONResponse is not JSON
+    serializable"). A raised 502 keeps the provider's message, like the 500 did before."""
+    import asyncio
+    import json
+
+    from routers.wangp_mcp import create_wangp_mcp_router
+    from services.llm_service import LLMProviderError
+    from services.wangp_agent_adapters import application_endpoint
+
+    app = FastAPI()
+    app.include_router(_core_router())
+    analyze = application_endpoint(app, "/api/v1/llm/generate", "POST")
+    mcp = create_wangp_mcp_router(handlers={"analyze": analyze}, journal_path=str(tmp_path / "journal.db"),
+                                  token_getter=lambda: "test-token")
+    endpoint = next(route.endpoint for route in mcp.routes if route.path.endswith("/mcp") and "POST" in route.methods)
+
+    class McpRequest:
+        headers = {"authorization": "Bearer test-token"}
+        url = type("URL", (), {"scheme": "http", "netloc": "localhost:42000"})()
+
+        def __init__(self, value):
+            self.value = value
+
+        async def json(self):
+            return self.value
+
+    message = 'OpenAI-compatible request failed: {"type":"authorized_error","http_code":"401"}'
+    call = {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": {"name": "analyze", "arguments": {
+        "request_id": "analyze-provider-401", "params": {"prompt": "Describe it", "workspace": "default"}}}}
+    with patch("services.llm_service.generate", side_effect=LLMProviderError(message, status=401)):
+        response = asyncio.run(endpoint(McpRequest(call)))
+    result = json.loads(response.body)["result"]
+    assert result["isError"] is True
+    assert result["content"] == [{"type": "text", "text": message}]
+
+
 def test_generate_can_use_scoped_series_writer_without_changing_the_global_model():
     app = FastAPI()
     loaded = []

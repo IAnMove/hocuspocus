@@ -4,7 +4,7 @@ import { productionImageModelType } from '../../../lib/productionProfile'
 import { resolveResolution } from '../../../stores/resolution'
 import { storyDirectorSubmissionProvenance } from '../../stories/provenance'
 import type { GenerationMode } from '../../../types'
-import type { DirectorDashboardSlice } from './directorDashboardSlice'
+import { DASHBOARD_PIPELINE_PAGE_SIZE, type DirectorDashboardSlice } from './directorDashboardSlice'
 import type { DirectorSlice } from '../../../stores/directorSlice'
 import type { GallerySlice } from '../../../stores/gallerySlice'
 import type { LlmSlice } from '../../../stores/llmSlice'
@@ -86,7 +86,7 @@ export type DirectorPipelineSliceHost = DirectorPipelineSlice & Pick<DirectorSli
   | 'directorLoading'
   | 'directorError'
   | 'directorStep'
-> & Pick<ModelOptionsSlice, 'modelOptions'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & Pick<ModelsSlice, 'models'> & Pick<LlmSlice, 'llmStatus'> & Pick<GallerySlice, 'activeWorkspace' | 'refreshOutputs' | 'maybeRefreshGallery'> & Pick<DirectorDashboardSlice, 'loadPipelineList'> & {
+> & Pick<ModelOptionsSlice, 'modelOptions'> & Pick<ServicesSlice, 'servicesConfig' | 'productionProfile'> & Pick<ModelsSlice, 'models'> & Pick<LlmSlice, 'llmStatus'> & Pick<GallerySlice, 'activeWorkspace' | 'refreshOutputs' | 'maybeRefreshGallery'> & Pick<DirectorDashboardSlice, 'loadPipelineList' | 'discoverActiveDirectorRepairs'> & {
   selectedModelPerMode: Partial<Record<GenerationMode, string>>
   savedLoraPerMode: Partial<Record<GenerationMode, { activated_loras: string[]; loras_multipliers: string; loraWeights: Record<string, number[]>; availableLoras: string[] }>>
   savedParamsPerMode: Partial<Record<GenerationMode, SavedModeParams>>
@@ -540,6 +540,12 @@ export const createDirectorPipelineSlice: SliceCreator<DirectorPipelineSlice, Di
         directorReconnectInFlight = false
       }
     }
+    // A reload also drops the Director repair polls while the repair keeps running on the
+    // server: rediscover them once from the newest runs, without opening the Dashboard.
+    // (Not in `refresh`, which repeats every two seconds.)
+    void api.fetchPipelineList({ limit: DASHBOARD_PIPELINE_PAGE_SIZE, offset: 0 })
+      .then(({ pipelines }) => get().discoverActiveDirectorRepairs(pipelines))
+      .catch(() => { /* older backend or offline: the Dashboard still discovers on open */ })
     await refresh()
   },
 

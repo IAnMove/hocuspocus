@@ -129,8 +129,11 @@ def _apply_film_grain_to_file_impl(video_path: str, intensity: float, saturation
         try:
             import subprocess
             muxed_path = video_path + ".muxed." + container
+            # No -shortest: the clip's own audio goes back as it was, and an
+            # audio track that ends before the picture must not cut its last
+            # frames (the rule of the Recast and Outpaint finishing passes).
             subprocess.run(
-                ['ffmpeg', '-y', '-i', tmp_path, '-i', audio_tmp, '-c:v', 'copy', '-c:a', 'aac', '-shortest', muxed_path],
+                ['ffmpeg', '-y', '-i', tmp_path, '-i', audio_tmp, '-c:v', 'copy', '-c:a', 'aac', muxed_path],
                 capture_output=True, timeout=120
             )
             _replace_with_retry(muxed_path, video_path)

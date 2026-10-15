@@ -303,6 +303,8 @@ export interface GenerationDetails {
   model_type?: string
   model_name?: string
   generation_mode?: string
+  /** Edit-tab jobs: which edit (retake, inpaint, edit_anything, outpaint, recast, restyle). */
+  edit_sub_mode?: string
   resolution?: string
   seed?: number | string
   steps?: number

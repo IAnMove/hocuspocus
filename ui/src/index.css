@@ -2257,6 +2257,7 @@ input[type="range"]::-webkit-slider-thumb {
   background: radial-gradient(ellipse, rgba(var(--hp-wizard-deep), 0.18), rgba(124, 58, 237, 0.08) 45%, transparent 70%);
   pointer-events: none;
 }
+.hp-agent-markdown { overflow-wrap: anywhere; }
 .hp-agent-markdown > * + * { margin-top: 0.55rem; }
 .hp-agent-markdown p,
 .hp-agent-markdown blockquote { white-space: pre-wrap; }

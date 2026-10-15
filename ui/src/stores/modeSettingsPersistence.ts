@@ -35,6 +35,33 @@ export type SavedModeParams = Partial<GenerateParams> & {
   durationSeconds?: number
 }
 
+/**
+ * The modes that own a model. Mirrors `_MODEL_SELECTION_MODES` in
+ * app/services/model_visibility.py: the server refuses the WHOLE selections
+ * payload when it holds any other key, and Tools owns no model.
+ */
+const MODEL_SELECTION_MODES: ReadonlySet<string> = new Set(['image', 'video', 'audio', 'model3d', 'avatar'])
+
+function _modelSelectionsOnly<V>(selections: Partial<Record<GenerationMode, V>> | undefined): Partial<Record<GenerationMode, V>> {
+  return Object.fromEntries(
+    Object.entries(selections || {}).filter(([mode]) => MODEL_SELECTION_MODES.has(mode)),
+  ) as Partial<Record<GenerationMode, V>>
+}
+
+/**
+ * Per-mode bookkeeping for the mode being left. Tools keeps nothing: entering it
+ * already saved the real mode's state and it owns no model, prompt or LoRAs, so
+ * leaving it must not add a `tools` key (it would be persisted and then sent to
+ * the server, which refuses unknown modes).
+ */
+export function withLeavingModeEntry<V>(
+  saved: Partial<Record<GenerationMode, V>>,
+  leaving: GenerationMode,
+  value: V,
+): Partial<Record<GenerationMode, V>> {
+  return leaving === 'tools' ? saved : { ...saved, [leaving]: value }
+}
+
 export function snapshotModeParams(params: GenerateParams): SavedModeParams {
   const snapshot: SavedModeParams = { ...params }
   delete snapshot.model_type
@@ -78,7 +105,7 @@ export function _persistModelSelections(
 ) {
   const payload = Object.fromEntries(
     Object.entries(selections).filter(([mode, modelType]) => (
-      Boolean(modelType) && !_globalModelSelectionModes.has(mode as GenerationMode)
+      MODEL_SELECTION_MODES.has(mode) && Boolean(modelType) && !_globalModelSelectionModes.has(mode as GenerationMode)
     )),
   ) as Record<string, string>
   _modelSelectionSaveTask = _modelSelectionSaveTask
@@ -278,7 +305,9 @@ export function _loadSettings(): PersistedModeSettings | null {
       }
       return {
         generationMode: parsed.generationMode,
-        selectedModelPerMode: parsed.selectedModelPerMode || {},
+        // Drop a stale `tools` key written by earlier versions: it would be
+        // rehydrated on every boot and make every PUT a 400.
+        selectedModelPerMode: _modelSelectionsOnly(parsed.selectedModelPerMode),
         // Strip ephemeral file-bearing fields at load too — protects existing
         // users whose localStorage was written by a pre-fix version and still
         // contains stale image_start / image_refs / etc. paths. New saves will
@@ -296,6 +325,7 @@ export function _loadSettings(): PersistedModeSettings | null {
     const legacy = parsed as PersistedModeSettings
     return {
       ...legacy,
+      selectedModelPerMode: _modelSelectionsOnly(legacy.selectedModelPerMode),
       savedParamsPerMode: _stripEphemeralParams(legacy.savedParamsPerMode || {}),
     }
   } catch { return null }

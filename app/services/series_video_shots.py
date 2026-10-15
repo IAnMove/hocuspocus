@@ -98,6 +98,32 @@ def budget_warning(script: dict[str, Any], budget: dict[str, int] | None, shot_i
     return budget_group(budget["maxShots"], over) if over else None
 
 
+def methods_to_allow(series: dict[str, Any], script: dict[str, Any]) -> list[str] | None:
+    """The series' ``allowedProductionMethods`` plus ``imported_video``, when the script has H3 video shots and the
+    series does not allow that method yet. None when nothing is to be added.
+
+    A scripted clip is attached as an ``imported_video`` take (``series_production.attach_series_import``), which the
+    series default (``generated_video`` only) refuses after the clip was made."""
+    if not _video_indexes(script):
+        return None
+    from services.series_production import normalize_production_methods
+    try:
+        allowed = normalize_production_methods(series.get("allowedProductionMethods"))
+    except ValueError:
+        return None
+    return None if "imported_video" in allowed else [*allowed, "imported_video"]
+
+
+def method_warning(series: dict[str, Any], script: dict[str, Any], shot_id: Callable[[int], str]) -> dict[str, Any] | None:
+    """``imported_video_not_allowed`` in the grouped warning shape: the video shots a write of the script enables."""
+    if methods_to_allow(series, script) is None:
+        return None
+    shots = [shot_id(index) for index in _video_indexes(script)]
+    return {"code": "imported_video_not_allowed", "subject": "allowedProductionMethods", "shots": shots,
+            "message": f"allowedProductionMethods: imported_video is not allowed for this series; "
+                       f"writing the script enables it {listed_shots(shots)}"}
+
+
 def budget_group(limit: Any, over: list[str]) -> dict[str, Any]:
     """``video_budget`` in the grouped warning shape of a script (``series_script_warnings``): the shots the cap skips."""
     count = "1 video shot is" if len(over) == 1 else f"{len(over)} video shots are"
@@ -280,9 +306,22 @@ class _Run:
         self.space = _Space(deps.workspace_dir(workspace), lambda: _kits(deps, workspace))
 
 
+def _require_method(series: dict[str, Any], shot: dict[str, Any]) -> None:
+    """A scripted clip is attached as an ``imported_video`` take, which the series must allow. The attach refuses it
+    the same way (``series_production._verified_take_media``), but only after the GPU time was spent."""
+    from services.series_production import series_shot_method
+    try:
+        method = series_shot_method(series, shot)
+    except ValueError as error:
+        raise VideoShotError(str(error)) from error
+    if method == "generated_video":
+        raise VideoShotError(f"{shot.get('id')}: choose an animation or imported-video method before attaching a completed take")
+
+
 def _spend_one(run: _Run, series: dict, episode: dict, shot: dict, done: set, warnings: list) -> None:
     if run.cancelled():
         raise VideoShotError("cancelled")
+    _require_method(series, shot)
     made = _generate(run, shot, series)
     _remember(run.deps, run.job, shot, made, episode_mode(episode) != "preview")
     _note_drift(warnings, shot, made)
@@ -672,18 +711,27 @@ def _call(deps: Any, tool: str, version: int, data: dict[str, Any], *, intent: s
     return result if isinstance(result, dict) else reply
 
 
+def admitted_job_id(reply: Any) -> str | None:
+    """The backend job id a tool's admission reply names, or None.
+
+    ``generation.video`` is an operation tool: its handler answers the admission result unchanged,
+    ``{"receipt": {..., "result": {"job_id": ...}}, "replayed": bool}`` (``task_command_admission._receipt``), with no
+    top-level ``result``. A reply already unwrapped to ``job_id``, or a ``job`` / ``task`` object, is read too."""
+    if not isinstance(reply, dict):
+        return None
+    receipt = reply.get("receipt") if isinstance(reply.get("receipt"), dict) else {}
+    for holder in (receipt.get("result"), reply, reply.get("job"), reply.get("task")):
+        for key in ("job_id", "jobId"):
+            if isinstance(holder, dict) and holder.get(key):
+                return str(holder[key])
+    return None
+
+
 def _job_id(payload: dict[str, Any]) -> str:
-    for key in ("job_id", "jobId"):
-        if payload.get(key):
-            return str(payload[key])
-    job = payload.get("job") if isinstance(payload.get("job"), dict) else {}
-    found = job.get("jobId") or job.get("job_id")
-    if found:
-        return str(found)
-    task = payload.get("task") if isinstance(payload.get("task"), dict) else {}
-    if task.get("job_id"):
-        return str(task["job_id"])
-    raise VideoShotError("generation.video returned no job")
+    found = admitted_job_id(payload)
+    if found is None:
+        raise VideoShotError("generation.video returned no job")
+    return found
 
 
 def _wait(deps: Any, job_id: str, cancelled: Callable[[], bool]) -> dict[str, Any]:

@@ -381,7 +381,6 @@ def test_native_projection_keeps_managed_asset_id_with_canonical_source(tmp_path
             "_workspace_dir": lambda workspace: str(
                 {"source": source_root, "destination": output_root}[workspace]
             ),
-            "_uploads_dir": lambda: str(uploads_root),
         },
     )
     ready.pop("source_path", None)

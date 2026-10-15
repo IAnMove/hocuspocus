@@ -28,6 +28,7 @@ from typing import Any
 
 from . import execution_mode, resource_scheduler, model3d_external
 from .asset_manifest import publish_generation_job_sidecar
+from .generation_output_name import canonical_file_url
 from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
 from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
@@ -789,7 +790,7 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
             progress=1.0,
             message="3D model ready",
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
         )
     except Exception as exc:
         if cancelled():
@@ -1048,7 +1049,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             _update_job(
                 job_id, status="completed", phase="completed", progress=1.0,
                 message="3D model ready · simulated artifact", filename=filename,
-                url=f"/api/v1/file/{filename}", simulated=True,
+                url=canonical_file_url(filename, current_job.get("workspace")), simulated=True,
             )
         except InterruptedError:
             _settle_cancelled_job(job_id)
@@ -1263,7 +1264,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message=("GLB retextured as a new copy; worker exited and VRAM was released" if operation == "retexture" else "3D asset generated; worker exited and VRAM was released"),
             progress=1.0,
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
             size=output_path.stat().st_size,
         )
     except Exception as exc:

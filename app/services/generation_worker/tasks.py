@@ -12,7 +12,7 @@ import os
 import time
 import torch
 import traceback
-from services import safe_download
+from services import media_dimensions, safe_download
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     collect_job_outputs,
@@ -177,6 +177,11 @@ def _run_generation_queue(st):
             else:
                 file_sidecar.pop("director_clip_index", None)
             file_sidecar["output_filename"] = fname
+            produced = media_dimensions.produced_resolution(
+                os.path.join(out_dir, fname), sidecar_params.get("resolution"),
+            )
+            if produced:
+                file_sidecar["output_resolution"] = produced
             _publish_generation_sidecar_for_studio_job(
                 job, os.path.join(out_dir, fname), file_sidecar,
             )

@@ -481,6 +481,8 @@ def test_an_image_job_and_a_random_seed(rig, golden) -> None:
     """An image keeps its film grain in the params; seed -1 comes back as the seed the file name carries."""
     job_id = rig.run({**BODY, "prompt": "a red barn", "generation_mode": "image", "seed": -1,
                       "film_grain_intensity": 0.3, "video_length": 1})
+    # gen-01: the body never said image_mode; the submission door adds it, so the engine saves a picture.
+    assert [call["kwargs"]["image_mode"] for call in rig.engine.calls] == [1]
     rig.check(golden, "image job", rig.observe(job_id, full=True))
 
 
@@ -961,7 +963,9 @@ def test_the_real_simulated_executor_writes_an_artifact_and_finishes_the_job(rig
     monkeypatch.setattr(
         prepare, "execution_mode", SimpleNamespace(policy=lambda: SimpleNamespace(simulated=True, mode="simulate")),
     )
-    job_id = rig.direct_job({**BODY, "generation_mode": "image", "video_length": 1, "prompt": "a simulated barn"})
+    # direct_job skips POST /generate, which is where an image request gets its image_mode: say it here.
+    job_id = rig.direct_job({**BODY, "generation_mode": "image", "image_mode": 1, "video_length": 1,
+                             "prompt": "a simulated barn"})
     rig.call_worker(job_id)
     rig.check(golden, "real simulated executor", rig.observe(job_id, full=True))
 
@@ -1346,7 +1350,9 @@ def test_a_failed_job_runs_no_finishing_pass_on_the_outputs_it_keeps(rig, clip, 
 
     def media_tools(command, *args, **kwargs):
         if list(command)[0] in ("ffmpeg", "ffprobe"):
-            ran.append(list(command)[0])
+            # The sidecar's read-only size probe (media_dimensions.probe_video_size) is not a finishing pass.
+            if list(command)[0] != "ffprobe" or "stream=width,height" not in " ".join(map(str, command)):
+                ran.append(list(command)[0])
             return subprocess.CompletedProcess(command, 1, "", "the test runs no media tool")
         return real_run(command, *args, **kwargs)
 
@@ -1410,6 +1416,11 @@ def _outpaint_tools(monkeypatch, source: Path, *, source_audio: bool, mux_ok: bo
         if command[0] == "ffprobe" and "stream=r_frame_rate" in command:
             commands.append(command)
             return subprocess.CompletedProcess(command, 0, "8/1\n", "")
+        if command[0] == "ffprobe" and "stream=duration" in command:
+            # The picture's length bounds the re-encoded source audio (``-t``); a fixed answer keeps the golden
+            # independent of the ffprobe that is installed.
+            commands.append(command)
+            return subprocess.CompletedProcess(command, 0, "1.5\n", "")
         if command[0] == "ffmpeg" and str(source) in command:
             commands.append(command)
             if not mux_ok:
@@ -1806,7 +1817,8 @@ def test_film_grain_rewrites_the_file_and_restores_the_decord_bridge(rig, golden
     elif case == "audio mux":
         assert error is None and _file_mark(source) == "muxed" and len(commands) == 3
         assert commands[1][commands[1].index("-vn") + 1:commands[1].index("-vn") + 3] == ["-acodec", "copy"]
-        assert "-shortest" in commands[2] and commands[2][commands[2].index("-c:a") + 1] == "aac"
+        # The own audio goes back without -shortest: it must not cut the picture (frame-exact outputs).
+        assert "-shortest" not in commands[2] and commands[2][commands[2].index("-c:a") + 1] == "aac"
     else:
         assert error is None and _file_mark(source) == "grain" and len(grain) == 1 and len(commands) == 1
     assert bridge_calls == ["torch", "native"] and bridge.current == "native" and _extras(folder, source) == []

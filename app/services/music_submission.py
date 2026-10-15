@@ -19,7 +19,7 @@ from typing import Any, Callable, Mapping
 
 from .minimax_music_service import ALLOWED_MODELS, COVER_MODELS
 from .story_library import read_story_library
-from .task_manager import TaskRegistry
+from .task_manager import TaskRegistry, get_task_registry
 
 
 SCHEMA_NAME = "hocuspocus.music-submission"
@@ -326,7 +326,9 @@ def submit_music_generation(
         stored = dict(stored)
         stored["replay"] = True
         return stored
-    registry = task_registry or TaskRegistry(workspace_dir, interrupt_stale=False)
+    # The folder's one shared registry: a private second object would leave this task for the first
+    # get_task_registry() of the folder to interrupt as a leftover.
+    registry = task_registry or get_task_registry(workspace_dir)
     registry.create(
         id=task_id,
         kind="music",

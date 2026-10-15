@@ -11,6 +11,8 @@ import traceback
 
 from fastapi import HTTPException, Request
 
+from services.request_numbers import number_field
+
 # Bound by bind(); None until the full server mounts the routes.
 _get_active_workspace = None
 _workspace_dir = None
@@ -58,6 +60,12 @@ async def segment_preview_endpoint(request: Request):
     if not os.path.isfile(video_path):
         raise HTTPException(status_code=400, detail=f"Video not found: {video_path}")
 
+    # Read the numbers before the try below: its handlers turn anything into a 503/500.
+    full_video = body.get("full_video", False)
+    start_time = number_field(body, "start_time", 0)
+    end_time = number_field(body, "end_time", -1)
+    mask_padding = number_field(body, "mask_padding", 20, int) if full_video else None
+
     try:
         import asyncio
         from services.inpaint_service import segment_image_preview, segment_video, ensure_sam_running
@@ -68,15 +76,14 @@ async def segment_preview_endpoint(request: Request):
         if not sam_ready:
             raise HTTPException(status_code=503, detail="SAM service not available. Check installation.")
 
-        full_video = body.get("full_video", False)
         if full_video:
             result = await asyncio.to_thread(
                 segment_video,
                 video_path=video_path,
                 text=sam_target,
-                start_time=float(body.get("start_time", 0)),
-                end_time=float(body.get("end_time", -1)),
-                mask_padding=int(body.get("mask_padding", 20)),
+                start_time=start_time,
+                end_time=end_time,
+                mask_padding=mask_padding,
             )
         else:
             result = await asyncio.to_thread(
@@ -84,8 +91,8 @@ async def segment_preview_endpoint(request: Request):
                 video_path=video_path,
                 text=sam_target,
                 frame_index=body.get("frame_index", -1),
-                start_time=float(body.get("start_time", 0)),
-                end_time=float(body.get("end_time", -1)),
+                start_time=start_time,
+                end_time=end_time,
             )
         result["target"] = sam_target
 
@@ -121,6 +128,9 @@ async def segment_preview_endpoint(request: Request):
             result["target"] = f"NOT {sam_target}"
 
         return result
+    except HTTPException:
+        # The 503 above is this route's own answer; it was rewrapped as a 500 (validation edit-01).
+        raise
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:

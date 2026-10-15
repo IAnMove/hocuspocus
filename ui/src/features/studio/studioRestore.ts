@@ -12,6 +12,20 @@ export function restoredSfxSettings(params: Record<string, unknown>) {
   }
 }
 
+/**
+ * Extend and Blend outputs. The submit rewrites their `image_mode` to 0 and the
+ * sidecar keeps the source clip as `video_source` (with a `V` flag) or as `_blend_*`.
+ * Load Settings does not restore that working set yet, so it lands on Frames with
+ * no source video and a reroll would run a plain text-to-video. Edit sidecars
+ * (`edit_sub_mode`) have their own restore and are not affected.
+ */
+export function isExtendOrBlendOutput(params: Record<string, unknown> | null | undefined): boolean {
+  if (!params || params.edit_sub_mode) return false
+  if (typeof params._blend_mode === 'string' && params._blend_mode) return true
+  const flags = typeof params.image_prompt_type === 'string' ? params.image_prompt_type : ''
+  return flags.includes('V') && typeof params.video_source === 'string' && params.video_source.length > 0
+}
+
 const JOINED_SEQUENCE_NAME = /(?:^|[._-])multiclip\.(?:mp4|webm|mkv|mov)$/i
 
 export function isJoinedSequenceOutput(name: string | null | undefined): boolean {

@@ -1,5 +1,6 @@
 {
   "settingsUnavailable": "Saved settings could not be restored. Select the file again.",
+  "extendBlendRestoreUnavailable": "Extend and Blend outputs cannot be restored yet, so Load settings and Re-generate are off. Use Extend this video, or start a new Extend or Blend.",
   "title": "Activity",
   "openHistory": "Show canonical task history",
   "panelTitle": "HocusPocus tasks",

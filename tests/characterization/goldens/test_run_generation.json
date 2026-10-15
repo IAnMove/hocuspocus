@@ -2376,7 +2376,6 @@
           "copy",
           "-c:a",
           "aac",
-          "-shortest",
           "<PATH>"
         ]
       ],
@@ -4138,6 +4137,7 @@
           "image_save_path": "<OUTPUTS>",
           "kwargs": {
             "film_grain_intensity": 0.3,
+            "image_mode": 1,
             "mode": "",
             "model_type": "fake_t2v",
             "plugin_data": {},
@@ -4150,6 +4150,7 @@
             "_execution_mode": "real",
             "film_grain_intensity": 0.3,
             "generation_mode": "image",
+            "image_mode": 1,
             "model_type": "fake_t2v",
             "prompt": "a red barn",
             "resolution": "64x64",
@@ -4198,6 +4199,7 @@
             "_execution_mode": "real",
             "film_grain_intensity": 0.3,
             "generation_mode": "image",
+            "image_mode": 1,
             "model_type": "fake_t2v",
             "prompt": "a red barn",
             "provider": "local",
@@ -8187,7 +8189,6 @@
           "0:a?",
           "-c:a",
           "copy",
-          "-shortest",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -8358,6 +8359,18 @@
           "<STATE>/outpaint-source.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -8370,11 +8383,15 @@
           "copy",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.501",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -8561,7 +8578,6 @@
           "0:a?",
           "-c:a",
           "copy",
-          "-shortest",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -8935,6 +8951,18 @@
           "<STATE>/outpaint-source.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -8947,11 +8975,15 @@
           "copy",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.501",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -9147,6 +9179,18 @@
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -9167,11 +9211,15 @@
           "yuv420p",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.126",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -9342,6 +9390,18 @@
           "<STATE>/outpaint-source.mp4"
         ],
         [
+          "ffprobe",
+          "-v",
+          "quiet",
+          "-select_streams",
+          "v:0",
+          "-show_entries",
+          "stream=duration",
+          "-of",
+          "csv=p=0",
+          "<OUTPUTS>/<TIME>_seed42_a_calm_lake.mp4"
+        ],
+        [
           "ffmpeg",
           "-y",
           "-i",
@@ -9354,11 +9414,15 @@
           "copy",
           "-map",
           "1:a:0",
+          "-af",
+          "apad",
           "-c:a",
           "aac",
           "-b:a",
           "192k",
           "-shortest",
+          "-t",
+          "1.501",
           "<OUTPUTS>/<TIME>_seed42_a_calm_lake_post.mp4"
         ]
       ],
@@ -10238,6 +10302,7 @@
           "params": {
             "_execution_mode": "real",
             "generation_mode": "image",
+            "image_mode": 1,
             "model_type": "fake_t2v",
             "prompt": "a simulated barn",
             "provider": "local",
@@ -11261,7 +11326,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -12344,7 +12408,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -12897,7 +12960,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -13087,7 +13149,6 @@
           "output_filename": "<TIME>_seed42_recast_shot_aware.mp4",
           "params": {
             "_execution_mode": "real",
-            "_recast_source_video": "<OUTPUTS>/recast-source.mp4",
             "edit_recast_shot_aware": true,
             "edit_recast_shot_plan": [
               {
@@ -16268,6 +16329,7 @@
             "tool": "studio"
           },
           "output_filename": "<TIME>_seed42_a_calm_lake.mp4",
+          "output_resolution": "64x36",
           "params": {
             "_execution_mode": "real",
             "generation_mode": "video",
@@ -16792,21 +16854,20 @@
             "ceilinged": false,
             "compute_penalty": -0.0291320987654321,
             "compute_ratio": 0.0011851851851851852,
-            "effective_coef": 0.7957987654320987,
+            "effective_coef": 0.8791320987654321,
             "floored": false,
             "lora_penalty": 0.0,
             "lora_total_gb": 0.0,
-            "pass_penalty": 0.08333333333333333,
+            "pass_penalty": 0.0,
             "reasons": [
-              "-0.083 for 1 extra pipeline stage(s) (2.0 GB)",
               "+0.029 bonus for 0.00× compute vs baseline (512×512 × 1 frames, lighter than baseline)"
             ],
-            "stage_count": 2
+            "stage_count": 1
           },
           "after": 0.85,
           "before": 0.85,
           "during": [
-            0.7957987654320987
+            0.8791320987654321
           ],
           "job": "light image",
           "status": "completed"

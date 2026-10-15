@@ -30,13 +30,16 @@ from typing import Any
 
 from . import resource_scheduler
 from .asset_manifest import publish_generation_sidecar_best_effort
+from .generation_output_name import canonical_file_url
 
 APP_DIR = Path(__file__).resolve().parents[1]
 SERVICE_DIR = Path(__file__).resolve().parent / "hunyuan3d"
 ENV_DIR = SERVICE_DIR / "env"
 INSTALL_MARKER = ENV_DIR / ".maestro_hunyuan3d_v1.installed"
 WORKER_PATH = SERVICE_DIR / "rig_worker.py"
-JOBS_DIR = Path(__file__).resolve().parents[1] / "ckpts" / "rig" / "jobs"
+# Job control (request and pid files) belongs to THIS install: checkpoints may be shared by several installs
+# (worktrees, validation or lent instances), so the pid files cannot live next to them.
+JOBS_DIR = Path(__file__).resolve().parents[1] / "settings" / "rig-jobs"
 
 # Optional UniRig AI engine: separate Python 3.11 env installed on demand
 # through rigging_install.js ("Install AI Rigging (UniRig)" in the menu).
@@ -906,7 +909,7 @@ def _run_job_serialized(job_id: str, output_dir: str) -> None:
             message="Rigged model saved",
             progress=1.0,
             filename=filename,
-            url=f"/api/v1/file/{filename}",
+            url=canonical_file_url(filename, job.get("workspace")),
             size=output_path.stat().st_size,
             animations=result_summary.get("animations") or request_data["animations"],
             rig_profile=result_summary.get("rig_profile", request_data.get("rig_profile", DEFAULT_RIG_PROFILE)),
@@ -1024,30 +1027,44 @@ def cancel_all_jobs() -> int:
     return len(active_ids)
 
 
-def _cmdline_is_rig_worker(cmdline: str) -> bool:
-    return (WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline) or (
-        UNIRIG_WORKER_PATH.name in cmdline and "rigging" in cmdline
+def _cmdline_is_rig_worker(cmdline: str, request_path: Path) -> bool:
+    """A rig worker (any engine) started with THIS job's request file in THIS install's job folder.
+
+    The request path is on every engine's command line (``--request <JOBS_DIR>/<job>.json``), so it tells our
+    worker from another install's, which can also be listed in a shared folder or recycle a pid.
+    """
+    if os.path.normcase(str(request_path)) not in os.path.normcase(cmdline):
+        return False
+    return (
+        (WORKER_PATH.name in cmdline and "hunyuan3d" in cmdline)
+        or (UNIRIG_WORKER_PATH.name in cmdline and "rigging" in cmdline)
+        or "services.humanoid_rig.worker" in cmdline
     )
 
 
-def _is_rig_worker(pid: int) -> bool:
+def _is_rig_worker(pid: int, request_path: Path) -> bool:
     proc_cmdline = Path("/proc") / str(pid) / "cmdline"
     try:
         if proc_cmdline.is_file():
             cmdline = proc_cmdline.read_bytes().replace(b"\x00", b" ").decode("utf-8", "replace")
-            return _cmdline_is_rig_worker(cmdline)
+            return _cmdline_is_rig_worker(cmdline, request_path)
     except OSError:
         return False
     try:
         import psutil
 
         cmdline = " ".join(psutil.Process(pid).cmdline())
-        return _cmdline_is_rig_worker(cmdline)
+        return _cmdline_is_rig_worker(cmdline, request_path)
     except Exception:
         return False
 
 
 def _reap_stale_jobs() -> None:
+    """End the workers a previous run of THIS install left behind, and forget their files.
+
+    Only ``JOBS_DIR`` is read. The old folder ``ckpts/rig/jobs`` is shared by every install that links the same
+    checkpoints, so what is listed there may be another install's live job: it is never signalled or cleaned.
+    """
     if not JOBS_DIR.is_dir():
         return
     for pid_path in JOBS_DIR.glob("*.pid"):
@@ -1055,7 +1072,7 @@ def _reap_stale_jobs() -> None:
             pid = int(pid_path.read_text(encoding="utf-8").strip())
         except (OSError, ValueError):
             pid = 0
-        if pid > 0 and _is_rig_worker(pid):
+        if pid > 0 and _is_rig_worker(pid, JOBS_DIR / f"{pid_path.stem}.json"):
             print(f"[Rig] Terminating orphaned rig worker from a previous run (pid {pid})")
             try:
                 os.kill(pid, signal.SIGTERM)

@@ -589,9 +589,21 @@ def normalize_known_series_bootstrap(result: Any, series: dict) -> dict:
     if not isinstance(locations, list) or not 1 <= len(locations) <= 12:
         raise ValueError("Known-series bootstrap requires between one and twelve recurring locations")
 
+    taken: set[str] = set()
+
     def stable_id(value: Any, prefix: str, index: int) -> str:
+        """One id names one thing in the whole library (``validate_series_ids`` refuses a repeat across kinds too):
+        a small model that reuses an id for a character, a location and a fact keeps it for the first only."""
         raw = re.sub(r"[^A-Za-z0-9_-]+", "_", str(value or "").strip()).strip("_")
-        return (raw or f"{prefix}_{index + 1}")[:120]
+        candidate = (raw or f"{prefix}_{index + 1}")[:120]
+        if candidate in taken:
+            fallback = f"{prefix}_{index + 1}"[:110]
+            candidate, copies = fallback, 1
+            while candidate in taken:
+                copies += 1
+                candidate = f"{fallback}_{copies}"
+        taken.add(candidate)
+        return candidate
 
     def text(value: Any, limit: int = 3000) -> str:
         return str(value or "").strip()[:limit]
@@ -615,8 +627,6 @@ def normalize_known_series_bootstrap(result: Any, series: dict) -> dict:
         if not isinstance(raw, dict):
             raise ValueError("Known-series bootstrap contains an invalid character")
         character_id = stable_id(raw.get("id"), "character", index)
-        if character_id in character_ids:
-            character_id = f"character_{index + 1}"
         character_ids.add(character_id)
         aliases = [text(item, 200) for item in raw.get("aliases", [])[:8] if text(item, 200)] \
             if isinstance(raw.get("aliases"), list) else []
@@ -648,8 +658,6 @@ def normalize_known_series_bootstrap(result: Any, series: dict) -> dict:
         if not isinstance(raw, dict):
             raise ValueError("Known-series bootstrap contains an invalid location")
         location_id = stable_id(raw.get("id"), "location", index)
-        if location_id in location_ids:
-            location_id = f"location_{index + 1}"
         location_ids.add(location_id)
         normalized_locations.append({
             "id": location_id, "name": text(raw.get("name") or f"Location {index + 1}", 200),

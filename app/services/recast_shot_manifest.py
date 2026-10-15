@@ -744,6 +744,9 @@ def _write_recast_shot_aware_sidecar(
         "_recast_shot_temp_dir",
         "_recast_final_out_dir",
         "_recast_shot_bundle",
+        # Worker-private too: the restored settings do not need the temp source path (edit-11).
+        "_recast_source_video",
+        "_recast_protect_bystanders",
     ):
         params.pop(key, None)
     params["video_length"] = int(shot_bundle["frame_count"])

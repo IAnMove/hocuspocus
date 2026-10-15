@@ -2,9 +2,11 @@ import * as api from '../api/client'
 import { beginImageSettingsChange, restoreStudioImageSettings } from '../features/studio/imageSettingsRestore'
 import type { GenerateParams, GenerationMode } from '../types'
 import { getModelMode } from './modelCatalog'
-import type { SliceCreator } from './storeApi'
-import type { AppState } from './useStore'
+import { _saveSettings } from './modeSettingsPersistence'
 import { advanceModelOptionsSeq } from './modelOptionsSlice'
+import { _globalModelSelectionModes } from './servicesSlice'
+import type { SliceCreator, SliceGet } from './storeApi'
+import type { AppState } from './useStore'
 
 export type RecipesSlice = {
   // Recipes (one-click Studio presets)
@@ -21,6 +23,22 @@ export type RecipesSlice = {
 
 /** applyRecipe passes get and set into the image-settings restore, which is typed as AppState. */
 export type RecipesSliceHost = AppState
+
+/**
+ * A recipe's model is a manual choice, like picking it in the selector: stop the
+ * mode following the production profile and save the selection now (localStorage
+ * and the server copy that survives a changed Pinokio port), not at the next save.
+ */
+function persistRecipeModel(get: SliceGet<RecipesSliceHost>, mode: GenerationMode): void {
+  _globalModelSelectionModes.delete(mode)
+  const s = get()
+  _saveSettings({
+    generationMode: s.generationMode,
+    selectedModelPerMode: s.selectedModelPerMode,
+    savedParamsPerMode: s.savedParamsPerMode,
+    savedLoraPerMode: s.savedLoraPerMode,
+  }, s.loraIdByFilename)
+}
 
 export const createRecipesSlice: SliceCreator<RecipesSlice, RecipesSliceHost> = (set, get) => ({
   // ── Recipes (one-click Studio presets) ────────────────────────────
@@ -62,6 +80,7 @@ export const createRecipesSlice: SliceCreator<RecipesSlice, RecipesSliceHost> = 
         loras_multipliers: (recipe.loras || []).map(item => String(item.multiplier ?? 1)).join(' '),
       }, get().activeWorkspace, get, set)
       if (!restored) throw new Error('The image form changed while loading the recipe')
+      persistRecipeModel(get, 'image')
       await get().loadLoras(recipe.model_type)
       const present = new Set(get().availableLoras.map(name => name.replace(/\\/g, '/').split('/').pop()))
       return { missing: (recipe.loras || []).filter(item => !present.has(item.filename)) }
@@ -99,6 +118,7 @@ export const createRecipesSlice: SliceCreator<RecipesSlice, RecipesSliceHost> = 
       selectedModelPerMode: { ...s.selectedModelPerMode, [mode]: recipe.model_type },
       h3WindowPlan: null,
     }))
+    persistRecipeModel(get, mode)
 
     if (recipe.model_type) {
       get().loadModelOptions(recipe.model_type)

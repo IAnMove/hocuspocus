@@ -5,7 +5,7 @@ import type { DirectorSlice } from '../../../stores/directorSlice'
 import type { GallerySlice } from '../../../stores/gallerySlice'
 import type { SliceCreator } from '../../../stores/storeApi'
 
-const DASHBOARD_PIPELINE_PAGE_SIZE = 8
+export const DASHBOARD_PIPELINE_PAGE_SIZE = 8
 const DIRECTOR_REPAIR_POLL_MS = 2000
 const DIRECTOR_REPAIR_ACTIVE = new Set(['queued', 'running', 'cancelling'])
 type DirectorRepairPoll = {
@@ -45,6 +45,8 @@ export type DirectorDashboardSlice = {
   dashboardRetryPipelineId: string | null
   setDashboardOpen: (open: boolean, preferredPipelineId?: string) => void
   loadPipelineList: (preferredPipelineId?: string) => Promise<void>
+  /** Resume UI polling for every run in `pipelines` whose repair is still active on the server. */
+  discoverActiveDirectorRepairs: (pipelines: PipelineListItem[]) => void
   loadMorePipelineList: () => Promise<void>
   loadSavedPipeline: (pid: string) => Promise<void>
   retryDashboardLoad: () => Promise<void>
@@ -137,48 +139,52 @@ export const createDirectorDashboardSlice: SliceCreator<DirectorDashboardSlice, 
 
       // The repair worker belongs to the server, so a browser reload must
       // rediscover active operations and resume UI polling without requiring
-      // the Dashboard to be opened first. Keep discovery separate from the
-      // selected pipeline so bootstrapping never opens or changes the overlay.
-      for (const item of pipelines) {
-        if (!item.repair_status || !DIRECTOR_REPAIR_ACTIVE.has(item.repair_status)) continue
-        if (_directorRepairPolls.has(item.id) || _directorRepairDiscoveries.has(item.id)) continue
-
-        const discovery = {}
-        _directorRepairDiscoveries.set(item.id, discovery)
-        void api.fetchSavedPipeline(item.id).then(pipeline => {
-          if (_directorRepairDiscoveries.get(item.id) !== discovery) return
-          if (_directorRepairPolls.has(item.id)) return
-
-          const repair = pipeline.repair
-          if (_repairNeedsPolling(repair)) {
-            get().pollPipelineRepair(item.id, repair!.operation_id)
-            return
-          }
-
-          // The operation may have finished between the list and detail
-          // requests. Reflect that terminal state and refresh newly-created
-          // media instead of waiting for another Dashboard visit.
-          set(s => ({
-            dashboardPipelineList: s.dashboardPipelineList.map(entry =>
-              entry.id === item.id
-                ? { ...entry, repair_status: repair?.status || null }
-                : entry),
-          }))
-          void get().maybeRefreshGallery()
-        }).catch(e => {
-          console.warn(`Failed to reconnect Director repair for ${item.id}:`, e)
-        }).finally(() => {
-          if (_directorRepairDiscoveries.get(item.id) === discovery) {
-            _directorRepairDiscoveries.delete(item.id)
-          }
-        })
-      }
+      // the Dashboard to be opened first (boot does it through
+      // reconnectDirectorPipelines). Discovery stays separate from the selected
+      // pipeline so bootstrapping never opens or changes the overlay.
+      get().discoverActiveDirectorRepairs(pipelines)
     } catch (e) {
       if (loadToken !== _dashboardPipelineListLoadToken) return
       console.error('Failed to load pipeline list:', e)
       set({
         dashboardLoadError: e instanceof Error ? e.message : 'Failed to load pipeline list',
         dashboardRetryPipelineId: retryPipelineId,
+      })
+    }
+  },
+  discoverActiveDirectorRepairs: (pipelines) => {
+    for (const item of pipelines) {
+      if (!item.repair_status || !DIRECTOR_REPAIR_ACTIVE.has(item.repair_status)) continue
+      if (_directorRepairPolls.has(item.id) || _directorRepairDiscoveries.has(item.id)) continue
+
+      const discovery = {}
+      _directorRepairDiscoveries.set(item.id, discovery)
+      void api.fetchSavedPipeline(item.id).then(pipeline => {
+        if (_directorRepairDiscoveries.get(item.id) !== discovery) return
+        if (_directorRepairPolls.has(item.id)) return
+
+        const repair = pipeline.repair
+        if (_repairNeedsPolling(repair)) {
+          get().pollPipelineRepair(item.id, repair!.operation_id)
+          return
+        }
+
+        // The operation may have finished between the list and detail
+        // requests. Reflect that terminal state and refresh newly-created
+        // media instead of waiting for another Dashboard visit.
+        set(s => ({
+          dashboardPipelineList: s.dashboardPipelineList.map(entry =>
+            entry.id === item.id
+              ? { ...entry, repair_status: repair?.status || null }
+              : entry),
+        }))
+        void get().maybeRefreshGallery()
+      }).catch(e => {
+        console.warn(`Failed to reconnect Director repair for ${item.id}:`, e)
+      }).finally(() => {
+        if (_directorRepairDiscoveries.get(item.id) === discovery) {
+          _directorRepairDiscoveries.delete(item.id)
+        }
       })
     }
   },

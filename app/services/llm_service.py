@@ -1962,6 +1962,22 @@ def _post_with_backoff(url: str, *, provider: str, cancellation_token=None, atte
     raise RuntimeError(f"{provider}: no attempts left")
 
 
+class LLMProviderError(RuntimeError):
+    """A provider call failed: it answered with an error (``status`` is its HTTP status) or not at all.
+
+    A ``RuntimeError`` subclass, so callers that already catch ``RuntimeError`` keep working;
+    the HTTP routes use ``code`` to tell a rejected key from any other provider failure.
+    """
+
+    def __init__(self, message: str, *, status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def code(self) -> str:
+        return "provider_auth_failed" if self.status in (401, 403) else "provider_failed"
+
+
 class LLMRequestCancelled(InterruptedError):
     """Raised when one job's active provider request is cancelled."""
 
@@ -2745,11 +2761,13 @@ def generate_openai_compatible(
                     abort_supported=abort_supported,
                 ) from exc
             detail = ""
+            status = None
             if getattr(exc, "response", None) is not None:
                 detail = str(exc.response.text or "")[:500]
+                status = exc.response.status_code
             suffix = f": {detail}" if detail else ""
             finish_operation("failed", "Provider request failed", error=f"OpenAI-compatible request failed{suffix}")
-            raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
+            raise LLMProviderError(f"OpenAI-compatible request failed{suffix}", status=status) from exc
 
         try:
             _raise_if_token_cancelled(

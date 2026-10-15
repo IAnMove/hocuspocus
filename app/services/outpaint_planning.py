@@ -361,6 +361,10 @@ def _resolve_outpaint_canvas_geometry(
     # Re-resolve through the same helper inference uses. These coordinates
     # are retained for legacy overlay metadata and make any float rounding
     # difference observable instead of allowing two geometries to diverge.
+    # The job carries the percentages as 8-decimal text (see
+    # _format_outpaint_percentage) and inference parses that text, so resolve
+    # from the same rounded values: the exact floats gave 383 px where the
+    # model got 384 (validation edit-05).
     from shared.utils.utils import get_outpainting_frame_location
 
     (
@@ -371,7 +375,7 @@ def _resolve_outpaint_canvas_geometry(
     ) = get_outpainting_frame_location(
         final_h,
         final_w,
-        list(dims),
+        [float(_format_outpaint_percentage(value)) for value in dims],
         1,
     )
     return {

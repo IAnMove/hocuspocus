@@ -38,6 +38,19 @@ _DIRECTOR_V2_PLANNER_KEYS = (
 )
 
 
+# The planners index these as lists of objects (``music_video.plan(lyrics: list[dict])``).
+_LISTS_OF_OBJECTS = ("lyrics", "clips", "characters")
+
+
+def _check_planner_shapes(body: dict) -> None:
+    """A wrongly typed field is a 422 that names it, before a durable job or an Activity row exists. Left to the
+    planner it ended inside the job as a 500 with a Python message, and a resume repeated it."""
+    for field in _LISTS_OF_OBJECTS:
+        value = body.get(field)
+        if value and (not isinstance(value, list) or not all(isinstance(item, dict) for item in value)):
+            raise HTTPException(status_code=422, detail=f"{field} must be a list of objects")
+
+
 def _director_v2_planner_kwargs(body: dict) -> dict:
     """Keep every supported Director input, including Story Lab visual refs."""
     return {key: body[key] for key in _DIRECTOR_V2_PLANNER_KEYS if key in body}
@@ -50,6 +63,7 @@ async def _director_v2_plan_body(body: dict):
     """
     if not isinstance(body, dict):
         raise HTTPException(status_code=422, detail="Director plan request must be an object")
+    _check_planner_shapes(body)
     skill_type = body.get("skill_type", body.get("pipeline_type", "music_video"))
     tracking_id = str(body.get("activity_id") or "").strip()[:160]
     from services import llm_service

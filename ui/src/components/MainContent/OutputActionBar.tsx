@@ -15,6 +15,7 @@ import { fetchOutputMetadata, moveOutput, uploadImage, selectPipelineClipVideo }
 import type { OutputFile } from '../../types'
 import { exportedSceneKind, openExportedScene } from '../../lib/exportedScene'
 import { outputProvenance } from '../../lib/outputProvenance'
+import { isExtendOrBlendOutput } from '../../features/studio/studioRestore'
 import {
   readVideoEditorReplacementTarget,
   writeVideoEditorReplacementResult,
@@ -443,7 +444,10 @@ function HandoffActions({ a }: { a: OutputActions }) {
 }
 
 function GenerationActions({ a }: { a: OutputActions }) {
-  const { clipTotal, copied, file, groupId, handleContinueFrom, handleCopyPrompt, handleOutputSettings, handleRejoin, openRetakeDialog, params, rejoining, setShowSaveRecipe, settingsBusy, settingsError, tStudio } = a
+  const { clipTotal, copied, file, groupId, handleContinueFrom, handleCopyPrompt, handleOutputSettings, handleRejoin, openRetakeDialog, params, rejoining, setShowSaveRecipe, settingsBusy, settingsError, t, tStudio } = a
+  // Extend/Blend sidecars cannot be restored yet (see isExtendOrBlendOutput).
+  const restoreBlocked = isExtendOrBlendOutput(params)
+  const restoreBlockedTitle = t('extendBlendRestoreUnavailable')
   return (
     <>
         {params && (
@@ -457,17 +461,17 @@ function GenerationActions({ a }: { a: OutputActions }) {
             </button>
             <button
               onClick={event => { event.stopPropagation(); void handleOutputSettings(false) }}
-              disabled={settingsBusy}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title={tStudio('imageActions.loadSettings')}
+              disabled={settingsBusy || restoreBlocked}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+              title={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')}
             >
               <SlidersHorizontal size={13} />
             </button>
             <button
               onClick={event => { event.stopPropagation(); void handleOutputSettings(true) }}
-              disabled={settingsBusy}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Re-generate with same settings"
+              disabled={settingsBusy || restoreBlocked}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+              title={restoreBlocked ? restoreBlockedTitle : 'Re-generate with same settings'}
             >
               <RefreshCw size={13} />
             </button>

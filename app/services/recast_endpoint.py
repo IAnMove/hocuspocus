@@ -155,28 +155,27 @@ async def recast_endpoint(request: Request):
     # Optional trim — outpaint's frame-accurate re-encode pattern. The
     # trimmed clip becomes the canonical guide so the SAM3 mask and the
     # generation windows stay 1:1 with the frames actually used.
-    trim_start = body.get("start_time")
-    trim_end = body.get("end_time")
+    from services.request_numbers import optional_number
+    trim_start = optional_number(body, "start_time")
+    trim_end = optional_number(body, "end_time")
     if trim_start is not None and trim_end is not None:
         try:
-            trim_start_f = float(trim_start)
-            trim_end_f = float(trim_end)
-            if trim_end_f - trim_start_f > 0.05 and trim_start_f >= 0:
+            if trim_end - trim_start > 0.05 and trim_start >= 0:
                 import subprocess
                 trim_dir = os.path.join(os.getcwd(), "uploads")
                 os.makedirs(trim_dir, exist_ok=True)
                 trimmed_path = os.path.join(trim_dir, f"recast_trim_{uuid.uuid4().hex[:8]}.mp4")
                 cmd = [
                     "ffmpeg", "-y", "-i", video_path,
-                    "-ss", f"{trim_start_f:.3f}",
-                    "-to", f"{trim_end_f:.3f}",
+                    "-ss", f"{trim_start:.3f}",
+                    "-to", f"{trim_end:.3f}",
                     "-c:v", "libx264", "-crf", "18", "-preset", "fast",
                     "-c:a", "aac", "-b:a", "192k",
                     trimmed_path,
                 ]
                 proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
                 if proc.returncode == 0 and os.path.isfile(trimmed_path):
-                    print(f"[Recast] Trimmed source to [{trim_start_f:.2f}s, {trim_end_f:.2f}s] -> {os.path.basename(trimmed_path)}")
+                    print(f"[Recast] Trimmed source to [{trim_start:.2f}s, {trim_end:.2f}s] -> {os.path.basename(trimmed_path)}")
                     video_path = trimmed_path
                 else:
                     print(f"[Recast] Trim failed (continuing with full clip): {proc.stderr[:200]}")
@@ -393,8 +392,8 @@ async def recast_endpoint(request: Request):
         },
         # UI restore keys for the gallery Edits filter + Load Settings.
         "edit_video_path": original_video_path,
-        "edit_start_time": float(trim_start) if trim_start is not None else 0.0,
-        "edit_end_time": float(trim_end) if trim_end is not None else duration_s,
+        "edit_start_time": trim_start if trim_start is not None else 0.0,
+        "edit_end_time": trim_end if trim_end is not None else duration_s,
         "edit_recast_target": target,
         "edit_recast_person_count": person_count,
         "edit_recast_character_mappings": serialized_mappings,

@@ -47,9 +47,7 @@ def _resource_adapter(runtime):
     list_workspaces = runtime.get("_list_workspaces")
     if not callable(workspace_dir) or not callable(list_workspaces):
         raise ValueError("Tools upscale resources are not configured")
-    uploads_dir = runtime.get("_uploads_dir")
-    if not callable(uploads_dir):
-        uploads_dir = lambda: os.path.join(os.getcwd(), "uploads")
+    uploads_dir = lambda: os.path.join(os.getcwd(), "uploads")
     wgp = runtime.get("wgp")
     lora_search_dirs = getattr(wgp, "get_lora_search_dirs", None)
     if not callable(lora_search_dirs):
@@ -97,7 +95,7 @@ def _check_asset_scope(runtime, asset_id, source_workspace):
 
 
 def _resolve_source(runtime):
-    resolver = runtime.get("_resolve_tool_source") or runtime.get("resolve_tool_source")
+    resolver = runtime.get("_resolve_tool_source")
     if not callable(resolver):
         return None
 
@@ -151,9 +149,7 @@ def _canonical_request_source(params: dict[str, Any], runtime: dict[str, Any]) -
     workspace_dir = runtime.get("_workspace_dir")
     if not path or not callable(workspace_dir):
         return None
-    uploads_dir = runtime.get("_uploads_dir")
-    if not callable(uploads_dir):
-        uploads_dir = lambda: os.path.join(os.getcwd(), "uploads")
+    uploads_dir = lambda: os.path.join(os.getcwd(), "uploads")
     source_workspace = params.get("source_workspace")
     if not isinstance(source_workspace, str) or not source_workspace:
         return None
@@ -233,11 +229,6 @@ def create_tools_upscale_operation(runtime: dict[str, Any]) -> NativeGenerationO
             resources=_resource_adapter(runtime),
             resolve_source=source_resolver,
             execution_policy=_execution_policy(runtime),
-            processor_capabilities=runtime.get("_tools_processor_capabilities"),
-            validate_processors=runtime.get("_validate_tools_processors"),
-            processor_settings=runtime.get("_validated_tools_processor_settings"),
-            processor_parameters=runtime.get("_tools_processor_parameters"),
-            probe_video=runtime.get("_probe_tool_video"),
         )
         ready = _request_ready_params(prepared)
         canonical_source = _canonical_request_source(prepared, runtime)

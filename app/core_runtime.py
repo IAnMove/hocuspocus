@@ -6,7 +6,6 @@ import shutil
 import sys
 from contextlib import nullcontext
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from routers.assets import create_assets_router
@@ -65,14 +64,8 @@ from services.workspace_registry import WorkspaceRegistry
 
 api = FastAPI(title="HocusPocus core")
 api.add_middleware(ActorHeaderMiddleware)
-from services.host_guard import install_host_guard
-install_host_guard(api)
-api.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost|\d+\.localhost)(:\d+)?$",
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+from services.request_guards import install_local_browser_guards
+install_local_browser_guards(api)
 api.include_router(create_lan_auth_router())
 api.include_router(create_system_capabilities_router())
 api.include_router(create_user_diagnostics_router(
@@ -294,21 +287,10 @@ def _core_persist_active(name, apply_save_paths=True):
     return path
 
 
-from types import SimpleNamespace
+from services.output_listing import _output_scan_cache, _output_scan_cache_lock, serve_file
+from routers.core_gallery import create_core_gallery_router
+from routers.workspace_outputs import create_workspace_router
 
-from services.output_listing import _output_scan_cache, _output_scan_cache_lock, configure as _configure_output_listing, serve_file
-from routers.workspace_outputs import (
-    create_list_outputs_router,
-    create_serve_file_router,
-    create_workspace_router,
-)
-
-_configure_output_listing(
-    workspace_dir=lambda workspace=None: core.uploads_dir() if workspace == "__uploads__" else core.workspace_dir(workspace),
-    load_favorites=lambda: set(),
-    safe_join=core.safe_join,
-    engine=SimpleNamespace(server_config={"save_path": "outputs"}),
-)
 api.include_router(create_workspace_router(
     list_workspaces=core.list_workspaces,
     get_active_workspace=core.active_workspace,
@@ -319,8 +301,7 @@ api.include_router(create_workspace_router(
     save_path=lambda: str(core.outputs_root()),
     busy_profile="core",
 ))
-api.include_router(create_list_outputs_router())
-api.include_router(create_serve_file_router())
+api.include_router(create_core_gallery_router())
 
 
 @api.get("/api/v1/system-config")

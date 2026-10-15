@@ -16,6 +16,7 @@ from fastapi import APIRouter, HTTPException
 from services.series_render_jobs import (
     _active_series_render_for_episode,
     _load_series_render_job,
+    _reconcile_series_render_job,
     _run_series_render_job,
     _series_render_active_jobs,
     _series_render_candidates,
@@ -325,7 +326,7 @@ def cancel_series_render_job(job_id: str):
 
 def list_series_render_recovery(workspace: str | None = None):
     target_workspace = _series_library_workspace(workspace)
-    jobs = _series_render_store(target_workspace).recoverable()
+    jobs = [_reconcile_series_render_job(job) for job in _series_render_store(target_workspace).recoverable()]
     return {"jobs": [{key: job.get(key) for key in (
         "jobId", "seriesId", "episodeId", "status", "stage", "current", "total",
         "activeShotId", "message", "error", "createdAt", "updatedAt",

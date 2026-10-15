@@ -426,6 +426,58 @@ def test_retake_and_edit_anything_jobs(rig, golden, monkeypatch, tmp_path) -> No
     rig.check(golden, "retake and edit anything", observed)
 
 
+def test_edit_routes_refuse_a_value_that_is_not_a_number(rig, golden, monkeypatch) -> None:
+    """Retake, Edit Anything, Inpaint, frame extraction and Recast answer 400 and name the field, before the
+    video is read, SAM runs or a job is registered (they answered 500)."""
+    from services import inpaint_service
+
+    _probe_as(monkeypatch)
+    # Inpaint stops SAM before it registers the job; nothing listens in a test.
+    monkeypatch.setattr(inpaint_service, "shutdown_sam", lambda: None)
+    source = _source(rig)
+    media.image(rig.server.outputs / "ref.png")
+    jobs_before = set(rig.launch._jobs)
+    video = {"video_path": str(source), "model_type": "fake_t2v"}
+    cases = {
+        "retake start_time": ("/api/v1/retake", {**video, "start_time": "abc"}),
+        "retake end_time": ("/api/v1/retake", {**video, "end_time": {}}),
+        "retake retake_strength": ("/api/v1/retake", {**video, "retake_strength": "strong"}),
+        "edit anything start_time": ("/api/v1/edit-anything", {**video, "prompt": "Remove the boat.", "start_time": "x"}),
+        "edit anything lora_strength": ("/api/v1/edit-anything",
+                                        {**video, "prompt": "Remove the boat.", "lora_strength": "max"}),
+        "edit anything guidance_scale": ("/api/v1/edit-anything",
+                                         {**video, "prompt": "Remove the boat.", "guidance_scale": None}),
+        "edit anything num_inference_steps": ("/api/v1/edit-anything",
+                                              {**video, "prompt": "Remove the boat.", "num_inference_steps": "8.5"}),
+        "edit anything retake_strength": ("/api/v1/edit-anything",
+                                          {**video, "prompt": "Remove the boat.", "retake_strength": "x"}),
+        "inpaint start_time": ("/api/v1/inpaint", {**video, "description": "the sky", "sam_target": "sky",
+                                                    "start_time": "abc"}),
+        "inpaint mask_padding": ("/api/v1/inpaint", {**video, "description": "the sky", "sam_target": "sky",
+                                                      "mask_padding": "wide"}),
+        # Read after SAM had run before: now before anything.
+        "inpaint guidance_scale": ("/api/v1/inpaint", {**video, "description": "the sky", "sam_target": "sky",
+                                                        "guidance_scale": "high"}),
+        "inpaint num_inference_steps": ("/api/v1/inpaint", {**video, "description": "the sky", "sam_target": "sky",
+                                                             "num_inference_steps": "many"}),
+        "inpaint retake_strength": ("/api/v1/inpaint", {**video, "description": "the sky", "sam_target": "sky",
+                                                         "retake_strength": "x"}),
+        "extract frames start_time": ("/api/v1/extract-frames", {"video_path": str(source), "start_time": "abc"}),
+        "extract frames end_time": ("/api/v1/extract-frames", {"video_path": str(source), "end_time": "soon"}),
+        "recast start_time": ("/api/v1/recast", {"video_path": str(source), "ref_image_path": "ref.png",
+                                                  "start_time": "abc", "end_time": 2}),
+        "recast end_time alone": ("/api/v1/recast", {"video_path": str(source), "ref_image_path": "ref.png",
+                                                      "end_time": "soon"}),
+    }
+    answers = {}
+    for case, (path, body) in cases.items():
+        status, answer = _submit(rig, path, body)
+        answers[case] = {"status": status, "answer": answer}
+    answers["jobs registered"] = sorted(set(rig.launch._jobs) - jobs_before)
+    answers["uploads"] = sorted(path.name for path in (rig.server.root / "uploads").glob("*"))
+    rig.check(golden, "edit routes refuse values that are not numbers", answers)
+
+
 def test_edit_routes_follow_the_execution_mode(rig, golden, monkeypatch) -> None:
     from services import execution_mode, inpaint_service
 
@@ -574,6 +626,11 @@ def test_segment_preview_and_sam_status_with_sam_stubbed(server, golden, monkeyp
     post("other error", {"video_path": "shot.mp4", "text": "the boat"})
     outcome["ready"] = False
     post("sam not available", {"video_path": "shot.mp4", "text": "the boat"})
+    # The numbers are read before SAM is asked for: a value that is not a number is a 400, never a 503 or a 500.
+    post("start time that is not a number", {"video_path": "shot.mp4", "text": "the boat", "start_time": "abc"})
+    post("end time that is not a number", {"video_path": "shot.mp4", "text": "the boat", "end_time": [1]})
+    post("mask padding that is not a number, full video",
+         {"video_path": "shot.mp4", "text": "the boat", "full_video": True, "mask_padding": "wide"})
     answers["sam status"] = server.client.get("/api/v1/sam/status").json()
     answers["calls"] = calls
     golden.check("segment preview", 200, server.normalise(answers))

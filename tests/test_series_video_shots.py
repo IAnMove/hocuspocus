@@ -17,9 +17,9 @@ from services.series_produce import ProduceDeps, SeriesProduce
 from services.series_review import content_digest
 from services.series_script import ScriptError, apply_script
 from services.series_video_shots import (
-    STYLE_DRIFT_THRESHOLD, _request_digest, _take_matches, digest_request, import_generated_take, normalize_video,
-    style_distance, video_preset,
+    STYLE_DRIFT_THRESHOLD, VideoShotError, _request_digest, _take_matches, digest_request, import_generated_take, normalize_video, style_distance, video_preset,
 )
+from services.task_command_admission import _receipt
 from tests.test_series_script_produce import FILES, KITS, Series, finished
 
 HAS_FFMPEG = shutil.which("ffmpeg") is not None and shutil.which("ffprobe") is not None
@@ -41,11 +41,18 @@ def _script(**video):
 
 
 def _shot(tools):
-    return tools.calls[1][1]["episode"]["shots"][0]
+    return tools.episode_patch()["episode"]["shots"][0]
+
+
+def _video_series():
+    """The default test series allows no ``imported_video``; a video script on it enables it (tested apart)."""
+    tools = Series()
+    tools.series["allowedProductionMethods"] = ["generated_video", "imported_video"]
+    return tools
 
 
 def test_a_video_object_is_stored_and_drops_the_model_audio():
-    tools = Series()
+    tools = _video_series()
     result = apply_script(tools, tools.read, KITS, FILES, "cast", _script())
     shot = _shot(tools)
     assert result["shots"] == ["e2s00"] and not result.get("warnings")
@@ -67,6 +74,30 @@ def test_keep_audio_and_a_plain_imported_take_leave_the_clip_alone():
     assert plain["productionMethod"] == "imported_video" and "video" not in plain and "clipAudio" not in plain["layout2d"]
 
 
+def test_a_video_script_on_a_series_without_imported_video_is_reported_by_check_and_enabled_on_create():
+    """The script asks for imported_video explicitly (kind video); the default series allows generated_video only, and
+    the produce used to generate the clip first and refuse the take afterwards."""
+    tools = Series()
+    checked = apply_script(tools, tools.read, KITS, FILES, "cast", _script(), check_only=True)
+    warning = next(item for item in checked["warnings"] if item["code"] == "imported_video_not_allowed")
+    assert warning["shots"] == ["e2s00"] and "writing the script enables it" in warning["message"]
+    assert tools.calls == [] and "allowedProductionMethods" not in tools.series, "a check changes nothing"
+    written = apply_script(tools, tools.read, KITS, FILES, "cast", _script())
+    assert tools.series["allowedProductionMethods"] == ["generated_video", "imported_video"]
+    assert written["enabledProductionMethods"] == ["imported_video"]
+    order = [tool for tool, _data in tools.calls]
+    assert order[:3] == ["series.update", "series.episode.create", "series.episode.update"], "nothing is written if the update fails"
+    allowed = Series()
+    allowed.series["allowedProductionMethods"] = ["imported_video"]
+    quiet = apply_script(allowed, allowed.read, KITS, FILES, "cast", _script())
+    assert "enabledProductionMethods" not in quiet and not quiet.get("warnings")
+    assert "series.update" not in [tool for tool, _data in allowed.calls]
+    plain = Series()
+    apply_script(plain, plain.read, KITS, FILES, "cast", {"scenes": [{"id": "cold_open", "location": "garage"}],
+                                                          "shots": [{"scene": "cold_open", "duration": 4}]})
+    assert "series.update" not in [tool for tool, _data in plain.calls], "a script without video shots leaves the methods alone"
+
+
 def test_a_bad_video_is_a_script_error_and_a_budget_only_warns():
     tools = Series()
     with pytest.raises(ScriptError) as raised:
@@ -80,6 +111,7 @@ def test_a_bad_video_is_a_script_error_and_a_budget_only_warns():
     with pytest.raises(ScriptError) as raised:
         apply_script(tools, tools.read, KITS, FILES, "cast", _script(frames=100))
     assert any("H3 length" in item for item in raised.value.problems)
+    tools = _video_series()
     over = {**_script(), "videoBudget": {"maxShots": 0}}
     checked = apply_script(tools, tools.read, KITS, FILES, "cast", over, check_only=True)
     # The grouped shape of the other script warnings; it survives finish_check beside them.
@@ -87,7 +119,7 @@ def test_a_bad_video_is_a_script_error_and_a_budget_only_warns():
                                     "message": "videoBudget: 1 video shot is over maxShots 0 and not generated (shots e2s00)"}]
     assert tools.calls == []
     written = apply_script(tools, tools.read, KITS, FILES, "cast", {**_script(), "videoBudget": {"maxShots": 2}})
-    assert not written.get("warnings") and tools.calls[1][1]["episode"]["videoBudget"] == {"maxShots": 2}
+    assert not written.get("warnings") and tools.episode_patch()["episode"]["videoBudget"] == {"maxShots": 2}
 
 
 def test_the_video_field_survives_an_episode_update_and_does_not_change_a_shot_that_omits_it():
@@ -106,6 +138,13 @@ def _png(path, color):
     return str(path)
 
 
+def _admitted(intent, job_id, workspace="cast"):
+    """What ``generation.video`` answers: the admission receipt of ``task_command_admission``, not a flattened result.
+    The fakes build it with the server's own ``_receipt``, so a change of that shape breaks these tests."""
+    task = {"id": f"task-{job_id}", "root_id": f"task-{job_id}", "backend_job_id": job_id, "workspace": workspace}
+    return {"receipt": _receipt(intent or "", "generation.video", task), "replayed": False}
+
+
 class _Tools:
     def __init__(self, start, take):
         self.calls, self.imports, self.jobs = [], [], {}
@@ -117,7 +156,7 @@ class _Tools:
         if tool == "media.compose":
             return {"result": {"file": self.start}}
         if tool == "generation.video":
-            return {"result": {"job_id": "vid-1"}}
+            return _admitted(arguments.get("intent_id"), "vid-1")
         if tool == "jobs.wait":
             return {"result": {"status": "completed", "output_files": [self.take]}}
         if tool == "series.episode.render_native":
@@ -186,6 +225,31 @@ def test_a_shot_without_a_video_object_keeps_the_old_step_order(tmp_path):
     library, _episode_body = _episode({"id": "s00", "productionMethod": "imported_video"})
     job = _produce(tmp_path, tools, library).start("cast", "uv", "ep1")
     assert [step["kind"] for step in job["steps"]] == ["render", "assemble"]
+
+
+def test_the_job_id_is_read_from_the_admission_receipt_of_the_real_reply():
+    from services.series_video_shots import _job_id, admitted_job_id
+    reply = _admitted("series-ep1-s00-video-abc-1", "vid-9")
+    assert set(reply) == {"receipt", "replayed"}, "the operation tool answers the receipt, with no top-level result"
+    assert admitted_job_id(reply) == "vid-9"
+    assert admitted_job_id({**reply, "replayed": True}) == "vid-9", "a replayed admission names the same job"
+    assert admitted_job_id({"job_id": "flat-1"}) == "flat-1" and admitted_job_id({"job": {"jobId": "j-2"}}) == "j-2"
+    assert admitted_job_id({"receipt": {"status": "queued"}}) is None and admitted_job_id("nothing") is None
+    with pytest.raises(VideoShotError, match="returned no job"):
+        _job_id({"receipt": {"result": {}}})
+
+
+def test_a_series_that_does_not_allow_imported_video_spends_nothing(tmp_path):
+    """The method is checked before the plate is composed and before any generation, not when the take is attached."""
+    tools = _Tools("a", "b")
+    library, _episode_body = _episode(_request())
+    library["seriesById"]["uv"]["allowedProductionMethods"] = ["generated_video"]
+    service = _produce(tmp_path, tools, library)
+    failed = finished(service, service.start("cast", "uv", "ep1")["jobId"])
+    assert failed["status"] == "failed", failed
+    assert "imported_video is not permitted for this series" in failed["steps"][0]["error"]
+    assert _video_calls(tools, "generation.video") == [] and _video_calls(tools, "media.compose") == []
+    assert tools.imports == []
 
 
 def test_plan_mode_does_not_spend_until_the_plan_is_approved(tmp_path):
@@ -301,7 +365,7 @@ class _Server(_Tools):
             self.calls.append((tool, arguments))
             job_id = f"vid-{len(self.clips) + 1}"
             self.clips[job_id] = self.outcomes.pop(0) if self.outcomes else "completed"
-            return {"result": {"job_id": job_id}}
+            return _admitted(arguments.get("intent_id"), job_id)
         if tool == "jobs.wait":
             self.calls.append((tool, arguments))
             status = self.clips[data["job_id"]]

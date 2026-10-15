@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, Loader2, Globe, Sparkles, BookOpen, Info, ArrowUpCircle, RefreshCw, ArrowDownAZ, Clock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { sfxModelTypes } from '../../stores/modelCatalog'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails, checkLoraUpdates } from '../../api/client'
 import { formatAge } from '../../lib/format'
 import type { LoraRecommendedWeights, LoraUpdateStatus } from '../../types'
@@ -108,6 +109,8 @@ export function LoraSortToggle({ sort, onChange }: { sort: LoraPickerSort; onCha
 
 export function LoraSelector() {
   const modelType = useStore(s => s.params.model_type)
+  // The virtual SFX models (MMAudio) have no LoRA endpoint: the server answers 404 for them.
+  const hasLoraEndpoint = Boolean(modelType) && !sfxModelTypes.has(modelType)
   const loraCompatibilityNote = useStore(s => s.models.find(
     model => model.model_type === s.params.model_type,
   )?.lora_compatibility_note)
@@ -261,7 +264,7 @@ export function LoraSelector() {
 
   // Load LoRA details (weight recommendations for the list, guides for activated)
   useEffect(() => {
-    if (!modelType) return
+    if (!hasLoraEndpoint) return
     // Check guide status for activated LoRAs
     for (const lora of activatedLoras) {
       if (guideStatus[lora]) continue
@@ -319,7 +322,7 @@ export function LoraSelector() {
         }
       }
     }).catch(() => {})
-  }, [modelType, activatedLoras]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [modelType, hasLoraEndpoint, activatedLoras]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGenerateGuide = async (filename: string) => {
     if (!modelType) return
@@ -340,8 +343,8 @@ export function LoraSelector() {
 
   // Load LoRAs when model changes
   useEffect(() => {
-    if (modelType) loadLoras(modelType)
-  }, [modelType, loadLoras])
+    if (hasLoraEndpoint) loadLoras(modelType)
+  }, [modelType, hasLoraEndpoint, loadLoras])
 
   const displayName = (filename: string) => {
     return filename.replace(/\.(safetensors|sft)$/i, '')
