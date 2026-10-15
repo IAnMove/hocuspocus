@@ -1,5 +1,7 @@
 """A 2D Series shot takes its crop and its camera from its neighbours: a lone character's close-up shows its side of
 the room, and a shot that shows the previous shot's picture goes on from its camera instead of cutting back."""
+import pytest
+
 from services.series_continuity import CAMERA_LIMIT, camera_start, focus, inputs, ordered, same_picture_warnings
 from services.series_shot_plan import background_point, build_shot_spec, normalize_layout2d
 from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
@@ -161,3 +163,42 @@ def test_a_detail_frames_the_same_plate_closer():
     assert background_point("insert", 50.0, 0.56, 0.18, detail) == (50.0, 32.4), \
         "the point is centred across; near the top it stays high, the plate's edge in the frame's"
     assert same_picture_warnings(value, ep["shots"]) == []
+
+
+# What development wrote (INPUTS_VERSION 3, before the neighbours counted) for the episode below: a portrait series, a
+# dictionary that rewrites a line, a castIndex, and two shots (s2, s4) that now take something from a neighbour.
+DEVELOPMENT_DIGESTS = {
+    "s1": {3: "d7bb8f5a4209fb6d", 2: "1dd2e6fd4ed2b6c9", 1: "66638fd582b4fe83"},
+    "s2": {3: "d7bb8f5a4209fb6d", 2: "1dd2e6fd4ed2b6c9", 1: "66638fd582b4fe83"},
+    "s3": {3: "aaac1fd072b1e1b9", 2: "d3adf6b13dea1932", 1: "d89ae06f392d7837"},
+    "s4": {3: "0a4695379839c500", 2: "ecb17451f63e3456", 1: "ecb17451f63e3456"},
+}
+
+
+def _portrait_episode_of_development():
+    value = series()
+    value["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    value["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Latencia": "La-ten-sia"}
+    line = {"id": "d1", "characterId": "ivan", "text": "La Latencia nos alcanza.", "emotion": "calma", "delivery": "bajo", "castIndex": 0}
+    ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "calle", "insert"),
+                 shot("s3", 3, "capsula", "wide", [("ivan", 20), ("nerea", 80)]),
+                 {**shot("s4", 4, "capsula", "close", [("ivan", None)]), "dialogueBeats": [line]})
+    return value, ep
+
+
+@pytest.mark.parametrize("saved_at", [3, 2, 1])
+def test_a_take_development_saved_stays_current_in_a_portrait_episode_with_neighbours(saved_at):
+    """Second legacy shape for the version-4 bump: the digests come from development's own render_inputs, not from this
+    branch, so a change to what version 3, 2 or 1 hash shows up here. Nothing renders again, for a review neither."""
+    value, ep = _portrait_episode_of_development()
+    kits = {}
+    assert [item["id"] for item in ep["shots"] if inputs(value, ep, item)] == ["s2", "s4"], "two shots do take something now"
+    for item in ep["shots"]:
+        assert render_inputs(value, item, kits, version=saved_at) == DEVELOPMENT_DIGESTS[item["id"]][saved_at]
+    value["assets"] = {**value["assets"], **{f"take-{sid}": {"metadata": {"renderInputs": digest[saved_at], "renderInputsVersion": saved_at}}
+                                             for sid, digest in DEVELOPMENT_DIGESTS.items()}}
+    taken = {**ep, "shots": [{**item, "approvedAttemptId": "att", "attempts": [{"id": "att", "outputAssetIds": [f"take-{item['id']}"]}]}
+                             for item in ep["shots"]]}
+    assert stale_shot_ids(value, taken, kits) == []
+    for item in taken["shots"]:
+        assert accepted_inputs(value, item, kits, episode=taken) == DEVELOPMENT_DIGESTS[item["id"]][saved_at]
