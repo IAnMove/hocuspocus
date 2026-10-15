@@ -314,6 +314,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/audioRestoreProjection.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/characterCreator.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -369,6 +375,30 @@
     },
     {
       "file": "ui/tests/directorPlanRecovery.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/directorRepairDiscovery.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/editTabJobCards.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/executionModeBanner.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/extendBlendOutputs.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
@@ -476,6 +506,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/loraSelectorSfx.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/mediaFeedComicRecovery.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -483,6 +519,12 @@
     },
     {
       "file": "ui/tests/mixerSfxPicker.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/modelSelectionPersistence.test.ts",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
@@ -591,6 +633,18 @@
     },
     {
       "file": "ui/tests/seriesWizardDraft.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/sfxDurationAfterSpeech.test.ts",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/sfxVideoGuideRoundTrip.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."

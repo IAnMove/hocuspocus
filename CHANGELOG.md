@@ -46,6 +46,28 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a generation's sidecar records the size that was produced.** WanGP fits the canvas to the start image (a 640x480 request with a square image gives 480x480); the sidecar now adds `output_resolution` next to the unchanged requested `params.resolution` when they differ.
 
+**Fixed: re-generating or loading the settings of a Speech or Music output works again.** The pencil and the re-generate button on a Speech or Music output used to fail before anything was sent, because restoring the settings left video and H3 values in the form that the Speech and Music commands refuse. Restoring an audio output now clears them.
+
+**Fixed: Edit-tab jobs show up in the Edit tab queue.** The "Submitting…" and queued cards of Retake, Inpaint, Edit Anything, Outpaint, Recast and Repaint were hidden on the Edit tab, and the running card vanished after the first status update or a page reload. The server now reports which edit a job is (`edit_sub_mode`), and the cards carry it from the moment you press Generate.
+
+**Fixed: visiting Tools no longer breaks the saved model choices.** Leaving the Tools area recorded a `tools` model that the server refuses, so every later save of your per-mode model choices failed, and the bad entry came back on every start. Only the five generation modes are saved now, a stored `tools` entry is dropped on load, and a recipe's model is saved the moment you apply it.
+
+**Fixed: the first SFX generation after Speech no longer fails on duration.** The SFX slider showed 20 s while the request carried the Speech model's leftover duration (60 s, or 0 for auto), which the SFX command refuses. A text-only SFX request now sends the 1–20 s the slider shows.
+
+**Changed: Load settings and Re-generate are switched off for Extend and Blend outputs.** Restoring such an output landed on the plain Frames tab with no source video, so re-generating it silently produced a text-to-video instead of an extension (wasted GPU time). The two buttons are disabled for those outputs, with a tooltip, until the Extend and Blend working sets can be restored; use "Extend this video" or start a new Extend or Blend.
+
+**Fixed: an uploaded SFX video clip stays attached when you switch sub-tabs.** Coming back to SFX from Speech, Music or Mixer used to show the raw upload URL instead of the clip you had chosen.
+
+**Fixed: the SFX and Mixer tabs no longer request LoRAs for the virtual MMAudio model.** Each visit produced two 404 errors in the network log.
+
+**Fixed: a Director repair that was running when you reloaded the page shows its progress again** without opening the Productions dashboard.
+
+**Fixed: an LLM provider failure is reported as a bad gateway, not an internal error.** A missing or rejected provider key made `POST /api/v1/llm/generate` answer 500; it now answers 502 with the same readable `detail` and a stable code in the `X-Hocus-Error-Code` header (`provider_auth_failed` for a 401/403, `provider_failed` otherwise). The MCP `analyze` tool still reports the provider's message.
+
+**Fixed: the Wizard keeps snake_case names intact and long tokens wrap.** Names such as `qwen_image_21` or `http_code` used to lose their underscores and turn italic, and a long unbroken token (a provider error, a path) pushed the Wizard bubble wider than the panel.
+
+**Fixed: the SIMULATE pill no longer blocks clicks.** In simulation mode it floated over the header buttons of full-screen panels such as the Director dashboard.
+
 **Fixed: a Story Lab song in Cover mode now goes to MiniMax with the reference you uploaded.** A new project starts on the local ACE-Step model, so switching the Manual song panel to Cover used to make Generate write an original local song and ignore the reference (or fail asking for a story cue). In Cover mode Generate now always asks for MiniMax `music-cover` after the paid confirmation, the button waits for the MiniMax key, and the readiness line says MiniMax instead of "ACE local ready". An old save with an unchosen paid model still reads as the local default, as before.
 
 **Fixed: the LAN, video-command and operator documentation now matches the code.** The README said LAN token protection was optional; on the full server it is on by default whenever the app is shared, and the new LAN authentication page says so, with the token, cookie and MCP exceptions. It also says plainly that the core server has no LAN gate and prints no token, so it should not be shared on an untrusted network. A new page documents the `generation.video` command (Wan 2.1 version 2, H3 and LTX-2.3 version 3, validate-only checks) and who calls it; the Wizard and MCP guide no longer says the command is unpublished. The guides also describe VoxCPM2 as the default voice engine, Qwen 2.1 Turbo, and the ground styles of Video 3D.

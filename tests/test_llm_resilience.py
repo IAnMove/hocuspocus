@@ -97,3 +97,27 @@ def test_waiting_between_attempts_stops_when_the_request_is_cancelled(monkeypatc
     monkeypatch.setattr(llm_service.time, "sleep", lambda seconds: naps.append(seconds))
     llm_service._sleep_unless_cancelled(0.0, None, "Example")
     assert naps == [], "nothing to wait for"
+
+
+class _ErrorResponse(Response):
+    text = '{"type":"authorized_error","message":"invalid api key","http_code":"401"}'
+
+
+@pytest.mark.parametrize("status, code", [(401, "provider_auth_failed"), (403, "provider_auth_failed"), (400, "provider_failed")])
+def test_a_provider_error_is_typed_with_the_status_the_provider_answered(monkeypatch, status, code):
+    monkeypatch.setattr(llm_service.requests, "post", lambda url, **kw: _ErrorResponse(status))
+    with pytest.raises(llm_service.LLMProviderError) as raised:
+        llm_service.generate_openai_compatible(prompt="Say hi", model_id="m", base_url="https://api.example/v1", api_key="k")
+    assert isinstance(raised.value, RuntimeError), "callers that catch RuntimeError keep working"
+    assert raised.value.status == status and raised.value.code == code
+    assert "OpenAI-compatible request failed" in str(raised.value) and "authorized_error" in str(raised.value)
+
+
+def test_a_provider_that_cannot_be_reached_is_a_provider_failure_without_a_status(monkeypatch):
+    def refuse(url, **kw):
+        raise llm_service.requests.exceptions.ConnectionError("refused")
+    monkeypatch.setattr(llm_service.requests, "post", refuse)
+    monkeypatch.setattr(llm_service, "_sleep_unless_cancelled", lambda *_args: None)
+    with pytest.raises(llm_service.LLMProviderError) as raised:
+        llm_service.generate_openai_compatible(prompt="Say hi", model_id="m", base_url="https://api.example/v1", api_key="k")
+    assert raised.value.status is None and raised.value.code == "provider_failed"

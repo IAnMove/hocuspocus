@@ -2577,6 +2577,7 @@
       "cached mask and explicit target": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "inpaint",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -2600,6 +2601,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "inpaint",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -2817,6 +2819,7 @@
       "sam mask, parsed intent, inverted": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "inpaint",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -2840,6 +2843,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "inpaint",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -3219,6 +3223,7 @@
       "job": {
         "accepted": {
           "generation_details": {
+            "edit_sub_mode": "outpaint",
             "execution_mode": "real",
             "frames": 24,
             "generation_mode": "video",
@@ -3617,6 +3622,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 1,
               "generation_mode": "image",
@@ -3921,6 +3927,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "outpaint",
               "execution_mode": "real",
               "frames": 24,
               "generation_mode": "video",
@@ -4422,6 +4429,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -4639,6 +4647,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -4840,6 +4849,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 8,
@@ -5043,6 +5053,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5244,6 +5255,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5445,6 +5457,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5658,6 +5671,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -5883,6 +5897,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6045,6 +6060,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6333,6 +6349,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6601,6 +6618,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -6753,6 +6771,7 @@
       "answer": {
         "frames": 17,
         "generation_details": {
+          "edit_sub_mode": "recast",
           "execution_mode": "real",
           "flow_shift": 3,
           "frames": 17,
@@ -6783,6 +6802,7 @@
         "accepted": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 17,
@@ -6958,6 +6978,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "simulate",
             "flow_shift": 1,
             "frames": 17,
@@ -7112,6 +7133,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -7409,6 +7431,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -7701,6 +7724,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -7953,6 +7977,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 8,
@@ -8251,6 +8276,7 @@
       "answer": {
         "frames": 17,
         "generation_details": {
+          "edit_sub_mode": "recast",
           "execution_mode": "real",
           "flow_shift": 3,
           "frames": 17,
@@ -8281,6 +8307,7 @@
         "accepted": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 3,
             "frames": 17,
@@ -8749,6 +8776,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9016,6 +9044,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9273,6 +9302,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9535,6 +9565,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -9793,6 +9824,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -10032,6 +10064,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -10874,6 +10907,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11164,6 +11198,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11325,6 +11360,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11575,6 +11611,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -11806,6 +11843,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -12037,6 +12075,7 @@
         "answer": {
           "frames": 17,
           "generation_details": {
+            "edit_sub_mode": "recast",
             "execution_mode": "real",
             "flow_shift": 1,
             "frames": 17,
@@ -12400,6 +12439,7 @@
         "answer": {
           "edit_range": "0-24/48",
           "generation_details": {
+            "edit_sub_mode": "edit_anything",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -12427,6 +12467,7 @@
           "accepted": {
             "edit_range": "0-24/48",
             "generation_details": {
+              "edit_sub_mode": "edit_anything",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -12757,6 +12798,7 @@
         "answer": {
           "edit_range": "0-48/48",
           "generation_details": {
+            "edit_sub_mode": "edit_anything",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -12783,6 +12825,7 @@
           "accepted": {
             "edit_range": "0-48/48",
             "generation_details": {
+              "edit_sub_mode": "edit_anything",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
@@ -13256,6 +13299,7 @@
       "retake": {
         "answer": {
           "generation_details": {
+            "edit_sub_mode": "retake",
             "execution_mode": "real",
             "frames": 48,
             "generation_mode": "video",
@@ -13278,6 +13322,7 @@
         "job": {
           "accepted": {
             "generation_details": {
+              "edit_sub_mode": "retake",
               "execution_mode": "real",
               "frames": 48,
               "generation_mode": "video",
