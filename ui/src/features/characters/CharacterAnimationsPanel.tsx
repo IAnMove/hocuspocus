@@ -110,7 +110,8 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const usable = kits.filter(kit => animationReference(kit))
   // The one just saved is the active one: it is the character the person is working on.
   const kit = usable.find(item => item.id === kitId) ?? usable.find(item => item.id === activeId) ?? usable[0]
-  const imageModels = characterImageModels(models, false)
+  // Every pose uses the character as an identity reference: only models that accept one (the server refuses the others).
+  const imageModels = characterImageModels(models, true)
   const model = imageModels.some(item => item.model_type === modelId) ? modelId : preferredCharacterImageModel(imageModels, false)
   const work = useCharacterAnimations(workspace, kit?.id, reload)
   const actions: Actions = {
