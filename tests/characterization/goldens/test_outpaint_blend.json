@@ -644,7 +644,7 @@
           "_blend_concat_h": 48,
           "_blend_concat_w": 64,
           "_blend_fps": 8.0,
-          "_blend_mode": "insert",
+          "_blend_mode": "overlap",
           "_blend_out_h": 32,
           "_blend_out_w": 64,
           "_blend_overlap_sec": 2.125,
