@@ -10,6 +10,7 @@
   "y": "Y (%)",
   "size": "Tamaño (%)",
   "intensity": "Intensidad",
+  "speed": "Velocidad (1 normal, 0,05 casi quieto)",
   "volume": "Volumen",
   "seed": "Semilla",
   "remove": "Quitar efecto",
