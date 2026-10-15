@@ -16,7 +16,7 @@ test('reference index keeps the 24 coral v1 hashes/byte counts as history, not g
   assert.deepEqual(Object.keys(APPROVED_REFERENCE_JSON), CORAL_V1)
   const merged = CORAL_V1.filter(id => id in SCENE_TEMPLATE_ALIASES)
   assert.deepEqual(merged, ['cinema-isolation', 'music-chorus', 'music-parallax', 'music-stage', 'music-finale', 'space-shield', 'space-explosion'])
-  assert.deepEqual(CORAL_V1.filter(id => !merged.includes(id)), CANDIDATE_SCENE_TEMPLATES.map(item => item.id))
+  assert.deepEqual(CORAL_V1.filter(id => !merged.includes(id)), CANDIDATE_SCENE_TEMPLATES.map(item => item.id).filter(id => !id.startsWith('walk-') && id !== 'character-reaction'))
   for (const id of CORAL_V1) assert.ok(resolveSceneTemplate(id).template, `${id} still compiles`)
   for (const reference of Object.values(APPROVED_REFERENCE_JSON)) {
     assert.deepEqual(Object.keys(reference).sort(), ['bytes', 'sha256'])

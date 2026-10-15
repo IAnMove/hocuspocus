@@ -5,8 +5,8 @@ import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, ty
 import { CHARACTER_MOUTH_STATES, mouthStateForSound, type CharacterMouthState } from './characterMouthStates'
 import { characterRestPoseSource } from './characterRestPose'
 import { characterVoiceFor, isReferenceVoice, speechEngineName } from './characterVoice'
+import type { KitAnimation } from './characterAnimations'
 export type { CharacterMouthState } from './characterMouthStates'
-
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
 export type CharacterKitReviewState = 'pending' | 'approved' | 'rejected'
 export type CharacterKitAlphaStatus = 'unknown' | 'transparent' | 'opaque'
@@ -76,6 +76,8 @@ export interface CharacterKit {
     mouthSources?: Partial<Record<CharacterMouthState, string>>
   }>
   provenance: Array<Record<string, unknown>>
+  /** Small animations (walk, wave, anime expressions): a sprite sheet of poses of this character, by animation id. */
+  animations?: Record<string, KitAnimation>
   /** Style + traits the user picked; Face Rig fills overlay prompts from this. */
   lookNotes?: string
   createdAt?: string

@@ -293,7 +293,9 @@
     "workflowCompleted": "Workflow “{{type}}” completed.",
     "workflowStep": "Workflow “{{type}}”: {{step}} ({{current}}/{{total}}).",
     "programmaticHowTo": "You can ask: “Build a scene with Video3D, using only my assets, with no generative video.” The Wizard prepares the visible form; from there you review the resources, build the scene, and export it. Preparing does not start any generator.",
-    "programmaticPrepared": "I am preparing Video3D from your request word for word and without generative video. I will not create new resources unless you explicitly allow it. Review the assets and the recipe in the form before building or exporting; there is no finished video yet."
+    "programmaticPrepared": "I am preparing Video3D from your request word for word and without generative video. I will not create new resources unless you explicitly allow it. Review the assets and the recipe in the form before building or exporting; there is no finished video yet.",
+    "characterAnimationStarted": "Starting the “{{animation}}” animation of {{name}} ({{poses}} poses, job {{jobId}}). It is made on the server, one pose after another with Qwen: it takes a few minutes. You will see it in Characters › Animaciones, where you can review and approve it.",
+    "characterAnimationQueued": "The “{{animation}}” animation of {{name}} is queued (job {{jobId}}): it is made when the GPU is free. You will see it in Characters › Animaciones, where you can review and approve it."
   },
   "progress": {
     "addingAlternateSong": "Adding the alternative song to the music video…",
@@ -334,6 +336,7 @@
     "invokingStoryLabProposal": "Summoning a reviewable Story Lab proposal…",
     "linkingCharacterKitIdentity": "Linking the Character Kit identity…",
     "linkingVisualReferences": "Linking and approving visual references…",
+    "makingCharacterAnimation": "Making the character animation on the server…",
     "mountingVideoclipAlternateSong": "Assembling the music video with the alternative song…",
     "openingCharacterKit": "Opening Character Kit…",
     "openingHocuspocusSection": "Opening a HocusPocus section…",

@@ -680,3 +680,13 @@ def test_only_a_textured_face_is_filled_with_its_texture_and_plain_faces_keep_th
         pixels = np.array(crop_figure(image))
         box, _ = find_eyes(pixels[..., :3], pixels[..., 3])
         assert skin_textured(pixels[..., :3], pixels[..., 3], box) is textured
+
+
+def test_an_eye_white_cut_away_by_its_limits_has_no_opening_instead_of_failing_the_check():
+    """The graphic-novel Character Creator checks each option for the rig: one whose white was cut away made /rig-check answer 500."""
+    from services.flat_rig_eyes import _eye_opening
+    rgb = np.zeros((20, 20, 3), np.uint8)
+    alpha = np.full((20, 20), 255, np.uint8)
+    empty = np.zeros((20, 20), bool)
+    opening = _eye_opening(rgb, alpha, empty, np.array([200.0, 150.0, 120.0]), (0, 20), False)
+    assert opening.shape == (20, 20) and not opening.any()

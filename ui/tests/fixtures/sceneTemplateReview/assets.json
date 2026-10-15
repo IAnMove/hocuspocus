@@ -3,6 +3,7 @@
   "families": {"space": {"subject_1": "ship.glb", "prop_1": "ship-two.glb", "background": "space.jpg"}},
   "cards": {
     "cinema-two-shot": {"prop": "partner.png"},
+    "walk-behind-foreground": {"foreground": "prop.png"},
     "music-pulse": {"controls": {"bpm": 96}}
   }
 }

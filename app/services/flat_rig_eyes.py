@@ -274,6 +274,8 @@ def _eye_opening(rgb: np.ndarray, alpha: np.ndarray, sclera: np.ndarray, skin: n
     and lash lines) up to the skin, within the white's rows and ``x_limits``; then a dark upper lid resting on it,
     a little way up; then the holes. Brows and bangs above, and hair beside, stay outside."""
     ys, xs = np.nonzero(sclera)
+    if not ys.size:  # a white the eye's limits cut away has no opening (it used to fail the whole rig check with a 500)
+        return np.zeros(sclera.shape, dtype=bool)
     y0, y1, h = int(ys.min()), int(ys.max()) + 1, int(ys.max()) + 1 - int(ys.min())
     side, x0, x1 = int(h * 0.75), int(xs.min()), int(xs.max()) + 1
     wx0, wx1 = min(x0, max(x_limits[0], x0 - side)), max(x1, min(x_limits[1], x1 + side))
