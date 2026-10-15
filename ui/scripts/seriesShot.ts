@@ -58,14 +58,18 @@ export type SetLayerSpec = {
 /** A screen effect as planned (``series_shot_extras.fx_cues``). A beam's ``from`` is a point in % of the frame, or with
  * ``cast`` (an index in the shot's cast or a character id) in % of that cast member's pose image. */
 export type ShotFxSpec = Omit<SceneFx, 'from'> & { from?: { cast?: number | string; point: [number, number] } }
+/** A point of the plate (x, y in % of it) framed at ``zoom``: the same picture closer (series_shot_plan.background_view). */
+export type PlateDetail = { x: number; y: number; zoom: number }
 export type ShotSpec = {
   name: string; workspace: string; width: number; height: number; fps: 24 | 30 | 60; duration: number
-  framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number }
+  framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number; detail?: PlateDetail }
   cast: CastSpec[]; lines: LineSpec[]; props?: PropSpec[]
   /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
   layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
   camera?: CameraMove; narrative?: Scene['narrative']
+  /** Where a static or push camera starts when the shot goes on from the previous one (the same picture); absent, at rest. */
+  cameraStart?: { x?: number; y: number; scale: number }
   /** Picture holds every 2, 3 or 4 frames. Absent, the scene clock is unchanged. */
   motionStep?: 2 | 3 | 4
   /** Deterministic shake of one hold, in pixels, from 0 to 2. */
@@ -247,14 +251,14 @@ export function perchTransforms(size: { width: number; height: number }, framing
     prop: { x, y: round(propY), scale: round(propScale) } }
 }
 
-/** The full-frame background, zoomed and panned by the framing. In a layered set it is the far plane (depth 0) and
- * takes only its parallax share of the camera zoom. */
+/** The full-frame background, zoomed and panned by the framing, or framed on a ``detail`` of the plate. In a layered
+ * set it is the far plane (depth 0) and takes only its parallax share of the camera zoom. */
 export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number, layered = false): SceneLayer {
-  const zoom = BACKGROUND_ZOOM[framing]
-  const focus = background.focusX ?? 50
+  const detail = background.detail
+  const zoom = detail?.zoom ?? BACKGROUND_ZOOM[framing]
   const span = 50 * (zoom - 1)
-  const x = Math.max(50 - span, Math.min(50 + span, 50 - (focus / 100 - 0.5) * 100 * zoom))
-  const transform = { x: round(x), y: 50, scale: zoom, opacity: 1, rotation: 0 }
+  const pan = (point: number) => Math.max(50 - span, Math.min(50 + span, 50 - (point / 100 - 0.5) * 100 * zoom))
+  const transform = { x: round(pan(detail?.x ?? background.focusX ?? 50)), y: detail ? round(pan(detail.y)) : 50, scale: zoom, opacity: 1, rotation: 0 }
   return {
     id: 'background', name: 'Background', type: background.kind, source: background.source, visible: true, locked: false, z: 0,
     fill: true, parallax: FAR_PARALLAX, transform,
@@ -429,9 +433,17 @@ export const CAMERA_MOVES: Record<Exclude<CameraMove, 'static'>, readonly [Camer
   drift: [{ x: 49, y: 50, scale: 1.03 }, { x: 51, y: 50, scale: 1.03 }],
 }
 
-function cameraLayer(duration: number, move: Exclude<CameraMove, 'static'>): SceneLayer {
-  const [start, end] = CAMERA_MOVES[move]
-  const from = { ...start, opacity: 1, rotation: 0 }, to = { ...end, opacity: 1, rotation: 0 }
+/** A move's poses. A static or push shot with a ``start`` goes on from the previous shot's camera (the same picture,
+ * series_continuity): a push grows by 0.07 and lifts 1.5 % from there, a static holds there. Other moves ignore it. */
+function cameraPoses(move: CameraMove, start?: ShotSpec['cameraStart']): readonly [CameraPose, CameraPose] {
+  if (move !== 'push' && Object.hasOwn(CAMERA_MOVES, move)) return CAMERA_MOVES[move as Exclude<CameraMove, 'static'>]
+  const from = start ? { x: start.x ?? 50, y: start.y, scale: start.scale } : CAMERA_MOVES.push[0]
+  return [from, move === 'push' ? { ...from, y: round(from.y - 1.5), scale: round(from.scale + 0.07) } : from]
+}
+
+function cameraLayer(duration: number, move: CameraMove, start?: ShotSpec['cameraStart']): SceneLayer {
+  const [first, last] = cameraPoses(move, start)
+  const from = { ...first, opacity: 1, rotation: 0 }, to = { ...last, opacity: 1, rotation: 0 }
   return { id: 'camera', name: 'Camera', type: 'camera', source: '', visible: true, locked: false, z: 1000, transform: { ...from },
     animation: { start: from, end: to, duration, curve: 'ease', keyframes: [key('camera', 0, from, 'ease'), key('camera', duration, to, 'ease')] } } as SceneLayer
 }
@@ -503,7 +515,9 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     layers.push(...mounted.layers)
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
-  if (shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) layers.push(cameraLayer(shot.duration, shot.camera))
+  if ((shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) || shot.cameraStart) {
+    layers.push(cameraLayer(shot.duration, shot.camera ?? 'static', shot.cameraStart))
+  }
   const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthsForLine(shot.cast, line, mouths)))
   const sfx = shotEffects(shot.sfx, shot.cast, poseLayerIds)
   return {

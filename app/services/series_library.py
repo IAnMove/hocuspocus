@@ -16,6 +16,7 @@ import re
 import uuid
 from typing import Any
 
+from .character_speech_definition import PLACEHOLDER_DELIVERY, PLACEHOLDER_EMOTION
 from .document_origin import created_by, keep_record_author, restore_created_by
 from .language_intent import labels_for_request_language, normalize_language_intent, saved_language_labels
 from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
@@ -309,8 +310,8 @@ def _normalize_dialogue_beat(value: dict, fallback_id: str) -> dict:
         "id": _id(beat.get("id"), fallback_id),
         "characterId": _id(beat.get("characterId"), "character_unknown"),
         "text": _text(beat.get("text")),
-        "emotion": _text(beat.get("emotion"), "natural"),
-        "delivery": _text(beat.get("delivery"), "natural delivery"),
+        "emotion": _text(beat.get("emotion"), PLACEHOLDER_EMOTION),
+        "delivery": _text(beat.get("delivery"), PLACEHOLDER_DELIVERY),
     })
     # The room this one line is heard in (series_voice_rooms.line_rooms); null clears it, an unknown one is refused.
     if beat.get("voiceRoom") is None:

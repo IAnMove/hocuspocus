@@ -3,7 +3,7 @@ import { cancelJob } from '../../api/client'
 import { fetchCharacterKitLibrary, rigFlatCharacter, saveCharacterKit, type FlatRigResult } from '../../api/characters'
 import { generateImageAsset } from '../../lib/imageGeneration'
 import { createCharacterKit, type CharacterKit, type CharacterKitAsset } from '../../lib/characterKit'
-import type { CharacterStyle } from '../../lib/characterStyles'
+import { screenFor, type CharacterStyle } from '../../lib/characterStyles'
 import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
 import { randomUuid } from '../../lib/uuid'
@@ -183,9 +183,11 @@ export class CharacterCreatorSession {
   private async generate(lane: Lane, context: CreatorContext, signal: AbortSignal, existing?: KeyedCandidate[]) {
     const poses = lane === 'poseCandidates'
     const identity = poses ? this.draft.kit?.identityReference?.source || this.draft.kit?.base?.source : undefined
+    // The pose text rarely names the clothes: a pose goes on the screen its character was made on, so green clothes survive the key.
+    const screen = poses ? screenFor(this.draft.kit?.lookNotes || this.draft.description) : undefined
     const found = await generateKeyedCandidates({
       workspace: this.workspace, style: context.style, kind: poses ? 'pose' : 'character', description: (poses ? this.draft.pose : this.draft.description).trim(),
-      model: context.model, ...(identity ? { references: [identity] } : {}), count: this.draft.count, ...(existing ? { existing } : {}), signal,
+      model: context.model, ...(identity ? { references: [identity] } : {}), ...(screen ? { screen } : {}), count: this.draft.count, ...(existing ? { existing } : {}), signal,
       picked: () => this.pickedIn(lane), onUpdate: items => this.put(lane, items), onJobSubmitted: id => { this.operation?.jobs.push(id) },
     }, this.dependencies)
     context.onPictures?.()

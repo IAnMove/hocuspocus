@@ -14,8 +14,40 @@ STYLED_REFERENCE_VOICE_MODELS = ("voxcpm2_base",)
 VOICE_STYLE_MAX_CHARS = 300
 
 
+# Voices whose engine takes a spoken direction («whispering», «very slowly»): VoxCPM2 references (as a style) and
+# Qwen3 presets (as instructions). A line's direction reaches only these; other voices say the line as written.
+DIRECTED_VOICE_MODELS = (*STYLED_REFERENCE_VOICE_MODELS, "qwen3_tts_customvoice")
+# Library normalize and the H3 prompt fill these when a beat has no direction. They are not spoken direction.
+PLACEHOLDER_EMOTION = "natural"
+PLACEHOLDER_DELIVERY = "natural delivery"
+_PLACEHOLDER_DIRECTION = {"emotion": PLACEHOLDER_EMOTION, "delivery": PLACEHOLDER_DELIVERY}
+
+
 def is_reference_voice(voice):
     return isinstance(voice, dict) and voice.get("model") in REFERENCE_VOICE_MODELS
+
+
+def line_delivery(beat, voice):
+    """How a dialogue beat is said (its ``emotion`` and ``delivery``), when its voice can take a direction; else ""."""
+    if not isinstance(voice, dict) or voice.get("model") not in DIRECTED_VOICE_MODELS or not isinstance(beat, dict):
+        return ""
+    parts = []
+    for key in ("emotion", "delivery"):
+        text = " ".join(str(beat.get(key) or "").split())
+        if text and text.lower() != _PLACEHOLDER_DIRECTION[key]:
+            parts.append(text)
+    return ", ".join(parts)[:VOICE_STYLE_MAX_CHARS]
+
+
+def voice_direction(voice, limit=None):
+    """The voice's own instructions followed by the line's direction (``lineDelivery``), as one text. Within
+    ``limit`` the line's direction is kept whole and the instructions are shortened to make room."""
+    instructions = str(voice.get("instructions") or "").strip()
+    delivery = str(voice.get("lineDelivery") or "").strip()
+    if limit is not None and delivery and len(instructions) + len(delivery) + 2 > limit:
+        instructions = instructions[:max(0, limit - len(delivery) - 2)].rstrip(" ,")
+    text = ", ".join(part for part in (instructions, delivery) if part)
+    return text if limit is None else text[:limit]
 
 
 def _voice_reference_query(kind, raw):

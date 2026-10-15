@@ -41,6 +41,8 @@ const defaults: CandidateDependencies = {
 
 export type CandidateRequest = {
   workspace: string; style: CharacterStyle; kind: CharacterStyleKind; description: string; model: string
+  /** The screen to generate on; a new pose passes its character's, since the pose text alone rarely names the clothes. */
+  screen?: ChromaScreen
   references?: string[]; signal: AbortSignal
   onUpdate: (candidates: KeyedCandidate[]) => void; onJobSubmitted?: (jobId: string) => void
   /** How many to make (1 to 3). */
@@ -58,7 +60,7 @@ export type CandidateRequest = {
  */
 export async function generateKeyedCandidates(request: CandidateRequest, dependencies: Partial<CandidateDependencies> = {}): Promise<KeyedCandidate[]> {
   const deps = { ...defaults, ...dependencies }
-  const { prompt, negative, screen } = characterStylePrompt(request.style, request.kind, request.description)
+  const { prompt, negative, screen } = characterStylePrompt(request.style, request.kind, request.description, request.screen)
   let candidates: KeyedCandidate[] = request.existing?.length ? request.existing
     : Array.from({ length: candidateCount(request.count) }, (_, index) => ({ id: `candidate-${index + 1}`, seed: deps.seed(), status: 'generating' as const, screen }))
   const update = (id: string, patch: Partial<KeyedCandidate>) => {

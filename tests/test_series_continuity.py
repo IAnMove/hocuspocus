@@ -1,0 +1,204 @@
+"""A 2D Series shot takes its crop and its camera from its neighbours: a lone character's close-up shows its side of
+the room, and a shot that shows the previous shot's picture goes on from its camera instead of cutting back."""
+import pytest
+
+from services.series_continuity import CAMERA_LIMIT, camera_start, focus, inputs, ordered, same_picture_warnings
+from services.series_shot_plan import background_point, build_shot_spec, normalize_layout2d
+from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
+
+
+def series():
+    character = lambda cid: {"id": cid, "voiceProfile": {"characterKitRef": {"id": f"kit-{cid}", "workspace": "cast"}}}
+    return {"id": "lc", "title": "Latencia", "spokenLanguage": "Español de España",
+            "characters": [character("ivan"), character("nerea")],
+            "locations": [{"id": "calle", "referenceAssetIds": ["asset_street"]}, {"id": "capsula", "referenceAssetIds": ["asset_room"]},
+                          {"id": "altavoz", "referenceAssetIds": ["asset_speaker"]}],
+            "assets": {"asset_street": {"kind": "image", "uri": "street.png"}, "asset_room": {"kind": "image", "uri": "room.png"},
+                       "asset_speaker": {"kind": "image", "uri": "speaker.png"}}}
+
+
+def shot(sid, order, location, framing, cast=(), camera="push", scene="a", **extra):
+    layout = {"framing": framing, "camera": camera, "cast": [{"characterId": cid, **({"x": x} if x is not None else {})} for cid, x in cast]}
+    return {"id": sid, "order": order, "sceneId": scene, "locationId": location, "productionMethod": "animation_2d",
+            "durationSeconds": 4, "layout2d": layout, **extra}
+
+
+def episode(*shots):
+    return {"id": "ep1", "title": "Piloto", "shots": list(shots)}
+
+
+def spec(value, ep, sid):
+    return build_shot_spec(value, ep, next(item for item in ep["shots"] if item["id"] == sid), workspace="cast", recorded={})
+
+
+def test_the_same_still_plate_twice_goes_on_pushing_and_warns():
+    ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "calle", "insert"), shot("s3", 3, "calle", "insert", camera="static"))
+    first, second, third = (spec(series(), ep, sid) for sid in ("s1", "s2", "s3"))
+    assert "cameraStart" not in first and first["camera"] == "push"
+    assert second["cameraStart"] == {"x": 50.0, "y": 48.5, "scale": 1.07} and second["camera"] == "push", "it starts where s1's push ended"
+    assert third["cameraStart"] == {"x": 50.0, "y": 47.0, "scale": 1.14} and third["camera"] == "static", "a static shot holds there"
+    warnings = same_picture_warnings(series(), ep["shots"])
+    assert [(item["code"], item["shots"]) for item in warnings] == [("same_picture", ["s1", "s2"]), ("same_picture", ["s2", "s3"])]
+    assert "make it one shot, or frame a detail of the same plate (detail)" in warnings[0]["message"]
+
+
+def test_another_plate_or_framing_starts_the_camera_at_rest():
+    ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "altavoz", "insert"), shot("s3", 3, "altavoz", "wide", [("ivan", None)]))
+    assert [camera_start(series(), ordered(ep), item) for item in ep["shots"]] == [None, None, None]
+    assert same_picture_warnings(series(), ep["shots"]) == []
+
+
+def test_a_push_stops_growing_at_the_limit_and_holds():
+    ep = episode(*(shot(f"s{n}", n, "calle", "insert") for n in range(1, 8)))
+    starts = [camera_start(series(), ordered(ep), item) for item in ep["shots"]]
+    assert all(start[2] <= CAMERA_LIMIT for start in starts[1:]) and starts[-1][3] is False
+    assert starts[-1][2] == starts[-2][2], "past the limit the camera holds where it got to"
+
+
+def test_a_pull_pan_or_drift_plays_its_own_move_and_the_run_goes_on_from_its_end():
+    run = lambda *cameras: episode(*(shot(f"s{n}", n, "calle", "insert", camera=camera) for n, camera in enumerate(cameras, 1)))
+    ep = run("push", "pan-left", "static", "push")
+    pan, held, pushed = (spec(series(), ep, sid) for sid in ("s2", "s3", "s4"))
+    assert pan["camera"] == "pan-left" and "cameraStart" not in pan, "a pan after a push keeps its own move"
+    assert held["cameraStart"] == {"x": 46.5, "y": 50, "scale": 1.08} and held["camera"] == "static", "it holds at the pan's end"
+    assert pushed["cameraStart"] == {"x": 46.5, "y": 50, "scale": 1.08} and pushed["camera"] == "push", "a push goes on from there"
+    assert inputs(series(), ep, ep["shots"][2]) == {"cameraStart": [1.08, 50, False, 46.5]}, "an off-centre start adds its x"
+    ep = run("push", "pull", "static")
+    assert [camera_start(series(), ordered(ep), item) for item in ep["shots"]] == [None, None, None], "a pull ends at rest"
+    ep = run("drift", "push")
+    assert camera_start(series(), ordered(ep), ep["shots"][1]) == (51, 50, 1.03, True)
+
+
+def test_a_lone_close_up_shows_its_side_of_the_room():
+    two = shot("s1", 1, "capsula", "two", [("ivan", 32), ("nerea", 70)], camera="static")
+    ep = episode(two, shot("s2", 2, "capsula", "close", [("nerea", 50)]), shot("s3", 3, "capsula", "close", [("ivan", 50)], scene="b"))
+    shots = ordered(ep)
+    assert [focus(series(), shots, item, item["layout2d"]["framing"]) for item in shots] == [51.0, 70.0, 32.0]
+    nerea, ivan = spec(series(), ep, "s2"), spec(series(), ep, "s3")
+    assert (nerea["background"]["focusX"], ivan["background"]["focusX"]) == (70.0, 32.0)
+    assert [item["x"] for item in nerea["cast"]] == [50.0], "the cutout stays where the script put it"
+    assert "cameraStart" not in ivan, "shot and reverse shot are two pictures"
+
+
+def test_the_place_is_the_nearest_wider_shot_of_the_scene_else_the_home():
+    value = series()
+    value["locations"][1]["layout2d"] = {"homes": {"ivan": 20}}
+    ep = episode(shot("s1", 1, "capsula", "wide", [("ivan", 34)], scene="other"), shot("s2", 2, "capsula", "close", [("ivan", None)]),
+                 shot("s3", 3, "capsula", "two", [("ivan", 40), ("nerea", 60)]))
+    assert focus(value, ordered(ep), ep["shots"][1], "close") == 40.0, "the same scene first, even after the close-up"
+    alone = episode(shot("s2", 2, "capsula", "close", [("ivan", None)]))
+    assert focus(value, ordered(alone), alone["shots"][0], "close") == 20.0, "no wider shot: its home"
+    assert focus(series(), ordered(alone), alone["shots"][0], "close") == 50.0, "nothing known: the centre, as before"
+
+
+def test_a_take_renders_again_when_its_neighbours_move_its_picture():
+    value, kits = series(), {}
+    ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "calle", "insert"))
+    alone = episode(shot("s1", 1, "calle", "insert"))
+    first = ep["shots"][0]
+    assert inputs(value, ep, first) == {} and render_inputs(value, first, kits, episode=ep) == render_inputs(value, first, kits), \
+        "a shot that takes nothing from its neighbours keeps its digest"
+    second = ep["shots"][1]
+    assert inputs(value, ep, second) == {"cameraStart": [1.07, 48.5, True]}
+    static_first = episode({**first, "layout2d": {**first["layout2d"], "camera": "static"}}, second)
+    assert render_inputs(value, second, kits, episode=ep) != render_inputs(value, second, kits, episode=static_first)
+    assert inputs(value, alone, first) == {}
+
+
+def _taken(value, ep, sid, digest, version):
+    """The episode with the shot ``sid`` carrying one approved take that kept ``digest`` at ``version``."""
+    value["assets"] = {**value["assets"], f"take-{sid}": {"metadata": {"renderInputs": digest, "renderInputsVersion": version}}}
+    return {**ep, "shots": [{**item, "approvedAttemptId": "att", "attempts": [{"id": "att", "outputAssetIds": [f"take-{sid}"]}]}
+                            if item["id"] == sid else item for item in ep["shots"]]}
+
+
+def test_an_episode_made_before_the_neighbours_counted_renders_nothing_again():
+    """A lone close-up pans toward its place and the second of two equal pictures goes on from the first's camera: both
+    now fingerprint that. A take saved before (version 3) keeps matching what it kept; one saved now follows the neighbours."""
+    value, kits = series(), {}
+    ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "calle", "insert"))
+    second = ep["shots"][1]
+    assert inputs(value, ep, second), "this shot does take something from its neighbour"
+    before = render_inputs(value, second, kits, version=INPUTS_VERSION - 1)
+    assert before != render_inputs(value, second, kits, episode=ep)
+    old_take = _taken(value, ep, "s2", before, INPUTS_VERSION - 1)
+    assert "s2" not in stale_shot_ids(value, old_take, kits)
+    assert accepted_inputs(value, old_take["shots"][1], kits, episode=ep) == before, "the review compares with what the old take kept"
+    now = render_inputs(value, second, kits, episode=ep)
+    assert "s2" not in stale_shot_ids(value, _taken(value, ep, "s2", now, INPUTS_VERSION), kits)
+    static_first = episode({**ep["shots"][0], "layout2d": {**ep["shots"][0]["layout2d"], "camera": "static"}}, second)
+    assert "s2" in stale_shot_ids(value, _taken(value, static_first, "s2", now, INPUTS_VERSION), kits), \
+        "a take made with the neighbours counted renders again when a neighbour moves its picture"
+
+
+def test_from_script_check_warns_about_the_same_picture_twice():
+    from services.series_script import apply_script
+    project = {**series(), "revision": 1, "episodesById": {}}
+    script = {"title": "Latencia", "scenes": [{"id": "prologo", "location": "calle"}],
+              "shots": [{"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5},
+                        {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5},
+                        {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5, "location": "altavoz"},
+                        {"scene": "prologo", "framing": "insert", "camera": "push", "duration": 5, "location": "altavoz",
+                         "detail": {"x": 56, "y": 18, "zoom": 1.8}}]}
+    checked = apply_script(lambda tool, data: {"result": {}}, lambda: project, {}, set(), "lc", script, check_only=True)
+    found = [item for item in checked["warnings"] if item["code"] == "same_picture"]
+    assert [item["shots"] for item in found] == [["e1s00", "e1s01"]], "the loudspeaker has its own location, then a detail of it"
+
+
+def test_a_detail_frames_the_same_plate_closer():
+    assert normalize_layout2d({"detail": {"x": 56, "y": 18, "zoom": 1.8}}) == {"detail": {"x": 56.0, "y": 18.0, "zoom": 1.8}}
+    assert normalize_layout2d({"detail": {"x": 56, "y": 18}}) is None and normalize_layout2d({"detail": {"x": 56, "y": 18, "zoom": 9}}) is None
+    value = series()
+    value["locations"][0]["layout2d"] = {"anchors": {"kiosk": {"u": 0.6, "v": 0.3}}}
+    detail = {"x": 56.0, "y": 18.0, "zoom": 1.8}
+    wide = shot("s1", 1, "calle", "insert")
+    close = shot("s2", 2, "calle", "insert", props=None)
+    close["layout2d"].update(detail=detail, props=[{"file": "prop-sign.png", "anchor": "kiosk", "scale": 0.2}])
+    ep = episode(wide, close)
+    planned = spec(value, ep, "s2")
+    assert planned["background"]["detail"] == detail and "cameraStart" not in planned, "a detail is another picture: its own push"
+    prop = planned["props"][0]
+    assert prop["scale"] == round(0.2 * 1.8, 4)
+    assert (prop["x"], prop["y"] + prop["scale"] * 50) == background_point("insert", 50.0, 0.6, 0.3, detail), "it stays on its anchor"
+    assert background_point("insert", 50.0, 0.56, 0.18, detail) == (50.0, 32.4), \
+        "the point is centred across; near the top it stays high, the plate's edge in the frame's"
+    assert same_picture_warnings(value, ep["shots"]) == []
+
+
+# What development wrote (INPUTS_VERSION 3, before the neighbours counted) for the episode below: a portrait series, a
+# dictionary that rewrites a line, a castIndex, and two shots (s2, s4) that now take something from a neighbour.
+DEVELOPMENT_DIGESTS = {
+    "s1": {3: "d7bb8f5a4209fb6d", 2: "1dd2e6fd4ed2b6c9", 1: "66638fd582b4fe83"},
+    "s2": {3: "d7bb8f5a4209fb6d", 2: "1dd2e6fd4ed2b6c9", 1: "66638fd582b4fe83"},
+    "s3": {3: "aaac1fd072b1e1b9", 2: "d3adf6b13dea1932", 1: "d89ae06f392d7837"},
+    "s4": {3: "0a4695379839c500", 2: "ecb17451f63e3456", 1: "ecb17451f63e3456"},
+}
+
+
+def _portrait_episode_of_development():
+    value = series()
+    value["provider"] = {"videoSettings": {"orientation": "portrait"}}
+    value["characters"][0]["voiceProfile"]["pronunciationDictionary"] = {"Latencia": "La-ten-sia"}
+    line = {"id": "d1", "characterId": "ivan", "text": "La Latencia nos alcanza.", "emotion": "calma", "delivery": "bajo", "castIndex": 0}
+    ep = episode(shot("s1", 1, "calle", "insert"), shot("s2", 2, "calle", "insert"),
+                 shot("s3", 3, "capsula", "wide", [("ivan", 20), ("nerea", 80)]),
+                 {**shot("s4", 4, "capsula", "close", [("ivan", None)]), "dialogueBeats": [line]})
+    return value, ep
+
+
+@pytest.mark.parametrize("saved_at", [3, 2, 1])
+def test_a_take_development_saved_stays_current_in_a_portrait_episode_with_neighbours(saved_at):
+    """Second legacy shape for the version-4 bump: the digests come from development's own render_inputs, not from this
+    branch, so a change to what version 3, 2 or 1 hash shows up here. Nothing renders again, for a review neither."""
+    value, ep = _portrait_episode_of_development()
+    kits = {}
+    assert [item["id"] for item in ep["shots"] if inputs(value, ep, item)] == ["s2", "s4"], "two shots do take something now"
+    for item in ep["shots"]:
+        assert render_inputs(value, item, kits, version=saved_at) == DEVELOPMENT_DIGESTS[item["id"]][saved_at]
+    value["assets"] = {**value["assets"], **{f"take-{sid}": {"metadata": {"renderInputs": digest[saved_at], "renderInputsVersion": saved_at}}
+                                             for sid, digest in DEVELOPMENT_DIGESTS.items()}}
+    taken = {**ep, "shots": [{**item, "approvedAttemptId": "att", "attempts": [{"id": "att", "outputAssetIds": [f"take-{item['id']}"]}]}
+                             for item in ep["shots"]]}
+    assert stale_shot_ids(value, taken, kits) == []
+    for item in taken["shots"]:
+        assert accepted_inputs(value, item, kits, episode=taken) == DEVELOPMENT_DIGESTS[item["id"]][saved_at]

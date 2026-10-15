@@ -84,6 +84,10 @@ test('the mouth line editor reads the rigged original, the saved line and re-rig
   // A kit switching to warp mouths is rigged whole: a pose without mouths of its own would show none.
   const ink = { ...kit, provenance: [{ ...kit.provenance[0], style: { mouthStyle: 'ink' } }] }
   assert.equal(mouthLineRigRequest(ink, 'busto', { mouth: [41, 33], mouthWidth: 6 }).poses, undefined)
+  // A pose told not to blink (clear spectacles) keeps that through a mouth edit: the request replaces its hint.
+  const glasses = { ...kit, provenance: [{ ...kit.provenance[0], hints: { busto: { eyes: [40, 20], blink: false } } }] }
+  assert.deepEqual(mouthLineRigRequest(glasses, 'busto', { mouth: [41, 33], mouthWidth: 6 }).hints,
+    { busto: { eyes: [40, 20], blink: false, mouth: [41, 33], mouthWidth: 6, exact: true } })
 })
 
 test('the zoom is a square window round the mouth and maps points both ways', () => {

@@ -81,7 +81,8 @@ character's ink.
 1. **Generate for the rig.** `characters.styles` with `style: "graphic-novel"`, `kind: "character"` (then `"pose"`)
    and the description. The prompt asks for what the rig must find: both eyes with clean white sclera, never in the
    shadow, and the closed mouth painted as one short dark line. Key in the screen colour `characters.styles` returns:
-   magenta when the character or object is green, so green cloth is not keyed away, and green otherwise.
+   magenta when the character or object is green, so green cloth is not keyed away, and green otherwise. A pose's
+   text rarely names the clothes: pass `screen` with the colour its character prompt returned.
 2. **Save and rig.** Save the kit with `provenance: [{"method": "character-style-create", "style": "graphic-novel"}]`;
    `characters.rig.flat` then uses the style's rig, `{"mouthStyle": "warp"}`, with no `style`. Later rigs of the kit (a pose added, a mouth line
    placed) keep warp mouths; only `style.mouthStyle` changes them. The result's `style` is the look used.
@@ -169,6 +170,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   are `static` (push-in words `push`). Follow the series' `cameraLanguage`, else push on punchlines.
 - **finish:** `paper` (default), `none`, a Video 2D finish id (`scenes.catalog`) or `{texture, grain, vignette}`;
   else the series' `look.finish`.
+- **same picture:** one plate, framing and crop back to back is one camera (`check`: `same_picture`): make it one
+  shot or frame a detail, `"detail": {"x": 56, "y": 18, "zoom": 1.8}` (% of plate, zoom 1.1–4). Never paint a
+  place twice or reuse a plate elsewhere. A lone `medium`/`close` pans to its side of the room.
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
   as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
@@ -249,7 +253,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, default 1; a value outside that range is clamped, never reset to 1;
   `"shot"` lasts until the end of the shot), `x`/`y`/`size` in %, `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
-  points right at 0). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
+  points right at 0), `speed` (how fast the effect's own time runs, 0.02–4: `0.05` keeps `rain` or `dust` hanging in
+  the air, a slowed `explosion` is a slow-motion one). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
   in % of that cast member's pose image (`cast`: its index in the shot's `cast`, or a character id), so the beam leaves
   the muzzle wherever the cutout is drawn, at any size, even under a push; `{"point": [70, 40]}` is a frame point.
   The beam runs from `from` to `x`/`y` (where it lands); `rotation` is not used. A `cast` naming no
@@ -267,6 +272,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   (`at` 0 and `"duration": "shot"`); it repeats over its cue, so a plate as long as the cue loops.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat.
+- **delivery:** a line's `delivery` and `emotion` (`{"who": "ana", "es": "Ven.", "delivery": "susurrando, muy despacio"}`)
+  direct how it is said when the voice takes a direction: VoxCPM2 voices (as their style; such a line clones from the
+  reference alone) and Qwen3 presets (after the voice's instructions). Other voices say it as written. Changing it
+  records that line again; the subtitle keeps the written text.
 - **voiceRoom:** the room this shot's voices are heard in, instead of its location's (see Sound design): `none`,
   `small_room`, `room`, `hall`, `cathedral`, `cockpit`, `outdoor` or `radio`. In a script, `"voiceRoom"` on the shot.
   A place reaches only the speakers in the shot (its `cast`, else `visibleCharacterIds`; a 3D shot's `scene3d.cast`):
@@ -317,6 +326,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
    `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
    For example, `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
+   `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`,
+   `clinical`; exteriors `daylight`, `dusk`, `night_sky` (a night street gets a night key light and a dark sky).
    `wall_back: {image: "location"}` reuses the approved location picture. Asset skins: `{image: {asset: "wall.png"}}`,
    `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`. Poll `series.location.set3d.status` until
    completed (a failed status carries its error). A `texture` that will not tile is painted once over its surface

@@ -22,7 +22,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from services.character_animations import CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations, pose_prompt
+from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
+                                           pose_prompt)
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.local_generation import LocalTools, ToolError, file_url
 
@@ -121,6 +122,23 @@ class CharacterAnimationJobs:
             raise AnimationJobError("kit_not_found", f"Character Kit {kit_id} is not in the {workspace} workspace", 404)
         return kit
 
+    def _alive(self, job_id: str) -> bool:
+        """Whether a worker thread of this service still owns the job (one that has not started yet counts)."""
+        thread = self._threads.get(job_id)
+        return thread is not None and (thread.ident is None or thread.is_alive())
+
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The jobs in this folder that a worker of this service is running (``services.workspace_busy`` probe).
+
+        Reads only. A checkpoint that says running without a thread was cut by a restart: it is not
+        busy, and ``jobs()`` turns it into ``interrupted`` the next time something reads it.
+        """
+        return [
+            {"jobId": job["jobId"], "status": job["status"], "workspace": job.get("workspace")}
+            for job in JobStore(workspace_dir).list()
+            if job.get("status") in ACTIVE and self._alive(str(job.get("jobId") or ""))
+        ]
+
     def jobs(self, workspace: str, kit_id: str | None = None) -> list[dict[str, Any]]:
         listed = [self._reconcile(workspace, job) for job in self._store(workspace).list()]
         return [public(job) for job in listed if not kit_id or job.get("kitId") == kit_id]
@@ -133,10 +151,9 @@ class CharacterAnimationJobs:
 
     def _reconcile(self, workspace: str, job: dict[str, Any]) -> dict[str, Any]:
         """A job that says it is active but has no thread here was cut by a restart: it is interrupted, its poses kept."""
-        thread = self._threads.get(job.get("jobId", ""))
-        if job.get("status") not in ACTIVE or (thread is not None and (thread.ident is None or thread.is_alive())):
+        if job.get("status") not in ACTIVE or self._alive(job.get("jobId", "")):
             return job
-        if thread is not None:
+        if job.get("jobId") in self._threads:
             stored = self._store(workspace).load(job["jobId"]) or job
             if stored.get("status") not in ACTIVE:
                 return stored
@@ -170,6 +187,9 @@ class CharacterAnimationJobs:
             raise AnimationJobError("pose_not_found", f"{animation_id} has no made pose {pose} to make again", 404)
         if not reference_of(kit):
             raise AnimationJobError("no_reference", f"Character Kit {kit.get('name') or kit['id']} has no persistent picture to make poses from")
+        if not made and len(kit.get("animations") or {}) >= MAX_ANIMATIONS:
+            # A new id at the cap would spend every GPU pose and only then fail to save on the kit. Making one again is fine.
+            raise AnimationJobError("animation_limit", f"Character Kit {kit.get('name') or kit['id']} already has {MAX_ANIMATIONS} animations, the most a kit keeps")
         return definition
 
     def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None) -> dict[str, Any]:

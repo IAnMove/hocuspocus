@@ -12,8 +12,10 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from routers.character_animation_jobs import create_character_animation_jobs_router
+from services.character_animations import MAX_ANIMATIONS
 from services.character_animation_job import AnimationJobDeps, AnimationJobError, CharacterAnimationJobs, reference_of
 from services.character_kit_library import patch_character_kit, read_character_kit_library, write_character_kit_library
+from services.local_generation import ToolError, payload_of
 
 WS = "demo"
 
@@ -166,6 +168,82 @@ def test_a_character_with_no_persistent_picture_cannot_make_poses(world, monkeyp
     assert error.value.code == "no_reference" and not server.calls
 
 
+def test_a_kit_at_the_animation_limit_refuses_a_new_animation_before_any_gpu_work(world, monkeypatch):
+    root, server, jobs = world
+    full = {**_kit(root), "animations": {f"a{index}": {} for index in range(MAX_ANIMATIONS)}}
+    monkeypatch.setattr(jobs, "_kit", lambda workspace, kit_id: full)
+    with pytest.raises(AnimationJobError) as error:
+        jobs.start(WS, "hero", "wave")
+    assert error.value.code == "animation_limit" and not server.calls, "the limit is checked before any picture is asked for"
+    full["animations"]["wave"] = {"reviewState": "pending"}
+    assert jobs._definition(full, "wave", None, None)["id"] == "wave", "an animation the kit already has may be made again"
+
+
+def test_a_wait_http_error_is_not_a_live_job_and_does_not_hang(world):
+    """LocalMcp puts the HTTP status on error.status. Treating that as a generation status used to wait forever."""
+    root, server, jobs = world
+    original = server.call
+
+    def call(tool, arguments):
+        if tool == "jobs.wait":
+            server.calls.append((tool, arguments))
+            assert len(server.of("jobs.wait")) < 5, "polled again and again after an HTTP error"
+            return {"_is_error": True, "error": {"code": "invalid_status", "message": "Status payload must be an object.", "status": 502}}
+        return original(tool, arguments)
+
+    jobs.deps.call = call
+    failed = jobs.start(WS, "hero", "nod")
+    assert failed["status"] == "failed" and failed["errorCode"] == "invalid_status"
+    assert "Status payload" in failed["error"]
+    assert [take["status"] for take in failed["takes"]][0] == "failed"
+    assert len(server.of("jobs.wait")) == 1, "one wait error stops the pose; it does not poll again"
+
+
+def test_a_wait_that_times_out_with_the_live_job_is_asked_again(world):
+    root, server, jobs = world
+    original = server.call
+    waits = {"n": 0}
+
+    def call(tool, arguments):
+        if tool == "jobs.wait":
+            waits["n"] += 1
+            if waits["n"] == 1:
+                return {"status": "running", "job_id": "gen-1", "timed_out": True, "code": "timeout"}
+        return original(tool, arguments)
+
+    jobs.deps.call = call
+    assert jobs.start(WS, "hero", "nod")["status"] == "completed"
+    assert waits["n"] >= 2
+
+
+def test_a_wait_with_no_status_at_all_is_an_error_not_a_busy_loop(world):
+    root, server, jobs = world
+    original = server.call
+
+    def call(tool, arguments):
+        if tool == "jobs.wait":
+            server.calls.append((tool, arguments))
+            assert len(server.of("jobs.wait")) < 5, "polled again and again with no status"
+            return {"result": {"job_id": "gen-1"}}
+        return original(tool, arguments)
+
+    jobs.deps.call = call
+    failed = jobs.start(WS, "hero", "nod")
+    assert failed["status"] == "failed" and failed["errorCode"] == "no_status"
+    assert len(server.of("jobs.wait")) == 1
+
+
+def test_payload_of_does_not_treat_an_http_error_status_as_a_running_job():
+    with pytest.raises(ToolError) as error:
+        payload_of({"_is_error": True, "error": {"code": "invalid_status", "message": "Status payload must be an object.", "status": 502}})
+    assert error.value.code == "invalid_status"
+    live = payload_of({"status": "running", "job_id": "gen-1", "timed_out": True})
+    assert live["status"] == "running" and live["timed_out"] is True
+    assert payload_of({"result": {"url": "/api/v1/file/a.png", "file": "a.png"}}) == {"url": "/api/v1/file/a.png", "file": "a.png"}
+    # The old timeout envelope still names the job.
+    assert payload_of({"_is_error": True, "error": {"job_id": "gen-1", "status": "running", "timed_out": True}})["job_id"] == "gen-1"
+
+
 def test_a_picture_the_server_could_not_start_is_discarded_from_the_queue_and_the_job_says_to_try_again(world):
     root, server, jobs = world
     original = server.call
@@ -247,6 +325,26 @@ def test_a_request_for_an_animation_being_made_returns_that_job_and_a_restart_ma
     jobs._store(WS).save(stale)
     cut = jobs.status(WS, "anim-stale")
     assert cut["status"] == "interrupted" and "restarted" in cut["error"] and cut["takes"][0]["status"] == "waiting"
+
+
+def test_a_live_animation_job_is_visible_to_the_workspace_busy_probe_and_a_stale_one_is_not(world):
+    root, server, jobs = world
+    release = threading.Event()
+    server.during = lambda: release.wait(10)
+    jobs.deps.inline = False
+    job = jobs.start(WS, "hero", "wave")
+    try:
+        live = jobs.live_jobs(str(root))
+        assert len(live) == 1 and live[0]["jobId"] == job["jobId"] and live[0]["workspace"] == WS
+        assert live[0]["status"] in ("queued", "running")
+        stale = jobs._store(WS).load(job["jobId"])
+        stale.update(status="running", jobId="anim-stale")
+        jobs._store(WS).save(stale)
+        assert all(item["jobId"] != "anim-stale" for item in jobs.live_jobs(str(root)))
+        assert jobs._store(WS).load("anim-stale")["status"] == "running", "the probe does not reconcile"
+    finally:
+        release.set()
+        jobs._threads[job["jobId"]].join(10)
 
 
 def test_the_http_routes_start_follow_and_cancel_a_job_and_say_why_they_refuse(world):
