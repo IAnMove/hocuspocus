@@ -13,6 +13,7 @@ import time
 import torch
 import traceback
 from services import media_dimensions, safe_download
+from services.studio_image_alpha_restore import restore_inpaint_alpha
 from services.job_lifecycle import (
     GENERATED_MEDIA_EXTENSIONS,
     collect_job_outputs,
@@ -178,6 +179,10 @@ def _run_generation_queue(st):
             else:
                 file_sidecar.pop("director_clip_index", None)
             file_sidecar["output_filename"] = fname
+            # An inpainted picture gets its source's transparency back (the engine returns RGB): before anything reads the file.
+            alpha_restore = restore_inpaint_alpha(job, out_dir, fname)
+            if alpha_restore:
+                file_sidecar["alpha_restore"] = alpha_restore
             produced = media_dimensions.produced_resolution(
                 os.path.join(out_dir, fname), sidecar_params.get("resolution"),
             )
