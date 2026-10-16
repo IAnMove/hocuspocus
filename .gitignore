@@ -1,6 +1,9 @@
 # Python virtual environment
 env/
 app/env/
+
+# Local logs from scripts/dev/gates.py. Never commit them.
+.dev-gates/
 # Cloud Agent / local dev virtualenv created by .cursor/install.sh
 .venv/
 
