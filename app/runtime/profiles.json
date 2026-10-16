@@ -110,8 +110,14 @@
           "triton-windows==3.3.1.post19",
           "https://github.com/woct0rdho/SageAttention/releases/download/v2.2.0-windows/sageattention-2.2.0+cu128torch2.7.1-cp310-cp310-win_amd64.whl"
         ],
-        "excludedPackages": ["torchcodec", "flash-attn"],
-        "verificationImports": ["xformers.ops", "diffusers.models.transformers.pixart_transformer_2d"]
+        "excludedPackages": [
+          "torchcodec",
+          "flash-attn"
+        ],
+        "verificationImports": [
+          "xformers.ops",
+          "diffusers.models.transformers.pixart_transformer_2d"
+        ]
       },
       "defaultInstall": true,
       "acceleratorPackages": [
@@ -236,9 +242,47 @@
         "flash-attn": "2.7.4.post1",
         "bpy": "4.2.22"
       },
-      "verificationImports": ["bpy", "flash_attn", "torch_scatter", "torch_cluster", "spconv.pytorch"],
+      "verificationImports": [
+        "bpy",
+        "flash_attn",
+        "torch_scatter",
+        "torch_cluster",
+        "spconv.pytorch"
+      ],
       "vendors": [
         "unirig"
+      ],
+      "defaultInstall": false
+    },
+    "creation_models": {
+      "label": "FLUX 3 Klein / Drama 3",
+      "installStepsVersion": 1,
+      "env": "app/services/creation_models/env",
+      "environment": "conda",
+      "python": "3.11",
+      "required": false,
+      "platforms": [
+        "linux",
+        "win32"
+      ],
+      "cuda": "13.0",
+      "torch": "2.10.0",
+      "torchvision": "0.25.0",
+      "torchaudio": "2.10.0",
+      "requirements": "app/services/creation_models/vendor/ComfyUI/requirements.txt",
+      "constraints": {
+        "numpy": "2.2.6",
+        "transformers": "4.57.1",
+        "tokenizers": "0.22.1"
+      },
+      "windows": {
+        "constraints": {
+          "triton-windows": "3.6.0.post26"
+        }
+      },
+      "vendors": [
+        "creation_comfy",
+        "drama3_nodes"
       ],
       "defaultInstall": false
     }

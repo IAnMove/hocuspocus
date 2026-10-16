@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 4259,
+      "weight": 4270,
       "paths": [
         "tests/characterization/test_jobs_and_tasks.py",
         "tests/characterization/test_outpaint_blend.py",
@@ -54,6 +54,7 @@
         "tests/test_comic_video_preflight_pipeline.py",
         "tests/test_comics_router.py",
         "tests/test_core_media_parity.py",
+        "tests/test_creation_models.py",
         "tests/test_director_cancellation.py",
         "tests/test_director_minimax_llm_routing.py",
         "tests/test_director_parallel_resources.py",

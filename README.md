@@ -24,6 +24,17 @@ Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMo
 
 ## What you can do
 
+### Generate with FLUX 3 Klein and Drama 3
+
+Optional local **FLUX 3 Image Klein INT8** creates pictures and edits with up to
+ten images, including the source. **Drama 3 INT8** generates expressive speech
+or clones one reference recording, with English and Spanish language hints.
+Install **Advanced → Install FLUX 3 / Drama 3 Support** in Pinokio, then download
+the models in Settings. FLUX needs Hugging Face access on the configured account;
+Drama streams experts from system RAM (64 GB system RAM recommended).
+See the [generation guide](docs/generation/FLUX3_DRAMA3.md) for references,
+voice settings, requirements, API and the integration's current limits.
+
 ### Edit images in batches
 
 Clicking **Direct generation** opens the currently selected generation mode immediately; use its tabs to switch modes.

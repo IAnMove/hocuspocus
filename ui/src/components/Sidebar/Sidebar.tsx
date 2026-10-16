@@ -8,6 +8,7 @@ import { PromptInput } from './PromptInput'
 import { ImageRefSection } from './ImageRefSection'
 import { ImageStudioPanel } from './ImageStudioPanel'
 import { AudioModeSection } from './AudioModeSection'
+import { DramaSpeechControls } from './DramaSpeechControls'
 import { MusicControls } from './MusicControls'
 import { AudioSubModeToggle } from './AudioSubModeToggle'
 import { SfxControls } from './SfxControls'
@@ -199,7 +200,8 @@ export function DirectGenerationWorkspace() {
 
         {/* Audio mode: sub-mode toggle + mode-specific controls */}
         {isAudio && <AudioSubModeToggle />}
-        {isAudio && audioSubMode === 'speech' && modelOptions?.audio_prompt_type_sources && <AudioModeSection />}
+        {isAudio && audioSubMode === 'speech' && (String(modelType).startsWith('drama3_')
+          ? <DramaSpeechControls /> : modelOptions?.audio_prompt_type_sources && <AudioModeSection />)}
         {isAudio && audioSubMode === 'sfx' && <SfxControls />}
         {isAudio && audioSubMode === 'mixer' && <MixerControls />}
         {isAudio && audioSubMode === 'music' && <MusicControls />}

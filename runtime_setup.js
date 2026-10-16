@@ -11,6 +11,9 @@ module.exports = {
     }},
     ...runtime.installEngines(['core', 'wangp', 'minimax_h3']),
     ...runtime.call('speech_install.js'),
+    ...runtime.call('creation_models_install.js').map(step => ({...step,
+      when: "{{args.update && exists('app/services/creation_models/env') && local.runtime.engines.creation_models.supported}}",
+    })),
     // Optional engines, installed from the Advanced menu, are refreshed only if present.
     ...runtime.call('hunyuan3d_install.js').map(step => ({...step,
       when: `{{args.update && exists('app/services/hunyuan3d/env') && local.runtime.engines.hunyuan3d.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,

@@ -1,4 +1,11 @@
 {
+  "drama": {
+    "reference": "Grabación de referencia",
+    "transcript": "Palabras exactas de la grabación de referencia (obligatorio)",
+    "direction": "Dirección de voz (opcional)",
+    "hint": "Escribe el texto nuevo debajo. Añade [language: en] o [language: es] para orientar la pronunciación. Comprueba la toma completa antes de usarla.",
+    "duration": "Máximo de segundos por bloque de texto (1–180)"
+  },
   "groups": {
     "help": "Completa entrada e instrucciones y ejecuta. Los resultados quedan al lado de este formulario cuando hay espacio.",
     "input": "Entrada y referencias",

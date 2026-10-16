@@ -6,6 +6,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: optional local FLUX 3 Klein and Drama 3 generation.** FLUX 3 distilled
+INT8 provides text-to-image and editing with up to ten images. Drama 3 INT8
+provides speech generation and single-reference voice cloning, including English
+and Spanish hints. The models use the native generation queue, tasks, cancellation
+and workspace metadata through an isolated, pinned ComfyUI runtime installed from
+Pinokio's Advanced menu. The guide documents account access, memory needs and the
+current feature limits; existing WanGP and MiniMax H3 environments stay separate.
+
 **Fixed: making a character animation from the Character Creator, the MCP or the Wizard no longer stops after the first pose.** The job keyed the first drawn pose but then said "studio.key returned no file", because it read the tool's reply as a finished generation instead of a keyed picture. It now takes the keyed file from the reply, goes on with the other poses and saves the pending sheet.
 
 **Fixed: inpainting and outpainting accept a source or mask PNG with an alpha channel, and an edit without `model_mode` uses the model's default method.** A PNG made by the app's own Compose tool carries an alpha channel and made the job fail in its first stage; the picture is now flattened before the job is admitted (a mask onto black, a source onto grey; the original file is not changed). Leaving `model_mode` out of an inpaint or outpaint request was refused even though the schema says the default is 0; it now runs the model's default method.

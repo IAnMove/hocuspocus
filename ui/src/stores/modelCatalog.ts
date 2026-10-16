@@ -4,6 +4,7 @@ import type { GenerationMode, ModelDef, ModelFamily } from '../types'
 const familyModeMap: Record<string, GenerationMode> = {
   flux: 'image',
   flux2: 'image',
+  flux3: 'image',
   qwen: 'image',
   z_image: 'image',
   krea2: 'image',
