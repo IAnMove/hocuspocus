@@ -76,8 +76,10 @@ without creating or moving files. See the
 9. **Voice is local only.** Presets use `qwen3_tts_customvoice` plus a named
    id (`vivian`, `serena`, `uncle_fu`, `dylan`, `eric`, `ryan`, `aiden`,
    `ono_anna`, `sohee`) and optional direction (max 1000 chars). Custom
-   recordings use `qwen3_tts_base` or `voxcpm2_base` with `voiceId: "reference"`;
+   recordings use `qwen3_tts_base`, `voxcpm2_base`, or `drama3_base` with `voiceId: "reference"`;
    a VoxCPM2 recording may add a speaking style (`instructions`, max 300 chars).
+   Drama 3 cloning requires the transcript and takes no style. `drama3_voicedesign`
+   stores a designed voice (`voiceId: "design"`, optional direction, no recording).
    Do not store credentials on the kit.
 
 ---
@@ -92,10 +94,11 @@ CharacterKit
   identityReference?, base?, poses{}
   mouth { closed?, small?, wide?, round? }
   eyes { open?, blink? }
-  voice? PresetCharacterVoice | CustomCharacterVoice
+  voice? PresetCharacterVoice | CustomCharacterVoice | DesignCharacterVoice
     preset: { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
-    custom: { provider: local, model: qwen3_tts_base | voxcpm2_base, voiceId: "reference",
+    custom: { provider: local, model: qwen3_tts_base | voxcpm2_base | drama3_base, voiceId: "reference",
               name, referenceAudio, transcript, language, instructions? (VoxCPM2 only) }
+    design: { provider: local, model: drama3_voicedesign, voiceId: "design", name, language, instructions? }
   lookNotes?
   speech3d? { model, digest, settings? }
   anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources? } }
@@ -213,7 +216,7 @@ does not create audio.
 **Named preset** (`qwen3_tts_customvoice`): pick a catalog speaker and optional
 acting notes. Tijeral ships these presets; they are not cloned actors.
 
-**Add your own voice** (`qwen3_tts_base` or `voxcpm2_base`):
+**Add your own voice** (`qwen3_tts_base`, `voxcpm2_base`, or `drama3_base`):
 
 1. Choose **Add your own voice: import or record**.
 2. Name the voice (max 120 chars) and pick the **Voice engine**: VoxCPM2,

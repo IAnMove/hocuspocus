@@ -4,7 +4,7 @@ import { usableCharacterAsset, type CharacterKitReviewPolicy } from './character
 import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, type FacePatchMetadata } from './characterFacePatch'
 import { CHARACTER_MOUTH_STATES, mouthStateForSound, type CharacterMouthState } from './characterMouthStates'
 import { characterRestPoseSource } from './characterRestPose'
-import { characterVoiceFor, isReferenceVoice, speechEngineName } from './characterVoice'
+import { characterVoiceFor, isDesignVoice, isReferenceVoice, speechEngineName } from './characterVoice'
 import type { KitAnimation } from './characterAnimations'
 export type { CharacterMouthState } from './characterMouthStates'
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
@@ -134,7 +134,7 @@ export function resolvedCharacterTts(
       source: 'kit',
       engine: speechEngineName(voice.model),
       voiceId: voice.voiceId,
-      ...(isReferenceVoice(voice) ? { voiceName: voice.name } : {}),
+      ...(isReferenceVoice(voice) || isDesignVoice(voice) ? { voiceName: voice.name } : {}),
       provider: voice.provider,
       instructions: voice.instructions,
     }

@@ -220,12 +220,27 @@ def _drawn(shots: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [shot for shot in shots if shot.get("productionMethod") not in VIDEO_METHODS]
 
 
+# Drama 3 documents only these two hints. Other languages are left untagged.
+_DRAMA_LANGUAGE_TAGS = {"english": "en", "spanish": "es"}
+
+
+def _drama_prompt(text: str, language: str) -> str:
+    """The line plus Drama 3's optional ``[language: en|es]`` hint, unless the line already has one."""
+    if "[language:" in text:
+        return text
+    tag = _DRAMA_LANGUAGE_TAGS.get(str(language or ""))
+    return f"{text} [language: {tag}]" if tag else text
+
+
 def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) -> dict[str, Any]:
     """Generation params for one line in one character voice (reference clone or preset)."""
     seconds = min(30, max(4, round(len(text.split()) * 0.6 + 3)))
+    model = str(voice.get("model") or "")
     # The speech schema requires a resolution even for audio; it does not change the output.
-    params: dict[str, Any] = {"prompt": text, "model_type": voice["model"], "seed": seed, "duration_seconds": seconds, "priority": 10,
-                              "resolution": "1280x720"}
+    params: dict[str, Any] = {
+        "prompt": _drama_prompt(text, language) if model.startswith("drama3_") else text,
+        "model_type": voice["model"], "seed": seed, "duration_seconds": seconds, "priority": 10,
+        "resolution": "1280x720"}
     if is_reference_voice(voice):
         params.update({"audio_prompt_type": "A", "audio_guide": voice["referenceAudio"], "alt_prompt": voice.get("transcript") or ""})
         if voice["model"] == "qwen3_tts_base":
@@ -233,6 +248,11 @@ def speech_params(voice: dict[str, Any], text: str, language: str, seed: int) ->
         style = voice_direction(voice, VOICE_STYLE_MAX_CHARS)
         if style:
             params["custom_settings"] = {"style": style}
+    elif model == "drama3_voicedesign":
+        # Studio's Drama 3 design command: optional direction, no recording and no model_mode.
+        direction = str(voice.get("instructions") or "").strip()
+        if direction:
+            params["alt_prompt"] = direction
     elif voice.get("voiceId"):
         params.update({"model_mode": voice["voiceId"], "alt_prompt": voice_direction(voice)})
     return params

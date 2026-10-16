@@ -268,6 +268,43 @@ def test_series_lines_in_a_voxcpm2_voice_send_no_language_mode_and_carry_the_sty
     assert "Zilia ES" in json.dumps(_kit_summary({"id": "zilia", "name": "Zilia", "voice": REFERENCE}), ensure_ascii=False)
 
 
+def test_drama3_is_a_character_voice_and_series_speech_matches_studio():
+    """A Drama 3 clone needs its recording and transcript; Voice Design takes a direction and no recording."""
+    from services.character_speech_definition import normalize_character_voice, normalize_character_voices_by_language
+    from services.creation_model_catalog import validate
+    from services.series_native_render import speech_params
+    clone = {**REFERENCE, "model": "drama3_base"}
+    assert normalize_character_voice(clone) == clone
+    with pytest.raises(ValueError, match="no style"):
+        normalize_character_voice({**clone, "instructions": "susurrando"})
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design",
+              "name": "  Sol  ", "language": "spanish", "instructions": " warm "}
+    assert normalize_character_voice(design) == {**design, "name": "Sol", "instructions": "warm"}
+    with pytest.raises(ValueError, match="drama3_base"):
+        normalize_character_voice({**design, "referenceAudio": REFERENCE["referenceAudio"], "transcript": "Hola."})
+    with pytest.raises(ValueError, match="supported"):
+        normalize_character_voice({"provider": "local", "model": "not_a_voice", "voiceId": "ryan"})
+    from services.series_commands import _kit_summary
+    assert _kit_summary({"id": "sol", "name": "Sol", "voice": normalize_character_voice(design)})["voice"] == "Sol"
+    assert normalize_character_voices_by_language({"spanish": clone})["spanish"]["model"] == "drama3_base"
+    with pytest.raises(ValueError, match="language it is assigned"):
+        normalize_character_voices_by_language({"english": design})
+    spoken = speech_params(clone, "uno dos tres", "spanish", 7)
+    assert spoken["model_type"] == "drama3_base" and "model_mode" not in spoken and "custom_settings" not in spoken
+    assert (spoken["audio_prompt_type"], spoken["audio_guide"], spoken["alt_prompt"]) == ("A", clone["referenceAudio"], clone["transcript"])
+    assert spoken["prompt"] == "uno dos tres [language: es]"
+    validate(spoken)
+    designed = speech_params(normalize_character_voice(design), "Hola.", "spanish", 3)
+    assert designed["model_type"] == "drama3_voicedesign" and "audio_guide" not in designed and "model_mode" not in designed
+    assert designed["alt_prompt"] == "warm" and designed["prompt"] == "Hola. [language: es]"
+    validate(designed)
+    kept = speech_params(clone, "Hello. [language: en]", "english", 1)
+    assert kept["prompt"] == "Hello. [language: en]"
+    french = speech_params({**clone, "language": "french"}, "Bonjour.", "french", 1)
+    assert "[language:" not in french["prompt"] and french["alt_prompt"] == clone["transcript"]
+    assert "[language:" not in speech_params(REFERENCE, "uno dos", "spanish", 1)["prompt"]
+
+
 # -- readiness and pre-download of a folder-only model -------------------------------------------
 
 def _runtime_function(name, namespace, *helpers):

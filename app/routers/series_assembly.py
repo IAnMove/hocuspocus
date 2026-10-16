@@ -26,6 +26,7 @@ from services.episode_finishing import finish_episode, finishing_note, remove_ep
 from services import series_hearing, task_controls, workspace_busy
 from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
+from services.series_take_range import apply_take_ranges
 from services.series_language_versions import localized_view
 from services.series_review_gate import assembly_blockers, blocker_message
 from services.series_jobs import SeriesJobStore
@@ -405,6 +406,8 @@ def create_series_assembly_router(
             output_directory = workspace_dir(str(job["workspace"]))
             # Generated and imported takes get their shot's sound, and every clip the episode's frame (series_take_sound).
             prepared_dir = tempfile.mkdtemp(prefix="hocuspocus-assembly-")
+            # A take that names a range is cut first; a take without one stays the original file.
+            clip_paths = apply_take_ranges(clip_paths, list(job.get("clips") or []), prepared_dir)
             clip_paths, prepared = prepare_clips(clip_paths, job.get("clips", []), job.get("frame"), output_directory,
                                                  prepared_dir, cancelled=token.is_cancelled)
             timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
