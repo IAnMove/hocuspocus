@@ -93,8 +93,32 @@ def join_spans(durations: Sequence[float], joined_duration: float | None,
     return [(offset, offset + length) for offset, length in zip(offsets, lengths)], join
 
 
-def _chunks(text: str) -> list[str]:
-    """Split one line into cues of at most two subtitle lines, at word boundaries."""
+MIN_TAIL_WORDS = 3
+MIN_TAIL_SECONDS = 0.8
+_CLAUSE_END = (".", ",", ";", ":", "!", "?", "\u2026")
+
+
+def _rebalanced_tail(chunks: list[str], tail_characters: int) -> list[str]:
+    """The last cue is never a lone word or a flash. The characters limit left ``ellas?`` alone for 0.4 s at the end of
+    a line of 85; words move from the cue before it, back to the nearest clause end that leaves the last cue long
+    enough, else back as few words as that takes. Both cues stay within the characters limit."""
+    if len(chunks) < 2:
+        return chunks
+    before, tail = chunks[-2].split(), chunks[-1].split()
+    fits = [back for back in range(1, len(before) - 1)
+            if len(tail) + back >= MIN_TAIL_WORDS
+            and len(" ".join(before[-back:] + tail)) >= tail_characters
+            and len(" ".join(before[-back:] + tail)) <= CUE_CHARACTERS]
+    if len(tail) >= MIN_TAIL_WORDS and len(chunks[-1]) >= tail_characters or not fits:
+        return chunks
+    clause = [back for back in fits if before[-back - 1].endswith(_CLAUSE_END)]
+    back = clause[0] if clause else fits[0]
+    return chunks[:-2] + [" ".join(before[:-back]), " ".join(before[-back:] + tail)]
+
+
+def _chunks(text: str, tail_characters: int = 0) -> list[str]:
+    """Split one line into cues of at most two subtitle lines, at word boundaries. ``tail_characters``: the least the
+    last cue may have so that, at the line's speaking rate, it stays up for ``MIN_TAIL_SECONDS``."""
     words, chunks, current = text.split(), [], ""
     for word in words:
         candidate = f"{current} {word}".strip()
@@ -105,7 +129,7 @@ def _chunks(text: str) -> list[str]:
             current = candidate
     if current:
         chunks.append(current)
-    return chunks
+    return _rebalanced_tail(chunks, tail_characters)
 
 
 def _wrap(text: str) -> str:
@@ -130,7 +154,7 @@ def _beat_cues(beat: Any, offset: float, duration: float) -> list[dict[str, Any]
         return []
     if not text or end <= start:
         return []
-    chunks = _chunks(text)
+    chunks = _chunks(text, min(math.ceil(len(text) * MIN_TAIL_SECONDS / (end - start)), len(text) // 2))
     total = sum(len(chunk) for chunk in chunks)
     cues, cursor = [], start
     for chunk in chunks:
