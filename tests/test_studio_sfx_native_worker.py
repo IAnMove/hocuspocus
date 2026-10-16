@@ -81,6 +81,7 @@ def test_admitted_worker_uses_exact_inputs_without_download_or_reprobe(
         'os': os, 'time': time, 'copy': copy, 'traceback': traceback, 'wgp': wgp,
         '_task_registry': native.registry,
         'is_cancel_requested': lambda _job: False,
+        'mark_producing': lambda _job: True,
         'update_job': lambda *_args, **_kwargs: True,
         'finish_job': finish,
         'record_job_outputs': lambda target, files: target.update(outputs=files),

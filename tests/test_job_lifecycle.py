@@ -34,6 +34,7 @@ from services.job_lifecycle import (  # noqa: E402
     generation_queue_position,
     generation_slot,
     is_cancel_requested,
+    mark_producing,
     record_job_outputs,
     register_abort_state,
     register_generation_job,
@@ -255,6 +256,59 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertEqual(job["status"], "cancelling")
         self.assertIsNone(job["finished_at"])
         unregister_abort_state(job["id"], states, state)
+        self.assertEqual(job["status"], "cancelled")
+
+    def test_mark_producing_refuses_a_job_cancel_already_settled(self):
+        job = _job()
+        states: dict = {}
+        state = {"abort": False}
+        self.assertTrue(try_start(job))
+        self.assertTrue(register_abort_state(
+            job, job["id"], states, state, preparing_engine=True,
+        ))
+        request_cancel(job, job_id=job["id"], active_states=states)
+        self.assertEqual(job["status"], "cancelled")
+        self.assertFalse(mark_producing(job))
+        self.assertTrue(job.get("preparing_engine"))
+        self.assertFalse(job.get("producing"))
+        unregister_abort_state(job["id"], states, state)
+
+    def test_sfx_like_sampling_keeps_cancel_pending_until_the_worker_releases(self):
+        """Standalone SFX never enters the WGP task stream. It must mark
+        producing before MMAudio, or Cancel would publish `cancelled` while
+        the non-cooperative sample still holds the GPU."""
+        job = _job()
+        states: dict = {}
+        state = {"abort": False}
+        blocked = threading.Event()
+        release = threading.Event()
+        seen: list[str] = []
+
+        def worker():
+            self.assertTrue(try_start(job))
+            self.assertTrue(register_abort_state(
+                job, job["id"], states, state, preparing_engine=True,
+            ))
+            self.assertTrue(mark_producing(job))
+            blocked.set()
+            release.wait(timeout=3)
+            seen.append(job["status"])
+            unregister_abort_state(job["id"], states, state)
+
+        thread = threading.Thread(target=worker)
+        thread.start()
+        try:
+            self.assertTrue(blocked.wait(timeout=2))
+            result = request_cancel(job, job_id=job["id"], active_states=states)
+            self.assertTrue(result.changed)
+            self.assertEqual(job["status"], "cancelling")
+            self.assertEqual(job["message"], "Cancelling…")
+            self.assertIsNone(job["finished_at"])
+        finally:
+            release.set()
+            thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(seen, ["cancelling"])
         self.assertEqual(job["status"], "cancelled")
 
     def test_state_observer_receives_atomic_transition_snapshots(self):

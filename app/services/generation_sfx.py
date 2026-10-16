@@ -14,6 +14,7 @@ from services.job_lifecycle import (
     collect_job_outputs,
     finish_job,
     is_cancel_requested,
+    mark_producing,
     record_job_outputs,
     update_job,
 )
@@ -144,6 +145,11 @@ def _run_sfx_generation(job: dict, raw_params: dict, start_time: float):
             phase="MMAudio Generation",
             progress=10,
         ):
+            return False
+        # MMAudio is the sample. Without this flag, #1139's immediate-cancel
+        # path treats the job as still loading and publishes `cancelled` while
+        # video_to_audio keeps the GPU (the call is non-cooperative).
+        if not mark_producing(job):
             return False
         print(f"[SFX] Running MMAudio: prompt='{prompt}', neg='{neg_prompt}', "
               f"duration={duration:.1f}s, model={mmaudio_model_name}, video={'yes' if video_path else 'no'}")

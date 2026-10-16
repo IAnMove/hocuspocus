@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: cancelling a Studio SFX job that is already generating no longer pretends the GPU is free.** `#1139` settles a job as `cancelled` while its engine is still loading. Standalone MMAudio never entered the WGP task stream, so it never flipped `producing` and Cancel published `cancelled` during the non-cooperative sample. The next Generate then sat behind a job the UI already called finished. SFX now marks producing before `video_to_audio`; Cancel stays `cancelling` until the worker releases, as it does for a video sample.
+
 **Fixed: `qa.export` no longer calls a dark picture black.** A black frame is near zero on every channel (the brightest channel at or under 12/255), so a dark-blue or dark-gray card is an informational `dark` note and does not change the verdict. A real black gap is still a `black` warning.
 
 **Fixed: cancelling a job that is still loading its engine returns immediately.** A retake cancelled while Drama 3 (or any queued engine) was still starting stayed `cancelling` until that load finished, so the caller waited through the whole startup (74s on one retake). Cancel now marks the job `cancelled`, drops its queue slot and signals the worker without waiting for the load. The worker does not start sampling. A job that has already started producing still stays `cancelling` until the worker releases it.
