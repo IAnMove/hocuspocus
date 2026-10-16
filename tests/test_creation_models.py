@@ -212,7 +212,7 @@ def comfy(monkeypatch, tmp_path):
     from types import SimpleNamespace
     from services import creation_model_service as service
     processes, calls = [], []
-    state = {"healthy": True, "history": "ok", "prompts": 0}
+    state = {"healthy": True, "history": "ok", "prompts": 0, "pending": 0}
     output = tmp_path / "runtime" / "output"
     output.mkdir(parents=True)
     (output / "take.flac").write_bytes(b"generated audio")
@@ -230,6 +230,9 @@ def comfy(monkeypatch, tmp_path):
         if suffix == "/prompt":
             state["prompts"] += 1
             return SimpleNamespace(json=lambda: {"prompt_id": f"p{state['prompts']}"})
+        if state["pending"] > 0:
+            state["pending"] -= 1
+            return SimpleNamespace(json=lambda: {})
         if state["history"] == "error":
             status = {"status_str": "error", "messages": [["execution_error", {"exception_message": "boom"}]]}
             return SimpleNamespace(json=lambda: {suffix.rsplit("/", 1)[1]: {"status": status}})
@@ -463,3 +466,79 @@ def test_the_idle_setting_reaches_the_runtime_and_a_bad_one_means_the_default(mo
                                 job_id="job", start_time=0, finalize=True)
         execution.run_creation_job(state, engine=engine, publish=lambda *args: None)
     assert seen == [7.0, 300.0, 300.0]
+
+
+# --- the stall guard ----------------------------------------------------------------
+
+
+class _Clock:
+    """A monotonic clock the test moves: ``sleep`` advances it, nothing really waits."""
+
+    def __init__(self, now=10_000.0):
+        self.now, self.ticks = now, []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+        for tick in self.ticks:
+            tick(self.now)
+
+
+@pytest.fixture
+def clock(comfy, monkeypatch):
+    fake = _Clock()
+    monkeypatch.setattr(comfy.service, "time", fake)
+    monkeypatch.setattr(comfy.service, "_last_output", fake.now)
+    return fake
+
+
+def test_a_silent_runtime_with_a_pending_prompt_is_stopped_after_fifteen_minutes(comfy, clock):
+    comfy.state["pending"] = 10**9
+    with pytest.raises(RuntimeError, match="no progress for 15 minutes.*try again"):
+        comfy.job()
+    assert comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is False
+    assert 900 <= clock.now - 10_000 < 1000, "The guard fired at the one-hour limit instead of after 15 quiet minutes"
+
+
+def test_printed_output_keeps_a_slow_prompt_alive_until_the_one_hour_limit(comfy, clock):
+    comfy.state["pending"] = 10**9
+
+    def print_a_line(now):
+        if int(now) % 300 == 0:
+            comfy.service._last_output = now
+
+    clock.ticks.append(print_a_line)
+    with pytest.raises(RuntimeError, match="one-hour limit"):
+        comfy.job()
+    assert clock.now - 10_000 >= 3600
+    assert comfy.processes[0].stopped.is_set()
+
+
+def test_time_a_warm_runtime_sat_silent_before_the_prompt_does_not_count(comfy, clock):
+    comfy.service._last_output = 0.0
+    clock.now = 50_000.0
+    comfy.state["pending"] = 3
+    assert len(comfy.job()) == 1
+    assert len(comfy.processes) == 1 and not comfy.processes[0].stopped.is_set()
+
+
+def test_the_output_reader_stamps_every_line(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from services import creation_model_service as service
+    fake = _Clock()
+    monkeypatch.setattr(service, "time", fake)
+    monkeypatch.setattr(service, "ROOT", tmp_path / "app")
+    monkeypatch.setattr(service, "_last_output", 0.0)
+
+    def lines():
+        fake.now = 111.0
+        yield "first\n"
+        fake.now = 222.0
+        yield "second\n"
+
+    service._drain(SimpleNamespace(stdout=lines()))
+    assert service._last_output == 222.0
+    assert (tmp_path / "logs" / "creation_models" / "latest.log").read_text(encoding="utf-8") == "first\nsecond\n"

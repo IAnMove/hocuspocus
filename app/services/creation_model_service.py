@@ -37,6 +37,10 @@ _idle_deadline = None
 _lock = threading.RLock()
 DEFAULT_IDLE_SECONDS = 300.0
 MAX_IDLE_SECONDS = 86400.0
+# A prompt measured 70-158 s on Drama 3 (323 s at worst); 15 minutes without one
+# printed line is a hung process, not a slow one.
+STALL_SECONDS = 900.0
+_last_output = 0.0
 
 
 def runtime_family(model_type):
@@ -111,10 +115,12 @@ def _request(method, base, suffix, **kwargs):
 
 
 def _drain(process):
+    global _last_output
     log_dir = ROOT.parent / "logs" / "creation_models"
     log_dir.mkdir(parents=True, exist_ok=True)
     with (log_dir / "latest.log").open("a", encoding="utf-8") as log:
         for line in process.stdout:
+            _last_output = time.monotonic()
             log.write(line)
             log.flush()
             print("[Creation models] " + line.rstrip(), flush=True)
@@ -260,9 +266,21 @@ def ensure_runtime(progress, cancelled, family=None):
     raise RuntimeError("Creation runtime startup timed out; see logs/creation_models/latest.log")
 
 
+def _raise_if_stalled(submitted):
+    """Fail a pending prompt when the runtime has printed nothing for ``STALL_SECONDS``.
+
+    A runtime that sat warm and silent before this prompt must not count that time,
+    so the quiet period starts at the last printed line or at the submission.
+    """
+    if time.monotonic() - max(_last_output, submitted) >= STALL_SECONDS:
+        stop_runtime()
+        raise RuntimeError("The creation runtime made no progress for 15 minutes and was stopped; try again")
+
+
 def _await_output(base, prompt_id, output_node, cancelled, out_dir):
     """Poll one prompt until Comfy reports it, then copy its media into ``out_dir``."""
-    deadline = time.monotonic() + 3600
+    submitted = time.monotonic()
+    deadline = submitted + 3600
     while True:
         if cancelled():
             cancel()
@@ -276,6 +294,7 @@ def _await_output(base, prompt_id, output_node, cancelled, out_dir):
             # A missed poll is not evidence that inference failed.
             if _process is None or _process.poll() is not None:
                 raise RuntimeError("Creation runtime stopped before returning its output")
+            _raise_if_stalled(submitted)
             time.sleep(1)
             continue
         if history:
@@ -298,6 +317,7 @@ def _await_output(base, prompt_id, output_node, cancelled, out_dir):
             if not records:
                 raise RuntimeError("Creation runtime completed without output media")
             return copied
+        _raise_if_stalled(submitted)
         time.sleep(1)
 
 
