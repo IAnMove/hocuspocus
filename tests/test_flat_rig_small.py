@@ -6,8 +6,8 @@ cv2 = pytest.importorskip("cv2")
 from PIL import Image, ImageDraw
 
 from services import face_enlarge, face_landmarks, flat_rig_preview, flat_rig_warp
-from services.character_kit_library import patch_character_kit
-from services.flat_rig import _outlined_eyes, rig_character
+from services.character_kit_library import patch_character_kit, read_character_kit_library
+from services.flat_rig import FlatRigError, _outlined_eyes, rig_character
 from services.flat_rig_base import STATES
 
 SKIN, LINE, BEARD, STRAND = (205, 140, 70, 255), (25, 15, 10, 255), (70, 45, 28, 255), (150, 118, 84, 255)
@@ -303,3 +303,41 @@ def test_a_rig_reports_each_poses_face_size_and_enlargement(tmp_path, monkeypatc
     flat_rig_preview._CACHE.clear()
     preview = flat_rig_preview.preview_mouth(str(folder), "cast", "hero", "base", states=["closed", "wide"])
     assert preview["faceSize"] == pose["faceSize"] and preview["mouth"] == pose["mouthLine"]["mouth"]
+
+
+def _kit_with(folder, poses):
+    """A saved kit with the base drawn by ``_figure`` and the given extra poses (the same drawing each)."""
+    folder.mkdir()
+    url = lambda name: f"/api/v1/file/{name}?workspace=cast"
+    asset = lambda name: {"id": name, "name": name, "source": url(f"{name}.png"), "kind": "image", "alphaStatus": "transparent", "reviewState": "approved"}
+    for name in ("hero", *poses):
+        _figure().save(folder / f"{name}.png")
+    kit = {"id": "hero", "name": "Hero", "style": "cutout", "base": asset("hero"), "poses": {pose: asset(pose) for pose in poses},
+           "mouth": {}, "eyes": {}, "anchors": {}}
+    patch_character_kit(str(folder), "hero", kit, base_revision=0)
+
+
+def test_a_pose_filter_that_leaves_out_the_base_rigs_the_approved_base_with_it(tmp_path, monkeypatch):
+    """Sol, 2026-10-15: ``poses: [book, sad]`` answered missing_base although the kit had an approved base. The blink and the
+    shared mouths come from the base, so it is rigged with the poses asked for (from its recorded original: the same rig)."""
+    monkeypatch.setattr(face_landmarks, "detect", lambda image: None)
+    folder = tmp_path / "cast"
+    _kit_with(folder, ["book", "sad", "wave"])
+    rigged = rig_character(str(folder), "cast", "hero", base_revision=1, pose_ids=["book", "sad"])
+    assert sorted(rigged["poses"]) == ["base", "book", "sad"], "the base comes with the filter; wave was not asked for"
+    kit = rigged["character"]
+    assert kit["eyes"]["blink"]["source"] and kit["mouth"]["closed"]["source"]
+    assert "anchors" in kit and set(kit["anchors"]) == {"base", "book", "sad"}
+    assert "-wave-rig-" not in kit["poses"]["wave"]["source"], "a pose left out of the filter is not touched"
+
+
+def test_a_kit_without_a_base_pose_still_asks_for_one(tmp_path):
+    folder = tmp_path / "cast"
+    _kit_with(folder, ["book"])
+    library = read_character_kit_library(str(folder))
+    kit = library["kits"]["hero"]
+    kit["base"] = None
+    patch_character_kit(str(folder), "hero", kit, base_revision=library["revision"])
+    with pytest.raises(FlatRigError) as raised:
+        rig_character(str(folder), "cast", "hero", base_revision=read_character_kit_library(str(folder))["revision"], pose_ids=["book"])
+    assert raised.value.code == "missing_base"

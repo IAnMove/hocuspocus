@@ -1032,9 +1032,10 @@ def pose_source(kit: dict[str, Any], pose: str) -> str:
 
 def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, pose_ids, hints=None):
     assets = {"base": kit.get("base"), **(kit.get("poses") or {})}
-    wanted = list(pose_ids) if pose_ids else [pose for pose, asset in assets.items() if asset]
-    if "base" not in wanted or not assets.get("base"):
+    if not assets.get("base"):
         raise FlatRigError("missing_base", "Approve a base pose before rigging; the blink comes from it", 409)
+    # The blink and the shared mouths come from the base: a filter that leaves it out rigs it with the poses asked for.
+    wanted = ["base", *(pose for pose in pose_ids if pose != "base")] if pose_ids else [pose for pose, asset in assets.items() if asset]
     rigs, sources = {}, {}
     for pose in wanted:
         if not assets.get(pose):
