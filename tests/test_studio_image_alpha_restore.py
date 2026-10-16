@@ -274,3 +274,38 @@ def test_a_palette_or_colour_key_source_keeps_the_transparency_it_had(tmp_path):
     keyed = tmp_path / "keyed.png"
     Image.new("RGB", (4, 4), (255, 255, 255)).save(keyed, transparency=(255, 255, 255))
     assert Image.open(alpha_plane_path(flattened(str(keyed), "image_guide", _digest(keyed), str(tmp_path)))).getextrema() == (0, 0)
+
+
+def test_with_the_non_masked_area_selector_the_edit_is_what_the_mask_leaves_black(tmp_path):
+    """``VNAG`` ("Non Masked Area"): the engine negates the mask, so the edited region is the black part and the white part is kept."""
+    case = Case(tmp_path)
+    case.job["params"]["video_prompt_type"] = "VNAG"
+    assert case.restore()["status"] == "restored"
+    alpha, kept = case.result()[..., 3], case.mask_array > 0
+    assert (alpha[~kept] == 255).all(), "the edited region (where the mask is black) is opaque"
+    assert (alpha[kept] == _alpha()[kept]).all(), "the part the mask keeps has the source's alpha, exactly"
+
+
+def test_a_selector_that_drops_the_mask_changes_nothing(tmp_path):
+    case = Case(tmp_path)
+    case.job["params"]["video_prompt_type"] = "VUAG"
+    before = _digest(case.path)
+    assert case.restore() is None and _digest(case.path) == before
+
+
+def test_a_webp_keeps_the_exif_the_engine_wrote_and_a_png_its_profile(tmp_path):
+    exif = Image.Exif()
+    exif[0x9286] = b"ASCII\x00\x00\x00settings of the job"
+    case = Case(tmp_path, output="out.webp")
+    Image.fromarray(case.engine).save(case.path, lossless=True, exif=exif.tobytes())
+    case.restore()
+    with Image.open(case.path) as picture:
+        assert picture.mode == "RGBA" and b"settings of the job" in picture.info["exif"]
+    other = Case(_folder(tmp_path, "png"))
+    profile = b"not a real profile but opaque bytes carried along"
+    Image.fromarray(other.engine).save(other.path, icc_profile=profile)
+    with Image.open(other.path) as picture:
+        written = picture.info.get("icc_profile")
+    other.restore()
+    with Image.open(other.path) as picture:
+        assert picture.info.get("icc_profile") == written

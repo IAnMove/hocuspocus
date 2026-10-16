@@ -45,16 +45,17 @@ def _single(value):
     return value if isinstance(value, str) and value else None
 
 
-def _inpaint_sources(params) -> tuple[Path, Path] | None:
-    """The saved alpha of the guide and the mask picture of an inpaint (a guide, a mask and the selectors that use both)."""
+def _inpaint_sources(params) -> tuple[Path, Path, bool] | None:
+    """The saved alpha of the guide, the mask picture of an inpaint (a guide, a mask and the selectors that use both) and whether
+    the edit is the area the mask leaves black (``N``, "Non Masked Area": the engine negates the mask). ``U`` drops the mask."""
     guide, mask = _single(params.get("image_guide")), _single(params.get("image_mask"))
-    selector = str(params.get("video_prompt_type") or "")
-    if not guide or not mask or params.get("video_guide_outpainting") or not {"V", "A"} <= set(selector):
+    selector = set(str(params.get("video_prompt_type") or ""))
+    if not guide or not mask or params.get("video_guide_outpainting") or not {"V", "A"} <= selector or "U" in selector:
         return None
     plane = alpha_plane_path(guide)
     if plane is None or not plane.is_file() or not Path(mask).is_file():
         return None
-    return plane, Path(mask)
+    return plane, Path(mask), "N" in selector
 
 
 def _layer(path: Path, size: tuple[int, int]) -> Image.Image:
@@ -81,8 +82,8 @@ def _composite(colour: np.ndarray, original: np.ndarray, weight: np.ndarray) -> 
     return np.dstack([np.rint(colour), alpha]).clip(0, 255).astype(np.uint8)
 
 
-def _write(path: str, result: np.ndarray, kind: str, text: dict) -> None:
-    options: dict = {}
+def _write(path: str, result: np.ndarray, kind: str, text: dict, kept: dict) -> None:
+    options: dict = dict(kept)
     if kind == "PNG":
         info = PngImagePlugin.PngInfo()
         for key, value in text.items():
@@ -99,7 +100,7 @@ def _write(path: str, result: np.ndarray, kind: str, text: dict) -> None:
             os.remove(temporary)
 
 
-def _restore(path: str, plane: Path, mask: Path) -> dict | None:
+def _restore(path: str, plane: Path, mask: Path, negated: bool = False) -> dict | None:
     kind = FORMATS.get(Path(path).suffix.lower())
     with Image.open(plane) as opened:
         opened.load()
@@ -111,14 +112,17 @@ def _restore(path: str, plane: Path, mask: Path) -> dict | None:
     with Image.open(path) as opened:
         opened.load()
         text = dict(getattr(opened, "text", {}) or {})
+        # The engine's own settings travel as PNG text or, in a WebP, as Exif: both go with the picture.
+        kept = {key: opened.info[key] for key in ("exif", "icc_profile") if opened.info.get(key)}
         rgba = opened.convert("RGBA")
     if rgba.getchannel("A").getextrema()[0] < 255:
         raise _Skipped("output_already_has_alpha")
     size = rgba.size
     if original.size != size:
         original = _layer(plane, size)
-    result = _composite(np.asarray(rgba.convert("RGB")), np.asarray(original), np.asarray(_layer(mask, size)))
-    _write(path, result, kind, text)
+    weight = np.asarray(_layer(mask, size))
+    result = _composite(np.asarray(rgba.convert("RGB")), np.asarray(original), 255 - weight if negated else weight)
+    _write(path, result, kind, text, kept)
     return {"status": "restored", "from": "image_guide", "mask": "image_mask"}
 
 
