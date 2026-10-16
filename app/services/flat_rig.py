@@ -63,7 +63,7 @@ from services.flat_rig_eyes import (
     _fill_holes, _not_skin, _upper_lid, _eye_opening,
     _hull, _whole_white, eye_openings, _lid_colour,
     _shadow_lid, _cover, blink_sprite, _blink_box,
-    _eye_skin, _outlined_eyes,
+    _eye_skin, _outlined_eyes, add_outlined_irises,
 )
 
 MAPPING = {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small",
@@ -813,7 +813,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
         warnings.append("stray_mark")
     sprite_width = _ink_sprite_width(mouth_box, guide, eyes_box) if ink else (ex1 - ex0) * style["mouth_scale"]
     lids = background if style["screen"] else _eye_skin(rgb, alpha, eyes_box, background)
-    openings = eye_openings(rgb, alpha, eyes_mask, lids, style["screen"])
+    openings = add_outlined_irises(eye_openings(rgb, alpha, eyes_mask, lids, style["screen"]), rgb, alpha,
+                                   guide.get("eye_outlines"), lids, style["screen"])
     ys, xs = np.nonzero(openings)
     # The whole openings, not just the whites: an anime iris and its lid reach past them.
     ox0, oy0, ox1, oy1 = min(ex0, int(xs.min())), min(ey0, int(ys.min())), max(ex1, int(xs.max()) + 1), max(ey1, int(ys.max()) + 1)
@@ -1032,9 +1033,10 @@ def pose_source(kit: dict[str, Any], pose: str) -> str:
 
 def _rig_poses(kit: dict[str, Any], style, workspace: str, workspace_dir: str, pose_ids, hints=None):
     assets = {"base": kit.get("base"), **(kit.get("poses") or {})}
-    wanted = list(pose_ids) if pose_ids else [pose for pose, asset in assets.items() if asset]
-    if "base" not in wanted or not assets.get("base"):
+    if not assets.get("base"):
         raise FlatRigError("missing_base", "Approve a base pose before rigging; the blink comes from it", 409)
+    # The blink and the shared mouths come from the base: a filter that leaves it out rigs it with the poses asked for.
+    wanted = list(dict.fromkeys(["base", *pose_ids])) if pose_ids else [pose for pose, asset in assets.items() if asset]
     rigs, sources = {}, {}
     for pose in wanted:
         if not assets.get(pose):

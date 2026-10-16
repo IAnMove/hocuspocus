@@ -6,8 +6,8 @@ cv2 = pytest.importorskip("cv2")
 from PIL import Image, ImageDraw
 
 from services import face_enlarge, face_landmarks, flat_rig_preview, flat_rig_warp
-from services.character_kit_library import patch_character_kit
-from services.flat_rig import _outlined_eyes, rig_character
+from services.character_kit_library import patch_character_kit, read_character_kit_library
+from services.flat_rig import FlatRigError, _outlined_eyes, kit_look, place, rig_character, rig_pose
 from services.flat_rig_base import STATES
 
 SKIN, LINE, BEARD, STRAND = (205, 140, 70, 255), (25, 15, 10, 255), (70, 45, 28, 255), (150, 118, 84, 255)
@@ -303,3 +303,83 @@ def test_a_rig_reports_each_poses_face_size_and_enlargement(tmp_path, monkeypatc
     flat_rig_preview._CACHE.clear()
     preview = flat_rig_preview.preview_mouth(str(folder), "cast", "hero", "base", states=["closed", "wide"])
     assert preview["faceSize"] == pose["faceSize"] and preview["mouth"] == pose["mouthLine"]["mouth"]
+
+
+def _kit_with(folder, poses):
+    """A saved kit with the base drawn by ``_figure`` and the given extra poses (the same drawing each)."""
+    folder.mkdir()
+    url = lambda name: f"/api/v1/file/{name}?workspace=cast"
+    asset = lambda name: {"id": name, "name": name, "source": url(f"{name}.png"), "kind": "image", "alphaStatus": "transparent", "reviewState": "approved"}
+    for name in ("hero", *poses):
+        _figure().save(folder / f"{name}.png")
+    kit = {"id": "hero", "name": "Hero", "style": "cutout", "base": asset("hero"), "poses": {pose: asset(pose) for pose in poses},
+           "mouth": {}, "eyes": {}, "anchors": {}}
+    patch_character_kit(str(folder), "hero", kit, base_revision=0)
+
+
+def test_a_pose_filter_that_leaves_out_the_base_rigs_the_approved_base_with_it(tmp_path, monkeypatch):
+    """Sol, 2026-10-15: ``poses: [book, sad]`` answered missing_base although the kit had an approved base. The blink and the
+    shared mouths come from the base, so it is rigged with the poses asked for (from its recorded original: the same rig)."""
+    monkeypatch.setattr(face_landmarks, "detect", lambda image: None)
+    folder = tmp_path / "cast"
+    _kit_with(folder, ["book", "sad", "wave"])
+    rigged = rig_character(str(folder), "cast", "hero", base_revision=1, pose_ids=["book", "sad"])
+    assert sorted(rigged["poses"]) == ["base", "book", "sad"], "the base comes with the filter; wave was not asked for"
+    kit = rigged["character"]
+    assert kit["eyes"]["blink"]["source"] and kit["mouth"]["closed"]["source"]
+    assert "anchors" in kit and set(kit["anchors"]) == {"base", "book", "sad"}
+    assert "-wave-rig-" not in kit["poses"]["wave"]["source"], "a pose left out of the filter is not touched"
+
+
+def test_a_kit_without_a_base_pose_still_asks_for_one(tmp_path):
+    folder = tmp_path / "cast"
+    _kit_with(folder, ["book"])
+    library = read_character_kit_library(str(folder))
+    kit = library["kits"]["hero"]
+    kit["base"] = None
+    patch_character_kit(str(folder), "hero", kit, base_revision=library["revision"])
+    with pytest.raises(FlatRigError) as raised:
+        rig_character(str(folder), "cast", "hero", base_revision=read_character_kit_library(str(folder))["revision"], pose_ids=["book"])
+    assert raised.value.code == "missing_base"
+
+
+def _sideways_eyes_figure(iris_beyond: int = 5) -> Image.Image:
+    """``_figure`` with eyes looking aside, as in a three-quarter face: each iris sits at the outer corner of its white and reaches
+    ``iris_beyond`` pixels past it, joined to a dark socket line that runs out of the eye (so the eye is cut back to its white)."""
+    image = _figure()
+    draw = ImageDraw.Draw(image)
+    for x0 in (124, 156):
+        corner = x0 - 1 if x0 < 150 else x0 + 21
+        outward = -1 if x0 < 150 else 1
+        draw.ellipse((corner - 5, 92, corner + 5, 104), fill=LINE)
+        draw.line((corner + outward * iris_beyond, 98, corner + outward * (iris_beyond + 12), 98), fill=LINE, width=2)
+    return image
+
+
+def test_an_iris_at_the_corner_of_a_sideways_eye_is_closed_with_the_lid():
+    """Sol, 2026-10-15 (Omani, Ingenescu): on a three-quarter face the iris at the corner of the white stayed open in the blink frame.
+    The eye is cut back to its white's surroundings; the landmarks' outline of the whole eye brings the iris with it."""
+    # Each eye's outline from corner to corner, the iris at one end inside it.
+    outlines = [[[x0 - 8, 98], [x0 - 2, 90], [x0 + 16, 90], [x0 + 24, 98], [x0 + 16, 106], [x0 - 2, 106]] for x0 in (122, 160)]
+    landmarks = {"eyes": outlines, "mouth": _lips(), "scores": {"eyes": 0.9, "mouth": 0.9}, "face": {"size": "small", "head": 84.0, "pass": "head"}}
+    rig = rig_pose(_sideways_eyes_figure(), kit_look({}, None), None, landmarks)
+    closed = np.array(place(rig["image"], rig["blink"], rig["eyes"]))
+    luma = closed[..., :3].astype(float) @ np.array([0.299, 0.587, 0.114])
+    skin = float(np.array(SKIN[:3], float) @ np.array([0.299, 0.587, 0.114]))
+    x0, y0 = rig["frame"][:2]  # the rig works on the figure cut out of the pose image
+    # The iris past each white, above and below the lid line the blink draws across the eye (the socket line starts beyond it).
+    for top, bottom, left, right in ((94, 98, 121, 124), (102, 104, 122, 125), (94, 98, 177, 180), (102, 104, 177, 180)):
+        assert (luma[top - y0:bottom - y0, left - x0:right - x0] > skin * 0.6).all(), f"the iris at x {left}..{right}, y {top}..{bottom} is still open after the blink"
+
+
+def test_a_pose_filter_that_names_the_base_rigs_it_once_and_keeps_the_order_asked_for(tmp_path, monkeypatch):
+    """The base is added to a filter that leaves it out, never on top of one that has it, and a repeated pose is rigged once."""
+    from services import flat_rig
+    monkeypatch.setattr(face_landmarks, "detect", lambda image: None)
+    seen = []
+    real = flat_rig.rig_pose
+    monkeypatch.setattr(flat_rig, "rig_pose", lambda *args, **kwargs: seen.append(args[0].size) or real(*args, **kwargs))
+    folder = tmp_path / "cast"
+    _kit_with(folder, ["book", "sad"])
+    rigged = rig_character(str(folder), "cast", "hero", base_revision=1, pose_ids=["book", "base", "book"])
+    assert sorted(rigged["poses"]) == ["base", "book"] and len(seen) == 2, "the base once, book once, sad not at all"

@@ -378,6 +378,27 @@ def eye_openings(rgb: np.ndarray, alpha: np.ndarray, eyes: np.ndarray, skin, scr
     return found
 
 
+def add_outlined_irises(openings: np.ndarray, rgb: np.ndarray, alpha: np.ndarray, outlines, skin, screen: bool = False) -> np.ndarray:
+    """The iris and pupil an eye's white leaves out. Eyes looking aside (a three-quarter face) have the iris at a corner of the
+    white, past the reach ``_eye_opening`` allows round it on a small face, and a closed lid left it showing. The landmarks'
+    outline of each eye (the whole eye, iris included) adds what is not face colour inside it to that eye's opening. An outline
+    that touches none of the openings found (landmarks on other eyes) adds nothing."""
+    if not outlines:
+        return openings
+    result = openings.copy()
+    other = _not_skin(rgb, np.asarray(skin, dtype=float), screen) & (alpha > 200)
+    for outline in outlines:
+        points = np.asarray(outline, dtype=float)
+        shape = np.zeros(alpha.shape, np.uint8)
+        cv2.fillPoly(shape, [np.round(points).astype(np.int32)], 1)
+        shape = _dilate(shape > 0, max(1, int(np.ptp(points[:, 0]) * 0.06)))
+        found = openings[shape]
+        if not (found > 0).any():
+            continue
+        result[shape & other & (result == 0)] = np.bincount(found[found > 0]).argmax()
+    return result
+
+
 def _lid_colour(rgb: np.ndarray, alpha: np.ndarray, cover: np.ndarray, skin: np.ndarray) -> tuple[int, ...]:
     """The face colour right around one covered eye, from face pixels only (not iris, lashes or hair)."""
     grow = max(2, int(np.sqrt(cover.sum()) * 0.2))

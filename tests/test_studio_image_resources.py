@@ -547,3 +547,34 @@ def test_only_a_guide_or_mask_with_real_transparency_is_copied_and_every_other_p
     with Image.open(flattened(path, "image_guide", digest, str(tmp_path))) as guide:
         assert guide.getpixel((1, 1)) == (191, 191, 191), "half-transparent white over neutral grey (127)"
     assert not [item for item in (tmp_path / FLATTENED_DIR).iterdir() if item.suffix == ".tmp"], "no half-written copy is left behind"
+
+
+def test_a_guides_alpha_is_saved_beside_its_flattened_copy_also_for_a_copy_made_before_that_existed(tmp_path):
+    """The engine returns RGB: the inpainted picture's transparency is put back from this plane (``studio_image_alpha_restore``)."""
+    from services.studio_image_alpha import FLATTENED_DIR, alpha_plane_path, flattened
+
+    picture = Image.new("RGBA", (6, 4), (10, 20, 30, 255))
+    picture.paste((10, 20, 30, 0), (0, 0, 2, 4))
+    picture.putpixel((5, 0), (10, 20, 30, 77))
+    path = tmp_path / "keyed.png"
+    picture.save(path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    copy = flattened(str(path), "image_guide", digest, str(tmp_path))
+    plane = alpha_plane_path(copy)
+    assert plane == Path(copy).with_name(f"{digest[:32]}-image_guide.alpha.png") and plane.parent.name == FLATTENED_DIR
+    with Image.open(plane) as alpha:
+        assert alpha.mode == "L" and alpha.size == (6, 4)
+        assert alpha.getpixel((0, 0)) == 0 and alpha.getpixel((5, 0)) == 77 and alpha.getpixel((3, 3)) == 255
+    # a copy the previous release made has none: the next request adds it and leaves the copy as it was
+    plane.unlink()
+    before = Path(copy).read_bytes()
+    assert flattened(str(path), "image_guide", digest, str(tmp_path)) == copy
+    assert plane.is_file() and Path(copy).read_bytes() == before
+    # only a guide has one: a mask is read from its black copy, a reference and a picture without alpha are passed untouched
+    flattened(str(path), "image_mask", digest, str(tmp_path))
+    assert alpha_plane_path(str(tmp_path / FLATTENED_DIR / f"{digest[:32]}-image_mask.png")) is None
+    assert sorted(item.name for item in (tmp_path / FLATTENED_DIR).iterdir()) == sorted(
+        [Path(copy).name, plane.name, f"{digest[:32]}-image_mask.png"])
+    flat = tmp_path / "flat.png"
+    Image.new("RGB", (6, 4), (1, 2, 3)).save(flat)
+    assert flattened(str(flat), "image_guide", "f" * 64, str(tmp_path)) == str(flat) and alpha_plane_path(str(flat)) is None
