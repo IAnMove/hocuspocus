@@ -6602,7 +6602,7 @@ def _trim_video_tail(clip_path, trim_frames, fps):
 
 def concatenate_multi_clip_videos(
     clip_paths, output_path, audio_path=None, audio_start_sec=0.0,
-    abort_callback=None, pad_audio=False, audio_duration_sec=None,
+    abort_callback=None, pad_audio=False, audio_duration_sec=None, allow_soft_join=True,
 ):
     """Concatenate video clips into one video, optionally adding a full audio track.
 
@@ -6675,22 +6675,32 @@ def concatenate_multi_clip_videos(
 
     try:
         from services.mix_concat import (
+            ASSEMBLY_BLOCK_CLIPS,
+            FfmpegOutOfMemory,
             build_hard_concat_filter,
+            child_process_options,
             concat_with_tail_hold_and_crossfade,
             driving_soundtrack_bound,
             probe_audio_flags,
             probe_duration_seconds,
+            raise_if_out_of_memory,
             should_use_hold_crossfade,
         )
+        from services.mix_concat_blocks import hard_join_in_blocks
     except ImportError:
         from app.services.mix_concat import (
+            ASSEMBLY_BLOCK_CLIPS,
+            FfmpegOutOfMemory,
             build_hard_concat_filter,
+            child_process_options,
             concat_with_tail_hold_and_crossfade,
             driving_soundtrack_bound,
             probe_audio_flags,
             probe_duration_seconds,
+            raise_if_out_of_memory,
             should_use_hold_crossfade,
         )
+        from app.services.mix_concat_blocks import hard_join_in_blocks
 
     # Probe every clip. A video-only bumper (or mute H3 shot) in slot 0
     # used to hide later dialogue; a later video-only clip crashed ffmpeg
@@ -6703,7 +6713,7 @@ def concatenate_multi_clip_videos(
 
     use_clip_audio = clips_have_audio and not audio_path
     audio_label = "with embedded audio" if use_clip_audio else ("with external audio" if audio_path else "video only")
-    if should_use_hold_crossfade(
+    if allow_soft_join and should_use_hold_crossfade(
         n,
         has_driving_audio=bool(audio_path),
         pad_audio=bool(pad_audio),
@@ -6717,6 +6727,17 @@ def concatenate_multi_clip_videos(
         if abort_callback is not None and abort_callback():
             return False
         print("[Multi-Clip] Soft join failed; falling back to hard concat")
+    if n > ASSEMBLY_BLOCK_CLIPS:
+        # One graph keeps a decoder per clip: join in blocks, then join the blocks (with the driving soundtrack).
+        print(f"[Multi-Clip] Joining {n} clips in blocks of at most {ASSEMBLY_BLOCK_CLIPS}")
+        return hard_join_in_blocks(
+            valid_paths, output_path,
+            lambda blocks: concatenate_multi_clip_videos(
+                blocks, output_path, audio_path, audio_start_sec=audio_start_sec, abort_callback=abort_callback,
+                pad_audio=pad_audio, audio_duration_sec=audio_duration_sec, allow_soft_join=False,
+            ),
+            with_clip_audio=use_clip_audio, ffmpeg_bin=ffmpeg_bin, abort_callback=abort_callback,
+        )
     print(f"[Multi-Clip] Joining {n} clips using concat filter (re-encode, {audio_label})")
     if audio_path and audio_start_sec > 0:
         print(f"[Multi-Clip] External audio begins at source time {audio_start_sec:.3f}s")
@@ -6840,6 +6861,7 @@ def concatenate_multi_clip_videos(
                 capture_output=True,
                 text=True,
                 timeout=1200,
+                **child_process_options(),
             )
             returncode = completed.returncode
             stderr = completed.stderr
@@ -6849,6 +6871,7 @@ def concatenate_multi_clip_videos(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                **child_process_options(),
             )
             deadline = time.monotonic() + 1200.0
             while True:
@@ -6885,6 +6908,7 @@ def concatenate_multi_clip_videos(
                 tail = err[-1000:] if len(err) > 1000 else err
                 print(tail)
             _remove_partial_output()
+            raise_if_out_of_memory(returncode, stderr, cmd)
             return False
 
         # Verify output file has content; an ffmpeg zero-byte success is not a
@@ -6904,6 +6928,8 @@ def concatenate_multi_clip_videos(
             process.communicate()
         _remove_partial_output()
         return False
+    except FfmpegOutOfMemory:
+        raise
     except Exception as e:
         print(f"[Multi-Clip] Concatenation failed: {e}")
         _remove_partial_output()

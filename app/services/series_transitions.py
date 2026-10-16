@@ -26,7 +26,7 @@ from services.mix_concat import (
 KINDS = ("cut", "fade_black", "dissolve", "dip_white")
 _ACTIVE = frozenset({"fade_black", "dissolve", "dip_white"})
 _TAIL = 0.05
-_GRID_FPS = 24  # an episode's frame rate (series_take_sound.FPS): the picture at a fade lies on this grid
+_GRID_FPS = 24  # an episode's frame rate (series_shot_plan.FPS): the picture at a fade lies on this grid
 
 
 def _whole_frames(seconds: float) -> float:
@@ -213,12 +213,39 @@ def _active_filter(durations, transitions, *, hold_sec: float, fade_sec: float, 
         raise ValueError("need at least two clip durations")
     flags = _flags(count, with_audio, has_audio)
     clips, _length = _plan(durations, transitions, hold_sec, fade_sec)
+    return chain_filter(clips, flags, hold_sec)
+
+
+def chain_filter(clips: Sequence[_Clip], flags: list[bool] | None, hold_sec: float = HOLD_TAIL_SEC) -> tuple[str, str, str | None]:
+    """The filter list that joins ``clips`` (a planned run, or the blocks one was cut into) in order."""
     parts = [_prepared(index, clip, hold_sec, flags) for index, clip in enumerate(clips)]
     video, audio = "v0", ("a0" if flags is not None else None)
-    for index in range(1, count):
-        video, audio, extra = _join(video, audio, index, clips[index], flags is not None)
+    restamp = False
+    for index in range(1, len(clips)):
+        video, audio, extra = _join(video, audio, index, clips[index], flags is not None, restamp)
         parts.append(extra)
+        restamp = clips[index].kind not in ("cut", "dissolve")
     return ";".join(parts), video, audio
+
+
+def plan_clips(durations: Sequence[float], transitions: Sequence[Any] | None = None,
+               hold_sec: float = HOLD_TAIL_SEC, fade_sec: float = FADE_SEC) -> list[_Clip]:
+    """Every clip of the whole join, planned once, so each block of a long join is cut from the same plan."""
+    return _plan(durations, transitions, hold_sec, fade_sec)[0]
+
+
+def rebased(clips: Sequence[_Clip]) -> list[_Clip]:
+    """``clips`` (one block) as if they began the join: the first has no join in and starts at 0."""
+    base = round(clips[0].start, 3)
+    first = clips[0]._replace(kind="cut", seconds=0.0, start=0.0)
+    return [first] + [clip._replace(start=round(clip.start, 3) - base) for clip in clips[1:]]
+
+
+def merged(clips: Sequence[_Clip]) -> _Clip:
+    """One block as a single clip of the join above it: its planned length, the join the first clip had."""
+    end = max(clip.start + clip.played for clip in clips)
+    length = end - clips[0].start
+    return _Clip(length, length, clips[0].kind, clips[0].seconds, clips[0].start)
 
 
 def _prepared(index: int, clip: _Clip, hold_sec: float, flags: list[bool] | None) -> str:
@@ -228,9 +255,9 @@ def _prepared(index: int, clip: _Clip, hold_sec: float, flags: list[bool] | None
     return video + ";" + _audio_pad_filter(index, clip.played, flags[index])
 
 
-def _join(video, audio, index: int, clip: _Clip, mix: bool):
+def _join(video, audio, index: int, clip: _Clip, mix: bool, restamp: bool = True):
     if clip.kind in ("cut", "dissolve"):
-        return _dissolve(video, audio, index, clip.start, clip.seconds, mix)
+        return _dissolve(video, audio, index, clip.start, clip.seconds, mix, restamp)
     if clip.seconds > 0:
         color = "white" if clip.kind == "dip_white" else "black"
         return _dip(video, audio, index, clip.start, clip.seconds, color, mix)
@@ -246,13 +273,16 @@ def _concat(video, audio, index, mix: bool):
     return video_label, None, f"[{video}][v{index}]concat=n=2:v=1:a=0[{video_label}]"
 
 
-def _dissolve(video, audio, index, offset, seconds, mix: bool):
-    """The incoming clip from ``offset``, over the last ``seconds`` of the outgoing one (its held tail for a cut)."""
+def _dissolve(video, audio, index, offset, seconds, mix: bool, restamp: bool = True):
+    """The incoming clip from ``offset``, over the last ``seconds`` of the outgoing one (its held tail for a cut).
+
+    What a concat made is re-stamped to the common timebase first. What an xfade made already has it, and the extra
+    filter in the chain made ffmpeg buffer twice the frames (a 15-clip block: 4.9 GB against 2.7 GB).
+    """
     video_label, audio_label = f"vx{index}", f"ax{index}"
-    parts = [
-        f"[{video}]settb=AVTB,setpts=PTS-STARTPTS[vb{index}]",
-        f"[vb{index}][v{index}]xfade=transition=fade:duration={seconds:.3f}:offset={offset:.3f}[{video_label}]",
-    ]
+    parts = [f"[{video}]settb=AVTB,setpts=PTS-STARTPTS[vb{index}]"] if restamp else []
+    first = f"vb{index}" if restamp else video
+    parts.append(f"[{first}][v{index}]xfade=transition=fade:duration={seconds:.3f}:offset={offset:.3f}[{video_label}]")
     if mix:
         parts.append(f"[{audio}][a{index}]acrossfade=d={seconds:.6f}[{audio_label}]")
         return video_label, audio_label, ";".join(parts)
