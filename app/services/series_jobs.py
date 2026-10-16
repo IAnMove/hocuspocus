@@ -5,12 +5,23 @@ from __future__ import annotations
 import copy
 import json
 import os
+import time
 import uuid
 from typing import Any
 
 
 SERIES_JOBS_DIR = ".series-jobs-v1"
 KINDS = {"planning", "render", "assembly", "native", "produce"}
+ACTIVE_STATUSES = frozenset({"queued", "running", "cancelling"})
+
+
+def interrupt_orphaned_job(store: "SeriesJobStore", job: dict, *, alive: bool, message: str) -> dict:
+    """A checkpoint left ``running`` after the worker died becomes resumable."""
+    if str(job.get("status") or "") not in ACTIVE_STATUSES or alive:
+        return job
+    job.update(status="interrupted", message=message, finishedAt=time.time())
+    store.save(job)
+    return job
 
 
 class SeriesJobStore:

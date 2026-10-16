@@ -214,3 +214,53 @@ def test_produce_refuses_a_language_without_a_version(tmp_path):
     assert raised.value.code == "no_version"
     with pytest.raises(ProduceError):
         service.start("cast", "uv", "nope")
+
+
+def _stale_produce(tmp_path, status="running"):
+    from services.series_jobs import SeriesJobStore
+    job = {"jobId": "produce-stale1", "workspace": "cast", "seriesId": "uv", "episodeId": "ep2",
+           "original": "spanish", "languages": ["spanish"], "burnSubtitles": True, "status": status,
+           "steps": [{"kind": "render", "language": "spanish", "status": "running"}],
+           "chapters": {}, "createdAt": time.time(), "message": "Producing"}
+    SeriesJobStore(str(tmp_path), "produce").save(job)
+    return job
+
+
+def test_a_stale_produce_checkpoint_is_interrupted_and_does_not_block_a_new_start(tmp_path):
+    stale = _stale_produce(tmp_path)
+    fresh = producer(tmp_path, Production())
+    started = fresh.start("cast", "uv", "ep2", languages=["spanish"])
+    assert started["jobId"] != stale["jobId"]
+    assert fresh.status("cast", stale["jobId"])["status"] == "interrupted"
+    assert finished(fresh, started["jobId"])["status"] == "completed"
+
+
+def test_resume_rewrites_a_stale_running_produce(tmp_path):
+    tools = Production()
+    service = producer(tmp_path, tools)
+    stale = _stale_produce(tmp_path, status="cancelling")
+    done = finished(service, service.resume("cast", stale["jobId"])["jobId"])
+    assert done["status"] == "completed"
+    assert [tool for tool, _ in tools.calls].count("series.episode.render_native") == 1
+
+
+def test_produce_restarts_an_interrupted_assembly(tmp_path):
+    class Cuts(Production):
+        def __init__(self):
+            super().__init__(fail_english=0)
+            self.cuts = 0
+
+        def __call__(self, tool, arguments):
+            data = arguments["input"]
+            if tool == "series.assembly.status":
+                self.cuts += 1
+                if self.cuts == 1:
+                    return {"result": {"job": {"status": "interrupted", "message": "process died"}}}
+                return {"result": {"job": {"status": "completed", "assetId": "asset-spanish", "filename": "spanish.mp4"}}}
+            return super().__call__(tool, arguments)
+
+    tools = Cuts()
+    service = producer(tmp_path, tools)
+    done = finished(service, service.start("cast", "uv", "ep2", languages=["spanish"])["jobId"])
+    assert done["status"] == "completed" and done["chapters"]["spanish"]["file"] == "spanish.mp4"
+    assert [tool for tool, _ in tools.calls].count("series.assembly.start") == 2

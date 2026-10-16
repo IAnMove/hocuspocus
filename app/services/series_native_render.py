@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from services.audio_levels import gain_to, level_file
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import ACTIVE_STATUSES, SeriesJobStore, interrupt_orphaned_job
 from services.series_language_versions import LANGUAGES, localized_view, missing_lines
 from services.series_shot_bridge import run_series_shot, with_pose_sizes
 from services import series_shot3d
@@ -41,6 +41,7 @@ from services.series_shot_extras import pauses, timing_args
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, voice_for
 
 KIND = "native"
+STALE_MESSAGE = "The previous render process was interrupted; resume to continue."
 STAGES = ("voices", "scene", "export", "import", "done")
 MAX_TAKES = 3
 MAX_WER = 0.34
@@ -167,7 +168,8 @@ class SeriesNativeRender:
         raw_series, language, shots = self._preflight(workspace, series_id, episode_id, shot_ids, language)
         store = self._store(workspace)
         for job in store.list():
-            if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ("queued", "running"):
+            if (job.get("episodeId") == episode_id and job.get("language") == language
+                    and self._normalize(workspace, job).get("status") in ACTIVE_STATUSES):
                 raise NativeRenderError("already_running", "This episode is already rendering on the server")
         job_id = f"native-{uuid.uuid4().hex[:12]}"
         job = {"jobId": job_id, "workspace": workspace, "seriesId": series_id, "episodeId": episode_id, "status": "queued",
@@ -203,6 +205,16 @@ class SeriesNativeRender:
                                                               *(beat.get("characterId") for beat in shot.get("dialogueBeats") or [])] if cid)
         return [str(names.get(cid, cid)) for cid in ids if (kit_ref(series, cid) or {}).get("id") not in kits]
 
+    def _thread_alive(self, job_id: str) -> bool:
+        with self._lock:
+            thread = self._threads.get(job_id)
+            return bool(thread and thread.is_alive())
+
+    def _normalize(self, workspace: str, job: dict[str, Any]) -> dict[str, Any]:
+        return interrupt_orphaned_job(
+            self._store(workspace), job, alive=self._thread_alive(str(job.get("jobId") or "")),
+            message=STALE_MESSAGE)
+
     def _launch(self, workspace: str, job_id: str) -> None:
         with self._lock:
             running = self._threads.get(job_id)
@@ -214,13 +226,13 @@ class SeriesNativeRender:
             thread.start()
 
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
-        return self._store(workspace).list()
+        return [self._normalize(workspace, job) for job in self._store(workspace).list()]
 
     def status(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self._store(workspace).load(job_id)
         if not job:
             raise NativeRenderError("not_found", "Render job not found", 404)
-        return job
+        return self._normalize(workspace, job)
 
     def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self.status(workspace, job_id)
