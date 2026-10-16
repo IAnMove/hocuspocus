@@ -39,7 +39,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/core_labs.py` | Story, Character Kit and Series filesystem persistence for core/remote. | 154 | core | — |
 | `app/routers/core_mcp.py` | Core MCP handlers on the shared wangp transport. | 115 | core | tests/test_core_mcp.py, tests/test_mcp_access.py |
 | `app/routers/core_remote.py` | Remote providers, production profile and Director planning for core/remote. | 189 | core | tests/test_no_paid_music_defaults.py |
-| `app/routers/director.py` | Director planner and short-film pipeline routes for the full server. | 858 | launch | tests/characterization/test_generation_worker_bind.py, tests/test_job_lifecycle_wiring.py |
+| `app/routers/director.py` | Director planner and short-film pipeline routes for the full server. | 876 | launch | tests/characterization/test_generation_worker_bind.py, tests/test_job_lifecycle_wiring.py |
 | `app/routers/director_comic.py` | Director comic HTTP routes for the full server. | 1063 | launch | tests/characterization/test_comics.py, tests/test_comic_plan_resume_contract.py |
 | `app/routers/director_pipeline_reads.py` | Director routes that both servers serve the same way. | 155 | launch | tests/test_core_runtime.py |
 | `app/routers/director_review.py` | — | 39 | launch | tests/test_director_review.py, tests/test_director_visible_reference.py |
@@ -173,7 +173,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 
 `app/services/director/__init__.py` (6 —), `app/services/director/comic_identity.py` (104 —), `app/services/director/guide_loader.py` (29 —), `app/services/director/h3_dialogue.py` (2064 —)
 `app/services/director/h3_story_contracts.py` (153 —), `app/services/director/image_prompt_rules.py` (210 —), `app/services/director/minimax_h3_prompting.py` (395 —), `app/services/director/music_video_coverage.py` (134 —)
-`app/services/director/nsfw_guidance.py` (142 —), `app/services/director/orchestrator.py` (523 —), `app/services/director/pipeline_locks.py` (136 —), `app/services/director/pipeline_observer.py` (93 —)
+`app/services/director/nsfw_guidance.py` (142 —), `app/services/director/orchestrator.py` (523 —), `app/services/director/pipeline_locks.py` (255 —), `app/services/director/pipeline_observer.py` (93 —)
 `app/services/director/pipeline_reconcile.py` (118 —), `app/services/director/pipeline_repair_plan.py` (171 —), `app/services/director/planners/__init__.py` (6 —), `app/services/director/planners/base.py` (431 —)
 `app/services/director/planners/comic_movie.py` (1607 —), `app/services/director/planners/music_video.py` (1636 —), `app/services/director/planners/podcast.py` (322 —), `app/services/director/planners/short_film.py` (6696 —)
 `app/services/director/planners/viral_video.py` (221 —), `app/services/director/policies.py` (1078 —), `app/services/director/prompt_cleanup.py` (76 —), `app/services/director/prompt_polish.py` (2469 —)
@@ -272,7 +272,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 `app/services/core_canonical_tasks.py` (277 core), `app/services/core_generation_commands.py` (305 core), `app/services/core_production.py` (105 core), `app/services/core_remote_3d.py` (290 —), `app/services/core_remote_image.py` (288 core)
 `app/services/core_series_assembly.py` (171 both), `app/services/core_workspace.py` (250 core), `app/services/creation_model_catalog.py` (117 —), `app/services/creation_model_execution.py` (51 —)
 `app/services/creation_model_graphs.py` (94 —), `app/services/creation_model_service.py` (222 —), `app/services/debug_trace.py` (196 launch), `app/services/diorama_set.py` (180 —), `app/services/director_comic_film.py` (101 —)
-`app/services/director_comic_jobs.py` (220 launch), `app/services/director_model_compat.py` (328 —), `app/services/director_pipeline.py` (14424 launch), `app/services/director_pipeline_state.py` (174 —)
+`app/services/director_comic_jobs.py` (220 launch), `app/services/director_model_compat.py` (328 —), `app/services/director_pipeline.py` (14536 launch), `app/services/director_pipeline_state.py` (174 —)
 `app/services/director_plan_jobs.py` (297 —), `app/services/director_review.py` (154 —), `app/services/director_v2_plan.py` (461 launch), `app/services/director_video_strategy.py` (1070 —), `app/services/document_origin.py` (191 —)
 `app/services/durable_generation_queue.py` (122 —), `app/services/enhance_guides.py` (161 —), `app/services/episode_av_sync.py` (161 —), `app/services/episode_finishing.py` (608 —), `app/services/example_assets.py` (95 —)
 `app/services/example_collections.py` (140 —), `app/services/execution_mode.py` (253 launch), `app/services/export_output_name.py` (145 —), `app/services/export_qa.py` (547 launch), `app/services/export_receipts.py` (116 —)

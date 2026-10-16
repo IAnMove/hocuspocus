@@ -599,13 +599,31 @@ async def rerun_pipeline_clip_video(pid: str, clip_index: int, request: Request)
     from services.production_shot_regeneration import guard_shared_regeneration
     guard_shared_regeneration(base, body.get("workspace") or "default", body,
                               f"/api/v1/director/pipelines/{pid}/clips/{clip_index}/rerun-video")
+    prompt_override = body.get("prompt")
     try:
+        # By default Repeat waits here until the clip is done: the Studio
+        # review looks the new take up by the filename in this reply. A client
+        # that cannot hold a request open for a whole H3 clip (the validation
+        # harness times out at 60s) sends ``"wait": false`` and gets 202 with
+        # the same filename/clip_index shape (filename null until the worker
+        # finishes). A test double that does not take ``blocking`` keeps the
+        # synchronous reply.
+        code = getattr(rerun_clip_video, "__code__", None)
+        if body.get("wait") is False and "blocking" in getattr(code, "co_varnames", ()):
+            result = rerun_clip_video(
+                base,
+                pid,
+                clip_index,
+                prompt_override=prompt_override,
+                blocking=False,
+            )
+            return JSONResponse(result, status_code=202)
         result = await asyncio.to_thread(
             rerun_clip_video,
             base,
             pid,
             clip_index,
-            prompt_override=body.get("prompt"),
+            prompt_override=prompt_override,
         )
         return result
     except PipelineBusyError as e:
