@@ -121,3 +121,38 @@ test('a VoxCPM2 line sends the reference and transcript, no language mode, and i
   assert.equal(requests[0].alt_prompt, custom.transcript)
   assert.deepEqual(requests[0].custom_settings, { style: 'susurrando' })
 })
+
+test('Drama 3 clone and design voices round-trip and generate like Studio', async () => {
+  const drama: CustomCharacterVoice = { ...custom, model: 'drama3_base', name: 'Sol' }
+  assert.deepEqual(parseCharacterVoice(JSON.parse(JSON.stringify(drama))), drama)
+  assert.throws(() => parseCharacterVoice({ ...drama, instructions: 'warm' }), /no style/)
+  const design = { provider: 'local' as const, model: 'drama3_voicedesign' as const, voiceId: 'design' as const,
+    name: 'Sol', language: 'spanish' as const, instructions: 'warm' }
+  assert.deepEqual(parseCharacterVoice(design), design)
+  assert.throws(() => parseCharacterVoice({ ...design, referenceAudio: drama.referenceAudio, transcript: 'Hola.' }), /drama3_base/)
+  assert.equal(resolvedCharacterTts({ ...createCharacterKit('Sol'), voice: drama }).engine, 'Drama 3')
+  assert.equal(resolvedCharacterTts({ ...createCharacterKit('Sol'), voice: design }).voiceName, 'Sol')
+  const requests: Record<string, unknown>[] = []
+  await generateSceneSpeechClip({ model: drama.model, voice: drama, prompt: 'Nueva frase.', durationSeconds: 5, workspace: 'episode' }, {
+    adoptAudio: async () => ({ filename: 'sol.wav', path: '/server/sol.wav', url: drama.referenceAudio }),
+    submitGeneration: async params => { requests.push(params); return { job_id: 'drama-clone', status: 'queued' } },
+    fetchJobStatus: async () => ({ status: 'completed', output_files: ['line.flac'] } as never),
+  })
+  assert.equal(requests[0].model_type, 'drama3_base')
+  assert.equal('model_mode' in requests[0], false)
+  assert.equal(requests[0].audio_prompt_type, 'A')
+  assert.equal(requests[0].audio_guide, '/server/sol.wav')
+  assert.equal(requests[0].alt_prompt, custom.transcript)
+  assert.equal(requests[0].prompt, 'Nueva frase. [language: es]')
+  assert.equal('custom_settings' in requests[0], false)
+  requests.length = 0
+  await generateSceneSpeechClip({ model: design.model, voice: design, prompt: 'Nueva frase.', durationSeconds: 5, workspace: 'episode' }, {
+    submitGeneration: async params => { requests.push(params); return { job_id: 'drama-design', status: 'queued' } },
+    fetchJobStatus: async () => ({ status: 'completed', output_files: ['line.flac'] } as never),
+  })
+  assert.equal(requests[0].model_type, 'drama3_voicedesign')
+  assert.equal('audio_guide' in requests[0], false)
+  assert.equal('model_mode' in requests[0], false)
+  assert.equal(requests[0].alt_prompt, 'warm')
+  assert.equal(requests[0].prompt, 'Nueva frase. [language: es]')
+})

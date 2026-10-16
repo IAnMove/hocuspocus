@@ -54,15 +54,14 @@ async function submitSpeech(options: SceneSpeechOptions, deps: SceneSpeechDepend
   const submitted = await deps.submitGeneration({
     model_type: model,
     generation_mode: 'audio',
-    prompt,
+    prompt: voice && voices ? voices.linePrompt(model, prompt, 'language' in voice ? voice.language : undefined) : prompt,
     video_length: 0,
     image_mode: 0,
     multi_prompts_gen_type: 2,
     duration_seconds: Math.max(1, options.durationSeconds),
     _audio_sub_mode: 'speech',
     ...(options.workspace ? { workspace: options.workspace } : {}),
-    ...(reference && voices ? voices.referenceVoiceParams(reference, referencePath)
-      : voice ? { model_mode: voice.voiceId, alt_prompt: voice.instructions ?? '' } : {}),
+    ...(voice && voices ? voices.speechVoiceParams(voice, referencePath) : {}),
   })
   return { prompt, model, jobId: submitted.job_id }
 }

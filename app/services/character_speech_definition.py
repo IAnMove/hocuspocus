@@ -8,9 +8,12 @@ CHARACTER_VOICE_LANGUAGES = {"auto", "chinese", "english", "japanese", "korean",
 # A character can carry one dedicated voice per spoken language; "auto" is not a language.
 CHARACTER_VOICE_DUB_LANGUAGES = CHARACTER_VOICE_LANGUAGES - {"auto"}
 # Speech models that clone a character voice from a reference recording and its transcript.
-REFERENCE_VOICE_MODELS = ("qwen3_tts_base", "voxcpm2_base")
+# Drama 3 clone is the same shape and requires the transcript; it takes no style direction.
+REFERENCE_VOICE_MODELS = ("qwen3_tts_base", "voxcpm2_base", "drama3_base")
 # Reference voices that may also carry a style direction (VoxCPM2 controllable cloning).
 STYLED_REFERENCE_VOICE_MODELS = ("voxcpm2_base",)
+# A designed voice with no recording. Drama 3 Voice Design takes an optional direction, never a sample.
+DESIGN_VOICE_MODELS = ("drama3_voicedesign",)
 VOICE_STYLE_MAX_CHARS = 300
 
 
@@ -185,6 +188,27 @@ def _voice_style(value):
     return {"instructions": style.strip()} if style.strip() else {}
 
 
+def _design_direction(value):
+    direction = value.get("instructions")
+    if direction is None:
+        return {}
+    if not isinstance(direction, str) or len(direction) > VOICE_STYLE_MAX_CHARS:
+        raise ValueError("Voice instructions are too long.")
+    return {"instructions": direction.strip()} if direction.strip() else {}
+
+
+def _normalize_design_voice(value):
+    """Drama 3 Voice Design: a name, a language and an optional direction. No recording."""
+    required = {"provider", "model", "voiceId", "name", "language"}
+    if not required <= set(value) <= required | {"instructions"}:
+        raise ValueError("Drama 3 Voice Design takes no recording. Use drama3_base to clone a voice.")
+    if (value.get("provider") != "local" or value.get("model") not in DESIGN_VOICE_MODELS or value.get("voiceId") != "design"
+            or not _voice_text(value.get("name"), 120)
+            or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
+        raise ValueError("Add a name and a supported language for this Drama 3 voice.")
+    return {**{key: value[key] for key in required}, "name": value["name"].strip(), **_design_direction(value)}
+
+
 def _normalize_reference_voice(value):
     required = {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
     if (not required <= set(value) <= required | {"instructions"}
@@ -200,6 +224,8 @@ def _normalize_reference_voice(value):
 def normalize_character_voice(value):
     if is_reference_voice(value):
         return _normalize_reference_voice(value)
+    if isinstance(value, dict) and value.get("model") in DESIGN_VOICE_MODELS:
+        return _normalize_design_voice(value)
     if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"}:
         raise ValueError("Store voice preferences only, never credentials.")
     if value.get("provider") != "local" or value.get("model") != "qwen3_tts_customvoice":
@@ -220,7 +246,9 @@ def normalize_character_voices_by_language(value):
         if language not in CHARACTER_VOICE_DUB_LANGUAGES:
             raise ValueError("Unsupported voice language.")
         normalized = normalize_character_voice(voice)
-        if is_reference_voice(normalized) and normalized["language"] not in {language, "auto"}:
+        speaks = normalized.get("language")
+        designed = normalized.get("model") in DESIGN_VOICE_MODELS
+        if (is_reference_voice(normalized) or designed) and speaks not in {language, "auto"}:
             raise ValueError("A reference voice must speak the language it is assigned to.")
         result[language] = normalized
     return result

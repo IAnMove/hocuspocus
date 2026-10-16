@@ -647,6 +647,18 @@ def test_a_kit_without_a_voice_fails_the_check():
     assert tools.calls == []
 
 
+def test_a_drama3_kit_voice_counts_for_the_script_check():
+    """from_script only asks that a voice exists for the language. Drama 3 is one."""
+    tools = Series()
+    clone = {"provider": "local", "model": "drama3_base", "voiceId": "reference", "name": "Kevin",
+             "referenceAudio": "/api/v1/uploads/kevin.wav", "transcript": "Hola.", "language": "spanish"}
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design", "name": "Kevin EN", "language": "english"}
+    kits = {**KITS, "kit-kevin": {"poses": {"panic": {}}, "voice": clone, "voicesByLanguage": {"english": design}}}
+    checked = apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
+    assert checked["checked"] is True
+    assert not any("kevin has no" in problem for problem in checked.get("problems") or [])
+
+
 def test_cast_index_is_stored_on_the_beat_and_must_point_at_the_cast():
     from services.series_script import EpisodeScript
     tools = Series()

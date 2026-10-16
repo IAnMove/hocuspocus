@@ -137,6 +137,24 @@ test('the default engine, VoxCPM2, designs from the description alone and the ch
     'voxcpm2_base')
 })
 
+test('Drama 3 designs without a language mode and the chosen take is a Drama 3 clone', async () => {
+  const submitted: Record<string, unknown>[] = []
+  const voices = await designVoiceCandidates({
+    workspace: 'cast', description: 'Female voice. Warm and clear.', text: 'Hola. Esta es mi voz.', language: 'spanish',
+    engine: 'drama3', signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 4,
+    submitGeneration: async params => { submitted.push(params); return { job_id: 'drama-design' } as never },
+    fetchJobStatus: async () => ({ status: 'completed', output_files: ['drama.wav'] }) as never,
+    checkSpeech: async () => ({ transcript: 'Hola. Esta es mi voz.', wer: 0, medianPitchHz: 210, wordsPerSecond: 2.4, duration: 3, warnings: [] }),
+    fileUrl: (name, workspace) => `/api/v1/file/${name}?workspace=${workspace}`,
+  })
+  assert.equal(VOICE_ENGINES.drama3.design, 'drama3_voicedesign')
+  assert.ok(submitted.every(params => params.model_type === 'drama3_voicedesign' && !('model_mode' in params) && !('audio_guide' in params)
+    && params.alt_prompt === 'Female voice. Warm and clear.'))
+  assert.equal(referenceVoice(voices[0], { name: 'Sol', text: 'Hola. Esta es mi voz.', language: 'spanish' }, 'drama3').model, 'drama3_base')
+})
+
 type CreatorRequest = { method: string; url: string; body?: Record<string, unknown> }
 
 /** The server a Character Creator run talks to: image jobs, keying, the kit library and the flat rig, whose reply

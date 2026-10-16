@@ -261,7 +261,8 @@
       "engine": "Motor de voz",
       "engines": {
         "qwen3_tts_base": "Qwen3 — clona la muestra en 10 idiomas",
-        "voxcpm2_base": "VoxCPM2 — clon a 48 kHz en 30 idiomas, admite estilo de habla"
+        "voxcpm2_base": "VoxCPM2 — clon a 48 kHz en 30 idiomas, admite estilo de habla",
+        "drama3_base": "Drama 3 — clona la muestra; la transcripción es obligatoria"
       },
       "style": "Estilo de habla (opcional)",
       "stylePlaceholder": "susurrando, emocionado, más despacio…",
