@@ -838,3 +838,46 @@ def test_only_what_a_concat_made_is_restamped_before_an_xfade():
     graph, _video, _audio = filter_for([2.0] * 5, transitions=[None, dissolve, dissolve, fade, dissolve])
     assert graph.count("settb=AVTB,setpts=PTS-STARTPTS[vb") == 1
     assert "[vx3]settb=AVTB,setpts=PTS-STARTPTS[vb4]" in graph
+
+
+def test_the_out_of_memory_mapping_needs_no_sigkill_constant(monkeypatch):
+    # signal.SIGKILL does not exist on Windows: an ffmpeg that fails there must be an ordinary failure (False), not an AttributeError.
+    import signal
+
+    from app.services import mix_concat
+
+    monkeypatch.delattr(signal, "SIGKILL", raising=False)
+    assert mix_concat.raise_if_out_of_memory(1, "Invalid data found", ["ffmpeg", "-i", "a.mp4"]) is None
+    assert mix_concat.raise_if_out_of_memory(None, None, ["ffmpeg"]) is None
+    with pytest.raises(mix_concat.FfmpegOutOfMemory):
+        mix_concat.raise_if_out_of_memory(1, "[libx264] Cannot allocate memory", ["ffmpeg", "-i", "a.mp4"])
+
+
+def test_a_cancelled_join_is_a_cancel_and_never_an_out_of_memory(monkeypatch, tmp_path):
+    # A cancel stops ffmpeg (terminate, then kill: a SIGKILL return code): it must come back False, not as the OOM error.
+    from app.services import mix_concat
+
+    class Process:
+        returncode = None
+
+        def __init__(self, *args, **kwargs):
+            self.calls = 0
+
+        def communicate(self, timeout=None):
+            self.calls += 1
+            if self.calls <= 2:
+                raise subprocess.TimeoutExpired("ffmpeg", timeout)  # still running; again after terminate()
+            self.returncode = -9
+            return "", ""
+
+        def terminate(self):
+            pass
+
+        def kill(self):
+            self.returncode = -9
+
+    monkeypatch.setattr(mix_concat.subprocess, "Popen", Process)
+    out = tmp_path / "joined.mp4"
+    out.write_bytes(b"partial")
+    assert mix_concat._run_ffmpeg_command(["ffmpeg", "-i", "a.mp4", str(out)], str(out), abort_callback=lambda: True) is False
+    assert not out.exists()

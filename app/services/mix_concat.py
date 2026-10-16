@@ -50,7 +50,10 @@ def child_process_options() -> dict:
 def raise_if_out_of_memory(returncode: int | None, stderr: str | None, cmd: Sequence[str]) -> None:
     """Turn ffmpeg's death by SIGKILL (or its own "Cannot allocate memory") into ``FfmpegOutOfMemory``."""
     text = (stderr or "").lower()
-    if returncode != -signal.SIGKILL and "cannot allocate memory" not in text and "out of memory" not in text:
+    # signal.SIGKILL does not exist on Windows (an ffmpeg killed there reports its own code, not -9).
+    sigkill = getattr(signal, "SIGKILL", None)
+    killed = sigkill is not None and returncode == -sigkill
+    if not killed and "cannot allocate memory" not in text and "out of memory" not in text:
         return
     clips = sum(1 for part in cmd if part == "-i")
     raise FfmpegOutOfMemory(
