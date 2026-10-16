@@ -435,3 +435,53 @@ def test_series_lab_media_in_a_workspace_subfolder_can_be_exported(tmp_path):
     with pytest.raises(Exception) as error:
         service.submit(_command("scene2d-escape", escaping))
     assert error.value.status_code == 422
+
+
+def _rgba_png(path, width, height, rgba):
+    from PIL import Image
+    Image.new("RGBA", (width, height), rgba).save(path)
+
+
+def test_blank_frame_guard_tells_a_lost_canvas_from_a_fade_to_black(tmp_path):
+    from PIL import Image
+    from services.scene2d_blank_frames import assert_no_blank_frames, is_blank_frame
+    lost, fade, backdrop, rgb, half = (tmp_path / f"{name}.png" for name in ("lost", "fade", "backdrop", "rgb", "half"))
+    _rgba_png(lost, 1920, 1080, (0, 0, 0, 0))
+    _rgba_png(fade, 1920, 1080, (0, 0, 0, 255))
+    _rgba_png(backdrop, 1920, 1080, (11, 16, 32, 255))
+    write_png(rgb, 64, 36, (0, 0, 0))
+    picture = Image.new("RGBA", (1920, 1080), (0, 0, 0, 0))
+    picture.paste((200, 30, 30, 255), (0, 0, 960, 1080))
+    picture.save(half)
+    assert is_blank_frame(lost)
+    assert not any(is_blank_frame(path) for path in (fade, backdrop, rgb, half))
+    assert_no_blank_frames([fade, backdrop, rgb, half], 24)
+    with pytest.raises(RuntimeError, match=r"1 blank .* out of 3, the first at 0\.042 s \(frame 2\)"):
+        assert_no_blank_frames([fade, lost, backdrop], 24)
+
+
+def test_an_export_with_a_blank_frame_fails_instead_of_encoding_black(tmp_path):
+    def paint_with_a_lost_canvas(snapshot, staging, progress, cancelled):
+        plan = snapshot["plan"]
+        frames = []
+        for index in range(plan["count"]):
+            path = Path(staging) / "frames" / f"frame_{index + 1:06d}.png"
+            (_rgba_png(path, plan["width"], plan["height"], (0, 0, 0, 0)) if index == 2
+             else write_png(path, plan["width"], plan["height"], (20, 80, 140)))
+            frames.append(path)
+            progress(index + 1, plan["count"])
+        return frames
+
+    service = _service(tmp_path, renderer=paint_with_a_lost_canvas)
+    root = Path(service.workspace_dir(WORKSPACE))
+    write_png(root / "bg.png", 8, 8, (10, 20, 30))
+    task_id = service.submit(_command("scene2d-lost-canvas"))["receipt"]["taskIds"][0]
+    registry = service._registry(WORKSPACE)
+    deadline = time.time() + 20
+    while time.time() < deadline and (registry.get(task_id) or {}).get("status") not in {"completed", "failed"}:
+        time.sleep(0.05)
+    task = registry.get(task_id)
+    assert task["status"] == "failed", task
+    assert task["error"]["code"] == "export_failed"
+    assert "1 blank" in task["message"] and "0.083 s (frame 3)" in task["message"]
+    assert not list(root.glob("*.mp4"))
