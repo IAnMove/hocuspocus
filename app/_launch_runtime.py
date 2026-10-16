@@ -802,18 +802,7 @@ api.include_router(create_workspace_router(
 # API Routes: Storage (duplicate finder + usage analytics)
 # ============================================================================
 
-from services.storage_tools import (  # noqa: E402
-    _STORAGE_MIN_DUP_BYTES,
-    _STORAGE_WEIGHT_EXTS,
-    _files_probably_identical,
-    _same_physical_file,
-    _storage_roots,
-    _walk_sized,
-    bind as bind_storage_tools,
-    storage_duplicates,
-    storage_reclaim,
-    storage_remove_linked,
-)
+from services.storage_tools import bind as bind_storage_tools  # noqa: E402
 from routers.storage_tools import create_storage_tools_router  # noqa: E402
 
 # Registered here, before storage usage, so the three routes keep their ordinals.
@@ -1466,14 +1455,9 @@ _bind_generation_sfx(
 
 from routers.tools import (
     create_tools_post_router,
-    _resolve_tool_clip_path,
     _resolve_tool_source,
-    _run_tool_revoice,
     _run_tool_upscale,
     _tool_asset_roots,
-    _tool_source_kind_from_name,
-    _upscale_tool_image,
-    _write_tool_sidecar,
 )
 api.include_router(create_tools_post_router(
     wgp=wgp,
@@ -1499,9 +1483,8 @@ api.include_router(create_tools_post_router(
     _run_generation=lambda job_id, *, finalize=True: _run_generation(job_id, finalize=finalize),
     _resolve_request_media_path=_resolve_request_media_path,
 ))
-# MCP and the image-command runtime call these same objects.
+# The image-command runtime calls this same object.
 tools_upscale = create_tools_post_router.tools_upscale
-tools_revoice = create_tools_post_router.tools_revoice
 
 
 # --- generation worker: moved to app/services/generation_worker (generated bind list) ---
@@ -1566,7 +1549,7 @@ _bind_recast_shot_run(
 
 # bind_generation_jobs runs once, below, after _job_leftovers exists (no request arrives during import).
 from services.generation_jobs import bind as bind_generation_jobs
-from services.generation_jobs import cancel_job, get_status, list_jobs
+from services.generation_jobs import cancel_job, get_status
 from routers.generation_jobs import create_generation_jobs_router
 
 api.include_router(create_generation_jobs_router())
@@ -1668,11 +1651,7 @@ from services.comic_helpers import (
 bind_comic_helpers(wgp_module=wgp)
 
 
-from services.comic_director_json import (
-    _generate_comic_director_json,
-    _parse_comic_director_json,
-    _repair_comic_text_encoding,
-)
+from services.comic_director_json import _generate_comic_director_json
 
 
 
@@ -1735,8 +1714,6 @@ api.include_router(create_series_library_router())
 
 
 from services.series_plan_jobs import (
-    _llm_abort_outcome,
-    _planning_cancel_message,
     _series_plan_jobs,
     _series_plan_jobs_lock,
 )
@@ -2036,10 +2013,8 @@ api.include_router(create_director_comic_router())
 
 
 from services.output_listing import (
-    _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS,
     _output_scan_cache,
     _output_scan_cache_lock,
-    _resolve_output_file,
     configure as _configure_output_listing,
     serve_file,
 )
@@ -2094,7 +2069,6 @@ api.include_router(create_output_metadata_router())
 
 
 from services.alternative_songs import (  # noqa: E402
-    _alternative_song_sidecar_lock,  # same lock the handlers take; this module keeps the alias
     configure_editor as _configure_alternative_song_editor,
     configure_workspace as _configure_alternative_songs,
 )
