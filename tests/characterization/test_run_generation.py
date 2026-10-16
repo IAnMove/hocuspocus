@@ -486,6 +486,35 @@ def test_an_image_job_and_a_random_seed(rig, golden) -> None:
     rig.check(golden, "image job", rig.observe(job_id, full=True))
 
 
+def test_an_inpainted_picture_gets_its_sources_transparency_back_and_its_sidecar_says_so(rig, tmp_path) -> None:
+    """Sol, 2026-10-15: the engine returns RGB, so the transparent background of an inpainted PNG came back as opaque grey. The worker puts
+    the source's alpha back (outside the mask; opaque inside it) on the same file, and the sidecar records it."""
+    import hashlib
+
+    import numpy
+    from PIL import Image
+    from services.studio_image_alpha import flattened
+
+    alpha = numpy.full((8, 8), 255, numpy.uint8)
+    alpha[:, :4] = 0
+    source = tmp_path / "source.png"
+    Image.fromarray(numpy.dstack([numpy.full((8, 8, 3), (200, 40, 40), numpy.uint8), alpha])).save(source)
+    guide = flattened(str(source), "image_guide", hashlib.sha256(source.read_bytes()).hexdigest(), str(tmp_path))
+    mask = numpy.zeros((8, 8), numpy.uint8)
+    mask[2:4, 2:6] = 255
+    Image.fromarray(mask).save(tmp_path / "mask.png")
+    job_id = rig.direct_job({**BODY, "generation_mode": "image", "image_mode": 1, "video_length": 1, "prompt": "a red pocket",
+                             "image_guide": guide, "image_mask": str(tmp_path / "mask.png"), "video_prompt_type": "VAG"})
+    rig.call_worker(job_id)
+    (name,) = [path.name for path in rig.server.outputs.glob("*.png")]
+    with Image.open(rig.server.outputs / name) as picture:
+        assert picture.mode == "RGBA", "the engine wrote RGB; the source had transparency"
+        result = numpy.asarray(picture)[..., 3]
+    assert (result[:, :4][mask[:, :4] == 0] == 0).all() and (result[2:4, 2:6] == 255).all() and (result[:, 6:] == 255).all()
+    sidecar = json.loads((rig.server.outputs / (Path(name).stem + ".meta.json")).read_text(encoding="utf-8"))
+    assert sidecar["alpha_restore"] == {"status": "restored", "from": "image_guide", "mask": "image_mask"}
+
+
 def test_a_job_in_a_named_workspace_locks_the_save_path_and_puts_it_back(rig, golden) -> None:
     assert rig.server.client.post("/api/v1/workspaces", json={"name": "golden-ws"}).status_code == 200
     job_id = rig.run({**BODY, "workspace": "golden-ws"})
