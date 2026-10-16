@@ -43,8 +43,11 @@ from services.director.pipeline_locks import (
     _claim_pipeline_operation,
     _claim_pipeline_operation_locked,
     _exclusive_pipeline_operation,
+    _pipeline_busy_detail,
+    _pipeline_busy_detail_locked,
     _release_pipeline_delete,
     _release_pipeline_operation,
+    _release_stale_pipeline_leases_locked,
 )
 from services.director.pipeline_observer import (
     _notify_pipeline_snapshot,
@@ -186,6 +189,7 @@ _pipeline_threads: dict[str, threading.Thread] = {}
 _pipeline_child_jobs: dict[str, set[str]] = {}
 _pipeline_starting: set[str] = set()
 _pipeline_operations: set[str] = set()
+_pipeline_operation_labels: dict[str, str] = {}
 _pipeline_deleting: set[str] = set()
 _pipeline_repairs: dict[str, dict] = {}
 _REPAIR_ACTIVE_STATUSES = {"queued", "running", "cancelling"}
@@ -2453,8 +2457,8 @@ def _load_pipeline_state_locked(out_dir: str, pid: str) -> Optional[dict]:
 
 
 def update_clip_tag(out_dir: str, pid: str, clip_index: int, tag: Optional[str]) -> bool:
-    if not _claim_pipeline_operation(pid):
-        raise PipelineBusyError("Pipeline is still active; try again shortly.")
+    if not _claim_pipeline_operation(pid, label=f"tag clip {clip_index}"):
+        raise PipelineBusyError(_pipeline_busy_detail(pid))
     try:
         with _pipeline_file_lock:
             return _update_clip_tag_locked(out_dir, pid, clip_index, tag)
@@ -2671,16 +2675,28 @@ def any_pipeline_active() -> bool:
     """True when any in-memory pipeline has a live (or resumable-in-place)
     run thread. Used by workspace deletion: between generation jobs a
     pipeline holds no _jobs entry yet will recreate its workspace folder
-    on its next step."""
+    on its next step. A finished child id or an exited worker thread does
+    not count."""
     with _pipeline_lock:
-        return bool(
+        pids = (
+            set(_pipeline_threads)
+            | set(_pipeline_child_jobs)
+            | set(_pipeline_starting)
+            | set(_pipeline_operations)
+            | set(_pipeline_deleting)
+        )
+        for pid in pids:
+            _release_stale_pipeline_leases_locked(pid)
+        if (
             _pipeline_threads
             or _pipeline_child_jobs
             or _pipeline_starting
             or _pipeline_operations
             or _pipeline_deleting
-        ) or any(
-            p.get("status") in _ACTIVE_PIPELINE_STATUSES
+        ):
+            return True
+        return any(
+            isinstance(p, dict) and p.get("status") in _ACTIVE_PIPELINE_STATUSES
             for p in _pipelines.values()
         )
 
@@ -2711,6 +2727,7 @@ def _delete_pipeline_locked(out_dir: str, pid: str) -> dict:
     paths outside the pipeline folder and are never touched.
     """
     with _pipeline_lock:
+        _release_stale_pipeline_leases_locked(pid)
         mem = _pipelines.get(pid)
         if (
             pid in _pipeline_threads
@@ -3447,8 +3464,103 @@ def _quantize_clip_frame_schedule(
     return carried
 
 
+def rerun_clip_video(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    prompt_override: str = None,
+    *,
+    blocking: bool = True,
+) -> dict:
+    """Regenerate one clip's video.
+
+    The default stays synchronous so existing callers receive
+    ``{filename, clip_index}`` when the file exists. The HTTP route passes
+    ``blocking=False`` and gets that same shape immediately (``filename`` is
+    null until the background worker finishes) with status 202.
+    """
+    if not blocking:
+        return _accept_clip_video_rerun(
+            out_dir, pid, clip_index, prompt_override,
+        )
+    return _rerun_clip_video_guarded(
+        out_dir, pid, clip_index, prompt_override,
+    )
+
+
+def _require_rerun_video_target(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    prompt_override: str = None,
+) -> None:
+    state = load_pipeline_state(out_dir, pid)
+    if not state:
+        raise ValueError(f"Pipeline {pid} not found")
+    clips = state.get("clips") or []
+    if clip_index < 0 or clip_index >= len(clips):
+        raise ValueError(
+            f"Clip index {clip_index} out of range (0-{max(len(clips) - 1, 0)})"
+        )
+    clip = clips[clip_index] if isinstance(clips[clip_index], dict) else {}
+    prompt = prompt_override if prompt_override is not None else clip.get("video_prompt", "")
+    if not str(prompt or "").strip():
+        raise ValueError("No video prompt for this clip")
+
+
+def _accept_clip_video_rerun(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    prompt_override: str = None,
+) -> dict:
+    """Reserve the pipeline and return before the clip worker finishes."""
+    _require_rerun_video_target(out_dir, pid, clip_index, prompt_override)
+    label = f"rerun-video clip {clip_index}"
+    if not _claim_pipeline_operation(pid, label=label):
+        raise PipelineBusyError(_pipeline_busy_detail(pid))
+    thread = threading.Thread(
+        target=_run_accepted_video_rerun,
+        args=(out_dir, pid, clip_index, prompt_override),
+        daemon=False,
+        name=f"director-rerun-video-{pid}-{clip_index}",
+    )
+    try:
+        thread.start()
+    except BaseException:
+        _release_pipeline_operation(pid)
+        raise
+    return {
+        "filename": None,
+        "clip_index": clip_index,
+        "pipeline_id": pid,
+        "accepted": True,
+        "status": "accepted",
+    }
+
+
+def _run_accepted_video_rerun(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    prompt_override: str = None,
+) -> None:
+    try:
+        _rerun_clip_video_impl(out_dir, pid, clip_index, prompt_override)
+    except Exception:
+        print(f"[Pipeline {pid}] Clip {clip_index} rerun failed")
+        traceback.print_exc()
+    finally:
+        _release_pipeline_operation(pid)
+
+
 @_exclusive_pipeline_operation
-def rerun_clip_video(out_dir: str, pid: str, clip_index: int, prompt_override: str = None) -> dict:
+def _rerun_clip_video_guarded(
+    out_dir: str,
+    pid: str,
+    clip_index: int,
+    prompt_override: str = None,
+) -> dict:
     return _rerun_clip_video_impl(out_dir, pid, clip_index, prompt_override)
 
 
@@ -4866,10 +4978,8 @@ def start_pipeline_repair(out_dir: str, pid: str) -> dict:
             # section. A simultaneous duplicate now waits for this starter's
             # persisted snapshot instead of falling into the claim gap and
             # receiving a spurious busy response.
-            if not _claim_pipeline_operation_locked(pid):
-                raise PipelineBusyError(
-                    "Pipeline is still active; try again shortly."
-                )
+            if not _claim_pipeline_operation_locked(pid, label="repair"):
+                raise PipelineBusyError(_pipeline_busy_detail_locked(pid))
             operation_id = uuid.uuid4().hex[:12]
             control = {
                 "operation_id": operation_id,
@@ -5558,6 +5668,7 @@ def _start_pipeline_worker(pid: str, *, resume: bool = False) -> None:
         daemon=False,
     )
     with _pipeline_lock:
+        _release_stale_pipeline_leases_locked(pid)
         if pid in _pipeline_threads:
             raise RuntimeError(f"Pipeline {pid} already has a worker")
         if _pipeline_child_jobs.get(pid):
@@ -7331,6 +7442,7 @@ def resume_pipeline(pid: str, out_dir: str) -> tuple[bool, str]:
     can't be resumed faithfully and report so.
     """
     with _pipeline_lock:
+        _release_stale_pipeline_leases_locked(pid)
         existing = _pipelines.get(pid)
         if (
             pid in _pipeline_threads
