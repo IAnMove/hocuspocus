@@ -63,6 +63,26 @@ def crop_result(image: Image.Image, crop: bool) -> tuple[Image.Image, list[int]]
     return Image.fromarray(crop_figure(rgba, margin=margin)), bbox
 
 
+def _already_clear(image: Image.Image) -> bool:
+    """At least 1% of the pixels are not fully opaque (alpha below 250)."""
+    alpha = np.asarray(image.convert("RGBA"))[..., 3]
+    return int(np.count_nonzero(alpha < 250)) * 100 >= int(alpha.size)
+
+
+def _kept_cutout(source: str, root: Path) -> Path:
+    """The same picture under the operation's output name. The source is not overwritten."""
+    dest = root / f"{Path(source).stem}.no-background-{uuid.uuid4().hex[:8]}.png"
+    with Image.open(source) as opened:
+        opened.convert("RGBA").save(dest, format="PNG")
+    return dest
+
+
+def _note_kept_cutout(output: Path, source: str, workspace: str) -> None:
+    from services.production_media_common import publish_sidecar, source_ref
+    publish_sidecar(str(output), workspace, OPERATION, "image",
+                    {"method": "background_already_removed"}, [source_ref(source, workspace)])
+
+
 def _u2net(source, workspace, root, uploads, start_job, register_job):
     if start_job is None:
         raise HTTPException(503, "Background removal worker unavailable")
@@ -94,7 +114,12 @@ def remove_image(data, workspace_dir, uploads_dir, start_job=None, register_job=
     source = resolve_permitted_media_path(data["source"], uploads_root=uploads, workspace_root=str(root), kinds=("image",), workspace_name=workspace)
     with Image.open(source) as opened:
         screen, confidence = detect_screen(opened)
-    if method == "auto":
+        kept = method == "auto" and _already_clear(opened)
+    if kept:
+        output = _kept_cutout(source, root)
+        _note_kept_cutout(output, source, workspace)
+        method = "background_already_removed"
+    elif method == "auto":
         method = "screen" if screen else "u2net"
     if method == "screen":
         screen = data.get("screen") or screen
@@ -103,7 +128,7 @@ def remove_image(data, workspace_dir, uploads_dir, start_job=None, register_job=
         keyed = key_request({"version": 1, "input": {"workspace": workspace, "source": source, "mode": screen}},
                             workspace_dir=workspace_dir, uploads_dir=uploads, find_model=find_isnet_model)
         output = root / keyed["file"]
-    else:
+    elif method != "background_already_removed":
         output = _u2net(source, workspace, root, uploads, start_job, register_job)
     with Image.open(output) as opened:
         image, bbox = crop_result(opened.convert("RGBA"), data.get("crop", False))

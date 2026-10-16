@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: `image.remove_background` in auto mode no longer segments a PNG that is already transparent.** When at least 1% of the pixels have alpha below 250, the operation copies that picture to the result (named like a cutout) and records `background_already_removed`. An opaque picture, and an explicit U2Net or screen request, still run as before.
+
 **Fixed: a character kit can store a Drama 3 voice, and Series regenerates a line with it.** `drama3_base` is a clone preference (recording plus its exact transcript, no speaking style). `drama3_voicedesign` is a designed voice (`voiceId: "design"`, optional direction, no recording). Series `produce` and a line retake send the same `generation.speech` command Studio uses, including the `[language: en|es]` hint. The default new voice stays VoxCPM2.
 
 **Fixed: an approved take's `startTimeSeconds`/`endTimeSeconds` is applied when the episode is joined.** The assembler used the whole file, so a trimmed range came out longer than the plan. A range that is present and inside the file is cut first (frame-accurate picture, the sound on the same times, the source frame rate); a take with no range, or a range that is already the whole file, is joined unchanged. A range that runs backwards or past the file is refused.
