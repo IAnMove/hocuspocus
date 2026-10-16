@@ -1,4 +1,5 @@
 """Run optional creation models under the native job's existing GPU lease."""
+import inspect
 import os
 import secrets
 import time
@@ -23,10 +24,14 @@ def run_creation_job(st, *, engine, publish):
 
     if is_cancel_requested(job):
         return False
+    # A test double may replace generate and reject this callback.
+    generate_kwargs = {}
+    if "on_produce" in inspect.signature(service.generate).parameters:
+        generate_kwargs["on_produce"] = lambda: mark_producing(job)
     with safe_download.cancellable_downloads(lambda: is_cancel_requested(job)):
         outputs = service.generate(
             params, st.job_id, job["out_dir"], progress, lambda: is_cancel_requested(job),
-            on_produce=lambda: mark_producing(job),
+            **generate_kwargs,
         )
     if is_cancel_requested(job):
         return False
