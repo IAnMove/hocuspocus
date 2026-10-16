@@ -567,3 +567,51 @@ def test_soft_join_keeps_sound_on_the_pictures_over_many_clips(tmp_path):
     # here before the cut); the pictures to within the 24 fps frames the last dissolve rounds to.
     assert abs(sound - planned) < 0.025, (sound, planned)
     assert abs(video - planned) < 0.1, (video, planned)
+
+
+def _marked_clip(path: Path, seconds: float) -> None:
+    """A gray clip whose sound is one 1 kHz burst 100 ms after its first frame, so a join can be checked for where
+    each clip's sound lands."""
+    cmd = ["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", f"color=c=gray:s=160x90:r=24:d={seconds}",
+           "-f", "lavfi", "-i", f"sine=f=1000:sample_rate=48000:d=0.3,adelay=100|100,apad=whole_dur={seconds}",
+           "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "aac", "-t", f"{seconds}", str(path)]
+    assert subprocess.run(cmd, capture_output=True, timeout=30).returncode == 0
+
+
+def _burst_errors_ms(joined: Path, starts: list[float]) -> list[int]:
+    """How late (ms) each clip's burst sounds against ``start + 0.1`` on the joined sound."""
+    import numpy as np
+
+    pcm = subprocess.run(["ffmpeg", "-v", "error", "-i", str(joined), "-map", "0:a", "-ac", "1", "-ar", "48000",
+                          "-f", "s16le", "-"], capture_output=True).stdout
+    level = np.abs(np.frombuffer(pcm, dtype="<i2").astype(float))
+    errors = []
+    for start in starts:
+        window = level[int(max(0.0, start - 0.05) * 48000):int((start + 0.5) * 48000)]
+        hits = np.nonzero(window > 400)[0]
+        assert hits.size, f"no burst near {start:.3f}s"
+        errors.append(round((max(0.0, start - 0.05) + hits[0] / 48000 - (start + 0.1)) * 1000))
+    return errors
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg is required")
+@pytest.mark.parametrize("kind", ["fade_black", "dip_white"])
+def test_a_fade_places_the_next_sound_on_the_planned_timeline(tmp_path, kind):
+    # Sixteen cuts then a fade into a narrated shot, as the 90-shot episode had. The concat that joins a fade took the
+    # longer of the pictures (whole frames) and the sound as the length of what came before, so the shot after it
+    # sounded up to a frame late: 10 ms here, 50 ms on the real episode, which the sound check refused.
+    from services.core_series_assembly import concatenate_clips
+    from services.series_transitions import placed_offsets
+
+    lengths = [1.07, 1.33, 2.91, 1.58, 1.21, 0.87, 1.44, 1.12, 0.96, 1.66, 1.05, 1.29, 1.17, 2.4, 1.9, 1.35, 3.02]
+    clips = []
+    for index, seconds in enumerate(lengths):
+        path = tmp_path / f"clip{index:02d}.mp4"
+        _marked_clip(path, seconds)
+        clips.append(str(path))
+    transitions = [None] * (len(clips) - 1) + [{"kind": kind, "seconds": 0.65}]
+    out = tmp_path / "joined.mp4"
+    assert concatenate_clips(clips, str(out), transitions=transitions) is True
+    starts = placed_offsets([probe_duration_seconds(path) for path in clips], transitions)
+    errors = _burst_errors_ms(out, starts)
+    assert max(abs(value) for value in errors) <= 3, errors

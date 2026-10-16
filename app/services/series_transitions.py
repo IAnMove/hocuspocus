@@ -26,6 +26,12 @@ from services.mix_concat import (
 KINDS = ("cut", "fade_black", "dissolve", "dip_white")
 _ACTIVE = frozenset({"fade_black", "dissolve", "dip_white"})
 _TAIL = 0.05
+_GRID_FPS = 24  # an episode's frame rate (series_take_sound.FPS): the picture at a fade lies on this grid
+
+
+def _whole_frames(seconds: float) -> float:
+    """``seconds`` rounded down to a whole frame, so a picture that ends there never ends after the sound."""
+    return int(float(seconds) * _GRID_FPS + 1e-6) / _GRID_FPS
 
 
 def normalize_transition(value: Any) -> dict[str, Any] | None:
@@ -257,7 +263,7 @@ def _dip(video, audio, index, elapsed, seconds, color: str, mix: bool):
     video_label, audio_label = f"vx{index}", f"ax{index}"
     start = max(0.0, elapsed - seconds)
     parts = [
-        f"[{video}]fade=t=out:st={start:.3f}:d={seconds:.3f}:color={color}[vf{index}]",
+        f"[{video}]fade=t=out:st={start:.3f}:d={seconds:.3f}:color={color},fps={_GRID_FPS},trim=end={_whole_frames(elapsed):.6f}[vf{index}]",
         f"[v{index}]fade=t=in:st=0:d={seconds:.3f}:color={color}[vi{index}]",
     ]
     if mix:
