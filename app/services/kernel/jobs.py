@@ -23,6 +23,7 @@ from typing import Any, Callable
 
 from services import execution_mode
 from services import resource_scheduler
+from services.creation_model_catalog import MODEL_TYPES as CREATION_MODEL_TYPES
 from services.durable_generation_queue import DurableGenerationQueue
 from services.generation import get_wgp
 from services.job_lifecycle import (
@@ -214,8 +215,11 @@ class GenerationQueue:
                     "HocusPocus Lab H3 Legacy generation",
                 )
             elif model_type:
+                # FLUX 3 / Drama 3 run in their own warm ComfyUI process: the hand-off
+                # must not stop it for its own next job, only for another engine.
                 description = resource_scheduler.gpu_engine_description(
-                    resource_scheduler.GPU_ENGINE_WGP,
+                    resource_scheduler.GPU_ENGINE_CREATION
+                    if model_type in CREATION_MODEL_TYPES else resource_scheduler.GPU_ENGINE_WGP,
                     f"HocusPocus Lab WGP generation · {model_type}",
                 )
             else:

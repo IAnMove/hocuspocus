@@ -1,11 +1,17 @@
 """Isolated, loopback-only ComfyUI runtime for FLUX 3 and Drama 3.
 
 The native generation coordinator owns the GPU and queue. This service runs one
-graph at a time and stops its process before returning that lease, including on
-failure and cancellation. It never upgrades the WanGP or H3 environments.
+graph at a time. After a successful job the process stays warm for an idle
+period (``creation_runtime_idle_seconds``, 300 s by default, 0 stops it at once),
+so the next job of the same family skips the ~40 GB weight load and keeps the
+GPU expert cache. A failure or a cancellation stops the process, a job of the
+other family restarts it, and every other GPU user stops it first through
+``stop_runtime`` (the GPU hand-off hook) or ``evict_if_idle`` (users that never
+take the GPU lane). It never upgrades the WanGP or H3 environments.
 """
 import atexit
 import json
+import math
 import shutil
 import socket
 import subprocess
@@ -25,7 +31,28 @@ INPUT_DIR = SERVICE_DIR / "input"
 OUTPUT_DIR = SERVICE_DIR / "output"
 _process = None
 _port = None
+_family = None
+_idle_timer = None
+_idle_deadline = None
 _lock = threading.RLock()
+DEFAULT_IDLE_SECONDS = 300.0
+MAX_IDLE_SECONDS = 86400.0
+
+
+def runtime_family(model_type):
+    """Drama 3 and FLUX 3 load different weights, so a warm runtime serves one family."""
+    name = str(model_type or "")
+    return "flux" if name.startswith("flux3_") else "drama" if name.startswith("drama3_") else name
+
+
+def idle_seconds_setting(services):
+    """Read ``creation_runtime_idle_seconds`` from the services config; a bad value means the default."""
+    raw = (services or {}).get("creation_runtime_idle_seconds", DEFAULT_IDLE_SECONDS)
+    try:
+        value = DEFAULT_IDLE_SECONDS if isinstance(raw, bool) else float(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_IDLE_SECONDS
+    return min(max(value, 0.0), MAX_IDLE_SECONDS) if math.isfinite(value) else DEFAULT_IDLE_SECONDS
 
 
 def is_runtime_installed():
@@ -93,17 +120,73 @@ def _drain(process):
             print("[Creation models] " + line.rstrip(), flush=True)
 
 
+def _cancel_idle_locked():
+    global _idle_timer, _idle_deadline
+    timer, _idle_timer, _idle_deadline = _idle_timer, None, None
+    if timer is not None:
+        timer.cancel()
+
+
+def _stop_locked():
+    global _process, _port, _family
+    _cancel_idle_locked()
+    process, _process, _port, _family = _process, None, None, None
+    if process is not None and process.poll() is None:
+        process.terminate()
+        try:
+            process.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=10)
+
+
 def stop_runtime():
-    global _process, _port
     with _lock:
-        process, _process, _port = _process, None, None
-        if process is not None and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=15)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait(timeout=10)
+        _stop_locked()
+
+
+def evict_if_idle():
+    """Stop a warm runtime for a GPU user that never takes the GPU lane (the SAM service).
+
+    Never waits: while a job holds the lock the runtime is busy and stays. Returns True if it stopped one.
+    """
+    if not _lock.acquire(blocking=False):
+        return False
+    try:
+        if _process is None:
+            return False
+        print("[Creation models] runtime released for another GPU engine", flush=True)
+        _stop_locked()
+        return True
+    finally:
+        _lock.release()
+
+
+def _keep_warm_locked(delay):
+    """Stop the runtime after ``delay`` idle seconds unless the next job arrives first."""
+    global _idle_timer, _idle_deadline
+    _cancel_idle_locked()
+
+    def release():
+        with _lock:
+            if _idle_timer is not timer:
+                return
+            _stop_locked()
+            print("[Creation models] runtime released after idle", flush=True)
+
+    timer = threading.Timer(delay, release)
+    timer.daemon = True
+    _idle_timer, _idle_deadline = timer, time.monotonic() + delay
+    timer.start()
+    print(f"[Creation models] runtime kept warm for {delay:g} s", flush=True)
+
+
+def runtime_status():
+    """``warm`` is True while a live process waits for the next job. Never waits for a running job."""
+    process, deadline = _process, _idle_deadline
+    warm = process is not None and process.poll() is None
+    left = None if not warm or deadline is None else round(max(0.0, deadline - time.monotonic()), 1)
+    return {"warm": warm, "family": _family if warm else None, "idle_seconds_left": left}
 
 
 def cancel():
@@ -116,8 +199,33 @@ def cancel():
             pass
 
 
-def ensure_runtime(progress, cancelled):
-    global _process, _port
+def _reusable_base(family):
+    """The warm runtime's URL when it can run this job; otherwise stop it, say why, and return None."""
+    if _process is None:
+        return None
+    if _process.poll() is not None:
+        reason = "its process exited"
+    elif _family != family:
+        reason = f"the job needs the {family} family, not {_family}"
+    else:
+        base = f"http://127.0.0.1:{_port}"
+        try:
+            _request("GET", base, "/system_stats", timeout=2)
+            print("[Creation models] reusing the warm runtime", flush=True)
+            return base
+        except requests.RequestException:
+            reason = "it stopped answering"
+    print(f"[Creation models] restarting the runtime: {reason}", flush=True)
+    stop_runtime()
+    return None
+
+
+def ensure_runtime(progress, cancelled, family=None):
+    global _process, _port, _family
+    _cancel_idle_locked()
+    base = _reusable_base(family)
+    if base is not None:
+        return base
     if not is_runtime_installed():
         raise RuntimeError("Install FLUX 3 / Drama 3 Support from Pinokio → Advanced first")
     for folder in (INPUT_DIR, OUTPUT_DIR):
@@ -135,6 +243,7 @@ def ensure_runtime(progress, cancelled):
     progress("Starting isolated FLUX 3 / Drama 3 runtime", 2, 0, 0)
     _process = subprocess.Popen(command, cwd=COMFY_DIR, env=isolated_environment(python),
                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    _family = family
     threading.Thread(target=_drain, args=(_process,), daemon=True).start()
     base = f"http://127.0.0.1:{_port}"
     deadline = time.monotonic() + 180
@@ -151,15 +260,70 @@ def ensure_runtime(progress, cancelled):
     raise RuntimeError("Creation runtime startup timed out; see logs/creation_models/latest.log")
 
 
-def generate(params, job_id, out_dir, progress, cancelled, on_produce=None):
+def _await_output(base, prompt_id, output_node, cancelled, out_dir):
+    """Poll one prompt until Comfy reports it, then copy its media into ``out_dir``."""
+    deadline = time.monotonic() + 3600
+    while True:
+        if cancelled():
+            cancel()
+            raise RuntimeError("Generation cancelled")
+        if time.monotonic() >= deadline:
+            raise RuntimeError("Creation generation exceeded its one-hour limit")
+        try:
+            history = _request("GET", base, "/history/" + prompt_id, timeout=5).json().get(prompt_id)
+        except (requests.Timeout, requests.ConnectionError):
+            # Heavy native kernels can temporarily delay Comfy's HTTP thread.
+            # A missed poll is not evidence that inference failed.
+            if _process is None or _process.poll() is not None:
+                raise RuntimeError("Creation runtime stopped before returning its output")
+            time.sleep(1)
+            continue
+        if history:
+            status = history.get("status", {})
+            if status.get("status_str") == "error":
+                errors = [str(message[1].get("exception_message", message[1]))
+                          for message in status.get("messages", []) if message[0] == "execution_error"]
+                raise RuntimeError("Creation generation failed: " + "; ".join(errors))
+            outputs = history.get("outputs", {}).get(output_node, {})
+            records = outputs.get("images") or outputs.get("audio") or []
+            copied = []
+            for record in records:
+                source = (OUTPUT_DIR / record.get("subfolder", "") / record["filename"]).resolve()
+                if not source.is_relative_to(OUTPUT_DIR.resolve()) or not source.is_file():
+                    raise RuntimeError("Creation runtime returned an invalid output file")
+                destination = Path(out_dir) / source.name
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(source, destination)
+                copied.append(str(destination))
+            if not records:
+                raise RuntimeError("Creation runtime completed without output media")
+            return copied
+        time.sleep(1)
+
+
+def _release_after_job(succeeded, idle_seconds):
+    """Keep the runtime warm after a success; a failure, a cancellation or an idle time of 0 stops it."""
+    if not succeeded:
+        stop_runtime()
+        return
+    delay = DEFAULT_IDLE_SECONDS if idle_seconds is None else max(0.0, float(idle_seconds))
+    if delay > 0:
+        _keep_warm_locked(delay)
+    else:
+        stop_runtime()
+
+
+def generate(params, job_id, out_dir, progress, cancelled, on_produce=None, idle_seconds=None):
     with _lock:
+        succeeded = False
+        _cancel_idle_locked()
         try:
             if cancelled():
                 raise RuntimeError("Generation cancelled")
             download_assets(params["model_type"], lambda message: progress(message, 1, 0, 0))
             if cancelled():
                 raise RuntimeError("Generation cancelled")
-            base = ensure_runtime(progress, cancelled)
+            base = ensure_runtime(progress, cancelled, runtime_family(params["model_type"]))
             results = []
             for index in range(int(params.get("repeat_generation", 1))):
                 if cancelled():
@@ -174,45 +338,11 @@ def generate(params, job_id, out_dir, progress, cancelled, on_produce=None):
                     raise RuntimeError("Creation graph validation failed: " + str(response["node_errors"]))
                 prompt_id = response["prompt_id"]
                 progress("Generating " + params["model_type"], 5, 0, 0)
-                deadline = time.monotonic() + 3600
-                while True:
-                    if cancelled():
-                        cancel()
-                        raise RuntimeError("Generation cancelled")
-                    if time.monotonic() >= deadline:
-                        raise RuntimeError("Creation generation exceeded its one-hour limit")
-                    try:
-                        history = _request("GET", base, "/history/" + prompt_id, timeout=5).json().get(prompt_id)
-                    except (requests.Timeout, requests.ConnectionError):
-                        # Heavy native kernels can temporarily delay Comfy's HTTP thread.
-                        # A missed poll is not evidence that inference failed.
-                        if _process is None or _process.poll() is not None:
-                            raise RuntimeError("Creation runtime stopped before returning its output")
-                        time.sleep(1)
-                        continue
-                    if history:
-                        status = history.get("status", {})
-                        if status.get("status_str") == "error":
-                            errors = [str(message[1].get("exception_message", message[1]))
-                                      for message in status.get("messages", []) if message[0] == "execution_error"]
-                            raise RuntimeError("Creation generation failed: " + "; ".join(errors))
-                        outputs = history.get("outputs", {}).get(output_node, {})
-                        records = outputs.get("images") or outputs.get("audio") or []
-                        for record in records:
-                            source = (OUTPUT_DIR / record.get("subfolder", "") / record["filename"]).resolve()
-                            if not source.is_relative_to(OUTPUT_DIR.resolve()) or not source.is_file():
-                                raise RuntimeError("Creation runtime returned an invalid output file")
-                            destination = Path(out_dir) / source.name
-                            destination.parent.mkdir(parents=True, exist_ok=True)
-                            shutil.copyfile(source, destination)
-                            results.append(str(destination))
-                        if not records:
-                            raise RuntimeError("Creation runtime completed without output media")
-                        break
-                    time.sleep(1)
+                results.extend(_await_output(base, prompt_id, output_node, cancelled, out_dir))
+            succeeded = True
             return results
         finally:
-            stop_runtime()
+            _release_after_job(succeeded, idle_seconds)
             # The user originals stay in uploads/library; discard job-scoped copies.
             for path in INPUT_DIR.glob("*" + job_id + "*"):
                 if path.is_file():

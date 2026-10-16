@@ -183,6 +183,11 @@ def create_system_runtime_router(
             raise HTTPException(status_code=409, detail="A generation is in progress — stop it or wait for it to finish first.")
         try:
             released = []
+            from services import creation_model_service
+            if creation_model_service.runtime_status()["warm"]:
+                print("[ReleaseModel] Stopping the warm FLUX 3 / Drama 3 runtime (user request)")
+                creation_model_service.stop_runtime()
+                released.append("FLUX 3 / Drama 3 runtime")
             if minimax_h3_service.is_runtime_running():
                 print("[ReleaseModel] Stopping isolated H3 Legacy runtime (user request)")
                 minimax_h3_service.stop_runtime()

@@ -44,6 +44,7 @@ KERNEL_MODULES = {"services.resource_scheduler", "services.job_lifecycle"}
 # Leaf services the moved code already used. Each one reaches no router, no
 # composition root and no wgp (test_kernel_leaf_services_reach_no_slice).
 KERNEL_LEAF_SERVICES = {
+    "services.creation_model_catalog": "the FLUX 3 / Drama 3 model names the GPU slot tags as their own engine",
     "services.durable_generation_queue": "the file-backed queue the generation queue owns",
     "services.execution_mode": "the execution-mode check made when a job is built",
     "services.media_paths": "the request media path policy that PathPolicy wraps",

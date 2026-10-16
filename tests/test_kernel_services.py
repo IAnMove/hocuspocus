@@ -833,6 +833,16 @@ def test_slot_takes_the_gpu_in_turn_and_names_the_owner_by_engine(queue_parts, a
     assert all(item["lane"] == queue.local_gpu_lane for item in adopted)
 
 
+def test_slot_names_a_creation_job_as_its_own_engine(queue_parts, adopted) -> None:
+    """FLUX 3 / Drama 3 keep their warm runtime across their own hand-off, so the hook must know them."""
+    queue = queue_parts.queue
+    for model in ("flux3_klein", "flux3_klein_edit", "drama3_base", "drama3_voicedesign"):
+        with queue.slot({"id": model, "params": {"model_type": model}}):
+            pass
+    kinds = {item["task_id"]: resource_scheduler.gpu_engine_kind(item["description"]) for item in adopted}
+    assert set(kinds.values()) == {resource_scheduler.GPU_ENGINE_CREATION} and len(kinds) == 4
+
+
 def test_slot_yields_false_for_a_job_cancelled_while_it_waited(queue_parts, adopted) -> None:
     queue = queue_parts.queue
     job = {"id": "gone", "params": {"model_type": "known_model"}, "cancel_requested": True}

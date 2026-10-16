@@ -202,6 +202,11 @@ def _run_generation_start(st):
             minimax_h3_service.cancel_idle_shutdown()
         else:
             minimax_h3_service.stop_runtime()
+        # The warm FLUX 3 / Drama 3 runtime stays only for creation jobs (the
+        # GPU hand-off hook stops it first; this covers a slot without the hook).
+        from services import creation_model_catalog, creation_model_service
+        if job.get("params", {}).get("model_type") not in creation_model_catalog.MODEL_TYPES:
+            creation_model_service.stop_runtime()
 
         # Per-job VRAM coefficient adjustment applies only to WGP jobs.
         if not legacy_h3_job:
