@@ -174,5 +174,9 @@ def test_a_trimmed_take_joins_as_its_range_and_a_bad_range_is_refused(tmp_path):
     frames, video, audio = _frames(output)
     assert frames == 72 and video == pytest.approx(3.0, abs=1 / 24)
     assert audio == pytest.approx(video, abs=0.05), "the cut keeps picture and sound together"
+    planned = apply_take_ranges([str(whole)], [{"startTimeSeconds": 0, "endTimeSeconds": 9}], str(tmp_path / "planned"))
+    assert planned == [str(whole)], "an end past the file, as a planned shot length can be, keeps the whole file"
+    tail = apply_take_ranges([str(long)], [{"startTimeSeconds": 0.5, "endTimeSeconds": 9}], str(tmp_path / "tail"))
+    assert tail[0] != str(long) and _frames(Path(tail[0]))[0] == 36, "an end past the file cuts only the start"
     with pytest.raises(ValueError, match="Invalid take range"):
-        apply_take_ranges([str(long)], [{"startTimeSeconds": 0, "endTimeSeconds": 9}], str(tmp_path / "bad"))
+        apply_take_ranges([str(long)], [{"startTimeSeconds": 5, "endTimeSeconds": 9}], str(tmp_path / "bad"))

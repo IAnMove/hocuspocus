@@ -3,8 +3,10 @@
 A take with no range (the fields absent, or the library default of 0 and 0)
 is left as the original file, so the join sees the same bytes it did before.
 A named range must be ``0 <= start < end`` and, once the file is known, must
-not run past it. The cut keeps the source frame rate and the same in and out
-on the sound, so the picture and the sound stay together.
+not start past it; an end past the file means "to the end", because a new
+attempt carries the shot's planned length and a clip can be a little shorter.
+The cut keeps the source frame rate and the same in and out on the sound, so
+the picture and the sound stay together.
 """
 from __future__ import annotations
 
@@ -83,8 +85,10 @@ def _probe(path: str) -> dict[str, Any]:
 def _cut(start: float, end: float, info: dict[str, Any], name: str) -> tuple[float, float] | None:
     """The in and out to encode, or None when the range is already the whole file."""
     duration, fps = float(info["duration"]), float(info["fps"])
-    if end > duration + _SLACK:
-        raise ValueError(f"Invalid take range: endTimeSeconds ({end:g}) is past {name} ({duration:.3f} s)")
+    if start >= duration:
+        raise ValueError(f"Invalid take range: startTimeSeconds ({start:g}) is past the end of {name} ({duration:.3f} s)")
+    # A new attempt is created with the shot's planned length as its end, and a clip can come out a little
+    # shorter than planned: an end past the file means "to the end", it never fails the join.
     end = min(end, duration)
     start_frame, end_frame = int(round(start * fps)), int(round(end * fps))
     if start_frame <= 0 and end_frame >= int(info["frames"]):
