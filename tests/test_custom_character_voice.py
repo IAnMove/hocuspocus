@@ -27,6 +27,23 @@ def test_reference_voice_survives_library_reload_and_links_from_another_workspac
     assert normalize_character_voice(preset) == preset
 
 
+def test_a_drama3_voice_survives_a_kit_save_and_reload(tmp_path):
+    clone = {**voice(), "model": "drama3_base", "name": "Sol"}
+    english = {**clone, "language": "english", "name": "Sol EN"}
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design",
+              "name": "Sol design", "language": "spanish", "instructions": "warm and clear"}
+    kit = {"version": 1, "id": "sol", "name": "Sol", "style": "cutout", "poses": {},
+           "mouth": {}, "eyes": {}, "anchors": {}, "provenance": [],
+           "voice": clone, "voicesByLanguage": {"english": english, "spanish": design}}
+    patch_character_kit(str(tmp_path), "sol", kit, base_revision=0)
+    saved = read_character_kit_library(str(tmp_path))["kits"]["sol"]
+    assert saved["voice"] == clone
+    assert saved["voicesByLanguage"]["english"] == english
+    assert saved["voicesByLanguage"]["spanish"] == design
+    again = patch_character_kit(str(tmp_path), "sol", {**kit, "voice": saved["voice"]}, base_revision=1)
+    assert again["kits"]["sol"]["voice"]["model"] == "drama3_base"
+
+
 @pytest.mark.parametrize("patch", [
     {"name": ""}, {"name": " "}, {"name": "a" * 121}, {"name": 12}, {"transcript": ""}, {"transcript": "\n"},
     {"transcript": "a" * 4001}, {"transcript": None}, {"referenceAudio": ""}, {"language": "martian"},

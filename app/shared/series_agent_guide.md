@@ -13,8 +13,10 @@ those ids and file names, never invent one.
      `generation.image` (base, then each pose with the base as `image_refs`) → `studio.key` → `characters.save`
      (approved assets) → `characters.rig.flat` (with the style's `rig` as `style`) → design a voice per
      language (`generation.speech` with `voxcpm2_voicedesign`, the default: 48 kHz, 30 languages, no `model_mode`;
-     `qwen3_tts_voicedesign` is the alternative; check with `qa.speech`) → `characters.save` with `voicesByLanguage`
-     (a reference voice whose model is `voxcpm2_base`, optionally with style `instructions`, or `qwen3_tts_base`) →
+     `qwen3_tts_voicedesign` and `drama3_voicedesign` are the alternatives; a Drama 3 clone is `drama3_base` with the
+     recording and its exact transcript, and it takes no style; check with `qa.speech`) → `characters.save` with
+     `voicesByLanguage` (a reference voice whose model is `voxcpm2_base`, optionally with style `instructions`,
+     `qwen3_tts_base`, or `drama3_base`; or `drama3_voicedesign` with `voiceId: "design"` and no recording) →
      add the character to the series (`series.update`) with `voiceProfile.characterKitRef`.
      Check the pitch with `qa.speech` and `pitch_range`: an adult man sits at 85–155 Hz, an adult woman at 165–255 Hz.
      The series render only notes a line outside the character's range (`pitch_out_of_range`) and keeps the take;

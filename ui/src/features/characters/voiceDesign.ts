@@ -5,10 +5,12 @@ import type { CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
 
 /** Engines that design a voice from a description, then clone every line from the chosen take.
- * Qwen3 is told the language; VoxCPM2 reads it from the text (30 languages, 48 kHz). */
+ * Qwen3 is told the language. VoxCPM2 and Drama 3 read the language from the text.
+ * Drama 3's clone still needs the sample's exact transcript and takes no style. */
 export const VOICE_ENGINES = {
   voxcpm2: { design: 'voxcpm2_voicedesign', reference: 'voxcpm2_base', tellsLanguage: false },
   qwen3: { design: 'qwen3_tts_voicedesign', reference: 'qwen3_tts_base', tellsLanguage: true },
+  drama3: { design: 'drama3_voicedesign', reference: 'drama3_base', tellsLanguage: false },
 } as const
 export type VoiceEngine = keyof typeof VOICE_ENGINES
 /** VoxCPM2 is the default engine; Qwen3 stays available. */

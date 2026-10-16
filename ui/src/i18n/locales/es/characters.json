@@ -667,7 +667,8 @@
     "engine": "Motor",
     "engines": {
       "qwen3": "Qwen3 VoiceDesign",
-      "voxcpm2": "VoxCPM2 (48 kHz, 30 idiomas)"
+      "voxcpm2": "VoxCPM2 (48 kHz, 30 idiomas)",
+      "drama3": "Drama 3"
     },
     "missing": "El diseño de voz necesita estos modelos: {{models}}.",
     "download": "Descargar",

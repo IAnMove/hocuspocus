@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 from typing import Any
 
+from services.series_take_range import named_range
 from services.series_transitions import normalize_transition
 
 
@@ -72,5 +73,9 @@ def episode_assembly_plan(series: dict[str, Any], episode: dict[str, Any]) -> li
         transition = normalize_transition(shot.get("transitionIn"))
         if transition:
             item["transitionIn"] = transition
+        # A named in/out is applied when the join trims the file (series_take_range). 0 and 0 is no range.
+        span = named_range(attempt)
+        if span:
+            item["startTimeSeconds"], item["endTimeSeconds"] = span
         plan.append(item)
     return copy.deepcopy(plan)

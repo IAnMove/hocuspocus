@@ -667,7 +667,8 @@
     "engine": "Engine",
     "engines": {
       "qwen3": "Qwen3 VoiceDesign",
-      "voxcpm2": "VoxCPM2 (48 kHz, 30 languages)"
+      "voxcpm2": "VoxCPM2 (48 kHz, 30 languages)",
+      "drama3": "Drama 3"
     },
     "missing": "Voice design needs these models: {{models}}.",
     "download": "Download",

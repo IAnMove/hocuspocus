@@ -1,6 +1,11 @@
+import shutil
+import subprocess
+from pathlib import Path
+
 import pytest
 
 from services.series_assembly import episode_assembly_plan
+from services.series_take_range import apply_take_ranges
 
 
 def _series():
@@ -90,3 +95,88 @@ def test_the_assembly_plan_carries_a_shots_transition():
     plan = episode_assembly_plan(_series(), episode)
     assert plan[0]["transitionIn"] == {"kind": "fade_black", "seconds": 0.5}
     assert "transitionIn" not in plan[1]
+
+
+def _attempt(attempt_id, asset_id, **extra):
+    return {"id": attempt_id, "status": "completed", "outputAssetIds": [asset_id], **extra}
+
+
+def test_the_assembly_plan_keeps_a_named_take_range_and_rejects_a_bad_one():
+    episode = {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "attempts": [_attempt("attempt-1", "asset-1", startTimeSeconds=0.5, endTimeSeconds=1.5)],
+    }]}
+    plan = episode_assembly_plan(_series(), episode)
+    assert plan[0]["startTimeSeconds"] == 0.5 and plan[0]["endTimeSeconds"] == 1.5
+    bare = episode_assembly_plan(_series(), {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "attempts": [_attempt("attempt-1", "asset-1")],
+    }]})
+    assert "startTimeSeconds" not in bare[0] and "endTimeSeconds" not in bare[0]
+    library_default = episode_assembly_plan(_series(), {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "attempts": [_attempt("attempt-1", "asset-1", startTimeSeconds=0, endTimeSeconds=0)],
+    }]})
+    assert "startTimeSeconds" not in library_default[0], "0 and 0 is the stored default, not a cut"
+    bad = {"shots": [{
+        "id": "shot-1", "order": 1, "approvedAttemptId": "attempt-1",
+        "attempts": [_attempt("attempt-1", "asset-1", startTimeSeconds=2, endTimeSeconds=1)],
+    }]}
+    with pytest.raises(ValueError, match="Invalid take range"):
+        episode_assembly_plan(_series(), bad)
+
+
+def _lavfi(path: Path, seconds: float, frequency: int) -> None:
+    completed = subprocess.run([
+        "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-i", "testsrc=size=160x120:rate=24",
+        "-f", "lavfi", "-i", f"sine=frequency={frequency}:sample_rate=48000",
+        "-t", f"{seconds:.3f}", "-r", "24",
+        "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le",
+        str(path),
+    ], capture_output=True, text=True, timeout=30)
+    assert completed.returncode == 0, completed.stderr[-300:]
+
+
+def _frames(path: Path) -> tuple[int, float, float]:
+    completed = subprocess.run([
+        "ffprobe", "-v", "error", "-count_frames", "-show_entries",
+        "stream=codec_type,nb_read_frames,duration", "-of", "json", str(path),
+    ], capture_output=True, text=True, timeout=30)
+    assert completed.returncode == 0, completed.stderr[-300:]
+    import json
+    streams = json.loads(completed.stdout)["streams"]
+    video = next(item for item in streams if item["codec_type"] == "video")
+    audio = next(item for item in streams if item["codec_type"] == "audio")
+    return int(video["nb_read_frames"]), float(video["duration"]), float(audio["duration"])
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None or shutil.which("ffprobe") is None, reason="ffmpeg required")
+def test_a_trimmed_take_joins_as_its_range_and_a_bad_range_is_refused(tmp_path):
+    """One approved take is cut to its range; a take with no range is the original file."""
+    from services.core_series_assembly import _hard_concat_filter
+
+    whole = tmp_path / "whole.mov"
+    long = tmp_path / "long.mov"
+    _lavfi(whole, 2.0, 440)
+    _lavfi(long, 2.0, 660)
+    original = whole.read_bytes()
+    clips = [
+        {"uri": "whole.mov"},
+        {"uri": "long.mov", "startTimeSeconds": 0.5, "endTimeSeconds": 1.5},
+    ]
+    paths = apply_take_ranges([str(whole), str(long)], clips, str(tmp_path / "cuts"))
+    assert paths[0] == str(whole) and whole.read_bytes() == original, "a take with no range is not re-encoded"
+    covered = apply_take_ranges([str(whole)], [{"startTimeSeconds": 0, "endTimeSeconds": 2}], str(tmp_path / "same"))
+    assert covered == [str(whole)], "a range that is the whole file is not re-encoded"
+    output = tmp_path / "episode.mp4"
+    assert _hard_concat_filter(paths, str(output)) is True
+    frames, video, audio = _frames(output)
+    assert frames == 72 and video == pytest.approx(3.0, abs=1 / 24)
+    assert audio == pytest.approx(video, abs=0.05), "the cut keeps picture and sound together"
+    planned = apply_take_ranges([str(whole)], [{"startTimeSeconds": 0, "endTimeSeconds": 9}], str(tmp_path / "planned"))
+    assert planned == [str(whole)], "an end past the file, as a planned shot length can be, keeps the whole file"
+    tail = apply_take_ranges([str(long)], [{"startTimeSeconds": 0.5, "endTimeSeconds": 9}], str(tmp_path / "tail"))
+    assert tail[0] != str(long) and _frames(Path(tail[0]))[0] == 36, "an end past the file cuts only the start"
+    with pytest.raises(ValueError, match="Invalid take range"):
+        apply_take_ranges([str(long)], [{"startTimeSeconds": 5, "endTimeSeconds": 9}], str(tmp_path / "bad"))
