@@ -514,11 +514,19 @@ def acknowledge_cancel(
     return changed
 
 
-def mark_producing(job: MutableMapping[str, Any]) -> None:
-    """Record that this job has left engine load and started sampling."""
+def mark_producing(job: MutableMapping[str, Any]) -> bool:
+    """Record that this job has left engine load and started sampling.
+
+    Returns False when cancellation already won, so the worker must not begin
+    (or continue to treat the job as) a sample. The preparing/producing flags
+    stay unchanged in that case: Cancel still sees a load, not a sample.
+    """
     with _lifecycle_lock:
+        if is_cancel_requested(job):
+            return False
         job["producing"] = True
         job["preparing_engine"] = False
+        return True
 
 
 def _still_preparing(job: Mapping[str, Any]) -> bool:
