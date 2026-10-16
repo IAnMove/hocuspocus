@@ -43,7 +43,9 @@ def validate_image_model(params, *, model_definition, model_downloaded, allow_re
     definition = model_definition(params["model_type"])
     if not definition or not definition.get("image_outputs") or definition.get("returns_audio"):
         raise command_error(422, "unsupported_model", "Choose an exact text-to-image model from the model catalog")
-    if definition.get("at_least_one_image_ref_needed") and not (allow_references and params.get("image_refs")):
+    needs_reference = definition.get("at_least_one_image_ref_needed") or definition.get("image_conditioning_required")
+    references = params.get("image_refs") or params.get("image_guide")
+    if needs_reference and not (allow_references and references):
         raise command_error(422, "reference_required", "This model requires references; choose a text-to-image model")
     if not model_downloaded(params["model_type"]):
         missing = missing_model_files(params["model_type"]) if missing_model_files else []

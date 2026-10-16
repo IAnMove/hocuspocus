@@ -163,3 +163,10 @@ scripts/*_song.json
 scripts/*_pipeline.json
 scripts/*_concat.txt
 scripts/joke_*.json
+# Optional FLUX 3 / Drama 3 runtime, dependencies and downloaded vendors.
+app/services/creation_models/env/
+app/services/creation_models/vendor/
+
+app/services/creation_models/input/
+app/services/creation_models/output/
+app/services/creation_models/extra_model_paths.json
