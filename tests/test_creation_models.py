@@ -1,4 +1,5 @@
 """Creation models keep reference identities, native contracts and cancellation."""
+import subprocess
 import threading
 from pathlib import Path
 
@@ -180,3 +181,364 @@ def test_drama_flac_outputs_appear_in_the_audio_gallery(monkeypatch, tmp_path):
     assert result["total"] == 1
     assert result["outputs"][0]["name"] == "drama.flac"
     assert result["outputs"][0]["type"] == "audio"
+
+
+# --- the warm runtime ------------------------------------------------------------
+
+
+class _FakeComfy:
+    """A ComfyUI process that never starts: records the launch and answers the poll."""
+
+    def __init__(self, command, **kwargs):
+        self.command, self.kwargs = command, kwargs
+        self.stdout = iter(())
+        self.stopped = threading.Event()
+
+    def poll(self):
+        return 0 if self.stopped.is_set() else None
+
+    def terminate(self):
+        self.stopped.set()
+
+    kill = terminate
+
+    def wait(self, timeout=None):
+        return 0
+
+
+@pytest.fixture
+def comfy(monkeypatch, tmp_path):
+    """Run ``generate`` end to end with a fake process and a stubbed HTTP surface."""
+    from types import SimpleNamespace
+    from services import creation_model_service as service
+    processes, calls = [], []
+    state = {"healthy": True, "history": "ok", "prompts": 0, "pending": 0}
+    output = tmp_path / "runtime" / "output"
+    output.mkdir(parents=True)
+    (output / "take.flac").write_bytes(b"generated audio")
+
+    def popen(command, **kwargs):
+        processes.append(_FakeComfy(command, **kwargs))
+        return processes[-1]
+
+    def request(method, base, suffix, **kwargs):
+        calls.append(suffix)
+        if suffix == "/system_stats":
+            if not state["healthy"]:
+                raise service.requests.ConnectionError("down")
+            return SimpleNamespace(json=lambda: {})
+        if suffix == "/prompt":
+            state["prompts"] += 1
+            return SimpleNamespace(json=lambda: {"prompt_id": f"p{state['prompts']}"})
+        if state["pending"] > 0:
+            state["pending"] -= 1
+            return SimpleNamespace(json=lambda: {})
+        if state["history"] == "error":
+            status = {"status_str": "error", "messages": [["execution_error", {"exception_message": "boom"}]]}
+            return SimpleNamespace(json=lambda: {suffix.rsplit("/", 1)[1]: {"status": status}})
+        return SimpleNamespace(json=lambda: {suffix.rsplit("/", 1)[1]: {"outputs": {"5": {"audio": [{"filename": "take.flac"}]}}}})
+
+    monkeypatch.setattr(service, "subprocess", SimpleNamespace(
+        Popen=popen, PIPE=subprocess.PIPE, STDOUT=subprocess.STDOUT, TimeoutExpired=subprocess.TimeoutExpired))
+    monkeypatch.setattr(service, "_request", request)
+    monkeypatch.setattr(service, "_drain", lambda process: None)
+    monkeypatch.setattr(service, "is_runtime_installed", lambda: True)
+    monkeypatch.setattr(service, "engine_python", lambda name: "python")
+    monkeypatch.setattr(service, "isolated_environment", lambda python: {})
+    monkeypatch.setattr(service, "download_assets", lambda *args: None)
+    monkeypatch.setattr(service, "build_workflow", lambda *args: ({}, "5"))
+    monkeypatch.setattr(service, "SERVICE_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(service, "COMFY_DIR", tmp_path / "runtime")
+    monkeypatch.setattr(service, "INPUT_DIR", tmp_path / "runtime" / "input")
+    monkeypatch.setattr(service, "OUTPUT_DIR", output)
+    monkeypatch.setattr(service.time, "sleep", lambda _: None)
+    service.stop_runtime()
+
+    def job(model="drama3_base", name="job", cancelled=lambda: False, **options):
+        return service.generate({"model_type": model, "seed": 1}, name, tmp_path / "published",
+                                lambda *args: None, cancelled, **options)
+
+    yield SimpleNamespace(service=service, processes=processes, calls=calls, state=state, job=job)
+    service.stop_runtime()
+
+
+def test_two_consecutive_jobs_start_one_process(comfy):
+    comfy.job(name="one")
+    comfy.job(name="two")
+    assert len(comfy.processes) == 1
+    assert not comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is True
+
+
+def test_idle_timer_stops_the_warm_runtime(comfy):
+    comfy.job(idle_seconds=0.05)
+    assert comfy.processes[0].stopped.wait(2), "The idle timer never stopped the runtime"
+    assert comfy.service.runtime_status() == {"warm": False, "family": None, "idle_seconds_left": None}
+
+
+def test_a_new_job_cancels_the_idle_timer(comfy):
+    comfy.job(name="one", idle_seconds=0.2)
+    comfy.job(name="two", idle_seconds=600)
+    assert not comfy.processes[0].stopped.wait(0.4), "The first job's timer stopped a runtime a later job kept"
+    assert len(comfy.processes) == 1
+
+
+def test_a_family_switch_restarts_the_runtime(comfy):
+    comfy.job("drama3_base", "a")
+    comfy.job("drama3_voicedesign", "b")
+    assert len(comfy.processes) == 1, "Both Drama models share one family"
+    comfy.job("flux3_klein", "c")
+    assert len(comfy.processes) == 2 and comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["family"] == "flux"
+    comfy.job("flux3_klein_edit", "d")
+    assert len(comfy.processes) == 2
+
+
+def test_a_dead_process_or_a_failed_health_check_restarts_the_runtime(comfy, monkeypatch):
+    comfy.job(name="one")
+    comfy.processes[0].stopped.set()
+    comfy.job(name="two")
+    assert len(comfy.processes) == 2
+    comfy.job(name="three")
+    assert len(comfy.processes) == 2
+    # The process is alive but /system_stats stops answering: replace it.
+    answers = iter([False])
+    real = comfy.service._request
+
+    def flaky(method, base, suffix, **kwargs):
+        if suffix == "/system_stats" and next(answers, True) is False:
+            raise comfy.service.requests.ConnectionError("hung")
+        return real(method, base, suffix, **kwargs)
+
+    monkeypatch.setattr(comfy.service, "_request", flaky)
+    comfy.job(name="four")
+    assert len(comfy.processes) == 3 and comfy.processes[1].stopped.is_set()
+
+
+def test_an_error_stops_the_warm_runtime(comfy):
+    comfy.job(name="one")
+    comfy.state["history"] = "error"
+    with pytest.raises(RuntimeError, match="boom"):
+        comfy.job(name="two")
+    assert comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is False
+    comfy.state["history"] = "ok"
+    comfy.job(name="three")
+    assert len(comfy.processes) == 2
+
+
+def test_a_cancellation_stops_the_warm_runtime(comfy):
+    comfy.job(name="one")
+    with pytest.raises(RuntimeError, match="cancelled"):
+        comfy.job(name="two", cancelled=lambda: True)
+    assert comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is False
+
+
+def test_a_zero_idle_setting_stops_the_runtime_at_once(comfy):
+    comfy.job(idle_seconds=0)
+    assert comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is False
+    assert comfy.service.idle_seconds_setting({"creation_runtime_idle_seconds": 0}) == 0
+    assert comfy.service.idle_seconds_setting({}) == 300
+    assert comfy.service.idle_seconds_setting({"creation_runtime_idle_seconds": "12.5"}) == 12.5
+    assert comfy.service.idle_seconds_setting({"creation_runtime_idle_seconds": -4}) == 0
+    assert comfy.service.idle_seconds_setting({"creation_runtime_idle_seconds": "soon"}) == 300
+    assert comfy.service.idle_seconds_setting({"creation_runtime_idle_seconds": True}) == 300
+
+
+def test_runtime_status_reports_the_family_and_the_time_left(comfy):
+    assert comfy.service.runtime_status() == {"warm": False, "family": None, "idle_seconds_left": None}
+    comfy.job("flux3_klein", idle_seconds=120)
+    status = comfy.service.runtime_status()
+    assert status["warm"] is True and status["family"] == "flux"
+    assert 100 < status["idle_seconds_left"] <= 120
+    comfy.service.stop_runtime()
+    assert comfy.service.runtime_status() == {"warm": False, "family": None, "idle_seconds_left": None}
+
+
+@pytest.fixture
+def gpu_hand_off(monkeypatch):
+    """A coordinator wired like the server: the prepare hook sits on the local GPU lane only."""
+    from services import generation_preparation, llm_service, resource_scheduler
+    monkeypatch.setattr(llm_service, "get_status", lambda: {"provider": "remote"})
+    monkeypatch.setattr(generation_preparation, "wgp", None)
+    coordinator = resource_scheduler.ResourceCoordinator()
+    coordinator.set_prepare_hook(resource_scheduler.local_gpu_lane(0), generation_preparation._prepare_local_gpu_owner)
+    return coordinator
+
+
+@pytest.mark.parametrize("owner", [
+    "GPU_ENGINE_WGP", "GPU_ENGINE_H3_LEGACY", "GPU_ENGINE_LOCAL_LLM",
+])
+def test_another_engine_taking_the_gpu_stops_the_warm_runtime(comfy, gpu_hand_off, owner):
+    from services import resource_scheduler
+    comfy.job(name="one")
+    description = resource_scheduler.gpu_engine_description(getattr(resource_scheduler, owner), "next owner")
+    with gpu_hand_off.acquire(resource_scheduler.local_gpu_lane(0), task_id="next", description=description):
+        assert comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is False
+
+
+def test_an_untagged_gpu_owner_stops_the_warm_runtime(comfy, gpu_hand_off):
+    from services import resource_scheduler
+    comfy.job(name="one")
+    with gpu_hand_off.acquire(resource_scheduler.local_gpu_lane(0), task_id="whisper", description="Audio analysis"):
+        assert comfy.processes[0].stopped.is_set()
+
+
+def test_a_creation_job_keeps_the_runtime_across_the_gpu_hand_off(comfy, gpu_hand_off):
+    from services import resource_scheduler
+    comfy.job(name="one")
+    description = resource_scheduler.gpu_engine_description(resource_scheduler.GPU_ENGINE_CREATION, "creation job")
+    with gpu_hand_off.acquire(resource_scheduler.local_gpu_lane(0), task_id="next", description=description):
+        assert not comfy.processes[0].stopped.is_set()
+        comfy.job(name="two")
+    assert len(comfy.processes) == 1
+
+
+def test_cpu_work_between_two_drama_lines_keeps_one_process(comfy, gpu_hand_off):
+    """Series render: voice, then the CPU Whisper check (speech_qa takes the audio CPU lane), then the next line."""
+    from services import resource_scheduler
+    comfy.job(name="line1")
+    for name in ("audio-analysis", "speech-analysis", "world3d-render"):
+        with gpu_hand_off.acquire(resource_scheduler.cpu_lane(name), task_id=f"cpu-{name}", description="Speech check"):
+            assert not comfy.processes[0].stopped.is_set()
+    comfy.job(name="line2")
+    assert len(comfy.processes) == 1
+
+
+def test_the_sam_service_start_evicts_an_idle_warm_runtime(comfy, monkeypatch):
+    """SAM is a GPU subprocess that never takes the GPU lane, so it asks the creation runtime to go itself."""
+    from services import inpaint_service
+    comfy.job(name="one")
+    monkeypatch.setattr(inpaint_service, "check_sam_status", lambda: {"status": "stopped"})
+    monkeypatch.setattr(inpaint_service, "_find_sam_env", lambda: "python")
+    monkeypatch.setattr(inpaint_service, "_find_sam_service_script", lambda: "sam_service.py")
+
+    def refuse(*args, **kwargs):
+        raise OSError("the test never starts SAM")
+
+    monkeypatch.setattr(subprocess, "Popen", refuse)
+    with pytest.raises(OSError, match="never starts SAM"):
+        inpaint_service.ensure_sam_running()
+    assert comfy.processes[0].stopped.is_set()
+
+
+def test_a_lane_less_eviction_never_waits_for_a_running_job(comfy, monkeypatch):
+    started, release = threading.Event(), threading.Event()
+    original = comfy.service._request
+
+    def slow(method, base, suffix, **kwargs):
+        if suffix.startswith("/history/"):
+            started.set()
+            release.wait(2)
+        return original(method, base, suffix, **kwargs)
+
+    monkeypatch.setattr(comfy.service, "_request", slow)
+    worker = threading.Thread(target=comfy.job, kwargs={"name": "busy"}, daemon=True)
+    worker.start()
+    assert started.wait(2)
+    assert comfy.service.evict_if_idle() is False
+    assert not comfy.processes[0].stopped.is_set()
+    release.set()
+    worker.join(2)
+    assert comfy.service.evict_if_idle() is True
+    assert comfy.processes[0].stopped.is_set()
+
+
+def test_the_idle_setting_reaches_the_runtime_and_a_bad_one_means_the_default(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from services import creation_model_execution as execution
+    seen = []
+
+    def generate(params, job_id, out_dir, progress, cancelled, on_produce=None, idle_seconds=None):
+        seen.append(idle_seconds)
+        return []
+
+    monkeypatch.setattr(execution.service, "generate", generate)
+    monkeypatch.setattr(execution, "record_job_outputs", lambda *args: None)
+    monkeypatch.setattr(execution, "is_cancel_requested", lambda _: False)
+    monkeypatch.setattr(execution, "finish_job", lambda *args, **kwargs: True)
+    for services in ({"creation_runtime_idle_seconds": 7}, {"creation_runtime_idle_seconds": "later"}, {}):
+        engine = SimpleNamespace(server_config={"services": services})
+        state = SimpleNamespace(job={"out_dir": str(tmp_path)}, raw_params={"model_type": "drama3_base", "seed": 1},
+                                job_id="job", start_time=0, finalize=True)
+        execution.run_creation_job(state, engine=engine, publish=lambda *args: None)
+    assert seen == [7.0, 300.0, 300.0]
+
+
+# --- the stall guard ----------------------------------------------------------------
+
+
+class _Clock:
+    """A monotonic clock the test moves: ``sleep`` advances it, nothing really waits."""
+
+    def __init__(self, now=10_000.0):
+        self.now, self.ticks = now, []
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+        for tick in self.ticks:
+            tick(self.now)
+
+
+@pytest.fixture
+def clock(comfy, monkeypatch):
+    fake = _Clock()
+    monkeypatch.setattr(comfy.service, "time", fake)
+    monkeypatch.setattr(comfy.service, "_last_output", fake.now)
+    return fake
+
+
+def test_a_silent_runtime_with_a_pending_prompt_is_stopped_after_fifteen_minutes(comfy, clock):
+    comfy.state["pending"] = 10**9
+    with pytest.raises(RuntimeError, match="no progress for 15 minutes.*try again"):
+        comfy.job()
+    assert comfy.processes[0].stopped.is_set()
+    assert comfy.service.runtime_status()["warm"] is False
+    assert 900 <= clock.now - 10_000 < 1000, "The guard fired at the one-hour limit instead of after 15 quiet minutes"
+
+
+def test_printed_output_keeps_a_slow_prompt_alive_until_the_one_hour_limit(comfy, clock):
+    comfy.state["pending"] = 10**9
+
+    def print_a_line(now):
+        if int(now) % 300 == 0:
+            comfy.service._last_output = now
+
+    clock.ticks.append(print_a_line)
+    with pytest.raises(RuntimeError, match="one-hour limit"):
+        comfy.job()
+    assert clock.now - 10_000 >= 3600
+    assert comfy.processes[0].stopped.is_set()
+
+
+def test_time_a_warm_runtime_sat_silent_before_the_prompt_does_not_count(comfy, clock):
+    comfy.service._last_output = 0.0
+    clock.now = 50_000.0
+    comfy.state["pending"] = 3
+    assert len(comfy.job()) == 1
+    assert len(comfy.processes) == 1 and not comfy.processes[0].stopped.is_set()
+
+
+def test_the_output_reader_stamps_every_line(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from services import creation_model_service as service
+    fake = _Clock()
+    monkeypatch.setattr(service, "time", fake)
+    monkeypatch.setattr(service, "ROOT", tmp_path / "app")
+    monkeypatch.setattr(service, "_last_output", 0.0)
+
+    def lines():
+        fake.now = 111.0
+        yield "first\n"
+        fake.now = 222.0
+        yield "second\n"
+
+    service._drain(SimpleNamespace(stdout=lines()))
+    assert service._last_output == 222.0
+    assert (tmp_path / "logs" / "creation_models" / "latest.log").read_text(encoding="utf-8") == "first\nsecond\n"

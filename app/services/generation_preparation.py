@@ -15,7 +15,7 @@ import traceback
 import torch
 from fastapi import HTTPException
 
-from services import execution_mode, minimax_h3_service, resource_scheduler
+from services import creation_model_service, execution_mode, minimax_h3_service, resource_scheduler
 from services.job_lifecycle import (
     acknowledge_cancel,
     finish_job,
@@ -67,14 +67,19 @@ def _prepare_local_gpu_owner(
     """Hand GPU 0 to one engine without retaining incompatible runtimes."""
     owner_kind = resource_scheduler.gpu_engine_kind(description)
     is_legacy_h3 = owner_kind == resource_scheduler.GPU_ENGINE_H3_LEGACY
+    is_creation = owner_kind == resource_scheduler.GPU_ENGINE_CREATION
     is_wgp_generation = owner_kind == resource_scheduler.GPU_ENGINE_WGP
     is_local_llm = owner_kind == resource_scheduler.GPU_ENGINE_LOCAL_LLM
 
     if not is_legacy_h3:
         minimax_h3_service.cancel_idle_shutdown()
         minimax_h3_service.stop_runtime()
+    # The warm FLUX 3 / Drama 3 runtime holds tens of GB of RAM and VRAM between
+    # its jobs: every other GPU-lane owner stops it, only a creation job keeps it.
+    if not is_creation:
+        creation_model_service.stop_runtime()
     released_wgp = False
-    if not is_wgp_generation and (
+    if not (is_wgp_generation or is_creation) and (
         getattr(wgp, "wan_model", None) is not None
         or getattr(wgp, "offloadobj", None) is not None
     ):

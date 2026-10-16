@@ -26,8 +26,12 @@ def run_creation_job(st, *, engine, publish):
         return False
     # A test double may replace generate and reject this callback.
     generate_kwargs = {}
-    if "on_produce" in inspect.signature(service.generate).parameters:
+    accepted = inspect.signature(service.generate).parameters
+    if "on_produce" in accepted:
         generate_kwargs["on_produce"] = lambda: mark_producing(job)
+    if "idle_seconds" in accepted:
+        services = (getattr(engine, "server_config", None) or {}).get("services") or {}
+        generate_kwargs["idle_seconds"] = service.idle_seconds_setting(services)
     with safe_download.cancellable_downloads(lambda: is_cancel_requested(job)):
         outputs = service.generate(
             params, st.job_id, job["out_dir"], progress, lambda: is_cancel_requested(job),
