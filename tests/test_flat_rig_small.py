@@ -370,3 +370,16 @@ def test_an_iris_at_the_corner_of_a_sideways_eye_is_closed_with_the_lid():
     # The iris past each white, above and below the lid line the blink draws across the eye (the socket line starts beyond it).
     for top, bottom, left, right in ((94, 98, 121, 124), (102, 104, 122, 125), (94, 98, 177, 180), (102, 104, 177, 180)):
         assert (luma[top - y0:bottom - y0, left - x0:right - x0] > skin * 0.6).all(), f"the iris at x {left}..{right}, y {top}..{bottom} is still open after the blink"
+
+
+def test_a_pose_filter_that_names_the_base_rigs_it_once_and_keeps_the_order_asked_for(tmp_path, monkeypatch):
+    """The base is added to a filter that leaves it out, never on top of one that has it, and a repeated pose is rigged once."""
+    from services import flat_rig
+    monkeypatch.setattr(face_landmarks, "detect", lambda image: None)
+    seen = []
+    real = flat_rig.rig_pose
+    monkeypatch.setattr(flat_rig, "rig_pose", lambda *args, **kwargs: seen.append(args[0].size) or real(*args, **kwargs))
+    folder = tmp_path / "cast"
+    _kit_with(folder, ["book", "sad"])
+    rigged = rig_character(str(folder), "cast", "hero", base_revision=1, pose_ids=["book", "base", "book"])
+    assert sorted(rigged["poses"]) == ["base", "book"] and len(seen) == 2, "the base once, book once, sad not at all"
