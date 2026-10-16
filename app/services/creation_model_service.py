@@ -151,15 +151,21 @@ def ensure_runtime(progress, cancelled):
     raise RuntimeError("Creation runtime startup timed out; see logs/creation_models/latest.log")
 
 
-def generate(params, job_id, out_dir, progress, cancelled):
+def generate(params, job_id, out_dir, progress, cancelled, on_produce=None):
     with _lock:
         try:
+            if cancelled():
+                raise RuntimeError("Generation cancelled")
             download_assets(params["model_type"], lambda message: progress(message, 1, 0, 0))
+            if cancelled():
+                raise RuntimeError("Generation cancelled")
             base = ensure_runtime(progress, cancelled)
             results = []
             for index in range(int(params.get("repeat_generation", 1))):
                 if cancelled():
                     raise RuntimeError("Generation cancelled")
+                if on_produce is not None:
+                    on_produce()
                 prefix = f"{params['model_type']}_{job_id}_{index}"
                 effective = {**params, "seed": int(params["seed"]) + index}
                 graph, output_node = build_workflow(effective, prefix, INPUT_DIR)

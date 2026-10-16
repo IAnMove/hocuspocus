@@ -15,6 +15,7 @@ from services.job_lifecycle import (
     acknowledge_cancel,
     finish_job,
     is_cancel_requested,
+    mark_producing,
     record_job_outputs,
     register_abort_state,
     try_start,
@@ -255,6 +256,7 @@ def _run_generation_start(st):
             _active_gen_states,
             pending_abort,
             interrupt_model=interrupt_model,
+            preparing_engine=True,
         ):
             return False
         abort_state = pending_abort
@@ -311,6 +313,8 @@ def _run_generation_legacy_h3(st):
             step: int = 0,
             total: int = 0,
         ) -> None:
+            if step > 0:
+                mark_producing(job)
             update_job(
                 job,
                 message=message,
@@ -320,6 +324,8 @@ def _run_generation_legacy_h3(st):
                 phase="H3 Legacy sampling" if total > 0 else "",
             )
 
+        if is_cancel_requested(job):
+            return False
         with safe_download.cancellable_downloads(
             lambda: is_cancel_requested(job),
         ):
@@ -330,6 +336,7 @@ def _run_generation_legacy_h3(st):
                 _legacy_h3_progress,
                 lambda: is_cancel_requested(job),
                 keep_runtime=True,
+                on_produce=lambda: mark_producing(job),
             )
         if is_cancel_requested(job):
             return False

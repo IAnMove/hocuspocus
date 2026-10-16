@@ -33,6 +33,7 @@ from services.job_lifecycle import (  # noqa: E402
     finish_job,
     generation_queue_position,
     generation_slot,
+    is_cancel_requested,
     record_job_outputs,
     register_abort_state,
     register_generation_job,
@@ -196,6 +197,65 @@ class TestJobLifecycle(unittest.TestCase):
         self.assertEqual(job["status"], "cancelled")
         self.assertEqual(job["message"], "Cancelled")
         self.assertIsNotNone(job["finished_at"])
+
+    def test_cancel_while_the_engine_is_preparing_is_terminal_immediately(self):
+        """Preparing an engine is not production: Cancel must not wait it out."""
+        job = _job()
+        states: dict = {}
+        state = {"abort": False}
+        lock = threading.Lock()
+        prepared = threading.Event()
+        release = threading.Event()
+        generated: list[str] = []
+
+        def worker():
+            self.assertTrue(try_start(job))
+            self.assertTrue(register_abort_state(
+                job, job["id"], states, state, interrupt_model=Mock(),
+            ))
+            job["preparing_engine"] = True
+            prepared.set()
+            # The engine load blocks. Cancel must return before this wait ends.
+            release.wait(timeout=3)
+            if not is_cancel_requested(job):
+                generated.append("video")
+            unregister_abort_state(job["id"], states, state)
+
+        register_generation_job(lock, job)
+        thread = threading.Thread(target=worker)
+        thread.start()
+        try:
+            self.assertTrue(prepared.wait(timeout=2))
+            started = time.monotonic()
+            result = request_cancel(job, job_id=job["id"], active_states=states)
+            elapsed = time.monotonic() - started
+            self.assertLess(elapsed, 2.0)
+            self.assertTrue(result.changed)
+            self.assertEqual(job["status"], "cancelled")
+            self.assertEqual(job["phase"], "cancelled")
+            self.assertEqual(job["message"], "Cancelled")
+            self.assertIsNotNone(job["finished_at"])
+            self.assertTrue(state["abort"])
+            self.assertIsNone(generation_queue_position(lock, job))
+        finally:
+            release.set()
+            thread.join(timeout=2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(generated, [])
+
+    def test_cancel_while_producing_stays_pending_until_the_worker_releases(self):
+        job = {**_job(), "preparing_engine": True, "producing": True}
+        states: dict = {}
+        state = {"abort": False}
+        self.assertTrue(try_start(job))
+        self.assertTrue(register_abort_state(job, job["id"], states, state))
+
+        request_cancel(job, job_id=job["id"], active_states=states)
+
+        self.assertEqual(job["status"], "cancelling")
+        self.assertIsNone(job["finished_at"])
+        unregister_abort_state(job["id"], states, state)
+        self.assertEqual(job["status"], "cancelled")
 
     def test_state_observer_receives_atomic_transition_snapshots(self):
         observed = []

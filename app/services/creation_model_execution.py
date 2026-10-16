@@ -4,7 +4,9 @@ import secrets
 import time
 
 from services import creation_model_service as service, safe_download
-from services.job_lifecycle import finish_job, is_cancel_requested, record_job_outputs, update_job
+from services.job_lifecycle import (
+    finish_job, is_cancel_requested, mark_producing, record_job_outputs, update_job,
+)
 
 
 def run_creation_job(st, *, engine, publish):
@@ -15,10 +17,17 @@ def run_creation_job(st, *, engine, publish):
         engine.release_model()
 
     def progress(message, value, step=0, total=0):
+        if step > 0:
+            mark_producing(job)
         update_job(job, message=message, progress=value, step=step, total_steps=total, phase="Generating")
 
+    if is_cancel_requested(job):
+        return False
     with safe_download.cancellable_downloads(lambda: is_cancel_requested(job)):
-        outputs = service.generate(params, st.job_id, job["out_dir"], progress, lambda: is_cancel_requested(job))
+        outputs = service.generate(
+            params, st.job_id, job["out_dir"], progress, lambda: is_cancel_requested(job),
+            on_produce=lambda: mark_producing(job),
+        )
     if is_cancel_requested(job):
         return False
     record_job_outputs(job, [os.path.basename(path) for path in outputs])
