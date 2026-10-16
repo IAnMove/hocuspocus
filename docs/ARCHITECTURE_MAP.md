@@ -150,8 +150,8 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | --- | --- | ---: | --- | --- |
 | `app/services/generation_worker/__init__.py` | The generation worker: ''_run_generation'' split into a frame and the phases it chains th… | 14 | launch | tests/characterization/test_generation_worker_bind.py, tests/characterization/test_run_generation.py, tests/test_generation_worker_bind.py |
 | `app/services/generation_worker/finalize.py` | The end of a generation run: post-processing passes and the hand-over. | 682 | — | tests/characterization/test_studio_generate.py, tests/test_frame_exact_outputs.py |
-| `app/services/generation_worker/prepare.py` | The start of a generation run: the frame, the GPU slot, the preflight and the task manife… | 943 | — | tests/characterization/test_run_generation.py |
-| `app/services/generation_worker/tasks.py` | The middle of a generation run: the task queue, the task loop and the collection of outpu… | 636 | — | — |
+| `app/services/generation_worker/prepare.py` | The start of a generation run: the frame, the GPU slot, the preflight and the task manife… | 954 | — | tests/characterization/test_run_generation.py |
+| `app/services/generation_worker/tasks.py` | The middle of a generation run: the task queue, the task loop and the collection of outpu… | 645 | — | — |
 
 ## services/generation
 
@@ -270,12 +270,12 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 `app/services/character_speech_definition.py` (226 —), `app/services/character_styles.py` (57 —), `app/services/checkpoints.py` (632 launch), `app/services/civitai.py` (580 launch), `app/services/civitai_downloads.py` (900 launch)
 `app/services/clip_align.py` (354 launch), `app/services/comic_animatic.py` (302 launch), `app/services/comic_director_json.py` (146 launch), `app/services/comic_helpers.py` (397 launch), `app/services/command_input_errors.py` (28 —)
 `app/services/core_canonical_tasks.py` (277 core), `app/services/core_generation_commands.py` (305 core), `app/services/core_production.py` (105 core), `app/services/core_remote_3d.py` (290 —), `app/services/core_remote_image.py` (288 core)
-`app/services/core_series_assembly.py` (171 both), `app/services/core_workspace.py` (250 core), `app/services/creation_model_catalog.py` (117 —), `app/services/creation_model_execution.py` (37 —)
-`app/services/creation_model_graphs.py` (94 —), `app/services/creation_model_service.py` (216 —), `app/services/debug_trace.py` (196 launch), `app/services/diorama_set.py` (180 —), `app/services/director_comic_film.py` (101 —)
+`app/services/core_series_assembly.py` (171 both), `app/services/core_workspace.py` (250 core), `app/services/creation_model_catalog.py` (117 —), `app/services/creation_model_execution.py` (51 —)
+`app/services/creation_model_graphs.py` (94 —), `app/services/creation_model_service.py` (222 —), `app/services/debug_trace.py` (196 launch), `app/services/diorama_set.py` (180 —), `app/services/director_comic_film.py` (101 —)
 `app/services/director_comic_jobs.py` (220 launch), `app/services/director_model_compat.py` (328 —), `app/services/director_pipeline.py` (14536 launch), `app/services/director_pipeline_state.py` (174 —)
 `app/services/director_plan_jobs.py` (297 —), `app/services/director_review.py` (154 —), `app/services/director_v2_plan.py` (461 launch), `app/services/director_video_strategy.py` (1070 —), `app/services/document_origin.py` (191 —)
 `app/services/durable_generation_queue.py` (122 —), `app/services/enhance_guides.py` (161 —), `app/services/episode_av_sync.py` (161 —), `app/services/episode_finishing.py` (608 —), `app/services/example_assets.py` (95 —)
-`app/services/example_collections.py` (140 —), `app/services/execution_mode.py` (253 launch), `app/services/export_output_name.py` (145 —), `app/services/export_qa.py` (499 launch), `app/services/export_receipts.py` (116 —)
+`app/services/example_collections.py` (140 —), `app/services/execution_mode.py` (253 launch), `app/services/export_output_name.py` (145 —), `app/services/export_qa.py` (547 launch), `app/services/export_receipts.py` (116 —)
 `app/services/face_enlarge.py` (136 —), `app/services/face_landmarks.py` (195 —), `app/services/flat_rig.py` (1130 —), `app/services/flat_rig_base.py` (31 —), `app/services/flat_rig_eyes.py` (525 —), `app/services/flat_rig_hints.py` (57 —)
 `app/services/flat_rig_ink.py` (90 —), `app/services/flat_rig_look.py` (66 —), `app/services/flat_rig_metrics.py` (206 —), `app/services/flat_rig_preview.py` (175 —), `app/services/flat_rig_warp.py` (518 —)
 `app/services/game_audio.py` (495 —), `app/services/game_commands.py` (444 launch), `app/services/game_estimate.py` (201 —), `app/services/game_export.py` (852 —), `app/services/game_frames.py` (319 —), `app/services/game_guide.py` (77 —)
@@ -289,7 +289,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 `app/services/h3_prompt_finalization.py` (14 —), `app/services/h3_prompt_policy.py` (119 —), `app/services/h3_runtime_policy.py` (217 launch), `app/services/h3_story_contract.py` (279 —), `app/services/h3_window_planner.py` (766 —)
 `app/services/hardware_detect.py` (220 launch), `app/services/hardware_probe.py` (28 launch), `app/services/hf_import.py` (473 launch), `app/services/hi3d_service.py` (199 —), `app/services/host_guard.py` (95 launch)
 `app/services/image_edit_workflow.py` (75 —), `app/services/image_generation_commands.py` (371 —), `app/services/image_generation_runtime.py` (127 launch), `app/services/image_generation_spec.py` (280 —)
-`app/services/image_remove_background.py` (141 launch), `app/services/inpaint_service.py` (441 —), `app/services/install_speech_tools.py` (67 —), `app/services/job_leftovers.py` (550 launch), `app/services/job_lifecycle.py` (996 launch)
+`app/services/image_remove_background.py` (141 launch), `app/services/inpaint_service.py` (441 —), `app/services/install_speech_tools.py` (67 —), `app/services/job_leftovers.py` (550 launch), `app/services/job_lifecycle.py` (1036 launch)
 `app/services/jobs_cancel.py` (202 launch), `app/services/jobs_wait.py` (242 launch), `app/services/lan_auth.py` (291 launch), `app/services/language_intent.py` (100 —), `app/services/lips_creator_commands.py` (364 launch)
 `app/services/lipsync_qa.py` (210 launch), `app/services/live_stats.py` (152 core), `app/services/llama_release_assets.py` (25 —), `app/services/llm_routing.py` (138 —), `app/services/llm_service.py` (6865 —)
 `app/services/local_generation.py` (187 —), `app/services/local_mcp.py` (80 launch), `app/services/lora_compat.py` (113 —), `app/services/lora_guides.py` (554 launch), `app/services/lora_library.py` (1221 launch)
@@ -297,7 +297,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 `app/services/mcp_compact.py` (154 —), `app/services/mcp_intent.py` (94 —), `app/services/mcp_oauth.py` (259 launch), `app/services/mcp_profiles.py` (86 launch), `app/services/media_compose.py` (210 —)
 `app/services/media_dimensions.py` (375 launch), `app/services/media_frame.py` (168 —), `app/services/media_kinds.py` (48 —), `app/services/media_options.py` (116 launch), `app/services/media_paths.py` (206 —)
 `app/services/media_publication.py` (53 —), `app/services/media_refs.py` (31 —), `app/services/media_thumbnails.py` (194 —), `app/services/memory_trim.py` (71 —), `app/services/meshy_3d_service.py` (160 —)
-`app/services/minimax_h3_duration.py` (468 —), `app/services/minimax_h3_service.py` (1093 launch), `app/services/minimax_image_service.py` (194 core), `app/services/minimax_music_models.py` (10 —)
+`app/services/minimax_h3_duration.py` (468 —), `app/services/minimax_h3_service.py` (1098 launch), `app/services/minimax_image_service.py` (194 core), `app/services/minimax_music_models.py` (10 —)
 `app/services/minimax_music_service.py` (192 —), `app/services/minors_rule.py` (59 —), `app/services/mix_concat.py` (505 —), `app/services/mix_concat_blocks.py` (175 —), `app/services/model3d_commands.py` (150 launch)
 `app/services/model3d_external.py` (111 —), `app/services/model3d_input_path.py` (44 both), `app/services/model3d_rig_commands.py` (30 launch), `app/services/model3d_service.py` (1415 launch), `app/services/model_downloads.py` (473 launch)
 `app/services/model_file_groups.py` (107 launch), `app/services/model_options.py` (273 launch), `app/services/model_selectors.py` (374 —), `app/services/model_visibility.py` (337 launch), `app/services/montage_commands.py` (172 launch)

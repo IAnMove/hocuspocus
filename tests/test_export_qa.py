@@ -52,6 +52,43 @@ def _codes(path: Path, **kwargs: object) -> list[str]:
     return [item["code"] for item in probe(str(path), **kwargs)["warnings"]]
 
 
+def test_dark_cards_are_not_black_and_a_real_gap_still_is(tmp_path: Path):
+    pure = tmp_path / "pure-black.mp4"
+    navy = tmp_path / "navy.mp4"
+    gray = tmp_path / "gray.mp4"
+    mixed = tmp_path / "gap.mp4"
+    _video(pure, f"color=c=black:s=320x180:r={FPS}:d=1")
+    _video(navy, f"color=c=0x000028:s=320x180:r={FPS}:d=1")
+    _video(gray, f"color=c=0x141414:s=320x180:r={FPS}:d=1")
+    _video(
+        mixed,
+        f"color=c=0x4080c0:s=320x180:r={FPS}:d=1",
+        f"color=c=black:s=320x180:r={FPS}:d=0.5",
+        f"color=c=0x4080c0:s=320x180:r={FPS}:d=1",
+    )
+
+    pure_report = probe(str(pure))
+    assert any(item["code"] == "black" for item in pure_report["warnings"])
+    assert pure_report["verdict"] == "fail"
+
+    navy_report = probe(str(navy))
+    assert "black" not in _codes(navy)
+    assert navy_report["verdict"] == "ok"
+    assert any(item["code"] == "dark" for item in navy_report.get("notes") or [])
+    assert "dark" not in _codes(navy)
+
+    gray_report = probe(str(gray))
+    assert "black" not in _codes(gray)
+    assert gray_report["verdict"] == "ok"
+    assert any(item["code"] == "dark" for item in gray_report.get("notes") or [])
+
+    mixed_report = probe(str(mixed))
+    gaps = [item for item in mixed_report["warnings"] if item["code"] == "black"]
+    assert len(gaps) == 1
+    assert abs(gaps[0]["t"] - 1.0) <= 2 * FRAME
+    assert abs(gaps[0]["evidence"]["end"] - 1.5) <= 2 * FRAME
+
+
 def test_one_second_of_black_is_within_one_frame(tmp_path: Path):
     path = tmp_path / "black.mp4"
     _video(

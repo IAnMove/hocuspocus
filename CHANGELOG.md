@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: `qa.export` no longer calls a dark picture black.** A black frame is near zero on every channel (the brightest channel at or under 12/255), so a dark-blue or dark-gray card is an informational `dark` note and does not change the verdict. A real black gap is still a `black` warning.
+
+**Fixed: cancelling a job that is still loading its engine returns immediately.** A retake cancelled while Drama 3 (or any queued engine) was still starting stayed `cancelling` until that load finished, so the caller waited through the whole startup (74s on one retake). Cancel now marks the job `cancelled`, drops its queue slot and signals the worker without waiting for the load. The worker does not start sampling. A job that has already started producing still stays `cancelling` until the worker releases it.
+
 **Fixed: `image.remove_background` in auto mode no longer segments a PNG that is already transparent.** When at least 1% of the pixels have alpha below 250, the operation copies that picture to the result (named like a cutout) and records `background_already_removed`. An opaque picture, and an explicit U2Net or screen request, still run as before.
 
 **Fixed: a character kit can store a Drama 3 voice, and Series regenerates a line with it.** `drama3_base` is a clone preference (recording plus its exact transcript, no speaking style). `drama3_voicedesign` is a designed voice (`voiceId: "design"`, optional direction, no recording). Series `produce` and a line retake send the same `generation.speech` command Studio uses, including the `[language: en|es]` hint. The default new voice stays VoxCPM2.
