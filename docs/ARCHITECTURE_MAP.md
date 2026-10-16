@@ -39,7 +39,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/core_labs.py` | Story, Character Kit and Series filesystem persistence for core/remote. | 154 | core | — |
 | `app/routers/core_mcp.py` | Core MCP handlers on the shared wangp transport. | 115 | core | tests/test_core_mcp.py, tests/test_mcp_access.py |
 | `app/routers/core_remote.py` | Remote providers, production profile and Director planning for core/remote. | 189 | core | tests/test_no_paid_music_defaults.py |
-| `app/routers/director.py` | Director planner and short-film pipeline routes for the full server. | 875 | launch | tests/characterization/test_generation_worker_bind.py, tests/test_job_lifecycle_wiring.py |
+| `app/routers/director.py` | Director planner and short-film pipeline routes for the full server. | 876 | launch | tests/characterization/test_generation_worker_bind.py, tests/test_job_lifecycle_wiring.py |
 | `app/routers/director_comic.py` | Director comic HTTP routes for the full server. | 1063 | launch | tests/characterization/test_comics.py, tests/test_comic_plan_resume_contract.py |
 | `app/routers/director_pipeline_reads.py` | Director routes that both servers serve the same way. | 155 | launch | tests/test_core_runtime.py |
 | `app/routers/director_review.py` | — | 39 | launch | tests/test_director_review.py, tests/test_director_visible_reference.py |
