@@ -31,6 +31,9 @@ _SILENCE_END = re.compile(r"silence_end:\s*([0-9.]+)\s*\|\s*silence_duration:\s*
 _PEAK = re.compile(r"Peak level dB:\s*(-?[0-9.]+)")
 _LUFS = re.compile(r"I:\s*(-?[0-9.]+)\s+LUFS")
 _VIDEO_FILTER = "blackdetect=d=0.05:pic_th=0.98:pix_th=0.10,freezedetect=n=-60dB:d=1.5,scdet=threshold=10"
+# Near-zero on every channel. Luma alone (blackdetect's pix_th) also matches a
+# dark-blue or dark-gray card; those stay informational notes, not black.
+_BLACK_MAX_CHANNEL = 12
 _AUDIO_FILTER = "silencedetect=n=-50dB:d=0.4,astats=metadata=1:reset=0,ebur128"
 
 
@@ -88,14 +91,17 @@ def probe(
     window_fps = float(reported_fps if isinstance(reported_fps, (int, float)) else expected_fps or 25.0)
     windows = _shots(shots, duration)
     warnings: list[dict[str, Any]] = []
+    notes: list[dict[str, Any]] = []
     measured: dict[str, Any] = {"duration": round(duration, 3)}
     if isinstance(reported_fps, (int, float)):
         measured["fps"] = round(float(reported_fps), 3)
     if media.get("video"):
         try:
-            warnings.extend(_video_warnings(path, ffmpeg, windows, window_fps))
+            found, dark = _video_warnings(path, ffmpeg, windows, window_fps)
         except (OSError, subprocess.TimeoutExpired):
             return _unreliable("probe_failed")
+        warnings.extend(found)
+        notes.extend(dark)
     if media.get("audio"):
         try:
             audio_warnings, levels = _audio_warnings(path, ffmpeg, windows, float(target_lufs))
@@ -104,7 +110,10 @@ def probe(
         warnings.extend(audio_warnings)
         measured.update(levels)
     warnings.extend(_timing_warnings(media, expected_duration, expected_fps))
-    return {"verdict": _verdict(warnings), "warnings": warnings, "measured": measured}
+    report: dict[str, Any] = {"verdict": _verdict(warnings), "warnings": warnings, "measured": measured}
+    if notes:
+        report["notes"] = notes
+    return report
 
 
 def command_catalog() -> list[dict[str, Any]]:
@@ -126,7 +135,9 @@ def command_catalog() -> list[dict[str, Any]]:
         "description": (
             "Probe one exported file with ffmpeg. Verdict is ok, watch, fail, or unreliable. "
             "Warnings use code, t, optional slot, detail, and evidence. A fail only warns: "
-            "export is never blocked. intentional still and dark intervals are listed in shots.allow. "
+            "export is never blocked. A dark frame that is not near zero on every channel "
+            "is a note (code dark) and does not change the verdict. "
+            "intentional still and dark intervals are listed in shots.allow. "
             "target_lufs defaults to -14. When intent_id matches an export admission, the same "
             "report is stored on that task and shown as receipt.qa."
         ),
@@ -320,17 +331,47 @@ def _message(line: str) -> str:
     return line.strip()
 
 
-def _video_warnings(path: str, ffmpeg: str, windows: list[dict], fps: float) -> list[dict[str, Any]]:
+def _video_warnings(
+    path: str, ffmpeg: str, windows: list[dict], fps: float,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     result = _run(ffmpeg, ["-hide_banner", "-i", path, "-vf", _VIDEO_FILTER, "-an", "-f", "null", "-"])
     if result.returncode != 0:
         raise OSError("video probe failed")
     lines = result.stderr.splitlines()
-    found = [*_black_warnings(lines, windows), *_freeze_warnings(lines, windows), *_jump_warnings(lines, windows, fps)]
-    return found
+    black, dark = _black_findings(path, ffmpeg, lines, windows)
+    found = [*black, *_freeze_warnings(lines, windows), *_jump_warnings(lines, windows, fps)]
+    return found, dark
 
 
-def _black_warnings(lines: list[str], windows: list[dict]) -> list[dict[str, Any]]:
-    found = []
+def _raw_frame(path: str, ffmpeg: str, t: float) -> bytes | None:
+    """One decoded RGB frame at ``t``. stderr is discarded (no version or paths)."""
+    result = subprocess.run(
+        [
+            ffmpeg, "-hide_banner", "-loglevel", "error", "-i", path,
+            "-ss", f"{max(0.0, float(t)):.3f}", "-frames:v", "1",
+            "-f", "rawvideo", "-pix_fmt", "rgb24", "-",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        timeout=60,
+        check=False,
+    )
+    data = result.stdout
+    if result.returncode != 0 or len(data) < 3 or len(data) % 3:
+        return None
+    return data
+
+
+def _near_black(raw: bytes) -> bool:
+    """True when every channel is near zero. That also bounds luma."""
+    return max(raw) <= _BLACK_MAX_CHANNEL
+
+
+def _black_findings(
+    path: str, ffmpeg: str, lines: list[str], windows: list[dict],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    warnings: list[dict[str, Any]] = []
+    notes: list[dict[str, Any]] = []
     for line in lines:
         match = _BLACK.search(_message(line))
         if match is None:
@@ -338,11 +379,18 @@ def _black_warnings(lines: list[str], windows: list[dict]) -> list[dict[str, Any
         start, end, duration = (float(match.group(index)) for index in (1, 2, 3))
         if _allowed(start, end, windows, "dark"):
             continue
-        found.append(_warning(
+        raw = _raw_frame(path, ffmpeg, (start + end) / 2.0)
+        item = _warning(
             "black", start, f"{duration:.3f}s black",
             {"start": start, "end": end, "duration": duration}, _slot_at(start, windows),
-        ))
-    return found
+        )
+        if raw is None or _near_black(raw):
+            warnings.append(item)
+            continue
+        item["code"] = "dark"
+        item["detail"] = f"{duration:.3f}s dark"
+        notes.append(item)
+    return warnings, notes
 
 
 def _freeze_warnings(lines: list[str], windows: list[dict]) -> list[dict[str, Any]]:

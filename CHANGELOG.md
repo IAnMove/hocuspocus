@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: `qa.export` no longer calls a dark picture black.** A black frame is near zero on every channel (the brightest channel at or under 12/255), so a dark-blue or dark-gray card is an informational `dark` note and does not change the verdict. A real black gap is still a `black` warning.
+
 **Fixed: cancelling a job that is still loading its engine returns immediately.** A retake cancelled while Drama 3 (or any queued engine) was still starting stayed `cancelling` until that load finished, so the caller waited through the whole startup (74s on one retake). Cancel now marks the job `cancelled`, drops its queue slot and signals the worker without waiting for the load. The worker does not start sampling. A job that has already started producing still stays `cancelling` until the worker releases it.
 
 **Fixed (defence): a Video 2D export no longer ships silent black frames.** Exports at `final` could contain 1 to 6 frames of exact black (RGB 0,0,0) at random places (36 of 87 shots of one chapter), and the headless page never reported an error. The cause is inferred, not reproduced: a canvas that is lost reads back as transparent black. The page now reads every frame back, repaints one whose alpha is zero everywhere (on freshly allocated canvases) and stops the export with the frame time if it stays blank; it also reuses its two supersample canvases instead of allocating two new ones per frame. The server checks the rendered PNGs before the encode and fails the task instead of encoding black frames. A fade to opaque black is not affected. The renderer-device policy is unchanged.
