@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a fade no longer leaves the next shot's picture one frame behind its sound.** The fade trims the outgoing picture to a whole frame, and a clip that lasts an exact number of frames but whose length ffprobe prints with six decimals (26/24 s is `1.083333`) was rounded down to the frame before, so every later shot of the join kept that frame of lag. The rounding now tolerates that print noise (a thousandth of a frame) and still never ends after the sound. Found by Grok's review of the day's merges.
+
 **Fixed: `qa.export` no longer calls a dark picture black.** A black frame is near zero on every channel (the brightest channel at or under 12/255), so a dark-blue or dark-gray card is an informational `dark` note and does not change the verdict. A real black gap is still a `black` warning.
 
 **Fixed: cancelling a job that is still loading its engine returns immediately.** A retake cancelled while Drama 3 (or any queued engine) was still starting stayed `cancelling` until that load finished, so the caller waited through the whole startup (74s on one retake). Cancel now marks the job `cancelled`, drops its queue slot and signals the worker without waiting for the load. The worker does not start sampling. A job that has already started producing still stays `cancelling` until the worker releases it.

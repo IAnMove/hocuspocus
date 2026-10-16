@@ -881,3 +881,13 @@ def test_a_cancelled_join_is_a_cancel_and_never_an_out_of_memory(monkeypatch, tm
     out.write_bytes(b"partial")
     assert mix_concat._run_ffmpeg_command(["ffmpeg", "-i", "a.mp4", str(out)], str(out), abort_callback=lambda: True) is False
     assert not out.exists()
+
+
+def test_a_printed_whole_frame_duration_is_not_floored_to_the_frame_before():
+    """ffprobe prints 26/24 s as 1.083333: the fade trim must keep all 26 frames, and still never round up."""
+    from services.series_transitions import _whole_frames
+
+    for frames in (13, 26, 38, 70, 125):
+        printed = float(f"{frames / 24:.6f}")
+        assert _whole_frames(printed) == pytest.approx(frames / 24, abs=1e-9), frames
+    assert _whole_frames(1.0833 + 0.0205) == pytest.approx(26 / 24, abs=1e-9), "half a frame over still floors"

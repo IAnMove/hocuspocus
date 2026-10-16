@@ -26,12 +26,16 @@ from services.mix_concat import (
 KINDS = ("cut", "fade_black", "dissolve", "dip_white")
 _ACTIVE = frozenset({"fade_black", "dissolve", "dip_white"})
 _TAIL = 0.05
+_FRAME_TOLERANCE = 1e-3  # of a frame: printed durations are rounded to microseconds
 _GRID_FPS = 24  # an episode's frame rate (series_shot_plan.FPS): the picture at a fade lies on this grid
 
 
 def _whole_frames(seconds: float) -> float:
-    """``seconds`` rounded down to a whole frame, so a picture that ends there never ends after the sound."""
-    return int(float(seconds) * _GRID_FPS + 1e-6) / _GRID_FPS
+    """``seconds`` rounded down to a whole frame, so a picture that ends there never ends after the sound.
+
+    A duration that is a whole frame but was printed with six decimals (26/24 s is ``1.083333``) lands a hair under
+    the frame; the tolerance is far below one frame so that it does not drop a frame."""
+    return int(float(seconds) * _GRID_FPS + _FRAME_TOLERANCE) / _GRID_FPS
 
 
 def normalize_transition(value: Any) -> dict[str, Any] | None:
