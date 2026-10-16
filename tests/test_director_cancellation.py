@@ -3275,6 +3275,16 @@ class TestDirectorCancellation(unittest.TestCase):
                 worker.join(timeout=3)
         self.assertFalse(worker.is_alive())
 
+    def test_repeat_waits_for_the_clip_unless_the_caller_asks_not_to(self):
+        # The Studio review reads the new take from this reply: the default stays synchronous.
+        pid = "pipe-repeat-sync"
+        self._completed_clip(pid)
+        with patch.object(
+            pipeline, "_rerun_clip_video_impl", return_value={"filename": "new.mp4", "clip_index": 0},
+        ):
+            result = pipeline.rerun_clip_video(self.temp_dir.name, pid, 0)
+        self.assertEqual(result.get("filename"), "new.mp4")
+
     def test_repeat_returns_before_the_worker_finishes(self):
         # The validation client gives up after 60s (status 0, empty body)
         # because rerun-video blocks until the clip is done.
@@ -3315,7 +3325,7 @@ class TestDirectorCancellation(unittest.TestCase):
             try:
                 box["response"] = client.post(
                     f"/api/v1/director/pipelines/{pid}/clips/0/rerun-video",
-                    json={},
+                    json={"wait": False},
                 )
             except Exception as exc:  # pragma: no cover - surfaced below
                 box["error"] = exc
