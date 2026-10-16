@@ -13,8 +13,6 @@ Environment variables:
     SERVER_PORT  - Port to bind (default: 7860)
 """
 
-import gc
-import base64
 import copy
 import sys
 
@@ -39,22 +37,14 @@ APP_VERSION = read_app_version()
 startup_identity()  # pin the deployed commit before anything can change the checkout
 
 import torch
-import glob
-import hashlib
-import json
 import re
 import math
-import random
 import time
 import uuid
 import asyncio
 import threading
 import traceback
 import requests
-from datetime import datetime, timezone
-from pathlib import Path, PureWindowsPath
-from urllib.parse import quote
-
 # --- Bootstrap: CWD must be app/ and sys.argv must be patched before importing wgp ---
 _app_dir = os.path.dirname(os.path.abspath(__file__))
 os.chdir(_app_dir)
@@ -162,14 +152,10 @@ _generation_job_acceptance = ctx.jobs.job_acceptance
 _public_generation_details = ctx.jobs.public_details
 _pending_gpu_jobs = ctx.jobs.pending_gpu_jobs
 _request_generation_cancel = ctx.jobs.cancel
-from services import model3d_service, minimax_h3_service, minimax_image_service
-from services import tools_upscale as tools_upscale_service
+from services import model3d_service, minimax_h3_service
 from services import debug_trace
 from routers.lan_auth import create_lan_auth_router
 from services.lan_auth import LanAuthMiddleware, describe_lan_auth_startup
-from services.media_paths import resolve_voice_ref_paths
-from shared.utils.generation_timing import GenerationTaskTimer
-from shared.utils.ltx_prompt_queue import schedule_ltx_prompt_windows
 from models.minimax_h3.turbo import (
     MINIMAX_H3_TURBO_LORA_FILENAME,
     MINIMAX_H3_TURBO_LORA_REPO_ID,
@@ -251,11 +237,9 @@ if _services.get("auto_performance") and not _services.get("auto_performance_app
 sys.argv = _original_argv
 
 # --- FastAPI setup ---
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
 from services.access_log_filter import install_quiet_access_filter
 
 # Uvicorn's logging configuration replaces handlers but retains logger-level
@@ -285,11 +269,6 @@ debug_trace.start_session(
     config_file=wgp.server_config_filename,
     app_version=api.version,
 )
-
-# Upload size caps — enforced in upload handlers. Tuned for real-world
-# media the app actually ingests; anything larger is almost certainly
-# abuse or a user mistake.
-from routers.uploads import MAX_IMAGE_UPLOAD_BYTES   # 500 MB, defined with the upload route
 
 # CORS — restricted to localhost (the Vite dev server + the bundled UI
 # served from the same FastAPI process + Pinokio's HTTPS proxy at
@@ -324,12 +303,10 @@ api.add_middleware(LanAuthMiddleware)
 
 # --- Generation job tracking ---
 from services.job_lifecycle import (
-    GENERATED_MEDIA_EXTENSIONS,
     acknowledge_cancel,
     collect_job_outputs,
     ensure_generation_priority,
     finish_job,
-    generation_queue_position,
     is_cancel_requested,
     record_job_outputs,
     register_abort_state,
@@ -341,7 +318,7 @@ from services.job_lifecycle import (
     unregister_abort_state,
     update_job,
 )
-from services.asset_manifest import publish_generation_sidecar, publish_generation_sidecar_best_effort
+from services.asset_manifest import publish_generation_sidecar
 from services import resource_scheduler
 
 
@@ -367,7 +344,6 @@ canonical_task_publishers.bind(
     _task_registry=_task_registry,
 )
 from services.canonical_task_publishers import (
-    _GENERIC_TASK_CONFIG,
     _observe_generation_job_state,
     _publish_director_task,
     _publish_generation_sidecar_for_studio_job,
@@ -380,8 +356,6 @@ from services.canonical_task_publishers import (
 
 
 from services.generation_option_helpers import (  # noqa: E402
-    _IPT_REQUIRED_INPUTS,
-    _VPT_REQUIRED_INPUTS,
     _extract_output_seed,
     _is_character_sheet_engine,
     _is_legacy_h3_model,
@@ -459,8 +433,6 @@ bind_model_file_groups(wgp=wgp)
 # them, and the download map is the one instance.
 from services.model_downloads import (  # noqa: E402
     _check_model_downloaded,
-    _download_model_files,
-    _folder_model_ready,
     _model_downloads,
     _model_downloads_lock,
     list_models,
@@ -482,24 +454,13 @@ api.include_router(create_model_list_router())
 
 
 
-# Model visibility, selections and the production profile. These names are the
-# same objects the service holds: code that has not moved keeps calling them,
-# and the write lock is the one instance.
+# Model visibility and the production profile. These names are the same objects
+# the service holds: code that has not moved keeps calling them.
 from services.model_visibility import (  # noqa: E402
-    _MODEL_SELECTION_CONFIG_KEY,
-    _MODEL_VISIBILITY_CONFIG_KEY,
-    _MODEL_VISIBILITY_WRITE_LOCK,
     _PRODUCTION_PROFILE_CONFIG_KEY,
     _active_production_profile,
-    _default_production_profile,
-    _model_selections_response,
-    _model_visibility_response,
-    _normalize_model_selections,
-    _normalize_model_visibility_ids,
     _normalize_production_profile,
-    _persist_model_visibility_config,
     _production_profile_response,
-    _profile_image_model_type,
     configure as _configure_model_visibility,
 )
 _configure_model_visibility(engine=wgp, check_model_downloaded=_check_model_downloaded)
@@ -542,15 +503,6 @@ api.include_router(create_primary_settings_router(wgp=wgp))
 
 
 from services import lora_guides  # noqa: E402
-from services.lora_guides import (  # noqa: E402
-    _append_lora_guide_scan_result,
-    _build_lora_context,
-    _generate_and_save_lora_guide,
-    _lora_guide_scan_lock,
-    _lora_guide_scans,
-    _register_lora_guide_scan,
-    _update_lora_guide_scan,
-)
 from routers.lora_guides import create_lora_guide_status_router  # noqa: E402
 
 api.include_router(create_lora_guide_status_router())
@@ -591,14 +543,12 @@ from services.civitai import (  # noqa: E402
     CIVITAI_BASE_URL,
     CIVITAI_USER_AGENT,
     _CIVITAI_CACHE,
-    _CIVITAI_CACHE_LOCK,
     _build_manifest_entry,
     _civitai_fetch_model,
 )
 from services.civitai_downloads import (  # noqa: E402
     _civitai_download_lock,
     _civitai_downloads,
-    _download_target_reservations,
 )
 
 
@@ -662,7 +612,6 @@ api.include_router(create_lora_guide_scan_router())
 
 from services.model_options import (  # noqa: E402
     configure as _configure_model_options,
-    get_model_options,
 )
 _configure_model_options(
     engine=wgp,
@@ -769,8 +718,6 @@ get_services_config = create_settings_services_router.get_services_config
 _PUBLIC_LLM_PROVIDERS = settings_store._PUBLIC_LLM_PROVIDERS
 _DEFAULT_LLM_REPO = settings_store._DEFAULT_LLM_REPO
 _llm_default_device = settings_store._llm_default_device
-_mask_key = settings_store._mask_key
-
 
 
 api.include_router(create_system_diagnostics_router(wgp=wgp))
