@@ -242,6 +242,9 @@ def _run_generation_start(st):
         pending_abort = state["gen"]
         if legacy_h3_job:
             interrupt_model = minimax_h3_service.cancel
+        elif raw_params.get("model_type", "").startswith(("flux3_", "drama3_")):
+            from services.creation_model_service import cancel
+            interrupt_model = cancel
         else:
             interrupt_model = (
                 None if raw_params.get("sfx_mode") else _interrupt_wan_model
@@ -380,6 +383,10 @@ def _run_generation_legacy_h3(st):
 def _run_generation_configure(st):
     """Preflight: SFX shortcut and the downloads the model needs before it loads."""
     job, raw_params, start_time = st.job, st.raw_params, st.start_time
+    from services.creation_model_catalog import MODEL_TYPES
+    if raw_params.get("model_type") in MODEL_TYPES:
+        from services.creation_model_execution import run_creation_job
+        return run_creation_job(st, engine=wgp, publish=_publish_generation_sidecar_for_studio_job)
     # Inject progressive pipeline setting from services config (applies to all paths)
     _services_cfg = wgp.server_config.get("services", {})
     # ── SFX mode: standalone MMAudio generation ──────────────────

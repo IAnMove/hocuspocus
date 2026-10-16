@@ -1,0 +1,8 @@
+# ABI contract from app/runtime/profiles.json
+numpy==2.2.6
+transformers==4.57.1
+tokenizers==0.22.1
+triton-windows==3.6.0.post26
+torch==2.10.0+cu130
+torchvision==0.25.0+cu130
+torchaudio==2.10.0+cu130

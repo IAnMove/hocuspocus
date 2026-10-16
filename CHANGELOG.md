@@ -14,6 +14,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Added: MCP can create and list workspaces (`workspaces.create`, `workspaces.list`).** An agent could not make the workspace its tools take as an argument and waited about two hours for one to be created by hand. The tools call the same routes the UI calls, with the same name rules; creating an existing name returns it unchanged, so a retry is safe. They are in the series and game profiles.
 
+**Added: optional local FLUX 3 Klein and Drama 3 generation.** FLUX 3 distilled
+INT8 provides text-to-image and editing with up to ten images. Drama 3 INT8
+provides speech generation and single-reference voice cloning, including English
+and Spanish hints. The models use the native generation queue, tasks, cancellation
+and workspace metadata through an isolated, pinned ComfyUI runtime installed from
+Pinokio's Advanced menu. The guide documents account access, memory needs and the
+current feature limits; existing WanGP and MiniMax H3 environments stay separate.
+
 **Fixed: an inpainted picture keeps the transparency of its source.** A PNG with a transparent background that was inpainted with a mask came back with that background as opaque grey: the app flattens a guide with alpha onto grey before the engine, and the engine returns plain RGB. After the job the source's alpha is put back on the same file: exactly the source's outside the mask, opaque inside the edited region, with the grey taken out of soft edges; the sidecar records `alpha_restore`. A JPEG output, an opaque or RGB source, an outpaint, or a picture of another shape are left as the engine wrote them.
 
 **Fixed: `characters.rig.flat` with a `poses` filter that leaves out the base no longer answers `missing_base`.** The blink and the shared mouths come from the base, so an approved base is now rigged together with the poses asked for (the same rig as before, from its recorded original). The error stays for a kit that really has no base.

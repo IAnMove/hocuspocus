@@ -1,4 +1,11 @@
 {
+  "drama": {
+    "reference": "Reference recording",
+    "transcript": "Exact words in the reference recording (required)",
+    "direction": "Voice direction (optional)",
+    "hint": "Write the new words below. Add [language: en] or [language: es] to guide pronunciation. Check the complete take before using it.",
+    "duration": "Maximum seconds per text chunk (1–180)"
+  },
   "groups": {
     "help": "Fill input and instructions, then run. Results stay beside this form when there is room.",
     "input": "Input and references",

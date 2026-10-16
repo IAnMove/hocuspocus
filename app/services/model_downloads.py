@@ -64,6 +64,10 @@ def _check_model_downloaded(model_type: str) -> bool:
     # Keep this first branch self-contained: the readiness function is also
     # used in isolated model-definition checks where launcher-only helpers are
     # intentionally not imported.
+    from services.creation_model_catalog import MODEL_TYPES
+    if model_type in MODEL_TYPES:
+        from services import creation_model_service
+        return creation_model_service.is_runtime_installed() and creation_model_service.is_model_downloaded(model_type)
     if str(model_type or "").strip() == "minimax_h3_legacy":
         return minimax_h3_service.is_model_downloaded()
     try:
@@ -258,6 +262,8 @@ def debug_model(model_type: str):
 
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
+    from services.creation_model_catalog import MODEL_TYPES, models_sharing_assets
+    sharing = models_sharing_assets(model_type)
     active_generation_ids = [
         str(job_id)
         for job_id, job in list(_jobs.items())
@@ -266,7 +272,7 @@ def delete_model(model_type: str):
             in {"created", "queued", "waiting_resource", "running", "cancelling"}
             or job_id in _active_gen_states
         )
-        and str((job.get("params") or {}).get("model_type") or "") == model_type
+        and str((job.get("params") or {}).get("model_type") or "") in sharing
     ]
     if active_generation_ids:
         raise HTTPException(
@@ -277,6 +283,9 @@ def delete_model(model_type: str):
                 "Cancel them and wait for shutdown first."
             ),
         )
+    if model_type in MODEL_TYPES:
+        from services.creation_model_service import delete_model_assets
+        return delete_model_assets(model_type)
     if _is_legacy_h3_model(model_type):
         deleted = minimax_h3_service.delete_model_cache()
         return {"deleted": deleted, "model_type": model_type}
@@ -357,6 +366,12 @@ def _download_model_files(model_type: str):
     keeps calling it.
     """
     from services.engine.model_files import download_model_files
+
+    from services.creation_model_catalog import MODEL_TYPES
+    if model_type in MODEL_TYPES:
+        from services.creation_model_service import download_assets
+        download_assets(model_type, print)
+        return
 
     download_model_files(
         model_type,

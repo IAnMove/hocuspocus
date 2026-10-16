@@ -1,0 +1,17 @@
+{
+  "model": {
+    "name": "TTS Drama 3 \u2014 Voice Generation",
+    "architecture": "drama3_voicedesign",
+    "description": "Fish Audio Drama 3, INT8 experts streamed from system RAM. Expressive speech in English, Spanish and other languages. About 48 GB system RAM; optional isolated creation runtime.",
+    "URLs": []
+  },
+  "prompt": "Welcome to HocusPocus. Let us bring your imagination to life.",
+  "num_inference_steps": 0,
+  "guidance_scale": 1.0,
+  "multi_prompts_gen_type": 2,
+  "temperature": 1.0,
+  "top_p": 0.9,
+  "top_k": 30,
+  "duration_seconds": 60,
+  "alt_prompt": ""
+}

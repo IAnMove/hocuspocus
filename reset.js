@@ -17,6 +17,13 @@ module.exports = {
     // MiniMax H3 isolated ComfyUI runtime and lazily-downloaded checkpoints
     { method: "fs.rm", params: { path: "app/services/minimax_h3/env" } },
     { method: "fs.rm", params: { path: "app/services/minimax_h3/vendor" } },
+    // Optional FLUX 3 / Drama 3 isolated runtime and its downloaded assets.
+    { method: "fs.rm", params: { path: "app/services/creation_models/env" } },
+    { method: "fs.rm", params: { path: "app/services/creation_models/vendor" } },
+    { method: "fs.rm", params: { path: "app/services/creation_models/input" } },
+    { method: "fs.rm", params: { path: "app/services/creation_models/output" } },
+    { method: "fs.rm", params: { path: "app/services/creation_models/extra_model_paths.json" } },
+    { method: "fs.rm", params: { path: "app/ckpts/creation_models" } },
     { method: "fs.rm", params: { path: "app/services/rigging/env" } },
     { method: "fs.rm", params: { path: "app/services/rigging/vendor" } },
     // Seed-VC voice conversion checkout (cloned by runtime_setup.js)

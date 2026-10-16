@@ -535,6 +535,18 @@
           "template_model_type": "dramabox_audio"
         },
         {
+          "architecture": "flux3_klein_edit",
+          "family": "",
+          "name": "FLUX 3 Image Klein Edit — INT8",
+          "template_model_type": "flux3_klein_edit"
+        },
+        {
+          "architecture": "flux3_klein",
+          "family": "",
+          "name": "FLUX 3 Image Klein — INT8",
+          "template_model_type": "flux3_klein"
+        },
+        {
           "architecture": "fantasy",
           "family": "",
           "name": "Fantasy Talking 720p 14B",
@@ -959,6 +971,18 @@
           "family": "",
           "name": "TTS Chatterbox Multilingual",
           "template_model_type": "chatterbox"
+        },
+        {
+          "architecture": "drama3_base",
+          "family": "",
+          "name": "TTS Drama 3 — Voice Clone",
+          "template_model_type": "drama3_base"
+        },
+        {
+          "architecture": "drama3_voicedesign",
+          "family": "",
+          "name": "TTS Drama 3 — Voice Generation",
+          "template_model_type": "drama3_voicedesign"
         },
         {
           "architecture": "index_tts2",
@@ -1233,6 +1257,18 @@
           "template_model_type": "dramabox_audio"
         },
         {
+          "architecture": "flux3_klein_edit",
+          "family": "",
+          "name": "FLUX 3 Image Klein Edit — INT8",
+          "template_model_type": "flux3_klein_edit"
+        },
+        {
+          "architecture": "flux3_klein",
+          "family": "",
+          "name": "FLUX 3 Image Klein — INT8",
+          "template_model_type": "flux3_klein"
+        },
+        {
           "architecture": "fantasy",
           "family": "",
           "name": "Fantasy Talking 720p 14B",
@@ -1657,6 +1693,18 @@
           "family": "",
           "name": "TTS Chatterbox Multilingual",
           "template_model_type": "chatterbox"
+        },
+        {
+          "architecture": "drama3_base",
+          "family": "",
+          "name": "TTS Drama 3 — Voice Clone",
+          "template_model_type": "drama3_base"
+        },
+        {
+          "architecture": "drama3_voicedesign",
+          "family": "",
+          "name": "TTS Drama 3 — Voice Generation",
+          "template_model_type": "drama3_voicedesign"
         },
         {
           "architecture": "index_tts2",

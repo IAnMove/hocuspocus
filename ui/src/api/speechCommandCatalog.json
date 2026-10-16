@@ -34,6 +34,20 @@
                 "default": null,
                 "title": "Auto Split Every S"
               },
+              "expert_cache_gb": {
+                "anyOf": [
+                  {
+                    "maximum": 16.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expert Cache Gb"
+              },
               "exaggeration": {
                 "anyOf": [
                   {
@@ -973,6 +987,20 @@
               ],
               "default": null,
               "title": "Auto Split Every S"
+            },
+            "expert_cache_gb": {
+              "anyOf": [
+                {
+                  "maximum": 16.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expert Cache Gb"
             },
             "exaggeration": {
               "anyOf": [
@@ -1934,6 +1962,8 @@
       "auk",
       "auk_flash",
       "chatterbox",
+      "drama3_base",
+      "drama3_voicedesign",
       "dramabox_audio",
       "index_tts2",
       "kugelaudio_0_open",

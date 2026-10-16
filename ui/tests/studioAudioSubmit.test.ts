@@ -51,6 +51,24 @@ test('Speech submit maps character names to Speaker N and keeps guides', () => {
   assert.equal(params.sliding_window_size, undefined)
 })
 
+test('Drama keeps literal speech and its selected reference when older voice slots remain in the form', () => {
+  const state = { generationMode: 'audio', audioSubMode: 'speech', durationSeconds: 60,
+    ttsVoiceCount: 2, ttsVoices: [{ name: 'Alice', path: '/old/a.wav' }, { name: 'Bob', path: '/old/b.wav' }],
+    modelOptions: { audio_only: true, default_num_inference_steps: 0 } }
+  const clone = applyStudioSpeechSubmitParams({ model_type: 'drama3_base', prompt: 'Alice: Hola.',
+    audio_guide: '/selected/reference.flac', audio_guide2: '/old/b.wav', alt_prompt: 'Original words.' }, state)
+  assert.equal(clone.prompt, 'Alice: Hola.')
+  assert.equal(clone.audio_guide, '/selected/reference.flac')
+  assert.equal(clone.audio_guide2, undefined)
+  assert.equal(clone._tts_voice_count, 0)
+  assert.equal(clone.alt_prompt, 'Original words.')
+  assert.equal(clone.audio_prompt_type, 'A')
+  const design = applyStudioSpeechSubmitParams({ model_type: 'drama3_voicedesign', prompt: 'Hello.',
+    audio_guide: '/old/a.wav' }, state)
+  assert.equal(design.audio_guide, undefined)
+  assert.equal(design.audio_prompt_type, '')
+})
+
 test('audio dispatcher stamps sub-mode and leaves video untouched', () => {
   const video = applyStudioAudioSubmitParams(
     { prompt: 'shot' },
