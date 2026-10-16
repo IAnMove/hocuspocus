@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: an inpainted picture keeps the transparency of its source.** A PNG with a transparent background that was inpainted with a mask came back with that background as opaque grey: the app flattens a guide with alpha onto grey before the engine, and the engine returns plain RGB. After the job the source's alpha is put back on the same file: exactly the source's outside the mask, opaque inside the edited region, with the grey taken out of soft edges; the sidecar records `alpha_restore`. A JPEG output, an opaque or RGB source, an outpaint, or a picture of another shape are left as the engine wrote them.
+
+**Fixed: `characters.rig.flat` with a `poses` filter that leaves out the base no longer answers `missing_base`.** The blink and the shared mouths come from the base, so an approved base is now rigged together with the poses asked for (the same rig as before, from its recorded original). The error stays for a kit that really has no base.
+
+**Fixed: the blink frame closes the iris of three-quarter faces.** With the eyes looking aside, the iris sits at a corner of the white and a closed lid left it (and its highlight) showing on small faces. The face landmarks' outline of each eye now adds the iris and pupil to the part that is covered; on the real poses of one chapter the cover grew 18-29% where this happened and 0-3% elsewhere.
+
 **Fixed: making a character animation from the Character Creator, the MCP or the Wizard no longer stops after the first pose.** The job keyed the first drawn pose but then said "studio.key returned no file", because it read the tool's reply as a finished generation instead of a keyed picture. It now takes the keyed file from the reply, goes on with the other poses and saves the pending sheet.
 
 **Fixed: inpainting and outpainting accept a source or mask PNG with an alpha channel, and an edit without `model_mode` uses the model's default method.** A PNG made by the app's own Compose tool carries an alpha channel and made the job fail in its first stage; the picture is now flattened before the job is admitted (a mask onto black, a source onto grey; the original file is not changed). Leaving `model_mode` out of an inpaint or outpaint request was refused even though the schema says the default is 0; it now runs the model's default method.
