@@ -2505,7 +2505,7 @@ from services.image_generation_runtime import create_image_generation_commands
 from routers.image_generation_commands import (
     create_image_generation_commands_router, image_command_catalog, image_command_handlers,
 )
-from services.workspace_commands import catalog as workspace_command_catalog
+from services.workspace_commands import installation_catalog as workspace_command_catalog
 
 from services.scene_commands import SceneCommands, command_catalog as scene_command_catalog
 from routers.scene_commands import create_scene_commands_router

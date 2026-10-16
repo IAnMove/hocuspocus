@@ -6,6 +6,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: assembling a long episode no longer runs out of memory and takes the service down.** One ffmpeg filter graph kept a decoder and its frames for every clip it joined (about 75 MB per 1080p clip, more with transitions), so the 90-shot Profesion episode exhausted a 62 GB machine and the kernel killed the whole service. A join of more than 16 clips is now cut into balanced blocks from one plan and the blocks are joined by the same filter, so the held tails, dissolves, fades, the final length, the frame count and the sound position are the single pass's (the 90-clip join peaks at 2.7 GB instead of 8.8 GB, and 2.9 GB instead of more than 14.5 GB when the episode has transitions). The filter chain no longer re-stamps the picture between two dissolves, which had doubled the frames ffmpeg buffered. ffmpeg children now ask the kernel to stop them before the server, and an ffmpeg stopped for lack of memory fails the job with "Out of memory while assembling..." instead of an opaque error and a harder retry.
+
+**Fixed: a `fade_black` or `dip_white` transition no longer shifts the next shot's sound up to a frame late.** The join that renders a fade took the longer of the picture (whole 24 fps frames) and the sound as the length of everything before it, so the narration after the fade sounded up to 41 ms late (50 ms on Profesion, which the sound check refused). The outgoing picture now ends on a whole frame at or before the planned join, so the sound decides where the next shot starts.
+
+**Fixed: the last burned subtitle of a line is never a lone word or a flash.** The two-line limit left "ellas?" alone at the end of an 85-character line for about 0.4 s. The last cue now has at least 3 words and enough of the line to stay up 0.8 s: words move across from the cue before it, back to the nearest clause end when there is one.
+
+**Added: MCP can create and list workspaces (`workspaces.create`, `workspaces.list`).** An agent could not make the workspace its tools take as an argument and waited about two hours for one to be created by hand. The tools call the same routes the UI calls, with the same name rules; creating an existing name returns it unchanged, so a retry is safe. They are in the series and game profiles.
+
 **Added: optional local FLUX 3 Klein and Drama 3 generation.** FLUX 3 distilled
 INT8 provides text-to-image and editing with up to ten images. Drama 3 INT8
 provides speech generation and single-reference voice cloning, including English

@@ -90,6 +90,14 @@ def catalog() -> dict[str, Any]:
     return {"version": 1, "scope": "installation", "operations": operations}
 
 
+def installation_catalog() -> dict[str, Any]:
+    """``catalog()`` plus the workspace folder tools (``workspace_folder_commands``): what an installation publishes."""
+    from services.workspace_folder_commands import command_catalog
+
+    published = catalog()
+    return {**published, "operations": [*published["operations"], *command_catalog()]}
+
+
 def _validate_collection_fields(data: dict[str, Any]) -> None:
     if any(item is None for item in data.values()):
         raise ValueError("Collection fields cannot be null; omit a field to preserve it")

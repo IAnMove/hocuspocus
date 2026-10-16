@@ -40,6 +40,30 @@ def test_the_offsets_follow_the_join_that_was_used():
     assert join_offsets([4.0], 4.0) == ([0.0], "cut")
 
 
+def test_the_last_cue_of_a_line_is_never_a_lone_word_or_a_flash():
+    # Profesion e1s88: the characters limit left "ellas?" alone at the end, up for about 0.4 s.
+    line = "Otra cosa. Cuando aprenda a hacer cintas... \u00bfme dejar\u00e1n decidir qu\u00e9 ponemos en ellas?"
+    cues = episode_cues([{"offset": 0.0, "duration": 6.0, "beats": [{"text": line, "start": 0.5, "end": 5.9}]}])
+    flat = [" ".join(cue["text"].split("\n")) for cue in cues]
+    assert flat == ["Otra cosa. Cuando aprenda a hacer cintas...", "\u00bfme dejar\u00e1n decidir qu\u00e9 ponemos en ellas?"]
+    assert cues[0]["end"] == pytest.approx(cues[1]["start"])
+    assert all(cue["end"] - cue["start"] >= 0.8 for cue in cues)
+    assert cues[0]["start"] == pytest.approx(0.5) and cues[-1]["end"] == pytest.approx(5.9)
+    # With no clause end to fall back to, the fewest words that make a readable tail move across.
+    plain = "uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce quince dieciseis diecisiete dieciocho"
+    for text in (plain, plain + " veinte"):
+        pieces = [cue["text"].replace("\n", " ") for cue in episode_cues(
+            [{"offset": 0.0, "duration": 6.0, "beats": [{"text": text, "start": 0.0, "end": 4.0}]}])]
+        assert " ".join(pieces) == text
+        assert len(pieces[-1].split()) >= 3 and all(len(piece) <= 84 for piece in pieces)
+    # A short line stays one cue, and a tail that is already long enough is left where the limit put it.
+    assert len(episode_cues([{"offset": 0.0, "duration": 6.0, "beats": [{"text": "Hola.", "start": 0.0, "end": 1.0}]}])) == 1
+    even = "a" * 40 + " " + "b" * 40 + " " + "c" * 30
+    pieces = [cue["text"].replace("\n", " ") for cue in episode_cues(
+        [{"offset": 0.0, "duration": 9.0, "beats": [{"text": even, "start": 0.0, "end": 8.0}]}])]
+    assert pieces == [("a" * 40 + " " + "b" * 40), "c" * 30]
+
+
 def test_long_lines_become_two_line_cues_timed_by_length_and_kept_inside_their_shot():
     long_line = ("I'm a large language model, Kevin. Making things up is literally my job, "
                  "and honestly I am very good at it.")

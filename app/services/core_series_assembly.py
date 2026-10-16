@@ -18,6 +18,7 @@ from typing import Any, Callable
 
 from services import core_workspace as core
 from services.mix_concat import (
+    ASSEMBLY_BLOCK_CLIPS,
     _run_ffmpeg_command,
     build_hard_concat_filter,
     concat_with_tail_hold_and_crossfade,
@@ -25,6 +26,7 @@ from services.mix_concat import (
     probe_duration_seconds,
     should_use_hold_crossfade,
 )
+from services.mix_concat_blocks import hard_join_in_blocks, join_in_blocks
 from services.series_transitions import any_active, filter_for
 
 
@@ -58,6 +60,11 @@ def _hard_concat_filter(
     ffmpeg = _ffmpeg_bin()
     if not ffmpeg:
         return False
+    if len(files) > ASSEMBLY_BLOCK_CLIPS:
+        return hard_join_in_blocks(
+            files, output_path, lambda blocks: _hard_concat_filter(blocks, output_path, abort_callback=abort_callback),
+            with_clip_audio=True, ffmpeg_bin=ffmpeg, abort_callback=abort_callback,
+        )
     audio_flags = probe_audio_flags(files, ffmpeg)
     silent_durations = None
     if audio_flags and any(audio_flags) and not all(audio_flags):
@@ -95,6 +102,12 @@ def _transition_concat(
     if any(duration is None for duration in durations):
         return False
     audio_flags = probe_audio_flags(files, ffmpeg)
+    if len(files) > ASSEMBLY_BLOCK_CLIPS:
+        return join_in_blocks(
+            files, output_path, [float(duration) for duration in durations], transitions, audio_flags=audio_flags,
+            video_args=["-c:v", "libx264", "-crf", "18", "-preset", "fast"], ffmpeg_bin=ffmpeg,
+            abort_callback=abort_callback,
+        )
     with_audio = any(audio_flags)
     filter_str, video_label, audio_label = filter_for(
         [float(duration) for duration in durations],
