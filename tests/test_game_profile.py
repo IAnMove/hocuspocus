@@ -6,6 +6,7 @@ from services.game_guide import build_bible, guide_text
 from services.mcp_profiles import GAME_TOOLS, PROFILES
 
 _EXTERNAL = {
+    "workspaces.list", "workspaces.create",
     "generation.image", "generation.video", "generation.sfx", "generation.music", "generation.speech",
     "image.remove_background", "studio.key", "qa.accent",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",

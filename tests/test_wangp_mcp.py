@@ -468,3 +468,83 @@ def test_generation_tools_advertise_the_queue_priority_they_accept():
     assert 'priority' not in tools['generation.receipt']['inputSchema']['properties']
     assert 'priority' not in tools['scenes.video2d.validate']['inputSchema']['properties']
     assert 'priority' not in schema['properties'], 'the source catalog is not mutated'
+
+
+def _workspace_app(tmp_path):
+    """The real workspace router over a temporary outputs folder, as the full server mounts it."""
+    import os
+
+    from fastapi import FastAPI
+    from routers.workspace_outputs import create_workspace_router
+
+    root = tmp_path / "outputs"
+    root.mkdir()
+
+    def workspace_dir(name):
+        return str(root) if name == "default" else str(root / name)
+
+    def list_workspaces():
+        return [{"name": "default", "path": str(root)}] + [
+            {"name": item.name, "path": str(item)} for item in sorted(root.iterdir()) if item.is_dir()]
+
+    app = FastAPI()
+    app.include_router(create_workspace_router(
+        list_workspaces=list_workspaces, get_active_workspace=lambda: "default", persist_active=lambda *a, **k: str(root),
+        workspace_dir=workspace_dir, generation_idle=lambda: True, safe_join=os.path.join, save_path=lambda: str(root)))
+    # The other routes application_handlers resolves; the workspace tools do not use them.
+    for path, method in [("/api/v1/assets", "GET"), ("/api/v1/assets/{asset_id}", "GET"), ("/api/v1/workspace-collections", "GET"),
+                         ("/api/v1/workspace-collections", "POST"), ("/api/v1/workspace-collections/{workspace_id}", "PUT"),
+                         ("/api/v1/llm/generate", "POST")]:
+        app.add_api_route(path, lambda: {}, methods=[method])
+    return app, root
+
+
+def test_an_agent_creates_and_lists_workspaces_through_the_rest_operations(tmp_path):
+    # Sol waited about two hours for a workspace: MCP had no way to make one. The tools call the UI's own routes.
+    from fastapi import HTTPException
+    from fastapi.testclient import TestClient
+    from services.wangp_agent_adapters import application_handlers
+
+    app, root = _workspace_app(tmp_path)
+    handlers = application_handlers(app)
+    created = asyncio.run(handlers["workspaces.create"]({"version": 1, "input": {"name": "profesion"}}))
+    assert created["status"] == "completed" and created["result"] == {"status": "ok", "name": "profesion", "path": str(root / "profesion")}
+    assert (root / "profesion").is_dir()
+    # Safe to retry: the same answer, nothing changed.
+    assert asyncio.run(handlers["workspaces.create"]({"version": 1, "input": {"name": "profesion"}})) == created
+    listed = asyncio.run(handlers["workspaces.list"]({"version": 1, "input": {}}))["result"]
+    assert [item["name"] for item in listed["workspaces"]] == ["default", "profesion"] and listed["active"] == "default"
+    # One rule set: whatever the UI's route refuses, the tool refuses with the route's own message.
+    client = TestClient(app)
+    for bad in ("", "  ", "has space", "-lead", "../up", "a/b"):
+        rest = client.post("/api/v1/workspaces", json={"name": bad})
+        assert rest.status_code == 400
+        with pytest.raises(HTTPException) as refused:
+            asyncio.run(handlers["workspaces.create"]({"version": 1, "input": {"name": bad}}))
+        assert refused.value.status_code == 400 and refused.value.detail == rest.json()["detail"]
+    assert sorted(item.name for item in root.iterdir()) == ["profesion"]
+    for wrong in ({"version": 2, "input": {"name": "x"}}, {"version": 1, "input": {"name": "x", "path": "/tmp"}},
+                  {"version": 1, "input": {"name": 7}}, {"version": 1}):
+        with pytest.raises(ValueError):
+            asyncio.run(handlers["workspaces.create"](wrong))
+    assert sorted(item.name for item in root.iterdir()) == ["profesion"]
+
+
+def test_the_workspace_tools_are_published_and_in_the_agent_profiles():
+    from services.mcp_profiles import GAME_TOOLS, SERIES_TOOLS
+    from services.workspace_commands import installation_catalog
+
+    operations = {item["name"]: item for item in installation_catalog()["operations"]}
+    assert operations["workspaces.create"]["mutation"] is True and operations["workspaces.list"]["mutation"] is False
+    assert operations["workspaces.create"]["inputSchema"]["properties"]["input"]["properties"]["name"]["pattern"] == "^[a-zA-Z0-9][a-zA-Z0-9_-]*$"
+    tool = _command_tool_for(operations["workspaces.create"])
+    assert tool["annotations"] == {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True}
+    assert "workspaces.list" in tool["description"]
+    for profile in (SERIES_TOOLS, GAME_TOOLS):
+        assert {"workspaces.create", "workspaces.list"} <= profile
+
+
+def _command_tool_for(operation):
+    from routers.wangp_mcp import _command_tool
+
+    return _command_tool(operation)

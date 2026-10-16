@@ -8,6 +8,7 @@ the same handlers filtered to a profile, with its own first instructions.
 from __future__ import annotations
 
 SERIES_TOOLS = frozenset({
+    "workspaces.list", "workspaces.create",
     "scene3d.sets.catalog", "scene3d.item.add", "scene3d.item.update", "scene3d.item.remove", "scene3d.item.list",
     "props.create", "props.import", "props.status", "props.approve", "props.reject", "props.list", "props.get", "props.delete",
     # Start here, then the series itself.
@@ -41,6 +42,7 @@ SERIES_TOOLS = frozenset({
 })
 
 GAME_TOOLS = frozenset({
+    "workspaces.list", "workspaces.create",
     "game.guide", "game.presets", "game.list", "game.get", "game.create", "game.update",
     "game.style.sheet", "game.style.approve", "game.assets.from_list", "game.asset.update",
     "game.asset.approve", "game.asset.reject", "game.asset.lock",

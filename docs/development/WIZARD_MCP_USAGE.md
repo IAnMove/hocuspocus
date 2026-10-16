@@ -44,7 +44,10 @@ or render a video. Creation receipts include the premises actually saved.
 
 ### Before you start
 
-1. Choose the **output workspace**. Generations land there.
+1. Choose the **output workspace**. Generations land there. A workspace that does not exist yet is made with the MCP
+   tool `workspaces.create` (`{"version": 1, "input": {"name": "my-outputs"}}`: letters, numbers, hyphens and
+   underscores, the same rules as the UI; an existing name comes back unchanged, so a retry is safe), and
+   `workspaces.list` shows which exist.
 2. In **Settings**, enable only models that are already installed. This guide
    never downloads weights.
 3. For MCP, enable it in Settings (or set `HOCUS_MCP_TOKEN` before start). The
@@ -220,7 +223,9 @@ por sí solo no crea el episodio ni genera vídeos.
 
 ### Antes de empezar
 
-1. Elige la **carpeta de salida**.
+1. Elige la **carpeta de salida**. Si no existe, se crea con la herramienta MCP `workspaces.create`
+   (`{"version": 1, "input": {"name": "mis-salidas"}}`, con las mismas reglas que la interfaz; si ya existe se
+   devuelve tal cual, así que reintentar es seguro) y `workspaces.list` muestra cuáles hay.
 2. En **Ajustes**, deja visibles solo modelos **ya instalados**. Esta guía no
    descarga pesos.
 3. Para MCP, actívalo en Ajustes (o `HOCUS_MCP_TOKEN` al arrancar). El
