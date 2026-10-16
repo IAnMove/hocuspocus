@@ -20,13 +20,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import ACTIVE_STATUSES, SeriesJobStore, interrupt_orphaned_job
 from services.series_language_versions import LANGUAGES
 from services.series_shot_plan import language_key
 
 KIND = "produce"
 RENDER_RETRIES = 1
-ACTIVE = ("queued", "running", "cancelling")
+ACTIVE = tuple(ACTIVE_STATUSES)
+STALE_MESSAGE = "The previous production process was interrupted; resume to continue."
 
 
 class ProduceError(RuntimeError):
@@ -78,8 +79,9 @@ class SeriesProduce:
               burn_subtitles: bool = True) -> dict[str, Any]:
         original, languages = self._languages(workspace, series_id, episode_id, languages)
         store = self._store(workspace)
-        if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in store.list()):
-            raise ProduceError("already_running", "This episode is already being produced")
+        for job in store.list():
+            if job.get("episodeId") == episode_id and self._normalize(workspace, job).get("status") in ACTIVE:
+                raise ProduceError("already_running", "This episode is already being produced")
         steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
         job = {"jobId": f"produce-{uuid.uuid4().hex[:12]}", "workspace": workspace, "seriesId": series_id, "episodeId": episode_id,
                "original": original, "languages": languages, "burnSubtitles": bool(burn_subtitles), "status": "queued",
@@ -92,7 +94,7 @@ class SeriesProduce:
         job = self._store(workspace).load(job_id)
         if not job:
             raise ProduceError("not_found", "Production job not found", 404)
-        return job
+        return self._normalize(workspace, job)
 
     def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self.status(workspace, job_id)
@@ -117,6 +119,16 @@ class SeriesProduce:
         self._store(workspace).save(job)
         self._launch(workspace, job_id)
         return job
+
+    def _thread_alive(self, job_id: str) -> bool:
+        with self._lock:
+            thread = self._threads.get(job_id)
+            return bool(thread and thread.is_alive())
+
+    def _normalize(self, workspace: str, job: dict[str, Any]) -> dict[str, Any]:
+        return interrupt_orphaned_job(
+            self._store(workspace), job, alive=self._thread_alive(str(job.get("jobId") or "")),
+            message=STALE_MESSAGE)
 
     def _launch(self, workspace: str, job_id: str) -> None:
         with self._lock:
@@ -193,16 +205,21 @@ class SeriesProduce:
             _result(self.deps.call("series.episode.render_native.resume", self._args(job, job_id=step["jobId"])), "resume render")
 
     def _assemble(self, job: dict, step: dict) -> None:
-        if not step.get("jobId"):
-            data = {"series_id": job["seriesId"], "episode_id": job["episodeId"], "burn_subtitles": job["burnSubtitles"]}
-            if step["language"] != job["original"]:
-                data["language"] = step["language"]
-            step["jobId"] = _result(self.deps.call("series.assembly.start", self._args(job, **data)), "assemble")["job"]["jobId"]
-            self._save(job)
-        cut = self._wait(job, step, "series.assembly.status")
-        if cut.get("status") != "completed":
-            raise ProduceError("assembly_failed", cut.get("error") or cut.get("message") or cut.get("status"))
-        job["chapters"][step["language"]] = self._chapter(job, cut)
+        while True:
+            if not step.get("jobId"):
+                data = {"series_id": job["seriesId"], "episode_id": job["episodeId"], "burn_subtitles": job["burnSubtitles"]}
+                if step["language"] != job["original"]:
+                    data["language"] = step["language"]
+                step["jobId"] = _result(self.deps.call("series.assembly.start", self._args(job, **data)), "assemble")["job"]["jobId"]
+                self._save(job)
+            cut = self._wait(job, step, "series.assembly.status")
+            if cut.get("status") == "completed":
+                job["chapters"][step["language"]] = self._chapter(job, cut)
+                return
+            if self._cancelled(job["jobId"]) or step.get("retries", 0) >= RENDER_RETRIES:
+                raise ProduceError("assembly_failed", cut.get("error") or cut.get("message") or cut.get("status"))
+            step["retries"] = step.get("retries", 0) + 1
+            step.pop("jobId", None)
 
     def _chapter(self, job: dict, cut: dict) -> dict[str, Any]:
         series = (self.deps.read_library(job["workspace"]).get("seriesById") or {}).get(job["seriesId"]) or {}

@@ -95,7 +95,7 @@ def service(tmp_path, tools, compiled, **deps):
 def finished(render, job_id, tmp_path):
     for _ in range(200):
         job = render.status("cast", job_id)
-        if job["status"] in ("completed", "failed", "cancelled"):
+        if job["status"] in ("completed", "failed", "cancelled", "interrupted"):
             return job
         time.sleep(0.02)
     raise AssertionError(render.status("cast", job_id))
@@ -189,6 +189,37 @@ def test_lines_are_levelled_and_music_volume_follows_its_loudness(tmp_path):
     assert len(levelled) == 2 and all(name.startswith("ln-ep1-s01_d") for name in levelled), "every recorded line is levelled"
     music = next(track for track in compiled[0]["shot"]["audioTracks"] if track["filename"] == "theme.wav")
     assert music["volume"] == 0.2, "0.8 of the dialogue level, for a file 12 dB louder than dialogue"
+
+
+def test_a_stale_native_checkpoint_is_interrupted_and_does_not_block_a_new_start(tmp_path):
+    from services.series_jobs import SeriesJobStore
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    SeriesJobStore(str(tmp_path), "native").save({
+        "jobId": "native-stale1", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1",
+        "status": "running", "approve": False, "language": "spanish", "original": True,
+        "current": 0, "total": 1, "items": [{"shotId": "s03", "stage": "voices", "status": "running", "lines": {}}],
+        "createdAt": time.time(), "message": "Rendering",
+    })
+    seen = render.status("cast", "native-stale1")
+    assert seen["status"] == "interrupted"
+    started = render.start("cast", "uv", "ep1", shot_ids=["s03"])
+    assert started["jobId"] != "native-stale1"
+    assert finished(render, started["jobId"], tmp_path)["status"] == "completed"
+
+
+def test_resume_rewrites_a_stale_running_native_render(tmp_path):
+    from services.series_jobs import SeriesJobStore
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled)
+    SeriesJobStore(str(tmp_path), "native").save({
+        "jobId": "native-stale2", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1",
+        "status": "cancelling", "approve": True, "language": "spanish", "original": True,
+        "current": 0, "total": 1, "items": [{"shotId": "s03", "stage": "voices", "status": "queued", "lines": {}}],
+        "createdAt": time.time(), "message": "Stopping",
+    })
+    done = finished(render, render.resume("cast", "native-stale2")["jobId"], tmp_path)
+    assert done["status"] == "completed" and done["items"][0]["status"] == "done"
 
 
 def test_refusals_and_speech_params():
