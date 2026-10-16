@@ -7,6 +7,7 @@ the same objects the rest of the server uses; this module does not import WanGP,
 ``_launch_runtime``.
 """
 
+import inspect
 import os
 import time
 import traceback
@@ -329,14 +330,18 @@ def _run_generation_legacy_h3(st):
         with safe_download.cancellable_downloads(
             lambda: is_cancel_requested(job),
         ):
+            # Test doubles replace generate and do not take this callback.
+            # The real runtime marks production itself, after the engine is up.
+            generate_kwargs = {"keep_runtime": True}
+            if "on_produce" in inspect.signature(minimax_h3_service.generate).parameters:
+                generate_kwargs["on_produce"] = lambda: mark_producing(job)
             generated = minimax_h3_service.generate(
                 raw_params,
                 job_id,
                 job["out_dir"],
                 _legacy_h3_progress,
                 lambda: is_cancel_requested(job),
-                keep_runtime=True,
-                on_produce=lambda: mark_producing(job),
+                **generate_kwargs,
             )
         if is_cancel_requested(job):
             return False

@@ -291,6 +291,10 @@ def _run_generation_task_stream(
     """Start the engine for one task and relay its progress until it exits."""
     if is_cancel_requested(job):
         return False
+    # Entering the engine is production. Cancel during a sample stays
+    # `cancelling` until this worker releases the abort registration.
+    # Engine startup before this call is still the immediate-cancel window.
+    mark_producing(job)
     gen["prompt_no"] = task_no
     gen["prompts_max"] = total_tasks
 
