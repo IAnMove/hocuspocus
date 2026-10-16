@@ -168,3 +168,15 @@ def test_random_seed_is_resolved_and_each_repeat_keeps_its_effective_seed(monkey
     assert original["seed"] == -1
     assert observed[0]["seed"] == 12345
     assert [meta["params"]["seed"] for meta in published] == [12345, 12346]
+
+
+def test_drama_flac_outputs_appear_in_the_audio_gallery(monkeypatch, tmp_path):
+    from fastapi import Response
+    from services import output_listing
+    (tmp_path / "drama.flac").write_bytes(b"fLaC fixture")
+    monkeypatch.setattr(output_listing, "_workspace_dir", lambda _: str(tmp_path))
+    monkeypatch.setattr(output_listing, "_load_favorites", lambda: set())
+    result = output_listing.list_outputs(Response(), workspace="demo", media_type="audio")
+    assert result["total"] == 1
+    assert result["outputs"][0]["name"] == "drama.flac"
+    assert result["outputs"][0]["type"] == "audio"

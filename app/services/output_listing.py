@@ -77,9 +77,9 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
     if not os.path.isdir(out_dir):
         return {"outputs": [], "total": 0}
 
-    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
+    media_exts = {".mp4", ".webm", ".gif", ".png", ".jpg", ".jpeg", ".webp", ".wav", ".mp3", ".flac", ".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
     video_exts = {".mp4", ".webm", ".gif"}
-    audio_exts = {".wav", ".mp3"}
+    audio_exts = {".wav", ".mp3", ".flac"}
     model3d_exts = {".glb", ".gltf", ".obj", ".ply", ".stl", ".usdz", ".zip"}
 
     def model3d_thumbnail_url(name: str, params: dict) -> str | None:

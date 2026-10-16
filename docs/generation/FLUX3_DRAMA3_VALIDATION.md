@@ -56,6 +56,7 @@ que nombres o referencias de antiguos slots de voz alteren el texto de Drama.
 Los modelos se agrupan en FLUX 3 y Text to Speech, respectivamente, para que
 aparezcan en los selectores de imagen y audio. La seed aleatoria se resuelve antes
 de llamar a ComfyUI y los metadatos conservan la seed efectiva de cada repetición.
+La galería de Audio reconoce las salidas FLAC de Drama, además de WAV y MP3.
 
 ## Evidencia y reproducción
 
