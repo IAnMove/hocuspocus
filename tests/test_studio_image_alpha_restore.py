@@ -104,6 +104,23 @@ def test_the_grey_the_flattening_mixed_into_a_soft_edge_is_taken_out_again_and_t
     assert (picture[12:, 16:, :3] == RED).all(), "an opaque pixel outside the mask is untouched"
 
 
+def test_taking_the_grey_out_does_not_turn_engine_noise_into_a_coloured_fringe(tmp_path):
+    """The engine does not give the flattened source back pixel-exact: noise on the edge pixels must stay noise, never clip to a colour."""
+    alpha = _alpha()
+    alpha[:, 8:12] = np.array([13, 40, 77, 100], np.uint8)
+    case = Case(tmp_path, alpha=alpha)
+    noise = np.random.default_rng(0).integers(-6, 7, case.engine.shape)
+    Image.fromarray(np.clip(case.engine.astype(int) + noise, 0, 255).astype(np.uint8)).save(case.path)
+    case.restore()
+    edge = case.result()[0:4, 8:12]  # outside the mask (its rows start at 4)
+    for column, opacity in enumerate(alpha[0, 8:12] / 255):
+        error = np.abs(edge[:, column, :3].astype(int) - RED).max()
+        assert opacity * error <= 25, f"opacity {opacity:.2f}: the colour the viewer sees is off by {opacity * error:.0f}"
+        assert ((edge[:, column, :3] > 0) & (edge[:, column, :3] < 255)).all(), f"opacity {opacity:.2f}: a channel clipped to 0 or 255"
+        if opacity >= 0.3:
+            assert error <= 25, f"opacity {opacity:.2f}: the grey is taken out of the colour, within the noise"
+
+
 def test_a_soft_mask_blends_the_alpha_between_the_sources_and_opaque(tmp_path):
     mask = _mask_array()
     mask[4:10, 4:6] = 128

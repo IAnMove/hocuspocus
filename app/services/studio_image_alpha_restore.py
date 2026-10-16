@@ -6,7 +6,8 @@ its picture, the source's alpha is put back here, from the copy of it saved besi
 
 * outside the mask: the source's alpha, exactly (a soft edge of the mask blends towards opaque);
 * inside the mask, the edited region: opaque;
-* the colour of a partly transparent source pixel outside the mask had the grey mixed in by the flattening: it is taken out again.
+* the colour of a partly transparent source pixel outside the mask (at least 30 % opaque) had the grey mixed in by the flattening: it is
+  taken out again.
 
 Only a PNG or WebP can carry it. A JPEG output, a source without transparency, an outpaint, a picture that already has alpha, or a
 picture of another shape than the source is left exactly as the engine wrote it, and the sidecar says why. The result is written to the
@@ -26,8 +27,10 @@ from services.studio_image_alpha import FLATTEN_ROLES, alpha_plane_path
 FORMATS = {".png": "PNG", ".webp": "WEBP"}
 PICTURES = {*FORMATS, ".jpg", ".jpeg", ".bmp", ".gif", ".tif", ".tiff"}
 GREY = FLATTEN_ROLES["image_guide"][0]
-# Under this share of opacity the grey cannot be told from the colour any more (and the pixel is hardly seen).
-LEAST_OPACITY = 0.05
+# Taking the grey out divides by the opacity, which multiplies any difference between what the engine returned and the flattened
+# source (the engine does not give the composite back pixel-exact). Under this share of opacity the engine's colour is kept: a
+# slightly grey tint on a pixel that is at most a third opaque is hardly seen, a clipped colour is.
+LEAST_OPACITY = 0.3
 # How far the output's shape may be from the source's (one pixel of rounding on a large picture) and still be the same picture.
 ASPECT_TOLERANCE = 0.02
 
