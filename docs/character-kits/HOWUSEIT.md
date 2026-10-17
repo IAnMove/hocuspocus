@@ -286,8 +286,8 @@ character. Each one is a few poses of the same figure joined into a sprite sheet
 | Anime expressions (18) | `angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`, `tired`, `love`, `disgusted`, `bored`, `worried`, `nervous` (nervous laugh), `laughing`, `wink`, `pout`: two poses each, from a hint to the full expression (anger vein, shock lines, sweat drop, hearts) |
 
 **Three doors, one job.** The Animaciones panel (**Crear**), any MCP client (`characters.animation.make`, then
-`characters.animation.status` / `.cancel`) and Ask to the Wizard (`make_character_animation`: "hazle una cara de enfado a
-Heroína") all start the same server job, `POST /api/v1/character-kits/animations/make` (`services/character_animation_job.py`). The
+`characters.animation.status` / `.cancel` / `.review`) and Ask to the Wizard (`make_character_animation`: "hazle una cara de enfado a
+Heroína"; `review_character_animation`) all start the same server job, `POST /api/v1/character-kits/animations/make` (`services/character_animation_job.py`). The
 panel only asks and follows it (a poll, quick while a job runs and slow otherwise), so a run survives a reload, a tab change or a
 restart, and an animation an agent started shows up in the panel (and the other way round). One animation is made at a time on the
 server (one GPU); asking for one already being made returns that job. The job is a small file under
@@ -309,7 +309,37 @@ What the job does:
    move the torso). It writes `<kit>-<animation>-sheet-<8hex>.png` and never overwrites one.
 4. The animation joins the kit as `reviewState: pending`, read again from the library just before it is saved, so a character edited
    meanwhile keeps its edits. Play it (the player uses the card's own frame rule), then approve or reject it in the panel.
-   **Approve** is a human decision: no job, tool or Wizard action approves.
+   **Approve** is a person's decision unless the owner turned on «Modo un solo disparo» (next section): nothing approves it otherwise.
+
+**«Modo un solo disparo» (one-shot mode).** Settings › Services has a switch (`agent_autonomy`: `review`, the default, or
+`one_shot`) so that one request to an agent can go from the idea to a finished animation. Off, nothing changes: a person approves.
+On, an agent may decide what a person normally decides, through the same operation from every door
+(`services/character_animation_review.py`, `POST /api/v1/character-kits/animations/review`): MCP `characters.animation.review`
+{character_id, animation, decision approve | reject, note} and Ask to the Wizard (`review_character_animation`). In `review` mode they
+answer an error that says to approve it in Characters › Animaciones or turn the mode on. The review is stamped on the animation
+(`reviewedBy` `person` or `agent`, `reviewNote`, `reviewedAt`; older data has none and reads as a person's) and the card shows
+«aprobada por el agente» with the note as its tooltip; **Aprobar** and **Rechazar** on the card take the decision back and stamp
+`reviewedBy: person`. A rejected animation keeps its sheet and poses, so **Rehacer** or `pose` makes one again; an agent never
+overturns a decision a person gave.
+
+`characters.animation.make` and the Wizard's `make_character_animation` take `autoApprove` / `auto_approve`. In `one_shot` the job
+reads the sheet it wrote (`services/character_animation_checks.py`), approves it as the agent only if every check passes and reports
+`autoApproved` and `checks` (id, ok, value, limit); otherwise the animation stays pending and the failed checks say why. In `review`
+mode it is ignored and the job says so (`autoApproveNote`). The checks, set against 57 real Qwen sheets (all passed the picture checks):
+
+| check | passes when |
+|---|---|
+| `cell_count` | the cells are the poses of the animation, in a grid that holds them |
+| `cell_size` | the sheet is exactly columns × rows cells of the contract height (640) |
+| `filled_cells` | every figure covers at least 3 % of its cell (real: 15 to 55 %) |
+| `clean_alpha` | at most 25 % of a figure's pixels are half-transparent (real: 1 to 5 %) |
+| `silhouette` | a figure fills at most 90 % of its box, so a key that left a rectangle fails (real: 53 to 75 %) |
+| `ground_line` | the lowest row of every figure is on the line `feet`, within 2 % of the cell (real: 0.1 %) |
+| `scale_spread` | the smallest figure is at least 80 % of the biggest (legs 80 %, head 70 %, measured before the sheet equalised them; jump and bow 45 %); real walks 0.93 to 0.99 |
+| `scale_measure` | the sheet was scaled by what was asked, not by the height it falls back to when the legs or head cannot be measured |
+
+The checks catch a pose drawn at another size, a bad key, a missing pose or a broken sheet. They do not judge identity (a walk sheet
+of a younger-looking character passes): the agent still looks at the sheet and rejects it when it is out of model.
 
 **An animation of your own** ("A medida" in the panel; `custom {title, view, poses}` in the request): a name, a framing (`bust`,
 `front`, `side`) and one line per pose (up to 6, 600 characters each). The words stay on the kit with each pose, so any pose can be
