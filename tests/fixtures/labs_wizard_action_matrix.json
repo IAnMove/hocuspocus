@@ -85,7 +85,8 @@
       "stage_series_comic",
       "edit_series_shot",
       "rerender_series_shot",
-      "regenerate_series_line_voice"
+      "regenerate_series_line_voice",
+      "apply_series_shot_card"
     ],
     "blocked": [],
     "availability": {
@@ -3496,6 +3497,32 @@
       "presentation": "review / render",
       "test": "ui/tests/seriesShotEditWizard.test.ts",
       "notes": "Renders just that shot on the server and approves the new take; produce=true renders what changed in every language and recuts.",
+      "prompt_fixture": "",
+      "blocking_defect": ""
+    },
+    {
+      "id": "series.shots.apply_card",
+      "lab": "series",
+      "surface": "shots",
+      "user_operation": "Put a Video 2D card (a walk-in, a character reaction...) on a shot as a new take",
+      "control": "Ask to the Wizard → Series Lab; MCP series.shot.card.apply; the person opens the scene in Video 2D and approves the take in Series Lab",
+      "ui_handler": "seriesShots.applyCard",
+      "domain_function": "registerSeriesShotCardCapabilities",
+      "domain_module": "ui/src/features/agent/seriesShotCardCapabilities.ts",
+      "adapter": "seriesShots.applyCard",
+      "api": "POST /api/v1/series/{series_id}/episodes/{episode_id}/shots/{shot}/card",
+      "wizard_capability": "apply_series_shot_card",
+      "wizard_schema": "seriesShotCardCapabilities.apply_series_shot_card.inputSchema",
+      "in_wizard_context": true,
+      "wizard_status": "registrada",
+      "wizard_available": true,
+      "classification": "condicional",
+      "phase": "out_of_scope",
+      "preconditions": "An open (or named) episode; a 2D shot (its number #N or id); a card of the 2D catalog; the characters' APPROVED animation sheets for the sheet cards; the shot's spoken lines recorded; a location plate or a card_assets background",
+      "persistence": "Workspace: <series>-<episode>-<shot>-card-<card>.scene.json (replaced by a second apply) and the exported MP4 imported as a new candidate take of the shot (cardId, cardScene, cardDigest, cardBindings, renderInputs in its metadata)",
+      "presentation": "series_lab",
+      "test": "ui/tests/seriesShotCardWizard.test.ts",
+      "notes": "The same operation as the MCP tool (services/series_shot_card.py). approve_take approves the take only in «Modo un solo disparo» (agent_autonomy = one_shot); in review mode the server refuses with the way to approve by hand, and a take a person approved is never replaced. A scene still being exported answers exporting and the same request finishes it.",
       "prompt_fixture": "",
       "blocking_defect": ""
     },

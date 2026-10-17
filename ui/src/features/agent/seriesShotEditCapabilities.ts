@@ -61,7 +61,7 @@ export function shotRef(raw: Record<string, unknown>): string | number | null {
   return id || null
 }
 
-function failure(body: ShotReply, fallback: string): Error {
+export function failure(body: ShotReply, fallback: string): Error {
   const detail = body.detail
   if (typeof detail === 'string') return new Error(detail)
   const problems = detail?.problems?.length ? `: ${detail.problems.slice(0, 4).join('; ')}` : ''
@@ -101,7 +101,7 @@ export async function activeShotTarget(seriesId: string, episodeId: string, work
   return target
 }
 
-async function reloadSeries(): Promise<void> {
+export async function reloadSeries(): Promise<void> {
   const { useSeriesStore } = await import('../series/store')
   await useSeriesStore.getState().reload().catch(() => undefined)
 }

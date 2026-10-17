@@ -137,6 +137,12 @@ def _state_problem(animations: dict[str, Any], who: str, name: str, where: str) 
     return f"{where}: animation '{name}' of '{who}' is pending approval: approve it in Characters › Animaciones"
 
 
+def playable_problem(animations: dict[str, Any], who: str, name: str, where: str) -> str | None:
+    """Why the kit cannot play ``name`` (it has none, it is pending or it was rejected), in the script check's words; None when
+    it can. A card applied to a shot (``series.shot.card.apply``) refuses the same sheets the script does."""
+    return _state_problem(animations, who, name, where)
+
+
 def _walk_in(entry: dict[str, Any], animations: dict[str, Any]) -> tuple[float, float] | None:
     """The interval a cast entry's approved ``walk`` sheet plays on its entrance, None when the entrance walks with the bob."""
     if (animations.get(WALK) or {}).get("reviewState") != "approved":

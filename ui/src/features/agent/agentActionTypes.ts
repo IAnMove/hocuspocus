@@ -18,6 +18,7 @@ export const AGENT_ACTION_TYPES = [
   'edit_series_shot',
   'rerender_series_shot',
   'regenerate_series_line_voice',
+  'apply_series_shot_card',
   'make_character_animation',
   'review_character_animation',
   'media_tool',

@@ -25,6 +25,7 @@ import {
 } from './storyWorkflowIdentity'
 import type { AgentProductionWorksAction } from './productionWorkCapabilities'
 import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentRerenderSeriesShotAction } from './seriesShotEditCapabilities'
+import type { AgentApplySeriesShotCardAction } from './seriesShotCardCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
@@ -645,6 +646,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentEditSeriesShotAction
   | AgentRerenderSeriesShotAction
   | AgentRecordSeriesLineAction
+  | AgentApplySeriesShotCardAction
   | AgentMakeCharacterAnimationAction
   | AgentReviewCharacterAnimationAction
   | AgentMediaToolAction

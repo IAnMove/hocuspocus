@@ -398,6 +398,38 @@ A Series script plays an **approved** animation of the kit (`app/services/series
   by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust animation (`view: bust`)
   goes with a bust pose in a `medium` or `close` shot: the cell is sized by the pose's height, not by its head.
 
+### 4.9 A whole Video 2D card as a shot's take
+
+`series.shot.card.apply` (MCP) and `apply_series_shot_card` (Wizard) put any card of `scenes.templates.catalog` on a 2D Series
+shot as a **new take**, in one call: `POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`
+(`app/services/series_shot_card.py`). Before it, a walk-in took five steps by hand (find the card, compile it, edit it, export it,
+import and approve the take).
+
+```json
+{"workspace": "cast", "card": "walk-cycle-sheet",
+ "cast": [{"slot": "subject_1", "characterId": "gloria", "animation": "walk"}]}
+```
+
+- **Characters:** the `subject_N` slots take the shot's own people (in the shot's order) or the `cast` you give. The sheet cards
+  (`walk-cycle-sheet`, `walk-two-pose`, `character-reaction`) play the character's **approved** animation sheet: `walk` by default
+  for the walk cards, always named (`wave`, `angry`...) for `character-reaction`; `frames`, `columns` and `facing`/`step` or
+  `fps`/`loop` come from the sheet. A pending or rejected sheet is refused with the words of §4.8. Every other card draws a pose
+  picture (`poseId`, else the pose the shot gives that character).
+- **The rest of the card:** `background` is the shot's location plate; `foreground` and props come from `assets`
+  (`{slot: workspace file or URL}`); `controls` are the card's own. The card lasts as long as the shot (held inside the card's 3 to 12
+  seconds; longer shots are refused) and the shot takes the take's length, as the server render does.
+- **Lines:** a shot with spoken lines needs them recorded (`series.shot.voice`, or one render): the speech and the subtitles are laid
+  into the scene (`audioTracks`, `dialogueBeats`), timed as the render times them. A card has no mouths.
+- **What it leaves:** the scene `<series>-<episode>-<shot>-card-<card>.scene.json` in the workspace (a second apply replaces it)
+  opens in Video 2D, and the take (`productionMethod: animation_2d`, `sceneFilename`, `cardId`, `cardBindings`, the shot's
+  `renderInputs`) is a candidate in Series Lab. The same inputs again find the same take; other inputs reject the earlier
+  unapproved take of the scene as superseded and attach a new one.
+- **Approval:** `approve: true` approves the take only in «Modo un solo disparo» (`agent_autonomy` = `one_shot`); in `review` mode it
+  is refused (403 `agent_review_off`) and the person approves in Series Lab. A take a person approved is never replaced: the new one stays a
+  candidate and the reply says so (`approvalNote`).
+- **Export:** the scene is exported by `scenes.video2d.export`, the exporter the server render uses (a 5 s card takes seconds on a CPU).
+  If it is not ready after 60 s the reply is `status: "exporting"`; send the same request again and it attaches the take.
+
 ---
 
 ## 5. Cutout dialogue in a scene
@@ -562,6 +594,15 @@ animation, pose or style.
 
 `{workspace, sources[1..12], name?, columns?, scaleBy?}` → `{filename, source, width, height, count, columns, rows, cell, feet,
 figure, scaleBy, requestedScaleBy, measures, poses}`. Sources are keyed workspace or upload images; `400` for a source with nothing opaque in it.
+
+### `POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`
+
+`{workspace, card, controls?, cast?: [{slot?, characterId, animation?, poseId?}], assets?, language?, approve?}` → `{status:
+"completed" | "exporting", shotId, number, card, scene, sceneUrl, bindings, controls, duration, warnings, take?: {attemptId,
+assetId, approved, reused, superseded}, approvalNote?, exportIntent?}`. `shot` is the shot id or its number. Errors carry
+`{code, message}`: `template_unknown`, `template_retired`, `template_bad_control` (the compiler's own), `shot_not_found` (404), `shot_not_2d`, `animation_not_approved`,
+`animation_not_found`, `animation_required`, `card_not_sheet`, `slot_missing`, `bad_slot`, `bad_asset`, `unknown_pose`,
+`unknown_character`, `lines_not_recorded`, `card_shorter_than_shot`, `agent_review_off` (403), `export_failed`, `tool_failed`.
 
 ## 8. Pitfalls
 

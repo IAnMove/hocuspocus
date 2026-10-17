@@ -2780,7 +2780,7 @@ from routers.series_shot_edit import create_series_shot_edit_router
 api.include_router(create_series_shot_edit_router(
     change_series=_change_series, read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,
-    call=_local_mcp.call, bind_loop=_local_mcp.bind_loop,
+    call=_local_mcp.call, bind_loop=_local_mcp.bind_loop, services=lambda: wgp.server_config.get("services") or {},
     plan_changes=lambda prompt, system, schema: _generate_comic_director_json(
         prompt=prompt, system_prompt=system, schema=schema, max_new_tokens=3000, stage="Series Lab shot edit", llm_override=None)))
 from services.series_line_voice import SeriesLineVoice
