@@ -778,3 +778,89 @@ def test_a_template_backdrop_belongs_to_the_asset_at_that_exact_path(tmp_path):
     assert warned("/api/v1/file/assets/uv/asset_ma.png?workspace=cast") == ["madrid"]
     assert warned("/api/v1/file/uv/old.png?workspace=cast") == ["madrid"]
     assert warned("/api/v1/file/uv/old.png.bak?workspace=cast") == []
+
+
+# Kit animations in the script -----------------------------------------------------------
+
+def sheet(state="approved"):
+    return {"sheet": {"source": "/api/v1/file/walk-sheet.png?workspace=cast", "count": 4, "columns": 4, "rows": 1, "width": 1200, "height": 640,
+                      "cell": {"width": 300, "height": 640}}, "frames": [], "fps": 4, "loop": "loop", "facing": "right", "reviewState": state}
+
+
+def with_animations(**animations):
+    return {**KITS, "kit-kevin": {**KITS["kit-kevin"], "animations": animations}}
+
+
+def animated_script(entry, **shot):
+    return {"scenes": [{"id": "a", "location": "garage"}], "shots": [{"scene": "a", "framing": "wide", "duration": 8, "cast": [entry], **shot}]}
+
+
+def animation_check(kits, entry, **shot):
+    tools = Series()
+    return apply_script(tools, tools.read, kits, FILES, "cast", animated_script(entry, **shot), check_only=True)
+
+
+def animation_problems(kits, entry, **shot):
+    with pytest.raises(ScriptError) as raised:
+        animation_check(kits, entry, **shot)
+    return raised.value.problems
+
+
+def test_a_cast_entry_plays_an_approved_animation_of_its_kit():
+    kits = with_animations(wave=sheet(), walk=sheet())
+    for animation in ("wave", {"id": "wave"}, {"id": "wave", "at": 2.5, "duration": 1.5, "loop": "pingpong"}, {"id": "walk", "loop": True}):
+        assert animation_check(kits, {"characterId": "kevin", "x": 50, "animation": animation})["checked"] is True, animation
+
+
+def test_an_animation_the_kit_does_not_have_or_has_not_approved_is_refused_with_the_way_out():
+    kits = with_animations(wave=sheet(), angry=sheet("pending"), sad=sheet("rejected"))
+    entry = lambda animation: {"characterId": "kevin", "animation": animation}
+    assert "animation 'zoom' of 'kevin' is not in its Character Kit (approved animations: wave)" in animation_problems(kits, entry("zoom"))[0]
+    assert "animation 'angry' of 'kevin' is pending approval: approve it in Characters › Animaciones" in animation_problems(kits, entry("angry"))[0]
+    assert "animation 'sad' of 'kevin' was rejected: make it again in Characters › Animaciones" in animation_problems(kits, entry({"id": "sad"}))[0]
+    assert "has no approved animations" in animation_problems(KITS, entry("wave"))[0]
+    assert "shot 0 (e2s00)" in animation_problems(kits, entry("angry"))[0]
+
+
+def test_a_bad_window_is_refused_and_every_problem_is_listed():
+    kits = with_animations(wave=sheet(), walk=sheet())
+    problems = animation_problems(kits, {"characterId": "kevin", "animation": {"id": "wave", "at": -1, "duration": 0, "loop": "forever"}})
+    for text in ("animation at must be a number from 0 to 600", "animation duration must be a number from 0.1 to 600", "animation loop must be one of loop, pingpong, once"):
+        assert any(text in problem for problem in problems), (text, problems)
+    assert any("animation must be an animation id" in problem for problem in animation_problems(kits, {"characterId": "kevin", "animation": 3}))
+    late = animation_problems(kits, {"characterId": "kevin", "animation": {"id": "wave", "at": 9}})
+    assert "animation 'wave' of 'kevin' starts at 9 s, but the shot lasts 8 s" in late[0]
+
+
+def test_a_walk_in_with_a_sheet_is_not_shared_with_another_animation():
+    kits = with_animations(wave=sheet(), walk=sheet())
+    walking = {"characterId": "kevin", "x": 60, "enterFrom": "left", "enterAt": 0.5, "enterDuration": 3, "enterGait": "walk"}
+    problems = animation_problems(kits, {**walking, "animation": {"id": "wave", "at": 2}})
+    assert "animation 'wave' of 'kevin' overlaps its walk-in (0.5-3.5 s): start it at 3.5 s or later" in problems[0]
+    assert animation_check(kits, {**walking, "animation": {"id": "wave", "at": 3.5}})["warnings"] == []
+    hopping = {**walking, "enterGait": "hop"}
+    assert animation_check(kits, {**hopping, "animation": {"id": "wave", "at": 2}})["checked"] is True, "a hop has no sheet to share"
+    assert animation_check(KITS, walking)["warnings"] == [], "no sheet at all: the walk is the bob it always was"
+
+
+def test_a_walk_in_whose_sheet_is_not_approved_keeps_the_bob_and_says_so():
+    walking = {"characterId": "kevin", "x": 60, "enterFrom": "left", "enterGait": "walk"}
+    for state in ("pending", "rejected"):
+        warned = [item for item in animation_check(with_animations(walk=sheet(state)), walking)["warnings"] if item["code"] == "walk_sheet_not_approved"]
+        assert [(item["subject"], item["shots"]) for item in warned] == [("kevin", ["e2s00"])], state
+        assert "bob" in warned[0]["message"] and "Characters › Animaciones" in warned[0]["message"]
+    approved = animation_check(with_animations(walk=sheet()), walking)["warnings"]
+    assert not any(item["code"] == "walk_sheet_not_approved" for item in approved)
+    assert not any(item["code"] == "walk_sheet_not_approved" for item in animation_check(KITS, walking)["warnings"])
+
+
+def test_a_written_script_keeps_the_animation_and_reads_back_the_same():
+    from services.series_shot_plan import normalize_layout2d
+    kits = with_animations(wave=sheet())
+    script = animated_script({"characterId": "kevin", "x": 40, "animation": {"id": "wave", "at": 1, "duration": 2}})
+    tools = Series()
+    apply_script(tools, tools.read, kits, FILES, "cast", script)
+    layout = tools.episode_patch()["episode"]["shots"][0]["layout2d"]
+    assert layout["cast"] == [{"characterId": "kevin", "x": 40, "animation": {"id": "wave", "at": 1, "duration": 2}}]
+    assert normalize_layout2d(layout)["cast"][0]["animation"] == {"id": "wave", "at": 1.0, "duration": 2.0}
+    assert normalize_layout2d(normalize_layout2d(layout)) == normalize_layout2d(layout)

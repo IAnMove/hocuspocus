@@ -120,6 +120,7 @@ def _sequence() -> dict:
         "sources": _array(_string(), max_items=120), "source": _string(),
         "columns": _number(1, 32), "rows": _number(1, 32), "count": _number(1, 120),
         "fps": _number(1, 60), "loop": LOOP,
+        "start": _number(0, 3600), "mirror": {"type": "boolean"},
     }, ["kind"])
 
 

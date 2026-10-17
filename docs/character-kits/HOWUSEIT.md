@@ -370,7 +370,33 @@ bust is asked for with an explicit crop (`views.bust` and `viewNegatives` in the
 picture pulls the composition: without it an expression came out as a whole figure with a small face. A cutout pose is one
 picture, so the animation is limited animation (a few poses a second), not fluid motion; a bust (`view: bust`) is made for
 expressions and a whole figure for gestures and cycles. A figure looks the way the picture says: a layer cannot be mirrored,
-so the card walks it the way it looks (`facing`).
+so the card walks it the way it looks (`facing`); only a sheet `sequence` can be drawn mirrored (`mirror: true`), which is how a
+Series shot lets a character walk in against the way its sheet looks.
+
+### 4.8 Animations in a Series shot
+
+A Series script plays an **approved** animation of the kit (`app/services/series_cast_animation.py`,
+`ui/scripts/seriesSheet.ts`). A pending or rejected sheet is refused by the script check (and by `series.shot.update`) with
+«animation 'walk' of 'ana' is pending approval: approve it in Characters › Animaciones»: the person approves it first.
+
+- **`animation` on a `layout2d.cast` entry:** an id of the kit (`"wave"`, `"angry"`, one of your own) or
+  `{"id", "at", "duration", "loop"}`: `at` is seconds inside the shot (default 0), `duration` defaults to one pass of the sheet
+  (its cells at its fps; a `pingpong` there and back), `loop` is `loop`, `pingpong` or `once` (the sheet's own by default; a `once`
+  sheet holds its last cell until the window ends). The cast entry still says where the character stands (`x`) and which pose it has.
+- **What is drawn:** during the window the sheet takes the pose's place, drawn as the `walk-cycle-sheet` and `character-reaction`
+  cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %): the cell is `pose height / 0.86`
+  tall, so the figure is as tall as the pose, and its bottom edge is the pose's (the floor in a wide shot). The pose picture, its mouths and
+  its eyes are hidden meanwhile and come back when the window ends, so a character who speaks over a body sheet does not move its lips.
+  The sheet is its own layer (`kit-<kit>-sheet-<id>`, a `sheet` sequence with `start` = the window's start second); stop-motion
+  holds (`motionStep`) apply to it like to every picture.
+- **`enterGait: "walk"` with the kit's approved `walk` sheet:** the sheet plays on loop for the whole entrance, on the same slide
+  at the same pace, with no bob or sway (the drawings step), one cycle (two steps) per `2 × enterStep` seconds, so the footfalls
+  and the `repeat: "steps"` sounds land on the feet. It is mirrored when the character enters against the way the sheet looks
+  (`facing`: a sheet that looks right entering from the right). Without an approved `walk` sheet the entrance is the bob it
+  always was (the check warns `walk_sheet_not_approved` when the sheet exists but is not approved).
+- **Limits:** one animation per cast entry; an `animation` that would start inside a walk-in that plays the walk sheet is refused
+  by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust animation (`view: bust`)
+  goes with a bust pose in a `medium` or `close` shot: the cell is sized by the pose's height, not by its head.
 
 ---
 
