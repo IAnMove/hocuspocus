@@ -1,6 +1,7 @@
 """A character walks into a 2D shot when and for as long as the script says, and its footsteps can follow its feet."""
 import pytest
 
+from services import series_cast_animation as animations
 from services import series_entrances as entrances
 from services.series_script import ScriptError, apply_script
 from services.series_shot_extras import cue_time, fx_cues, sfx_tracks
@@ -80,6 +81,57 @@ def test_a_new_entrance_renders_its_shot_again_and_an_old_shot_keeps_its_digest(
     assert render_inputs(series(), {**plain, "layout2d": normalize_layout2d(plain["layout2d"])}, kits) == before
     walking = {**plain, "layout2d": normalize_layout2d({**plain["layout2d"], "cast": [{**plain["layout2d"]["cast"][0], "enterGait": "walk"}]})}
     assert render_inputs(series(), walking, kits) != before
+
+
+# A kit animation on a cast member ---------------------------------------------------
+
+def test_a_cast_animation_is_an_id_or_a_window_and_bad_values_are_dropped():
+    assert animations.entry_fields({"animation": "wave"}) == {"animation": {"id": "wave"}}
+    window = {"id": "wave", "at": 1.5, "duration": 2, "loop": "once"}
+    assert animations.entry_fields({"animation": window}) == {"animation": {"id": "wave", "at": 1.5, "duration": 2.0, "loop": "once"}}
+    assert animations.entry_fields({"animation": {"id": "wave", "at": -1, "duration": 0, "loop": "forever"}}) == {"animation": {"id": "wave"}}
+    assert animations.entry_fields({"animation": {"id": "wave", "loop": True}}) == {"animation": {"id": "wave", "loop": "loop"}}
+    assert animations.entry_fields({"animation": {"id": "wave", "loop": False}}) == {"animation": {"id": "wave", "loop": "once"}}
+    for bad in (None, 3, "", "Not An Id", {"at": 1}, {"id": 4}, [], {"id": "x" * 80}):
+        assert animations.entry_fields({"animation": bad}) == {}, bad
+    assert animations.entry_fields({"characterId": "kevin"}) == {}
+
+
+def test_the_layout_keeps_a_cast_animation_next_to_the_entrance_fields():
+    layout = {"cast": [{**WALK, "animation": {"id": "wave", "at": 4, "duration": 1.5}}, {"characterId": "kevin", "animation": "angry"},
+                       {"characterId": "gary", "animation": 7}]}
+    kept = normalize_layout2d(layout)["cast"]
+    assert kept[0]["animation"] == {"id": "wave", "at": 4.0, "duration": 1.5} and kept[0]["enterGait"] == "walk"
+    assert kept[1] == {"characterId": "kevin", "animation": {"id": "angry"}} and kept[2] == {"characterId": "gary"}
+    assert normalize_layout2d({"cast": kept}) == normalize_layout2d(layout), "reading it back and saving it again changes nothing"
+
+
+def test_the_planned_cast_carries_the_animation_clamped_into_the_shot():
+    plan = lambda animation, duration=6.0: plan_cast(series(), shot({"characterId": "kevin", "x": 30, "animation": animation}), "wide", duration)[0].get("animation")
+    assert plan({"id": "wave", "at": 1, "duration": 2}) == {"id": "wave", "at": 1.0, "duration": 2.0}
+    assert plan({"id": "wave"}) == {"id": "wave", "at": 0.0}, "from the start, as long as the sheet"
+    assert plan({"id": "wave", "at": 9, "duration": 2}) == {"id": "wave", "at": 5.9, "duration": 0.1}, "an animation after the end still happens in the shot"
+    assert plan({"id": "wave", "at": 4, "duration": 9, "loop": "loop"}) == {"id": "wave", "at": 4.0, "duration": 2.0, "loop": "loop"}
+    assert "animation" not in plan_cast(series(), shot({"characterId": "kevin", "x": 30}), "wide", 6.0)[0]
+
+
+def test_the_full_spec_carries_the_animation_and_the_entrance_is_the_one_it_always_was():
+    value = shot({**WALK, "animation": {"id": "wave", "at": 4, "duration": 1}})
+    value["layout2d"] = normalize_layout2d(value["layout2d"])
+    spec = build_shot_spec(series(), {"id": "ep1"}, value, workspace="cast", recorded=RECORDED)
+    assert spec["cast"][0]["animation"] == {"id": "wave", "at": 4.0, "duration": 1.0}
+    assert spec["cast"][0]["enter"] == {"fromX": -15.0, "start": 0.5, "end": 3.5, "gait": "walk", "step": 0.6, "sway": 1.5}, \
+        "which sheet a walk uses is the compiler's choice: the plan and the footfalls are the same with or without one"
+    assert animations.walk_window(spec["cast"][0]["enter"]) == (0.5, 3.5)
+    assert animations.walk_window({"fromX": -15.0, "start": 0.5, "end": 3.5}) is None, "a hop has no sheet"
+
+
+def test_a_new_animation_renders_its_shot_again():
+    kits = {"kit-kevin": {"id": "kit-kevin"}, "kit-monk": {"id": "kit-monk"}}
+    plain = shot({"characterId": "monk", "x": 40})
+    before = render_inputs(series(), plain, kits)
+    waving = {**plain, "layout2d": normalize_layout2d({**plain["layout2d"], "cast": [{"characterId": "monk", "x": 40, "animation": "wave"}]})}
+    assert render_inputs(series(), waving, kits) != before
 
 
 # Sound on the entrance ---------------------------------------------------------------

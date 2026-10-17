@@ -5,6 +5,9 @@ import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
 import { createSceneEvaluator } from '../src/lib/scene2d/evaluate.ts'
 import { normalizeScene2D } from '../src/lib/scene2d/normalize.ts'
 import { blinkTimes, bodyKeyframes, CAMERA_MOVES, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type CameraMove, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
+import { sequenceFrame } from '../src/lib/scene2d/motion.ts'
+import { heldFrameTime } from '../src/features/stopMotion.ts'
+import { ANIMATION_SHEET, type KitAnimation } from '../src/lib/characterAnimations.ts'
 
 const STATES = ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
 const asset = (id: string, kind: 'image' | 'overlay' = 'overlay', size?: { width: number; height: number }): CharacterKitAsset => ({
@@ -294,4 +297,150 @@ test('a pan crosses the plate the way it is named and a pull ends wider than it 
   assert.ok(picture('pan-right', 1).x < picture('pan-right', 0).x, 'pan right: the picture slides left')
   assert.ok(picture('pull', 1).scale < picture('pull', 0).scale && picture('push', 1).scale > picture('push', 0).scale)
   assert.ok(picture('drift', 1).x !== picture('drift', 0).x && picture('drift', 0).scale > 1)
+})
+
+// Kit animations in a Series shot (cast[].animation, and the walk sheet of an entrance) -------------------------
+
+const sheetOf = (id: string, count: number, extra: Partial<KitAnimation> = {}, cell = { width: 300, height: 640 }): KitAnimation => ({
+  sheet: { source: `/api/v1/file/${id}-sheet.png?workspace=cast`, width: cell.width * count, height: cell.height, count, columns: count, rows: 1, cell },
+  frames: [], fps: 4, loop: 'loop', facing: 'right', reviewState: 'approved', ...extra })
+
+function animated(extra: Record<string, KitAnimation> = {}, id = 'kevin') {
+  const value = kit(id)
+  value.animations = { walk: sheetOf('walk', 4), wave: sheetOf('wave', 3, { fps: 5, loop: 'pingpong', facing: 'front' }),
+    angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front', reviewState: 'pending' }), ...extra }
+  return value
+}
+
+const withSheets = { ...kits, kevin: animated() }
+const ASPECT = 16 / 9
+const poseLayer = (scene: ReturnType<typeof compileSeriesShot>) => scene.layers.find(layer => layer.id === 'kit-kevin-pose-base')!
+const opacityAt = (scene: ReturnType<typeof compileSeriesShot>, id: string, time: number) => {
+  const layer = scene.layers.find(item => item.id === id)!
+  return createSceneEvaluator(scene).layerState(layer, time / scene.duration).opacity
+}
+const alone = (cast: ShotSpec['cast'], extra: Partial<ShotSpec> = {}) => shot({ framing: 'wide', camera: 'static', duration: 6, cast, lines: [], ...extra })
+
+test('a kit with animations nobody plays compiles to the scene it always did', () => {
+  const walk = { kitId: 'kevin', x: 60, motion: 'still' as const, enter: { fromX: -15, start: 0.5, end: 3.5, gait: 'walk' as const, step: 0.6, sway: 1.5 } }
+  for (const spec of [shot(), alone([walk]), alone([{ kitId: 'kevin', x: 50 }], { lines: [shot().lines[0]] })]) {
+    assert.deepEqual(compileSeriesShot({ ...kits, kevin: animated({ walk: sheetOf('walk', 4, { reviewState: 'pending' }) }) }, spec), compileSeriesShot(kits, spec),
+      'a pending walk sheet leaves the bob as it was')
+    if (!spec.cast[0].enter) assert.deepEqual(compileSeriesShot(withSheets, spec), compileSeriesShot(kits, spec))
+  }
+})
+
+test('an animation swaps the pose for the sheet inside its window and hides the face while it plays', () => {
+  const spec = alone([{ kitId: 'kevin', x: 50, blinks: [1.5, 3.05], animation: { id: 'wave', at: 1, duration: 2 } }],
+    { lines: [{ id: 'l1', kitId: 'kevin', text: 'Hello Gary.', start: 0.35, end: 1.55, filename: 'l1.wav', cues }] })
+  const scene = compileSeriesShot(withSheets, spec)
+  const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!
+  assert.equal(sheet.source, '/api/v1/file/wave-sheet.png?workspace=cast')
+  assert.deepEqual(sheet.sequence, { kind: 'sheet', source: sheet.source, columns: 3, rows: 1, count: 3, fps: 5, loop: 'pingpong', start: 1 })
+  assert.deepEqual(sheet.focus, { x: 50, y: ANIMATION_SHEET.feet * 100 })
+  for (const [time, pose, drawn] of [[0.5, 1, 0], [0.99, 1, 0], [1.5, 0, 1], [2.9, 0, 1], [3.2, 1, 0], [5, 1, 0]]) {
+    assert.equal(opacityAt(scene, poseLayer(scene).id, time), pose, `pose at ${time}`)
+    assert.equal(opacityAt(scene, sheet.id, time), drawn, `sheet at ${time}`)
+  }
+  const face = scene.layers.filter(layer => layer.faceBinding?.poseLayerId === poseLayer(scene).id)
+  assert.ok(face.length > 5, 'mouths and blink are bound to the pose')
+  for (const time of [1.0, 1.5, 2.0, 2.9]) {
+    assert.deepEqual(face.filter(layer => opacityAt(scene, layer.id, time) > 0).map(layer => layer.id), [], `no face over the sheet at ${time}`)
+  }
+  assert.equal(face.filter(layer => opacityAt(scene, layer.id, 3.2) > 0).length, 2, 'the rest mouth and the blink come back with the pose')
+  assert.equal(face.filter(layer => opacityAt(scene, layer.id, 0.2) > 0).length, 1, 'only the rest mouth before it')
+})
+
+test('the sheet stands on the pose\'s ground line at the pose\'s height, in a flat or a vertical frame', () => {
+  const spoken = alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave', at: 1, duration: 2 } }])
+  const scene = compileSeriesShot(withSheets, spoken)
+  const stand = personTransform(withSheets.kevin, 'base', 'wide', 50, ASPECT, 1.25)
+  const height = stand.scale * 100
+  const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!
+  const state = createSceneEvaluator(scene).layerState(sheet, 2 / scene.duration)
+  assert.ok(Math.abs(state.y - (stand.y + height / 2)) < 0.01, 'the boots on the pose\'s bottom edge')
+  assert.ok(Math.abs(state.scale * 100 * ANIMATION_SHEET.figure - height) < 0.01, 'the figure as tall as the pose')
+  assert.equal(state.x, 50)
+  // A cell wider than a vertical frame is limited by the frame\'s width: the feet line moves up the box with it.
+  const wide = { ...withSheets, kevin: animated({ wave: sheetOf('wave', 3, { fps: 5, loop: 'pingpong', facing: 'front' }, { width: 400, height: 640 }) }) }
+  const portrait = compileSeriesShot(wide, alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave', at: 1, duration: 2 } }], { width: 1080, height: 1920 }))
+  const tall = portrait.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!
+  const aspect = 1080 / 1920, ratio = 400 / 640
+  const base = personTransform(wide.kevin, 'base', 'wide', 50, aspect, 1.25)
+  const box = createSceneEvaluator(portrait).layerState(tall, 2 / portrait.duration)
+  assert.ok(Math.abs(tall.focus!.y - (50 + (ANIMATION_SHEET.feet - 0.5) * 100 * aspect / ratio)) < 0.01)
+  assert.ok(Math.abs(box.scale * 100 * aspect / ratio * ANIMATION_SHEET.figure - base.scale * 100) < 0.01, 'a width-limited cell is drawn as tall as the pose')
+})
+
+test('an animation without a duration lasts one pass of its sheet, and a once sheet holds its last cell', () => {
+  const scene = compileSeriesShot(withSheets, alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave' } }]))
+  const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!
+  assert.equal(sheet.sequence?.kind === 'sheet' && sheet.sequence.start, 0)
+  assert.equal(opacityAt(scene, sheet.id, 0), 1, 'from the first frame')
+  assert.equal(opacityAt(scene, sheet.id, 0.5), 1)
+  assert.equal(opacityAt(scene, sheet.id, 1.5), 0, 'wave: 3 cells back and forth at 5 fps is 4 steps, 0.8 s')
+  const angry = compileSeriesShot({ ...kits, kevin: animated({ angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front' }) }) },
+    alone([{ kitId: 'kevin', x: 50, animation: { id: 'angry', at: 1, duration: 3, loop: 'once' }, }]))
+  assert.equal(opacityAt(angry, 'kit-kevin-sheet-angry', 3.9), 1, 'the window is longer than the sheet: it holds the last cell')
+  assert.equal(opacityAt(angry, 'kit-kevin-sheet-angry', 4.1), 0)
+  const looped = compileSeriesShot(withSheets, alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave', at: 1, loop: 'loop' } }]))
+  const sequence = looped.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!.sequence
+  assert.equal(sequence?.kind === 'sheet' && sequence.loop, 'loop', 'the cast entry may choose the loop')
+})
+
+test('an animation the kit cannot play fails the compile with the reason', () => {
+  const failure = (animation: NonNullable<ShotSpec['cast'][number]['animation']>) => {
+    const result = runSeriesShot({ mode: 'shot', kits: withSheets, shot: alone([{ kitId: 'kevin', x: 50, animation }]) })
+    return result.ok ? '' : result.message
+  }
+  assert.match(failure({ id: 'zoom' }), /has no animation zoom/)
+  assert.match(failure({ id: 'angry' }), /angry.*pending approval.*Characters/)
+})
+
+test('an approved walk sheet plays through the whole entrance on the same slide, without the bob', () => {
+  const enter = { fromX: -15, start: 0.5, end: 3.5, gait: 'walk' as const, step: 0.6, sway: 1.5 }
+  const spec = alone([{ kitId: 'kevin', x: 60, motion: 'still', enter }])
+  const scene = compileSeriesShot(withSheets, spec)
+  const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!
+  assert.deepEqual(sheet.sequence, { kind: 'sheet', source: '/api/v1/file/walk-sheet.png?workspace=cast', columns: 4, rows: 1, count: 4,
+    fps: Math.round(4 / (2 * 0.6) * 1000) / 1000, loop: 'loop', start: 0.5 }, 'a cycle is two steps: the feet land on the steps')
+  const evaluator = createSceneEvaluator(scene)
+  const at = (time: number) => evaluator.layerState(sheet, time / scene.duration)
+  assert.deepEqual([0.2, 0.6, 2, 3.4, 3.6].map(time => opacityAt(scene, sheet.id, time)), [0, 1, 1, 1, 0])
+  assert.deepEqual([0.2, 0.6, 3.6].map(time => opacityAt(scene, poseLayer(scene).id, time)), [1, 0, 1], 'the pose is back on the mark')
+  assert.ok(Math.abs(at(2).x - 22.5) < 1e-6, 'halfway across at an even pace')
+  assert.ok(Math.abs(at(0.8).y - at(1.1).y) < 1e-9 && Math.abs(at(1.4).y - at(1.1).y) < 1e-9 && at(0.8).rotation === 0, 'feet on the line: no bob, no sway')
+  assert.ok(Math.abs(evaluator.layerState(poseLayer(scene), 3.6 / scene.duration).x - 60) < 1e-6)
+  assert.equal(sheet.sequence?.kind === 'sheet' && sheet.sequence.mirror, undefined, 'a right-facing sheet entering from the left is not mirrored')
+})
+
+test('a walk sheet is mirrored when the character walks against the way the sheet looks', () => {
+  const walkFrom = (fromX: number, facing: 'left' | 'right' | 'front') => {
+    const kitWith = { ...kits, kevin: animated({ walk: sheetOf('walk', 4, { facing }) }) }
+    const scene = compileSeriesShot(kitWith, alone([{ kitId: 'kevin', x: 40, motion: 'still', enter: { fromX, start: 0.5, end: 2.5, gait: 'walk', step: 0.5, sway: 0 } }]))
+    const sequence = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!.sequence
+    return sequence?.kind === 'sheet' ? sequence.mirror : 'no sheet'
+  }
+  assert.deepEqual([walkFrom(115, 'right'), walkFrom(115, 'left'), walkFrom(-15, 'left'), walkFrom(-15, 'right'), walkFrom(115, 'front')],
+    [true, undefined, true, undefined, undefined])
+})
+
+test('an animation after the walk-in plays when the walk ends', () => {
+  const enter = { fromX: -15, start: 0.5, end: 3.5, gait: 'walk' as const, step: 0.6, sway: 1.5 }
+  const scene = compileSeriesShot(withSheets, alone([{ kitId: 'kevin', x: 60, motion: 'still', enter, animation: { id: 'wave', at: 3.5, duration: 1 } }]))
+  assert.deepEqual([3.4, 3.6, 4.4, 4.6].map(time => [opacityAt(scene, 'kit-kevin-sheet-walk-in', time), opacityAt(scene, 'kit-kevin-sheet-wave', time), opacityAt(scene, poseLayer(scene).id, time)]),
+    [[1, 0, 0], [0, 1, 0], [0, 1, 0], [0, 0, 1]], 'the pose is hidden from the first step to the end of the wave')
+  const early = compileSeriesShot(withSheets, alone([{ kitId: 'kevin', x: 60, motion: 'still', enter, animation: { id: 'wave', at: 2, duration: 3 } }]))
+  assert.equal(opacityAt(early, 'kit-kevin-sheet-wave', 3.0), 0, 'a wave that would start inside the walk starts when it ends')
+  assert.equal(opacityAt(early, 'kit-kevin-sheet-wave', 3.6), 1)
+})
+
+test('stop-motion holds apply to a sheet: the cell follows the held picture time', () => {
+  const scene = compileSeriesShot(withSheets, alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave', at: 1, duration: 2 } }], { motionStep: 4 }))
+  assert.equal(scene.motionStep, 4)
+  const sequence = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!.sequence!
+  const times = [1.0, 1.12, 1.2, 1.28, 1.34, 1.5]
+  const held = times.map(time => sequenceFrame(sequence, heldFrameTime(time, scene.fps, 4)))
+  assert.deepEqual(held, [0, 0, 0, 0, 1, 2], 'the cell changes only on a new hold of four frames, counted from the window\'s start')
+  assert.notDeepEqual(held, times.map(time => sequenceFrame(sequence, time)), 'the sheet follows the held picture, not the free clock')
 })
