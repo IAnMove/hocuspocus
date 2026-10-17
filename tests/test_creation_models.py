@@ -601,7 +601,8 @@ def test_ensure_runtime_wraps_the_command_with_systemd_run_and_the_limits(confin
     command = confined.processes[0].command
     assert command[:12] == [SYSTEMD_RUN, "--user", "--scope", "--quiet", "--collect", "-p", f"MemoryHigh={memory_high}",
                             "-p", f"MemoryMax={memory_max}", "-p", "MemorySwapMax=0", "--"]
-    assert command[12:14] == ["python", "main.py"] and "--listen" in command
+    assert command[12:15] == ["/usr/bin/env", "-i", "--"]
+    assert command[15:17] == ["python", "main.py"] and "--listen" in command
     assert confined.processes[0].kwargs["env"]["XDG_RUNTIME_DIR"] == "/run/user/1234"
     assert confined.processes[0].kwargs["env"]["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/1234/bus"
     status = confined.service.runtime_status()
@@ -680,6 +681,38 @@ def test_the_child_environment_keeps_what_systemd_run_needs():
     # Whatever an environment lost is copied back from the server's own, never overwritten.
     assert session_environment({"A": "1"}, inherited)["XDG_RUNTIME_DIR"] == "/run/user/1000"
     assert session_environment({"XDG_RUNTIME_DIR": "/mine"}, inherited)["XDG_RUNTIME_DIR"] == "/mine"
+
+
+def test_confine_gives_systemd_run_the_server_libraries_and_comfy_the_engine_env(monkeypatch):
+    """The probe uses the server env; systemd-run must too, or conda libcrypto shadows libsystemd."""
+    from services import creation_runtime_confinement as confinement
+    monkeypatch.setattr(confinement, "_support", SYSTEMD_RUN)
+    monkeypatch.setattr(confinement, "_on_linux", lambda: True)
+    monkeypatch.setattr(confinement, "physical_memory_bytes", lambda: 64 * GIB)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/server/lib")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1234/bus")
+    engine = {"LD_LIBRARY_PATH": "/engine/lib", "PATH": "/engine/bin", "PYTHONNOUSERSITE": "1"}
+    wrapped, runner_env, limits = confinement.confine(["/engine/bin/python", "main.py"], engine, 80)
+    assert limits is not None
+    assert wrapped[0] == SYSTEMD_RUN and wrapped[wrapped.index("--") + 1:wrapped.index("--") + 4] == ["/usr/bin/env", "-i", "--"]
+    assert "LD_LIBRARY_PATH=/engine/lib" in wrapped and wrapped[-2:] == ["/engine/bin/python", "main.py"]
+    assert runner_env["LD_LIBRARY_PATH"] == "/server/lib"
+    assert runner_env["XDG_RUNTIME_DIR"] == "/run/user/1234"
+    assert "LD_LIBRARY_PATH=/server/lib" not in wrapped
+
+
+def test_systemd_run_does_not_inherit_the_engine_ld_library_path(confined, monkeypatch):
+    monkeypatch.setattr(confined.service, "isolated_environment",
+                        lambda python: {"LD_LIBRARY_PATH": "/engine/lib", "PATH": "/engine/bin"})
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/server/lib")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
+    confined.job(name="one")
+    command, popen_env = confined.processes[0].command, confined.processes[0].kwargs["env"]
+    assert popen_env["LD_LIBRARY_PATH"] == "/server/lib"
+    assert "LD_LIBRARY_PATH=/engine/lib" in command
+    assert command[command.index("--") + 1:command.index("--") + 4] == ["/usr/bin/env", "-i", "--"]
+    assert "python" in command and "main.py" in command
 
 
 def test_the_runtime_record_is_written_on_start_and_removed_on_stop(confined):
