@@ -381,7 +381,7 @@ def create_settings_services_router(
             "show_experimental", "auto_performance", "storage_allow_linked_removal",
             "director_multishot_lora_mode", "director_reference_anchor", "director_lighting_continuity", "director_keep_reference_wardrobe",
             "flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend",
-            "creation_runtime_idle_seconds", agent_autonomy.KEY,
+            "creation_runtime_idle_seconds", "creation_runtime_memory_percent", agent_autonomy.KEY,
         }
 
         services = wgp.server_config.setdefault("services", {})
