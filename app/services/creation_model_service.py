@@ -8,6 +8,11 @@ GPU expert cache. A failure or a cancellation stops the process, a job of the
 other family restarts it, and every other GPU user stops it first through
 ``stop_runtime`` (the GPU hand-off hook) or ``evict_if_idle`` (users that never
 take the GPU lane). It never upgrades the WanGP or H3 environments.
+
+On Linux with a systemd user manager the process runs in its own memory cgroup
+(``creation_runtime_memory_percent`` of the RAM, 80 % by default, 0 turns it off), so a
+memory shortage kills or slows this runtime and not the server. See
+``creation_runtime_confinement``.
 """
 import atexit
 import json
@@ -21,8 +26,10 @@ from pathlib import Path
 
 import requests
 
+from services import creation_runtime_confinement as confinement
 from services.creation_model_catalog import ASSET_ROOT, ROOT, assets, models_sharing_assets
 from services.creation_model_graphs import build_workflow
+from services.creation_runtime_confinement import memory_percent_setting  # noqa: F401  (creation_model_execution reads it here)
 from services.runtime_environment import engine_python, isolated_environment
 
 SERVICE_DIR = ROOT / "services" / "creation_models"
@@ -32,6 +39,7 @@ OUTPUT_DIR = SERVICE_DIR / "output"
 _process = None
 _port = None
 _family = None
+_confinement = None  # {"max", "high", "percent", "ram", "cgroup"} while the running process is confined
 _idle_timer = None
 _idle_deadline = None
 _lock = threading.RLock()
@@ -133,17 +141,29 @@ def _cancel_idle_locked():
         timer.cancel()
 
 
+def _log(message):
+    print("[Creation models] " + message, flush=True)
+
+
+def _record_path():
+    return SERVICE_DIR / "runtime.json"
+
+
 def _stop_locked():
-    global _process, _port, _family
+    global _process, _port, _family, _confinement
     _cancel_idle_locked()
-    process, _process, _port, _family = _process, None, None, None
-    if process is not None and process.poll() is None:
+    process, _process, _port, _family, _confinement = _process, None, None, None, None
+    if process is None:
+        return
+    if process.poll() is None:
         process.terminate()
         try:
             process.wait(timeout=15)
         except subprocess.TimeoutExpired:
             process.kill()
             process.wait(timeout=10)
+    # Only a runtime that is really gone leaves the record; a stuck one stays findable for the next sweep.
+    confinement.forget_runtime(_record_path(), process.pid)
 
 
 def stop_runtime():
@@ -188,11 +208,17 @@ def _keep_warm_locked(delay):
 
 
 def runtime_status():
-    """``warm`` is True while a live process waits for the next job. Never waits for a running job."""
-    process, deadline = _process, _idle_deadline
+    """``warm`` is True while a live process waits for the next job. Never waits for a running job.
+
+    ``confined`` says the live process runs in its own memory cgroup (checked after start) and
+    ``memory_max_gb`` is that cgroup's hard limit in GiB.
+    """
+    process, deadline, limits = _process, _idle_deadline, _confinement
     warm = process is not None and process.poll() is None
     left = None if not warm or deadline is None else round(max(0.0, deadline - time.monotonic()), 1)
-    return {"warm": warm, "family": _family if warm else None, "idle_seconds_left": left}
+    confined = warm and limits is not None
+    return {"warm": warm, "family": _family if warm else None, "idle_seconds_left": left,
+            "confined": confined, "memory_max_gb": round(limits["max"] / 2**30, 1) if confined else None}
 
 
 def cancel():
@@ -226,14 +252,46 @@ def _reusable_base(family):
     return None
 
 
-def ensure_runtime(progress, cancelled, family=None):
-    global _process, _port, _family
+def _exit_error(message):
+    """The error for a runtime that is gone: the memory message when it was killed for memory."""
+    process, limits = _process, _confinement
+    code = None if process is None else process.poll()
+    if confinement.exited_from_oom(code, None if limits is None else limits.get("cgroup")):
+        return RuntimeError(confinement.OUT_OF_MEMORY_MESSAGE)
+    return RuntimeError(message)
+
+
+def _check_confinement(limits):
+    """Keep ``limits`` (plus the cgroup) only if the kernel really holds the memory limit on the running scope."""
+    cgroup = None if limits is None else confinement.verify_scope(_process.pid, limits)
+    if limits is not None and cgroup is None:
+        _log("WARNING: the runtime is NOT confined (systemd did not apply MemoryMax); a memory shortage can reach the server")
+    elif limits is not None:
+        _log(f"runtime confined: memory.max {limits['max'] / 2**30:.1f} GiB, memory.high {limits['high'] / 2**30:.1f} GiB "
+             f"({limits['percent']} % of {limits['ram'] / 2**30:.1f} GiB)")
+    return None if cgroup is None else {**limits, "cgroup": cgroup}
+
+
+def _start_process(command, python, config, memory_percent):
+    """Start ComfyUI, in its own memory scope when the machine supports it; returns the scope's limits or None."""
+    global _process
+    command, env, limits = confinement.confine(command, isolated_environment(python), memory_percent)
+    _process = subprocess.Popen(command, cwd=COMFY_DIR, env=env,
+                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    confinement.record_runtime(_record_path(), _process.pid, str(config))
+    return limits
+
+
+def ensure_runtime(progress, cancelled, family=None, memory_percent=None):
+    global _process, _port, _family, _confinement
     _cancel_idle_locked()
     base = _reusable_base(family)
     if base is not None:
         return base
     if not is_runtime_installed():
         raise RuntimeError("Install FLUX 3 / Drama 3 Support from Pinokio → Advanced first")
+    # The previous server may have died and left its runtime running outside our cgroup.
+    confinement.sweep_orphan_runtime(_record_path())
     for folder in (INPUT_DIR, OUTPUT_DIR):
         folder.mkdir(parents=True, exist_ok=True)
     config = SERVICE_DIR / "extra_model_paths.json"
@@ -247,8 +305,7 @@ def ensure_runtime(progress, cancelled, family=None):
                "--disable-auto-launch", "--enable-triton-backend", "--extra-model-paths-config", str(config),
                "--input-directory", str(INPUT_DIR), "--output-directory", str(OUTPUT_DIR)]
     progress("Starting isolated FLUX 3 / Drama 3 runtime", 2, 0, 0)
-    _process = subprocess.Popen(command, cwd=COMFY_DIR, env=isolated_environment(python),
-                                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    limits = _start_process(command, python, config, memory_percent)
     _family = family
     threading.Thread(target=_drain, args=(_process,), daemon=True).start()
     base = f"http://127.0.0.1:{_port}"
@@ -257,13 +314,22 @@ def ensure_runtime(progress, cancelled, family=None):
         if cancelled():
             raise RuntimeError("Generation cancelled")
         if _process.poll() is not None:
-            raise RuntimeError("Creation runtime stopped during startup; see logs/creation_models/latest.log")
+            raise _exit_error("Creation runtime stopped during startup; see logs/creation_models/latest.log")
         try:
             _request("GET", base, "/system_stats", timeout=2)
+            _confinement = _check_confinement(limits)
             return base
         except requests.RequestException:
             time.sleep(.5)
     raise RuntimeError("Creation runtime startup timed out; see logs/creation_models/latest.log")
+
+
+def _raise_if_memory_killed():
+    """Fail a pending prompt when the kernel counted an OOM kill in the runtime's cgroup, even if ComfyUI survived it."""
+    limits = _confinement
+    if limits is not None and confinement.exited_from_oom(None, limits.get("cgroup")):
+        stop_runtime()
+        raise RuntimeError(confinement.OUT_OF_MEMORY_MESSAGE)
 
 
 def _raise_if_stalled(submitted):
@@ -293,7 +359,8 @@ def _await_output(base, prompt_id, output_node, cancelled, out_dir):
             # Heavy native kernels can temporarily delay Comfy's HTTP thread.
             # A missed poll is not evidence that inference failed.
             if _process is None or _process.poll() is not None:
-                raise RuntimeError("Creation runtime stopped before returning its output")
+                raise _exit_error("Creation runtime stopped before returning its output")
+            _raise_if_memory_killed()
             _raise_if_stalled(submitted)
             time.sleep(1)
             continue
@@ -317,6 +384,7 @@ def _await_output(base, prompt_id, output_node, cancelled, out_dir):
             if not records:
                 raise RuntimeError("Creation runtime completed without output media")
             return copied
+        _raise_if_memory_killed()
         _raise_if_stalled(submitted)
         time.sleep(1)
 
@@ -333,7 +401,7 @@ def _release_after_job(succeeded, idle_seconds):
         stop_runtime()
 
 
-def generate(params, job_id, out_dir, progress, cancelled, on_produce=None, idle_seconds=None):
+def generate(params, job_id, out_dir, progress, cancelled, on_produce=None, idle_seconds=None, memory_percent=None):
     with _lock:
         succeeded = False
         _cancel_idle_locked()
@@ -343,7 +411,7 @@ def generate(params, job_id, out_dir, progress, cancelled, on_produce=None, idle
             download_assets(params["model_type"], lambda message: progress(message, 1, 0, 0))
             if cancelled():
                 raise RuntimeError("Generation cancelled")
-            base = ensure_runtime(progress, cancelled, runtime_family(params["model_type"]))
+            base = ensure_runtime(progress, cancelled, runtime_family(params["model_type"]), memory_percent)
             results = []
             for index in range(int(params.get("repeat_generation", 1))):
                 if cancelled():
@@ -370,3 +438,5 @@ def generate(params, job_id, out_dir, progress, cancelled, on_produce=None, idle
 
 
 atexit.register(stop_runtime)
+# A server that was killed leaves its runtime running outside the server's cgroup: stop it now, without blocking the import.
+confinement.sweep_in_background(_record_path())
