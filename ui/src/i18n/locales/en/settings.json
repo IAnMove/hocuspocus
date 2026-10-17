@@ -162,6 +162,8 @@
     "keepWardrobeHint": "Removes clothing words from image prompts so the image model copies the clothes in the reference. Turn it off to describe clothes per shot.",
     "parallelTitle": "Parallel workflows by resource",
     "parallelHint": "Overlaps work only across different servers or devices. Each local GPU and each remote host remains a sequential queue.",
+    "oneShotTitle": "One-shot mode",
+    "oneShotHint": "The agent approves what a person normally approves, so one request can go from the idea to a finished piece (today: character animations). Whatever it approves is marked “approved by the agent” in the app so you can audit and revert it. Off by default.",
     "debugTitle": "Debug trace",
     "debugHint": "Saves sanitized LLM requests/results and user actions as JSONL. Off by default.",
     "multishotTitle": "Multi-Shot LoRA Mode",

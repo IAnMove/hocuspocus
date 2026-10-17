@@ -38,7 +38,11 @@ export type KitAnimation = {
   frames: Array<{ id: string; source: string; prompt?: string; label?: string }>
   fps: number; loop: AnimationLoop; facing: AnimationFacing; reviewState: CharacterKitReviewState
   view?: string; title?: string; scaleBy?: AnimationScaleBy; prompt?: string; model?: string; createdAt?: string
+  /** Who gave the review: a person (the panel's buttons) or an agent in «Modo un solo disparo» (services/agent_autonomy.py), with its note
+   * and when. Animations saved before this have none, and read as a person's. */
+  reviewedBy?: AnimationReviewer; reviewNote?: string; reviewedAt?: string
 }
+export type AnimationReviewer = 'person' | 'agent'
 export type AnimationState = 'none' | CharacterKitReviewState
 
 export const kitAnimations = (kit: CharacterKit): Record<string, KitAnimation> => kit.animations ?? {}
@@ -72,11 +76,18 @@ export function withKitAnimation(kit: CharacterKit, id: string, animation: Omit<
   }
 }
 
+/** A person's review (the panel's Approve and Reject): it takes over from an agent's, so its note goes and it reads as the person's. */
 export function reviewKitAnimation(kit: CharacterKit, id: string, reviewState: CharacterKitReviewState, now = new Date()): CharacterKit {
   const current = kit.animations?.[id]
   if (!current) throw new Error(`Character Kit “${kit.name}” has no ${id} animation.`)
-  return { ...kit, animations: { ...kit.animations, [id]: { ...current, reviewState } }, updatedAt: now.toISOString() }
+  const rest = { ...current }
+  delete rest.reviewNote
+  return { ...kit, animations: { ...kit.animations, [id]: { ...rest, reviewState, reviewedBy: 'person', reviewedAt: now.toISOString() } }, updatedAt: now.toISOString() }
 }
+
+/** The animation was reviewed by an agent (approved or rejected), so the person can audit it and change it. */
+export const reviewedByAgent = (animation: Pick<KitAnimation, 'reviewState' | 'reviewedBy'>): boolean =>
+  animation.reviewedBy === 'agent' && animation.reviewState !== 'pending'
 
 export function withoutKitAnimation(kit: CharacterKit, id: string, now = new Date()): CharacterKit {
   const rest = Object.fromEntries(Object.entries(kit.animations ?? {}).filter(([key]) => key !== id))

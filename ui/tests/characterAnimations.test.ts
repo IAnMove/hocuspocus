@@ -4,7 +4,7 @@ import {
   animationSlug, canAddAnimation, customAnimationDef, freeAnimationId, kitCustomDefs, MAX_ANIMATIONS, MAX_CUSTOM_POSES,
   controlsForCard, findKitAnimationBySheet,
   ANIMATION_SHEET, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
-  kitStyleId, localized, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
+  kitStyleId, localized, reviewedByAgent, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
 } from '../src/lib/characterAnimations.ts'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
 
@@ -43,6 +43,21 @@ test('a made animation joins the kit as pending, with its provenance, and is rev
   const second = withKitAnimation(approved, 'wave', made({ loop: 'pingpong' }), stamp)
   assert.deepEqual(Object.keys(withoutKitAnimation(second, 'walk').animations!), ['wave'])
   assert.equal(withoutKitAnimation(approved, 'walk').animations, undefined)
+})
+
+test('a person\'s review takes over from an agent\'s: it reads as the person\'s and the agent\'s note goes', () => {
+  const stamp = new Date('2026-10-17T10:00:00.000Z')
+  const pending = withKitAnimation(kit(), 'walk', made(), stamp)
+  assert.equal(reviewedByAgent(pending.animations!.walk), false, 'older animations have no reviewer and read as a person\'s')
+  const person = reviewKitAnimation(pending, 'walk', 'approved', stamp).animations!.walk
+  assert.deepEqual([person.reviewState, person.reviewedBy, person.reviewedAt], ['approved', 'person', stamp.toISOString()])
+  const agent = { ...pending, animations: { walk: { ...pending.animations!.walk, reviewState: 'approved' as const, reviewedBy: 'agent' as const, reviewNote: 'one size, feet on one line', reviewedAt: '2026-10-17T09:00:00.000Z' } } }
+  assert.equal(reviewedByAgent(agent.animations.walk), true)
+  const reverted = reviewKitAnimation(agent, 'walk', 'rejected', stamp).animations!.walk
+  assert.deepEqual([reverted.reviewState, reverted.reviewedBy, reverted.reviewNote], ['rejected', 'person', undefined])
+  assert.equal(reviewedByAgent(reverted), false)
+  assert.deepEqual(reverted.frames, agent.animations.walk.frames, 'a review touches no pose')
+  assert.equal(reviewedByAgent({ reviewState: 'pending', reviewedBy: 'agent' }), false, 'a pending animation has nothing to audit')
 })
 
 test('poses are made from the character\'s own picture and in its style preset', () => {

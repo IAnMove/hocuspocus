@@ -13,8 +13,13 @@ export type AnimationJob = {
   /** The words of an animation the author described: the job keeps them, so it can be shown and tried again from any page load. */
   custom?: CustomAnimationRequest
   error?: string; errorCode?: string; createdAt: number; updatedAt: number; finishedAt?: number
-  result?: { animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string }
+  result?: { animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string; autoApproved?: boolean; checks?: AnimationCheck[] }
+  /** «Modo un solo disparo»: autoApprove was asked for and counts (false, with the note, when the mode is review), whether the job approved it
+   * and the automatic checks it ran on the sheet (the failed ones are why it stayed pending). */
+  autoApprove?: boolean; autoApproveNote?: string; autoApproved?: boolean; checks?: AnimationCheck[]; reviewNote?: string
 }
+export type AnimationCheck = { id: string; ok: boolean; value: number | string; limit: number | string; detail: string }
+export type AnimationReview = { kitId: string; animation: string; reviewState: 'approved' | 'rejected'; reviewedBy: 'agent'; reviewedAt: string; reviewNote: string; revision: number }
 /** An animation of the author's own: a name, a framing and the words of each pose (up to six). */
 export type CustomAnimationRequest = { title: string; view: 'bust' | 'front' | 'side'; poses: string[] }
 
@@ -34,7 +39,7 @@ async function request<T>(path: string, init: RequestInit | undefined, fallback:
 const post = (body: unknown): RequestInit => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
 
 export async function startAnimationJob(details: {
-  workspace: string; kitId: string; animation: string; model?: string; pose?: string; custom?: CustomAnimationRequest
+  workspace: string; kitId: string; animation: string; model?: string; pose?: string; custom?: CustomAnimationRequest; autoApprove?: boolean
 }): Promise<AnimationJob> {
   return (await request<{ job: AnimationJob }>('/make', post(details), 'Could not start the animation')).job
 }
@@ -51,4 +56,10 @@ export async function fetchAnimationJob(workspace: string, jobId: string): Promi
 
 export async function cancelAnimationJob(workspace: string, jobId: string): Promise<AnimationJob> {
   return (await request<{ job: AnimationJob }>(`/jobs/${encodeURIComponent(jobId)}/cancel`, post({ workspace }), 'Could not cancel the animation')).job
+}
+
+/** An agent's review of a made animation (the Wizard's review_character_animation, like characters.animation.review over MCP). The server
+ * refuses it unless the owner turned on «Modo un solo disparo»; a person reviews in the panel instead, which edits the character. */
+export async function reviewAnimation(details: { workspace: string; kitId: string; animation: string; decision: 'approve' | 'reject'; note?: string }): Promise<AnimationReview> {
+  return (await request<{ review: AnimationReview }>('/review', post(details), 'Could not review the animation')).review
 }

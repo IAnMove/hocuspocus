@@ -769,6 +769,10 @@
       "approved": "Aprobada",
       "rejected": "Rechazada"
     },
+    "agent": {
+      "approved": "aprobada por el agente",
+      "rejected": "rechazada por el agente"
+    },
     "make": "Crear",
     "makeAgain": "Rehacer todo",
     "tryAgain": "Reintentar",

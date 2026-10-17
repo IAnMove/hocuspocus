@@ -26,7 +26,7 @@ import {
 import type { AgentProductionWorksAction } from './productionWorkCapabilities'
 import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentRerenderSeriesShotAction } from './seriesShotEditCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
-import type { AgentMakeCharacterAnimationAction } from './characterAnimationCapabilities'
+import type { AgentMakeCharacterAnimationAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type { AgentVideo2DTemplatesAction } from './video2dTemplateCapabilities'
 import type {
@@ -646,6 +646,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentRerenderSeriesShotAction
   | AgentRecordSeriesLineAction
   | AgentMakeCharacterAnimationAction
+  | AgentReviewCharacterAnimationAction
   | AgentMediaToolAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction

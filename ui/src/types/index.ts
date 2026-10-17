@@ -1177,6 +1177,9 @@ export interface ServicesConfig {
   director_lighting_continuity?: DirectorLightingContinuity
   director_keep_reference_wardrobe?: boolean
   workflow_parallelism_enabled: boolean
+  /** «Modo un solo disparo»: 'review' (default) = a person approves what an agent makes; 'one_shot' = the agent approves it too
+   *  (services/agent_autonomy.py). Every approval the agent gives is marked in the app so it can be audited and reverted. */
+  agent_autonomy?: 'review' | 'one_shot'
   debug_trace_enabled: boolean
   debug_trace_log_path: string
   civitai_api_key: string
