@@ -108,6 +108,13 @@ character's ink.
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
 approves. Cards `walk-cycle-sheet`, `character-reaction` play it.
 
+In a Series shot a cast entry plays an **approved** animation of its kit (`animation`, see *cast*), and `enterGait: "walk"`
+walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet: «animation
+'walk' of 'ana' is pending approval: approve it in Characters › Animaciones». Ask the person; an agent cannot approve.
+A walk-in whose sheet is not approved keeps the bob and the check warns `walk_sheet_not_approved`.
+`"cast": [{"characterId": "gloria", "x": 34, "enterFrom": "left", "enterDuration": 3, "enterGait": "walk", "animation":
+{"id": "shrug", "at": 3.4}}, {"characterId": "leo", "poseId": "bust", "x": 70, "animation": {"id": "angry", "at": 2}}]`
+
 ## The script
 
 ```json
@@ -184,6 +191,13 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
   degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
   takes a whole number of steps (stretched a little to fit), so its feet land on its start, every step and its end. `poseId` must be one of the kit's poses.
+  With an approved `walk` sheet the entrance is walked by its drawings: same slide, feet on the ground, no bob, one
+  cycle per `2 × enterStep` (steps and sounds still land on the feet), mirrored against the way the sheet looks.
+- **animation:** `"wave"` or `{"id": "wave", "at": 2.5, "duration": 1.2, "loop": "once"}` plays an approved kit animation
+  in the pose's place, at its height and ground line; the pose, mouth and eyes are hidden meanwhile (nobody speaks
+  over a body sheet). `at`: seconds inside the shot (0); `duration`: one pass of the sheet by default; `loop`: `loop`,
+  `pingpong` or `once` (the sheet's). Whole-figure poses take gestures and `walk`, busts take expressions (`angry`,
+  `happy`) in `medium`/`close`. It cannot start inside a walk-in that plays the sheet: start it when the walk ends.
 - **look room:** stand a character on the side away from where they look (the bible's `facing` per pose): facing
   `left` right of centre, facing `right` left of it; two people face each other. `from_script` moves a 2D cast member
   who looks out of the frame (`lookRoom` in the reply); `"lookRoom": false` on a cast entry or a shot keeps your `x`.

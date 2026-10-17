@@ -5,12 +5,13 @@
 // (series_layers.py) gives the background and each layer its share of the camera push by depth.
 // A pose cut by its image border is moved so the cut stays out of the frame (snapToEdges), a
 // grounded prop stands on the floor (groundedY) and a video layer can play on its own clock.
-import { mountCharacterKitLayers, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit.ts'
+import { characterKitLayerId, mountCharacterKitLayers, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit.ts'
 import { rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
 import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
 import { holdFields } from '../src/features/stopMotion.ts'
+import { gateSheets, sheetLayer, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
@@ -24,7 +25,12 @@ export type CastSpec = {
   perch?: { source: string; width: number; height: number; top?: number; widthRatio?: number }
   /** Slides in from fromX (series_entrances.py). A `walk` takes a whole number of `step`-second steps: down on every
    * footfall (its start, each step, its end), up mid-step, leaning `sway` degrees to alternate sides; else it hops. */
-  enter?: { fromX: number; start: number; end: number; gait?: 'hop' | 'walk'; step?: number; sway?: number }
+  enter?: { fromX: number; start: number; end: number; gait?: 'hop' | 'walk'; step?: number; sway?: number
+    /** Share of the body bob a walk keeps (default 1); the walk of a sheet keeps none: its drawings step. Set by the compiler, not the plan. */
+    bob?: number }
+  /** A sheet of the character's kit that plays in place of its pose (series_cast_animation.py); an entrance that walks plays the kit's
+   * approved `walk` sheet. See seriesSheet.ts. */
+  animation?: SheetRequest
   exit?: { toX: number; start: number; end: number }
   /** false: a pose cut by its image border stays where ``x`` puts it, cut and all (snapToEdges). */
   edgeSnap?: boolean
@@ -315,7 +321,7 @@ export function walkKeyframes(id: string, rest: Pose, enter: NonNullable<CastSpe
     const lift = Math.sin(Math.PI * (quarter % 4) / 4)
     const side = Math.floor(quarter / 4) % 2 ? -1 : 1
     frames.push(key(id, enter.start + span * progress, {
-      x: enter.fromX + (rest.x - enter.fromX) * progress, y: rest.y - lift * WALK_BOB * rest.scale, scale: rest.scale,
+      x: enter.fromX + (rest.x - enter.fromX) * progress, y: rest.y - lift * WALK_BOB * (enter.bob ?? 1) * rest.scale, scale: rest.scale,
       rotation: lift ? side * sway * lift : 0 }))
   }
   return frames
@@ -495,6 +501,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
   for (const cast of shot.cast) counts.set(cast.kitId, (counts.get(cast.kitId) ?? 0) + 1)
   const mouths: string[][] = []
   const poseLayerIds: string[] = []
+  const gates: SheetGate[] = []
   shot.cast.forEach((cast, index) => {
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
@@ -509,10 +516,21 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     const base = cast.transform ?? seat?.character ?? castTransform(kit, cast, shot.framing, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
     const talking = shot.lines.filter(line => lineOwnsAppearance(shot.cast, line, index))
       .map(line => [line.start, line.end] as [number, number])
-    const mounted = mountCast(kit, { ...cast, z }, base, shot.duration, viewport, shot.workspace, talking, instanceKey)
+    const windows = sheetWindows(kit, cast, shot.duration)
+    // A walk of drawings steps on its own: the body neither bobs nor sways under it.
+    const entered = cast.enter && windows.some(window => window.part === 'walk-in') ? { ...cast.enter, sway: 0, bob: 0 } : cast.enter
+    const mounted = mountCast(kit, { ...cast, z, enter: entered }, base, shot.duration, viewport, shot.workspace, talking, instanceKey)
     mouths[index] = mounted.mouthIds
     poseLayerIds.push(mounted.layers[0].id)
     layers.push(...mounted.layers)
+    if (windows.length) {
+      const stand = cast.transform ?? seat?.character ?? personTransform(kit, cast.poseId ?? 'base', shot.framing, cast.x, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
+      const poseHeight = drawnHeight(poseAsset(kit, cast.poseId ?? 'base'), stand.scale, aspect)
+      const pose = mounted.layers[0]
+      layers.push(...windows.map(window => sheetLayer(kit, window, { layerId: characterKitLayerId(kit.id, `sheet-${window.part}`, instanceKey), z: pose.z,
+        workspace: shot.workspace, body: pose.animation.keyframes!, restY: base.y, ground: stand.y + poseHeight / 2, poseHeight, aspect, duration: shot.duration })))
+      gates.push({ poseId: pose.id, windows: windows.map(window => [window.start, window.end]) })
+    }
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
   if ((shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) || shot.cameraStart) {
@@ -523,7 +541,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
   return {
     version: 1, name: shot.name, width: shot.width, height: shot.height, fps: shot.fps, duration: round(shot.duration),
     generationPolicy: 'provided_only',
-    layers: rebuildCutoutDialogueLayers(layers, dialogueBeats, shot.fps, shot.duration),
+    layers: gateSheets(rebuildCutoutDialogueLayers(layers, dialogueBeats, shot.fps, shot.duration), gates, shot.duration),
     audioTracks: [...shot.lines.map(speechTrack), ...(shot.audioTracks ?? [])], dialogueBeats,
     // Music and effects dip while someone speaks, as in Video 3D.
     ...(shot.lines.length ? { audioMix: { duckDb: DIALOGUE_DUCK_DB } } : {}),

@@ -331,7 +331,7 @@ test('a kit with animations nobody plays compiles to the scene it always did', (
 })
 
 test('an animation swaps the pose for the sheet inside its window and hides the face while it plays', () => {
-  const spec = alone([{ kitId: 'kevin', x: 50, blinks: [1.5, 3.05], animation: { id: 'wave', at: 1, duration: 2 } }],
+  const spec = alone([{ kitId: 'kevin', x: 50, blinks: [1.5, 3.15], animation: { id: 'wave', at: 1, duration: 2 } }],
     { lines: [{ id: 'l1', kitId: 'kevin', text: 'Hello Gary.', start: 0.35, end: 1.55, filename: 'l1.wav', cues }] })
   const scene = compileSeriesShot(withSheets, spec)
   const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!
