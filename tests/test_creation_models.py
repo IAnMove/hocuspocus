@@ -861,11 +861,13 @@ def test_the_memory_setting_reaches_the_runtime(monkeypatch, tmp_path):
     assert seen == [70, 80, 0, 80]
 
 
-def test_services_config_accepts_the_memory_percent(tmp_path):
+def test_services_config_accepts_the_memory_percent(monkeypatch):
     from types import SimpleNamespace
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
     from routers.settings import create_settings_services_router
+    from services import settings_store
+    monkeypatch.setattr(settings_store, "wgp", None, raising=False)  # the router factory assigns it; the patch undoes that
     wgp = SimpleNamespace(server_config={})
     saved = []
     router = create_settings_services_router(
@@ -913,6 +915,8 @@ def test_a_real_scope_has_its_own_cgroup_with_the_memory_limit(capsys):
         while cgroup == own and time.monotonic() < deadline:
             time.sleep(0.05)
             cgroup = confinement.scope_cgroup(process.pid)
+        if cgroup is None or cgroup == own:
+            pytest.skip("systemd did not move the child into a scope of its own")
         memory_max = cgroup / "memory.max"
         if not memory_max.is_file():
             pytest.skip("the memory controller is not delegated to this user manager")
@@ -928,4 +932,5 @@ def test_a_real_scope_has_its_own_cgroup_with_the_memory_limit(capsys):
         assert observed["verify_scope"] == cgroup
     finally:
         process.terminate()
-    assert process.wait(timeout=10) == -signal.SIGTERM, "terminate() must reach the program, not a wrapper"
+        exit_code = process.wait(timeout=10)
+    assert exit_code == -signal.SIGTERM, "terminate() must reach the program, not a wrapper"
