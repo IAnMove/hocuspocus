@@ -131,8 +131,10 @@ def systemd_run_path():
 
 
 def scope_command(launcher, command, limits):
+    # No swap for the runtime: past its limit the kernel stops it, instead of it thrashing the swap that the
+    # server and the owner's other programs share (a 100 MB scope swapped out 612 MB without ever dying).
     return [launcher, "--user", "--scope", "--quiet", "--collect", "-p", f"MemoryHigh={limits['high']}",
-            "-p", f"MemoryMax={limits['max']}", "--", *command]
+            "-p", f"MemoryMax={limits['max']}", "-p", "MemorySwapMax=0", "--", *command]
 
 
 def confine(command, env, percent=None):

@@ -599,9 +599,9 @@ def test_ensure_runtime_wraps_the_command_with_systemd_run_and_the_limits(confin
     memory_high = memory_max * 90 // 100
     assert (memory_max, memory_high) == (54975581388, 49478023249)
     command = confined.processes[0].command
-    assert command[:10] == [SYSTEMD_RUN, "--user", "--scope", "--quiet", "--collect", "-p", f"MemoryHigh={memory_high}",
-                            "-p", f"MemoryMax={memory_max}", "--"]
-    assert command[10:12] == ["python", "main.py"] and "--listen" in command
+    assert command[:12] == [SYSTEMD_RUN, "--user", "--scope", "--quiet", "--collect", "-p", f"MemoryHigh={memory_high}",
+                            "-p", f"MemoryMax={memory_max}", "-p", "MemorySwapMax=0", "--"]
+    assert command[12:14] == ["python", "main.py"] and "--listen" in command
     assert confined.processes[0].kwargs["env"]["XDG_RUNTIME_DIR"] == "/run/user/1234"
     assert confined.processes[0].kwargs["env"]["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/1234/bus"
     status = confined.service.runtime_status()
