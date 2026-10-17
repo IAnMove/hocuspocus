@@ -997,6 +997,10 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
 from services.character_animation_commands import OPERATIONS as _ANIMATION_OPERATIONS, RUNNERS as _ANIMATION_RUNNERS  # noqa: E402
 OPERATIONS.update(_ANIMATION_OPERATIONS)
 _RUNNERS.update(_ANIMATION_RUNNERS)
+# So is the card tool (services/series_card_commands.py).
+from services.series_card_commands import OPERATIONS as _CARD_OPERATIONS, RUNNERS as _CARD_RUNNERS  # noqa: E402
+OPERATIONS.update(_CARD_OPERATIONS)
+_RUNNERS.update(_CARD_RUNNERS)
 
 
 def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:

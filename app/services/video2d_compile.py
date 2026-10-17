@@ -147,6 +147,12 @@ def _resolve(template_id: str) -> tuple[dict, dict, str | None]:
     return template, dict(alias.get("preset") or {}), template_id
 
 
+def resolve_card(template_id: str) -> tuple[dict, dict, str | None]:
+    """The catalog card for a card id or an alias id, the alias's control preset and the alias (None for a card).
+    ``template_unknown`` and ``template_retired`` are CompileErrors, as for ``scenes.template.compile``."""
+    return _resolve(template_id)
+
+
 def _slots(template: dict) -> dict[str, dict]:
     return {slot.get("id"): slot for slot in template.get("slots") or [] if isinstance(slot, dict)}
 
@@ -653,6 +659,7 @@ __all__ = [
     "execute",
     "has_transparency",
     "prepare_template",
+    "resolve_card",
     "slot_type",
     "spawn_bridge",
 ]

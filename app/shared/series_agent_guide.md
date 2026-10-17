@@ -119,6 +119,10 @@ A walk-in whose sheet is not approved keeps the bob and the check warns `walk_sh
 `"cast": [{"characterId": "gloria", "x": 34, "enterFrom": "left", "enterDuration": 3, "enterGait": "walk", "animation":
 {"id": "shrug", "at": 3.4}}, {"characterId": "leo", "poseId": "bust", "x": 70, "animation": {"id": "angry", "at": 2}}]`
 
+A whole Video 2D card as a shot's take, in one call: `series.shot.card.apply` {shot, card (`walk-cycle-sheet`,
+`character-reaction`, `walk-toward-camera`...), cast [{slot, characterId, animation?, poseId?}], assets, controls}. It uses the
+approved sheets and poses, the shot's plate and recorded lines; a candidate (`approve` only in one-shot). `exporting`: repeat it.
+
 ## The script
 
 ```json

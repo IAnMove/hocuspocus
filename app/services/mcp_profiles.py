@@ -32,7 +32,7 @@ SERIES_TOOLS = frozenset({
     "jobs.cancel",
     "image.remove_background", "studio.key", "qa.speech", "qa.accent", "qa.export", "audio.mouth_cues", "scenes.assets.inspect",
     # One shot by its number or id, and the media steps that used to need scripts outside the app.
-    "series.shot.get", "series.shot.update", "series.shot.voices", "series.shot.voice", "series.shot.voice.status", "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
+    "series.shot.get", "series.shot.update", "series.shot.card.apply", "series.shot.voices", "series.shot.voice", "series.shot.voice.status", "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace",
     # Editing a take's scene and Video 3D.
     "scenes.document.get", "scenes.document.save", "scenes.effects.catalog", "scenes.effects.apply",
     "scenes.video2d.export", "scenes.video2d.export.receipt", "scenes.video2d.preview",
