@@ -50,8 +50,13 @@ function drawLayerImage(context: CanvasRenderingContext2D, layer: VisualAnimator
   context.beginPath()
   context.rect(-width / 2, -height / 2, width, height)
   context.clip()
-  if (crop) context.drawImage(media, crop.x, crop.y, crop.width, crop.height, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
-  else context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+  if (!crop) {
+    context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+    return
+  }
+  // A mirrored sheet cell is drawn flipped about the layer's centre, after the clip (which is symmetric).
+  if (layer.sequence?.kind === 'sheet' && layer.sequence.mirror) context.scale(-1, 1)
+  context.drawImage(media, crop.x, crop.y, crop.width, crop.height, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
 }
 
 function sourceFrame(layer: VisualAnimatorLayer, media: SceneMedia, seconds: number): [number, number] {

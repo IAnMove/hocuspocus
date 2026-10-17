@@ -275,7 +275,7 @@ def _normalize_atmosphere(atmosphere: Any) -> None:
 def _normalize_sequence(sequence: Any) -> None:
     if not isinstance(sequence, dict):
         return
-    _clamp_into(sequence, {"fps": (1, 60)})
+    _clamp_into(sequence, {"fps": (1, 60), "start": (0, 3600)})
     _round_into(sequence, "columns", 1, 32)
     _round_into(sequence, "rows", 1, 32)
     _round_into(sequence, "count", 1, 120)
