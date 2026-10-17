@@ -373,11 +373,14 @@ def test_a_shot_with_lines_needs_them_recorded_and_the_card_carries_their_speech
     assert document["dialogueBeats"] == [{"id": "ep1-s02_d0", "text": "Hola, Gloria.", "start": 0.35, "end": 1.85, "audioTrackId": "ep1-s02_d0",
                                           "mouthLayerIds": [], "confidence": "known-text"}]
     assert document["audioMix"] == {"duckDb": 10} and document["duration"] == 3.0, "1.5 s of speech between the intro and the tail, in the shot's 3 s"
-    from services.series_assembly import episode_assembly_plan
     from services.episode_finishing import scene_beats
-    meta = world.series["assets"]["asset_1"]["metadata"]
-    assert [beat["text"] for beat in scene_beats(str(tmp_path), meta["sceneFilename"])] == ["Hola, Gloria."], "the cut's subtitles read the scene"
-    assert episode_assembly_plan  # the plan reads sceneFilename from the take's metadata (series_assembly._scene_filename)
+    from services.series_assembly import episode_assembly_plan
+    shot = world.shot("s02")
+    shot["approvedAttemptId"] = shot["attempts"][0]["id"]
+    world.series["episodesById"]["ep1"]["shots"] = [shot]
+    (item,) = episode_assembly_plan(world.series, world.series["episodesById"]["ep1"])
+    assert item["sceneFilename"] == reply["scene"] and "dialogueBeats" not in item, "the assembly plan points at the scene, which holds the timing"
+    assert [beat["text"] for beat in scene_beats(str(tmp_path), item["sceneFilename"])] == ["Hola, Gloria."], "the cut's subtitles read the scene"
 
 
 def test_the_card_lasts_as_long_as_the_lines_need_and_never_less(tmp_path):
@@ -391,7 +394,8 @@ def test_the_card_lasts_as_long_as_the_lines_need_and_never_less(tmp_path):
     assert reply["duration"] == 4.792, "0.35 s + 4 s of speech + 0.45 s, on a frame"
     with pytest.raises(CardApplyError) as error:
         longer.apply("cast", "uv", "ep1", "s02", "walk-toward-camera", cast=[{"characterId": "gloria"}], controls={"duration": 4})
-    assert error.value.code == "card_shorter_than_lines" and "4.8" in str(error.value) or "4.79" in str(error.value)
+    assert error.value.code == "card_shorter_than_lines"
+    assert "4.79" in str(error.value)
 
 
 def test_a_language_version_uses_its_own_scene_voices_and_approval(tmp_path):
@@ -406,6 +410,24 @@ def test_a_language_version_uses_its_own_scene_voices_and_approval(tmp_path):
     assert version["approvedAttemptIds"] == {"s01": "attempt-1"} and version["durations"]["s01"] == 5.0, "the version's own approval and length"
     assert not world.shot().get("approvedAttemptId") and world.shot()["attempts"][0]["approvedBy"] == "agent"
     assert refused(world, language="klingon", cast=WALK).code == "invalid_language"
+
+
+def test_a_language_versions_own_approval_survives_a_second_apply_and_each_language_has_its_own_take(tmp_path):
+    world = World(tmp_path, autonomy="one_shot")
+    world.series["episodesById"]["ep1"]["languageVersions"] = {"english": {"title": "Pilot", "dialogue": {"s02_d0": "Hi, Gloria."}, "cards": {}, "approvedAttemptIds": {},
+                                                                           "durations": {"s01": 5.0, "s02": 3.0}}}
+    spanish = world.apply(cast=WALK)
+    english = world.apply(language="english", cast=WALK)
+    assert english["take"]["attemptId"] != spanish["take"]["attemptId"] and english["scene"] != spanish["scene"], "the language is part of the take's identity"
+    assert len(world.shot()["attempts"]) == 2
+    version = world.series["episodesById"]["ep1"]["languageVersions"]["english"]
+    from services.series_language_versions import set_version_take
+    set_version_take(world.series["episodesById"]["ep1"], "english", "s01", english["take"]["attemptId"], "user")
+    again = world.apply(language="english", cast=WALK, controls={"step": 0.9}, approve=True)
+    assert again["take"]["superseded"] == [] and again["take"]["approved"] is False and "A person approved another take" in again["approvalNote"]
+    decisions = {item["id"]: item.get("reviewDecision") for item in world.shot()["attempts"]}
+    assert decisions[english["take"]["attemptId"]] is None, "the take a person approved in English is not rejected"
+    assert version["approvedAttemptIds"] == {"s01": english["take"]["attemptId"]} and decisions[spanish["take"]["attemptId"]] is None
 
 
 # One operation, three doors ---------------------------------------------------------------------

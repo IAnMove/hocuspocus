@@ -428,7 +428,7 @@ import and approve the take).
   is refused (403 `agent_review_off`) and the person approves in Series Lab. A take a person approved is never replaced: the new one stays a
   candidate and the reply says so (`approvalNote`).
 - **Export:** the scene is exported by `scenes.video2d.export`, the exporter the server render uses (a 5 s card takes seconds on a CPU).
-  If it is not ready after 75 s the reply is `status: "exporting"`; send the same request again and it attaches the take.
+  If it is not ready after 60 s the reply is `status: "exporting"`; send the same request again and it attaches the take.
 
 ---
 

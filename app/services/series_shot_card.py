@@ -58,7 +58,7 @@ PERSON_KEPT = "A person approved another take of this shot, so the new take stay
 EXPORT_RETRIES = 2
 EXPORTING = ("The scene is being exported (a few minutes on a busy machine). Call series.shot.card.apply again with the same input to "
              "finish: it finds this export and attaches the take.")
-WAIT_SECONDS = 75.0
+WAIT_SECONDS = 60.0
 POLL_SECONDS = 2.5
 
 
@@ -182,7 +182,7 @@ class SeriesShotCard:
         if dropped:
             warnings.append(f"{', '.join(dropped)} of the sheet does not fit the card and was left to its default")
         return {"card": entry["id"], "document": document, "controls": merged, "bindings": bound["bindings"], "warnings": warnings,
-                "digest": hashlib.sha1(json.dumps(document, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]}
+                "digest": hashlib.sha1(json.dumps([ctx.language, document], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]}
 
     # Context ---------------------------------------------------------------------------
 
@@ -234,7 +234,7 @@ class SeriesShotCard:
 
     def _compile(self, ctx: Context, card: str, assets: dict[str, str], controls: dict[str, Any]) -> dict[str, Any]:
         width, height = frame_size(ctx.series)
-        command = {"version": 1, "operation": video2d_compile.OPERATIONS[0],
+        command = {"version": 1, "operation": "scenes.template.compile",
                    "input": {"templateId": card, "assets": assets, "controls": controls, "width": width, "height": height, "fps": FPS, "full": True}}
         return self.deps.compile(command, workspace_dir=lambda _name: ctx.root)["result"]
 
@@ -335,6 +335,7 @@ class SeriesShotCard:
     def _supersede(self, ctx: Context, scene: str, keep: str) -> list[str]:
         """The earlier unapproved takes of this same scene are rejected: the new one replaces them (an approved one is left alone)."""
         done: list[str] = []
+        approved, _by = self._approval(ctx)  # in this language: a version keeps its own approval apart from the shot's
 
         def change(series: dict[str, Any]) -> None:
             episode = series["episodesById"][ctx.episode_id]
@@ -343,7 +344,7 @@ class SeriesShotCard:
                     continue
                 for attempt in list(shot.get("attempts") or []):
                     meta = _card_take(series, attempt) or {}
-                    if meta.get("cardScene") != scene or attempt["id"] in (keep, shot.get("approvedAttemptId")) or attempt.get("reviewDecision") == "rejected":
+                    if meta.get("cardScene") != scene or attempt["id"] in (keep, approved) or attempt.get("reviewDecision") == "rejected":
                         continue
                     shot = reject_shot_render_attempt(shot, attempt["id"], "server")
                     done.append(attempt["id"])
