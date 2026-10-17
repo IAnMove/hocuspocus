@@ -1371,6 +1371,15 @@ of the shot reuses the recording; `retake` records another take and replaces the
 only when it is good. The shot inspector's Dialogue part (Record voice, New take) calls
 the same route. Coverage is in `ui/tests/seriesShotEditWizard.test.ts` and
 `tests/test_series_line_voice.py`.
+`series.shots.apply_card` (`apply_series_shot_card`) puts a Video 2D card on a 2D shot as a new take through `seriesShots.applyCard`,
+registered by `registerSeriesShotCardCapabilities` in `ui/src/features/agent/seriesShotCardCapabilities.ts`. It posts to
+`POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`, the route behind the MCP tool `series.shot.card.apply`
+(`app/services/series_shot_card.py`), with the same body: `card`, `cast` (`{slot, characterId, animation?, poseId?}`), `controls`,
+`assets`, `language` and `approve`. The server binds the card to the shot's characters (pose pictures, or the approved animation sheet
+for the sheet cards), compiles it, saves the scene so it opens in Video 2D, exports it and attaches the take as a candidate;
+`approve_take` approves it only in «Modo un solo disparo» and never over a take a person approved. A scene still being exported
+answers `exporting` and the Wizard sends the same request again for a few minutes. Coverage is in
+`ui/tests/seriesShotCardWizard.test.ts` and `tests/test_series_shot_card.py`.
 
 ## Media tools
 

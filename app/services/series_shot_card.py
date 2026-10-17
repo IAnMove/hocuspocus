@@ -19,7 +19,8 @@ A person did it in five steps (find the card, compile it, edit it, export it, im
    ready after ``wait_seconds`` answers ``exporting`` and the same call finishes it: the export intent comes from the scene, so the
    second call finds the first one's work and imports it.
 5. **Approve.** The take is a candidate. ``approve`` approves it only when the owner turned on «Modo un solo disparo»
-   (``agent_autonomy`` = ``one_shot``, ``services/agent_autonomy.py``); a take a person approved is never replaced.
+   (``agent_autonomy`` = ``one_shot``, ``services/agent_autonomy.py``), stamped ``approvedBy`` agent or wizard; a take a person
+   approved is never replaced.
 
 Applying the same card with the same inputs again finds its take and does nothing twice; other inputs make a new take and reject
 the earlier unapproved take of the same scene as superseded.
@@ -36,10 +37,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from services import agent_autonomy, video2d_compile
+from services import agent_activity, agent_autonomy, video2d_compile
 from services.series_kit_pins import kits_for_episode
-from services.series_language_versions import LANGUAGES, localized_view, set_version_duration
-from services.series_library import reject_shot_render_attempt
+from services.series_language_versions import LANGUAGES, localized_view, set_version_duration, set_version_take
+from services.series_library import _now, approve_shot_render_attempt, reject_shot_render_attempt
 from services.series_native_render import audio_seconds
 from services.series_production import series_shot_method
 from services.series_shot_card_bind import CardBindError, bind_card, card_controls, card_duration
@@ -67,16 +68,24 @@ class CardApplyError(RuntimeError):
         self.code, self.status = code, status
 
 
+def agent_actor() -> str:
+    """The one who asked for this approval: the Wizard when it declared itself, else the agent. Never ``user``: a person approves in Series Lab."""
+    actor = agent_activity.current_actor()
+    return actor if actor in ("agent", "wizard") else "agent"
+
+
 @dataclass
 class CardDeps:
     read_library: Callable[[str], dict]
     read_kits: Callable[[str], dict]
     workspace_dir: Callable[[str], str]
-    # A tool of the server, run in process (``LocalMcp.call``): the exporter, the import, the approval.
+    # A tool of the server, run in process (``LocalMcp.call``): the exporter and the take import.
     call: Callable[[str, dict], dict]
     # ``change(series)`` under the library lock; returns the stored series (``_change_series`` of the launch module).
     change_series: Callable[[str, str, Callable[[dict], None]], dict]
     services: Callable[[], Mapping[str, Any]]
+    # Who answers for an approval (``agent`` or ``wizard``, never a person): read on the request's own thread.
+    actor: Callable[[], str] = agent_actor
     compile: Callable[..., dict] = video2d_compile.execute
     probe: Callable[[str], float] = audio_seconds
     room: Callable[[str, str, str], str] = apply_room
@@ -351,9 +360,21 @@ class SeriesShotCard:
             return True, None
         if approved and by == "user":
             return False, PERSON_KEPT
-        _ok(self.deps.call("series.take.approve", {"version": 1, "input": {
-            "workspace": ctx.workspace, "series_id": ctx.series_id, "episode_id": ctx.episode_id, "shot_id": ctx.shot["id"],
-            "attempt_id": attempt_id, **({} if ctx.original else {"language": ctx.language})}}), "approve take")
+        actor = self.deps.actor()
+
+        def change(series: dict[str, Any]) -> None:
+            episode = series["episodesById"][ctx.episode_id]
+            if ctx.original:
+                index = next(i for i, item in enumerate(episode["shots"]) if item["id"] == ctx.shot["id"])
+                episode["shots"][index] = approve_shot_render_attempt(episode["shots"][index], attempt_id, actor)
+                if all(item.get("approvedAttemptId") for item in episode["shots"]):
+                    episode["status"] = "completed"
+            else:
+                set_version_take(episode, ctx.language, ctx.shot["id"], attempt_id, actor)
+            episode["updatedAt"] = _now()
+        # Not the ``series.take.approve`` tool: a tool run in process is stamped as the server's own job, and this approval is the
+        # agent's (or the Wizard's) to answer for, as the take records it (``approvedBy``).
+        self.deps.change_series(ctx.workspace, ctx.series_id, change)
         return True, None
 
     def _approval(self, ctx: Context) -> tuple[str | None, str | None]:

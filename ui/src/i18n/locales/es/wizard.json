@@ -297,7 +297,12 @@
     "characterAnimationStarted": "Empiezo la animación «{{animation}}» de {{name}} ({{poses}} poses, trabajo {{jobId}}). Se hace en el servidor, una pose tras otra, con Qwen: tarda unos minutos. La verás en Personajes › Animaciones, donde puedes revisarla y aprobarla.",
     "characterAnimationQueued": "La animación «{{animation}}» de {{name}} queda en cola (trabajo {{jobId}}): se hace cuando la GPU quede libre. La verás en Personajes › Animaciones, donde puedes revisarla y aprobarla.",
     "characterAnimationApproved": "He aprobado la animación «{{animation}}» de {{name}} como agente (el modo un solo disparo está activado). Aparece como «aprobada por el agente» en Personajes › Animaciones, donde puedes auditarla y revertirla.",
-    "characterAnimationRejected": "He rechazado la animación «{{animation}}» de {{name}} como agente (el modo un solo disparo está activado). Sus poses se conservan: rehaz una pose o toda la animación en Personajes › Animaciones."
+    "characterAnimationRejected": "He rechazado la animación «{{animation}}» de {{name}} como agente (el modo un solo disparo está activado). Sus poses se conservan: rehaz una pose o toda la animación en Personajes › Animaciones.",
+    "shotCardTake": "{{shot}}: la tarjeta {{card}} es una toma nueva del plano{{approved}}. Su escena {{scene}} se abre en Vídeo 2D.",
+    "shotCardReused": "{{shot}}: la tarjeta {{card}} ya era la toma del plano{{approved}}. Su escena es {{scene}}.",
+    "shotCardApproved": " y la he aprobado (modo un solo disparo)",
+    "shotCardWaits": ", a la espera de que la apruebes en Series Lab",
+    "shotCardExporting": "{{shot}}: la escena de {{card}} ({{scene}}) aún se está exportando; pídemelo otra vez en un momento y adjunto la toma."
   },
   "progress": {
     "addingAlternateSong": "Añadiendo la canción alternativa al videoclip…",
@@ -374,6 +379,7 @@
     "updatingLipsCreator": "Actualizando Lips Creator…",
     "generatingLipsMouths": "Generando bocas de Lips Creator…",
     "searchingWork": "Buscando la obra…",
-    "preparingFile": "Preparando el archivo…"
+    "preparingFile": "Preparando el archivo…",
+    "applyingShotCard": "Poniendo la tarjeta en el plano…"
   }
 }

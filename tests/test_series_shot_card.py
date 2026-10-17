@@ -93,10 +93,6 @@ class World:
             return {"result": {"receipt": {"artifacts": [{"name": f"{intent}.mp4"}]}, "task": {"status": "completed"}}}
         if tool == "series.asset.import":
             return self._import(data)
-        if tool == "series.take.approve":
-            shot = self.shot(data["shot_id"])
-            shot.update(approve_shot_render_attempt(shot, data["attempt_id"], "agent"))
-            return {"result": {"shot": {"approvedAttemptId": data["attempt_id"]}}}
         raise AssertionError(tool)
 
     def _import(self, data):
@@ -273,8 +269,11 @@ def test_approve_is_refused_in_review_mode_before_any_work(tmp_path):
 def test_approve_in_one_shot_mode_approves_the_take_as_the_agent(tmp_path):
     world = World(tmp_path, autonomy="one_shot")
     reply = world.apply(cast=WALK, approve=True)
-    assert reply["take"]["approved"] is True and world.tool_names()[-1] == "series.take.approve"
+    assert reply["take"]["approved"] is True and "series.take.approve" not in world.tool_names(), "stamped by the agent, not as the server's own job"
     assert world.shot()["approvedAttemptId"] == "attempt-1" and world.shot()["attempts"][0]["approvedBy"] == "agent"
+    wizard = World(tmp_path, autonomy="one_shot")
+    wizard.service(actor=lambda: "wizard").apply("cast", "uv", "ep1", "s01", "walk-cycle-sheet", cast=WALK, approve=True)
+    assert wizard.shot()["attempts"][0]["approvedBy"] == "wizard"
 
 
 def test_a_take_a_person_approved_is_never_replaced_and_an_agents_can_be(tmp_path):
@@ -403,9 +402,9 @@ def test_a_language_version_uses_its_own_scene_voices_and_approval(tmp_path):
     assert reply["scene"] == "uv-ep1-s01-card-walk-cycle-sheet-english.scene.json"
     meta = world.series["assets"]["asset_1"]["metadata"]
     assert meta["language"] == "english"
-    approved = world.calls[-1][1]["input"]
-    assert approved["language"] == "english" and approved["attempt_id"] == "attempt-1"
-    assert world.series["episodesById"]["ep1"]["languageVersions"]["english"]["durations"]["s01"] == 5.0
+    version = world.series["episodesById"]["ep1"]["languageVersions"]["english"]
+    assert version["approvedAttemptIds"] == {"s01": "attempt-1"} and version["durations"]["s01"] == 5.0, "the version's own approval and length"
+    assert not world.shot().get("approvedAttemptId") and world.shot()["attempts"][0]["approvedBy"] == "agent"
     assert refused(world, language="klingon", cast=WALK).code == "invalid_language"
 
 

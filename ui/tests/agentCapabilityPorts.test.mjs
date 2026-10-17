@@ -55,6 +55,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './mediaToolCapabilities',
   // Action type only. Execution stays on the productionWorks adapter.
   './productionWorkCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesShotCardCapabilities',
   // Action types only. Execution stays on the seriesShots adapter.
   './seriesShotEditCapabilities',
   './sfxPack',
@@ -219,7 +221,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 92) // speech_analysis_engine uses the Video3D adapter and shared native installer.
+  assert.equal(registered.length, 93) // speech_analysis_engine uses the Video3D adapter and shared native installer.
   assert.equal(legacy.length, 0)
 })
 

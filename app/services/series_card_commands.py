@@ -22,20 +22,17 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "controls": {"type": "object"}, "cast": _CAST, "assets": {"type": "object", "additionalProperties": {"type": "string"}},
          "language": {"type": "string", "maxLength": 40}, "approve": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "shot", "card"], True,
-        "Put a Video 2D card on one 2D shot as a NEW TAKE (a candidate), in one call: it replaces scenes.template.compile, editing, "
-        "export, series.asset.import and series.take.approve. card is any id of scenes.templates.catalog (walk-cycle-sheet, "
-        "walk-two-pose, walk-toward-camera, walk-follow-back, walk-behind-foreground, character-reaction...). cast binds the card's "
-        "character slots (subject_1...) to series characters {slot, characterId, animation?, poseId?}; without cast the shot's own "
-        "people fill them. The sheet cards play the character's APPROVED animation sheet (walk by default for the walk cards; "
-        "character-reaction needs animation: wave, angry...); a pending or rejected sheet is refused. The other cards draw its pose "
-        "picture (poseId, else the shot's pose). The shot's location plate is the background; assets {slot: workspace file or URL} "
-        "fills foreground and props. controls are the card's own; the length follows the shot. The shot's spoken lines must be "
-        "recorded first (series.shot.voice). The scene is saved as <series>-<episode>-<shot>-card-<card>.scene.json and opens in "
-        "Video 2D; applying again replaces it. approve true approves the take, only when the owner turned on the one-shot mode "
-        "(agent_autonomy = one_shot); otherwise a person approves it in Series Lab, and a take a person approved is never replaced. "
+        "Put a Video 2D card on one 2D shot as a NEW candidate take, in one call (instead of compile, edit, export, import, approve). "
+        "card: an id of scenes.templates.catalog (walk-cycle-sheet, walk-two-pose, walk-toward-camera, walk-follow-back, "
+        "walk-behind-foreground, character-reaction...). cast binds the card's character slots {slot: subject_1, characterId, "
+        "animation?, poseId?}; empty, the shot's own people fill them. The sheet cards play the character's APPROVED animation sheet "
+        "(walk by default; character-reaction needs animation, e.g. wave): a pending or rejected one is refused. The other cards draw "
+        "a pose picture. The background is the shot's location plate; assets {slot: workspace file} fills a foreground or props; "
+        "controls are the card's own. The shot's spoken lines must be recorded first (series.shot.voice). The scene "
+        "(<series>-<episode>-<shot>-card-<card>.scene.json) opens in Video 2D. approve: true works only in one-shot mode "
+        "(agent_autonomy = one_shot); otherwise a person approves in Series Lab, and a take a person approved is never replaced. "
         "Example, a walk-in for shot 3: {shot: 3, card: \"walk-cycle-sheet\", cast: [{slot: \"subject_1\", characterId: \"gloria\", "
-        "animation: \"walk\"}]}. Returns status completed (take: attemptId, approved, bindings, scene) or exporting: call again with "
-        "the same input to finish.",
+        "animation: \"walk\"}]}. Returns completed (take, bindings, scene) or exporting: repeat the call.",
     ),
 }
 
