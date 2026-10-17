@@ -34,6 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from services import series_cast_animation
 from services.series_entrances import GAITS
 from services.series_finish import check_finish
 from services.series_library import assign_episode_number
@@ -217,6 +218,7 @@ class EpisodeScript:
         if shot.get("kind") not in (None, "2d", *METHODS):
             check.problems.append(f"{where}: kind must be 2d, {', '.join(METHODS)}")
         self._check_cast(shot, where)
+        self._check_animations(index, shot, where)
         self._check_lines(shot, where)
         self._check_files(shot, where)
         self._check_effects(shot, where)
@@ -247,6 +249,11 @@ class EpisodeScript:
             for index, cue in enumerate(shot.get(kind) or []):
                 if isinstance(cue, dict) and cue.get("anchor") == "enter":
                     self._check_entrance_cue(cue, cast, f"{where} {kind} {index}")
+
+    def _check_animations(self, index: int, shot: dict[str, Any], where: str) -> None:
+        """A cast entry's kit ``animation`` must be one the character's kit has and a person approved (``series_cast_animation``)."""
+        cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
+        series_cast_animation.check_cast(self.checker, cast, shot, where, self.shot_id(index), self.warnings)
 
     def _check_entrance_cue(self, cue: dict[str, Any], cast: list[dict[str, Any]], where: str) -> None:
         """A cue on an entrance names a cast member of the shot (by index or id) who walks in."""

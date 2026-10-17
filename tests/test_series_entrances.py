@@ -116,10 +116,10 @@ def test_the_planned_cast_carries_the_animation_clamped_into_the_shot():
 
 
 def test_the_full_spec_carries_the_animation_and_the_entrance_is_the_one_it_always_was():
-    value = shot({**WALK, "animation": {"id": "wave", "at": 4, "duration": 1}})
+    value = shot({**WALK, "animation": {"id": "wave", "at": 3.5, "duration": 1}})
     value["layout2d"] = normalize_layout2d(value["layout2d"])
     spec = build_shot_spec(series(), {"id": "ep1"}, value, workspace="cast", recorded=RECORDED)
-    assert spec["cast"][0]["animation"] == {"id": "wave", "at": 4.0, "duration": 1.0}
+    assert spec["cast"][0]["animation"] == {"id": "wave", "at": 3.5, "duration": 1.0}
     assert spec["cast"][0]["enter"] == {"fromX": -15.0, "start": 0.5, "end": 3.5, "gait": "walk", "step": 0.6, "sway": 1.5}, \
         "which sheet a walk uses is the compiler's choice: the plan and the footfalls are the same with or without one"
     assert animations.walk_window(spec["cast"][0]["enter"]) == (0.5, 3.5)

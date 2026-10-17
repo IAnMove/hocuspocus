@@ -30,6 +30,7 @@ import hashlib
 from typing import Any
 from urllib.parse import quote
 
+from services import series_cast_animation as cast_animation
 from services import series_entrances as entrances
 from services import series_finish
 from services import series_shot_extras as extras
@@ -97,7 +98,7 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
         return None
     return {"characterId": value["characterId"][:160], **_text_field(value, "poseId", 120),
             **_numbers(value, (("x", -50, 150), ("scale", 0.2, 4))), **_choice(value, "motion", MOTIONS),
-            **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value),
+            **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value), **cast_animation.entry_fields(value),
             **_explicit_transform(value.get("transform")),
             # A pose cut by its image border is moved so the cut stays out of the frame; false keeps it where x puts it.
             **({"edgeSnap": False} if value.get("edgeSnap") is False else {}),
@@ -331,6 +332,9 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
     enter = entrances.entrance(entry, duration)
     if enter:
         item["enter"] = enter
+    playing = cast_animation.planned(entry, duration)
+    if playing:
+        item["animation"] = playing
     if entry.get("edgeSnap") is False:
         item["edgeSnap"] = False
     return item
