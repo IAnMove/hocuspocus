@@ -1610,7 +1610,7 @@ from routers.character_kit_face import create_character_kit_face_router
 
 api.include_router(create_character_kit_face_router(
     workspace_dir=lambda workspace: _workspace_dir(_character_kit_workspace(workspace)), uploads_root=lambda: os.path.join(os.getcwd(), "uploads"),
-    local_mcp=lambda: _local_mcp, model_defaults=lambda model: dict(wgp.get_default_settings(model) or {}) if wgp.get_model_def(model) else {},
+    local_mcp=lambda: _local_mcp, model_defaults=lambda model: dict(wgp.get_default_settings(model) or {}) if wgp.get_model_def(model) else {}, services=lambda: wgp.server_config.get("services") or {},
 ))
 
 

@@ -3,8 +3,10 @@
 ``characters.animation.make`` is the way in: it starts the same server job the Character Creator and the Wizard start
 (services/character_animation_job.py), so a person reviews in the app what an agent made, and the other way round. The catalog and
 the single-pose prompt (``characters.animations``) and the sheet joiner (``characters.animation.sheet``) stay for an agent that
-wants to make the poses itself. Each tool is a thin projection of an HTTP route (routers/character_animation_jobs.py,
-routers/character_kit_face.py), like the rest of services/series_commands.py, which merges ``OPERATIONS`` and ``RUNNERS``.
+wants to make the poses itself. ``characters.animation.review`` approves or rejects one for a person, but only in «Modo un solo
+disparo» (``agent_autonomy`` = ``one_shot``, services/agent_autonomy.py). Each tool is a thin projection of an HTTP route
+(routers/character_animation_jobs.py, routers/character_animation_review.py, routers/character_kit_face.py), like the rest of
+services/series_commands.py, which merges ``OPERATIONS`` and ``RUNNERS``.
 """
 from __future__ import annotations
 
@@ -41,7 +43,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "custom": {"type": "object", "additionalProperties": False, "required": ["title", "view", "poses"], "properties": {
              "title": {"type": "string", "maxLength": 80}, "view": _CUSTOM_VIEW,
              "poses": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "string", "maxLength": 600}}}},
-         "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}},
+         "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
         "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21), "
@@ -50,12 +52,28 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "pass a new slug and custom {title, view bust|front|side, poses: one text per pose, up to 6}. pose makes that one pose of an "
         "animation already made again and keeps the others. Returns a job: follow it with characters.animation.status (poses, "
         "stage, result); a failure keeps the poses already made, so make it again to continue. One animation is made at a time. "
-        "Never approve it yourself: a person plays it in Characters › Animaciones and approves or rejects it.",
+        "It is saved pending: a person plays it in Characters › Animaciones and approves or rejects it. Approve it yourself only with "
+        "characters.animation.review, and only when the owner turned on the one-shot mode (agent_autonomy = one_shot); otherwise that tool "
+        "refuses. In that mode autoApprove: true makes the job approve it for you when the sheet passes the automatic checks (cell count "
+        "and size, figures filled with clean alpha and not a keyed rectangle, feet on one ground line, figures of one size); a sheet that "
+        "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review.",
+    ),
+    "characters.animation.review": (
+        {"workspace": _WORKSPACE, "character_id": _ID, "animation": {"type": "string", "minLength": 1, "maxLength": 64},
+         "decision": {"enum": ["approve", "reject"]}, "note": {"type": "string", "maxLength": 500}},
+        ["workspace", "character_id", "animation", "decision"], True,
+        "Approve or reject an animation of a saved character, as the agent: only when the owner turned on the one-shot mode (Settings › "
+        "Services, agent_autonomy = one_shot). In the default review mode it refuses with an error: a person approves it in Characters › "
+        "Animaciones. Look at the sheet first (its picture is result.sheet of characters.animation.status; the figure should be the same "
+        "character, one size, feet on one line). note is why, up to 500 characters; the app shows the animation as «approved by the agent» "
+        "with that note so the owner can audit and revert it. A rejected animation keeps its poses: make one pose again with "
+        "characters.animation.make (pose) or all of it again. A decision a person already gave is not overturned.",
     ),
     "characters.animation.status": (
         {"workspace": _WORKSPACE, "job_id": _ID}, ["workspace", "job_id"], False,
         "Read an animation job of characters.animation.make: queued, running (stage poses | sheet, each pose waiting | generating | "
-        "keying | ready | failed), completed (result: animation, sheet, count), failed (error), cancelling, cancelled or interrupted "
+        "keying | ready | failed), completed (result: animation, sheet, count, reviewState; with autoApprove also autoApproved and checks), "
+        "failed (error), cancelling, cancelled or interrupted "
         "(a restart). Poses already made are kept for the next try.",
     ),
     "characters.animation.cancel": (
@@ -94,8 +112,14 @@ def _sheet(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 
 def _make(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body = {"workspace": data["workspace"], "kitId": data["character_id"], "animation": data["animation"],
-            **{key: data[key] for key in ("custom", "pose", "model") if key in data}}
+            **{key: data[key] for key in ("custom", "pose", "model", "autoApprove") if key in data}}
     return request("POST", f"{_BASE}/make", body=body)
+
+
+def _review(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], "kitId": data["character_id"], "animation": data["animation"], "decision": data["decision"],
+            **({"note": data["note"]} if "note" in data else {})}
+    return request("POST", f"{_BASE}/review", body=body)
 
 
 def _status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
@@ -109,6 +133,7 @@ def _cancel(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) ->
 RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.animations": _catalog,
     "characters.animation.make": _make,
+    "characters.animation.review": _review,
     "characters.animation.status": _status,
     "characters.animation.cancel": _cancel,
     "characters.animation.sheet": _sheet,

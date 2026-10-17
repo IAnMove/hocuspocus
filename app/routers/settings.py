@@ -12,7 +12,7 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, Request
 
-from services import debug_trace, execution_mode
+from services import agent_autonomy, debug_trace, execution_mode
 from services import settings_store
 from services.settings_store import (
     _DEFAULT_LLM_REPO,
@@ -360,6 +360,8 @@ def create_settings_services_router(
             "flashvsr_mode": services.get("flashvsr_mode", 1),
             "flashvsr_topk_ratio": services.get("flashvsr_topk_ratio", 0.0),
             "flashvsr_backend": services.get("flashvsr_backend", "auto"),
+            # «Modo un solo disparo»: review (default) = a person approves what an agent makes; one_shot = the agent approves too.
+            agent_autonomy.KEY: agent_autonomy.autonomy_of(services),
         }
     @router.put("/api/v1/services-config")
     async def update_services_config(request: Request):
@@ -379,7 +381,7 @@ def create_settings_services_router(
             "show_experimental", "auto_performance", "storage_allow_linked_removal",
             "director_multishot_lora_mode", "director_reference_anchor", "director_lighting_continuity", "director_keep_reference_wardrobe",
             "flashvsr_mode", "flashvsr_topk_ratio", "flashvsr_backend",
-            "creation_runtime_idle_seconds",
+            "creation_runtime_idle_seconds", agent_autonomy.KEY,
         }
 
         services = wgp.server_config.setdefault("services", {})
@@ -391,6 +393,8 @@ def create_settings_services_router(
             # Don't overwrite a real key with its masked version
             if key.endswith("_api_key") and value and "..." in value:
                 continue
+            if key == agent_autonomy.KEY:
+                value = agent_autonomy.normalize(value)  # anything that is not "one_shot" is "review"
             services[key] = value
             updated[key] = _mask_key(value) if key.endswith("_api_key") else value
             if key.endswith("_api_key"):
