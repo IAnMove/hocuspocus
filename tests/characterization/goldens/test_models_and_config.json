@@ -4636,6 +4636,7 @@
   },
   "services config": {
     "body": {
+      "agent_autonomy": "review",
       "anthropic_api_key": "",
       "anthropic_api_key_set": false,
       "auto_performance": false,

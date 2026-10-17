@@ -29,6 +29,10 @@ CATALOG = Path(__file__).resolve().parents[1] / "shared" / "character_animations
 LOOPS = ("loop", "pingpong", "once")
 FACINGS = ("left", "right", "front")
 REVIEW_STATES = ("pending", "approved", "rejected")
+# Who gave the review: a person in the app, or an agent in «Modo un solo disparo» (services/agent_autonomy.py). Data made before this
+# has neither, and stays valid.
+REVIEWERS = ("person", "agent")
+MAX_REVIEW_NOTE = 500
 # What keeps a figure the same size from pose to pose: its height (a cycle: the framing the model drew, so a crouch stays lower than a
 # stand), the width of its legs (a standing gesture: a raised hand makes it taller, not bigger, and arms hanging or raised change how
 # wide the rest of the body is, but the legs do not move) or the size of its head (a bust: the model frames each pose a little
@@ -214,10 +218,15 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         raise CharacterAnimationError(f"{label} loop, facing or review state is invalid")
     result: dict[str, Any] = {"sheet": _sheet(raw.get("sheet")), "frames": _frames(raw.get("frames")), "fps": fps, "loop": loop,
                               "facing": facing, "reviewState": raw.get("reviewState", "pending")}
-    for key, maximum in (("view", 40), ("title", 80), ("prompt", 4000), ("model", 240), ("createdAt", 80)):
+    for key, maximum in (("view", 40), ("title", 80), ("prompt", 4000), ("model", 240), ("createdAt", 80),
+                         ("reviewNote", MAX_REVIEW_NOTE), ("reviewedAt", 80)):
         text = _text(raw.get(key), f"{label} {key}", maximum)
         if text:
             result[key] = text
+    if raw.get("reviewedBy") is not None:
+        if raw["reviewedBy"] not in REVIEWERS:
+            raise CharacterAnimationError(f"{label} reviewedBy is one of {', '.join(REVIEWERS)}")
+        result["reviewedBy"] = raw["reviewedBy"]
     if raw.get("scaleBy") is not None:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")

@@ -66,3 +66,60 @@ test('the character is found by name or id, or is the only or the active one, an
   assert.throws(() => findAnimationKit(kits, undefined, ''), /Say which character: Heroína, Inés/)
   assert.throws(() => findAnimationKit({}, undefined, ''), /Create one in Character Creator first|create one in Character Creator first/i)
 })
+
+test('the Wizard reviews an animation through the same route as characters.animation.review, and the server decides whether the mode allows it', async () => {
+  assert.equal(AGENT_ACTION_TYPES.includes('review_character_animation'), true)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /review_character_animation/)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /Modo un solo disparo/, 'the Wizard is told it approves only in one-shot mode')
+  const properties = (HOCUSPOCUS_AGENT_RESPONSE_SCHEMA as { properties: { actions: { items: { properties: Record<string, unknown> } } } }).properties.actions.items.properties
+  for (const key of ['kit_name', 'animation_id', 'decision', 'note', 'auto_approve']) assert.ok(properties[key], key)
+  const review = getCapability('review_character_animation')!
+  assert.equal(review.risk, 'edit')
+  assert.equal(review.confirmation, 'none', 'the mode is the owner\'s consent; the server refuses without it')
+  assert.equal(review.resolve({ type: 'review_character_animation', animation_id: 'walk', decision: 'maybe' }), null)
+  assert.equal(review.resolve({ type: 'review_character_animation', animation_id: 'Not A Slug!', decision: 'approve' }), null)
+  assert.deepEqual(review.resolve({ type: 'review_character_animation', kit_name: 'Heroína', animation_id: 'Walk', decision: 'reject', note: ' la mano no se ve ' }),
+    { type: 'review_character_animation', kitName: 'Heroína', animation: 'walk', decision: 'reject', note: 'la mano no se ve' })
+  const make = getCapability('make_character_animation')!
+  assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk', auto_approve: true, confirm: true }),
+    { type: 'make_character_animation', kitName: '', animation: 'walk', confirm: true, autoApprove: true })
+  assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk', auto_approve: false, confirm: true }),
+    { type: 'make_character_animation', kitName: '', animation: 'walk', confirm: true }, 'approval is asked for, never assumed')
+
+  const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
+  let mode: 'one_shot' | 'review' = 'one_shot'
+  const previousFetch = globalThis.fetch
+  Object.assign(globalThis, { fetch: async (url: string, init?: { body?: string }) => {
+    calls.push({ url, ...(init?.body ? { body: JSON.parse(init.body) } : {}) })
+    if (url.includes('/animations/review')) {
+      return mode === 'one_shot'
+        ? { ok: true, json: async () => ({ review: { kitId: 'hero', animation: 'walk', reviewState: 'approved', reviewedBy: 'agent', reviewedAt: 'now', reviewNote: 'ok', revision: 3 } }) }
+        : { ok: false, json: async () => ({ detail: { code: 'agent_review_off', message: 'Agent review is off (agent_autonomy is review): apruébala en Personajes › Animaciones' } }) }
+    }
+    if (url.includes('/animations/make')) {
+      return { ok: true, json: async () => ({ job: { jobId: 'anim-9', status: 'running', title: 'Walk', takes: [{ id: 'a' }], autoApprove: mode === 'one_shot',
+        ...(mode === 'review' ? { autoApproveNote: 'autoApprove was ignored: agent_autonomy is review' } : {}) } }) }
+    }
+    return { ok: true, json: async () => ({ ...emptyCharacterKitLibrary(), revision: 2, activeId: 'ines', kits }) }
+  } })
+  try {
+    const { createDefaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+    const context = { adapters: createDefaultApplicationAdapters(), workspace: 'show' }
+    const action = review.resolve({ type: 'review_character_animation', kit_name: 'heroína', animation_id: 'walk', decision: 'approve', note: 'ok' })!
+    const outcome = await review.execute(action, context)
+    const posted = calls.find(call => call.url.includes('/animations/review'))!
+    assert.equal(posted.url, '/api/v1/character-kits/animations/review')
+    assert.deepEqual(posted.body, { workspace: 'show', kitId: 'hero', animation: 'walk', decision: 'approve', note: 'ok' }, 'the body characters.animation.review sends')
+    assert.match(outcome.message, /aprobado|approved/i)
+    assert.deepEqual(outcome.target, { kind: 'character_kit', id: 'hero', title: 'Heroína' })
+    const asked = make.resolve({ type: 'make_character_animation', kit_name: 'heroína', animation_id: 'walk', auto_approve: true, confirm: true })!
+    await make.execute(asked, context)
+    assert.deepEqual(calls.filter(call => call.url.includes('/animations/make')).at(-1)!.body, { workspace: 'show', kitId: 'hero', animation: 'walk', autoApprove: true })
+    mode = 'review'
+    await assert.rejects(review.execute(action, context), /Agent review is off.*Personajes › Animaciones/s, 'review mode: the person reads what to do instead')
+    const ignored = await make.execute(asked, context)
+    assert.match(ignored.message, /autoApprove was ignored: agent_autonomy is review/, 'the person is told the approval stays theirs')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})

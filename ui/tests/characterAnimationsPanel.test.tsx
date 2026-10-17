@@ -212,3 +212,43 @@ test('an animation started elsewhere (the Wizard, an MCP tool) shows up while th
     cleanup()
   }
 })
+
+test('an animation the agent reviewed says so with its note, and Approve and Reject take the decision back as the person\'s', async () => {
+  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const note = 'Automatic checks passed (8): cell_count 4, scale_spread 0.96'
+  const byAgent = { ...walk, reviewState: 'approved' as const, reviewedBy: 'agent', reviewNote: note, reviewedAt: '2026-10-17T09:00:00.000Z' }
+  const byPerson = { ...walk, reviewState: 'approved' as const, reviewedBy: 'person' }
+  const api = server({ library: kitOf({ walk: byAgent, run: byPerson, wave: { ...walk, reviewState: 'pending' as const } }) })
+  const saved: Array<{ kit: { animations: Record<string, Record<string, unknown>> } }> = []
+  const original = globalThis.fetch
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (init?.method === 'PATCH') {
+      const body = JSON.parse(String(init.body))
+      saved.push(body)
+      api.state.library = { ...kitOf(), revision: 4, kits: { ana: body.kit } }
+      return json(api.state.library)
+    }
+    return api.fetch(input, init)
+  }) as typeof fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.ok(screen.getByTestId('animation-walk')))
+    const badge = screen.getByTestId('animation-walk').querySelector('[data-testid="animation-agent-badge"]') as HTMLElement
+    assert.match(badge.textContent!, /aprobada por el agente|approved by the agent/)
+    assert.equal(badge.getAttribute('title'), note, 'the note is the tooltip, so the owner can audit it')
+    assert.equal(Boolean(screen.getByTestId('animation-run').querySelector('[data-testid="animation-agent-badge"]')), false, 'a person\'s review shows no badge')
+    assert.equal(Boolean(screen.getByTestId('animation-wave').querySelector('[data-testid="animation-agent-badge"]')), false, 'nor does one still waiting')
+    fireEvent.click([...screen.getByTestId('animation-walk').querySelectorAll('button')].find(button => /Rechazar|Reject/.test(button.textContent ?? ''))!)
+    await waitFor(() => assert.equal(saved.length, 1))
+    const walkSaved = saved[0].kit.animations.walk
+    assert.deepEqual([walkSaved.reviewState, walkSaved.reviewedBy, walkSaved.reviewNote], ['rejected', 'person', undefined])
+    assert.deepEqual(saved[0].kit.animations.run, byPerson, 'the other animations are saved as they were')
+    await waitFor(() => assert.equal(Boolean(screen.getByTestId('animation-walk').querySelector('[data-testid="animation-agent-badge"]')), false)) // not the element itself: a failed assertion would print the whole DOM node
+    assert.match(screen.getByTestId('animation-walk').textContent!, /Rechazada|Rejected/)
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})

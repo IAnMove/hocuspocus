@@ -1194,6 +1194,7 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.generate_comic_panel` | `generate_comic_panel` | `generatePanel` | `ui/src/features/agent/applicationAdapters.ts` | `comic.generatePanel` |
 | `other.create_character_kit` | `create_character_kit` | `create` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.create` |
 | `other.make_character_animation` | `make_character_animation` | `registerCharacterAnimationCapabilities` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.make` |
+| `other.review_character_animation` | `review_character_animation` | `executeReviewCharacterAnimation` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.review` |
 | `other.open_character_kit` | `open_character_kit` | `openKit` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.openKit` |
 | `other.update_character_kit` | `update_character_kit` | `update` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.update` |
 | `other.attach_character_kit_references` | `attach_character_kit_references` | `attachReference` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.attachReference` |

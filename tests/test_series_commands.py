@@ -224,6 +224,27 @@ def test_character_animations_and_their_sheet_go_through_the_http_contract(tmp_p
     assert _operation_schema("characters.animation.sheet", *OPERATIONS["characters.animation.sheet"])["mutation"] is True
 
 
+def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_the_same_routes_as_the_wizard(tmp_path):
+    from services.series_commands import _operation_schema
+    handlers, calls, _, _ = harness(tmp_path, [{"review": {"reviewState": "approved", "reviewedBy": "agent"}}, {"job": {"jobId": "anim-1", "autoApprove": True}},
+                                               {"job": {"jobId": "anim-2"}}])
+    reviewed = call(handlers, "characters.animation.review", {"workspace": "w", "character_id": "ana", "animation": "walk", "decision": "approve", "note": "ok"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/review",
+                        {"workspace": "w", "kitId": "ana", "animation": "walk", "decision": "approve", "note": "ok"}), "the Wizard posts the same body to this route"
+    assert reviewed["result"]["review"]["reviewedBy"] == "agent"
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "walk", "autoApprove": True})
+    assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make", {"workspace": "w", "kitId": "ana", "animation": "walk", "autoApprove": True})
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "wave"})
+    assert "autoApprove" not in calls[2][2], "approval is asked for, never assumed"
+    review = _operation_schema("characters.animation.review", *OPERATIONS["characters.animation.review"])
+    assert review["mutation"] is True and review["inputSchema"]["properties"]["input"]["required"] == ["workspace", "character_id", "animation", "decision"]
+    assert review["inputSchema"]["properties"]["input"]["properties"]["decision"] == {"enum": ["approve", "reject"]}
+    make = OPERATIONS["characters.animation.make"]
+    assert "autoApprove" in make[0] and "Never approve it yourself" not in make[3] and "characters.animation.review" in make[3] and "one_shot" in make[3]
+    from services.mcp_profiles import SERIES_TOOLS
+    assert "characters.animation.review" in SERIES_TOOLS
+
+
 def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [{"jobId": "native-1", "status": "queued"}, {"jobId": "native-1", "status": "running"},
                                                {"jobId": "native-1", "status": "queued"}])

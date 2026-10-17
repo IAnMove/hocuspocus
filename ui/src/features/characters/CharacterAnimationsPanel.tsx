@@ -9,6 +9,7 @@ import {
 } from '../../lib/characterAnimations'
 import { characterImageModels, preferredCharacterImageModel } from '../../lib/characterImageModels'
 import type { CharacterKit, CharacterKitReviewState } from '../../lib/characterKit'
+import { AnimationAgentBadge } from './AnimationAgentBadge'
 import { AnimationSheetPlayer } from './AnimationSheetPlayer'
 import { CustomAnimationForm } from './CustomAnimationForm'
 import { pendingCustomDefs, useCharacterAnimations } from './useCharacterAnimations'
@@ -90,7 +91,10 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
         <h5 className="text-sm font-medium">{localized(def.title, i18n.language)}</h5>
         <p className="text-[11px] text-text-muted">{def.custom ? t('animations.custom.summary', { count: def.poses.length, view: t(`animations.view.${def.view}`) }) : localized(def.summary, i18n.language)}</p>
       </div>
-      <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
+      <div className="flex shrink-0 flex-wrap justify-end gap-1">
+        {made && <AnimationAgentBadge animation={made} />}
+        <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
+      </div>
     </header>
     {run && <RunProgress def={def} run={run} />}
     {made && !(run && isActiveJob(run)) && <MadeAnimation def={def} made={made} actions={actions} />}

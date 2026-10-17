@@ -106,7 +106,11 @@ character's ink.
 
 `characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
-approves. Cards `walk-cycle-sheet`, `character-reaction` play it.
+approves it in Characters › Animaciones. Cards `walk-cycle-sheet`, `character-reaction` play it.
+Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
+`autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
+pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.
+The app marks it «aprobada por el agente» so the owner can revert it. In `review` mode both are refused.
 
 In a Series shot a cast entry plays an **approved** animation of its kit (`animation`, see *cast*), and `enterGait: "walk"`
 walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet: «animation

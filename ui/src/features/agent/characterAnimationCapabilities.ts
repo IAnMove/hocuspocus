@@ -1,15 +1,18 @@
 import type { defineCapability } from './capabilityRegistry'
 import i18n from '../../i18n'
 import { fetchCharacterKitLibrary } from '../../api/characters'
-import { startAnimationJob, type CustomAnimationRequest } from '../../api/characterAnimationJobs'
+import { reviewAnimation, startAnimationJob, type CustomAnimationRequest } from '../../api/characterAnimationJobs'
 import { animationDef, customViews, MAX_CUSTOM_POSES, MAX_CUSTOM_TEXT } from '../../lib/characterAnimations'
 import type { CharacterKit } from '../../lib/characterKit'
 
 /**
  * "Hazle una cara de enfado a Heroína", "que Inés salude": one animation of a saved character, made by the same server job that the
  * Character Creator's Animaciones panel and the characters.animation.make MCP tool start (POST /api/v1/character-kits/animations/make).
- * Every pose is made from the character's own picture and the result waits for a person's review in the panel: the Wizard never
- * approves it. A job takes minutes, so the Wizard starts it and says where to follow it instead of waiting.
+ * Every pose is made from the character's own picture and the result waits for a person's review in the panel. The Wizard approves it only
+ * in «Modo un solo disparo» (Settings › Services, agent_autonomy = one_shot): then `auto_approve` lets the job approve a sheet that passes
+ * the automatic checks and `review_character_animation` approves or rejects one (POST /api/v1/character-kits/animations/review, the route
+ * of the characters.animation.review MCP tool); with the mode off the server refuses it. A job takes minutes, so the Wizard starts it and
+ * says where to follow it instead of waiting.
  */
 export interface AgentMakeCharacterAnimationAction {
   type: 'make_character_animation'
@@ -18,7 +21,18 @@ export interface AgentMakeCharacterAnimationAction {
   animation: string
   custom?: CustomAnimationRequest
   pose?: string
+  /** Ask the job to approve what it made when the sheet passes the automatic checks. The server ignores it (and says so) in review mode. */
+  autoApprove?: boolean
   confirm: true
+}
+
+/** "Aprueba la animación de andar de Heroína": the agent's own review of an animation, only in «Modo un solo disparo». */
+export interface AgentReviewCharacterAnimationAction {
+  type: 'review_character_animation'
+  kitName: string
+  animation: string
+  decision: 'approve' | 'reject'
+  note: string
 }
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -51,11 +65,26 @@ export async function executeMakeCharacterAnimation(action: AgentMakeCharacterAn
   const library = await fetchCharacterKitLibrary(space)
   const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
   const job = await startAnimationJob({ workspace: space, kitId: kit.id, animation: action.animation,
-    ...(action.pose ? { pose: action.pose } : {}), ...(action.custom ? { custom: action.custom } : {}) })
+    ...(action.pose ? { pose: action.pose } : {}), ...(action.custom ? { custom: action.custom } : {}), ...(action.autoApprove ? { autoApprove: true } : {}) })
   const key = job.status === 'queued' ? 'wizard:replies.characterAnimationQueued' : 'wizard:replies.characterAnimationStarted'
+  const said = i18n.t(key, { name: kit.name, animation: job.title || action.animation, poses: job.takes.length, jobId: job.jobId })
   return {
-    message: i18n.t(key, { name: kit.name, animation: job.title || action.animation, poses: job.takes.length, jobId: job.jobId }),
+    // autoApprove asked for in review mode: the server ignores it and says why, so the person knows they approve it themselves.
+    message: job.autoApproveNote ? `${said}\n${job.autoApproveNote}` : said,
     metadata: job as unknown as Record<string, unknown>, jobId: job.jobId,
+    target: { kind: 'character_kit', id: kit.id, title: kit.name },
+  }
+}
+
+export async function executeReviewCharacterAnimation(action: AgentReviewCharacterAnimationAction, workspace?: string) {
+  const space = workspace || 'default'
+  const library = await fetchCharacterKitLibrary(space)
+  const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
+  // The server decides: in review mode (the default) it answers with the way to approve by hand, and that is what the person reads.
+  const review = await reviewAnimation({ workspace: space, kitId: kit.id, animation: action.animation, decision: action.decision, ...(action.note ? { note: action.note } : {}) })
+  return {
+    message: i18n.t(review.reviewState === 'approved' ? 'wizard:replies.characterAnimationApproved' : 'wizard:replies.characterAnimationRejected', { name: kit.name, animation: action.animation }),
+    metadata: review as unknown as Record<string, unknown>,
     target: { kind: 'character_kit', id: kit.id, title: kit.name },
   }
 }
@@ -64,9 +93,9 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
   register<AgentMakeCharacterAnimationAction>({
     name: 'make_character_animation',
     title: 'Make an animation of a saved character',
-    description: 'Make one small animation (a walk, a gesture such as waving, or an anime expression such as angry) of a saved Character Kit with its own picture as the identity reference, on the server: every pose with Qwen, keyed, joined into a sprite sheet and saved on the character as pending review. animation_id is an id of the animation catalog; for one the catalog does not list give a new lowercase slug and custom_animation {title, view bust|front|side, poses: one description per pose, up to six}. pose_id makes that one pose of an animation already made again. It takes minutes, one animation at a time; the person reviews and approves it in Character Creator › Animaciones (you never approve it).',
+    description: 'Make one small animation (a walk, a gesture such as waving, or an anime expression such as angry) of a saved Character Kit with its own picture as the identity reference, on the server: every pose with Qwen, keyed, joined into a sprite sheet and saved on the character as pending review. animation_id is an id of the animation catalog; for one the catalog does not list give a new lowercase slug and custom_animation {title, view bust|front|side, poses: one description per pose, up to six}. pose_id makes that one pose of an animation already made again. It takes minutes, one animation at a time; the person reviews and approves it in Character Creator › Animaciones. You approve it only when the owner turned on one-shot mode (Settings › Services): then auto_approve=true lets the job approve it when the sheet passes the automatic checks, and review_character_animation approves or rejects one yourself; otherwise the server refuses.',
     useWhen: 'The user asks for an animation, gesture, expression or walk of a saved character ("hazle una cara de enfado a Heroína", "que salude", "una animación de andar", "una sonrisa pícara"), or to redo one pose of one.',
-    parameters: ['kit_name', 'animation_id', 'custom_animation', 'pose_id', 'confirm'],
+    parameters: ['kit_name', 'animation_id', 'custom_animation', 'pose_id', 'auto_approve', 'confirm'],
     inputSchema: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -74,7 +103,7 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
         custom_animation: { type: 'object', additionalProperties: false, required: ['title', 'view', 'poses'], properties: {
           title: { type: 'string', maxLength: 80 }, view: { enum: [...customViews] },
           poses: { type: 'array', minItems: 1, maxItems: MAX_CUSTOM_POSES, items: { type: 'string', maxLength: MAX_CUSTOM_TEXT } } } },
-        pose_id: { type: 'string', maxLength: 120 }, confirm: { const: true },
+        pose_id: { type: 'string', maxLength: 120 }, auto_approve: { type: 'boolean' }, confirm: { const: true },
       },
       required: ['type', 'animation_id', 'confirm'],
     },
@@ -84,7 +113,7 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
       const custom = customOf(raw.custom_animation)
       if (raw.confirm !== true || !SLUG.test(animation) || custom === null) return null
       return { type: 'make_character_animation', kitName: text(raw.kit_name, 160), animation, confirm: true,
-               ...(custom ? { custom } : {}), ...(text(raw.pose_id, 120) ? { pose: text(raw.pose_id, 120) } : {}) }
+               ...(custom ? { custom } : {}), ...(text(raw.pose_id, 120) ? { pose: text(raw.pose_id, 120) } : {}), ...(raw.auto_approve === true ? { autoApprove: true } : {}) }
     },
     validate(action) {
       if (action.confirm !== true) return ['confirmation is required']
@@ -96,6 +125,35 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
     report: { targetKind: 'character_kit', successState: 'queued' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'character_creator', anchors: ['animations'], replay: 'atomic' },
+  })
+  register<AgentReviewCharacterAnimationAction>({
+    name: 'review_character_animation',
+    title: 'Approve or reject the animation of a saved character',
+    description: 'Approve or reject one made animation of a saved Character Kit as the agent. It works only when the owner turned on one-shot mode (Settings › Services); in the default review mode the server refuses and the person approves it in Character Creator › Animaciones. Look at the sheet first (the same character, one size, feet on one line). note says why; the app shows the animation as "approved by the agent" with that note so the owner can audit and revert it. A rejected animation keeps its poses: make one pose again with make_character_animation (pose_id).',
+    useWhen: 'One-shot mode is on and the user asks you to approve or reject an animation you made ("aprueba la animación de andar de Heroína", "recházala, la mano no se ve").',
+    parameters: ['kit_name', 'animation_id', 'decision', 'note'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: {
+        type: { const: 'review_character_animation' }, kit_name: { type: 'string', maxLength: 160 }, animation_id: { type: 'string', maxLength: 64 },
+        decision: { enum: ['approve', 'reject'] }, note: { type: 'string', maxLength: 500 },
+      },
+      required: ['type', 'animation_id', 'decision'],
+    },
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.reviewingCharacterAnimation',
+    resolve(raw) {
+      const animation = text(raw.animation_id, 64).toLowerCase()
+      if (!SLUG.test(animation) || (raw.decision !== 'approve' && raw.decision !== 'reject')) return null
+      return { type: 'review_character_animation', kitName: text(raw.kit_name, 160), animation, decision: raw.decision, note: text(raw.note, 500) }
+    },
+    validate() { return [] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.characterAnimations.review(action, context.workspace) },
+    correlate(_action, outcome) { return outcome.target },
+    async track(_action, outcome) { return outcome },
+    report: { targetKind: 'character_kit', successState: 'completed' },
     summarize(_action, outcome) { return outcome.message },
     presentation: { destination: 'character_creator', anchors: ['animations'], replay: 'atomic' },
   })

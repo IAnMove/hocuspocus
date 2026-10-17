@@ -11,6 +11,7 @@ from typing import Any
 from fastapi import HTTPException
 
 from app_identity import read_app_version
+from services import agent_autonomy
 from services.kernel.config import write_private_json
 from services.kernel.paths import safe_join
 from services.media_refs import parse_media_ref
@@ -202,6 +203,7 @@ def services_config() -> dict[str, Any]:
         "ltx_progressive_pipeline": False,
         "show_experimental": False,
         "auto_performance": False,
+        "agent_autonomy": agent_autonomy.autonomy_of(services),
     }
 
 
@@ -245,6 +247,6 @@ def merge_services(partial: dict[str, Any]) -> dict[str, Any]:
     for key, value in partial.items():
         if key.endswith("_set"):
             continue
-        services[key] = value
+        services[key] = agent_autonomy.normalize(value) if key == agent_autonomy.KEY else value
     save_config(data)
     return services_config()

@@ -106,6 +106,19 @@ def test_a_kit_keeps_its_animations_and_drops_what_it_does_not_know():
         normalize_kit_animations({f"a{index}": _entry() for index in range(animations.MAX_ANIMATIONS + 1)})
 
 
+def test_who_reviewed_an_animation_and_why_survives_a_save_and_older_data_without_it_stays_valid():
+    entry = _entry(reviewState="approved", reviewedBy="agent", reviewNote="  same character,\n one size ", reviewedAt="2026-10-17T10:00:00.000Z")
+    kept = normalize_kit_animations({"walk": entry})["walk"]
+    assert (kept["reviewState"], kept["reviewedBy"], kept["reviewNote"], kept["reviewedAt"]) == ("approved", "agent", "same character,\n one size", "2026-10-17T10:00:00.000Z")
+    assert normalize_kit_animations({"walk": kept})["walk"] == kept, "saving it again changes nothing"
+    older = normalize_kit_animations({"walk": _entry(reviewState="approved")})["walk"]
+    assert older["reviewState"] == "approved" and not {"reviewedBy", "reviewNote", "reviewedAt"} & set(older)
+    assert normalize_kit_animations({"walk": _entry(reviewedBy="person")})["walk"]["reviewedBy"] == "person"
+    for bad in (_entry(reviewedBy="robot"), _entry(reviewedBy=1), _entry(reviewNote="x" * 501), _entry(reviewedAt="x" * 81)):
+        with pytest.raises(CharacterAnimationError):
+            normalize_kit_animations({"walk": bad})
+
+
 def test_a_custom_animation_keeps_its_title_its_scale_mode_and_the_words_of_each_pose():
     entry = _entry(title="Sonrisa pícara", scaleBy="face", view="bust", frames=[{"id": "pose-1", "source": "/api/v1/file/c.png", "prompt": "A lopsided grin.", "label": "Sonrisa", "extra": 1}])
     kept = normalize_kit_animations({"sonrisa-picara": entry})["sonrisa-picara"]

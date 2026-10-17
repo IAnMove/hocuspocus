@@ -30,11 +30,25 @@ def _picture(path: Path, *, keyed: bool, shift: int = 0) -> None:
     Image.fromarray(pixels).save(path)
 
 
+def _spoil(path: Path, how: str) -> None:
+    """A keyed pose gone wrong: the figure at half the size of the others, or the key left the whole picture opaque."""
+    with Image.open(path) as opened:
+        image = opened.convert("RGBA")
+    if how == "small":
+        small = image.resize((image.width // 2, image.height // 2), Image.Resampling.NEAREST)
+        image = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        image.paste(small, (35, 100))
+    else:
+        image = Image.fromarray(np.full((image.height, image.width, 4), (200, 160, 120, 255), dtype=np.uint8))
+    image.save(path)
+
+
 class FakeServer:
     """What the job calls through ``LocalMcp.call``. ``refuse`` names pose ids whose picture fails."""
 
     def __init__(self, root: Path) -> None:
         self.root, self.calls, self.refuse, self.during = root, [], set(), None
+        self.spoil = {}  # n-th key (1-based) -> "small" (a pose drawn at half the size) | "box" (a key that left a whole rectangle)
 
     def of(self, tool: str) -> list[dict]:
         return [arguments["input"] for name, arguments in self.calls if name == tool]
@@ -56,6 +70,8 @@ class FakeServer:
             source = arguments["input"]["source"]
             name = f"{Path(source).stem}-key.png"
             _picture(self.root / name, keyed=True, shift=len(self.of("studio.key")) % 5)
+            if self.spoil.get(len(self.of("studio.key"))):
+                _spoil(self.root / name, self.spoil[len(self.of("studio.key"))])
             # The shape the real handler answers (services/studio_key.py ``command_handlers``): an operation envelope that is itself
             # "completed", with the keyed file inside ``result``.
             return {"version": 1, "status": "completed", "operation": "studio.key", "result": {
@@ -385,3 +401,223 @@ def test_the_http_routes_start_follow_and_cancel_a_job_and_say_why_they_refuse(w
     assert client.post("/api/v1/character-kits/animations/make", json={"workspace": WS, "kitId": "hero", "animation": "nope"}).status_code == 400
     assert client.get("/api/v1/character-kits/animations/jobs/anim-none", params={"workspace": WS}).status_code == 404
     assert client.get("/api/v1/character-kits/animations/jobs/..%2Fx", params={"workspace": WS}).status_code in (400, 404)
+
+
+# ----- «Modo un solo disparo» (services/agent_autonomy.py): the agent's review and the job's autoApprove -----
+
+ONE_SHOT = {"agent_autonomy": "one_shot"}
+
+
+def _mode(jobs, services):
+    jobs.deps.services = lambda: services
+
+
+def test_the_autonomy_setting_is_review_unless_it_says_one_shot():
+    from services import agent_autonomy
+    assert agent_autonomy.autonomy_of({}) == agent_autonomy.autonomy_of(None) == "review"
+    assert agent_autonomy.autonomy_of({"agent_autonomy": "one_shot"}) == "one_shot" and agent_autonomy.autonomy_of({"agent_autonomy": " One_Shot "}) == "one_shot"
+    for bad in ("always", "", None, True, 1, ["one_shot"], "one-shot"):
+        assert agent_autonomy.autonomy_of({"agent_autonomy": bad}) == "review", bad
+    assert agent_autonomy.is_one_shot(ONE_SHOT) and not agent_autonomy.is_one_shot({"agent_autonomy": "review"})
+
+
+def test_the_services_config_stores_and_returns_the_autonomy_and_anything_else_is_review(monkeypatch):
+    from types import SimpleNamespace
+    from routers import settings
+    wgp = SimpleNamespace(server_config={"services": {}})
+    monkeypatch.setattr(settings.settings_store, "wgp", None, raising=False)
+    router = settings.create_settings_services_router(
+        wgp=wgp, _save_server_config=lambda: None, _effective_llm_routing=lambda services: ("minimax", "m", ""),
+        _active_production_profile=lambda: {}, _normalize_production_profile=lambda profile: profile, _PRODUCTION_PROFILE_CONFIG_KEY="profile")
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+    assert client.get("/api/v1/services-config").json()["agent_autonomy"] == "review", "the default: a person approves"
+    assert client.put("/api/v1/services-config", json={"agent_autonomy": "one_shot"}).json()["updated"] == {"agent_autonomy": "one_shot"}
+    assert wgp.server_config["services"]["agent_autonomy"] == "one_shot" and client.get("/api/v1/services-config").json()["agent_autonomy"] == "one_shot"
+    assert client.put("/api/v1/services-config", json={"agent_autonomy": "yolo"}).json()["updated"] == {"agent_autonomy": "review"}
+    assert wgp.server_config["services"]["agent_autonomy"] == "review"
+
+
+def test_the_core_server_keeps_the_autonomy_too(monkeypatch):
+    from services import core_workspace
+    store = {"services": {}}
+    monkeypatch.setattr(core_workspace, "load_config", lambda: store)
+    monkeypatch.setattr(core_workspace, "save_config", lambda data: None)
+    assert core_workspace.services_config()["agent_autonomy"] == "review"
+    assert core_workspace.merge_services({"agent_autonomy": "one_shot"})["agent_autonomy"] == "one_shot"
+    assert core_workspace.merge_services({"agent_autonomy": "whatever"})["agent_autonomy"] == "review"
+
+
+def _made(world, animation="walk"):
+    root, server, jobs = world
+    return root, server, jobs, jobs.start(WS, "hero", animation)
+
+
+def test_in_review_mode_an_agent_cannot_review_and_the_animation_stays_pending(world):
+    from services.character_animation_review import AnimationReviewError, review_kit_animation
+    root, server, jobs, _job = _made(world)
+    for services in (None, {}, {"agent_autonomy": "review"}, {"agent_autonomy": "bogus"}):
+        with pytest.raises(AnimationReviewError) as error:
+            review_kit_animation(str(root), "hero", "walk", "approve", "looks fine", "agent", services=services)
+        assert error.value.code == "agent_review_off" and error.value.status == 403
+        assert "Personajes › Animaciones" in str(error.value) and "modo un solo disparo" in str(error.value)
+    made = _kit(root)["animations"]["walk"]
+    assert made["reviewState"] == "pending" and "reviewedBy" not in made
+
+
+def test_in_one_shot_an_agent_approves_with_who_and_why_and_a_person_can_revert_it(world):
+    from services.character_animation_review import review_kit_animation
+    root, server, jobs, _job = _made(world)
+    done = review_kit_animation(str(root), "hero", "walk", "approve", "same character, one size", "agent", services=ONE_SHOT)
+    assert done["reviewState"] == "approved" and done["reviewedBy"] == "agent"
+    made = _kit(root)["animations"]["walk"]
+    assert (made["reviewState"], made["reviewedBy"], made["reviewNote"]) == ("approved", "agent", "same character, one size") and made["reviewedAt"].endswith("Z")
+    assert made["sheet"] and len(made["frames"]) == 4, "a review touches no picture"
+    assert _kit(root)["provenance"][-1] == {"method": "character-animation-review", "animation": "walk", "decision": "approve", "by": "agent"}
+    # What the panel does when a person rejects it: the kit is saved with the person's review, and the agent's note goes.
+    person = review_kit_animation(str(root), "hero", "walk", "reject", actor="person", services={})
+    assert person["reviewedBy"] == "person"
+    reverted = _kit(root)["animations"]["walk"]
+    assert reverted["reviewState"] == "rejected" and reverted["reviewedBy"] == "person" and "reviewNote" not in reverted
+
+
+def test_an_agent_cannot_overturn_what_a_person_decided_nor_review_what_does_not_exist(world):
+    from services.character_animation_review import AnimationReviewError, review_kit_animation
+    root, server, jobs, _job = _made(world)
+    review_kit_animation(str(root), "hero", "walk", "approve", actor="person")
+    with pytest.raises(AnimationReviewError) as error:
+        review_kit_animation(str(root), "hero", "walk", "reject", "no", "agent", services=ONE_SHOT)
+    assert error.value.code == "person_decided" and _kit(root)["animations"]["walk"]["reviewState"] == "approved"
+    # An approval saved before the reviewer was recorded is a person's too.
+    library = read_character_kit_library(str(root))
+    old = {key: value for key, value in _kit(root)["animations"]["walk"].items() if key not in {"reviewedBy", "reviewedAt", "reviewNote"}}
+    patch_character_kit(str(root), "hero", {**_kit(root), "animations": {"walk": old}}, base_revision=library["revision"], make_active=False)
+    with pytest.raises(AnimationReviewError) as error:
+        review_kit_animation(str(root), "hero", "walk", "reject", "", "agent", services=ONE_SHOT)
+    assert error.value.code == "person_decided"
+    for args, code, status in ((("ghost", "walk", "approve"), "kit_not_found", 404), (("hero", "wave", "approve"), "animation_not_found", 404),
+                               (("hero", "walk", "maybe"), "invalid_decision", 400)):
+        with pytest.raises(AnimationReviewError) as error:
+            review_kit_animation(str(root), *args, actor="person")
+        assert (error.value.code, error.value.status) == (code, status)
+    with pytest.raises(AnimationReviewError) as error:
+        review_kit_animation(str(root), "hero", "walk", "approve", "x" * 501, "person")
+    assert error.value.code == "note_too_long"
+
+
+def test_kit_data_from_before_the_reviewer_was_recorded_stays_valid_and_a_review_keeps_the_rest(world):
+    root, server, jobs, _job = _made(world)
+    made = _kit(root)["animations"]["walk"]
+    assert not {"reviewedBy", "reviewNote", "reviewedAt"} & set(made), "a job never records a reviewer"
+    library = read_character_kit_library(str(root))
+    saved = patch_character_kit(str(root), "hero", {**_kit(root), "animations": {"walk": {**made, "reviewState": "approved"}}}, base_revision=library["revision"],
+                                make_active=False)
+    assert saved["kits"]["hero"]["animations"]["walk"]["reviewState"] == "approved" and "reviewedBy" not in saved["kits"]["hero"]["animations"]["walk"]
+
+
+def test_a_rejected_animation_keeps_its_poses_for_a_remake(world):
+    from services.character_animation_review import review_kit_animation
+    root, server, jobs, _job = _made(world, "wave")
+    before = {frame["id"]: frame["source"] for frame in _kit(root)["animations"]["wave"]["frames"]}
+    review_kit_animation(str(root), "hero", "wave", "reject", "the hand is missing", "agent", services=ONE_SHOT)
+    rejected = _kit(root)["animations"]["wave"]
+    assert rejected["reviewState"] == "rejected" and {frame["id"]: frame["source"] for frame in rejected["frames"]} == before
+    pose = next(iter(before))
+    server.calls = []
+    again = jobs.start(WS, "hero", "wave", pose=pose)
+    assert again["status"] == "completed" and len(server.of("generation.image")) == 1, "only the pose asked for is made again"
+    remade = _kit(root)["animations"]["wave"]
+    assert remade["reviewState"] == "pending" and "reviewedBy" not in remade, "a remade animation is reviewed again"
+    assert {key: value for key, value in {frame["id"]: frame["source"] for frame in remade["frames"]}.items() if key != pose} == {key: value for key, value in before.items() if key != pose}
+
+
+def test_auto_approve_approves_a_good_sheet_in_one_shot_and_reports_the_checks(world):
+    root, server, jobs = world
+    _mode(jobs, ONE_SHOT)
+    job = jobs.start(WS, "hero", "walk", auto_approve=True)
+    assert job["status"] == "completed" and job["autoApprove"] is True and job["autoApproved"] is True
+    assert job["result"]["autoApproved"] is True and job["result"]["reviewState"] == "approved"
+    names = [check["id"] for check in job["checks"]]
+    assert names == ["cell_count", "cell_size", "filled_cells", "clean_alpha", "silhouette", "ground_line", "scale_spread", "scale_measure"]
+    assert all(check["ok"] for check in job["checks"]), job["checks"]
+    made = _kit(root)["animations"]["walk"]
+    assert made["reviewState"] == "approved" and made["reviewedBy"] == "agent" and made["reviewNote"].startswith("Automatic checks passed (8)")
+    assert jobs.status(WS, job["jobId"])["checks"] == job["checks"], "the job store reports them too"
+
+
+def test_auto_approve_leaves_a_bad_sheet_pending_with_the_failed_checks(world):
+    root, server, jobs = world
+    _mode(jobs, ONE_SHOT)
+    server.spoil = {3: "small"}
+    small = jobs.start(WS, "hero", "walk", auto_approve=True)
+    assert small["status"] == "completed" and small["autoApproved"] is False
+    assert [check["id"] for check in small["checks"] if not check["ok"]] == ["scale_spread"]
+    assert next(check for check in small["checks"] if check["id"] == "scale_spread")["value"] < 0.80
+    made = _kit(root)["animations"]["walk"]
+    assert made["reviewState"] == "pending" and "reviewedBy" not in made and small["result"]["reviewState"] == "pending"
+    assert small["reviewNote"].startswith("Automatic checks failed: scale_spread")
+    server.spoil, server.calls = {2: "box"}, []
+    box = jobs.start(WS, "hero", "walk", auto_approve=True)
+    assert box["autoApproved"] is False and "silhouette" in [check["id"] for check in box["checks"] if not check["ok"]]
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending"
+
+
+def test_auto_approve_is_ignored_with_a_note_in_review_mode_and_never_by_default(world):
+    root, server, jobs = world
+    for services in (None, {"agent_autonomy": "review"}):
+        _mode(jobs, services)
+        job = jobs.start(WS, "hero", "wave", auto_approve=True)
+        assert job["status"] == "completed" and job["autoApprove"] is False and "agent_autonomy is review" in job["autoApproveNote"]
+        assert "autoApproved" not in job and "checks" not in job
+        assert _kit(root)["animations"]["wave"]["reviewState"] == "pending"
+    _mode(jobs, ONE_SHOT)
+    plain = jobs.start(WS, "hero", "wave")
+    assert "autoApprove" not in plain and _kit(root)["animations"]["wave"]["reviewState"] == "pending", "approval is asked for, never assumed"
+
+
+def test_a_mode_switched_off_while_the_poses_are_made_leaves_the_animation_for_a_person(world):
+    root, server, jobs = world
+    state = dict(ONE_SHOT)
+    jobs.deps.services = lambda: state
+    server.during = lambda: state.update(agent_autonomy="review") if len(server.of("studio.key")) == 3 else None
+    job = jobs.start(WS, "hero", "walk", auto_approve=True)
+    assert job["autoApprove"] is True and job["autoApproved"] is False
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending" and job["reviewNote"].startswith("Agent review is off")
+
+
+def test_the_review_route_answers_403_in_review_mode_and_approves_in_one_shot(world):
+    from routers.character_animation_review import create_character_animation_review_router
+    root, server, jobs = world
+    config = {}
+    app = FastAPI()
+    app.include_router(create_character_animation_review_router(workspace_dir=lambda workspace: str(root), services=lambda: config), prefix="/api/v1/character-kits")
+    jobs.start(WS, "hero", "walk")
+    client = TestClient(app)
+    body = {"workspace": WS, "kitId": "hero", "animation": "walk", "decision": "approve", "note": "ok"}
+    refused = client.post("/api/v1/character-kits/animations/review", json=body)
+    assert refused.status_code == 403 and refused.json()["detail"]["code"] == "agent_review_off" and "Personajes › Animaciones" in refused.json()["detail"]["message"]
+    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending"
+    config.update(ONE_SHOT)
+    approved = client.post("/api/v1/character-kits/animations/review", json=body)
+    assert approved.status_code == 200 and approved.json()["review"]["reviewedBy"] == "agent" and _kit(root)["animations"]["walk"]["reviewedBy"] == "agent"
+    assert client.post("/api/v1/character-kits/animations/review", json={**body, "decision": "maybe"}).status_code == 422
+    assert client.post("/api/v1/character-kits/animations/review", json={**body, "actor": "person"}).status_code == 422, "the route has no way to claim to be a person"
+    assert client.post("/api/v1/character-kits/animations/review", json={**body, "animation": "wave"}).json()["detail"]["code"] == "animation_not_found"
+
+
+def test_the_make_route_passes_auto_approve_and_the_review_route_and_the_job_share_one_function(world, monkeypatch):
+    import routers.character_animation_review as review_router
+    import services.character_animation_job as job_module
+    import services.character_animation_review as review_module
+    assert review_router.review_kit_animation is review_module.review_kit_animation is job_module.review_kit_animation
+    root, server, jobs = world
+    _mode(jobs, ONE_SHOT)
+    app = FastAPI()
+    app.include_router(create_character_animation_jobs_router(jobs), prefix="/api/v1/character-kits")
+    calls = []
+    original = review_module.review_kit_animation
+    monkeypatch.setattr(job_module, "review_kit_animation", lambda *args, **kwargs: calls.append((args, kwargs)) or original(*args, **kwargs))
+    reply = TestClient(app).post("/api/v1/character-kits/animations/make", json={"workspace": WS, "kitId": "hero", "animation": "walk", "autoApprove": True})
+    assert reply.json()["job"]["autoApproved"] is True
+    assert len(calls) == 1 and calls[0][0][3:6] == ("approve", calls[0][0][4], "agent"), "the job's approval is the agent's review, through the shared function"

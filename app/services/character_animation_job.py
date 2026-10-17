@@ -7,6 +7,9 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
 * A pose that was made stays when the job fails, is cancelled or is cut by a restart: the next job for that animation keeps those
   poses and makes the rest. ``pose`` makes one pose of a finished animation again and keeps the others.
 * One animation is made at a time on the server (one GPU); a second request for the same animation returns the running job.
+* ``autoApprove`` («Modo un solo disparo», ``agent_autonomy`` = ``one_shot``) lets the job approve what it made when the sheet passes the
+  automatic checks (``services/character_animation_checks.py``): the approval is the agent's review (``reviewedBy: agent``), the job
+  reports ``autoApproved`` and ``checks``, and a sheet that fails stays pending for a person with the list of what failed.
 * A job is a small file under ``.character-animation-jobs-v1`` of the workspace, so it can be followed after a reload and listed.
 """
 from __future__ import annotations
@@ -18,10 +21,13 @@ import re
 import threading
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from services import agent_autonomy
+from services.character_animation_checks import failed, sheet_checks, summary
+from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
                                            pose_prompt)
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
@@ -31,6 +37,8 @@ JOBS_DIR = ".character-animation-jobs-v1"
 ACTIVE = ("queued", "running", "cancelling")
 RESUMABLE = ("failed", "cancelled", "interrupted")
 INTERRUPTED = "The server restarted while this animation was being made; make it again and the poses already made are kept"
+AUTO_APPROVE_OFF = ("autoApprove was ignored: agent_autonomy is review, so a person approves this animation in Personajes › Animaciones "
+                    "(or the owner turns on «Modo un solo disparo» in Ajustes › Servicios).")
 DEFAULT_MODEL = "qwen_image_21"
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 _SAVE_TRIES = 4
@@ -50,6 +58,9 @@ class AnimationJobDeps:
     # The steps and guidance a model runs with (its own defaults), so a turbo model keeps its few steps.
     model_defaults: Callable[[str], dict[str, Any]] | None = None
     inline: bool = False
+    # The services config now (``agent_autonomy`` lives there): read when a job starts and again when it ends, so a mode the owner
+    # switches off meanwhile is respected. None means «review».
+    services: Callable[[], Mapping[str, Any]] | None = None
 
 
 def _now() -> float:
@@ -206,10 +217,20 @@ class CharacterAnimationJobs:
             job["custom"] = {"title": definition["title"]["es"], "view": definition["view"], "poses": [item["prompt"] for item in definition["poses"]]}
         return job
 
+    def _services(self) -> Mapping[str, Any]:
+        return self.deps.services() if self.deps.services else {}
+
+    def _auto_fields(self, requested: bool) -> dict[str, Any]:
+        """What the job records of an ``autoApprove`` request: it counts only in «Modo un solo disparo»; otherwise it is ignored, with the why."""
+        if not requested:
+            return {}
+        return {"autoApprove": True} if agent_autonomy.is_one_shot(self._services()) else {"autoApprove": False, "autoApproveNote": AUTO_APPROVE_OFF}
+
     def start(self, workspace: str, kit_id: str, animation_id: str, *, custom: dict[str, Any] | None = None, pose: str | None = None,
-              model: str | None = None) -> dict[str, Any]:
+              model: str | None = None, auto_approve: bool = False) -> dict[str, Any]:
         """Make (or, with ``pose``, make one pose again of) an animation of a saved character. Returns the job; a request for an
-        animation that is already being made returns that job."""
+        animation that is already being made returns that job. ``auto_approve`` asks the job to approve what it made when the sheet passes
+        the automatic checks; it is ignored (the job says so) unless ``agent_autonomy`` is ``one_shot``."""
         if model and not _MODEL.fullmatch(model):
             raise AnimationJobError("invalid_model", "model is the id of an image model")
         kit = self._kit(workspace, kit_id)
@@ -218,7 +239,7 @@ class CharacterAnimationJobs:
             running = next((job for job in self.jobs(workspace, kit_id) if job.get("animationId") == animation_id and job.get("status") in ACTIVE), None)
             if running:
                 return running
-            job = self._new_job(workspace, kit, definition, pose, model)
+            job = {**self._new_job(workspace, kit, definition, pose, model), **self._auto_fields(auto_approve)}
             self._store(workspace).save(job)
             thread = threading.Thread(target=self._run, args=(workspace, job["jobId"]), name=f"character-animation-{job['jobId']}", daemon=True)
             self._threads[job["jobId"]] = thread
@@ -331,9 +352,26 @@ class CharacterAnimationJobs:
         }
         normalize_kit_animations({definition["id"]: entry})
         self._save_on_kit(workspace, job["kitId"], definition["id"], entry)
-        self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result={
-            "animation": definition["id"], "reviewState": "pending", "sheet": sheet["source"], "count": sheet["count"],
-            "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"]})
+        approval = self._auto_approve(job, sheet, definition) if job.get("autoApprove") else {}
+        result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
+                  "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"],
+                  **{key: approval[key] for key in ("autoApproved", "checks") if key in approval}}
+        self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
+                     **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
+
+    def _auto_approve(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
+        """The agent's review of the animation just saved: approved when every automatic check passes, else it stays pending with the
+        checks that failed. The approval is the same operation a review over MCP is (``review_kit_animation``, actor ``agent``)."""
+        checks = sheet_checks(sheet, definition)
+        outcome = {"autoApproved": False, "checks": checks, "reviewState": "pending", "reviewNote": summary(checks)}
+        if failed(checks):
+            return outcome
+        try:
+            review = review_kit_animation(self.deps.workspace_dir(job["workspace"]), job["kitId"], definition["id"], "approve", outcome["reviewNote"], "agent",
+                                          services=self._services())
+        except AnimationReviewError as error:  # the owner switched the mode off while the poses were made: a person decides
+            return {**outcome, "reviewNote": str(error)}
+        return {**outcome, "autoApproved": True, "reviewState": review["reviewState"]}
 
     def _save_on_kit(self, workspace: str, kit_id: str, animation_id: str, entry: dict[str, Any]) -> None:
         """Add the animation to the kit as it is now in the library: a character edited while the job ran keeps its edits."""

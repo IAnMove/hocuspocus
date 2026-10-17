@@ -154,7 +154,7 @@ api.include_router(create_wizard_workflow_executor_router(WizardWorkflowExecutor
 ), list_workspaces=core.list_workspaces))
 api.include_router(create_character_kit_face_router(
     workspace_dir=core.workspace_dir,
-    uploads_root=core.uploads_dir,
+    uploads_root=core.uploads_dir, services=core.services_raw,
 ))
 api.include_router(create_canonical_tasks_router(
     get_active_workspace=core.active_workspace,

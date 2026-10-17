@@ -162,6 +162,8 @@
     "keepWardrobeHint": "Quita las palabras de ropa de los prompts de imagen para que el modelo copie la ropa de la referencia. Desactívalo para describir la ropa en cada plano.",
     "parallelTitle": "Flujos en paralelo por recurso",
     "parallelHint": "Solapa trabajo solo entre servidores o dispositivos distintos. Cada GPU local y cada host remoto sigue siendo una cola secuencial.",
+    "oneShotTitle": "Modo un solo disparo",
+    "oneShotHint": "El agente aprueba lo que normalmente aprueba una persona, para que una sola petición llegue de la idea a la pieza terminada (hoy: animaciones de personaje). Lo que apruebe queda marcado «aprobada por el agente» en la app para que puedas auditarlo y revertirlo. Desactivado por defecto.",
     "debugTitle": "Traza de depuración",
     "debugHint": "Guarda peticiones/resultados LLM saneados y acciones del usuario como JSONL. Desactivado por defecto.",
     "multishotTitle": "Modo LoRA multiplano",
