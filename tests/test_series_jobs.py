@@ -9,7 +9,7 @@ import types
 import pytest
 from pathlib import Path
 
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, interrupt_orphaned_job
 
 
 _ROOT = Path(__file__).parents[1]
@@ -31,6 +31,15 @@ def _load_launch_functions(*names: str, namespace: dict) -> None:
     module = ast.Module(body=selected, type_ignores=[])
     ast.fix_missing_locations(module)
     exec(compile(module, str(_LAUNCH), "exec"), namespace)
+
+
+def test_interrupt_orphaned_job_skips_a_live_worker_and_rewrites_a_dead_one(tmp_path):
+    store = SeriesJobStore(str(tmp_path), "produce")
+    live = store.save({"jobId": "produce-live", "status": "running", "message": "Producing"})
+    assert interrupt_orphaned_job(store, live, alive=True, message="stale")["status"] == "running"
+    dead = store.save({"jobId": "produce-dead", "status": "cancelling", "message": "Stopping"})
+    rewritten = interrupt_orphaned_job(store, dead, alive=False, message="stale")
+    assert rewritten["status"] == "interrupted" and store.load("produce-dead")["status"] == "interrupted"
 
 
 def test_render_queue_survives_store_recreation(tmp_path):
