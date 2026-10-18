@@ -118,10 +118,19 @@ def resolve_background(resolved,sets,workspace):
 
 
 def dry_run_images(spec):
-    rooms={name:entry for name,entry in (spec.get('sets') or {}).items() if is_room(entry)}
-    if not rooms: return {}
-    counts={}
-    for name,entry in rooms.items():
-        try: counts[name]=len(image_requests(resolve_mold(entry['mold'],entry.get('size','medium')),entry.get('skin',{}),''))
-        except (ValueError,KeyError): counts[name]=0
-    return {'room_skin_images':sum(counts.values()),'room_sets':counts}
+    from services.room_box import image_count, is_box_room
+    entries=(spec.get('sets') or {}) if isinstance(spec,dict) else {}
+    molds={name:entry for name,entry in entries.items() if is_room(entry) and not is_box_room(entry)}
+    boxes={name:entry for name,entry in entries.items() if is_box_room(entry)}
+    result={}
+    if molds:
+        counts={}
+        for name,entry in molds.items():
+            try: counts[name]=len(image_requests(resolve_mold(entry['mold'],entry.get('size','medium')),entry.get('skin',{}),''))
+            except (ValueError,KeyError): counts[name]=0
+        result={'room_skin_images':sum(counts.values()),'room_sets':counts}
+    if boxes:
+        counted={name:image_count(entry) for name,entry in boxes.items()}
+        result['room_box_images']=sum(counted.values())
+        result['room_box_sets']=counted
+    return result

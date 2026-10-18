@@ -16,6 +16,7 @@ from urllib.parse import quote, unquote, urlparse, parse_qs
 
 from services.production_scene_retry import receipt_action, _artifact_name
 from services import production_rooms as rooms
+from services.room_box import check_box
 from services.world3d_grades import GRADE_NAMES
 from services.world3d_look import check_document_look
 from services.world3d_modifiers import GROUND_STYLES, LENS_NAMES, LIGHT_NAMES, check_camera_template
@@ -65,7 +66,7 @@ def validate_scene3d_shot(shot):
     _check_cast(config.get("cast"), CAST_MEMBERS if rooms.has_room(config) else 8)
     _check_background(config)
     _check_composition(config)
-    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast") or rooms.has_room(config)):
+    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast") or rooms.has_room(config) or _has_box(config)):
         raise ValueError("A template shot needs a subject GLB, a cast or explicit slots")
     if shot.get("sing"):
         raise ValueError("scene3d does not promise H3 lip-sync; use rigid object motion or authored GLB clips")
@@ -141,10 +142,31 @@ def _check_composition(config):
         raise ValueError("scene3d.scroll is the speed, in metres per second, at which a parallax set slides past a running cast (-10..10)")
 
 
+def _has_box(config):
+    background = config.get("background")
+    return isinstance(background, dict) and "roomBox" in background
+
+
+def _check_room_box_background(entry):
+    """A box room is ``{roomBox: spec}`` plus the built GLB's ``file``. It is not a mold ``room``."""
+    if set(entry) - {"roomBox", "file"}:
+        raise ValueError("scene3d.background for a box room is {roomBox} and, once built, its file")
+    spec = entry.get("roomBox")
+    if not isinstance(spec, dict):
+        raise ValueError("scene3d.background.roomBox is the box room spec")
+    if entry.get("file") is not None and not _source(entry.get("file")):
+        raise ValueError("scene3d.background.file is the room's GLB")
+    why = check_box("background", spec if spec.get("kind") == "room" else {**spec, "kind": "room"})
+    if why:
+        raise ValueError(why.replace("sets.background: ", "scene3d.background.roomBox: ", 1))
+
+
 def _check_background(config):
     if "background" in config and not rooms.check_background(config):
         entry = config["background"] if isinstance(config["background"], dict) else {"source": config["background"]}
-        if set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
+        if isinstance(entry, dict) and "roomBox" in entry:
+            _check_room_box_background(entry)
+        elif set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
             raise ValueError("scene3d.background is a picture (URL, workspace file, stills name or set) or "
                              "{source, surface: cutout|environment|wall|floor}")
         if "layers" in entry or "key" in entry:
@@ -281,8 +303,25 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         resolved["subject"] = url(resolved["subject"])
     if "background" in resolved and not rooms.resolve_background(resolved, sets, workspace):
         entry = resolved["background"] if isinstance(resolved["background"], dict) else {"source": resolved["background"]}
-        resolved["background"] = _diorama(entry, (sets or {}).get(entry["source"])) or {**entry, "source": url(entry["source"])}
+        made = (sets or {}).get(entry.get("source")) if isinstance(entry, dict) else None
+        box = _box_background(made)
+        if isinstance(entry, dict) and "roomBox" in entry:
+            resolved["background"] = entry
+        elif box:
+            resolved["background"] = box
+        else:
+            resolved["background"] = _diorama(entry, made) or {**entry, "source": url(entry["source"])}
     return resolved
+
+
+def _box_background(made):
+    """A built box room named as the background: its spec and the GLB, not a painted plate."""
+    if not isinstance(made, dict) or not isinstance(made.get("roomBox"), dict):
+        return None
+    background = {"roomBox": made["roomBox"]}
+    if made.get("url"):
+        background["file"] = made["url"]
+    return background
 
 
 def spread_groups(cast):
