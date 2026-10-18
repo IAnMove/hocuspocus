@@ -380,12 +380,12 @@ A Series script plays an **approved** animation of the kit (`app/services/series
 «animation 'walk' of 'ana' is pending approval: approve it in Characters › Animaciones»: the person approves it first.
 
 - **`animation` on a `layout2d.cast` entry:** an id of the kit (`"wave"`, `"angry"`, one of your own) or
-  `{"id", "at", "duration", "loop"}`: `at` is seconds inside the shot (default 0), `duration` defaults to one pass of the sheet
-  (its cells at its fps; a `pingpong` there and back), `loop` is `loop`, `pingpong` or `once` (the sheet's own by default; a `once`
+  `{"id", "at", "duration", "loop"}`: `at` is seconds inside the shot (default 0). `duration` defaults to one pass of the sheet
+  (its cells at its fps; a `pingpong` there and back); an expression with no duration lasts at least 2.5 s. An explicit duration
+  under 1.5 s on an expression warns `expression_too_short` and is still played. `loop` is `loop`, `pingpong` or `once` (the sheet's own by default; a `once`
   sheet holds its last cell until the window ends). The cast entry still says where the character stands (`x`) and which pose it has.
-- **What is drawn:** during the window the sheet takes the pose's place, drawn as the `walk-cycle-sheet` and `character-reaction`
-  cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %): the cell is `pose height / 0.86`
-  tall, so the figure is as tall as the pose, and its bottom edge is the pose's (the floor in a wide shot). The pose picture, its mouths and
+- **What is drawn:** during the window the sheet uses the pose's final transform, after the edge snap, centered on the character's `x`, at that size and that base, with no extra zoom. It is drawn as the `walk-cycle-sheet` and `character-reaction`
+  cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %). A body sheet is as tall as the pose and stands on the pose's feet. A face sheet (`scaleBy: face` on a pose taller than it is wide) is the head only: the figure is `pose height × 0.18 / 0.5` and hangs from the crown. An expression fades in and out over about 0.25 s; a gesture or a cycle does not. The pose picture, its mouths and
   its eyes are hidden meanwhile and come back when the window ends, so a character who speaks over a body sheet does not move its lips.
   The sheet is its own layer (`kit-<kit>-sheet-<id>`, a `sheet` sequence with `start` = the window's start second); stop-motion
   holds (`motionStep`) apply to it like to every picture.
@@ -395,8 +395,7 @@ A Series script plays an **approved** animation of the kit (`app/services/series
   (`facing`: a sheet that looks right entering from the right). Without an approved `walk` sheet the entrance is the bob it
   always was (the check warns `walk_sheet_not_approved` when the sheet exists but is not approved).
 - **Limits:** one animation per cast entry; an `animation` that would start inside a walk-in that plays the walk sheet is refused
-  by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust animation (`view: bust`)
-  goes with a bust pose in a `medium` or `close` shot: the cell is sized by the pose's height, not by its head.
+  by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust expression goes with a bust pose in a `medium` or `close` shot and is sized from the head, not from the whole pose.
 
 ### 4.9 A whole Video 2D card as a shot's take
 

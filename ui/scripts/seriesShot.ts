@@ -11,7 +11,7 @@ import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
 import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
 import { holdFields } from '../src/features/stopMotion.ts'
-import { gateSheets, sheetLayer, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
+import { gateSheets, sheetLayer, sheetPlacement, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
@@ -524,12 +524,15 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     poseLayerIds.push(mounted.layers[0].id)
     layers.push(...mounted.layers)
     if (windows.length) {
-      const stand = cast.transform ?? seat?.character ?? personTransform(kit, cast.poseId ?? 'base', shot.framing, cast.x, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
-      const poseHeight = drawnHeight(poseAsset(kit, cast.poseId ?? 'base'), stand.scale, aspect)
+      const size = poseAsset(kit, cast.poseId ?? 'base')
+      const poseHeight = drawnHeight(size, base.scale, aspect)
       const pose = mounted.layers[0]
-      layers.push(...windows.map(window => sheetLayer(kit, window, { layerId: characterKitLayerId(kit.id, `sheet-${window.part}`, instanceKey), z: pose.z,
-        workspace: shot.workspace, body: pose.animation.keyframes!, restY: base.y, ground: stand.y + poseHeight / 2, poseHeight, aspect, duration: shot.duration })))
-      gates.push({ poseId: pose.id, windows: windows.map(window => [window.start, window.end]) })
+      layers.push(...windows.map(window => {
+        const placed = sheetPlacement(window.animation, window.part === 'walk-in' ? 'walk' : window.part, size, base.y, poseHeight)
+        return sheetLayer(kit, window, { layerId: characterKitLayerId(kit.id, `sheet-${window.part}`, instanceKey), z: pose.z,
+          workspace: shot.workspace, body: pose.animation.keyframes!, restY: base.y, ground: placed.ground, poseHeight: placed.figure, aspect, duration: shot.duration })
+      }))
+      gates.push({ poseId: pose.id, windows: windows.map(window => [window.start, window.end, window.fade]) })
     }
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
