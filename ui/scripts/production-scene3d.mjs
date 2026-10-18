@@ -1,4 +1,5 @@
 import { DUST_ID, stageRoomSet } from '../src/features/scene3d/roomSet.ts'
+import { stageRoomBox } from '../src/features/scene3d/roomBox.ts'
 // Native template compilation for the production runner. The window is exported length.
 import { readFileSync } from 'node:fs'
 import { applyScene3DTemplate, SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/templates.ts'
@@ -35,6 +36,7 @@ if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
 if (config.background?.room) stageRoomSet(document, { ...config.background.room, camera: config.roomCamera ?? config.background.room.camera })
+else if (config.background?.roomBox) stageRoomBox(document, config.background.roomBox)
 else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
 if (config.camera_template) takeCamera(document, config.camera_template)
