@@ -47,3 +47,16 @@ test('the wide camera matches the shared frame and an adult measures the door', 
   assert.equal(parseScene3DDocument(JSON.parse(JSON.stringify(staged)))?.roomBox?.characters.length, 1)
   assert.equal(staged.slots.some(slot => slot.id === 'subject_1'), true)
 })
+
+test('a staged box room with a file keeps the GLB on the ungrounded room-box slot', () => {
+  const staged = stageRoomBox(createDefaultScene3DDocument(), {
+    size: { w: 4, d: 5, h: 2.6 }, door: { wall: 'back', x: 0, w: 0.9, h: 2 },
+    file: '/api/v1/file/set-batch-kitchen.glb?workspace=w',
+  })
+  const room = staged.slots.find(slot => slot.id === 'room-box')
+  assert.equal(room?.sourceUrl, '/api/v1/file/set-batch-kitchen.glb?workspace=w')
+  assert.equal(room?.grounded, false)
+  assert.equal(room?.media, 'model3d')
+  assert.equal(room?.scale, 2.6 / 1.7)
+  assert.deepEqual(room?.position, [0, 0, 0])
+})
