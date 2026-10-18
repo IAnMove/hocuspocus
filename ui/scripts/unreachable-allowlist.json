@@ -38,6 +38,7 @@
     "src/features/scene3d/motionlab/software.ts": "Server tooling: ui/scripts/world3d-template-tool.mjs imports it; app/services/world3d_scenes.py runs it.",
     "src/features/scene3d/parallaxSet.ts": "Server tooling: ui/scripts/production-scene3d.mjs imports it; app/services/production_scene3d.py runs it.",
     "src/features/scene3d/pictureStandIn.ts": "Server tooling: ui/scripts/production-scene3d.mjs and ui/scripts/world3d-template-tool.mjs import it; app/services runs both.",
+    "src/features/scene3d/roomBox.ts": "Server tooling: ui/scripts/production-scene3d.mjs and ui/scripts/room-box-proof.mjs import it; app/services/production_scene3d.py runs the compiler.",
     "src/features/scene3d/softwareRender.ts": "Server tooling: ui/scripts/world3d-template-tool.mjs imports it; app/services/world3d_scenes.py runs it.",
     "src/features/sceneTemplates/musicMotionCatalog.ts": "Pending (2026-10-13): only tests reach it. Recommendation: delete. Candidate-only rows; app/shared/scene_templates.json stays the source.",
     "src/i18n/animatorLabels.ts": "Tooling: ui/scripts/scene-template-review.mjs imports it; not app code.",

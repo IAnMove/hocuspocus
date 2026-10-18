@@ -2,8 +2,9 @@
 // character is a flat quad from the floor to heightM. Projection is projectPoint, the same one the rest of the
 // preview uses, so a foot at y = 0 lands on the floor the pixels already painted.
 import { projectPoint, vecCross, vecLength, vecNormalize, vecScale, vecSub } from './camera'
-import type { SoftwareFrame } from './softwareRender'
 import type { Scene3DDocument, Vec3 } from './types'
+
+type SoftwareFrame = { width: number; height: number; pixels: Uint8Array }
 
 export type RoomBoxPaint = {
   size: { w: number; d: number; h: number }

@@ -43,7 +43,8 @@ function round4(value: number): number {
 /** Place the room and its cast. A document without this call is left alone. */
 export function stageRoomBox(document: Scene3DDocument, spec: RoomBoxSpec): Scene3DDocument {
   const pose = roomBoxCamera(spec.size.d, spec.framing !== 'medium')
-  const { framing: _framing, ...camera } = document.camera
+  const camera = { ...document.camera }
+  delete camera.framing
   document.camera = { ...camera, family: 'fixed', eye: pose.eye, look: pose.look, fov: pose.fov }
   applyNamedLight(document, 'soft')
   const characters = (spec.characters ?? []).map((person, index) => ({
