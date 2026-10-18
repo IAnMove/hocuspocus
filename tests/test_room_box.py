@@ -4,8 +4,9 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-import pygltflib
 import pytest
+
+pygltflib = pytest.importorskip("pygltflib")
 
 from services.production_models import check_sets
 from services.production_room_box import build, picture_jobs

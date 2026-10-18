@@ -19,10 +19,20 @@ import json
 from pathlib import Path
 
 import numpy as np
-import pygltflib
 from PIL import Image
 
-from services.diorama_set import _arrays, _quad
+
+# pygltflib is an optional dependency that only the GLB writer needs; the boot path imports this module, so the
+# diorama helpers (which import it at the top) are loaded when a room is built, not at import time.
+def _quad(*args):
+    from services.diorama_set import _quad as quad
+    return quad(*args)
+
+
+def _arrays(quads):
+    from services.diorama_set import _arrays as arrays
+    return arrays(quads)
+
 
 _FRAME = json.loads((Path(__file__).resolve().parents[1] / "shared" / "room_box_camera.json").read_text(encoding="utf-8"))
 TILE = float(_FRAME["floorTile"])
@@ -439,6 +449,8 @@ def _prop_quad(spec: dict, prop: dict) -> list:
 
 
 def _write(target: str | Path, parts: list[dict]) -> None:
+    import pygltflib
+
     blob = bytearray()
     gltf = pygltflib.GLTF2(asset=pygltflib.Asset(version="2.0", generator="hocuspocus room_box"),
                            scenes=[pygltflib.Scene(nodes=[0])], scene=0)
