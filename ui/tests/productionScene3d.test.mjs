@@ -99,6 +99,21 @@ test('named camera shots keep speed, portrait format, framing and the other char
   assert.equal(pair.slots[1].sourceUrl, '')
 })
 
+test('a box-room background is not compiled as a painted set', () => {
+  const doc = compile({
+    template: 'two-shot',
+    subject: '/api/v1/file/hero.glb?workspace=movie',
+    background: {
+      roomBox: { size: { w: 4, d: 5, h: 2.6 }, door: { wall: 'back', x: 0, w: 0.9, h: 2 } },
+      file: '/api/v1/file/set-batch-kitchen.glb?workspace=w',
+    },
+  })
+  assert.equal(doc.environment?.floorStyle, 'none')
+  const background = doc.slots.find(slot => slot.slot === 'background')
+  assert.equal(background.scale, 8)
+  assert.deepEqual(background.position, [0, 0, -6])
+})
+
 test('a frame pushed nearer to a figure\'s middle aims higher until the head keeps room above it', () => {
   const subject = '/api/v1/file/hero.glb?workspace=movie'
   const top = (eye, look, fov) => look[1] + Math.hypot(eye[0] - look[0], eye[1] - look[1], eye[2] - look[2]) * Math.tan((fov * Math.PI) / 360)
