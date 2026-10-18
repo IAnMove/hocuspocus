@@ -210,6 +210,18 @@ def _replace_with_sidecar(source: str, target: str) -> None:
             os.remove(_sidecar(target))
 
 
+def _copy_with_sidecar(source: str, target: str) -> None:
+    """A byte copy of a recording and its sidecar, so a retry can still restore the previous take."""
+    with open(source, "rb") as src, open(target, "wb") as dst:
+        dst.write(src.read())
+    if os.path.isfile(_sidecar(source)):
+        with open(_sidecar(source), "rb") as src, open(_sidecar(target), "wb") as dst:
+            dst.write(src.read())
+    else:
+        with contextlib.suppress(OSError):
+            os.remove(_sidecar(target))
+
+
 def _ok(result: dict, label: str) -> dict:
     if not isinstance(result, dict) or result.get("_is_error") or result.get("status") == "failed":
         error = (result or {}).get("error") if isinstance(result, dict) else None
@@ -678,8 +690,20 @@ class SeriesNativeRender:
         root = self.deps.workspace_dir(workspace)
         stem = stem or self._stem(job, beat_id, key)
         final, best_path = os.path.join(root, f"{stem}.wav"), os.path.join(root, f"{stem}.best.wav")
+        previous = os.path.join(root, f"{stem}.prev.wav")
         best: dict[str, Any] | None = None
+        had_usable = False
         try:
+            # A band retry records onto this same file. Copy a usable take aside first: an empty new seed
+            # used to discard the wav, so the line the last render kept was gone if none of the three spoke.
+            if os.path.isfile(final):
+                try:
+                    kept = self.deps.probe(final)
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    kept = 0.0
+                if kept >= shortest_line(text):
+                    _copy_with_sidecar(final, previous)
+                    had_usable = True
             for attempt in range(MAX_TAKES):
                 raw = self._speak(workspace, job, stem, text, voice, attempt)
                 try:
@@ -704,11 +728,26 @@ class SeriesNativeRender:
                     break
         finally:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
-            if os.path.isfile(best_path):
-                _replace_with_sidecar(best_path, final)
+            # If no new seed spoke, put the previous recording back instead of leaving the line missing.
+            try:
+                if os.path.isfile(best_path):
+                    _replace_with_sidecar(best_path, final)
+                elif had_usable and os.path.isfile(previous):
+                    _replace_with_sidecar(previous, final)
+            finally:
+                _discard(previous)
         if best is None:
-            raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
-                                    "try another reference voice or reword the line", 502)
+            if not (had_usable and os.path.isfile(final)):
+                raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
+                                        "try another reference voice or reword the line", 502)
+            wer, _limit, notes = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
+            reason = take_reason(voice, notes)
+            try:
+                duration = self.deps.probe(final)
+            except (OSError, ValueError, subprocess.SubprocessError):
+                duration = 0.0
+            best = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer,
+                    "attempt": 0, **notes, **({"voiceBand": reason} if reason else {})}
         if best.get("voiceBand"):
             best = {**best, "warning": "voice_out_of_band"}
         self.deps.level(final)

@@ -829,6 +829,31 @@ def test_a_reused_line_outside_its_band_is_recorded_again(tmp_path):
     assert again["items"][0]["lines"]["s03_d0"]["warning"] == "voice_out_of_band"
     assert _speeches(tools) == 3
     assert [name for name, _args in tools.calls].count("qa.speech") == 4
+    assert not list(tmp_path.glob("*.prev.wav"))
+
+
+def test_a_band_retry_that_never_speaks_keeps_the_previous_recording(tmp_path):
+    """A line already on disk must survive a band retry whose three new seeds are empty.
+
+    ``_record`` trims onto the canonical wav. An empty seed discarded that file, so a man whose
+    existing take sat outside the band lost the only recording when TTS came back silent.
+    """
+    voice = {**GARY, "voiceType": "man"}
+    done, _tools = _band_shot(tmp_path, voice, reported_pitch=100.0, reported_brightness=0.01, reported_centroid=250.0)
+    filename = done["items"][0]["lines"]["s03_d0"]["filename"]
+    original = (tmp_path / filename).read_bytes()
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_pitch, tools.reported_brightness, tools.reported_centroid = 321.0, 0.01, 900.0
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_kits("cast")["kit-gary"]["voice"] = voice
+    render.deps.trim = _takes(tmp_path, [None, 0.05, None])
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = again["items"][0]["lines"]["s03_d0"]
+    assert again["status"] == "completed", again
+    assert line["warning"] == "voice_out_of_band" and line["voiceBand"] == "pitch"
+    assert (tmp_path / filename).read_bytes() == original
+    assert _speeches(tools) == 3
+    assert not list(tmp_path.glob("*.prev.wav")) and not list(tmp_path.glob("*.best.wav"))
 
 
 def test_a_voice_without_a_band_reuses_its_recording_without_another_pitch_check(tmp_path):
