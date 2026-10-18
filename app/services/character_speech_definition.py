@@ -197,28 +197,63 @@ def _design_direction(value):
     return {"instructions": direction.strip()} if direction.strip() else {}
 
 
+_BAND_KEYS = {"pitchBandHz", "maxBrightness", "voiceType", "maxCentroidHz"}
+_VOICE_TYPES = {"man", "woman", "child", "robot"}
+
+
+def _band_number(value, name: str, low: float, high: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
+        raise ValueError(f"{name} must be a number from {low:g} to {high:g}.")
+    return float(value)
+
+
+def _band_fields(value: dict) -> dict:
+    """Optional pitch band. Absent fields stay absent, so a voice without them round-trips unchanged."""
+    if not _BAND_KEYS & set(value):
+        return {}
+    kept = {}
+    if "voiceType" in value:
+        if value["voiceType"] not in _VOICE_TYPES:
+            raise ValueError("voiceType must be man, woman, child or robot.")
+        kept["voiceType"] = value["voiceType"]
+    if "pitchBandHz" in value:
+        band = value["pitchBandHz"]
+        if not isinstance(band, (list, tuple)) or len(band) != 2:
+            raise ValueError("pitchBandHz must be [low, high] in Hz.")
+        low, high = _band_number(band[0], "pitchBandHz low", 40, 600), _band_number(band[1], "pitchBandHz high", 40, 600)
+        if low >= high:
+            raise ValueError("pitchBandHz must be [low, high] in Hz.")
+        kept["pitchBandHz"] = [low, high]
+    if "maxBrightness" in value:
+        kept["maxBrightness"] = _band_number(value["maxBrightness"], "maxBrightness", 0, 1)
+    if "maxCentroidHz" in value:
+        kept["maxCentroidHz"] = _band_number(value["maxCentroidHz"], "maxCentroidHz", 40, 8000)
+    return kept
+
+
 def _normalize_design_voice(value):
     """Drama 3 Voice Design: a name, a language and an optional direction. No recording."""
     required = {"provider", "model", "voiceId", "name", "language"}
-    if not required <= set(value) <= required | {"instructions"}:
+    if not required <= set(value) <= required | {"instructions"} | _BAND_KEYS:
         raise ValueError("Drama 3 Voice Design takes no recording. Use drama3_base to clone a voice.")
     if (value.get("provider") != "local" or value.get("model") not in DESIGN_VOICE_MODELS or value.get("voiceId") != "design"
             or not _voice_text(value.get("name"), 120)
             or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
         raise ValueError("Add a name and a supported language for this Drama 3 voice.")
-    return {**{key: value[key] for key in required}, "name": value["name"].strip(), **_design_direction(value)}
+    return {**{key: value[key] for key in required}, "name": value["name"].strip(), **_design_direction(value), **_band_fields(value)}
 
 
 def _normalize_reference_voice(value):
     required = {"provider", "model", "voiceId", "name", "referenceAudio", "transcript", "language"}
-    if (not required <= set(value) <= required | {"instructions"}
+    if (not required <= set(value) <= required | {"instructions"} | _BAND_KEYS
             or value.get("provider") != "local" or value.get("voiceId") != "reference"
             or not _voice_text(value.get("name"), 120) or not _voice_text(value.get("transcript"), 4000)
             or not isinstance(value.get("language"), str) or value["language"] not in CHARACTER_VOICE_LANGUAGES):
         raise ValueError("Add a named local reference recording, its transcript and a supported language.")
     base = {key: value[key] for key in required}
     return {**base, "name": value["name"].strip(), "transcript": value["transcript"].strip(),
-            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"]), **_voice_style(value)}
+            "referenceAudio": normalize_character_voice_reference(value["referenceAudio"]), **_voice_style(value),
+            **_band_fields(value)}
 
 
 def normalize_character_voice(value):
@@ -226,7 +261,7 @@ def normalize_character_voice(value):
         return _normalize_reference_voice(value)
     if isinstance(value, dict) and value.get("model") in DESIGN_VOICE_MODELS:
         return _normalize_design_voice(value)
-    if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"}:
+    if not isinstance(value, dict) or set(value) - {"provider", "model", "voiceId", "instructions"} - _BAND_KEYS:
         raise ValueError("Store voice preferences only, never credentials.")
     if value.get("provider") != "local" or value.get("model") != "qwen3_tts_customvoice":
         raise ValueError("Choose a supported local character voice.")
@@ -234,7 +269,8 @@ def normalize_character_voice(value):
         raise ValueError("Invalid voice preset.")
     if "instructions" in value and (not isinstance(value["instructions"], str) or len(value["instructions"]) > 1000):
         raise ValueError("Voice instructions are too long.")
-    return dict(value)
+    kept = {key: value[key] for key in ("provider", "model", "voiceId", "instructions") if key in value}
+    return {**kept, **_band_fields(value)}
 
 
 def normalize_character_voices_by_language(value):

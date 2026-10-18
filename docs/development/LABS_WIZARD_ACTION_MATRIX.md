@@ -1380,6 +1380,10 @@ for the sheet cards), compiles it, saves the scene so it opens in Video 2D, expo
 `approve_take` approves it only in «Modo un solo disparo» and never over a take a person approved. A scene still being exported
 answers `exporting` and the Wizard sends the same request again for a few minutes. Coverage is in
 `ui/tests/seriesShotCardWizard.test.ts` and `tests/test_series_shot_card.py`.
+`characters.voice.band` (`set_voice_band`) stores a pitch band on a saved character's voice through `characterKit.setVoiceBand`,
+registered by `registerVoiceBandCapabilities` in `ui/src/features/agent/voiceBandCapabilities.ts`. It posts to
+`POST /api/v1/character-kits/library/kits/{kit_id}/voice-band`, the route behind the MCP tool `characters.voice.band`
+(`app/services/voice_band.py`). A voice with no band is recorded as before.
 
 ## Media tools
 

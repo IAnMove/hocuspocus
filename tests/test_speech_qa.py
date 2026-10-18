@@ -14,6 +14,19 @@ from services.speech_text_es import dictionary_map, merge_names, phonetic_es, pr
 from services.voice_pitch import inferred_range, pitch_notice, range_for, voice_checks
 
 
+def test_brightness_is_the_share_of_power_from_3_khz_up():
+    from services.speech_qa import _spectrum
+    rate = 16000
+    time = np.arange(rate) / rate
+    low = np.sin(2 * np.pi * 200 * time).astype(np.float32)
+    high = np.sin(2 * np.pi * 4000 * time).astype(np.float32)
+    low_centroid, low_share = _spectrum(low, rate)
+    high_centroid, high_share = _spectrum(high, rate)
+    assert low_share < 0.05 and high_share > 0.5
+    assert low_centroid < 500 < high_centroid
+    assert _spectrum(np.zeros(rate, dtype=np.float32), rate) == (0.0, 0.0)
+
+
 def test_numbers_accents_and_punctuation_do_not_count_as_errors():
     assert word_error_rate("Tenemos un 97% de éxito.", "tenemos un noventa y siete por ciento de exito", "es") == 0
     assert word_error_rate("We raised $40 million!", "we raised forty million", "en") == 0

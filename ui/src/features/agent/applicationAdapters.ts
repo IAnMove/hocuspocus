@@ -50,6 +50,8 @@ import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
 import { executeMakeCharacterAnimation, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
+import { executeSetVoiceBand } from './voiceBandCapabilities'
+import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
 import { executeVideo2DTemplates } from './video2dTemplateCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
@@ -154,6 +156,7 @@ export interface CharacterKitAdapter {
   openRig(action: AgentOpenCharacterKitRigAction): Promise<AdapterOutcome>
   applyPreset(action: AgentApplyCharacterKitPresetAction): Promise<AdapterOutcome>
   trackJob(action: AgentTrackCharacterKitJobAction): Promise<AdapterOutcome>
+  setVoiceBand(action: AgentSetVoiceBandAction, workspace?: string): Promise<AdapterOutcome>
 }
 export interface QueueAdapter {
   openActivity(): Promise<AdapterOutcome>
@@ -865,6 +868,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const result = await applyPreset({ kitName: action.kitName, presetId: action.presetId })
       return kitOutcome(result, i18n.t('wizard:replies.appliedPresetToRig', { preset: action.presetId, name: kitNameFromResult(result) }))
     },
+    async setVoiceBand(action, workspace) { return executeSetVoiceBand(action, workspace) },
     async trackJob(action) {
       const { trackJob } = await import('../characters/adapters')
       const result = await trackJob({ kitName: action.kitName })

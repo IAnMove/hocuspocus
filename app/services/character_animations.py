@@ -27,6 +27,7 @@ from services.character_styles import character_style, screen_for, style_catalog
 
 CATALOG = Path(__file__).resolve().parents[1] / "shared" / "character_animations.json"
 LOOPS = ("loop", "pingpong", "once")
+GROUPS = ("cycle", "gesture", "expression", "custom")
 FACINGS = ("left", "right", "front")
 REVIEW_STATES = ("pending", "approved", "rejected")
 # Who gave the review: a person in the app, or an agent in «Modo un solo disparo» (services/agent_autonomy.py). Data made before this
@@ -231,6 +232,10 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
         result["scaleBy"] = raw["scaleBy"]
+    if raw.get("group") is not None:
+        if raw["group"] not in GROUPS:
+            raise CharacterAnimationError(f"{label} group is one of {', '.join(GROUPS)}")
+        result["group"] = raw["group"]
     return result
 
 

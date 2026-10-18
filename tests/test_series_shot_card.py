@@ -430,6 +430,24 @@ def test_a_language_versions_own_approval_survives_a_second_apply_and_each_langu
     assert version["approvedAttemptIds"] == {"s01": english["take"]["attemptId"]} and decisions[spanish["take"]["attemptId"]] is None
 
 
+def test_a_person_approved_original_take_survives_a_language_version_reapply(tmp_path):
+    """Series Lab's Approve stamps shot.approvedAttemptId even when the take came from a version apply.
+    A later English apply with other controls must not reject that take: reject_shot_render_attempt would
+    clear the original approval and the episode would lose the take the person kept."""
+    world = World(tmp_path)
+    world.series["episodesById"]["ep1"]["languageVersions"] = {"english": {"title": "Pilot", "dialogue": {}, "cards": {}, "approvedAttemptIds": {},
+                                                                           "durations": {"s01": 5.0, "s02": 3.0}}}
+    english = world.apply(language="english", cast=WALK)
+    shot = world.shot()
+    shot.update(approve_shot_render_attempt(shot, english["take"]["attemptId"], "user"))
+    assert world.shot()["approvedAttemptId"] == english["take"]["attemptId"]
+    again = world.apply(language="english", cast=WALK, controls={"step": 0.9})
+    assert again["take"]["superseded"] == []
+    assert world.shot()["approvedAttemptId"] == english["take"]["attemptId"]
+    decisions = {item["id"]: item.get("reviewDecision") for item in world.shot()["attempts"]}
+    assert decisions[english["take"]["attemptId"]] == "approved"
+
+
 # One operation, three doors ---------------------------------------------------------------------
 
 def test_the_route_the_mcp_tool_and_the_wizard_post_to_runs_this_operation(tmp_path):

@@ -37,7 +37,7 @@ export type KitAnimation = {
   /** The keyed pose pictures the sheet was joined from, in order: one can be made again without the others. */
   frames: Array<{ id: string; source: string; prompt?: string; label?: string }>
   fps: number; loop: AnimationLoop; facing: AnimationFacing; reviewState: CharacterKitReviewState
-  view?: string; title?: string; scaleBy?: AnimationScaleBy; prompt?: string; model?: string; createdAt?: string
+  view?: string; title?: string; scaleBy?: AnimationScaleBy; group?: AnimationGroupId; prompt?: string; model?: string; createdAt?: string
   /** Who gave the review: a person (the panel's buttons) or an agent in «Modo un solo disparo» (services/agent_autonomy.py), with its note
    * and when. Animations saved before this have none, and read as a person's. */
   reviewedBy?: AnimationReviewer; reviewNote?: string; reviewedAt?: string

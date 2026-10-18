@@ -5,7 +5,7 @@
 // (equal cells, the figure `figure` of a cell high, its boots on the line `feet`), by the painter's `sheet` sequence.
 import type { SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { CharacterKit } from '../src/lib/characterKit.ts'
-import { ANIMATION_SHEET, type AnimationLoop, type KitAnimation } from '../src/lib/characterAnimations.ts'
+import { ANIMATION_SHEET, animationDef, type AnimationLoop, type KitAnimation } from '../src/lib/characterAnimations.ts'
 import { evaluateSceneLayer, getSceneKeyframes, withSceneKeyframes } from '../src/lib/sceneTimeline.ts'
 
 export type SheetRequest = { id: string; at?: number; duration?: number; loop?: AnimationLoop }
@@ -14,9 +14,13 @@ export type SheetCast = { animation?: SheetRequest; enter?: { fromX: number; sta
 export type SheetWindow = {
   /** `walk-in` for the walk sheet of an entrance, else the animation's id. */
   part: string; animation: KitAnimation; start: number; end: number; loop: AnimationLoop; fps: number; mirror: boolean
+  /** Seconds of opacity ramp at each end. 0 keeps the hard cut gestures and walks already use. */
+  fade: number
 }
+/** A window's start, end and, when the third number is set, its fade in seconds. */
+export type GateWindow = [number, number, number?]
 /** A pose whose picture and face are hidden while its sheets play. */
-export type SheetGate = { poseId: string; windows: Array<[number, number]> }
+export type SheetGate = { poseId: string; windows: GateWindow[] }
 
 const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places
 /** A window edge: opacity switches in a thousandth of a second, so no painted frame sees both pictures. */
@@ -41,13 +45,52 @@ export function passLength(animation: KitAnimation, loop: AnimationLoop): number
   return (loop === 'pingpong' && count > 1 ? count * 2 - 2 : count) / Math.max(1, animation.fps)
 }
 
+/** The catalog group when the kit copy did not keep one. A custom id that is not in the catalog has none. */
+function groupOf(animation: KitAnimation, id: string): string | undefined {
+  return animation.group ?? animationDef(id)?.group
+}
+
+/** How long the window plays. An expression with no duration of its own is held at least `expressionHold` seconds
+ * (one pass when that is already longer). An explicit duration, and every gesture and cycle, stay as they were asked. */
+export function windowLength(animation: KitAnimation, id: string, loop: AnimationLoop, asked?: number): number {
+  const pass = passLength(animation, loop)
+  if (asked != null) return asked
+  return groupOf(animation, id) === 'expression' ? Math.max(pass, ANIMATION_SHEET.expressionHold) : pass
+}
+
+/** Fade at each end of an expression, never more than a third of the window. Gestures and cycles stay a hard cut. */
+export function expressionFade(animation: KitAnimation, id: string, start: number, end: number): number {
+  const span = end - start
+  if (groupOf(animation, id) !== 'expression' || span <= SHORTEST) return 0
+  return Math.min(ANIMATION_SHEET.expressionFade, span / 3)
+}
+
+/** Height of the figure a sheet draws in place of a pose of `poseHeight` (% of the frame). A face-scaled portrait
+ * (taller than it is wide: a full body, not a square bust crop) is the head, `head / faceShare` of the pose.
+ * A square bust, or anything not scaled by the face, matches the pose. */
+export function sheetFigure(animation: KitAnimation, id: string, pose: { width: number; height: number }, poseHeight: number): number {
+  const scaleBy = animation.scaleBy ?? animationDef(id)?.scaleBy
+  const share = ANIMATION_SHEET.faceShare
+  if (scaleBy !== 'face' || !(pose.height > pose.width * 1.05) || !(share > 0)) return poseHeight
+  return poseHeight * ANIMATION_SHEET.head / share
+}
+
+/** Where that figure stands on the pose's final centre `centerY`: the pose's own feet, or, when the figure is only the
+ * head, hung from the crown so the face sits where the pose's face is. */
+export function sheetPlacement(animation: KitAnimation, id: string, pose: { width: number; height: number }, centerY: number, poseHeight: number): { figure: number; ground: number } {
+  const figure = sheetFigure(animation, id, pose, poseHeight)
+  const crown = centerY - poseHeight / 2
+  const feet = centerY + poseHeight / 2
+  return { figure, ground: figure < poseHeight - 1e-4 ? crown + figure : feet }
+}
+
 /** The walk of an entrance: a cycle is two steps, so the sheet plays at count / (2 steps) cells a second (3 to 24, as the card
  * does) and the feet land on the steps `enterStep` times. It walks the way it is drawn: against that, it is mirrored. */
 function walkIn(animation: KitAnimation, enter: NonNullable<SheetCast['enter']>): SheetWindow {
   const step = enter.step && enter.step > 0 ? enter.step : 0.5
   const fps = round(Math.min(24, Math.max(3, animation.sheet.count / (2 * step))))
   const comes = enter.fromX < 50 ? 'right' : 'left'
-  return { part: 'walk-in', animation, start: enter.start, end: enter.end, loop: 'loop', fps, mirror: animation.facing === 'left' ? comes === 'right' : animation.facing === 'right' && comes === 'left' }
+  return { part: 'walk-in', animation, start: enter.start, end: enter.end, loop: 'loop', fps, mirror: animation.facing === 'left' ? comes === 'right' : animation.facing === 'right' && comes === 'left', fade: 0 }
 }
 
 /** The intervals of the shot in which this cast member's pose gives way to a sheet: the walk-in, when the kit has an approved
@@ -61,8 +104,8 @@ export function sheetWindows(kit: CharacterKit, cast: SheetCast, duration: numbe
   const animation = playable(kit, wanted.id)
   const loop = wanted.loop ?? animation.loop
   const start = Math.max(wanted.at ?? 0, windows[0]?.end ?? 0)
-  const end = Math.min(duration, start + (wanted.duration ?? passLength(animation, loop)))
-  if (end - start >= SHORTEST) windows.push({ part: wanted.id, animation, start, end, loop, fps: animation.fps, mirror: false })
+  const end = Math.min(duration, start + windowLength(animation, wanted.id, loop, wanted.duration))
+  if (end - start >= SHORTEST) windows.push({ part: wanted.id, animation, start, end, loop, fps: animation.fps, mirror: false, fade: expressionFade(animation, wanted.id, start, end) })
   return windows
 }
 
@@ -78,7 +121,8 @@ export function sheetBox(animation: KitAnimation, poseHeight: number, aspect: nu
 
 /** Opacity of a layer inside the windows: `show` draws it only there, otherwise it is hidden there. Every other value of the layer
  * (place, size, tilt) goes on as it was: keys are added at the edges with the layer's own value at that moment. */
-export function gateOpacity(layer: SceneLayer, windows: Array<[number, number]>, show: boolean, duration: number): SceneLayer {
+export function gateOpacity(layer: SceneLayer, windows: GateWindow[], show: boolean, duration: number): SceneLayer {
+  if (windows.some(window => (window[2] ?? 0) > 0)) return fadeGate(layer, windows, show, duration)
   const source = getSceneKeyframes(layer)
   const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
   const inside = (time: number) => windows.some(([from, to]) => time >= from - 1e-9 && time < to - 1e-9)
@@ -92,6 +136,52 @@ export function gateOpacity(layer: SceneLayer, windows: Array<[number, number]>,
     const before = [...source].reverse().find(item => item.time <= time) ?? source[0]
     const point = frame ?? { ...rounded(evaluateSceneLayer(layer, time)), id: `${layer.id}-${Math.round(time * 1000)}`, time, curve: before.curve }
     return { ...point, opacity: inside(time) === show ? point.opacity : 0, ...(beforeEdge(time) ? { curve: 'hold' as const } : {}) }
+  })
+  return withSceneKeyframes(layer, frames, duration)
+}
+
+/** How far a window actually fades: never more than a third of itself, and never when it asked for none. */
+function fadeSpan(window: GateWindow): number {
+  const span = window[1] - window[0]
+  const asked = window[2] ?? 0
+  return asked > 0 && span > 0 ? Math.min(asked, span / 3) : 0
+}
+
+/** 1 while a sheet should be fully up, 0 while it should be gone, and the ramp between. A window with no fade is a step. */
+function sheetGain(time: number, window: GateWindow): number {
+  const [from, to] = window
+  const fade = fadeSpan(window)
+  if (fade <= 0) return time >= from - 1e-9 && time < to - 1e-9 ? 1 : 0
+  if (time <= from || time >= to) return 0
+  if (time < from + fade) return (time - from) / fade
+  if (time > to - fade) return (to - time) / fade
+  return 1
+}
+
+/** Opacity for a crossfade. `show` ramps the sheet in and out; hiding the pose is the complement, so the two pictures add to one. */
+function fadeGate(layer: SceneLayer, windows: GateWindow[], show: boolean, duration: number): SceneLayer {
+  const source = getSceneKeyframes(layer)
+  const near = (a: number, b: number) => Math.abs(a - b) < 1e-6
+  const gainAt = (time: number) => {
+    const up = Math.max(0, ...windows.map(window => sheetGain(time, window)))
+    return show ? up : 1 - up
+  }
+  const ramp = (time: number) => windows.some(window => {
+    const fade = fadeSpan(window)
+    return fade > 0 && time > window[0] && time < window[1] && (time < window[0] + fade || time > window[1] - fade)
+  })
+  const marks = windows.flatMap(window => {
+    const fade = fadeSpan(window)
+    const [from, to] = window
+    return (fade > 0 ? [from, from + fade, to - fade, to] : [from - EDGE, from, to - EDGE, to])
+  }).map(time => round(time)).filter(time => time >= 0 && time <= duration)
+  const added = [...new Set(marks)].filter(time => !source.some(frame => near(frame.time, time)))
+  const points = [...source.map(frame => ({ time: frame.time, frame })), ...added.map(time => ({ time, frame: undefined as SceneKeyframe | undefined }))]
+    .sort((a, b) => a.time - b.time)
+  const frames: SceneKeyframe[] = points.map(({ time, frame }) => {
+    const before = [...source].reverse().find(item => item.time <= time) ?? source[0]
+    const point = frame ?? { ...rounded(evaluateSceneLayer(layer, time)), id: `${layer.id}-${Math.round(time * 1000)}`, time, curve: before.curve }
+    return { ...point, opacity: round(Math.max(0, Math.min(1, point.opacity * gainAt(time)))), ...(ramp(time) ? { curve: 'linear' as const } : {}) }
   })
   return withSceneKeyframes(layer, frames, duration)
 }
@@ -122,5 +212,5 @@ export function sheetLayer(kit: CharacterKit, window: SheetWindow, args: {
       start: round(window.start), ...(window.mirror ? { mirror: true } : {}) },
     animation: { start: { ...transform }, end: { ...transform }, duration: args.duration, curve: 'linear', keyframes: frames },
   } as SceneLayer
-  return gateOpacity(layer, [[window.start, window.end]], true, args.duration)
+  return gateOpacity(layer, [[window.start, window.end, window.fade]], true, args.duration)
 }

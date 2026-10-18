@@ -342,3 +342,93 @@ def test_a_sheet_plays_cell_by_cell_in_a_real_cpu_render_of_a_series_shot(tmp_pa
     left, right = (picture.getpixel((round(walk_x / 100 * 320) + shift, walk_y)) for shift in (-9, 9))
     assert (_nearest(left, palette), _nearest(right, palette)) == ("blue", "red"), "entering from the right, the sheet that looks right is mirrored"
     assert len({frame.read_bytes() for frame in frames}) == len(times), "every sampled frame is a different picture"
+
+
+def _band(colour, size=(100, 200), count=2):
+    """A sheet whose opaque pixels are exactly the figure band: full cell width, from 10 % to the feet line at 96 %."""
+    from PIL import ImageDraw
+
+    def draw(image):
+        pen = ImageDraw.Draw(image)
+        top, bottom = round(size[1] * 0.10), round(size[1] * 0.96) - 1
+        for cell in range(count):
+            left = cell * size[0]
+            pen.rectangle((left, top, left + size[0] - 1, bottom), fill=colour + (255,))
+    return _png(draw, (size[0] * count, size[1]))
+
+
+def _colour_box(path, channel):
+    """Bounding box of pixels whose ``channel`` (0 red, 2 blue) dominates, or None when the colour is absent."""
+    from PIL import Image
+    image = Image.open(path).convert("RGB")
+    pixels, hits = image.load(), []
+    for y in range(image.height):
+        for x in range(image.width):
+            pixel = pixels[x, y]
+            others = [pixel[index] for index in range(3) if index != channel]
+            if pixel[channel] > 140 and all(pixel[channel] > other + 40 for other in others):
+                hits.append((x, y))
+    if not hits:
+        return None
+    xs, ys = [item[0] for item in hits], [item[1] for item in hits]
+    return min(xs), min(ys), max(xs), max(ys), image.size
+
+
+@pytest.mark.skipif(os.environ.get("RUN_SERIES_SHEET_RENDER_SMOKE") != "1", reason="explicit built-UI Chromium smoke (ui/dist, Node, Playwright Chromium)")
+def test_an_expression_sheet_covers_the_same_pixels_as_the_snapped_pose(tmp_path, monkeypatch):
+    """RUN_SERIES_SHEET_RENDER_SMOKE=1 pytest -q tests/test_series_entrances.py -k same_pixels (needs ``vite build`` in ui/).
+
+    A square bust cut on both sides is enlarged in a medium shot. The expression that replaces it, sampled after the fade,
+    must cover the same pixels the pose covered before the fade. The contact sheet is written beside the worktree."""
+    from PIL import Image
+    from services.scene2d_export import validated_document
+    from services.series_shot_bridge import run_series_shot
+    from services.world3d_export import export_plan, playwright_module, run_owned_browser
+    monkeypatch.setenv("HOCUS_SCENE_RENDER_DEVICE", "cpu")
+    dist = Path(__file__).resolve().parents[1] / "ui" / "dist"
+    assert (dist / "scene2d-render.html").is_file(), "Build the UI first (cd ui && npx vite build)"
+    red, blue = (220, 40, 30), (30, 40, 220)
+    pose = _png(lambda image: image.paste(red + (255,), (0, 0, 128, 128)), (128, 128))
+    # The figure band is 0.86 of the cell and the full cell width. A cell 172×200 makes that band square, the same shape as the pose.
+    cell = (172, 200)
+    asset = {"id": "hero-base", "name": "base", "source": pose, "kind": "image", "alphaStatus": "transparent", "reviewState": "approved",
+             "width": 128, "height": 128, "cut": {"left": [[0, 1]], "right": [[0, 1]], "bottom": [[0, 1]]}}
+    animation = {"sheet": {"source": _band(blue, cell), "width": cell[0] * 2, "height": cell[1], "count": 2, "columns": 2, "rows": 1,
+                           "cell": {"width": cell[0], "height": cell[1]}},
+                 "frames": [], "fps": 3, "loop": "once", "facing": "front", "scaleBy": "face", "group": "expression", "reviewState": "approved"}
+    kit = {"version": 1, "id": "hero", "name": "Hero", "style": {}, "base": asset, "poses": {}, "mouth": {}, "eyes": {}, "anchors": {},
+           "provenance": [], "animations": {"angry": animation}}
+    shot = {"name": "smoke", "workspace": "cast", "width": 320, "height": 180, "fps": 24, "duration": 3.2, "framing": "medium", "camera": "static",
+            "cast": [{"kitId": "hero", "x": 46, "motion": "still", "animation": {"id": "angry", "at": 0.4, "duration": 2}}], "lines": []}
+    scene = run_series_shot({"mode": "shot", "kits": {"hero": kit}, "shot": shot})
+    layers = {layer["id"]: layer for layer in scene["layers"]}
+    pose_layer, sheet_layer = layers["kit-hero-pose-base"], layers["kit-hero-sheet-angry"]
+    assert abs(sheet_layer["transform"]["x"] - pose_layer["transform"]["x"]) < 0.05
+    assert pose_layer["transform"]["scale"] > 1.5, "both cuts enlarged the pose, so an unsnapped sheet would be smaller"
+    document = validated_document(scene)
+    times = [0.15, 1.2]
+    plan = {**export_plan(document), "times": times}
+    handler = functools.partial(type("Quiet", (SimpleHTTPRequestHandler,), {"log_message": lambda *_args: None}), directory=str(dist))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        module = playwright_module()
+        assert module is not None, "Playwright is not installed"
+        snapshot = {"document": document, "plan": plan, "workspace": "cast", "refs": []}
+        (tmp_path / "snapshot.json").write_text(json.dumps(snapshot), encoding="utf-8")
+        frames = run_owned_browser(snapshot, tmp_path, lambda: False,
+                                   app_url=f"http://127.0.0.1:{server.server_port}", module=module, page="/scene2d-render.html", bridge="__scene2dExport")
+    finally:
+        server.shutdown(); server.server_close(); worker.join(timeout=2)
+    assert len(frames) == 2
+    pose_box, sheet_box = _colour_box(frames[0], 0), _colour_box(frames[1], 2)
+    contact = Image.new("RGB", (320 * 2 + 8, 180), (16, 16, 16))
+    contact.paste(Image.open(frames[0]).convert("RGB"), (0, 0))
+    contact.paste(Image.open(frames[1]).convert("RGB"), (328, 0))
+    contact.save("/mnt/outputs/hocuspocus-worktrees/expr-voice-fix.sheet.png")
+    assert pose_box is not None and sheet_box is not None, (pose_box, sheet_box)
+    width, height = pose_box[4]
+    for index, (pose_edge, sheet_edge) in enumerate(zip(pose_box[:4], sheet_box[:4])):
+        limit = max(2, round(0.01 * (width if index % 2 == 0 else height)))
+        assert abs(pose_edge - sheet_edge) <= limit, f"edge {index}: pose {pose_box[:4]} sheet {sheet_box[:4]} limit {limit}"

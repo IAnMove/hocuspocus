@@ -20,10 +20,11 @@ A person did it in five steps (find the card, compile it, edit it, export it, im
    second call finds the first one's work and imports it.
 5. **Approve.** The take is a candidate. ``approve`` approves it only when the owner turned on «Modo un solo disparo»
    (``agent_autonomy`` = ``one_shot``, ``services/agent_autonomy.py``), stamped ``approvedBy`` agent or wizard; a take a person
-   approved is never replaced.
+   approved (in this language or in Series Lab for the original) is never replaced.
 
 Applying the same card with the same inputs again finds its take and does nothing twice; other inputs make a new take and reject
-the earlier unapproved take of the same scene as superseded.
+the earlier unapproved take of the same scene as superseded. A take approved in any language (the original's ``approvedAttemptId``
+or a version's) is left alone: rejecting it would undo that language's decision.
 """
 from __future__ import annotations
 
@@ -332,10 +333,22 @@ class SeriesShotCard:
         asset_id = (result.get("asset") or {}).get("id")
         return {"attemptId": attempt["id"], "assetId": asset_id, "reused": False, "superseded": self._supersede(ctx, name, attempt["id"])}
 
+    def _protected(self, ctx: Context) -> set[str]:
+        """Takes already approved for this shot in any language. Rejecting one undoes that language's decision:
+        ``reject_shot_render_attempt`` clears ``approvedAttemptId`` when the id matches, so a version apply
+        must not treat a Series Lab approval of the original as an unapproved candidate."""
+        raw = (self.deps.read_library(ctx.workspace).get("seriesById") or {})[ctx.series_id]["episodesById"][ctx.episode_id]
+        shot = next(item for item in raw["shots"] if item["id"] == ctx.shot["id"])
+        kept = {shot.get("approvedAttemptId"), self._approval(ctx)[0]}
+        for version in (raw.get("languageVersions") or {}).values():
+            if isinstance(version, dict):
+                kept.add((version.get("approvedAttemptIds") or {}).get(shot["id"]))
+        return {item for item in kept if isinstance(item, str) and item}
+
     def _supersede(self, ctx: Context, scene: str, keep: str) -> list[str]:
-        """The earlier unapproved takes of this same scene are rejected: the new one replaces them (an approved one is left alone)."""
+        """The earlier unapproved takes of this same scene are rejected: the new one replaces them (a take approved in any language is left alone)."""
         done: list[str] = []
-        approved, _by = self._approval(ctx)  # in this language: a version keeps its own approval apart from the shot's
+        protected = self._protected(ctx) | {keep}
 
         def change(series: dict[str, Any]) -> None:
             episode = series["episodesById"][ctx.episode_id]
@@ -344,7 +357,8 @@ class SeriesShotCard:
                     continue
                 for attempt in list(shot.get("attempts") or []):
                     meta = _card_take(series, attempt) or {}
-                    if meta.get("cardScene") != scene or attempt["id"] in (keep, approved) or attempt.get("reviewDecision") == "rejected":
+                    if (meta.get("cardScene") != scene or attempt["id"] in protected
+                            or attempt.get("reviewDecision") in ("rejected", "approved")):
                         continue
                     shot = reject_shot_render_attempt(shot, attempt["id"], "server")
                     done.append(attempt["id"])
