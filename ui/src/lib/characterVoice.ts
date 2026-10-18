@@ -1,7 +1,15 @@
 import { SPOKEN_LANGUAGES, spokenLanguage, type SpokenLanguage } from './speechLanguage'
 
 /** Public preferences only. Credentials always stay in the server configuration. */
-export type PresetCharacterVoice = {
+export type VoiceTypeId = 'man' | 'woman' | 'child' | 'robot'
+/** Optional pitch band. Absent on a voice that has not asked for one, so a save of that voice is unchanged. */
+export type VoiceBandFields = {
+  voiceType?: VoiceTypeId
+  pitchBandHz?: [number, number]
+  maxBrightness?: number
+  maxCentroidHz?: number
+}
+export type PresetCharacterVoice = VoiceBandFields & {
   provider: 'local'
   model: 'qwen3_tts_customvoice'
   voiceId: string
@@ -20,7 +28,7 @@ export const STYLED_REFERENCE_VOICE_MODELS: readonly ReferenceVoiceModel[] = ['v
 export const DESIGN_VOICE_MODELS = ['drama3_voicedesign'] as const
 export type DesignVoiceModel = typeof DESIGN_VOICE_MODELS[number]
 export const VOICE_STYLE_MAX_CHARS = 300
-export type CustomCharacterVoice = {
+export type CustomCharacterVoice = VoiceBandFields & {
   provider: 'local'
   model: ReferenceVoiceModel
   voiceId: 'reference'
@@ -31,7 +39,7 @@ export type CustomCharacterVoice = {
   /** VoxCPM2 only: how the cloned voice speaks (whispering, excited…). */
   instructions?: string
 }
-export type DesignCharacterVoice = {
+export type DesignCharacterVoice = VoiceBandFields & {
   provider: 'local'
   model: DesignVoiceModel
   voiceId: 'design'
@@ -79,6 +87,35 @@ export function parseCharacterVoiceReference(raw: unknown): string {
 }
 
 const boundedText = (raw: unknown, max: number): raw is string => typeof raw === 'string' && Boolean(raw.trim()) && raw.length <= max
+const VOICE_TYPES: readonly VoiceTypeId[] = ['man', 'woman', 'child', 'robot']
+const BAND_KEYS = ['voiceType', 'pitchBandHz', 'maxBrightness', 'maxCentroidHz']
+
+function voiceBand(data: Record<string, unknown>): VoiceBandFields {
+  const kept: VoiceBandFields = {}
+  if (data.voiceType !== undefined) {
+    if (!VOICE_TYPES.includes(data.voiceType as VoiceTypeId)) throw new Error('voiceType must be man, woman, child or robot.')
+    kept.voiceType = data.voiceType as VoiceTypeId
+  }
+  if (data.pitchBandHz !== undefined) {
+    const band = data.pitchBandHz
+    if (!Array.isArray(band) || band.length !== 2 || band.some(item => typeof item !== 'number' || !Number.isFinite(item))
+      || !(band[0] < band[1]) || band[0] < 40 || band[1] > 600) throw new Error('pitchBandHz must be [low, high] in Hz.')
+    kept.pitchBandHz = [band[0], band[1]]
+  }
+  if (data.maxBrightness !== undefined) {
+    if (typeof data.maxBrightness !== 'number' || !Number.isFinite(data.maxBrightness) || data.maxBrightness < 0 || data.maxBrightness > 1) {
+      throw new Error('maxBrightness must be between 0 and 1.')
+    }
+    kept.maxBrightness = data.maxBrightness
+  }
+  if (data.maxCentroidHz !== undefined) {
+    if (typeof data.maxCentroidHz !== 'number' || !Number.isFinite(data.maxCentroidHz) || data.maxCentroidHz < 40 || data.maxCentroidHz > 8000) {
+      throw new Error('maxCentroidHz must be a frequency in Hz.')
+    }
+    kept.maxCentroidHz = data.maxCentroidHz
+  }
+  return kept
+}
 function voiceStyle(data: Record<string, unknown>, model: ReferenceVoiceModel): { instructions?: string } {
   if (data.instructions === undefined) return {}
   if (!STYLED_REFERENCE_VOICE_MODELS.includes(model)) throw new Error('This reference voice takes no style direction.')
@@ -91,7 +128,7 @@ function designDirection(data: Record<string, unknown>): { instructions?: string
   return data.instructions.trim() ? { instructions: data.instructions.trim() } : {}
 }
 function parseDesignCharacterVoice(data: Record<string, unknown>): DesignCharacterVoice {
-  const keys = ['provider', 'model', 'voiceId', 'name', 'language', 'instructions']
+  const keys = ['provider', 'model', 'voiceId', 'name', 'language', 'instructions', ...BAND_KEYS]
   if (Object.keys(data).some(key => !keys.includes(key))) {
     throw new Error('Drama 3 Voice Design takes no recording. Use drama3_base to clone a voice.')
   }
@@ -101,10 +138,10 @@ function parseDesignCharacterVoice(data: Record<string, unknown>): DesignCharact
     throw new Error('Add a name and a supported language for this Drama 3 voice.')
   }
   return { provider: 'local', model: data.model, voiceId: 'design', name: data.name.trim(),
-    language: data.language as DesignCharacterVoice['language'], ...designDirection(data) }
+    language: data.language as DesignCharacterVoice['language'], ...designDirection(data), ...voiceBand(data) }
 }
 function parseCustomCharacterVoice(data: Record<string, unknown>): CustomCharacterVoice {
-  const keys = ['provider', 'model', 'voiceId', 'name', 'referenceAudio', 'transcript', 'language', 'instructions']
+  const keys = ['provider', 'model', 'voiceId', 'name', 'referenceAudio', 'transcript', 'language', 'instructions', ...BAND_KEYS]
   if (Object.keys(data).some(key => !keys.includes(key)) || !isReferenceVoiceModel(data.model)
     || data.provider !== 'local' || data.voiceId !== 'reference' || !boundedText(data.name, 120) || !boundedText(data.transcript, 4000)
     || !CHARACTER_VOICE_LANGUAGES.includes(data.language as typeof CHARACTER_VOICE_LANGUAGES[number])) {
@@ -112,7 +149,7 @@ function parseCustomCharacterVoice(data: Record<string, unknown>): CustomCharact
   }
   return { provider: 'local', model: data.model, voiceId: 'reference', name: data.name.trim(),
     referenceAudio: parseCharacterVoiceReference(data.referenceAudio), transcript: data.transcript.trim(),
-    language: data.language as CustomCharacterVoice['language'], ...voiceStyle(data, data.model) }
+    language: data.language as CustomCharacterVoice['language'], ...voiceStyle(data, data.model), ...voiceBand(data) }
 }
 
 export function parseCharacterVoice(raw: unknown): CharacterVoice | undefined {
@@ -121,14 +158,14 @@ export function parseCharacterVoice(raw: unknown): CharacterVoice | undefined {
   const data = raw as Record<string, unknown>
   if (isReferenceVoiceModel(data.model)) return parseCustomCharacterVoice(data)
   if (isDesignVoiceModel(data.model)) return parseDesignCharacterVoice(data)
-  if (Object.keys(data).some(key => !['provider', 'model', 'voiceId', 'instructions'].includes(key))
+  if (Object.keys(data).some(key => !['provider', 'model', 'voiceId', 'instructions', ...BAND_KEYS].includes(key))
     || data.provider !== 'local' || data.model !== 'qwen3_tts_customvoice'
     || !CHARACTER_VOICES.includes(data.voiceId as typeof CHARACTER_VOICES[number])
     || (data.instructions !== undefined && (typeof data.instructions !== 'string' || data.instructions.length > 1000))) {
     throw new Error('Choose a local Qwen3 CustomVoice preset. Do not store credentials in a character.')
   }
   return { provider: 'local', model: 'qwen3_tts_customvoice', voiceId: data.voiceId as string,
-    ...(data.instructions ? { instructions: data.instructions as string } : {}) }
+    ...(data.instructions ? { instructions: data.instructions as string } : {}), ...voiceBand(data) }
 }
 export function parseCharacterVoicesByLanguage(raw: unknown): CharacterVoicesByLanguage | undefined {
   if (raw === undefined) return undefined

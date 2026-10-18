@@ -122,6 +122,14 @@ test('a VoxCPM2 line sends the reference and transcript, no language mode, and i
   assert.deepEqual(requests[0].custom_settings, { style: 'susurrando' })
 })
 
+test('a voice band round-trips and a bad type is refused', () => {
+  const banded = { ...custom, voiceType: 'child' as const, pitchBandHz: [180, 230] as [number, number], maxBrightness: 0.04 }
+  assert.deepEqual(parseCharacterVoice(JSON.parse(JSON.stringify(banded))), banded)
+  assert.throws(() => parseCharacterVoice({ ...custom, voiceType: 'ghost' }), /voiceType/)
+  const preset = { provider: 'local' as const, model: 'qwen3_tts_customvoice' as const, voiceId: 'ryan', voiceType: 'man' as const }
+  assert.deepEqual(parseCharacterVoice(preset), preset)
+})
+
 test('Drama 3 clone and design voices round-trip and generate like Studio', async () => {
   const drama: CustomCharacterVoice = { ...custom, model: 'drama3_base', name: 'Sol' }
   assert.deepEqual(parseCharacterVoice(JSON.parse(JSON.stringify(drama))), drama)

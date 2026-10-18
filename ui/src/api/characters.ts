@@ -30,6 +30,25 @@ export async function saveCharacterKit(
   return response.json()
 }
 
+/** The pitch band of one saved voice (the Wizard's set_voice_band, the same route as characters.voice.band). */
+export async function setCharacterVoiceBand(
+  workspace: string,
+  kitId: string,
+  band: { baseRevision?: number; voiceType?: string; pitchBandHz?: [number, number]; maxBrightness?: number; maxCentroidHz?: number; language?: string },
+): Promise<import('../lib/characterKit').CharacterKitLibrary> {
+  const response = await fetch(`${BASE}/api/v1/character-kits/library/kits/${encodeURIComponent(kitId)}/voice-band`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, ...band }),
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ detail: 'Could not save the voice band' }))
+    const detail = error.detail
+    throw new Error(typeof detail === 'string' ? detail : 'Could not save the voice band')
+  }
+  return response.json()
+}
+
 export async function deleteCharacterKit(
   workspace: string,
   library: import('../lib/characterKit').CharacterKitLibrary,

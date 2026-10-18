@@ -429,6 +429,39 @@ import and approve the take).
 - **Export:** the scene is exported by `scenes.video2d.export`, the exporter the server render uses (a 5 s card takes seconds on a CPU).
   If it is not ready after 60 s the reply is `status: "exporting"`; send the same request again and it attaches the take.
 
+### 4.10 Voice band
+
+A kit voice may carry `voiceType` (`man`, `woman`, `child`, `robot`), `pitchBandHz` `[low, high]`, `maxBrightness` (share of power at or above 3000 Hz) and `maxCentroidHz`. With none of them, a render records the line as before: `pitch_out_of_range` still only warns and does not ask for another take. With any of them, each take is measured (median pitch, that brightness, spectral centroid) and a take outside the band is spoken again, up to 3 seeds. If none lands inside, the best take is kept and the line warns `voice_out_of_band`. A man whose median pitch sits in the woman register (150–249 Hz) is retried even when a custom `pitchBandHz` would have allowed it. A missing measurement is not a failure.
+
+The default numbers are in `app/shared/voice_bands.json`, measured from real lines, not guessed: man 80–136 Hz, woman 108–249 Hz, child 180–230 Hz with centroid at most 510 Hz, robot 90–145 Hz. A stored field overrides its default. The type is never inferred from the character's description.
+
+Three doors, one function (`services/voice_band.py` `set_voice_band`):
+
+- `POST /api/v1/character-kits/library/kits/{kit_id}/voice-band` with `{workspace, voiceType?, pitchBandHz?, maxBrightness?, maxCentroidHz?, language?, baseRevision?}`. A bad value is HTTP 400.
+- MCP `characters.voice.band` posts that same body (`character_id` is the kit id; `language` selects `voicesByLanguage`).
+- Ask to the Wizard: `set_voice_band`.
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/character-kits/library/kits/gary/voice-band" \
+  -H "Content-Type: application/json" \
+  -d '{"workspace":"default","voiceType":"man"}'
+```
+
+```javascript
+await fetch(`${base}/api/v1/character-kits/library/kits/gary/voice-band`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'default', voiceType: 'man' }),
+})
+```
+
+```python
+import json, urllib.request
+body = json.dumps({"workspace": "default", "voiceType": "man"}).encode()
+request = urllib.request.Request(base + "/api/v1/character-kits/library/kits/gary/voice-band", data=body, method="POST")
+request.add_header("Content-Type", "application/json")
+urllib.request.urlopen(request)
+```
+
 ---
 
 ## 5. Cutout dialogue in a scene

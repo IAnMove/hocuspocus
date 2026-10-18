@@ -67,6 +67,8 @@ const AGENT_ACTIONS_IMPORTS = [
   // Action type only. Execution stays on the video2dTemplates adapter.
   './video2dTemplateCapabilities',
   './videoEditorActions',
+  // Action type only. Execution stays on the characterKit adapter.
+  './voiceBandCapabilities',
   './wizardContext',
   './wizardIntent',
   // Pure validation/result formatting; no store, transport or execution port.
@@ -221,7 +223,8 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 93) // speech_analysis_engine uses the Video3D adapter and shared native installer.
+  assert.equal(registered.length, 94) // set_voice_band uses the Character Kit adapter.
+  assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })
 

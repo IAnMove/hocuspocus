@@ -122,6 +122,7 @@ A walk-in whose sheet is not approved keeps the bob and the check warns `walk_sh
 A whole Video 2D card as a shot's take, in one call: `series.shot.card.apply` {shot, card (`walk-cycle-sheet`,
 `character-reaction`, `walk-toward-camera`...), cast [{slot, characterId, animation?, poseId?}], assets, controls}. It uses the
 approved sheets and poses, the shot's plate and recorded lines; a candidate (`approve` only in one-shot). `exporting`: repeat it.
+`characters.voice.band` {character_id, voiceType man|woman|child|robot} sets that voice's pitch band. A take outside it is retried and may warn `voice_out_of_band`.
 
 ## The script
 

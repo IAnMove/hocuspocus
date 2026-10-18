@@ -98,6 +98,9 @@ class Tools:
         self.exports, self.wait_errors, self.fail_speech_at = {}, list(wait_errors), fail_speech_at
         self.reported_wer = None
         self.reported_pitch = None
+        self.reported_brightness = None
+        self.reported_centroid = None
+        self.by_take = None
 
     def __call__(self, tool, arguments):
         self.calls.append((tool, arguments))
@@ -118,13 +121,21 @@ class Tools:
             return {"status": "completed", "outputs": [{"path": f"{speech['input']['output_name']}.wav"}]}
         if tool == "qa.speech":
             takes = [name for name, _ in self.calls if name == "qa.speech"]
-            if self.reported_wer is not None:
+            if self.by_take:
+                spec = self.by_take[min(len(takes) - 1, len(self.by_take) - 1)]
+                result = {"wer": spec.get("wer", 0.05), "wer_threshold": spec.get("wer_threshold", 0.34)}
+                result.update({key: spec[key] for key in ("medianPitchHz", "brightness", "centroidHz") if key in spec})
+            elif self.reported_wer is not None:
                 wer, threshold = self.reported_wer
                 result = {"wer": wer, "wer_threshold": threshold}
             else:
                 result = {"wer": 0.6 if self.bad_first_take and len(takes) == 1 else 0.05}
-            if self.reported_pitch is not None:
+            if self.by_take is None and self.reported_pitch is not None:
                 result["medianPitchHz"] = self.reported_pitch
+            if self.by_take is None and self.reported_brightness is not None:
+                result["brightness"] = self.reported_brightness
+            if self.by_take is None and self.reported_centroid is not None:
+                result["centroidHz"] = self.reported_centroid
             return {"result": result}
         if tool == "audio.mouth_cues":
             return {"result": {"mouthCues": [{"start": 0, "end": 0.4, "value": "D"}], "recognizer": "wav2vec2-phoneme"}}
@@ -731,6 +742,105 @@ def test_a_high_male_voice_and_a_seseo_warn_without_another_take(tmp_path):
     assert speech[0]["pitch_range"] == [85.0, 155.0]
     assert [name for name, _args in tools.calls].count("generation.speech") == 1
     assert [name for name, _args in tools.calls].count("qa.accent") == 1
+
+
+def _speeches(tools):
+    return [name for name, _args in tools.calls].count("generation.speech")
+
+
+def _band_shot(tmp_path, voice, **fields):
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    tools, compiled = Tools(tmp_path), []
+    for key, value in fields.items():
+        setattr(tools, key, value)
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    render.deps.read_kits("cast")["kit-gary"]["voice"] = voice
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    return done, tools
+
+
+def test_the_measured_voice_bands_are_the_ones_the_gate_loads():
+    from services.voice_band import limits_for
+    assert limits_for({"voiceType": "man"})["pitchBandHz"] == [80, 136]
+    assert limits_for({"voiceType": "man"})["maxBrightness"] == 0.04
+    assert limits_for({"voiceType": "woman"})["pitchBandHz"] == [108, 249]
+    assert limits_for({"voiceType": "child"})["maxCentroidHz"] == 510
+    assert limits_for({"voiceType": "robot"})["pitchBandHz"] == [90, 145]
+    assert limits_for({"voiceType": "man"})["womanRegisterHz"] == [150, 249]
+    wide = limits_for({"voiceType": "man", "pitchBandHz": [80, 400]})
+    assert wide["pitchBandHz"] == [80.0, 400.0] and wide["womanRegisterHz"] == [150, 249]
+
+
+def test_a_line_outside_its_band_is_retried_and_kept_with_a_warning(tmp_path):
+    done, tools = _band_shot(tmp_path, {**GARY, "voiceType": "man"}, reported_pitch=321.3, reported_brightness=0.0135, reported_centroid=906.8)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert done["status"] == "completed", done
+    assert line["warning"] == "voice_out_of_band" and line["voiceBand"] == "pitch" and line["attempt"] == 0
+    assert _speeches(tools) == 3
+    assert done["items"][0]["warnings"] == [{"id": "s03_d0", "warning": "voice_out_of_band"}]
+    assert "warning" not in done["items"][0]
+
+
+def test_a_line_inside_its_band_is_not_retried(tmp_path):
+    done, tools = _band_shot(tmp_path, {**GARY, "voiceType": "man"}, reported_pitch=100.0, reported_brightness=0.01, reported_centroid=250.0)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and "warning" not in line and "voiceBand" not in line
+    assert _speeches(tools) == 1
+    assert "warnings" not in done["items"][0]
+
+
+def test_a_man_in_a_womans_register_is_retried_even_inside_a_custom_band(tmp_path):
+    voice = {**GARY, "voiceType": "man", "pitchBandHz": [80, 400]}
+    done, tools = _band_shot(tmp_path, voice, reported_pitch=200.0, reported_brightness=0.01, reported_centroid=400.0)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["voiceBand"] == "man_in_woman_band" and line["warning"] == "voice_out_of_band"
+    assert _speeches(tools) == 3
+    # 120 Hz is a low man (inside the wide band, under the woman register): one take.
+    done, tools = _band_shot(tmp_path / "low", voice, reported_pitch=120.0, reported_brightness=0.01, reported_centroid=400.0)
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 0 and "warning" not in done["items"][0]["lines"]["s03_d0"]
+    assert _speeches(tools) == 1
+
+
+def test_an_in_band_take_beats_a_cleaner_take_that_is_outside(tmp_path):
+    done, tools = _band_shot(tmp_path, {**GARY, "voiceType": "man"}, by_take=[
+        {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.01, "centroidHz": 400.0},
+        {"wer": 0.2, "medianPitchHz": 100.0, "brightness": 0.01, "centroidHz": 250.0},
+        {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.01, "centroidHz": 400.0},
+    ])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 1 and line["wer"] == 0.2 and "warning" not in line
+    assert _speeches(tools) == 2
+
+
+def test_a_bright_child_inside_the_pitch_band_is_still_outside(tmp_path):
+    voice = {**GARY, "voiceType": "child"}
+    done, tools = _band_shot(tmp_path, voice, reported_pitch=215.1, reported_brightness=0.008, reported_centroid=762.0)
+    assert done["items"][0]["lines"]["s03_d0"]["voiceBand"] == "centroid"
+    assert _speeches(tools) == 3
+    done, tools = _band_shot(tmp_path / "ok", voice, reported_pitch=200.0, reported_brightness=0.01, reported_centroid=400.0)
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 0 and _speeches(tools) == 1
+
+
+def test_a_reused_line_outside_its_band_is_recorded_again(tmp_path):
+    voice = {**GARY, "voiceType": "man"}
+    _band_shot(tmp_path, voice, reported_pitch=100.0, reported_brightness=0.01, reported_centroid=250.0)
+    again, tools = _band_shot(tmp_path, voice, reported_pitch=321.0, reported_brightness=0.01, reported_centroid=900.0)
+    # The first recording is still in the folder. The band check measures it, refuses it, and records again.
+    assert again["items"][0]["lines"]["s03_d0"]["warning"] == "voice_out_of_band"
+    assert _speeches(tools) == 3
+    assert [name for name, _args in tools.calls].count("qa.speech") == 4
+
+
+def test_a_voice_without_a_band_reuses_its_recording_without_another_pitch_check(tmp_path):
+    tools, compiled = Tools(tmp_path), []
+    tools.reported_pitch = 200.0
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    spoken = _speeches(tools)
+    checked = [name for name, _args in tools.calls].count("qa.speech")
+    again = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    assert again["items"][0]["lines"]["s03_d0"]["reused"] is True
+    assert _speeches(tools) == spoken and [name for name, _args in tools.calls].count("qa.speech") == checked
 
 
 def _castilian_render(tmp_path, monkeypatch, wav2vec2):

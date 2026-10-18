@@ -22,6 +22,28 @@ def test_launch_and_core_labs_mount_the_shared_character_kit_router():
     assert "def get_character_kit_library" not in launch
 
 
+def test_the_voice_band_route_stores_the_type_and_rejects_a_bad_one(tmp_path):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from services.character_kit_library import patch_character_kit, read_character_kit_library
+
+    preset = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan"}
+    kit = {"version": 1, "id": "gary", "name": "Gary", "style": "cutout", "poses": {},
+           "mouth": {}, "eyes": {}, "anchors": {}, "provenance": [], "voice": preset}
+    patch_character_kit(str(tmp_path), "gary", kit, base_revision=0)
+    _bind_character_kit_library_runtime(workspace_dir=lambda _ws: str(tmp_path), conflict=lambda exc: HTTPException(409, "conflict"))
+    app = FastAPI()
+    app.include_router(create_character_kit_library_router())
+    client = TestClient(app)
+    bad = client.post("/api/v1/character-kits/library/kits/gary/voice-band", json={"workspace": "cast", "voiceType": "ghost"})
+    assert bad.status_code == 400
+    ok = client.post("/api/v1/character-kits/library/kits/gary/voice-band", json={"workspace": "cast", "voiceType": "man"})
+    assert ok.status_code == 200, ok.text
+    saved = read_character_kit_library(str(tmp_path))["kits"]["gary"]["voice"]
+    assert saved["voiceType"] == "man" and "pitchBandHz" not in saved
+    assert saved["voiceId"] == "ryan"
+
+
 def test_conflict_adapter_is_used_for_patch():
     seen = []
 

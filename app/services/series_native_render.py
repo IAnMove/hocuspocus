@@ -58,6 +58,7 @@ from services.series_document_card import DocumentCardError, document_plate
 from services import series_hearing
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.speech_text_es import line_notes, pronounce, qa_verdict
+from services.voice_band import band_applies, take_reason
 from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
 from services.series_voice_rooms import RoomError, apply_room, roomed
 
@@ -176,6 +177,28 @@ def _carry_sidecar(raw: str, trimmed: str) -> None:
     except OSError:
         with contextlib.suppress(OSError):
             os.remove(temporary)
+
+
+def _outranks(take: dict, best: dict | None) -> bool:
+    """An in-band take beats any out-of-band take. Inside one class, a lower word error rate wins.
+
+    A take whose error rate was not measured does not replace one that was.
+    """
+    if best is None:
+        return True
+    if bool(take.get("voiceBand")) != bool(best.get("voiceBand")):
+        return not take.get("voiceBand")
+    wer, previous = take.get("wer"), best.get("wer")
+    if wer is None:
+        return False
+    return previous is None or wer < previous
+
+
+def _keep_take(best: dict | None, take: dict, wer: float | None, limit: float) -> tuple[dict, bool]:
+    """The take to keep, and whether the loop can stop (in band, and the words are close enough)."""
+    chosen = take if _outranks(take, best) else best
+    stop = not take.get("voiceBand") and (wer is None or wer <= limit)
+    return chosen, stop
 
 
 def _replace_with_sidecar(source: str, target: str) -> None:
@@ -593,7 +616,7 @@ class SeriesNativeRender:
         that take is good: a failed retake leaves the old recording. The next render of the shot reuses it."""
         text, voice, key = self.line_voice(series, beat, kits, job["language"])
         if not retake:
-            return self._reuse(workspace, job, beat["id"], text, key) or self._record(workspace, job, beat["id"], text, voice, key)
+            return self._reuse(workspace, job, beat["id"], text, key, voice) or self._record(workspace, job, beat["id"], text, voice, key)
         stem, root = self._stem(job, beat["id"], key), self.deps.workspace_dir(workspace)
         take = self._record(workspace, job, beat["id"], text, voice, key, stem=f"{stem[:130]}-take{uuid.uuid4().hex[:6]}")
         _replace_with_sidecar(os.path.join(root, take["filename"]), os.path.join(root, f"{stem}.wav"))
@@ -608,7 +631,10 @@ class SeriesNativeRender:
             current = audio_content(self.deps.workspace_dir(workspace), [done["filename"]]) if done else {}
             if done and done.get("key") == key and done.get("audioDigest") == current.get(done["filename"]) != "unavailable":
                 continue
-            item["lines"][beat["id"]] = self._reuse(workspace, job, beat["id"], text, key) or self._record(workspace, job, beat["id"], text, voice, key)
+            recorded = self._reuse(workspace, job, beat["id"], text, key, voice) or self._record(workspace, job, beat["id"], text, voice, key)
+            item["lines"][beat["id"]] = recorded
+            if recorded.get("warning") == "voice_out_of_band":
+                item.setdefault("warnings", []).append({"id": beat["id"], "warning": "voice_out_of_band"})
             self._save(workspace, job)
             if self._cancelled(job["jobId"]):
                 raise NativeRenderError("cancelled", "Cancelled")
@@ -622,7 +648,14 @@ class SeriesNativeRender:
     def _stem(cls, job: dict, beat_id: str, key: str) -> str:
         return cls.recording_stem(job["episodeId"], beat_id, key)
 
-    def _reuse(self, workspace: str, job: dict, beat_id: str, text: str, key: str) -> dict[str, Any] | None:
+    def _band_rejects(self, workspace: str, job: dict, filename: str, text: str, voice: dict | None) -> bool:
+        """A reused file is recorded again only when its voice asked for a band and the file is outside it."""
+        if not self.deps.check_speech or not band_applies(voice):
+            return False
+        _wer, _limit, notes = self._wer(workspace, filename, text, job["language"], voice)
+        return take_reason(voice, notes) is not None
+
+    def _reuse(self, workspace: str, job: dict, beat_id: str, text: str, key: str, voice: dict | None = None) -> dict[str, Any] | None:
         """The recording an earlier render made of the same line in the same voice (its file name says so)."""
         filename = f"{self._stem(job, beat_id, key)}.wav"
         path = os.path.join(self.deps.workspace_dir(workspace), filename)
@@ -634,6 +667,8 @@ class SeriesNativeRender:
             return None
         if duration < shortest_line(text):
             return None  # an empty take an older render kept: record it again
+        if self._band_rejects(workspace, job, filename, text, voice):
+            return None
         self.deps.level(path)
         cues = self._cues(workspace, filename, duration, text, job["language"])
         return {"key": key, "filename": filename, "duration": round(duration, 3), "wer": None, "attempt": 0,
@@ -658,12 +693,14 @@ class SeriesNativeRender:
                     _discard(final)
                     continue
                 wer, limit, notes = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
+                reason = take_reason(voice, notes)
                 take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer,
-                        "attempt": attempt, **notes}
-                if best is None or (wer is not None and (best["wer"] is None or wer < best["wer"])):
-                    best = take
+                        "attempt": attempt, **notes, **({"voiceBand": reason} if reason else {})}
+                chosen, stop = _keep_take(best, take, wer, limit)
+                if chosen is not best:
+                    best = chosen
                     _replace_with_sidecar(final, best_path)
-                if wer is None or wer <= limit:
+                if stop:
                     break
         finally:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
@@ -672,6 +709,8 @@ class SeriesNativeRender:
         if best is None:
             raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
                                     "try another reference voice or reword the line", 502)
+        if best.get("voiceBand"):
+            best = {**best, "warning": "voice_out_of_band"}
         self.deps.level(final)
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
         return {**best, **cues, "audioDigest": file_digest(final)}

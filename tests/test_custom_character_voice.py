@@ -27,6 +27,19 @@ def test_reference_voice_survives_library_reload_and_links_from_another_workspac
     assert normalize_character_voice(preset) == preset
 
 
+def test_a_voice_band_is_kept_and_a_bad_type_is_refused():
+    banded = {**voice(), "voiceType": "woman", "pitchBandHz": [108, 249], "maxBrightness": 0.03}
+    saved = normalize_character_voice(banded)
+    assert saved["voiceType"] == "woman" and saved["pitchBandHz"] == [108.0, 249.0] and saved["maxBrightness"] == 0.03
+    assert "maxCentroidHz" not in saved
+    preset = {"provider": "local", "model": "qwen3_tts_customvoice", "voiceId": "ryan", "voiceType": "man"}
+    assert normalize_character_voice(preset) == preset
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design", "name": "Sol", "language": "spanish", "voiceType": "robot"}
+    assert normalize_character_voice(design)["voiceType"] == "robot" and "pitchBandHz" not in normalize_character_voice(design)
+    with pytest.raises(ValueError, match="voiceType"):
+        normalize_character_voice({**voice(), "voiceType": "ghost"})
+
+
 def test_a_drama3_voice_survives_a_kit_save_and_reload(tmp_path):
     clone = {**voice(), "model": "drama3_base", "name": "Sol"}
     english = {**clone, "language": "english", "name": "Sol EN"}

@@ -50,6 +50,7 @@ import { registerProductionWorkCapabilities } from './productionWorkCapabilities
 import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities'
 import { registerSeriesShotCardCapabilities } from './seriesShotCardCapabilities'
 import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
+import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
 import { registerVideo2DTemplateCapabilities } from './video2dTemplateCapabilities'
@@ -1215,6 +1216,7 @@ registerProductionWorkCapabilities(defineCapability)
 registerSeriesShotEditCapabilities(defineCapability)
 registerSeriesShotCardCapabilities(defineCapability)
 registerCharacterAnimationCapabilities(defineCapability)
+registerVoiceBandCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)
