@@ -169,3 +169,43 @@ def test_feet_land_on_the_floor_the_numpy_pinhole_predicts():
     # The camera looks slightly down, so a 1.75 m body beside a 2.0 m door is not exactly 0.875 on screen.
     assert abs(predicted - 0.875) <= 0.03
     assert abs(predicted - ratio) <= 0.01
+
+
+KITCHEN = {**BOX, "props": [{"prompt": "a chair", "on": "floor", "x": 0, "z": 0, "height_m": 0.9}]}
+
+
+def test_series_stands_on_the_floor_and_refuses_the_door_and_the_furniture():
+    from services.series_room_box import cutout_scale, foreign_room, shot_problems
+    from services.series_sets import inherit_shot, script_scene3d
+    from services.series_shot3d import _setup, normalize_scene3d
+    series = {"rooms": {"kitchen": KITCHEN}, "locations": [{"id": "office", "set3d": {"mold": "despacho"}}]}
+    chair = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 0, "z": 0}}]}
+    assert any("furniture" in item for item in shot_problems(chair, series, None, {}))
+    clear = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 1.2, "z": 1}, "heightM": 1.75}]}
+    assert shot_problems(clear, series, None, {}) == []
+    outside = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 3, "z": 0}}]}
+    assert any("outside the room floor" in item for item in shot_problems(outside, series, None, {}))
+    on_door = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 0, "z": 2.4}}]}
+    assert any("stands on the door" in item for item in shot_problems(on_door, series, None, {}))
+    far = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": "far"}]}
+    assert shot_problems(far, series, None, {}) == []
+    missing = {"kind": "3d", "cast": [{"characterId": "ana", "at": {"x": 0, "z": 0}}]}
+    assert any("names set" in item for item in shot_problems(missing, series, None, {}))
+    assert foreign_room({"kind": "2d", "set": "kitchen"}) == "set is only for a 3d shot"
+    assert any("mold room" in item for item in shot_problems(clear, series, None, series["locations"][0]))
+    half = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 1}}]}
+    assert any("at is" in item for item in shot_problems(half, series, None, {}))
+    dressed = script_scene3d(clear, {}, series=series)
+    assert dressed["roomBox"]["size"]["h"] == 2.6 and dressed["cast"][0]["at"] == {"x": 1.2, "z": 1}
+    room = next(item for item in dressed["objects"] if item["objectId"] == "room-box")
+    assert room["scale"] == round(2.6 / 1.7, 4) and room["grounded"] is False
+    stored = normalize_scene3d(dressed)
+    assert stored["roomBox"]["size"]["d"] == 5 and stored["cast"][0]["heightM"] == 1.75
+    setup = _setup("w", None, stored, [], lambda *_args: RuntimeError("unused"), [])
+    assert setup["camera"]["eye"] == [0.0, 1.6, -3.35] and setup["camera"]["fov"] == 48.0
+    assert setup["bindings"][0]["position"] == [1.2, 0, 1] and setup["bindings"][0]["grounded"] is True
+    assert setup["bindings"][1]["grounded"] is False
+    assert cutout_scale({}) == {} and cutout_scale({"heightM": 1.75})["scale"] == 1.75 / 2
+    boxed = {"productionMethod": "animation_3d", "set": "kitchen", "locationId": "office", "scene3d": dressed}
+    assert inherit_shot(series, boxed) is boxed and "roomSet" not in boxed["scene3d"]
+

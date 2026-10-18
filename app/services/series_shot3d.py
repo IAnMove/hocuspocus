@@ -73,6 +73,8 @@ def _extras(value: dict[str, Any]) -> dict[str, Any]:
     from services.series_set_items import hidden_items
     extras.update(hidden_items(value))
     extras.update({key: value[key] for key in ("roomCamera", "roomSet", "roomFingerprint") if key in value})
+    if isinstance(value.get("roomBox"), dict):
+        extras["roomBox"] = value["roomBox"]
     extras.update(_look(value))
     return extras
 
@@ -92,10 +94,26 @@ def _valid_id(value: Any) -> bool:
     return isinstance(value, str) and bool(_ID.match(value))
 
 
-def _cast_entry(entry: Any) -> dict[str, str] | None:
+def _cast_entry(entry: Any) -> dict[str, Any] | None:
     if not isinstance(entry, dict) or not (_valid_id(entry.get("characterId")) and _valid_id(entry.get("objectId"))):
         return None
-    return {"characterId": entry["characterId"], "objectId": entry["objectId"], **({"mark": entry["mark"]} if _valid_id(entry.get("mark")) else {}), **({"poseId": entry["poseId"]} if _valid_id(entry.get("poseId")) else {})}
+    return {"characterId": entry["characterId"], "objectId": entry["objectId"], **({"mark": entry["mark"]} if _valid_id(entry.get("mark")) else {}), **({"poseId": entry["poseId"]} if _valid_id(entry.get("poseId")) else {}), **_placed(entry)}
+
+
+def _placed(entry: dict[str, Any]) -> dict[str, Any]:
+    """Where a person stands in a box room, and how tall, when the shot named either."""
+    kept: dict[str, Any] = {}
+    at = entry.get("at")
+    if at in ("near", "mid", "far"):
+        kept["at"] = at
+    elif isinstance(at, dict):
+        x, z = _number(at.get("x"), -100, 100), _number(at.get("z"), -100, 100)
+        if x is not None and z is not None:
+            kept["at"] = {"x": x, "z": z}
+    height = _number(entry.get("heightM"), 0.3, 3.0)
+    if height is not None:
+        kept["heightM"] = height
+    return kept
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -383,14 +401,19 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
     setup: dict[str, Any] = {"retime": True} if config.get("retime", True) else {}
     setup.update({key: config[key] for key in ("renderLook", "toon") if key in config})
     from services.world3d_stage_documents import stage_camera
-    if stage_camera(config):
+    if config.get("roomBox"):
+        from services.series_room_box import box_camera
+        setup["camera"] = box_camera(config["roomBox"])
+    elif stage_camera(config):
         setup["camera"] = stage_camera(config)
     if effects:
         setup["screenFx"] = effects
     if sound:
         setup["soundtrack"] = sound
     from services.series_sets import room_cast_bindings
-    objects = [*room_cast_bindings(config), *[_object_binding(workspace, root, entry, error) for entry in config.get("objects") or []]]
+    from services.series_room_box import box_cast_bindings
+    placed = box_cast_bindings(config) if config.get("roomBox") else room_cast_bindings(config)
+    objects = [*placed, *[_object_binding(workspace, root, entry, error) for entry in config.get("objects") or []]]
     if objects:
         setup["bindings"] = objects
     return setup
@@ -427,9 +450,10 @@ def _talk(call: Callable, workspace: str, stem: str, scene_id: str, revision: in
     payload = [{"start": line["start"], "cues": line.get("cues") or [], "audio": f"/api/v1/file/{quote(line['filename'])}?workspace={quote(workspace)}"}
                for line in spoken]
     # A template's subject may be a 3D marker: a talking cutout is an image object.
+    from services.series_room_box import cutout_scale
     revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-image-{entry['objectId']}", "input": {
         "workspace": workspace, "scene_id": scene_id, "base_revision": revision,
-        "bindings": [{"object_id": entry["objectId"], "media": "image"}]}}), f"prepare {entry['objectId']}", error)["scene"]["revision"]
+        "bindings": [{"object_id": entry["objectId"], "media": "image", **cutout_scale(entry)}]}}), f"prepare {entry['objectId']}", error)["scene"]["revision"]
     talked = _ok(call("world3d.scene.talk", {"version": 1, "intent_id": f"{stem}-talk-{entry['objectId']}", "input": {
         "workspace": workspace, "scene_id": scene_id, "base_revision": revision, "object_id": entry["objectId"], "kit_id": kit_id,
         "pose": entry.get("poseId") or "base", "lines": payload}}), f"make {entry['characterId']} talk", error)
