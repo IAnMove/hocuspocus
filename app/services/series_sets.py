@@ -43,7 +43,10 @@ def series_style(series):
     return str(series.get('characterVisualStyle') or series.get('masterUniversePrompt') or '')
 
 
-def script_scene3d(shot,location):
+def script_scene3d(shot,location,*,series=None,root=None):
+    if shot.get('set'):
+        from services.series_room_box import dress_shot
+        return dress_shot(shot,series,root,location)
     config=copy.deepcopy(shot.get('scene3d') or {})
     if not location.get('set3d') or shot.get('kind')!='3d': return config
     if not config.get('scene'): config.setdefault('template','two-shot')
@@ -60,13 +63,14 @@ def script_scene3d(shot,location):
 
 
 def mark_warnings(shot,location):
-    if not location.get('set3d') or shot.get('kind')!='3d': return []
+    if shot.get('set') or not location.get('set3d') or shot.get('kind')!='3d': return []
     names={m['id'] for m in resolve_mold(location['set3d']['mold'],location['set3d'].get('size','medium'))['marks']}
     return [{'code':'unknown_set_mark','message':f'Unknown room mark: {entry["mark"]}', 'subject':entry['mark']}
             for entry in script_scene3d(shot,location).get('cast',[]) if entry.get('mark') and entry['mark'] not in names]
 
 
 def inherit_shot(series,shot):
+    if shot.get('set') or (shot.get('scene3d') or {}).get('roomBox'): return shot
     location=location_for(series,shot)
     if shot.get('productionMethod')!='animation_3d' or not location.get('set3d'): return shot
     result=copy.deepcopy(shot);config=result.setdefault('scene3d',{})
@@ -97,7 +101,7 @@ def room_cast_bindings(config):
 
 def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
     """Room listeners retain their approved pose even in a shot with no dialogue."""
-    if not config.get('roomSet'): return scene
+    if not config.get('roomSet') and not config.get('roomBox'): return scene
     from services.set_generation import require_result
     speaking={line['characterId'] for line in lines};bindings=[]
     for entry in config.get('cast',[]):
@@ -111,7 +115,11 @@ def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
         if not source.startswith(('/api/','http://','https://')):
             from urllib.parse import quote
             source=f"/api/v1/file/{quote(source.removeprefix('outputs/'))}?workspace={quote(workspace)}"
-        bindings.append({'object_id':entry['objectId'],'media':'image','source_url':source,'imageLook':{'grounded':True}})
+        row={'object_id':entry['objectId'],'media':'image','source_url':source,'imageLook':{'grounded':True}}
+        if config.get('roomBox'):
+            from services.series_room_box import cutout_scale
+            row.update(cutout_scale(entry))
+        bindings.append(row)
     if not bindings: return scene
     return require_result(call('world3d.scene.patch',{'version':1,'intent_id':f'{stem}-listeners','input':{
         'workspace':workspace,'scene_id':scene['sceneId'],'base_revision':scene['revision'],'bindings':bindings}}))['scene']

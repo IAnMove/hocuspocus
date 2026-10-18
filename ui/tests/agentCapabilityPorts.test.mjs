@@ -55,6 +55,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './mediaToolCapabilities',
   // Action type only. Execution stays on the productionWorks adapter.
   './productionWorkCapabilities',
+  // Action type only. Execution stays on the roomSets adapter.
+  './roomSetsCapabilities',
   // Action type only. Execution stays on the seriesShots adapter.
   './seriesShotCardCapabilities',
   // Action types only. Execution stays on the seriesShots adapter.
@@ -223,7 +225,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 94) // set_voice_band uses the Character Kit adapter.
+  assert.equal(registered.length, 95) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band uses the Character Kit adapter.
   assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })

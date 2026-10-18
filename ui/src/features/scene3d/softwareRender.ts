@@ -5,6 +5,7 @@ import { shakeCamera } from './cameraShake.ts'
 import { scene3dSlotColor } from './document.ts'
 import type { Scene3DDocument, Scene3DLoop } from './types.ts'
 import { renderMotionLabSoftware } from './motionlab/software'
+import { paintRoomBox } from './roomBoxRaster.ts'
 
 export type SoftwareFrame = {
   width: number
@@ -58,6 +59,16 @@ export function renderScene3DSoftware(document: Scene3DDocument, sceneSeconds: n
   pixels.fill(18)
   for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255
   const frame = native ?? { width, height, pixels }
+  // A box room paints its own floor. The generic ground and the slot boxes stay for every other document,
+  // so a document without roomBox keeps the same pixels.
+  if (!native && document.roomBox) {
+    const rawEye = cameraEyeAtTime(document.camera, sceneSeconds, document.duration, document.slots)
+    const roomFallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos, document.dressing) : null
+    const posed = roomFallback ? atmosEye(rawEye, sceneSeconds, document.duration, document.camera.family) : rawEye
+    const shaken = shakeCamera(document.camera.shake, sceneSeconds, posed, cameraLookAtTime(document.camera, sceneSeconds, document.duration, document.slots))
+    paintRoomBox(frame, document, shaken.eye, shaken.look, document.camera.fov, width / height)
+    return frame
+  }
   const cylinder = document.slots.find(isCylinderBackdrop)
   const fallback = isAtmosDressing(document.dressing) ? atmosFallbackLook(document.atmos, document.dressing) : null
   if (native) { /* Native sets already rasterized their geometry and sky. */ }

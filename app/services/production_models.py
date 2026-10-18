@@ -46,6 +46,10 @@ from services.production_parallax import (
     build as build_parallax, check_parallax, is_built as parallax_built, is_parallax, picture_jobs as parallax_jobs,
     recipe as parallax_recipe,
 )
+from services.production_room_box import (
+    build as build_room_box, check_room_box, is_built as box_built, picture_jobs as box_jobs, recipe as box_recipe,
+)
+from services.room_box import is_box_room
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
 FIELDS = {"from", "prompt", "glb", "rig", "fallback", "animations", "seed", "height"}
@@ -103,9 +107,14 @@ def check_sets(spec: dict) -> None:
     if not isinstance(sets, dict) or len(sets) > 12:
         raise ModelError("spec.sets maps up to 12 names to {prompt, seed}")
     for name, entry in sets.items():
-        built = is_diorama(entry) or is_parallax(entry) or rooms.is_room(entry)
+        built = is_diorama(entry) or is_parallax(entry) or is_box_room(entry) or rooms.is_room(entry)
         if built and isinstance(name, str) and _NAME.match(name):
-            why = (rooms.check_room if rooms.is_room(entry) else check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
+            if is_box_room(entry):
+                why = check_room_box(name, entry, _text)
+            elif rooms.is_room(entry):
+                why = rooms.check_room(name, entry, _text)
+            else:
+                why = (check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
             if why:
                 raise ModelError(why)
         elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
@@ -308,6 +317,7 @@ def _await(production: Any, operation: str, jobs: dict[str, tuple[str | None, st
 
 # The set kinds built from several pictures, each with its recipe, its picture jobs and what a built record holds.
 SET_KINDS = (
+    {"name": "room_box", "is": is_box_room, "recipe": box_recipe, "jobs": box_jobs, "built": box_built},
     {"name": "room", "is": rooms.is_room, "recipe": rooms.recipe, "jobs": rooms.picture_jobs, "built": rooms.is_built},
     {"name": "diorama", "is": is_diorama, "recipe": diorama_recipe, "jobs": diorama_jobs, "built": diorama_built},
     {"name": "parallax", "is": is_parallax, "recipe": parallax_recipe, "jobs": parallax_jobs, "built": parallax_built},
@@ -402,7 +412,7 @@ def _collect_pictures(production: Any, jobs: dict, made: dict, sets: dict, pictu
             pictures[name] = production.upload(file)[1]
     for set_name, record in sets.items():
         if record.get("pictures") and not record.get("error"):
-            (rooms.build if record.get("kind") == "room" else build_parallax if record.get("kind") == "parallax" else build_diorama)(production, set_name, record)
+            (build_room_box if record.get("kind") == "room_box" else rooms.build if record.get("kind") == "room" else build_parallax if record.get("kind") == "parallax" else build_diorama)(production, set_name, record)
     production.save()
 
 

@@ -611,6 +611,7 @@
         "tests/test_world3d_template_traits.py",
         "tests/test_set_molds_catalog.py",
         "tests/test_room_integration.py",
+        "tests/test_room_box.py",
         "tests/test_world3d_modifiers.py",
         "tests/test_world3d_template_queries.py",
         "tests/test_world3d_template_suggest.py",
@@ -637,6 +638,36 @@
     }
   ],
   "path_rules": [
+    {
+      "prefix": "app/services/room_box.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/production_room_box.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/room_box_camera.json",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_room_box.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/room_box_commands.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
     {
       "prefix": "app/services/gpu_machine_lock.py",
       "paths": [

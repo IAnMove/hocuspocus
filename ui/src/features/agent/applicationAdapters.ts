@@ -196,6 +196,7 @@ export interface WizardApplicationAdapters {
   characterKit: CharacterKitAdapter
   lipsCreator: { command(action: AgentLipsCreatorAction, workspace?: string): Promise<AdapterOutcome>; generate(action: AgentGenerateLipsAction, workspace?: string, context?: { onStep?: (message: string) => void; generationContext?: GenerationSubmissionContext }): Promise<AdapterOutcome> }
   world3dTemplates: { command(action: import('./world3dTemplateCapabilities').AgentWorld3DTemplatesAction, workspace?: string): Promise<AdapterOutcome> }
+  roomSets: { command(action: import('./roomSetsCapabilities').AgentRoomSetsAction, workspace?: string): Promise<AdapterOutcome> }
   video2dTemplates: { command(action: import('./video2dTemplateCapabilities').AgentVideo2DTemplatesAction): Promise<AdapterOutcome> }
   productionWorks: { command(action: import('./productionWorkCapabilities').AgentProductionWorksAction, workspace?: string): Promise<AdapterOutcome> }
   seriesShots: {
@@ -739,6 +740,26 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         outputNames,
       })
       return editorOutcome(result, message, { report, outputNames })
+    },
+  }
+  adapters.roomSets = {
+    async command(action, workspace) {
+      const active = workspace || 'default'
+      const input = { ...action.input }
+      const intent = typeof input.intent_id === 'string' ? input.intent_id : undefined
+      delete input.intent_id
+      const response = await fetch('/api/v1/scene3d/rooms/commands', {
+        method: 'POST', headers: { 'content-type': 'application/json', 'X-Hocus-UI-Surface': 'wizard' },
+        body: JSON.stringify({ operation: action.operation, version: 1, input: { workspace: active, ...input }, ...(intent ? { intent_id: intent } : {}) }),
+      })
+      const body = await response.json() as { result?: { name?: string; file?: string }; detail?: { message?: string } | string }
+      if (!response.ok) {
+        const detail = body.detail
+        const message = typeof detail === 'string' ? detail : detail?.message
+        throw new Error(message || 'Room command failed')
+      }
+      const name = body.result?.name || 'room'
+      return { message: body.result?.file ? `Stored room ${name} at ${body.result.file}.` : `Room ${name}.`, metadata: body as Record<string, unknown>, target: { kind: 'video_3d_scene', id: name, title: name } }
     },
   }
   adapters.world3dTemplates = {

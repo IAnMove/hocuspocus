@@ -299,9 +299,15 @@ class EpisodeScript:
         except ValueError as error:
             problems.append(f"{where}: {error}")
         if shot.get("kind") != "3d":
+            from services.series_room_box import foreign_room
+            foreign = foreign_room(shot)
+            if foreign:
+                problems.append(f"{where}: {foreign}")
             return
+        from services.series_room_box import shot_problems
         from services.series_sets import script_scene3d
-        config = normalize_scene3d(script_scene3d(shot, self._room_location(shot)))
+        problems += [f"{where}: {item}" for item in shot_problems(shot, self.series, self.checker.root, self._room_location(shot))]
+        config = normalize_scene3d(script_scene3d(shot, self._room_location(shot), series=self.series, root=self.checker.root))
         if not config:
             problems.append(f"{where}: a 3d shot needs scene3d with a template or a saved scene and its cast")
         elif config.get("scene"):
@@ -425,7 +431,7 @@ class EpisodeScript:
             body["durationSeconds"] = float(shot.get("duration") or 5)
         if shot.get("kind") == "3d":
             from services.series_sets import script_scene3d
-            body["scene3d"] = script_scene3d(shot, self._room_location(shot))
+            body["scene3d"] = script_scene3d(shot, self._room_location(shot), series=self.series, root=self.checker.root)
         if shot.get("foley") is not None:
             body["foley"] = normalize_foley(shot["foley"])
         # Always present, so a rewritten script clears a transition the new script omits.

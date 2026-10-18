@@ -30,6 +30,7 @@ import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
+import type { AgentRoomSetsAction } from './roomSetsCapabilities'
 import type { AgentVideo2DTemplatesAction } from './video2dTemplateCapabilities'
 import type {
   AgentLipsCreatorAction,
@@ -642,6 +643,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction
+  | AgentRoomSetsAction
   | AgentVideo2DTemplatesAction
   | AgentProductionWorksAction
   | AgentEditSeriesShotAction

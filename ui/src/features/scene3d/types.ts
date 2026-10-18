@@ -290,6 +290,8 @@ export type Scene3DToon = {
 
 export type Scene3DDocument = {
   room?: import('./roomSet').RoomSet
+  /** Metric box room painted by the CPU preview. Absent on every document that is not a box room. */
+  roomBox?: import('./roomBoxRaster').RoomBoxPaint
   /** Native procedural sets: shared by editor, MCP, Wizard and both export paths. */
   motionLab?: import('./motionlab/types').MotionLabSettings
   rhythm?: import('./rhythm').Scene3DRhythm
