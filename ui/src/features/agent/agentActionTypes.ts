@@ -21,6 +21,7 @@ export const AGENT_ACTION_TYPES = [
   'apply_series_shot_card',
   'make_character_animation',
   'review_character_animation',
+  'set_voice_band',
   'media_tool',
   'open_story_section',
   'open_series_section',

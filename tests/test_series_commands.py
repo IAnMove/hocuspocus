@@ -245,6 +245,15 @@ def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_th
     assert "characters.animation.review" in SERIES_TOOLS
 
 
+def test_a_voice_band_is_set_over_mcp_through_the_same_route_as_the_wizard(tmp_path):
+    from services.mcp_profiles import SERIES_TOOLS
+    handlers, calls, _, _ = harness(tmp_path, [{"kits": {"gary": {"id": "gary"}}}])
+    call(handlers, "characters.voice.band", {"workspace": "w", "character_id": "gary", "voiceType": "man"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/gary/voice-band",
+                        {"workspace": "w", "voiceType": "man"})
+    assert "characters.voice.band" in OPERATIONS and "characters.voice.band" in SERIES_TOOLS
+
+
 def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):
     handlers, calls, _, _ = harness(tmp_path, [{"jobId": "native-1", "status": "queued"}, {"jobId": "native-1", "status": "running"},
                                                {"jobId": "native-1", "status": "queued"}])

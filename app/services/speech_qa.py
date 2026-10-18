@@ -109,6 +109,24 @@ def _edges(audio: np.ndarray, rate: int) -> tuple[float, float]:
     return round(loud[0] / rate, 2), round((len(audio) - loud[-1]) / rate, 2)
 
 
+def _spectrum(audio: np.ndarray, rate: int) -> tuple[float, float]:
+    """``(centroidHz, highRatio)`` from one numpy rfft of the whole signal.
+
+    ``highRatio`` is the share of power at or above 3000 Hz. A silent or DC take is (0, 0).
+    Librosa is not used: the CI image does not install it.
+    """
+    if audio.size == 0 or rate <= 0:
+        return 0.0, 0.0
+    power = np.abs(np.fft.rfft(np.asarray(audio, dtype=np.float64))) ** 2
+    total = float(power.sum())
+    if total <= 0:
+        return 0.0, 0.0
+    freqs = np.fft.rfftfreq(audio.shape[0], d=1.0 / rate)
+    centroid = float((freqs * power).sum() / total)
+    high = float(power[freqs >= 3000].sum() / total)
+    return round(centroid, 1), round(high, 4)
+
+
 def _warnings(result: dict[str, Any], pitch_range: list[float] | None) -> list[str]:
     found = []
     if result["wer"] > result["wer_threshold"]:
@@ -137,8 +155,8 @@ def _compared(text: str, transcript: str, code: str, names: list[str] | None) ->
 
 def measure_speech(path: str, text: str, language: str = "", *, pitch_range: list[float] | None = None,
                    names: list[str] | None = None, load: Callable = _load, transcribe: Callable = _transcribe,
-                   pitch: Callable = _median_pitch) -> dict[str, Any]:
-    """Transcript, word error rate, median pitch, pace and edge silence for one take."""
+                   pitch: Callable = _median_pitch, brightness: Callable = _spectrum) -> dict[str, Any]:
+    """Transcript, word error rate, median pitch, brightness, pace and edge silence for one take."""
     # No language: the expected text tells es/en, so numbers are spelled and heard in that language.
     code = str(spoken_language_code(language or "", text) or "").split("-")[0].lower()
     audio, rate = load(path)
@@ -147,10 +165,12 @@ def measure_speech(path: str, text: str, language: str = "", *, pitch_range: lis
     transcript = transcribe(audio, code)
     spoken = max(0.1, duration - lead - trail)
     wer, raw, threshold = _compared(text, transcript, code, names)
+    centroid, high_ratio = brightness(audio, rate)
     result = {
         "transcript": transcript, "wer": round(wer, 3), "wer_raw": round(raw, 3),
         "wer_threshold": round(threshold, 3),
-        "medianPitchHz": pitch(audio, rate), "duration": round(duration, 2),
+        "medianPitchHz": pitch(audio, rate), "centroidHz": centroid, "brightness": high_ratio,
+        "duration": round(duration, 2),
         "wordsPerSecond": round(len(words(text, code or "en")) / spoken, 2),
         "leadSilence": lead, "trailSilence": trail,
     }

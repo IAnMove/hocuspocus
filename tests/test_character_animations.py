@@ -123,6 +123,10 @@ def test_a_custom_animation_keeps_its_title_its_scale_mode_and_the_words_of_each
     entry = _entry(title="Sonrisa pícara", scaleBy="face", view="bust", frames=[{"id": "pose-1", "source": "/api/v1/file/c.png", "prompt": "A lopsided grin.", "label": "Sonrisa", "extra": 1}])
     kept = normalize_kit_animations({"sonrisa-picara": entry})["sonrisa-picara"]
     assert kept["title"] == "Sonrisa pícara" and kept["scaleBy"] == "face" and kept["frames"] == [{"id": "pose-1", "source": "/api/v1/file/c.png", "prompt": "A lopsided grin.", "label": "Sonrisa"}]
+    grouped = normalize_kit_animations({"sonrisa-picara": _entry(group="expression")})["sonrisa-picara"]
+    assert grouped["group"] == "expression"
+    with pytest.raises(CharacterAnimationError):
+        normalize_kit_animations({"x": _entry(group="mood")})
     with pytest.raises(CharacterAnimationError):
         normalize_kit_animations({"x": _entry(scaleBy="width")})
     with pytest.raises(CharacterAnimationError):

@@ -28,6 +28,7 @@ import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentReren
 import type { AgentApplySeriesShotCardAction } from './seriesShotCardCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
+import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type { AgentVideo2DTemplatesAction } from './video2dTemplateCapabilities'
 import type {
@@ -649,6 +650,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentApplySeriesShotCardAction
   | AgentMakeCharacterAnimationAction
   | AgentReviewCharacterAnimationAction
+  | AgentSetVoiceBandAction
   | AgentMediaToolAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction

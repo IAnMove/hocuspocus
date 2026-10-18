@@ -25,6 +25,7 @@ import re
 from typing import Any
 
 from services import series_entrances as entrances
+from services.character_animations import animation as catalog_animation, catalog
 
 LOOPS = ("loop", "pingpong", "once")
 WALK = "walk"
@@ -180,16 +181,47 @@ def _check_entry(entry: dict[str, Any], animations: dict[str, Any], shot: dict[s
     return [*problems, overlap] if overlap else problems
 
 
+_GROUPS = ("cycle", "gesture", "expression", "custom")
+
+
+def _animation_group(animations: dict[str, Any], name: str) -> str | None:
+    """The group stored on the kit's copy, or the catalog's for an id it lists. A custom id with no group has none."""
+    made = animations.get(name)
+    if isinstance(made, dict) and made.get("group") in _GROUPS:
+        return str(made["group"])
+    try:
+        return catalog_animation(name).get("group")
+    except KeyError:
+        return None
+
+
+def _warn_short_expression(entry: dict[str, Any], animations: dict[str, Any], who: str, shot_id: str,
+                           warnings: list[dict[str, Any]]) -> None:
+    """An explicit expression shorter than ``expressionShort`` can be played, and the check says it is hard to read.
+    A missing duration is the compiler's hold, so it does not warn. A gesture or a cycle never does."""
+    from services.series_script_warnings import group_warning
+    found = request(entry.get("animation"))
+    if found is None or "duration" not in found or _state_problem(animations, who, found["id"], "animation"):
+        return
+    if _animation_group(animations, found["id"]) != "expression":
+        return
+    short = float(catalog()["sheet"].get("expressionShort", 1.5))
+    if found["duration"] < short:
+        group_warning(warnings, "expression_too_short", who, shot_id,
+                      f"plays '{found['id']}' for {found['duration']:g} s, shorter than {short:g} s: an expression is held at least that long so it can be read")
+
+
 def check_cast(checker: Any, entries: list[dict[str, Any]], shot: dict[str, Any], where: str, shot_id: str,
                warnings: list[dict[str, Any]]) -> None:
     """Problems of the shot's cast animations (they stop the script) and a warning for a walk-in whose ``walk`` sheet is not
-    approved (it walks with the body bob, as before)."""
+    approved (it walks with the body bob, as before). A short expression warns and still plays."""
     from services.series_script_warnings import group_warning
     for entry in entries:
         who = str(entry.get("characterId"))
         animations = _kit_animations(checker, who)
         if entry.get("animation") is not None:
             checker.problems.extend(_check_entry(entry, animations, shot, where))
+            _warn_short_expression(entry, animations, who, shot_id, warnings)
         walking = entry.get("enterFrom") in entrances.SIDES and entry.get("enterGait") == "walk"
         walk = animations.get(WALK)
         if walking and isinstance(walk, dict) and walk.get("reviewState") != "approved":

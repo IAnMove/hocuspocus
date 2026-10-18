@@ -4,7 +4,7 @@ import { createCharacterKit, parseCharacterKitPoseLayerId, type CharacterKit, ty
 import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
 import { createSceneEvaluator } from '../src/lib/scene2d/evaluate.ts'
 import { normalizeScene2D } from '../src/lib/scene2d/normalize.ts'
-import { blinkTimes, bodyKeyframes, CAMERA_MOVES, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type CameraMove, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
+import { blinkTimes, bodyKeyframes, CAMERA_MOVES, castTransform, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type CameraMove, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
 import { sequenceFrame } from '../src/lib/scene2d/motion.ts'
 import { heldFrameTime } from '../src/features/stopMotion.ts'
 import { ANIMATION_SHEET, type KitAnimation } from '../src/lib/characterAnimations.ts'
@@ -381,11 +381,82 @@ test('an animation without a duration lasts one pass of its sheet, and a once sh
   assert.equal(opacityAt(scene, sheet.id, 1.5), 0, 'wave: 3 cells back and forth at 5 fps is 4 steps, 0.8 s')
   const angry = compileSeriesShot({ ...kits, kevin: animated({ angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front' }) }) },
     alone([{ kitId: 'kevin', x: 50, animation: { id: 'angry', at: 1, duration: 3, loop: 'once' }, }]))
-  assert.equal(opacityAt(angry, 'kit-kevin-sheet-angry', 3.9), 1, 'the window is longer than the sheet: it holds the last cell')
+  assert.equal(opacityAt(angry, 'kit-kevin-sheet-angry', 2.5), 1, 'the hold in the middle of the window is fully up')
+  const leaving = opacityAt(angry, 'kit-kevin-sheet-angry', 3.9)
+  assert.ok(leaving > 0 && leaving < 1, `an expression fades out: ${leaving}`)
   assert.equal(opacityAt(angry, 'kit-kevin-sheet-angry', 4.1), 0)
+  const angrySheet = angry.layers.find(layer => layer.id === 'kit-kevin-sheet-angry')!
+  assert.equal(angrySheet.sequence?.kind === 'sheet' && sequenceFrame(angrySheet.sequence, 3.9), 1, 'the last cell is held through the fade')
   const looped = compileSeriesShot(withSheets, alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave', at: 1, loop: 'loop' } }]))
   const sequence = looped.layers.find(layer => layer.id === 'kit-kevin-sheet-wave')!.sequence
   assert.equal(sequence?.kind === 'sheet' && sequence.loop, 'loop', 'the cast entry may choose the loop')
+})
+
+const BOTH_EDGES = { left: [[0, 1]], right: [[0, 1]], bottom: [[0, 1]] } as const
+
+/** Height a pose occupies (% of the frame), the same rule as seriesShot.drawnHeight. */
+function drawn(size: { width: number; height: number }, scale: number, aspect: number) {
+  const ratio = size.width / size.height
+  return ratio < aspect ? scale * 100 : scale * 100 * aspect / ratio
+}
+
+/** The sheet's opaque figure, from the unpinned layer state: feet at state.y, figure share of the cell. */
+function figureBox(scene: ReturnType<typeof compileSeriesShot>, layerId: string, cell = { width: 300, height: 640 }) {
+  const layer = scene.layers.find(item => item.id === layerId)!
+  const state = createSceneEvaluator(scene).layerState(layer, 0.5)
+  const aspect = scene.width / scene.height
+  const ratio = cell.width / cell.height
+  const figure = ratio < aspect ? state.scale * 100 * ANIMATION_SHEET.figure : state.scale * 100 * aspect / ratio * ANIMATION_SHEET.figure
+  return { state, figure, center: state.y - figure / 2, top: state.y - figure }
+}
+
+test('a medium-shot expression matches the snapped pose, and a portrait face sheet is only the head', () => {
+  const square = kit('kevin')
+  square.base = { ...square.base, width: 1024, height: 1024, cut: BOTH_EDGES } as CharacterKit['base']
+  square.animations = { angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front', scaleBy: 'face' }) }
+  const bare = kit('kevin')
+  bare.base = { ...square.base }
+  const placed = { kitId: 'kevin', x: 46, motion: 'still' as const }
+  const quiet = shot({ framing: 'medium', camera: 'static', duration: 4, lines: [], cast: [placed] })
+  assert.deepEqual(compileSeriesShot({ kevin: square }, quiet), compileSeriesShot({ kevin: bare }, quiet),
+    'no animation: an approved sheet that nobody plays leaves the edge-snapped pose as it was')
+  const scene = compileSeriesShot({ kevin: square }, shot({ framing: 'medium', camera: 'static', duration: 4, lines: [],
+    cast: [{ ...placed, animation: { id: 'angry', at: 0.4 } }] }))
+  const pose = scene.layers.find(layer => layer.id === 'kit-kevin-pose-base')!
+  const plain = personTransform(square, 'base', 'medium', 46, ASPECT)
+  assert.ok(Math.abs(pose.transform.scale - plain.scale) > 0.05, 'both edges actually change the pose scale')
+  const snapped = castTransform(square, placed, 'medium', ASPECT)
+  assert.deepEqual({ x: pose.transform.x, y: pose.transform.y, scale: pose.transform.scale }, snapped)
+  const box = figureBox(scene, 'kit-kevin-sheet-angry')
+  const poseHeight = drawn({ width: 1024, height: 1024 }, pose.transform.scale, ASPECT)
+  assert.ok(Math.abs(box.figure - poseHeight) / poseHeight < 0.01, `figure ${box.figure} vs pose ${poseHeight}`)
+  assert.ok(Math.abs(box.center - pose.transform.y) / poseHeight < 0.01, `center ${box.center} vs ${pose.transform.y}`)
+  assert.ok(Math.abs(box.state.x - pose.transform.x) < 0.05, `x ${box.state.x} vs ${pose.transform.x}`)
+  assert.ok(opacityAt(scene, 'kit-kevin-sheet-angry', 1.6) === 1, 'default expression hold is fully up past one pass')
+  assert.ok(opacityAt(scene, 'kit-kevin-sheet-angry', 2.8) > 0, 'still visible at 2.4 s of a 2.5 s hold')
+  assert.equal(opacityAt(scene, 'kit-kevin-sheet-angry', 3.0), 0, 'the hold ends at 2.5 s')
+  const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-angry')!
+  assert.equal(sheet.sequence?.kind === 'sheet' && sequenceFrame(sheet.sequence, 2.8), 1, 'the last cell is held')
+
+  const body = animated({ angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front', scaleBy: 'face' }),
+    wave: sheetOf('wave', 3, { fps: 5, loop: 'pingpong', facing: 'front', scaleBy: 'base' }) })
+  const head = compileSeriesShot({ kevin: body }, shot({ framing: 'medium', camera: 'static', duration: 4, lines: [],
+    cast: [{ kitId: 'kevin', x: 50, motion: 'still', animation: { id: 'angry', at: 0.2, duration: 2.5 } }] }))
+  const headPose = head.layers.find(layer => layer.id === 'kit-kevin-pose-base')!
+  const headBox = figureBox(head, 'kit-kevin-sheet-angry')
+  const bodyHeight = drawn({ width: 500, height: 1000 }, headPose.transform.scale, ASPECT)
+  assert.ok(Math.abs(headBox.figure / bodyHeight - ANIMATION_SHEET.head / ANIMATION_SHEET.faceShare) < 0.01, `head share ${headBox.figure / bodyHeight}`)
+  const crown = headPose.transform.y - bodyHeight / 2
+  assert.ok(Math.abs(headBox.top - crown) / bodyHeight < 0.01, `hung from the crown ${headBox.top} vs ${crown}`)
+  const gesture = compileSeriesShot({ kevin: body }, shot({ framing: 'medium', camera: 'static', duration: 4, lines: [],
+    cast: [{ kitId: 'kevin', x: 50, motion: 'still', animation: { id: 'wave', at: 1, duration: 2 } }] }))
+  const wavePose = gesture.layers.find(layer => layer.id === 'kit-kevin-pose-base')!
+  const waveBox = figureBox(gesture, 'kit-kevin-sheet-wave')
+  const waveHeight = drawn({ width: 500, height: 1000 }, wavePose.transform.scale, ASPECT)
+  assert.ok(Math.abs(waveBox.figure - waveHeight) / waveHeight < 0.01, 'a gesture keeps the whole pose')
+  assert.equal(opacityAt(gesture, 'kit-kevin-sheet-wave', 1.05), 1, 'a gesture still cuts in')
+  assert.equal(opacityAt(gesture, 'kit-kevin-sheet-wave', 2.95), 1)
+  assert.equal(opacityAt(gesture, 'kit-kevin-sheet-wave', 3.05), 0)
 })
 
 test('an animation the kit cannot play fails the compile with the reason', () => {

@@ -854,6 +854,22 @@ def test_a_walk_in_whose_sheet_is_not_approved_keeps_the_bob_and_says_so():
     assert not any(item["code"] == "walk_sheet_not_approved" for item in animation_check(KITS, walking)["warnings"])
 
 
+def test_a_short_expression_warns_and_a_short_gesture_does_not():
+    """An explicit expression under 1.5 s is a check warning. The duration is still accepted. A gesture of 1 s is not an expression."""
+    kits = with_animations(angry=sheet(), wave=sheet(), **{"my-bust": sheet()})
+    short = animation_check(kits, {"characterId": "kevin", "animation": {"id": "angry", "duration": 1}})
+    assert short["checked"] is True
+    warned = [item for item in short["warnings"] if item["code"] == "expression_too_short"]
+    assert [(item["subject"], item["shots"]) for item in warned] == [("kevin", ["e2s00"])]
+    assert "1.5" in warned[0]["message"]
+    for animation in ({"id": "wave", "duration": 1}, {"id": "angry", "duration": 1.5}, "angry", {"id": "my-bust", "duration": 1}):
+        codes = [item["code"] for item in animation_check(kits, {"characterId": "kevin", "animation": animation})["warnings"]]
+        assert "expression_too_short" not in codes, animation
+    stored = with_animations(**{"my-bust": {**sheet(), "group": "expression"}})
+    assert any(item["code"] == "expression_too_short" for item in animation_check(
+        stored, {"characterId": "kevin", "animation": {"id": "my-bust", "duration": 1.2}})["warnings"])
+
+
 def test_a_written_script_keeps_the_animation_and_reads_back_the_same():
     from services.series_shot_plan import normalize_layout2d
     kits = with_animations(wave=sheet())

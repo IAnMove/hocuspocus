@@ -56,6 +56,23 @@ def create_character_kit_library_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.post("/api/v1/character-kits/library/kits/{kit_id}/voice-band")
+    def set_character_kit_voice_band(kit_id: str, body: dict):
+        """Store a pitch band on one kit voice. ValueError is 400, the same as the other kit routes."""
+        from services.voice_band import set_voice_band
+
+        try:
+            return set_voice_band(
+                _workspace_dir(body.get("workspace")), kit_id,
+                voice_type=body.get("voiceType"), pitch_band=body.get("pitchBandHz"),
+                max_brightness=body.get("maxBrightness"), max_centroid=body.get("maxCentroidHz"),
+                language=body.get("language"), base_revision=body.get("baseRevision"),
+            )
+        except CharacterKitRevisionConflict as exc:
+            raise _conflict(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig")
     def rig_flat_character_kit(kit_id: str, body: dict):
         """Wipe the painted mouths, draw nine paper (or ink, or per-pose warp) mouths and a blink, and save the anchors."""

@@ -1001,6 +1001,10 @@ _RUNNERS.update(_ANIMATION_RUNNERS)
 from services.series_card_commands import OPERATIONS as _CARD_OPERATIONS, RUNNERS as _CARD_RUNNERS  # noqa: E402
 OPERATIONS.update(_CARD_OPERATIONS)
 _RUNNERS.update(_CARD_RUNNERS)
+# So is the voice band (services/voice_band_commands.py).
+from services.voice_band_commands import OPERATIONS as _VOICE_BAND_OPERATIONS, RUNNERS as _VOICE_BAND_RUNNERS  # noqa: E402
+OPERATIONS.update(_VOICE_BAND_OPERATIONS)
+_RUNNERS.update(_VOICE_BAND_RUNNERS)
 
 
 def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:

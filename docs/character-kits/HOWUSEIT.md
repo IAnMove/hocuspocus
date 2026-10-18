@@ -380,12 +380,12 @@ A Series script plays an **approved** animation of the kit (`app/services/series
 «animation 'walk' of 'ana' is pending approval: approve it in Characters › Animaciones»: the person approves it first.
 
 - **`animation` on a `layout2d.cast` entry:** an id of the kit (`"wave"`, `"angry"`, one of your own) or
-  `{"id", "at", "duration", "loop"}`: `at` is seconds inside the shot (default 0), `duration` defaults to one pass of the sheet
-  (its cells at its fps; a `pingpong` there and back), `loop` is `loop`, `pingpong` or `once` (the sheet's own by default; a `once`
+  `{"id", "at", "duration", "loop"}`: `at` is seconds inside the shot (default 0). `duration` defaults to one pass of the sheet
+  (its cells at its fps; a `pingpong` there and back); an expression with no duration lasts at least 2.5 s. An explicit duration
+  under 1.5 s on an expression warns `expression_too_short` and is still played. `loop` is `loop`, `pingpong` or `once` (the sheet's own by default; a `once`
   sheet holds its last cell until the window ends). The cast entry still says where the character stands (`x`) and which pose it has.
-- **What is drawn:** during the window the sheet takes the pose's place, drawn as the `walk-cycle-sheet` and `character-reaction`
-  cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %): the cell is `pose height / 0.86`
-  tall, so the figure is as tall as the pose, and its bottom edge is the pose's (the floor in a wide shot). The pose picture, its mouths and
+- **What is drawn:** during the window the sheet uses the pose's final transform, after the edge snap, centered on the character's `x`, at that size and that base, with no extra zoom. It is drawn as the `walk-cycle-sheet` and `character-reaction`
+  cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %). A body sheet is as tall as the pose and stands on the pose's feet. A face sheet (`scaleBy: face` on a pose taller than it is wide) is the head only: the figure is `pose height × 0.18 / 0.5` and hangs from the crown. An expression fades in and out over about 0.25 s; a gesture or a cycle does not. The pose picture, its mouths and
   its eyes are hidden meanwhile and come back when the window ends, so a character who speaks over a body sheet does not move its lips.
   The sheet is its own layer (`kit-<kit>-sheet-<id>`, a `sheet` sequence with `start` = the window's start second); stop-motion
   holds (`motionStep`) apply to it like to every picture.
@@ -395,8 +395,7 @@ A Series script plays an **approved** animation of the kit (`app/services/series
   (`facing`: a sheet that looks right entering from the right). Without an approved `walk` sheet the entrance is the bob it
   always was (the check warns `walk_sheet_not_approved` when the sheet exists but is not approved).
 - **Limits:** one animation per cast entry; an `animation` that would start inside a walk-in that plays the walk sheet is refused
-  by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust animation (`view: bust`)
-  goes with a bust pose in a `medium` or `close` shot: the cell is sized by the pose's height, not by its head.
+  by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust expression goes with a bust pose in a `medium` or `close` shot and is sized from the head, not from the whole pose.
 
 ### 4.9 A whole Video 2D card as a shot's take
 
@@ -429,6 +428,39 @@ import and approve the take).
   candidate and the reply says so (`approvalNote`).
 - **Export:** the scene is exported by `scenes.video2d.export`, the exporter the server render uses (a 5 s card takes seconds on a CPU).
   If it is not ready after 60 s the reply is `status: "exporting"`; send the same request again and it attaches the take.
+
+### 4.10 Voice band
+
+A kit voice may carry `voiceType` (`man`, `woman`, `child`, `robot`), `pitchBandHz` `[low, high]`, `maxBrightness` (share of power at or above 3000 Hz) and `maxCentroidHz`. With none of them, a render records the line as before: `pitch_out_of_range` still only warns and does not ask for another take. With any of them, each take is measured (median pitch, that brightness, spectral centroid) and a take outside the band is spoken again, up to 3 seeds. If none lands inside, the best take is kept and the line warns `voice_out_of_band`. A man whose median pitch sits in the woman register (150–249 Hz) is retried even when a custom `pitchBandHz` would have allowed it. A missing measurement is not a failure.
+
+The default numbers are in `app/shared/voice_bands.json`, measured from real lines, not guessed: man 80–136 Hz, woman 108–249 Hz, child 180–230 Hz with centroid at most 510 Hz, robot 90–145 Hz. A stored field overrides its default. The type is never inferred from the character's description.
+
+Three doors, one function (`services/voice_band.py` `set_voice_band`):
+
+- `POST /api/v1/character-kits/library/kits/{kit_id}/voice-band` with `{workspace, voiceType?, pitchBandHz?, maxBrightness?, maxCentroidHz?, language?, baseRevision?}`. A bad value is HTTP 400.
+- MCP `characters.voice.band` posts that same body (`character_id` is the kit id; `language` selects `voicesByLanguage`).
+- Ask to the Wizard: `set_voice_band`.
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/character-kits/library/kits/gary/voice-band" \
+  -H "Content-Type: application/json" \
+  -d '{"workspace":"default","voiceType":"man"}'
+```
+
+```javascript
+await fetch(`${base}/api/v1/character-kits/library/kits/gary/voice-band`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'default', voiceType: 'man' }),
+})
+```
+
+```python
+import json, urllib.request
+body = json.dumps({"workspace": "default", "voiceType": "man"}).encode()
+request = urllib.request.Request(base + "/api/v1/character-kits/library/kits/gary/voice-band", data=body, method="POST")
+request.add_header("Content-Type", "application/json")
+urllib.request.urlopen(request)
+```
 
 ---
 
