@@ -513,3 +513,11 @@ H3 clips.
 | `ui/src/features/characters/orbitPrompt.ts` | Orbit A/B prompts and still-frame indices |
 
 When in doubt: **one identity per mesh, one path per compositor shot, H3 never draws that mesh.**
+
+## Box rooms
+
+A metric interior is `kind: "room"` with `size: {w, d, h}` in metres and no `mold`. The open side faces the camera. The floor is y = 0. A door defaults to 0.9 × 2.0 m on the back wall and the ceiling defaults to 2.6 m. `scene3d.room.put` stores the room and a flat-colour placeholder GLB (`scene3d.room.get` reads it). Painted textures are a production `spec.sets` entry of the same shape, not this command.
+
+A `kind: "3d"` Series shot names `set: "<room>"`. Each person carries `at: {x, z}` in metres or `near`, `mid` or `far`. Feet stand on the floor at that height (`heightM`, default 1.7). Use it for a wide interior full-body shot. A person outside the floor, on the door or on furniture is an error. A mold room (`location.set3d`) stays the other path and is not merged with a named box room.
+
+The wide frame is the shared camera in `app/shared/room_box_camera.json`: eye height 1.6 m, just outside the open side, field of view 48. Flat props can look like cardboard when the camera moves.

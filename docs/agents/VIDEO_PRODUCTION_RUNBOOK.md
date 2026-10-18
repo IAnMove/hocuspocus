@@ -1255,6 +1255,8 @@ shots in a row.
 Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
 approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.
 
+A metric box room is `kind: "room"` with `size: {w, d, h}` and no `mold`. `scene3d.room.put` stores it (and a flat-colour placeholder) and `scene3d.room.get` reads it. A `kind: "3d"` shot names `set: "<room>"` and each person `at: {x, z}` in metres or `near`, `mid` or `far`, so the feet stand on the floor. Use it for a wide interior full-body shot. A mold `location.set3d` is not merged with it. Detail is in `docs/3d-video-compositor/HOWUSEIT.md` (Box rooms).
+
 ## Video 2D music cards (`scene2d`)
 
 A `scene2d` shot plays one Video 2D music card: a cutout choreography (a figure that bounces, orbits, falls, swaps or

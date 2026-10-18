@@ -1399,3 +1399,5 @@ result is a workspace file with a provenance sidecar. Coverage is in
 beat and format) or `scenes.catalog`, posted to `/api/v1/scenes/templates/commands`, the handlers the MCP tools of
 the same names run. It is read-only; the Wizard puts the card in a production spec as a `scene2d` shot. Coverage is
 in `ui/tests/video2dTemplatesWizard.test.ts` and `tests/test_video2d_template_commands_router.py`.
+
+`scene3d.room.put` (`room_sets`) stores a metric box room through `roomSets.command` and `put_room` in `app/services/room_box_commands.py`, posted to `/api/v1/scene3d/rooms/commands`. Coverage is in `ui/tests/roomSetsWizard.test.ts`.

@@ -657,6 +657,18 @@
       ]
     },
     {
+      "prefix": "app/services/series_room_box.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/room_box_commands.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
       "prefix": "app/services/gpu_machine_lock.py",
       "paths": [
         "tests/test_job_lifecycle.py",

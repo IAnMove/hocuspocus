@@ -209,3 +209,26 @@ def test_series_stands_on_the_floor_and_refuses_the_door_and_the_furniture():
     boxed = {"productionMethod": "animation_3d", "set": "kitchen", "locationId": "office", "scene3d": dressed}
     assert inherit_shot(series, boxed) is boxed and "roomSet" not in boxed["scene3d"]
 
+
+def test_room_put_stores_a_placeholder_and_replays_the_same_intent(tmp_path, monkeypatch):
+    import asyncio
+    from fastapi import HTTPException
+    from services import core_workspace
+    from services.room_box_commands import GET, PUT, command_handlers, run
+    from services.set_commands import command_catalog
+    monkeypatch.setattr(core_workspace, "outputs_root", lambda: tmp_path)
+    assert command_catalog()[0]["name"] == "scene3d.sets.catalog"
+    body = {"version": 1, "intent_id": "room-1", "input": {"workspace": "default", "name": "kitchen", "room": BOX}}
+    first = run(PUT, body)
+    assert first["result"]["file"] == "rooms/kitchen.glb"
+    assert (tmp_path / "rooms" / "kitchen.glb").stat().st_size > 100
+    assert run(PUT, body)["result"] == first["result"]
+    changed = {**body, "input": {**body["input"], "room": {**BOX, "floor": "stone"}}}
+    with pytest.raises(HTTPException) as conflict:
+        run(PUT, changed)
+    assert conflict.value.status_code == 409
+    read = asyncio.run(command_handlers()[GET]({"version": 1, "input": {"workspace": "default", "name": "kitchen"}}))
+    assert read["result"]["room"]["door"]["h"] == 2
+    with pytest.raises(HTTPException) as bad_name:
+        run(PUT, {**body, "intent_id": "room-2", "input": {**body["input"], "name": "../kitchen"}})
+    assert bad_name.value.status_code == 422
