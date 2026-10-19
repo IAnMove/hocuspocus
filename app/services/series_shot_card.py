@@ -46,8 +46,9 @@ from services.series_native_render import audio_seconds
 from services.series_production import series_shot_method
 from services.series_shot_card_bind import CardBindError, bind_card, card_controls, card_duration
 from services.series_shot_card_lines import LinesError, heard, lay_dialogue, plan, recorded, spoken
+from services.series_expression_silence import card_warnings
 from services.series_shot_edit import ShotEditError, find_shot
-from services.series_shot_plan import FPS, frame_size, language_key
+from services.series_shot_plan import FPS, frame_size, kit_ref, language_key
 from services.series_take_inputs import INPUTS_VERSION, render_inputs
 from services.series_voice_rooms import apply_room
 
@@ -125,6 +126,13 @@ def _stem(ctx: Context, card: str) -> str:
     return name[:100 - len(suffix)] + suffix
 
 
+def _kit_animations(ctx: Context, who: str) -> dict[str, Any]:
+    """The animations of the kit of character ``who`` (empty when it has none)."""
+    ref = kit_ref(ctx.series, who)
+    found = (ctx.kits.get(ref["id"]) or {}).get("animations") if ref else None
+    return found if isinstance(found, dict) else {}
+
+
 def _card_take(series: dict[str, Any], attempt: dict[str, Any]) -> dict[str, Any] | None:
     """The metadata of the card take an attempt holds (None for any other take)."""
     for asset_id in attempt.get("outputAssetIds") or []:
@@ -182,6 +190,7 @@ class SeriesShotCard:
         warnings = [video2d_compile.warning_text(item) for item in compiled["warnings"]]
         if dropped:
             warnings.append(f"{', '.join(dropped)} of the sheet does not fit the card and was left to its default")
+        warnings.extend(card_warnings(bound["bindings"], lines, lambda who: _kit_animations(ctx, who)))
         return {"card": entry["id"], "document": document, "controls": merged, "bindings": bound["bindings"], "warnings": warnings,
                 "digest": hashlib.sha1(json.dumps([ctx.language, document], sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:12]}
 

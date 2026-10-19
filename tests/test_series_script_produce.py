@@ -880,3 +880,18 @@ def test_a_written_script_keeps_the_animation_and_reads_back_the_same():
     assert layout["cast"] == [{"characterId": "kevin", "x": 40, "animation": {"id": "wave", "at": 1, "duration": 2}}]
     assert normalize_layout2d(layout)["cast"][0]["animation"] == {"id": "wave", "at": 1.0, "duration": 2.0}
     assert normalize_layout2d(normalize_layout2d(layout)) == normalize_layout2d(layout)
+
+
+def test_allow_during_speech_is_kept_by_the_layout_and_must_be_a_boolean():
+    """The opt-out of series_expression_silence: written as true, kept as true, absent otherwise; a text is refused by the check."""
+    from services.series_shot_plan import normalize_layout2d
+    kits = with_animations(angry=sheet())
+    for flag, kept in ((True, {"id": "angry", "allowDuringSpeech": True}), (False, {"id": "angry"})):
+        entry = {"characterId": "kevin", "x": 40, "animation": {"id": "angry", "allowDuringSpeech": flag}}
+        assert animation_check(kits, entry)["checked"] is True
+        assert normalize_layout2d({"cast": [entry]})["cast"][0]["animation"] == kept, flag
+    assert any("animation allowDuringSpeech must be true or false" in problem for problem in animation_problems(
+        kits, {"characterId": "kevin", "animation": {"id": "angry", "allowDuringSpeech": "yes"}}))
+    from services.series_cast_animation import planned
+    assert planned({"animation": {"id": "angry", "at": 1, "allowDuringSpeech": True}}, 6.0) == {"id": "angry", "at": 1.0, "allowDuringSpeech": True}
+    assert planned({"animation": {"id": "angry", "at": 1}}, 6.0) == {"id": "angry", "at": 1.0}, "no flag, no key: as before"

@@ -9,7 +9,8 @@ author made) or a window of it:
 
 * ``at``: when it starts, in seconds inside the shot (default 0). ``duration``: how long it plays (default one pass of the
   sheet: its cells over its fps, back and forth for a ``pingpong``). ``loop``: ``loop``, ``pingpong`` or ``once`` (the sheet's own
-  by default; ``true`` is ``loop`` and ``false`` is ``once``).
+  by default; ``true`` is ``loop`` and ``false`` is ``once``). ``allowDuringSpeech: true`` keeps an expression where it was asked even
+  while its own character speaks (see ``series_expression_silence``).
 * Only an ``approved`` animation can be played: a sheet that is still pending, or was rejected, is refused by the script check
   with the way out (approve it in Characters > Animaciones).
 * While the sheet plays it takes the pose's place: the pose picture and its mouth and eyes are hidden and come back when it
@@ -32,7 +33,7 @@ WALK = "walk"
 _ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 _LIMITS = (("at", 0, 600), ("duration", 0.1, 600))
 _MIN_LEFT = 0.1
-_FORMS = "animation must be an animation id or {id, at, duration, loop}"
+_FORMS = "animation must be an animation id or {id, at, duration, loop, allowDuringSpeech}"
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -46,8 +47,8 @@ def _loop(value: Any) -> str | None:
 
 
 def request(value: Any) -> dict[str, Any] | None:
-    """The animation a cast entry asks for as ``{id, at?, duration?, loop?}``; bad numbers and loops are dropped (like the
-    rest of ``layout2d``), a value that names no animation is None."""
+    """The animation a cast entry asks for as ``{id, at?, duration?, loop?, allowDuringSpeech?}``; bad numbers and loops are dropped
+    (like the rest of ``layout2d``), a value that names no animation is None. ``allowDuringSpeech`` is kept only when it is true."""
     if isinstance(value, str):
         return {"id": value} if _ID.fullmatch(value) else None
     if not isinstance(value, dict) or not isinstance(value.get("id"), str) or not _ID.fullmatch(value["id"]):
@@ -60,6 +61,8 @@ def request(value: Any) -> dict[str, Any] | None:
     loop = _loop(value.get("loop"))
     if loop is not None:
         found["loop"] = loop
+    if value.get("allowDuringSpeech") is True:
+        found["allowDuringSpeech"] = True
     return found
 
 
@@ -70,7 +73,7 @@ def entry_fields(value: dict[str, Any]) -> dict[str, Any]:
 
 
 def planned(entry: dict[str, Any], duration: float) -> dict[str, Any] | None:
-    """The animation of a cast entry inside a shot of ``duration`` seconds: ``{id, at, duration?, loop?}``. It starts inside the
+    """The animation of a cast entry inside a shot of ``duration`` seconds: ``{id, at, duration?, loop?, allowDuringSpeech?}``. It starts inside the
     shot (an animation after the end still happens in it, like an entrance) and never ends after it. A missing ``duration`` is
     left to the compiler: one pass of the sheet."""
     found = request(entry.get("animation"))
@@ -82,6 +85,8 @@ def planned(entry: dict[str, Any], duration: float) -> dict[str, Any] | None:
         plan["duration"] = round(max(_MIN_LEFT, min(found["duration"], duration - at)), 3)
     if "loop" in found:
         plan["loop"] = found["loop"]
+    if found.get("allowDuringSpeech"):
+        plan["allowDuringSpeech"] = True
     return plan
 
 
@@ -100,7 +105,7 @@ def _kit_animations(checker: Any, character_id: str) -> dict[str, Any]:
     return kit.get("animations") if isinstance(kit.get("animations"), dict) else {}
 
 
-def _length(animation: dict[str, Any], loop: str) -> float:
+def pass_length(animation: dict[str, Any], loop: str) -> float:
     """Seconds of one pass of a sheet: its cells at its fps; a ``pingpong`` goes there and back."""
     sheet, fps = animation.get("sheet") or {}, float(animation.get("fps") or 4)
     count = int(sheet.get("count") or 1)
@@ -120,6 +125,8 @@ def _window_problems(raw: Any, where: str) -> list[str]:
         found.append(f"{where}: animation duration must be a number from 0.1 to 600 seconds")
     if raw.get("loop") is not None and _loop(raw["loop"]) is None:
         found.append(f"{where}: animation loop must be one of {', '.join(LOOPS)}")
+    if raw.get("allowDuringSpeech") is not None and not isinstance(raw["allowDuringSpeech"], bool):
+        found.append(f"{where}: animation allowDuringSpeech must be true or false")
     return found
 
 
@@ -157,7 +164,7 @@ def _overlap_problem(entry: dict[str, Any], found: dict[str, Any], animations: d
     if walk is None or not isinstance(made, dict):
         return None
     start = found.get("at", 0.0)
-    end = start + found.get("duration", _length(made, found.get("loop") or made.get("loop") or "loop"))
+    end = start + found.get("duration", pass_length(made, found.get("loop") or made.get("loop") or "loop"))
     if start < walk[1] and end > walk[0]:
         return (f"{where}: animation '{found['id']}' of '{who}' overlaps its walk-in ({walk[0]:g}-{walk[1]:g} s): "
                 f"start it at {walk[1]:g} s or later")
@@ -184,7 +191,7 @@ def _check_entry(entry: dict[str, Any], animations: dict[str, Any], shot: dict[s
 _GROUPS = ("cycle", "gesture", "expression", "custom")
 
 
-def _animation_group(animations: dict[str, Any], name: str) -> str | None:
+def animation_group(animations: dict[str, Any], name: str) -> str | None:
     """The group stored on the kit's copy, or the catalog's for an id it lists. A custom id with no group has none."""
     made = animations.get(name)
     if isinstance(made, dict) and made.get("group") in _GROUPS:
@@ -203,7 +210,7 @@ def _warn_short_expression(entry: dict[str, Any], animations: dict[str, Any], wh
     found = request(entry.get("animation"))
     if found is None or "duration" not in found or _state_problem(animations, who, found["id"], "animation"):
         return
-    if _animation_group(animations, found["id"]) != "expression":
+    if animation_group(animations, found["id"]) != "expression":
         return
     short = float(catalog()["sheet"].get("expressionShort", 1.5))
     if found["duration"] < short:

@@ -1189,3 +1189,40 @@ def test_a_real_direction_still_reaches_the_voice_after_library_placeholders():
     _, voice, key = SeriesNativeRender.line_voice(series, beat, {"kit-gary": {"voice": VOX_ES}}, "spanish")
     assert voice["lineDelivery"] == "susurrando" and key != recording_key("Ya voy.", VOX_ES)
     assert speech_params(voice, "Ya voy.", "spanish", 7)["custom_settings"]["style"] == "susurrando"
+
+
+# An expression never plays over its own character's voice ----------------------------------------------------------
+
+def _expression_render(tmp_path, monkeypatch, animation, pause):
+    """s01 with kevin's expression: kevin says «Vale, Gary.» (0.35-1.6 s), gary answers ``pause`` s later; every line lasts 1.25 s."""
+    data = library()
+    shot = data["seriesById"]["uv"]["episodesById"]["ep1"]["shots"][0]
+    shot["layout2d"] = {"framing": "wide", "cast": [{"characterId": "kevin", "x": 30, "animation": animation}, {"characterId": "gary", "x": 70}]}
+    shot["dialogueBeats"][1]["pauseBefore"] = pause
+    monkeypatch.setitem(globals(), "library", lambda: data)
+    tools, compiled = Tools(tmp_path), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    sheet = {"reviewState": "approved", "sheet": {"count": 4, "columns": 4, "rows": 1}, "fps": 4, "loop": "once"}
+    render.deps.read_kits("cast")["kit-kevin"]["animations"] = {"angry": sheet}
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s01"])["jobId"], tmp_path)
+    assert done["status"] == "completed", done
+    return done["items"][0], compiled[0]["shot"]
+
+
+def test_an_expression_over_its_own_voice_is_moved_in_the_render_and_the_job_says_so(tmp_path, monkeypatch):
+    item, shot = _expression_render(tmp_path, monkeypatch, {"id": "angry", "at": 0}, pause=4)
+    assert shot["cast"][0]["animation"] == {"id": "angry", "at": 1.8, "duration": 2.5}, "after kevin's line, before gary answers"
+    assert [(w["code"], w["subject"], w["shots"]) for w in item["warnings"]] == [("expression_moved_for_speech", "kevin", ["s01"])]
+    assert "from 0 s to 1.8 s" in item["warnings"][0]["message"]
+
+
+def test_an_expression_that_fits_in_no_silence_is_dropped_in_the_render_and_the_job_says_so(tmp_path, monkeypatch):
+    item, shot = _expression_render(tmp_path, monkeypatch, {"id": "angry", "at": 0}, pause=0)
+    assert "animation" not in shot["cast"][0], "the figure stays, drawn by its pose"
+    assert [(w["code"], w["subject"]) for w in item["warnings"]] == [("expression_dropped_during_speech", "kevin")]
+
+
+def test_an_expression_in_kevins_silence_reaches_the_compiler_untouched_and_the_job_has_no_warning(tmp_path, monkeypatch):
+    item, shot = _expression_render(tmp_path, monkeypatch, {"id": "angry", "at": 1.8, "duration": 2.5}, pause=4)
+    assert shot["cast"][0]["animation"] == {"id": "angry", "at": 1.8, "duration": 2.5}
+    assert "warnings" not in item
