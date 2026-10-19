@@ -101,10 +101,15 @@ function parseHue(value: unknown): { hue?: number } {
 function parseScreenArt(value: Partial<MediaScreen>) {
   if (value.media === 'video') return { sourceUrl: durableScene3DSourceUrl(value.sourceUrl ?? ''), transparent: Boolean(value.transparent) }
   const directional = parseDirectional(value.directional)
-  if (directional) {
+  if (directional?.sheets.length) {
     const talk = parseTalkingCutout(value.talk)
     return { sourceUrl: durableScene3DSourceUrl(value.sourceUrl ?? '') || talk?.base || directional.sheets[0].source, transparent: true, directional, ...(talk ? { talk } : {}) }
   }
+  // A figure with no sheet turns and walks in the picture it has: the directional block only says where.
+  return { ...plainScreenArt(value), ...(directional ? { directional } : {}) }
+}
+
+function plainScreenArt(value: Partial<MediaScreen>) {
   const poseSequence = parseImagePoses(value.poseSequence)
   if (poseSequence) return { sourceUrl: poseSequence[0].sourceUrl, transparent: true, poseSequence }
   const talk = parseTalkingCutout(value.talk)
@@ -150,6 +155,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
     Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl), screen.hue ?? 0,
     screen.talk ? [screen.talk.base, screen.talk.mouths, screen.talk.blink?.source] : null,
-    screen.directional ? screen.directional.sheets.map(sheet => sheet.source) : null,
+    screen.directional?.sheets.length ? screen.directional.sheets.map(sheet => sheet.source) : null,
   ])
 }

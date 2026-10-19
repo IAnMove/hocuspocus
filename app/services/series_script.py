@@ -34,7 +34,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from services import series_cast_animation
+from services import series_cast_animation, series_directional
 from services.series_entrances import GAITS
 from services.series_finish import check_finish
 from services.series_library import assign_episode_number
@@ -220,6 +220,7 @@ class EpisodeScript:
             check.problems.append(f"{where}: kind must be 2d, {', '.join(METHODS)}")
         self._check_cast(shot, where)
         self._check_animations(index, shot, where)
+        series_directional.check_shot(check, shot, where, self.shot_id(index), self.warnings, self.series, check.root)
         self._check_lines(shot, where)
         self._check_files(shot, where)
         self._check_effects(shot, where)

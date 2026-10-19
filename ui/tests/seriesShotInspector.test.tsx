@@ -18,7 +18,7 @@ function shots(): SeriesShot[] {
       layout2d: { cast: [{ characterId: 'ines', poseId: 'busto', x: 56 }], sfx: [{ file: 'sfx-boom.wav', at: 0.4, volume: 0.8 }],
         fx: [{ kind: 'vignette', at: 0, duration: 30, intensity: 0.5 }] }, attempts: [take('a1', { completedAt: '2026-10-06T10:00:00Z' })] }),
     shot('s2', 2, { productionMethod: 'animation_3d', durationSeconds: 5, dialogueBeats: [], visibleCharacterIds: [],
-      scene3d: { template: 'user-plaga', cast: [], objects: [{ objectId: 'e1', file: 'escolta.glb', add: true, clips: [{ clip: 'Aim', start: 0 }] }, RIFLE], quality: 'final' } }),
+      scene3d: { template: 'user-plaga', cast: [{ characterId: 'ines', objectId: 'ines', poseId: 'busto' }], objects: [{ objectId: 'e1', file: 'escolta.glb', add: true, clips: [{ clip: 'Aim', start: 0 }] }, RIFLE], quality: 'final' } }),
     shot('s3', 3, { productionMethod: 'imported_video', durationSeconds: 5.2, attempts: [take('a3')], layout2d: { sfx: [] },
       video: { prompt: 'Inés salutes', start: 'plan', frames: 124, model: 'minimax_h3' } }),
   ]
@@ -177,6 +177,25 @@ test('a 3D shot lists its objects and opens its scene in the Video 3D editor; sa
   const { useShotInspector } = await import('../src/features/series/inspector/inspectorStore')
   assert.equal(useStore.getState().mediaFilter, 'series')
   await waitFor(() => assert.equal(useShotInspector.getState().episodes['plus-ultra/mp-es/ep1']?.openShotId, 's2'), 'back on the same shot')
+})
+
+test('a cast member of a 3D shot turns to the camera and walks: heading and destination are saved with the shot', { concurrency: false }, async t => {
+  const { view, server } = await mount(t)
+  const { fireEvent, waitFor, within } = await import('@testing-library/react')
+  await open(view, 2)
+  const cast = within(await waitFor(() => view.getByTestId('series-inspector-s2-cast3d')))
+  fireEvent.click(cast.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(await waitFor(() => cast.getByLabelText('Looks')), { target: { value: 'right' } })
+  assert.ok(cast.queryByLabelText('Speed (m/s)') === null, 'a speed has nowhere to go until there is a destination')
+  fireEvent.change(cast.getByLabelText('Walks to x (m)'), { target: { value: '-1.5' } })
+  fireEvent.change(await waitFor(() => cast.getByLabelText('Speed (m/s)')), { target: { value: '0.9' } })
+  fireEvent.click(cast.getByRole('button', { name: 'Save' }))
+  await waitFor(() => assert.equal(server.posts('/shots/edit').length, 1))
+  const saved = (server.posts('/shots/edit')[0] as { changes: { scene3d: { cast: unknown[] } } }).changes.scene3d.cast
+  assert.deepEqual(saved, [{ characterId: 'ines', objectId: 'ines', poseId: 'busto', heading: 'right', walkTo: { x: -1.5, z: 0 }, walkSpeed: 0.9 }])
+  fireEvent.click(cast.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(await waitFor(() => cast.getByLabelText('Walks to x (m)')), { target: { value: '' } })
+  assert.ok(cast.queryByLabelText('Speed (m/s)') === null, 'no destination, no speed')
 })
 
 test('a video take shows how its sound plays at the cut and saves its clip sound without a render', { concurrency: false }, async t => {

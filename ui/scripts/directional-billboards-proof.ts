@@ -67,7 +67,7 @@ function sceneDocument(shot: Shot, sheets: DirectionalSprite['sheets']): Scene3D
   document.width = WIDTH; document.height = HEIGHT; document.duration = shot.duration; document.camera = shot.camera
   const floor: Scene3DSlot = { id: 'floor', slot: 'background', position: [0, 0.004, 0], rotationY: 0, scale: 8, sourceUrl: url('floor.png'), media: 'image', surface: 'floor', textureRepeat: 1, clip: null }
   const figures = shot.figures.map(figure => ({
-    id: figure.id, slot: figure.slot as Scene3DSlot['slot'], position: [figure.at[0], 0, figure.at[1]] as Vec3, rotationY: 0, scale: figure.heightM / (2 * FIGURE),
+    id: figure.id, slot: figure.slot as Scene3DSlot['slot'], position: [figure.at[0], 0, figure.at[1]] as Vec3, rotationY: 0, scale: figure.heightM / 2,
     sourceUrl: url('pose.png'), media: 'image' as const, surface: 'cutout' as const, grounded: true, billboard: true, clip: null,
     imageLook: { unlit: true, grounded: true, shadow: 0.5 },
     screen: { media: 'image', sourceUrl: url('pose.png'), directional: { sheets, ...figure.sprite } },

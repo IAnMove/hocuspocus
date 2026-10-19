@@ -316,12 +316,13 @@ function parseSpeech(raw: unknown): Window[] | undefined {
   return merged.length ? merged : undefined
 }
 
-/** A stored `screen.directional`: the sheets that are well formed, and the heading, walk and speech windows that are. */
+/** A stored `screen.directional`: the sheets that are well formed, and the heading, walk and speech windows that are. A figure with
+ * no sheet still turns and walks, in its pose; a block that says none of it is nothing. */
 export function parseDirectional(raw: unknown): DirectionalSprite | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Record<string, unknown>
   const sheets = (Array.isArray(value.sheets) ? value.sheets.slice(0, MAX_SHEETS) : []).map(parseSheet).filter((sheet): sheet is DirectionalSheet => Boolean(sheet))
-  if (!sheets.length) return undefined
   const heading = headingDegrees(value.heading), walk = parseWalk(value.walk), speech = parseSpeech(value.speech)
+  if (!sheets.length && heading === undefined && !walk) return undefined
   return { sheets, ...(heading !== undefined ? { heading } : {}), ...(walk ? { walk } : {}), ...(speech ? { speech } : {}) }
 }

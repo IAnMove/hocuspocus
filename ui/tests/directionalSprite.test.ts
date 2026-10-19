@@ -259,6 +259,7 @@ test('the painter pass turns the figure to the camera and hands the painter the 
   assert.equal(isDirectional({ ...slot, screen: undefined }), false)
   const painted = facingSlot(slot, slot.position, { memory: new DirectionMemory(), eye: [4, 1.6, 2], eye0: [1, 8], t: 0 })
   assert.ok(Math.abs(painted.rotationY - Math.PI / 2) < 1e-9)
+  assert.ok(Math.abs(painted.scale - 1 / 0.86) < 1e-9, 'the plane is the cell: taller than the figure by the share it fills')
   assert.equal(painted.screen?.directional?.view?.kind, 'sheet')
   assert.equal(slot.screen?.directional?.view, undefined)
 })
@@ -277,4 +278,19 @@ test('the plane of a figure is as wide as its widest cell and its feet stand on 
   assert.equal(frame.feet, 0.96); assert.equal(frame.figure, 0.86)
   const foot = spriteFoot({ sheets: ALL })
   assert.ok(Math.abs(foot.bottom - 0.04) < 1e-9 && foot.center === 0.5)
+})
+
+test('a figure whose kit has no sheet still turns and walks in its pose', () => {
+  const screen = parseMediaScreen({ directional: { sheets: [], heading: 'away', walk: { to: [2, 3], speed: 1.2, start: 0.5 } } })!
+  assert.deepEqual(screen.directional, { sheets: [], heading: 180, walk: { to: [2, 3], speed: 1.2, start: 0.5 } })
+  assert.equal(screen.sourceUrl, '')
+  const talking = parseMediaScreen({ media: 'image', sourceUrl: '/pose.png', directional: { sheets: [], heading: 0 }, talk: { base: '/pose.png', mouths: { closed: '/m.png' }, mouth: { offsetX: 0, offsetY: -18, scale: 0.05, rotation: 0 }, rest: 'closed', cues: [] } })!
+  assert.equal(talking.talk?.base, '/pose.png'); assert.equal(talking.directional?.heading, 0)
+  assert.equal(parseMediaScreen({ directional: { sheets: [] } })!.directional, undefined)
+  const slot = { id: 'a', slot: 'prop', position: [0, 0, 0], rotationY: 0, scale: 1, sourceUrl: '/pose.png', media: 'image', clip: null, screen } as unknown as Scene3DSlot
+  const painted = facingSlot(slot, [0, 0, 0], { memory: new DirectionMemory(), eye: [0, 1.6, 5], eye0: [0, 5], t: 0 })
+  assert.deepEqual(painted.screen?.directional?.view, { kind: 'pose', talking: false })
+  assert.equal(painted.scale, 1, 'no sheet, no cell: the pose keeps its own size')
+  const moved = walkedSlot(slot, [0, 0, 0], 2).position, length = Math.hypot(2, 3)
+  assert.ok(Math.abs(moved[0] - 1.8 * 2 / length) < 1e-9 && Math.abs(moved[2] - 1.8 * 3 / length) < 1e-9)
 })

@@ -101,3 +101,9 @@ def appearance(value: Any) -> dict[str, Any]:
     if not isinstance(color, str) or not _COLOR.match(color):
         raise ValueError("appearance.color must be #rrggbb")
     return {"start": float(value["start"]), "duration": float(duration), "color": color}
+
+
+def directional(value: Any) -> dict[str, Any]:
+    """``directional``: a 2D figure that turns to the camera: its sheets, ``heading``, ``walk`` and ``speech`` (``directional_sprite``)."""
+    from services.directional_sprite import normalize
+    return normalize(value)

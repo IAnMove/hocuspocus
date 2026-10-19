@@ -1149,7 +1149,21 @@
       "enters": "enters from {{side}}",
       "object": "object {{id}}",
       "open": "Open {{name}} in Characters (face rig on this pose)",
-      "openShort": "Open"
+      "openShort": "Open",
+      "heading": "Looks",
+      "noHeading": "As placed",
+      "headings": {
+        "toward": "toward the camera",
+        "right": "to the right",
+        "away": "away from the camera",
+        "left": "to the left"
+      },
+      "walkX": "Walks to x (m)",
+      "walkZ": "Walks to z (m)",
+      "walkSpeed": "Speed (m/s)",
+      "walkAt": "Starts at (s)",
+      "looks": "looks {{heading}}",
+      "walks": "walks to {{x}}, {{z}}"
     },
     "lines": {
       "title": "Dialogue",

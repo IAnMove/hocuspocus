@@ -58,6 +58,7 @@ def script_scene3d(shot,location,*,series=None,root=None):
         if not entry.get('characterId'): continue
         value=by_character.setdefault(entry['characterId'],{'characterId':entry['characterId'],'objectId':f'subject_{index+1}','poseId':entry.get('poseId','base')})
         if entry.get('mark'): value['mark']=entry['mark']
+        value.update({key:entry[key] for key in ('heading','walkTo','walkSpeed','walkAt') if key in entry})
     config['cast']=list(by_character.values())
     return config
 
@@ -100,12 +101,15 @@ def room_cast_bindings(config):
 
 
 def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
-    """Room listeners retain their approved pose even in a shot with no dialogue."""
-    if not config.get('roomSet') and not config.get('roomBox'): return scene
+    """Room listeners retain their approved pose even in a shot with no dialogue, and so does a figure that turns and walks
+    (``series_directional``) in any shot: it needs its picture first."""
+    from services.series_directional import uses_direction
+    placed=config.get('roomSet') or config.get('roomBox')
+    if not placed and not any(uses_direction(entry) for entry in config.get('cast',[])): return scene
     from services.set_generation import require_result
     speaking={line['characterId'] for line in lines};bindings=[]
     for entry in config.get('cast',[]):
-        if entry['characterId'] in speaking: continue
+        if entry['characterId'] in speaking or not (placed or uses_direction(entry)): continue
         kit=kits.get(characters.get(entry['characterId']),{})
         pose=entry.get('poseId','base')
         asset=kit.get('base',{}) if pose=='base' else kit.get('poses',{}).get(pose,{})
@@ -116,7 +120,7 @@ def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
             from urllib.parse import quote
             source=f"/api/v1/file/{quote(source.removeprefix('outputs/'))}?workspace={quote(workspace)}"
         row={'object_id':entry['objectId'],'media':'image','source_url':source,'imageLook':{'grounded':True}}
-        if config.get('roomBox'):
+        if config.get('roomBox') or (entry.get('heightM') and uses_direction(entry)):
             from services.series_room_box import cutout_scale
             row.update(cutout_scale(entry))
         bindings.append(row)

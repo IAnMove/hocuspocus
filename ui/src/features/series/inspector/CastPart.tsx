@@ -88,6 +88,42 @@ export function CastPart({ context, onOpenFaceRig }: { context: PartContext; onO
 }
 
 type Cast3D = NonNullable<SeriesShotScene3D['cast']>
+type Cast3DEntry = Cast3D[number] & { heading?: string | number; walkTo?: { x?: number; z?: number }; walkSpeed?: number; walkAt?: number }
+
+const HEADINGS = ['toward', 'right', 'away', 'left'] as const
+
+/** The destination of a walk with one coordinate changed; a cleared coordinate removes the walk (and its speed and start). */
+function withWalkTo(entry: Cast3DEntry, axis: 'x' | 'z', value: number | undefined): Cast3DEntry {
+  if (value === undefined) {
+    const rest = { ...entry } as Record<string, unknown>
+    for (const key of ['walkTo', 'walkSpeed', 'walkAt']) delete rest[key]
+    return rest as Cast3DEntry
+  }
+  return { ...entry, walkTo: { x: entry.walkTo?.x ?? 0, z: entry.walkTo?.z ?? 0, [axis]: value } }
+}
+
+/** Where a 3D cast member looks and goes (it turns to the camera and walks by the ground it covers: series_directional.py). */
+function DirectionFields({ entry, change }: { entry: Cast3DEntry; change: (entry: Cast3DEntry) => void }) {
+  const { t } = useUiTranslation('seriesLab')
+  return <>
+    <SelectInput title={t('inspector.cast.heading')} value={entry.heading} empty={t('inspector.cast.noHeading')}
+      onChange={value => change(withField(entry, 'heading', value))} options={HEADINGS.map(value => ({ value, label: t(`inspector.cast.headings.${value}`) }))} />
+    <NumberInput title={t('inspector.cast.walkX')} value={entry.walkTo?.x} min={-100} max={100} step={0.1} onChange={value => change(withWalkTo(entry, 'x', value))} />
+    <NumberInput title={t('inspector.cast.walkZ')} value={entry.walkTo?.z} min={-100} max={100} step={0.1} onChange={value => change(withWalkTo(entry, 'z', value))} />
+    {entry.walkTo && <>
+      <NumberInput title={t('inspector.cast.walkSpeed')} value={entry.walkSpeed} min={0.2} max={6} step={0.1} placeholder="1.2" onChange={value => change(withField(entry, 'walkSpeed', value))} />
+      <NumberInput title={t('inspector.cast.walkAt')} value={entry.walkAt} min={0} max={600} step={0.1} placeholder="0" onChange={value => change(withField(entry, 'walkAt', value))} />
+    </>}
+  </>
+}
+
+/** A cast member of a 3D shot in words: the object it speaks through, where it looks and where it walks. */
+function place3d(t: TFunction<'seriesLab'>, entry: Cast3DEntry): string {
+  const named = HEADINGS.find(value => value === entry.heading)
+  const heading = named ? t(`inspector.cast.headings.${named}`) : typeof entry.heading === 'number' ? `${Math.round(entry.heading)}°` : ''
+  return [t('inspector.cast.object', { id: entry.objectId }), heading ? t('inspector.cast.looks', { heading }) : '',
+    entry.walkTo ? t('inspector.cast.walks', { x: entry.walkTo.x ?? 0, z: entry.walkTo.z ?? 0 }) : ''].filter(Boolean).join(' · ')
+}
 
 /** Characters of a 3D shot: each speaks through one object of the scene, drawn as its Character Kit pose. */
 export function Cast3DPart({ context, onOpenFaceRig }: { context: PartContext; onOpenFaceRig?: (characterId: string, poseId?: string) => void }) {
@@ -102,12 +138,17 @@ export function Cast3DPart({ context, onOpenFaceRig }: { context: PartContext; o
       ? null : { scene3d: { ...script?.scene3d, cast: draft.cast } }}
     editable={cast.length > 0}
     view={cast.length > 0 && <ul className="mt-2 grid gap-1.5 @md:grid-cols-2">{cast.map(entry =>
-      <Figure key={entry.objectId} context={context} entry={entry} onOpenFaceRig={onOpenFaceRig} place={t('inspector.cast.object', { id: entry.objectId })} />)}</ul>}
-    editor={({ draft, change }) => <div className="space-y-2">{((draft.cast || []) as Cast3D).map((entry, index) =>
-      <div key={entry.objectId || index} className="grid grid-cols-2 gap-2">
-        <p className="self-center text-[11px] text-text-secondary">{characterName(context.series, entry.characterId)} · {t('inspector.cast.object', { id: entry.objectId })}</p>
-        <SelectInput title={t('inspector.cast.pose')} value={entry.poseId} empty={t('inspector.cast.basePose')}
-          options={options(entry.characterId).filter(pose => pose.value !== 'base')}
-          onChange={value => change({ ...draft, cast: ((draft.cast || []) as Cast3D).map((item, position) => position === index ? withField(item, 'poseId', value) : item) })} />
-      </div>)}</div>} />
+      <Figure key={entry.objectId} context={context} entry={entry} onOpenFaceRig={onOpenFaceRig} place={place3d(t, entry as Cast3DEntry)} />)}</ul>}
+    editor={({ draft, change }) => {
+      const update = (index: number, edit: (item: Cast3DEntry) => Cast3DEntry) =>
+        change({ ...draft, cast: ((draft.cast || []) as Cast3D).map((item, position) => position === index ? edit(item as Cast3DEntry) : item) })
+      return <div className="space-y-2">{((draft.cast || []) as Cast3D).map((entry, index) =>
+        <div key={entry.objectId || index} className="grid grid-cols-2 gap-2 @md:grid-cols-3 @2xl:grid-cols-4">
+          <p className="col-span-full self-center text-[11px] text-text-secondary">{characterName(context.series, entry.characterId)} · {t('inspector.cast.object', { id: entry.objectId })}</p>
+          <SelectInput title={t('inspector.cast.pose')} value={entry.poseId} empty={t('inspector.cast.basePose')}
+            options={options(entry.characterId).filter(pose => pose.value !== 'base')}
+            onChange={value => update(index, item => withField(item, 'poseId', value))} />
+          <DirectionFields entry={entry as Cast3DEntry} change={value => update(index, () => value)} />
+        </div>)}</div>
+    }} />
 }

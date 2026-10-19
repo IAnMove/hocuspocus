@@ -1,5 +1,5 @@
 import { cameraEyeAtTime } from './camera.ts'
-import { DirectionMemory, directionalPosition, directionalView, type V2 } from './directionalSprite.ts'
+import { DirectionMemory, directionalPosition, directionalView, spriteFrame, type V2 } from './directionalSprite.ts'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types.ts'
 
 /** The slot-side half of a directional figure (`screen.directional`): where it stands, and what the camera pass of
@@ -22,9 +22,11 @@ export function referenceEye(document: Scene3DDocument): V2 {
 }
 
 /** The slot to paint once the camera is known: turned toward it, with the drawing its angle asks for in
- * `screen.directional.view` (a copy: the document is never written to). */
+ * `screen.directional.view` (a copy: the document is never written to). Its `scale` is the half height of the figure, as for any
+ * cutout (`heightM / 2`); the plane of the sheets is the cell, so it is that much taller than the figure inside it. */
 export function facingSlot(posed: Scene3DSlot, placed: Vec3, frame: DirectionalFrame): Scene3DSlot {
   const screen = posed.screen!, directional = screen.directional!
   const { view } = directionalView(directional, { start: [placed[0], placed[2]], eye0: frame.eye0, eye: [frame.eye[0], frame.eye[2]], t: frame.t, memory: frame.memory, id: posed.id })
-  return { ...posed, rotationY: Math.atan2(frame.eye[0] - posed.position[0], frame.eye[2] - posed.position[2]), screen: { ...screen, directional: { ...directional, view } } }
+  const cell = directional.sheets.length ? spriteFrame(directional).figure : 1
+  return { ...posed, scale: posed.scale / cell, rotationY: Math.atan2(frame.eye[0] - posed.position[0], frame.eye[2] - posed.position[2]), screen: { ...screen, directional: { ...directional, view } } }
 }

@@ -35,21 +35,20 @@ those ids and file names, never invent one.
    - 3D background: `world3d.templates.suggest` (below) → `world3d.scene.instantiate` → `series.location.plate3d` (a silent loop).
    After changing characters or locations, `series.canon.approve`.
 3. **Write the episode:** `series.episode.from_script` with the whole script (format below), every language in the
-   same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect at
-   once. It assigns the ids, writes the shots and a language version for every other language.
+   same lines. Send it with `check: true` first: it lists every unknown character, pose, location, file or effect. It assigns the ids, writes the shots and a language version for every other language.
 4. **Make it:** `series.episode.produce`: renders the original and every language version on the server (voices checked
    with `qa.speech`, up to three takes per line; failed shots retried once), approves the takes and cuts each language
-   with subtitles burned in. Poll `series.episode.produce.status` every minute or two; `chapters` lists the files.
-   Before that full render, make 10–13 key shots with `series.episode.render_native` and `shot_ids`, or use `preview`
-   mode, and look at those takes first.
+   with subtitles burned in. Poll `series.episode.produce.status` every minute or two; `chapters` lists files.
+   Before the full render, make 10–13 key shots with `series.episode.render_native` and `shot_ids` (or `preview`
+   mode) and look at them first.
 5. **Look and fix:** `series.episode.get` lists each take's editable scene (`sceneFilename`): `scenes.video2d.preview`
-   it, or open it with `scenes.document.get`. Fix one shot with `series.shot.update` (by id or its number, below), or
-   change the script and send it again with `episode_id` (takes are kept by shot id), then `series.episode.produce` again: it renders only the shots whose script, kits or
+   it or open it with `scenes.document.get`. Fix one shot with `series.shot.update` (by id or its number, below), or
+   send the changed script again with `episode_id` (takes are kept by shot id), then `series.episode.produce`: it renders only the shots whose script, kits or
    location changed since their approved take, and recuts. `rerender: true` renders every shot again; a 3D template
-   edited in place is not detected, so render those shots with `series.episode.render_native` and `shot_ids`.
+   edited in place is not detected: render those shots with `series.episode.render_native` and `shot_ids`.
 
 The lower-level tools (`series.episode.create`/`update`, `series.episode.language_version.set`,
-`series.episode.render_native`, `series.assembly.start`) do the same steps one by one.
+`series.episode.render_native`, `series.assembly.start`) do these steps one by one.
 
 ## The user's review (production modes)
 
@@ -60,7 +59,7 @@ Three modes, set by the user in Series Lab (Validation) or with `series.episode.
   `render_native` and `produce` render only approved shots and list the rest as `waiting`.
 - `preview`: plan approval, then a preview render the user approves or sends back with notes, then the final. A 2D
   preview is its normal render, a 3D one is exported at `draft`. An approved 2D (or draft 3D) preview becomes the
-  final take without rendering again; a 3D shot at `final` quality renders its final.
+  final take; a 3D shot at `final` quality renders its final.
 
 Working with it:
 
@@ -195,10 +194,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
   `shake` (panic). `enterFrom`: `left`/`right`
-  walks in, from 0.2 s to 1.4 s unless `enterAt` (s, when it starts) and `enterDuration` (s, how long it takes; a
-  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick hop) or
+  walks in, from 0.2 s to 1.4 s unless `enterAt` (s, start) and `enterDuration` (s; a slow walk-in is 2–4 s) say
+  otherwise; both stay inside the shot. `enterGait`: `hop` (default) or
   `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
-  degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
+  degrees (default 1.5, 0 none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
   takes a whole number of steps (stretched a little to fit), so its feet land on its start, every step and its end. `poseId` must be one of the kit's poses.
   With an approved `walk` sheet the entrance is walked by its drawings: same slide, feet on the ground, no bob, one
   cycle per `2 × enterStep` (steps and sounds still land on the feet), mirrored against the way the sheet looks.
@@ -213,12 +212,11 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   who looks out of the frame (`lookRoom` in the reply); `"lookRoom": false` on a cast entry or a shot keeps your `x`.
 - **cut poses (edge snap):** a pose cut by its image border (a bust cut at the chest and one side) never shows the
   cut. A cut is a run of opaque pixels on the left or right border at least 8 % of the image height, or on the bottom
-  at least 15 % of its width (a stray pixel, hair or feet on the border are not cuts; the top is not read). A side cut
+  at least 15 % of its width (stray pixels, hair or feet are not cuts; the top is not read). A side cut
   slides the cutout, same size, until the cut is just past the frame edge; a bottom cut goes below the frame (slid
   down in a wide shot, else enlarged with the eyes on the framing's eye line); cut on both sides, it is enlarged until
   both cuts are out (at most 2.5×). A cut already out of the frame moves nothing; a mirrored pose is cut on the other
-  side. Give a bust cut on its left an `x` on the left (it lands there anyway) and keep two cut busts on their cut
-  sides in a two-shot. `"edgeSnap": false` on a cast entry keeps its `x`, cut and all; an entry with a `transform`, or
+  side. Put a bust cut on its left at a left `x`, and two cut busts on their cut sides. `"edgeSnap": false` on a cast entry keeps its `x`, cut and all; an entry with a `transform`, or
   a perched character, is never moved.
 - **perched characters:** a bible entry with `layout2d.perch` (a laptop on a desk) is placed on that prop in every
   framing. Give it no transform.
@@ -320,7 +318,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   over the 3D frame), on a line or at a second (`at`).
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
-  `clip` by name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
+  `clip` name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
   (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres),
   `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, headingOffset,
   easing}. `faceTravel` turns the model's +Z along the path; a generated ship or airship whose nose is its -X needs
@@ -328,7 +326,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   `{"objectId": "zep", "file": "zeppelin.glb", "add": true, "clip": "Fly", "position": [-6, 3, -8],
   "motion": {"to": [6, 3, -8], "faceTravel": true}}`.
   `"renderLook": "toon"` draws the 3D models as cel anime with an ink outline (`toon` {steps 2-4, outline 0-8 px,
-  ink #rrggbb}) so they sit with the flat cutouts and painted backgrounds; images and cutouts keep their look.
+  ink #rrggbb}) so they sit with the cutouts and painted backgrounds; images keep their look.
   An object also takes:
   - **Clip sequence:** `clips` instead of `clip`: `[{clip (name), start (shot seconds), duration?, fade? (0.3 s), speed?
     0.1-4, offset? (clip seconds), loop?}]`, crossfaded, up to 32.
@@ -339,12 +337,12 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
     the prop without editing its file and replaces `rotationY`.
   - **Rig axes:** in a T pose every bone's axes are the character's: +X its left, +Y up, +Z forward. In the rig's `Aim`
     clip, a prop modelled along +X (top +Y) lies level along the aim with `rotation: [-1.65, 0.11, 2.76]`.
-  - **Appearance:** `appearance` `{start, duration? 0.9, color? #rrggbb}` hides the object until `start`, then it
-    materializes.
-  - **Size:** a model is 1.7 m × `scale` tall: its bounding-box height, whatever its length. A rifle modelled lying flat
-    (0.99 long, 0.32 high) is 4.7 m long at 0.9, so it needs about 0.16.
+  - **Appearance:** `appearance` `{start, duration? 0.9, color? #rrggbb}` hides the object until `start`, then
+    materializes it.
+  - **Size:** a model is 1.7 m × `scale` tall: its bounding-box height, whatever its length. A rifle modelled flat
+    (0.99 long, 0.32 high) is 4.7 m long at 0.9: use about 0.16.
   - **Checks:** `from_script` checks each object's model file, clip names, sequence, hold and appearance before
-    writing anything; a carrier that is unknown or talks fails the render with a clear message.
+    writing; an unknown or talking carrier fails the render with a clear message.
 
 ## 3D sets: molds, skins and props
 
@@ -378,7 +376,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    `escenario_publico`, `vehiculo`) and exteriors (`calle`, `plaza`, `orilla`, `azotea`: no ceiling, the view on `wall_back`, a sun
    preset) sit beside the named interiors. A `kind: "3d"` shot may name a stage card, `scene3d: {template: "stage-sala",
    roomCamera: "ots_a"}`: the mold in its own colours, with dust and a breathing key light; a location set still brings the skin.
-8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide interior, full body. `scene3d.room.put` creates it already textured (default materials); `scene3d.room.paint` repaints it with AI. A `kind: "3d"` shot names `set` and `at` (`{x, z}`, `near`, `mid`, `far`). See HOWUSEIT (Box rooms).
+8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide interior, full body; `scene3d.room.put` textures it, `scene3d.room.paint` repaints it with AI. A `kind: "3d"` shot names `set` and `at` (`{x, z}`, `near`, `mid`, `far`). A cast entry's `heading` (degrees from the first camera: 0 toward, 90 right, 180 away, or a name) and `walkTo {x, z}` (`walkSpeed` 1.2, `walkAt`) draw the kit's walk and idle sheets (`motion`, `dir`) by angle to the camera; it stops to speak. See HOWUSEIT (Box rooms, Directional figures).
 
 ## How to choose a 3D shot
 
