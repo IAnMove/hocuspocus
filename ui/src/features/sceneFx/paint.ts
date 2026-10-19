@@ -10,7 +10,9 @@ import { aimedPainters, stormPainters } from './stormPaint'
 import { glow } from './energyBrush'
 import { isFrameFx, paintFrameFx } from './impactPaint'
 import { CODE_RAIN_KIND, paintCodeRain } from './codeRainPaint'
-import { blendsWithFrame, cinematicPainter } from './cinematicPaint'
+import { blendsWithFrame, cinematicPainter, smoothstep } from './cinematicPaint'
+import { paintScanline, SCANLINE_KIND } from './scanPaint'
+import { withAlpha } from './color'
 import { radiancePainters } from './radiancePaint'
 
 type Painter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, progress: number) => void
@@ -22,6 +24,9 @@ const circle = (ctx: CanvasRenderingContext2D, x: number, y: number, radius: num
 const line = (ctx: CanvasRenderingContext2D, x: number, y: number, x2: number, y2: number) => {
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x2, y2); ctx.stroke()
 }
+/** A field of drifting particles thins out toward the ellipse that bounds it (1.5 wide, 1 high, in cue units), so the
+ * rectangle it is drawn in never shows as an edge. */
+const fieldWindow = (x: number, y: number) => 1 - smoothstep(.7, 1, Math.hypot(x / .78, y / .5))
 const particles: Painter = (ctx, cue, time, progress) => {
   const burst = cue.kind === 'confetti'
   const rising = cue.kind === 'bubbles'
@@ -36,7 +41,7 @@ const particles: Painter = (ctx, cue, time, progress) => {
     const y = burst ? Math.sin(angle) * travel + progress * progress * .15 : (rising ? .5 - phase : phase - .5)
     const radius = .002 + c * .005
     const twinkle = cue.kind === 'stars' ? .5 + .5 * Math.sin(time * (3 + b * 5) + i) : 1
-    ctx.globalAlpha = (burst ? Math.pow(1 - progress, .5) : .35 + .65 * Math.sin(phase * Math.PI)) * twinkle
+    ctx.globalAlpha = (burst ? Math.pow(1 - progress, .5) : (.35 + .65 * Math.sin(phase * Math.PI)) * fieldWindow(x, y)) * twinkle
     ctx.fillStyle = ctx.strokeStyle = burst ? `hsl(${a * 360} 90% 70%)` : cue.color
     if (burst) { ctx.save(); ctx.translate(x, y); ctx.rotate(time * (b - .5) * 9); ctx.scale(1, Math.cos(time * (4 + b * 6) + i)); ctx.fillRect(-.004, -.009, .008, .018); ctx.restore() }
     else if (cue.kind === 'stars') { line(ctx, x - radius * 2.5, y, x + radius * 2.5, y); line(ctx, x, y - radius * 2.5, x, y + radius * 2.5); circle(ctx, x, y, radius * .5) }
@@ -95,16 +100,14 @@ const speedlines: Painter = (ctx, cue, time) => {
     line(ctx, Math.cos(angle) * radius, Math.sin(angle) * radius, Math.cos(angle) * (radius + .15), Math.sin(angle) * (radius + .15))
   }
 }
-const scanline: Painter = (ctx, _cue, time) => {
-  ctx.globalAlpha = .2
-  for (let i = 0; i < 32; i++) line(ctx, -.55, i / 32 - .5, .55, i / 32 - .5)
-  ctx.globalAlpha = .8; ctx.lineWidth = .008
-  line(ctx, -.55, (time * .35) % 1 - .5, .55, (time * .35) % 1 - .5)
-}
+/** The bands fade in and out along their length, so an aurora ends in the air and not at a cut. */
 const aurora: Painter = (ctx, cue, time) => {
   for (let band = 0; band < 15; band++) {
     ctx.globalAlpha = .06; ctx.lineWidth = .035
-    ctx.strokeStyle = `hsl(${150 + band * 5} 85% 65%)`; ctx.beginPath()
+    const color = `hsl(${150 + band * 5} 85% 65%)`
+    const along = ctx.createLinearGradient(-.8, 0, .8, 0)
+    along.addColorStop(0, withAlpha(color, '00')); along.addColorStop(.25, color); along.addColorStop(.75, color); along.addColorStop(1, withAlpha(color, '00'))
+    ctx.strokeStyle = along; ctx.beginPath()
     for (let i = 0; i <= 70; i++) {
       const x = i / 70 * 1.6 - .8, y = Math.sin(x * 5 + time * .5 + band * .05) * .14 + band * .012 - .16
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
@@ -113,7 +116,7 @@ const aurora: Painter = (ctx, cue, time) => {
   }
   ctx.strokeStyle = cue.color
 }
-const special: Record<string, Painter> = { portal: portalRings, speedlines, scanline, aurora, explosion: paintExplosion, fireworks, ...magicPainters, ...animePainters, ...stormPainters, ...radiancePainters }
+const special: Record<string, Painter> = { portal: portalRings, speedlines, aurora, explosion: paintExplosion, fireworks, ...magicPainters, ...animePainters, ...stormPainters, ...radiancePainters }
 /** Painted straight on the frame even where a 3D sprite of the kind exists: beams, weather and light. */
 export const drawnOnFrame = (kind: string) => Boolean(stormPainters[kind] || radiancePainters[kind])
 
@@ -121,12 +124,18 @@ type FramePainter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, 
 /** Effects that fill the whole frame, painted outside the cue's x/y/size transform. */
 function framePainter(kind: string): FramePainter | undefined {
   if (isFrameFx(kind)) return paintFrameFx
+  if (kind === SCANLINE_KIND) return paintScanline
   return kind === CODE_RAIN_KIND ? paintCodeRain : cinematicPainter(kind)
 }
 
 /** Effects that work on the picture under them: an overlay canvas copies the stage first. */
 export function needsFrameSource(kind: string) {
   return isRetroLook(kind) || isEtching(kind) || kind === 'impact_invert' || blendsWithFrame(kind)
+}
+
+/** Effects that work on the whole frame by design: painted outside the cue's footprint, or on the picture under it. */
+export function coversFrame(kind: string) {
+  return Boolean(framePainter(kind)) || needsFrameSource(kind)
 }
 
 /** The showcase label in the cue colour, or white when that colour is too dark to read. */

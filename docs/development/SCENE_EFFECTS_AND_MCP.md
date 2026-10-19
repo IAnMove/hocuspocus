@@ -94,6 +94,19 @@ broken into lumps lit from above (darker undersides) that swell, turn and drift 
 wind, and the flames of `anime_aura` fade in from the bottom of their card instead of
 ending on a straight cut.
 
+### Effects end in the air, never in a box
+
+A placed effect is drawn in the cue's footprint (`x`, `y`, `size`); paint that stops flat at that
+rectangle reads as a sticker. `node scripts/fx-footprint-audit.mjs` (run from `ui/`) paints every
+catalog effect alone with the real painter in headless Chromium, with WebGL and without it (the
+filmed 3D sprites and the 2D painters they fall back to), and measures a flat cut along the painted
+box and rectangular scatters (`ui/scripts/fxFootprint.ts`); `--sheet <dir>` writes contact sheets.
+`ui/e2e/specs/scene-fx-footprint.spec.ts` runs it in CI. The audit found `bubbles` and `stars` (their
+field was a rectangle: it now thins out toward an ellipse), `aurora` (its bands fade at both ends),
+`energy_beam` (the 2D beam's far end fades), `fire` and `tornado` (their 3D sheets faded over too
+little of their card), and `scanline`, which is now a whole-frame scanner like the grades above:
+hairlines edge to edge, `size` the pattern height, `x`, `y` and `rotation` not used.
+
 ### Beams from a point: `from`
 
 A `laser` or `lightning` cue (catalog entries with `"aim": true`) can start at `from` and
