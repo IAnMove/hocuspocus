@@ -14,6 +14,7 @@ import { blendsWithFrame, cinematicPainter, smoothstep } from './cinematicPaint'
 import { paintScanline, SCANLINE_KIND } from './scanPaint'
 import { withAlpha } from './color'
 import { radiancePainters } from './radiancePaint'
+import { paintPresence } from './presence'
 
 type Painter = (ctx: CanvasRenderingContext2D, cue: SceneFx, time: number, progress: number) => void
 const tau = Math.PI * 2
@@ -151,7 +152,9 @@ function paintPlacedCue(ctx: CanvasRenderingContext2D, cue: SceneFx, time: numbe
   ctx.save(); ctx.translate(width * cue.x / 100, height * cue.y / 100); ctx.scale(scale, scale)
   ctx.rotate((cue.rotation ?? 0) * Math.PI / 180)
   ctx.fillStyle = cue.color; ctx.strokeStyle = cue.color; ctx.lineWidth = .002; ctx.lineCap = 'round'
-  if (cue.kind === 'explosion') paintExplosion(ctx, cue, time, progress)
+  // Presence effects with a Three.js painter; without WebGL the 2D painters below are the effect.
+  if (paintPresence(ctx, cue, time)) { /* painted by the WebGL layers */ }
+  else if (cue.kind === 'explosion') paintExplosion(ctx, cue, time, progress)
   else {
     const sprite = isWorldSfxKind(cue.kind) && !drawnOnFrame(cue.kind) && typeof ctx.drawImage === 'function' ? rasterizeWorldFx(cue, time) : null
     if (sprite) {
