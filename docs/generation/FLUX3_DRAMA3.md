@@ -138,8 +138,54 @@ La respuesta inicial admite una tarea; el archivo está listo cuando
 El cliente [creation_job.py](../../pinokio_agent/skills/api/hocuspocus/clients/creation_job.py)
 guarda comando, recibo y tarea terminal. Puede reanudarse con el mismo comando.
 `POST /api/v1/qa/speech` recibe `{workspace,file,text,language,names}` y devuelve
-transcripción, WER, duración y silencios. Separa la evaluación del contenido
-de la evaluación perceptiva de la voz.
+transcripción, WER, duración, silencios y `cleanliness` (ruido, SNR, grave).
+Separa la evaluación del contenido de la evaluación perceptiva de la voz.
+
+## Runtime operativo (cola, memoria, cuelgues)
+
+FLUX 3 y Drama 3 no viven en el entorno WanGP. Arrancan un ComfyUI aislado
+(`app/services/creation_model_service.py`). Ese proceso es pesado (~40 GB RAM
+y ~6 GiB de caché GPU de expertos en Drama) y comparte la cola y el candado
+GPU con el resto del estudio.
+
+| Comportamiento | Contrato | Cómo ajustarlo |
+| --- | --- | --- |
+| **Proceso caliente** | Un trabajo correcto deja el runtime vivo `creation_runtime_idle_seconds` (300 s por defecto). El siguiente trabajo de la **misma familia** (`flux3_*` o `drama3_*`) lo reutiliza. `0` lo para al terminar. | `PUT /api/v1/services-config` con `{"creation_runtime_idle_seconds": 300}`. Un valor ilegible vuelve a 300; el máximo es 86400. |
+| **Cambio de familia** | Un trabajo FLUX mientras el runtime es Drama (o al revés) lo reinicia. Fallo, cancelación o health check caído también. | No hay ajuste. |
+| **Memoria (Linux + systemd --user)** | El runtime arranca en su propio cgroup: `MemoryMax` = `creation_runtime_memory_percent` de la RAM (80 % por defecto, acotado 30–95), `MemoryHigh` = 90 % de ese tope, `MemorySwapMax=0`. Un OOM mata el runtime, no el servidor. | `PUT /api/v1/services-config` con `{"creation_runtime_memory_percent": 70}`. `0` desactiva el confinamiento. |
+| **Sin systemd de usuario** | Windows, macOS y Linux sin `systemd-run --user` arrancan el comando plano y registran `runtime not confined`. | Cierra otros programas grandes; no hay cgroup. |
+| **Cuelgue** | Con un prompt pendiente, 15 minutos sin una línea impresa paran el runtime: `"The creation runtime made no progress for 15 minutes and was stopped; try again"`. El silencio **antes** del prompt no cuenta. El límite de una hora y Cancel siguen igual. | No hay ajuste. Reenvía el trabajo. |
+| **Cancelar al cargar** | Cancelar mientras el motor aún carga marca el trabajo `cancelled`, libera el hueco de cola y no espera al arranque. Si el motor ya está muestreando, el estado queda `cancelling` hasta que el worker suelta. | `POST /api/v1/cancel/{job_id}` o `jobs.cancel`. |
+
+Cualquier otro dueño del carril GPU (WanGP, H3, LLM CUDA local, análisis de audio GPU, UniRig, Hunyuan3D, export Video 3D) y `release-model` paran el runtime caliente primero. Arrancar SAM también. `qa.speech` (CPU) no.
+
+`runtime_status()` (módulo, no ruta HTTP pública) reporta
+`{warm, family, idle_seconds_left, confined, memory_max_gb}`. En el log busca
+`runtime kept warm for N s`, `released after idle`, `runtime confined: memory.max …`
+o `NOT confined`. Un SIGKILL / 137 / `oom_kill` falla el trabajo con el mensaje
+de memoria; ese proceso no se reutiliza. Un servidor nuevo para un runtime
+huérfano cuyo `creation_models/runtime.json` apunta a un PID de servidor muerto.
+
+**Ajustes.** `PUT /api/v1/services-config` acepta las dos claves y las guarda
+en `services`. `GET /api/v1/services-config` **no las devuelve** hoy: el runtime
+las lee del `server_config` persistido, no del JSON de Settings. No hay
+controles en la UI. Ejemplo:
+
+```bash
+curl -X PUT "$HOCUSPOCUS_URL/api/v1/services-config" \
+  -H 'Content-Type: application/json' \
+  -d '{"creation_runtime_idle_seconds": 300, "creation_runtime_memory_percent": 80}'
+```
+
+**Errores que verás**
+
+- OOM: *The FLUX 3 / Drama 3 runtime ran out of memory… lower
+  `creation_runtime_memory_percent` and try again.* El servidor sigue en pie.
+- Stall: *no progress for 15 minutes*. Reintenta; no es un timeout de cola.
+- Cancel durante la carga: el trabajo pasa a `cancelled` al momento. Cancel
+  a mitad de muestreo puede tardar hasta que el worker libere.
+- El proceso caliente ocupa ~50 GB RAM+VRAM. Si el siguiente trabajo es Wan
+  o H3, espera a que el runtime se evicte o baja `creation_runtime_idle_seconds`.
 
 ## Settings de la comunidad
 
