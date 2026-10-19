@@ -98,7 +98,7 @@ MODELS = (
      "published": True, "needs_gpu": True, "requires_install": True, "vram_gb": 6, "ram_gb": 16},
     {"id": "kugelaudio_0_open", "kind": "model", "component": "wangp",
      "published": True, "needs_gpu": True, "requires_install": True, "vram_gb": 6, "ram_gb": 16},
-    {"id": "trellis2", "kind": "model", "component": "hunyuan3d",
+    {"id": "trellis2", "kind": "model", "component": "trellis2",
      "published": True, "needs_gpu": True, "requires_install": True, "vram_gb": 24, "ram_gb": 32},
 )
 
@@ -185,6 +185,20 @@ def _gpu_csv() -> str | None:
         return None
     text = (result.stdout or "").strip()
     return text or None
+
+
+def _compute_cap() -> str | None:
+    """CUDA compute capability of the first GPU; a driver without the field leaves it unverified."""
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5, check=True,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    lines = (result.stdout or "").strip().splitlines()
+    value = lines[0].strip() if lines else ""
+    return value if re.fullmatch(r"\d+\.\d+", value) else None
 
 
 def _mib_to_gb(raw: str) -> float | None:
@@ -435,6 +449,7 @@ def _observe_host(observe: Mapping[str, Any]) -> dict[str, Any]:
         "gpu_kind": gpu["kind"],
         "ram_gb": _pick(observe, "ram_gb", _ram_gb),
         "vram_gb": gpu["vram_gb"],
+        "compute_cap": _pick(observe, "compute_cap", _compute_cap) if gpu["kind"] == "nvidia" else None,
         "cpu_count": _pick(observe, "cpu_count", _cpu_count),
         "app_version": _pick(observe, "app_version", read_app_version),
         "git_revision": _pick(observe, "git_revision", _git_revision),
@@ -451,8 +466,10 @@ def _receipt_for(name: str, platform: str, overrides: Mapping[str, Any] | None) 
 
 
 def _engine_table(host: Mapping[str, Any]) -> dict[str, dict[str, Any]]:
+    vram_gb = host.get("vram_gb")
     selected = profiles.select_profiles(
         host["platform"], host["architecture"], host["gpu_kind"], host["driver"],
+        host.get("compute_cap"), vram_gb * 1024 if isinstance(vram_gb, (int, float)) else None,
     )
     overrides = host.get("receipts") if isinstance(host.get("receipts"), dict) else None
     engines: dict[str, dict[str, Any]] = {}

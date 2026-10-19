@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
 from services import minimax_h3_service, model3d_service
+from services.trellis2 import catalog as trellis2_catalog
 
 wgp = None
 _model_weight_groups = None
@@ -190,6 +191,7 @@ def list_models(detail: bool = True):
             # Variants sharing one HF repo lose their weights together when
             # the cache is deleted; the UI warns using this list.
             "shared_cache_group": [item["id"] for item in model3d_service.models_sharing_repo(model["id"])],
+            **trellis2_catalog.catalog_extras(model),
         })
 
     # UniRig is a generative ML model too (autoregressive skeleton + learned
@@ -263,6 +265,8 @@ def debug_model(model_type: str):
 def delete_model(model_type: str):
     """Delete a model's checkpoint files from disk."""
     from services.creation_model_catalog import MODEL_TYPES, models_sharing_assets
+    if model_type == trellis2_catalog.MODEL_ID:
+        trellis2_catalog.refuse_delete_while_downloading(_model_downloads, _model_downloads_lock)
     sharing = models_sharing_assets(model_type)
     active_generation_ids = [
         str(job_id)
@@ -367,6 +371,9 @@ def _download_model_files(model_type: str):
     """
     from services.engine.model_files import download_model_files
 
+    if model_type == trellis2_catalog.MODEL_ID:
+        trellis2_catalog.download_weights()
+        return
     from services.creation_model_catalog import MODEL_TYPES
     if model_type in MODEL_TYPES:
         from services.creation_model_service import download_assets
@@ -393,8 +400,9 @@ def _download_model_files(model_type: str):
 
 def download_model(model_type: str):
     """Start downloading a model's files in the background."""
-    md = wgp.get_model_def(model_type)
-    if not md:
+    if model_type == trellis2_catalog.MODEL_ID:
+        trellis2_catalog.require_download_ready()
+    elif not wgp.get_model_def(model_type):
         return JSONResponse({"error": "Model not found"}, status_code=404)
     with _model_downloads_lock:
         entry = _model_downloads.get(model_type)

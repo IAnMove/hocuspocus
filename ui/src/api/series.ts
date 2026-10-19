@@ -621,6 +621,40 @@ export async function fetchSeriesLocationPlate(workspace: string, seriesId: stri
   return seriesResponse(fetch(`${platePath(seriesId, locationId)}?workspace=${encodeURIComponent(workspace)}`), 'Could not read the 3D background')
 }
 
+/** A location plate's perspective (``location.layout2d.stage``, services/series_stage.py): fractions of the plate height from the top. */
+export type SeriesStage = { horizon: number; ref: { baseY: number; heightPct: number; heightM: number }; floorTop?: number }
+/** `eyeHeightM`: the camera height the numbers imply (about 1.6 is right); `warning` says to re-read them when it is outside 1 to 2.4 m. */
+export type SeriesStageSetReply = { locationId: string; stage: SeriesStage | null; affectedShots: string[]; revision?: number; eyeHeightM?: number; warning?: string }
+export type SeriesStageCheckReply = {
+  locationId: string; plate: { file: string; width: number; height: number }
+  grid: { file: string; url: string; step: number; width: number; height: number }
+  stage: SeriesStage | null; proposal?: SeriesStage; eyeHeightM?: number; warning?: string
+  suggestion: { suggestion: { horizon: number; kind: string; confidence: 'low' | 'medium' | 'high' } | null; note: string }
+  how: string
+}
+
+function stagePath(seriesId: string, locationId: string, tail = '') {
+  return `${BASE}/api/v1/series/${encodeURIComponent(seriesId)}/locations/${encodeURIComponent(locationId)}/stage${tail}`
+}
+
+/** Save (or `clear`) a location's stage: 2D wide and two-shots there are then sized by it. The same route as `series.location.stage.set`. */
+export async function setSeriesLocationStage(workspace: string, seriesId: string, locationId: string,
+  stage: SeriesStage | null): Promise<SeriesStageSetReply> {
+  const body = stage ? { workspace, horizon: stage.horizon, ref: stage.ref, ...(stage.floorTop !== undefined ? { floorTop: stage.floorTop } : {}) } : { workspace, clear: true }
+  return seriesResponse(fetch(stagePath(seriesId, locationId), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), 'Could not save the stage')
+}
+
+/** Draw the grid over the plate (a workspace file) with an optional proposal; writes nothing to the series. `series.location.stage.check`. */
+export async function checkSeriesLocationStage(workspace: string, seriesId: string, locationId: string,
+  proposal?: SeriesStage): Promise<SeriesStageCheckReply> {
+  const body = { workspace, ...(proposal ? { horizon: proposal.horizon, ref: proposal.ref, ...(proposal.floorTop !== undefined ? { floorTop: proposal.floorTop } : {}) } : {}) }
+  return seriesResponse(fetch(stagePath(seriesId, locationId, '/check'), {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  }), 'Could not draw the grid')
+}
+
 export type SeriesTemplateCard = { id: string; title: string; description: string; characters: string[]; locations: string[]; pilotShots: number }
 
 /** Series templates: cast, locations, canon and a five-shot 2D pilot. */

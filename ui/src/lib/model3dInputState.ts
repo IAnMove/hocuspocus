@@ -24,7 +24,9 @@ export function model3dInputState(input: Inputs) {
   const remote3d = input.provider === 'meshy' || input.provider === 'hi3d'
   const supportsRetexture = !external3d && !remote3d
   const isMultiview = input.operation === 'generate' && !!input.model?.multiview
-  const installed = remote3d || (external3d ? !!input.model?.runtime?.installed : !!input.runtimeInstalled)
+  const installed = remote3d || (external3d
+    ? !!input.model?.runtime?.installed && input.model.runtime.compatible !== false && input.model.runtime.weights_downloaded !== false
+    : !!input.runtimeInstalled)
   const hasInput = hasRequiredInput(input, external3d, isMultiview)
   return {
     external3d, remote3d, supportsRetexture, isMultiview, installed, hasInput,

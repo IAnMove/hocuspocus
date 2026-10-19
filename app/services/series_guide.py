@@ -58,7 +58,7 @@ def _location(location: dict[str, Any]) -> dict[str, Any]:
     entry = {"id": location["id"], "name": location.get("name"), "description": location.get("description"),
              "variants": [variant.get("id") for variant in location.get("variants") or [] if variant.get("id")],
              "hasImage": bool(location.get("referenceAssetIds") or layout.get("backgroundAssetId") or layout.get("plateAssetId"))}
-    for key in ("homes", "anchors", "layers", "castDepth"):
+    for key in ("homes", "anchors", "layers", "castDepth", "stage"):
         if layout.get(key):
             entry[key] = layout[key]
     if location.get("set3d"):

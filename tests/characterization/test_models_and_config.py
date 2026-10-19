@@ -10,6 +10,7 @@ import pytest
 
 from tests.support.fake_wgp import catalog_attributes
 from tests.support.full_server import APP_DIR
+from tests.support.pinned_trellis2 import pin_trellis2_runtime
 
 
 @pytest.fixture
@@ -22,6 +23,7 @@ def catalog(server, monkeypatch):
     monkeypatch.setattr(model3d_service, "is_model_downloaded", lambda _model_id: False)
     monkeypatch.setattr(minimax_h3_service, "is_model_downloaded", lambda *_args, **_kwargs: False)
     monkeypatch.setattr(rig_service, "is_unirig_downloaded", lambda: False)
+    pin_trellis2_runtime(monkeypatch)
     return server
 
 

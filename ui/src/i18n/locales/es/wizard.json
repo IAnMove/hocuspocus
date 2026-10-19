@@ -302,7 +302,14 @@
     "shotCardReused": "{{shot}}: la tarjeta {{card}} ya era la toma del plano{{approved}}. Su escena es {{scene}}.",
     "shotCardApproved": " y la he aprobado (modo un solo disparo)",
     "shotCardWaits": ", a la espera de que la apruebes en Series Lab",
-    "shotCardExporting": "{{shot}}: la escena de {{card}} ({{scene}}) aún se está exportando; pídemelo otra vez en un momento y adjunto la toma."
+    "shotCardExporting": "{{shot}}: la escena de {{card}} ({{scene}}) aún se está exportando; pídemelo otra vez en un momento y adjunto la toma.",
+    "stageSet": "El escenario de {{location}} está guardado: los planos 2D generales y a dos de ahí se dimensionan con él y {{count}} planos se renderizarán de nuevo en la próxima producción. Con los números la cámara queda a {{eye}} m.",
+    "stageCleared": "El escenario de {{location}} está quitado: sus planos vuelven a dimensionarse por el encuadre.",
+    "stageGrid": "He dibujado una rejilla sobre la lámina de {{location}}: {{file}} (abre {{url}}).",
+    "stageGuess": "Una pista del horizonte, solo una pista: {{horizon}} (fiabilidad {{confidence}}).",
+    "stageNoGuess": "No he encontrado ninguna pista del horizonte en esta imagen.",
+    "stageEye": "Con los números la cámara queda a {{eye}} m.",
+    "stageLook": "No puedo ver la imagen: mírala y lee en la rejilla el horizonte, el pie de la referencia y su alto (fracciones del alto de la lámina, desde arriba), y yo los guardo."
   },
   "progress": {
     "addingAlternateSong": "Añadiendo la canción alternativa al videoclip…",
@@ -380,6 +387,8 @@
     "generatingLipsMouths": "Generando bocas de Lips Creator…",
     "searchingWork": "Buscando la obra…",
     "preparingFile": "Preparando el archivo…",
-    "applyingShotCard": "Poniendo la tarjeta en el plano…"
+    "applyingShotCard": "Poniendo la tarjeta en el plano…",
+    "settingLocationStage": "Guardando la perspectiva de la lámina…",
+    "checkingLocationStage": "Dibujando la rejilla sobre la lámina…"
   }
 }
