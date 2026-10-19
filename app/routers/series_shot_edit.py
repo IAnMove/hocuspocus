@@ -209,10 +209,10 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
             raise fail(error) from error
         return shot_view(series, episode, found, number)
 
+    # The plate's perspective (series_stage) sits beside the shot edit it informs: it needs the same series and workspace access.
+    router.include_router(create_series_stage_router(SeriesStage(
+        read_library=read_library, change_series=change_series, workspace_dir=workspace_dir), bind_loop))
     if services is not None:
-        # The plate's perspective (series_stage) sits beside the shot edit it informs: it needs the same series and workspace access.
-        router.include_router(create_series_stage_router(SeriesStage(
-            read_library=read_library, change_series=change_series, workspace_dir=workspace_dir), bind_loop))
         router.include_router(create_series_shot_card_router(SeriesShotCard(CardDeps(
             read_library=read_library, read_kits=read_kits, workspace_dir=workspace_dir, call=call, change_series=change_series,
             services=services)), bind_loop))

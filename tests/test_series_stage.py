@@ -538,3 +538,12 @@ def test_a_stage_says_how_high_it_puts_the_camera_so_a_misread_horizon_shows():
     assert stage_math.eye_height_m(low) == pytest.approx(0.57, abs=0.01)
     assert "0.57 m high" in stage_math.eye_height_note(low) and "low angle" in stage_math.eye_height_note(low)
     assert "high angle" in stage_math.eye_height_note({"horizon": 0.1, "ref": {"baseY": 0.9, "heightPct": 0.3, "heightM": 2}})
+
+
+def test_the_shot_edit_router_always_serves_the_stage_routes(tmp_path):
+    """The stage routes ride on the shot edit router: mounted whenever it is, with or without the card's ``services``."""
+    from routers.series_shot_edit import create_series_shot_edit_router
+    router = create_series_shot_edit_router(change_series=lambda *_a: {}, read_library=lambda _w: {}, read_kits=lambda _w: {},
+                                            workspace_dir=lambda _w: str(tmp_path), call=lambda *_a: {}, bind_loop=lambda _l: None)
+    paths = {route.path for item in router.routes for route in (item.original_router.routes if hasattr(item, "original_router") else [item])}
+    assert {"/api/v1/series/{series_id}/locations/{location_id}/stage", "/api/v1/series/{series_id}/locations/{location_id}/stage/check"} <= paths
