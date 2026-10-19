@@ -481,3 +481,20 @@ def test_an_ordinary_room_keeps_every_camera_and_zone_it_had():
     assert box_camera(spec, {"shift": {"x": 3}}) == box_camera(spec) and place(spec, "far") == (0.0, 1.75)
     from services.world3d_scenes import _CAMERA_FIELDS
     assert "lensShift" in _CAMERA_FIELDS
+
+
+def test_a_scene_patch_keeps_a_lens_shift_and_refuses_a_bad_one(tmp_path):
+    import json
+    from services.world3d_scenes import World3DSceneError, patch_scene
+    workspace_dir = lambda name: str(tmp_path / name)  # noqa: E731
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "anime-impact-frame", "slots": [], "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]}}
+    (folder / "w3d-00000000beef.json").write_text(json.dumps({"revision": 1, "templateId": "anime-impact-frame", "document": document,
+                                                                 "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"camera": {"lensShift": 0.28}}, 1)
+    assert viewed["document"]["camera"]["lensShift"] == 0.28 and viewed["document"]["camera"]["fov"] == 40
+    for bad in ("high", True, 0.9, -0.6, float("nan")):
+        with pytest.raises(World3DSceneError) as error:
+            patch_scene("studio", "w3d-00000000beef", workspace_dir, {"camera": {"lensShift": bad}}, 2)
+        assert error.value.code == "invalid_camera_lens_shift"

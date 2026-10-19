@@ -15,8 +15,8 @@ from PIL import Image, ImageFilter
 
 BASE_WIDTH = 960
 # Distance outside the picture (in plate heights) and the blur it earns (also in plate heights, as a Gaussian sigma).
-_STEPS = np.array([0.0, 0.05, 0.15, 0.4, 0.9, 1.8])
-_SIGMA = np.array([0.0, 0.004, 0.012, 0.03, 0.07, 0.15])
+_STEPS = np.array([0.0, 0.04, 0.1, 0.2, 0.45, 1.0])
+_SIGMA = np.array([0.0, 0.005, 0.028, 0.08, 0.15, 0.25])
 DARKEN = 0.42
 FULL = 1.6   # the distance at which the darkening has run its course
 

@@ -188,6 +188,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     if isinstance(changes.get("camera"), dict):
         if "shake" in changes["camera"]:
             _check_shake(changes["camera"]["shake"])
+        if "lensShift" in changes["camera"]:
+            _check_lens_shift(changes["camera"]["lensShift"])
         document["camera"] = {**document["camera"], **{key: deepcopy(value) for key, value in changes["camera"].items() if key in _CAMERA_FIELDS}}
     if "playbackSpeed" in changes or "playback_speed" in changes:
         document["playbackSpeed"] = _speed(changes.get("playbackSpeed", changes.get("playback_speed")))
@@ -282,6 +284,12 @@ def _valid_shake_window(window) -> bool:
     if "seed" in window and type(window["seed"]) is not int:
         return False
     return window["end"] > window["start"] and window["amplitude"] > 0 and window["frequency"] > 0
+
+
+def _check_lens_shift(value) -> None:
+    """``camera.lensShift``: the fraction of the frame's height the horizon sits above its middle, at most half a frame either way."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not -0.5 <= value <= 0.5:
+        raise World3DSceneError("invalid_camera_lens_shift", "camera.lensShift is a number from -0.5 to 0.5 (a share of the frame's height)")
 
 
 def _check_shake(shake) -> None:
