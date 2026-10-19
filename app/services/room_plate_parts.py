@@ -94,20 +94,15 @@ def _floor(size: dict, geo: dict, extension: Plate) -> dict:
         return 0.5 - (0.5 - i) / near, hz + (row - hz) / near
 
     picture = room_plate_extend.bake(extension, FLOOR_BAKE, _short(FLOOR_BAKE * depth / width), mapping)
-    half, back, front = width / 2, depth / 2, -depth / 2
-    reach = half * geo["near_s"] / depth
-    edge = front + geo["near_s"]                      # the nearest floor the plate shows
-    pieces = [[(half, 0, back), (half, 0, edge), (reach, 0, edge)],                 # the wedge left of the strip
-              [(-reach, 0, edge), (-half, 0, edge), (-half, 0, back)],              # and the one on the right
-              [(half, 0, edge), (half, 0, front), (-half, 0, front), (-half, 0, edge)]]   # and the floor in front of it
-    positions = np.array([point for piece in pieces for point in piece], np.float32)
-    uvs = np.stack([0.5 - positions[:, 0] / width, 0.5 - positions[:, 2] / depth], axis=1).astype(np.float32)
-    indices, base = [], 0
-    for piece in pieces:
-        indices += [base + k for k in ((0, 1, 2) if len(piece) == 3 else (0, 1, 2, 0, 2, 3))]
-        base += len(piece)
-    normals = np.tile(np.array([0, 1, 0], np.float32), (len(positions), 1))
-    return _part("floor", (positions, normals, uvs, np.array(indices, np.uint16)), _png(picture))
+    half, edge = width / 2, geo["near_s"]
+    cuts = _cuts(depth, edge)
+    below, above = cuts[cuts <= edge], cuts[cuts >= edge]
+    z = lambda s: s - depth / 2                                                 # noqa: E731
+    reach = lambda s: half * s / depth                                          # noqa: E731
+    pieces = [[[(half, 0, z(s)), (-half, 0, z(s))] for s in below],             # the floor in front of the strip
+              [[(half, 0, z(s)), (reach(s), 0, z(s))] for s in above],          # the wedge left of it
+              [[(-reach(s), 0, z(s)), (-half, 0, z(s))] for s in above]]        # and the one on the right
+    return _part("floor", _ribbons(pieces, lambda p: np.stack([0.5 - p[:, 0] / width, 0.5 - p[:, 2] / depth], axis=1), (0, 1, 0)), _png(picture))
 
 
 def _ceiling(size: dict, geo: dict, extension: Plate) -> dict:
@@ -119,9 +114,10 @@ def _ceiling(size: dict, geo: dict, extension: Plate) -> dict:
         return 0.5 - (0.5 - i) / near, hz - (top - eye) / (hp * near)
 
     picture = room_plate_extend.bake(extension, BAKE, _short(BAKE * depth / width), mapping)
-    half, z = width / 2, depth / 2
-    corners = [(half, top, z), (-half, top, z), (-half, top, -z), (half, top, -z)]
-    return _part("ceiling", _arrays(corners, [(0, 0), (1, 0), (1, 1), (0, 1)]), _png(picture))
+    half = width / 2
+    rows = [[(half, top, s - depth / 2), (-half, top, s - depth / 2)] for s in _cuts(depth)]
+    uv = lambda p: np.stack([0.5 - p[:, 0] / width, 0.5 - p[:, 2] / depth], axis=1)   # noqa: E731
+    return _part("ceiling", _ribbons([rows], uv, (0, -1, 0)), _png(picture))
 
 
 def _wall(size: dict, geo: dict, side: str, given: Any, extension: Plate) -> dict:
@@ -130,13 +126,13 @@ def _wall(size: dict, geo: dict, side: str, given: Any, extension: Plate) -> dic
     width, depth, hz, hp, eye = size["w"], size["d"], geo["horizon"], geo["plate_h"], geo["eye_height"]
     top = size["h"]
     x = width / 2 if side == "left" else -width / 2
-    near, far = (-depth / 2, depth / 2)
     # Seen from inside, the back corner is on the right of the left wall and on the left of the right wall.
-    ends = (near, far) if side == "left" else (far, near)
-    corners = [(x, 0, ends[0]), (x, 0, ends[1]), (x, top, ends[1]), (x, top, ends[0])]
-    uvs = [(0, 1), (1, 1), (1, 0), (0, 0)]
+    along = (lambda z: (z + depth / 2) / depth) if side == "left" else (lambda z: 1 - (z + depth / 2) / depth)
+    rows = [[(x, 0, s - depth / 2), (x, top, s - depth / 2)] for s in _cuts(depth)]
+    uv = lambda p: np.stack([along(p[:, 2]), 1 - p[:, 1] / top], axis=1)                # noqa: E731
+    normal = (-1, 0, 0) if side == "left" else (1, 0, 0)
     if given is not None:
-        return _part(f"wall-{side}", _arrays(corners, uvs), _png(_rgb(given)))
+        return _part(f"wall-{side}", _ribbons([rows], uv, normal), _png(_rgb(given)))
 
     def mapping(i: np.ndarray, j: np.ndarray):
         reach = np.maximum(i if side == "left" else 1 - i, 0.02)      # camera distance as a share of the plate's
@@ -144,7 +140,31 @@ def _wall(size: dict, geo: dict, side: str, given: Any, extension: Plate) -> dic
         return (0.5 - across if side == "left" else 0.5 + across), hz + (eye - top * (1 - j)) / (hp * reach)
 
     picture = room_plate_extend.bake(extension, BAKE, _short(BAKE * top / depth), mapping)
-    return _part(f"wall-{side}", _arrays(corners, uvs), _png(picture))
+    return _part(f"wall-{side}", _ribbons([rows], uv, normal), _png(picture))
+
+
+def _cuts(depth: float, extra: float | None = None) -> np.ndarray:
+    """Camera distances where a surface that reaches the camera is cut: each cell is at most twice as far at one end as at the other, so
+    a perspective-correct rasteriser never interpolates across a huge range of depths (the cell at the camera is the only exception)."""
+    cuts = {0.0, *(depth * 2.0 ** -k for k in range(7, -1, -1))}
+    return np.array(sorted(cuts | ({float(extra)} if extra is not None else set())))
+
+
+def _ribbons(pieces: list, uv_of, normal: tuple) -> tuple:
+    """Positions, normals, uvs and triangles of ribbons: each piece is a list of rows of equal length, and a quad joins two
+    neighbouring rows at two neighbouring points. ``uv_of`` gives the picture coordinates of an (n, 3) array of positions."""
+    points, indices, base = [], [], 0
+    for rows in pieces:
+        grid = np.asarray(rows, np.float64)
+        height, across = grid.shape[:2]
+        points.append(grid.reshape(-1, 3))
+        k = base + np.arange(height * across).reshape(height, across)
+        a, b, c, d = k[:-1, :-1].ravel(), k[:-1, 1:].ravel(), k[1:, 1:].ravel(), k[1:, :-1].ravel()
+        indices.append(np.stack([a, d, c, a, c, b], axis=1).ravel())
+        base += height * across
+    positions = np.concatenate(points)
+    normals = np.tile(np.array(normal, np.float32), (len(positions), 1))
+    return (positions.astype(np.float32), normals, uv_of(positions).astype(np.float32), np.concatenate(indices).astype(np.uint16))
 
 
 # ---------------------------------------------------------------- helpers

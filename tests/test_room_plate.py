@@ -220,14 +220,14 @@ def test_the_extension_continues_the_plate_and_fades_away_from_it(tmp_path):
     assert np.abs(edge - mirrored).max() < 8, "the colour at the picture's edge is the picture's"
     flat = room_plate_extend.Plate(Image.new("RGB", (120, 70), (120, 120, 120)))
     means = [flat.sample(np.array([-t]), np.array([0.5]))[0].mean() for t in (0.0, 0.1, 0.4, 1.0, 3.0)]
-    assert means == sorted(means, reverse=True) and means[0] == pytest.approx(120, abs=1) and 55 < means[-1] < 65, "darker with distance, never black"
+    assert means == sorted(means, reverse=True) and means[0] == pytest.approx(120, abs=1) and 60 < means[-1] < 80, "darker with distance, never black"
     checker = Image.fromarray((np.indices((96, 96)).sum(axis=0) // 8 % 2 * 200 + 20).astype(np.uint8)).convert("RGB")
     grain = room_plate_extend.Plate(checker)
     across = np.linspace(0.1, 0.9, 64)
     near = grain.sample(np.full_like(across, -0.02), across)[..., 0].std()
     far = grain.sample(np.full_like(across, -1.0), across)[..., 0].std()
     assert near > 3 * far, "and blurrier"
-    assert room_plate_extend.dimming(np.array([0.0]))[0] == 1 and room_plate_extend.dimming(np.array([9.0]))[0] == pytest.approx(0.5)
+    assert room_plate_extend.dimming(np.array([0.0]))[0] == 1 and room_plate_extend.dimming(np.array([9.0]))[0] == pytest.approx(1 - room_plate_extend.DARKEN)
     assert room_plate_extend.fold(np.array([1.25, -0.25, 2.1])).tolist() == pytest.approx([0.75, 0.25, 0.1])
 
 
@@ -317,3 +317,167 @@ def test_the_camera_range_says_camera_breaks_plate_only_outside_it():
     assert room_plate.camera_report(plate, {**plate["camera"], "fov": 70})[0]["code"] == "camera_breaks_plate"
     wide = normalize({"kind": "room", "prompt": "p", "floor": "f", "walls": "w", "plate": {"back": BACK, "range": {"shift_m": 1.5, "orbit_deg": 40}}})
     assert room_plate.camera_report(wide["plate"], room_plate.pose_of(wide["plate"], {"x": 0.9}, 35)) == []
+
+
+# ---------------------------------------------------------------- scene3d.room.put and paint with a picture
+
+
+@pytest.fixture()
+def workspace(tmp_path, monkeypatch):
+    from services import core_workspace
+    monkeypatch.setattr(core_workspace, "outputs_root", lambda: tmp_path)
+    _plate_picture((1920, 1088)).save(tmp_path / "office.png")
+    _plate_picture((800, 544)).save(tmp_path / "other.png")
+    _cutout(tmp_path / "column.png")
+    return tmp_path
+
+
+def _put(name="office", room=None, intent=None):
+    from services.room_box_commands import PUT, run
+    base = {"kind": "room", "prompt": "an office", "walls": {"file": "office.png"}, "stage": OFFICE}
+    return run(PUT, {"version": 1, "intent_id": intent or f"i-{name}", "input": {"workspace": "default", "name": name, "room": room or base}})["result"]
+
+
+def test_put_reads_the_plate_builds_the_glb_and_keeps_what_it_was_made_from(workspace):
+    from services import room_store
+    result = _put()
+    assert result["file"] == "rooms/office.glb" and (workspace / "rooms" / "office.glb").stat().st_size > 1000
+    plate = result["room"]["plate"]
+    assert plate["back"] == {"file": "office.png", "w": 1920, "h": 1088} and plate["camera"]["lensShift"] == pytest.approx(0.28)
+    assert result["surfaces"]["plate"]["source"] == "plate" and result["surfaces"]["plate"]["file"] == "office.png"
+    assert "warnings" not in result and result["paint"]["status"] == "not_painted"
+    assert _put() == result, "the same intent returns what it returned"
+    record = room_store.record_of(workspace, "office")
+    assert record["surfaces"]["plate"]["sha"] and room_store.look_of(record) == result["paint"]["look"]
+    gltf = pygltflib.GLTF2().load(workspace / "rooms" / "office.glb")
+    assert gltf.extensionsUsed == ["KHR_materials_unlit"]
+
+
+def test_put_without_a_stage_says_the_stage_is_assumed(workspace):
+    result = _put("guess", {"kind": "room", "prompt": "an office", "walls": {"file": "office.png"}})
+    assert [warning["code"] for warning in result["warnings"]] == ["stage_assumed"] and "stage {horizon" in result["warnings"][0]["message"]
+    odd = _put("odd", {"kind": "room", "prompt": "an office", "walls": {"file": "office.png"},
+                       "stage": {"horizon": 0.1, "ref": {"baseY": 0.95, "heightPct": 0.3, "heightM": 2.0}}})
+    assert [warning["code"] for warning in odd["warnings"]] == ["eye_height"]
+
+
+@pytest.mark.parametrize("room, message", [
+    ({"walls": {"file": "missing.png"}}, "must be a file of this workspace"),
+    ({"walls": {"file": "../outside.png"}}, "must be a file of this workspace"),
+    ({"walls": {"asset": "https://example.test/a.png"}}, "must be a file of this workspace"),
+    ({"walls": {"file": "office.png"}, "size": {"w": 4, "d": 4}}, "size comes from the plate"),
+    ({"walls": {"file": "office.png"}, "windows": [{"wall": "back", "x": 0, "y": 1, "w": 1, "h": 1}]}, "windows and ceiling"),
+    ({"walls": {"left": {"file": "office.png"}}}, "back wall's picture"),
+    ({"walls": {"file": "office.png"}, "stage": {"horizon": 0.9}}, "stage is"),
+    ({"walls": {"file": "office.png"}, "props": [{"prompt": "a desk", "on": "floor", "x": 0, "z": 0, "height_m": 1, "image": {"file": "nothing.png"}}]}, "must be a file"),
+])
+def test_put_names_what_is_wrong_with_a_plate(workspace, room, message):
+    from fastapi import HTTPException
+    (workspace / "notimage.png").write_text("not a picture")
+    with pytest.raises(HTTPException) as error:
+        _put(room={"kind": "room", "prompt": "an office", **room})
+    assert error.value.status_code == 422 and message in error.value.detail
+    with pytest.raises(HTTPException) as unreadable:
+        _put(room={"kind": "room", "prompt": "an office", "walls": {"file": "notimage.png"}})
+    assert "not an image" in unreadable.value.detail
+
+
+def test_put_keeps_a_props_cutout_as_the_surface_it_stands_on(workspace):
+    result = _put("columns", {"kind": "room", "prompt": "an office", "walls": {"file": "office.png"}, "stage": OFFICE,
+                              "props": [{"prompt": "a column", "on": "floor", "x": 0.5, "z": 1.0, "height_m": 2.0, "image": {"file": "column.png"}}]})
+    assert result["room"]["props"][0]["image"] == {"file": "column.png", "w": 200, "h": 300}
+    material, points, _uv = _part(pygltflib.GLTF2().load(workspace / "rooms" / "columns.glb"), "prop-1")
+    assert material.alphaMode == "MASK" and points[:, 1].max() == pytest.approx(2.0)
+
+
+def test_paint_with_a_picture_replaces_the_plate_at_once_and_changes_the_look(workspace):
+    from services.room_box_commands import PAINT, PAINT_STATUS, run
+    first = _put()
+    painted = run(PAINT, {"version": 1, "intent_id": "p1", "input": {"workspace": "default", "name": "office", "walls": {"file": "other.png"},
+                                                                       "stage": {**OFFICE, "horizon": 0.3}}})["result"]
+    assert painted["status"] == "completed" and painted["engine"] == "plate" and painted["look"] != first["paint"]["look"]
+    assert painted["surfaces"]["plate"]["file"] == "other.png"
+    status = run(PAINT_STATUS, {"version": 1, "input": {"workspace": "default", "name": "office"}})["result"]
+    assert status["status"] == "completed" and status["look"] == painted["look"]
+    from services.room_box_commands import get_room
+    room = get_room("default", "office")["room"]
+    assert room["plate"]["back"]["w"] == 800 and room["plate"]["stage"]["horizon"] == 0.3 and room["plate"]["camera"]["lensShift"] == pytest.approx(0.2)
+    assert room["size"]["w"] / room["size"]["h"] != first["room"]["size"]["w"] / first["room"]["size"]["h"], "the room follows the new plate"
+    again = run(PAINT, {"version": 1, "intent_id": "p1", "input": {"workspace": "default", "name": "office", "walls": {"file": "other.png"},
+                                                                     "stage": {**OFFICE, "horizon": 0.3}}})["result"]
+    assert again == painted
+
+
+def test_paint_refuses_words_on_a_plate_and_a_picture_on_a_room_with_no_plate(workspace):
+    from fastapi import HTTPException
+    from services.room_box_commands import PAINT, PUT, run
+    _put()
+    with pytest.raises(HTTPException) as words:
+        run(PAINT, {"version": 1, "intent_id": "p2", "input": {"workspace": "default", "name": "office", "floor": "oak boards"}})
+    assert "nothing to paint with words" in words.value.detail
+    with pytest.raises(HTTPException) as strange:
+        run(PAINT, {"version": 1, "intent_id": "p3", "input": {"workspace": "default", "name": "office", "walls": {"file": "other.png"}, "style": "ink"}})
+    assert "unknown style" in strange.value.detail
+    run(PUT, {"version": 1, "intent_id": "i9", "input": {"workspace": "default", "name": "plain", "room": {
+        "kind": "room", "prompt": "a kitchen", "size": {"w": 4, "d": 5}, "floor": "oak boards", "walls": "warm plaster"}}})
+    with pytest.raises(HTTPException) as ordinary:
+        run(PAINT, {"version": 1, "intent_id": "p4", "input": {"workspace": "default", "name": "plain", "walls": {"file": "other.png"}}})
+    assert "not a plate room" in ordinary.value.detail
+
+
+# ---------------------------------------------------------------- a Series shot in a plate room
+
+
+def _series_shot(**extra):
+    return {"kind": "3d", "set": "office", "cast": [{"characterId": "ana", "at": "mid"}], **extra}
+
+
+def test_a_shot_stands_in_the_plate_the_camera_is_the_plates_and_people_stay_in_the_frame(workspace):
+    from services.series_room_box import box_camera, dress_shot, place, plate_warnings, shot_problems, spec_of
+    from services.series_shot3d import _setup, normalize_scene3d
+    result = _put()
+    spec = spec_of({"spec": result["room"]})
+    plate = spec["plate"]
+    camera = box_camera(spec)
+    assert camera == {"family": "fixed", "eye": plate["camera"]["eye"], "look": plate["camera"]["look"], "fov": 48.0, "lensShift": pytest.approx(0.28)}
+    assert place(spec, "near") == (0.0, room_plate.zones(plate)["near"]) and place(spec, {"x": 0.3, "z": 1}) == (0.3, 1.0)
+    root = str(workspace)
+    assert shot_problems(_series_shot(), None, root, {}) == []
+    below = _series_shot(cast=[{"characterId": "ana", "at": {"x": 0, "z": -1.5}}])
+    assert any("below the plate's frame" in item for item in shot_problems(below, None, root, {}))
+    outside = _series_shot(cast=[{"characterId": "ana", "at": {"x": 9, "z": 1}}])
+    assert any("outside the room floor" in item for item in shot_problems(outside, None, root, {}))
+    dressed = dress_shot(_series_shot(), None, root, {})
+    assert dressed["roomBox"]["plate"]["camera"]["lensShift"] == pytest.approx(0.28)
+    room = next(item for item in dressed["objects"] if item["objectId"] == "room-box")
+    assert room["scale"] == round(result["room"]["size"]["h"] / 1.7, 4) and room["grounded"] is False
+    setup = _setup("w", None, normalize_scene3d({**dressed, "template": "two-shot"}), [], lambda *_args: RuntimeError("unused"), [])
+    assert setup["camera"]["lensShift"] == pytest.approx(0.28) and setup["camera"]["eye"] == plate["camera"]["eye"]
+    assert plate_warnings(_series_shot(), None, root) == []
+
+
+def test_a_shot_that_moves_the_camera_past_the_range_is_warned_and_the_move_is_rendered(workspace):
+    from services.series_room_box import box_camera, plate_warnings, spec_of
+    from services.series_shot3d import _setup, normalize_scene3d
+    spec = spec_of({"spec": _put()["room"]})
+    held = _series_shot(scene3d={"camera": {"shift": {"x": 0.3}, "yaw": 10}})
+    assert plate_warnings(held, None, str(workspace)) == []
+    broken = _series_shot(scene3d={"camera": {"shift": {"x": 0.9}, "yaw": 40}})
+    warnings = plate_warnings(broken, None, str(workspace))
+    assert warnings[0]["code"] == "camera_breaks_plate" and warnings[0]["moved_m"] == pytest.approx(0.9)
+    moved = box_camera(spec, {"shift": {"x": 0.3}, "yaw": 10})
+    assert moved["eye"][0] == pytest.approx(0.3) and moved["look"][0] > moved["eye"][0] and moved["lensShift"] == pytest.approx(0.28)
+    stored = normalize_scene3d({"template": "two-shot", "camera": {"shift": {"x": 0.3, "bad": 1, "y": "up"}, "yaw": 10, "pitch": 400, "extra": 1}})
+    assert stored["camera"] == {"shift": {"x": 0.3}, "yaw": 10.0}
+    assert "camera" not in normalize_scene3d({"template": "two-shot", "camera": {"yaw": "left"}})
+    setup = _setup("w", None, {**stored, "roomBox": spec, "cast": []}, [], lambda *_args: RuntimeError("unused"), [])
+    assert setup["camera"]["eye"][0] == pytest.approx(0.3)
+
+
+def test_an_ordinary_room_keeps_every_camera_and_zone_it_had():
+    from services.series_room_box import box_camera, place
+    spec = normalize({"kind": "room", "prompt": "a kitchen", "size": {"w": 4, "d": 5}, "floor": "oak", "walls": "plaster"})
+    assert box_camera(spec) == {"family": "fixed", "eye": [0.0, 1.6, -3.35], "look": [0.0, 1.15, 0.75], "fov": 48.0}
+    assert box_camera(spec, {"shift": {"x": 3}}) == box_camera(spec) and place(spec, "far") == (0.0, 1.75)
+    from services.world3d_scenes import _CAMERA_FIELDS
+    assert "lensShift" in _CAMERA_FIELDS

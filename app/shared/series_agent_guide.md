@@ -184,7 +184,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 
 - **framing:** `wide` (everyone, full body), `two` (two characters), `medium` (one, waist up), `close` (one face),
   `insert`/`title` (no cast; cards).
-- **camera:** `static` (default), `push`/`pull` (slow push-in/out), `pan-left`, `pan-right` or `drift`; other words
+- **camera:** `static` (default), `push`/`pull` (slow), `pan-left`, `pan-right` or `drift`; other words
   are `static` (push-in words `push`). Follow the series' `cameraLanguage`, else push on punchlines.
 - **finish:** `paper` (default), `none`, a Video 2D finish id (`scenes.catalog`) or `{texture, grain, vignette}`;
   else the series' `look.finish`.
@@ -196,7 +196,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
   `shake` (panic). `enterFrom`: `left`/`right`
   walks in, from 0.2 s to 1.4 s unless `enterAt` (s, when it starts) and `enterDuration` (s, how long it takes; a
-  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick hop) or
+  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default) or
   `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
   degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
   takes a whole number of steps (stretched a little to fit), so its feet land on its start, every step and its end. `poseId` must be one of the kit's poses.
@@ -341,44 +341,44 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
     clip, a prop modelled along +X (top +Y) lies level along the aim with `rotation: [-1.65, 0.11, 2.76]`.
   - **Appearance:** `appearance` `{start, duration? 0.9, color? #rrggbb}` hides the object until `start`, then it
     materializes.
-  - **Size:** a model is 1.7 m × `scale` tall: its bounding-box height, whatever its length. A rifle modelled lying flat
-    (0.99 long, 0.32 high) is 4.7 m long at 0.9, so it needs about 0.16.
+  - **Size:** a model is 1.7 m × `scale` tall (its bounding-box height, whatever its length): a rifle modelled lying
+    flat (0.99 long, 0.32 high) is 4.7 m long at 0.9, so it needs about 0.16.
   - **Checks:** `from_script` checks each object's model file, clip names, sequence, hold and appearance before
-    writing anything; a carrier that is unknown or talks fails the render with a clear message.
+    writing; an unknown or talking carrier fails the render with a clear message.
 
 ## 3D sets: molds, skins and props
 
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
 2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
    `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
-   For example, `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
+   `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
    `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`,
    `clinical`; exteriors `daylight`, `dusk`, `night_sky` (a night street gets a night key light and a dark sky).
    `wall_back: {image: "location"}` reuses the approved location picture. Asset skins: `{image: {asset: "wall.png"}}`,
    `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`. Poll `series.location.set3d.status` until
-   completed. A `texture` that will not tile is painted once over its surface
-   instead (`metrics.fallback: "image"`): the set is still built.
+   completed. A `texture` that will not tile is painted once
+   instead (`metrics.fallback: "image"`).
 3. The location's 3D shots inherit its set; `scene3d.roomCamera` selects `two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2` or `entrance`.
    In `series.episode.from_script`, use `kind: "3d", cast: [["pedro", "base", "behind_desk"]]`.
 4. Create a prop with `props.create`: `input: {workspace, name: "lamp", description: "small brass desk lamp", heightM: 0.4, style: "layered paper cutouts"}`.
-   Poll `props.status` with `job_id`, look at the candidate PNGs, then `props.approve` the chosen `id`.
+   Poll `props.status` (`job_id`), view the candidate PNGs, `props.approve` the chosen `id`.
    `props.list` filters by `style` and `query`; `props.import` accepts an existing PNG and `heightM`.
    For an image outside the library, `image.remove_background` takes `source, method: "auto" | "screen" | "u2net", crop: true` and returns `file`, `bbox`, `method` and halo report.
 5. Add an approved prop to one shot with `scene3d.item.add`:
    `input: {workspace, target: {series_id, episode_id, shot: 1}, item: {prop: "<approved-id>"}, at: {anchor: "desk_left"}}`.
    A working Video 3D scene uses `target: {scene_id}`; direct media uses `item: {image: "lamp.png"}` or an existing `{glb: "lamp.glb"}` with `heightM`.
-   `scene3d.item.list` returns object ids; move one with `scene3d.item.update` and `id, at: {position: [x, y, z]}` (metres).
-   Remove it with `scene3d.item.remove` and `id`; updates can change `heightM`, `rotationY` (radians), `billboard` and `shadow`.
+   `scene3d.item.list` returns ids; `scene3d.item.update` (`id`, `at: {position: [x, y, z]}` metres, `heightM`, `rotationY` radians,
+   `billboard`, `shadow`) changes one, `scene3d.item.remove` (`id`) removes it.
    For every shot at the location, put `{prop: "<approved-id>", anchor: "desk_left"}` in `set3d.props`.
 6. Every mutation takes a new `intent_id` (the same one only to retry the identical call); read each result first.
-   The back wall's straight-on painting, in the series style, carries the detail. Real heights on the mold's anchors
+   The back wall's straight-on painting, carries the detail. Real heights on the mold's anchors
    rest objects on their surfaces (a tall object at a low anchor warns `item_too_tall`). At most 12 objects per shot,
-   inherited set props included; look at the previews before approving.
+   inherited set props included; preview before approving.
 7. Shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`,
    `escenario_publico`, `vehiculo`) and exteriors (`calle`, `plaza`, `orilla`, `azotea`: no ceiling, the view on `wall_back`, a sun
    preset) sit beside the named interiors. A `kind: "3d"` shot may name a stage card, `scene3d: {template: "stage-sala",
    roomCamera: "ots_a"}`: the mold in its own colours, with dust and a breathing key light; a location set still brings the skin.
-8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide interior, full body. `scene3d.room.put` creates it already textured (default materials); `scene3d.room.paint` repaints it with AI. A `kind: "3d"` shot names `set` and `at` (`{x, z}`, `near`, `mid`, `far`). See HOWUSEIT (Box rooms).
+8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide interior, full body; `scene3d.room.put` textures it, `.paint` repaints it. `walls: {file}` (a painted plate) + `stage`: the plate is the room, no `size`; props take `image` (PNG with alpha) to hide people; `scene3d.camera` `{shift, yaw, pitch}` warns `camera_breaks_plate` past its `range`. A `kind: "3d"` shot names `set`, `at` (`{x, z}`, +x frame-left; or `near`, `mid`, `far`). See HOWUSEIT (Box rooms).
 
 ## How to choose a 3D shot
 
