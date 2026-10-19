@@ -205,7 +205,7 @@ def test_the_route_edits_the_fifth_shot_and_renders_just_that_shot(tmp_path):
     reply = asyncio.run(post("uv", "ep2", ShotEdit(workspace="cast", shot=2, append={"fx": [{"kind": "confetti", "at": 0.5}]},
                                                    render=True)))
     assert reply["shotId"] == "e2s01" and reply["number"] == 2 and reply["approvalReset"] is True and reply["reset"] == ["take"]
-    assert reply["shot"]["script"]["fx"][-1] == {"kind": "confetti", "at": 0.5, "duration": 1.0}
+    assert reply["shot"]["script"]["fx"][-1] == {"kind": "confetti", "at": 0.5}, "no duration written: the class default applies"
     assert store.calls == [("series.episode.render_native", {"workspace": "cast", "series_id": "uv", "episode_id": "ep2",
                                                              "shot_ids": ["e2s01"], "approve": True})]
     assert reply["render"]["jobId"] == "series.episode.render_native-1"

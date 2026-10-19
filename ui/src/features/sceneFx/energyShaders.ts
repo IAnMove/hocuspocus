@@ -121,7 +121,8 @@ const BODIES: Record<EnergySurface, string> = {
     float w=.3*(1.-y*.82)+.02;
     float body=1.-abs(x)/w;
     // Noise eats the flame from the top down, splitting it into tongues.
-    float f=(body*1.15-y*.5-n2*.95*(.25+y))*smoothstep(0.,.07,y);
+    // Faded in over the lowest third of the card, so the flame never stands on a straight cut.
+    float f=(body*1.15-y*.5-n2*.95*(.25+y))*smoothstep(0.,.3,y);
     float heat=clamp(f*1.25,0.,1.);
     float alpha=smoothstep(0.,.1,f);
     vec3 color=mix(vec3(.55,.06,.01),uColor,smoothstep(.0,.35,heat));
@@ -139,7 +140,7 @@ const BODIES: Record<EnergySurface, string> = {
     float edgeLight=smoothstep(.35,1.,abs(rel))*body;
     float fadeY=smoothstep(0.,.06,y)*(1.-smoothstep(.9,1.,y));
     float alpha=body*fadeY*(.28+swirl*.45)*(.6+bands*.4);
-    float debris=pow(fbm(vec2(x*18.+uTime*2.,y*10.)),4.)*(1.-smoothstep(0.,.25,y))*3.;
+    float debris=pow(fbm(vec2(x*18.+uTime*2.,y*10.)),4.)*(1.-smoothstep(0.,.25,y))*smoothstep(0.,.1,y)*3.;
     vec3 color=mix(uColor*.42,uColor*1.05,bands*.6+edgeLight*.5);
     gl_FragColor=vec4(color*uPower,clamp(alpha+debris*.4,0.,.92)*uPower);`,
   splash: `

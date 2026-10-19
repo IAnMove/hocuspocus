@@ -603,7 +603,7 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
         "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, shot, beats, timing, recorded, cast),
         "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
-        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
+        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves, framing),
         "camera": _shot_camera(layout, shot), "finish": series_finish.shot_finish(series, shot),
         "narrative": _narrative(series, episode, shot), **series_stop_motion.read_fields(shot),
     }

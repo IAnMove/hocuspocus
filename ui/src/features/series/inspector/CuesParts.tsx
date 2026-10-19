@@ -9,6 +9,7 @@ import { InspectorSection } from './InspectorSection'
 import { grid, lineText, withField, workspaceFileUrl } from './model'
 import { PlayButton } from './PlayButton'
 import { useShotFiles } from './useInspectorData'
+import { defaultFxLength } from './fxDefaults'
 
 type Cue = Record<string, unknown>
 
@@ -97,21 +98,22 @@ const FX_KINDS = FX_CATALOG.map(item => item.id)
 export function FxPart({ context }: { context: PartContext }) {
   const { t } = useUiTranslation('seriesLab')
   const cues = (context.script?.fx || []) as Cue[]
-  const length = (cue: Cue) => cue.duration === 'shot' ? t('inspector.fx.toEnd') : t('inspector.fx.lasts', { seconds: number(cue.duration) ?? 1 })
+  const lasting = (cue: Cue) => cue.duration ?? defaultFxLength(cue.kind)
+  const length = (cue: Cue) => lasting(cue) === 'shot' ? t('inspector.fx.toEnd') : t('inspector.fx.lasts', { seconds: number(lasting(cue)) ?? 1 })
   return <InspectorSection id={sectionId(context.shot.id, 'fx')} inspector={context.inspector} shotId={context.shot.id} section="fx"
     script={context.script} draft={context.drafts.fx} save={context.save} icon={<Sparkles size={14} />} title={t('inspector.fx.title')}
     summary={cues.length ? <ul className="flex flex-wrap gap-1.5">{cues.map((cue, index) => <li key={index}
       className="rounded-full border border-border bg-bg-primary px-2 py-0.5">{String(cue.kind)} · {cueWhen(t, cue, context)} · {length(cue)}
       {number(cue.intensity) !== undefined ? ` · ${t('inspector.fx.intensityShort', { value: cue.intensity })}` : ''}</li>)}</ul> : t('inspector.fx.empty')}
     editor={({ draft, change }) => <ListEditor items={(draft.fx || []) as Cue[]} addLabel={t('inspector.fx.add')}
-      itemLabel={index => t('inspector.fx.item', { number: index + 1 })} create={() => ({ kind: FX_KINDS[0], at: 0, duration: 1 })}
+      itemLabel={index => t('inspector.fx.item', { number: index + 1 })} create={() => ({ kind: FX_KINDS[0], at: 0 })}
       onChange={items => change({ ...draft, fx: items })}
       render={(cue, update) => <div className={grid}>
         <SelectInput title={t('inspector.fx.kind')} value={cue.kind} onChange={value => update({ ...cue, kind: value })}
           options={FX_KINDS.map(value => ({ value, label: value }))} />
         <WhenEditor cue={cue} change={update} context={context} />
-        <CheckInput title={t('inspector.fx.toEnd')} value={cue.duration === 'shot'} onChange={value => update({ ...cue, duration: value ? 'shot' : 1 })} />
-        {cue.duration !== 'shot' && <NumberInput title={t('inspector.fx.duration')} value={cue.duration} min={0.1} max={30}
+        <CheckInput title={t('inspector.fx.toEnd')} value={lasting(cue) === 'shot'} onChange={value => update({ ...cue, duration: value ? 'shot' : 1 })} />
+        {lasting(cue) !== 'shot' && <NumberInput title={t('inspector.fx.duration')} value={lasting(cue)} min={0.1} max={30}
           onChange={value => update(withField(cue, 'duration', value))} />}
         <NumberInput title={t('inspector.fx.intensity')} value={cue.intensity} min={0.1} max={2} onChange={value => update(withField(cue, 'intensity', value))} />
         <NumberInput title="x %" value={cue.x} min={0} max={100} step={1} onChange={value => update(withField(cue, 'x', value))} />

@@ -882,6 +882,39 @@ def test_a_written_script_keeps_the_animation_and_reads_back_the_same():
     assert normalize_layout2d(normalize_layout2d(layout)) == normalize_layout2d(layout)
 
 
+# A presence effect a script cuts short -----------------------------------------------------------------------------------
+
+def short_presence(fx, **shot):
+    checked = animation_check(KITS, {"characterId": "kevin"}, fx=fx, **shot)
+    return [(item["subject"], item["shots"], item["message"]) for item in checked["warnings"] if item["code"] == "fx_presence_too_short"]
+
+
+def test_a_presence_effect_given_under_two_seconds_in_a_long_shot_warns_and_the_script_still_checks():
+    warned = short_presence([{"kind": "anime_aura", "at": 0, "duration": 1}, {"kind": "shield", "at": 1, "duration": 1.9}])
+    assert [(subject, shots) for subject, shots, _ in warned] == [("anime_aura", ["e2s00"]), ("shield", ["e2s00"])]
+    assert "1 s" in warned[0][2] and "8 s" in warned[0][2] and "presence" in warned[0][2] and "shot" in warned[0][2]
+    assert animation_check(KITS, {"characterId": "kevin"}, fx=[{"kind": "anime_aura", "at": 0, "duration": 1}])["checked"] is True, "it does not block"
+
+
+def test_the_warning_is_for_a_short_explicit_presence_in_a_long_shot_and_nothing_else():
+    quiet = (
+        [{"kind": "anime_aura", "at": 0}], [{"kind": "anime_aura", "at": 0, "duration": "shot"}],
+        [{"kind": "anime_aura", "at": 0, "duration": 2}], [{"kind": "anime_aura", "at": 0, "duration": 6}],
+        [{"kind": "explosion", "at": 0, "duration": 0.5}, {"kind": "impact_flash", "at": 0, "duration": 0.1}],
+        [{"kind": "anime_aura", "at": 0, "duration": "soon"}],
+    )
+    for fx in quiet:
+        assert short_presence(fx) == [], fx
+    assert short_presence([{"kind": "anime_aura", "at": 0, "duration": 1}], duration=4) == [], "a shot of 4 s is not longer than 4"
+    assert short_presence([{"kind": "anime_aura", "at": 0, "duration": 1}], duration=4.5) != []
+
+
+def test_the_warning_reads_the_length_of_a_shot_that_has_lines():
+    line = {"who": "kevin", "es": "uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce"}
+    assert short_presence([{"kind": "fog", "at": 0, "duration": 1}], lines=[line], duration=None) != [], "14 words take about 5 s plus the intro and tail"
+    assert short_presence([{"kind": "fog", "at": 0, "duration": 1}], lines=[{"who": "kevin", "es": "Hola"}], duration=None) == []
+
+
 def test_allow_during_speech_is_kept_by_the_layout_and_must_be_a_boolean():
     """The opt-out of series_expression_silence: written as true, kept as true, absent otherwise; a text is refused by the check."""
     from services.series_shot_plan import normalize_layout2d
