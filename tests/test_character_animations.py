@@ -451,6 +451,21 @@ def test_a_kit_keeps_motion_and_dir_and_refuses_what_is_off_the_list():
             normalize_kit_animations({"walk-12": bad})
 
 
+def test_a_kit_keeps_the_left_facing_sheet_and_the_mouth_and_eye_anchors_of_a_direction_sheet():
+    """The directional billboard engine reads ``dir: *_r`` (a sheet that looks left, which beats the mirror) and per-sheet ``mouth`` and
+    ``eyes`` anchors ({offsetX, offsetY, scale, rotation?} in % of the long side of the cell); a kit says ``asymmetric`` for a badge on one side."""
+    anchors = {"offsetX": 1.5, "offsetY": -2, "scale": 0.9}
+    kept = normalize_kit_animations({"walk-12": _entry(motion="walk", dir="side_r", view="side", mouth=anchors, eyes={**anchors, "rotation": 3})})["walk-12"]
+    assert kept["dir"] == "side_r" and kept["mouth"] == anchors and kept["eyes"] == {**anchors, "rotation": 3}
+    for name in ("front34_r", "back34_r"):
+        assert normalize_kit_animations({"walk-12": _entry(dir=name)})["walk-12"]["dir"] == name
+    for bad in (_entry(dir="front_r"), _entry(dir="back_r"), _entry(mouth="open"), _entry(mouth={"offsetX": "a", "offsetY": 0, "scale": 1}),
+                _entry(eyes={"offsetX": 0, "offsetY": 0})):
+        with pytest.raises(CharacterAnimationError):
+            normalize_kit_animations({"walk-12": bad})
+    assert "mouth" not in normalize_kit_animations({"walk": _entry()})["walk"], "older data stays as it was"
+
+
 def test_the_approved_twelve_pose_walk_comes_before_the_four_pose_one():
     from services import character_animation_directions as directions
 
