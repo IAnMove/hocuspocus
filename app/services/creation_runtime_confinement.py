@@ -130,15 +130,36 @@ def systemd_run_path():
         return _support or None
 
 
+ENV_BIN = "/usr/bin/env"
+SCOPE_DESCRIPTION = "--description=HocusPocus FLUX 3 / Drama 3 runtime"
+
+
+def isolated_command(command, env):
+    """``env -i`` then ``command``: systemd-run keeps the server's libraries; ComfyUI still gets ``env``.
+
+    ``confine`` used to hand the engine environment (conda ``LD_LIBRARY_PATH`` first) to systemd-run
+    itself. The probe that decides confinement uses the server's environment, so a working probe
+    still launched systemd-run against torch/OpenSSL from the creation-models env, which shadows
+    ``libcrypto``/``libsystemd`` and the runtime dies during startup.
+    """
+    return [ENV_BIN, "-i", "--", *[f"{key}={value}" for key, value in env.items()], *command]
+
+
 def scope_command(launcher, command, limits):
     # No swap for the runtime: past its limit the kernel stops it, instead of it thrashing the swap that the
     # server and the owner's other programs share (a 100 MB scope swapped out 612 MB without ever dying).
-    return [launcher, "--user", "--scope", "--quiet", "--collect", "-p", f"MemoryHigh={limits['high']}",
+    # The description is fixed: without it systemd names the scope after the command line, which carries the
+    # engine environment (``isolated_command``), and ``systemctl --user show`` and the user journal would keep it.
+    return [launcher, "--user", "--scope", "--quiet", "--collect", SCOPE_DESCRIPTION, "-p", f"MemoryHigh={limits['high']}",
             "-p", f"MemoryMax={limits['max']}", "-p", "MemorySwapMax=0", "--", *command]
 
 
 def confine(command, env, percent=None):
-    """``(command, env, limits)``: wrapped in its own memory scope, or unchanged with ``limits`` None."""
+    """``(command, env, limits)``: wrapped in its own memory scope, or unchanged with ``limits`` None.
+
+    The returned ``env`` is the server session systemd-run needs. The engine environment is on the
+    command via ``env -i``, so conda libraries cannot shadow systemd-run.
+    """
     percent = DEFAULT_MEMORY_PERCENT if percent is None else percent
     if not percent:
         _log("runtime not confined: creation_runtime_memory_percent is 0")
@@ -147,7 +168,8 @@ def confine(command, env, percent=None):
     launcher = systemd_run_path() if limits else None
     if launcher is None:
         return command, env, None
-    return scope_command(launcher, command, limits), session_environment(env), limits
+    return (scope_command(launcher, isolated_command(command, env), limits),
+            session_environment(dict(os.environ)), limits)
 
 
 def scope_cgroup(pid):
