@@ -4,8 +4,11 @@ Generate itself needs Hunyuan3D or a paid remote and is not recorded here.
 """
 from __future__ import annotations
 
+from tests.support.pinned_trellis2 import pin_trellis2_runtime
 
-def test_model3d_and_rig_cheap_paths(server, golden) -> None:
+
+def test_model3d_and_rig_cheap_paths(server, golden, monkeypatch) -> None:
+    pin_trellis2_runtime(monkeypatch)
     server.check(golden, "model3d capabilities", "GET", "/api/v1/model3d/capabilities")
     server.check(golden, "model3d images must be an object", "POST", "/api/v1/model3d/generate", json={"images": "front"})
     server.check(

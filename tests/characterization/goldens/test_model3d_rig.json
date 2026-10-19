@@ -149,9 +149,12 @@
           "description": "Single-image geometry and native PBR materials; isolated Linux/CUDA runtime.",
           "engine": "trellis2",
           "id": "trellis2",
-          "label": "TRELLIS.2",
+          "label": "TRELLIS.2 · Official Microsoft 4B",
+          "minimum_vram_gb": 24,
           "multiview": false,
           "multiview_reason": "single_image",
+          "official": true,
+          "optional": true,
           "parameters": "4B",
           "provider": "trellis2",
           "recommended_vram_gb": 24,
@@ -162,13 +165,19 @@
             1536
           ],
           "runtime": {
-            "install_hint": "Configure HOCUSPOCUS_TRELLIS2_ROOT and HOCUSPOCUS_TRELLIS2_PYTHON for an isolated Linux/CUDA installation. See docs/development/MODEL3D_ENGINES.md.",
+            "compatibility_reason": "TRELLIS.2 is optional and supports Linux x64 with NVIDIA 24GB only.",
+            "compatible": false,
+            "install_hint": "TRELLIS.2 is optional and supports Linux x64 with NVIDIA 24GB only.",
             "installed": false,
             "isolated_runtime": true,
             "releases_vram_after_job": true,
-            "validation": "not_configured"
+            "validation": "not_configured",
+            "weights_downloaded": false
           },
           "subfolder": "",
+          "supported_platforms": [
+            "linux"
+          ],
           "supports_camera_fov": false,
           "supports_low_vram": false,
           "supports_text": false,

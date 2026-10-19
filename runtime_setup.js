@@ -15,6 +15,9 @@ module.exports = {
       when: "{{args.update && exists('app/services/creation_models/env') && local.runtime.engines.creation_models.supported}}",
     })),
     // Optional engines, installed from the Advanced menu, are refreshed only if present.
+    ...runtime.call('trellis2_install.js').map(step => ({...step,
+      when: `{{args.update && exists('app/services/model3d_runtimes/trellis2/env') && local.runtime.engines.trellis2.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
+    })),
     ...runtime.call('hunyuan3d_install.js').map(step => ({...step,
       when: `{{args.update && exists('app/services/hunyuan3d/env') && local.runtime.engines.hunyuan3d.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
     })),
