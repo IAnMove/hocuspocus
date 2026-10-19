@@ -99,6 +99,26 @@ test('named camera shots keep speed, portrait format, framing and the other char
   assert.equal(pair.slots[1].sourceUrl, '')
 })
 
+test('a box-room background mounts the built GLB that resolve_media stores beside the spec', () => {
+  const file = '/api/v1/file/set-batch-kitchen.glb?workspace=w'
+  const doc = compile({
+    template: 'two-shot',
+    subject: '/api/v1/file/hero.glb?workspace=movie',
+    background: {
+      roomBox: { size: { w: 4, d: 5, h: 2.6 }, door: { wall: 'back', x: 0, w: 0.9, h: 2 } },
+      file,
+    },
+  })
+  const room = doc.slots.find(slot => slot.id === 'room-box')
+  assert.equal(room.sourceUrl, file)
+  assert.equal(room.grounded, false)
+  assert.equal(room.media, 'model3d')
+  assert.equal(room.scale, 2.6 / 1.7)
+  assert.deepEqual(room.position, [0, 0, 0])
+  assert.deepEqual(doc.camera.eye, [0, 1.6, -3.35])
+  assert.equal(doc.camera.fov, 48)
+})
+
 test('a frame pushed nearer to a figure\'s middle aims higher until the head keeps room above it', () => {
   const subject = '/api/v1/file/hero.glb?workspace=movie'
   const top = (eye, look, fov) => look[1] + Math.hypot(eye[0] - look[0], eye[1] - look[1], eye[2] - look[2]) * Math.tan((fov * Math.PI) / 360)

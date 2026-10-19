@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a production GPU render of a metric box room now mounts the room.** `resolve_media` keeps the built GLB on `background.file` beside `background.roomBox`, but the Video 3D production compiler passed only the spec to `stageRoomBox`, so no `room-box` slot was created and the camera looked into an empty interior (the CPU preview still painted a checkered floor, so it failed silently). The compiler now joins `file` to the spec (Cursor PR #1154).
+
 **Fixed: a voice-band retry that never speaks no longer deletes the line's recording.** A recording outside the kit's pitch band is spoken again onto the same wav, and each empty seed discarded that file, so a later render could lose the only take and fail with `speech_empty`. The previous take is now copied aside first and put back when none of the three seeds speak; the line keeps it with `voice_out_of_band` (a first-ever line that never speaks still fails with `speech_empty`) (Cursor PR #1153).
 
 **Fixed: applying the same Series shot card with the same inputs no longer overwrites the scene a person edited in Video 2D.** `series.shot.card.apply` rewrote `<series>-<episode>-<shot>-card-<card>.scene.json` with a fresh compile before noticing it already had the take (`reused: true`), so mouths, timing and layers drawn in Video 2D vanished and the scene no longer matched the take's MP4. It now looks for the take first and only writes the scene when the take is new or the file is gone; other inputs still replace it (Cursor PR #1150).
