@@ -265,3 +265,114 @@ def test_a_word_whose_phones_do_not_line_up_with_its_letters_is_left_out():
     aligned, heard = spoken("estación sucesos zapato")
     without_s = [phone for phone in aligned if not (phone["word"] == "estación" and phone["phoneme"] == "s")]
     assert [site["word"] for site in tag_sites("estación sucesos zapato", heard, without_s)] == ["sucesos", "zapato"]
+
+
+# --- Cleanliness: noise floor, SNR and rumble of a take, measured without listening ------------------------------
+
+def _voice(seconds=3.0, rate=16000, floor_db=-95.0, f0=120.0, hum_db=None, period=0.6, word=0.35, seed=0):
+    """A voiced signal in ``word`` seconds of speech every ``period`` seconds (0.35 s words, 0.25 s pauses), over a
+    flat noise floor of ``floor_db`` dBFS."""
+    time = np.arange(int(seconds * rate)) / rate
+    weights = [1.0 / (1.0 + ((f0 * k - 500.0) / 400.0) ** 2) for k in range(1, 20)]  # a formant near 500 Hz
+    speech = sum(weight * np.sin(2 * np.pi * f0 * (k + 1) * time) for k, weight in enumerate(weights))
+    envelope = ((time % period) < word).astype(float)
+    envelope = np.convolve(envelope, np.ones(200) / 200, mode="same")
+    speech = speech * envelope
+    speech *= 10 ** (-18 / 20) / np.sqrt(np.mean(speech[envelope > 0.9] ** 2))  # words at about -18 dBFS
+    noise = np.random.default_rng(seed).standard_normal(len(time)) * 10 ** (floor_db / 20)
+    hum = 0 if hum_db is None else 10 ** (hum_db / 20) * np.sqrt(2) * np.sin(2 * np.pi * 60 * time)
+    return (speech + noise + hum).astype(np.float32), rate
+
+
+def test_a_clean_voice_passes_and_reports_its_numbers():
+    from services.voice_cleanliness import clean_reason, measure_cleanliness
+    found = measure_cleanliness(*_voice(floor_db=-95))
+    assert found["verdict"] == "clean" and found["reasons"] == [] and found["floorConclusive"] is True
+    assert found["noiseFloorDb"] <= -80 and found["snrDb"] >= 60
+    assert found["lowEndPct"] < 5 and found["bassPct"] < 5 and found["clippedPct"] == 0
+    assert clean_reason(found) is None
+
+
+def test_a_voice_over_a_noise_floor_of_minus_45_db_is_unclean():
+    from services.voice_cleanliness import clean_reason, measure_cleanliness
+    found = measure_cleanliness(*_voice(floor_db=-45))
+    assert found["verdict"] == "unclean" and found["reasons"] == ["noise_floor", "snr"]
+    assert -50 <= found["noiseFloorDb"] <= -40 and 20 <= found["snrDb"] <= 35
+    assert clean_reason(found) == "noise_floor"
+    # A floor just under the limit still passes; one just over it does not.
+    assert measure_cleanliness(*_voice(floor_db=-70))["verdict"] == "clean"
+    assert measure_cleanliness(*_voice(floor_db=-55))["verdict"] == "unclean"
+
+
+def test_a_60_hz_hum_is_reported_as_bass_even_when_the_floor_is_clean():
+    from services.voice_cleanliness import measure_cleanliness
+    found = measure_cleanliness(*_voice(floor_db=-95, hum_db=-20))
+    assert found["bassPct"] > 35 and "bass" in found["reasons"] and found["verdict"] == "unclean"
+    assert found["lowEndPct"] >= found["bassPct"], "the hum sits between 40 and 100 Hz"
+
+
+def test_a_deep_man_with_a_clean_floor_is_not_bass_heavy():
+    from services.voice_cleanliness import measure_cleanliness
+    for f0 in (82.0, 95.0, 110.0):
+        found = measure_cleanliness(*_voice(floor_db=-95, f0=f0))
+        assert found["bassPct"] < 35 and found["reasons"] == [], (f0, found)
+
+
+def test_a_short_clip_or_a_clip_without_pauses_has_no_reliable_floor_and_is_not_rejected():
+    from services.voice_cleanliness import clean_reason, measure_cleanliness
+    short = measure_cleanliness(*_voice(seconds=1.0, floor_db=-45))
+    assert short["floorConclusive"] is False and short["reasons"] == [] and short["verdict"] == "inconclusive"
+    assert clean_reason(short) is None
+    # Nearly continuous speech (3% of it is pause): the quietest frames are quiet phonemes, not a floor.
+    continuous = measure_cleanliness(*_voice(seconds=3.0, floor_db=-45, period=3.0, word=2.9))
+    assert continuous["floorConclusive"] is False and continuous["reasons"] == [] and continuous["verdict"] == "inconclusive"
+    # The bass check does not need a pause: a hum in a short clip is still found.
+    hummed = measure_cleanliness(*_voice(seconds=1.0, floor_db=-95, hum_db=-20))
+    assert hummed["reasons"] == ["bass"] and hummed["floorConclusive"] is False
+
+
+def test_silence_and_unreadable_audio_have_no_cleanliness(tmp_path):
+    from services.voice_cleanliness import measure_cleanliness, measure_file
+    assert measure_cleanliness(np.zeros(16000, dtype=np.float32), 16000) is None
+    assert measure_cleanliness(np.zeros(0, dtype=np.float32), 16000) is None
+    broken = tmp_path / "take.wav"
+    broken.write_bytes(b"raw speech")
+    assert measure_file(str(broken)) is None and measure_file(str(tmp_path / "missing.wav")) is None
+
+
+def test_the_file_measure_reads_a_stereo_flac_at_its_own_rate(tmp_path):
+    import soundfile as sf
+    from services.voice_cleanliness import measure_file
+    audio, rate = _voice(seconds=3.0, floor_db=-45)
+    sf.write(tmp_path / "take.flac", np.stack([audio, audio], axis=1), rate)
+    found = measure_file(str(tmp_path / "take.flac"))
+    assert found["verdict"] == "unclean" and found["reasons"][0] == "noise_floor"
+
+
+def test_the_dirtier_take_scores_higher_and_a_clean_one_scores_zero():
+    from services.voice_cleanliness import dirt_score, measure_cleanliness
+    clean, grimy, filthy = (measure_cleanliness(*_voice(floor_db=db)) for db in (-95, -55, -40))
+    assert dirt_score(clean) == 0 and 0 < dirt_score(grimy) < dirt_score(filthy)
+    assert dirt_score(None) == 0 and dirt_score({}) == 0
+
+
+def test_qa_speech_returns_the_cleanliness_and_warns_about_a_dirty_take():
+    dirty = measure_speech("take.wav", "This is fine, we have a product.", "English",
+                           load=lambda _path: _voice(floor_db=-45), transcribe=lambda _audio, code: "This is fine. We have a product.",
+                           pitch=lambda _audio, _rate: 120.0)
+    assert dirty["cleanliness"]["verdict"] == "unclean" and dirty["cleanliness"]["reasons"] == ["noise_floor", "snr"]
+    assert any("not clean" in warning and "noise floor" in warning and "VoxCPM2" in warning and "drama3_base" in warning
+               for warning in dirty["warnings"])
+    clean = measure_speech("take.wav", "This is fine, we have a product.", "English",
+                           load=lambda _path: _voice(floor_db=-95), transcribe=lambda _audio, code: "This is fine. We have a product.",
+                           pitch=lambda _audio, _rate: 120.0)
+    assert clean["cleanliness"]["verdict"] == "clean" and not any("clean" in warning for warning in clean["warnings"])
+    # Audio that cannot be measured (all zeros) has no cleanliness, and the rest of the result is as before.
+    mute = measure_speech("take.wav", "This is fine.", "English", load=lambda _path: (np.zeros(32000, dtype=np.float32), 16000),
+                          transcribe=lambda _a, _c: "This is fine.", pitch=lambda _audio, _rate: None)
+    assert mute["cleanliness"] is None and mute["wer"] == 0
+
+
+def test_the_qa_speech_catalog_describes_the_cleanliness_numbers():
+    description = command_catalog()[0]["description"]
+    assert "cleanliness" in description and "noise floor" in description

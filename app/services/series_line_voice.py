@@ -216,7 +216,8 @@ class SeriesLineVoice:
                 raise LineVoiceError("line_changed", "The line changed while it waited to record; record it again", 409)
             line = self.render.record_line(workspace, {"jobId": job_id, "episodeId": job["episodeId"], "language": language},
                                            series, beat, self._kits(workspace, episode), retake=job["retake"])
-            result = {key: line[key] for key in ("filename", "duration", "wer", "attempt", "key", "reused", "retake") if key in line}
+            keys = ("filename", "duration", "wer", "attempt", "key", "reused", "retake", "warning", "warnings", "cleanliness")
+            result = {key: line[key] for key in keys if key in line}
             job.update(status="completed", result={**result, "url": _file_url(line["filename"], workspace),
                                                    "cueCount": len(line.get("cues") or [])})
         except Exception as error:  # the job reports whatever stopped the recording
