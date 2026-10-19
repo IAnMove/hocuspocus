@@ -36,7 +36,7 @@
   "src/features/agent/capabilityRegistry.ts": 1,
   "src/features/agent/navigationQueueCapabilities.ts": 1,
   "src/features/agent/rhythmic3dWorkflow.ts": 1,
-  "src/features/agent/seriesShotEditCapabilities.ts": 2,
+  "src/features/agent/seriesShotEditCapabilities.ts": 1,
   "src/features/agent/toolsAdapter.ts": 7,
   "src/features/agent/wizardCardActions.ts": 1,
   "src/features/agent/wizardContext.ts": 23,

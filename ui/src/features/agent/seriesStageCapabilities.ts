@@ -1,6 +1,6 @@
 import type { defineCapability } from './capabilityRegistry'
 import i18n from '../../i18n'
-import { failure, reloadSeries } from './seriesShotEditCapabilities'
+import { activeSeriesState, failure, reloadSeries } from './seriesShotEditCapabilities'
 
 /**
  * "Calibra la perspectiva de la lámina de la oficina": a location plate's stage (horizon, one reference object of known height, optional far
@@ -80,9 +80,7 @@ type Target = { workspace: string, seriesId: string, locationId: string, locatio
 
 /** The location to calibrate: the one named, else the only one of the open series. Unsaved edits in Series Lab go first. */
 export async function stageTarget(seriesId: string, locationId: string, workspace?: string, save = true): Promise<Target> {
-  const { useSeriesStore } = await import('../series/store')
-  const state = useSeriesStore.getState()
-  if (save) await state.saveNow().catch(() => null)
+  const state = await activeSeriesState(save)
   const series = seriesId || state.activeSeriesId
   const locations = state.library.seriesById[series]?.locations ?? []
   const found = locationId ? locations.find(item => item.id === locationId) : locations.length === 1 ? locations[0] : undefined
