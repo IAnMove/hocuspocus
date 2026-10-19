@@ -36,6 +36,8 @@ export const animationsOf = (group: AnimationGroupId): AnimationDef[] => animati
 export type AnimationSetName = keyof typeof catalog.sets
 export type AnimationSetDef = { title: Localized; sheets: Array<{ animation: string; reference?: string }> }
 export const animationSets = catalog.sets as Record<AnimationSetName, AnimationSetDef>
+/** How many sheets of a set the character still lacks: what making the set would make. */
+export const missingSetSheets = (kit: CharacterKit, set: AnimationSetName): number => animationSets[set].sheets.filter(step => !kit.animations?.[step.animation]).length
 
 export type KitAnimationSheet = {
   source: string; width: number; height: number; count: number; columns: number; rows: number

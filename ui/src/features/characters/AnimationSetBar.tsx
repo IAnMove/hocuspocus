@@ -1,7 +1,7 @@
 import { Loader2, WandSparkles } from 'lucide-react'
 import { isActiveSet, type AnimationSetJob } from '../../api/characterAnimationSets'
 import { useUiTranslation } from '../../i18n'
-import { animationDef, animationSets, kitAnimations, localized, type AnimationSetName } from '../../lib/characterAnimations'
+import { animationDef, localized, missingSetSheets, type AnimationSetName } from '../../lib/characterAnimations'
 import type { CharacterKit } from '../../lib/characterKit'
 
 const small = 'inline-flex min-h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] disabled:opacity-40'
@@ -10,9 +10,6 @@ const BUTTONS = [
   { set: 'idle-directions', label: 'animations.sets.makeIdle' },
 ] as const satisfies ReadonlyArray<{ set: AnimationSetName; label: string }>
 const STOPPED = ['failed', 'cancelled', 'interrupted']
-
-/** How many sheets of a set the character still lacks: what the button would make. */
-export const missingSheets = (kit: CharacterKit, set: AnimationSetName): number => animationSets[set].sheets.filter(step => !kitAnimations(kit)[step.animation]).length
 
 function SetProgress({ job, onCancel }: { job: AnimationSetJob; onCancel: (jobId: string) => void }) {
   const { t, i18n } = useUiTranslation('characters')
@@ -46,7 +43,7 @@ export function AnimationSetBar({ kit, model, busy, latest, onStart, onCancel }:
     <h4 className="text-sm font-medium">{t('animations.sets.title')}</h4>
     <p className="text-[11px] text-text-muted">{t('animations.sets.intro')}</p>
     <div className="flex flex-wrap gap-2">{BUTTONS.map(({ set, label }) => {
-      const missing = missingSheets(kit, set)
+      const missing = missingSetSheets(kit, set)
       const resumable = STOPPED.includes(latest[set]?.status ?? '') && missing > 0
       const working = latest[set] ? isActiveSet(latest[set]!) : false
       return <button key={set} type="button" data-testid={`make-set-${set}`} disabled={busy || !model || missing === 0} className={`${small} text-cyan-200`} onClick={() => onStart(set)}
