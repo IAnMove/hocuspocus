@@ -39,7 +39,7 @@ The `/api/v1/series` resource (routes in `tests/fixtures/route_table.json`) incl
 - H3 render start/status/cancel/resume/recovery/discard; attempt approve/reject and bulk approve;
 - **native render** (`POST .../episodes/{episode_id}/native-render`; jobs under `/series/native-render/jobs/{job_id}` with status/cancel/resume and `/series/native-render/recovery`): every 2D animation shot rendered on the server without a browser, with each line in the character's voice for the requested language (checked with speech QA), phonetic mouth cues, an editable Video 2D scene and a take appended to the shot;
 - **language versions** (`PUT`/`DELETE .../episodes/{episode_id}/language-versions/{language}`, `POST .../language-versions/{language}/translate`): the same shots and line ids with their own text, cards, music, takes and cut;
-- assembly start/status/cancel/resume/recovery/discard (`/series/assembly/...`): the approved takes of one language cut into a chapter at -16 LUFS with SRT/VTT and an optional burned-in copy;
+- assembly start/status/cancel/resume/recovery/discard (`/series/assembly/...`): the approved takes of one language cut into a chapter at -16 LUFS with SRT/VTT and an optional burned-in copy. A take's `startTimeSeconds` / `endTimeSeconds` is cut first (`services/series_take_range.py`: frame-accurate picture, the same times on the sound, source frame rate). Absent or `0`/`0` leaves the file; a backwards range or a start past the file is refused; an end past the file means to the end. A join of more than 16 clips is split into balanced blocks (`ASSEMBLY_BLOCK_CLIPS` in `mix_concat.py`) so ffmpeg does not keep a decoder for every shot; the blocks are joined with the same filter. ffmpeg children raise their OOM score so the kernel stops them before the server; an OOM kill fails the job with "Out of memory while assembling…";
 - **produce** (`POST .../episodes/{episode_id}/produce`; jobs under `/series/produce/jobs/{job_id}` with status/cancel/resume): render the original and every language version with automatic approval, retry failed shots once, then assemble each language;
 - **3D location plates** (`POST`/`GET .../locations/{location_id}/plate3d`): a Video 3D scene rendered once as the silent looping background of a location; 2D shots in that location use it;
 - **staged review** (`GET`/`POST .../episodes/{episode_id}/review`): the episode's production mode and each shot's plan and preview decision and notes (see below);
@@ -67,7 +67,7 @@ The same operations are published as `series.*` tools on `/api/v1/mcp` and on th
 | `series.episode.produce` (+ `.status`, `.cancel`, `.resume`) | Render and cut an episode in one call: every language, automatic approval, one retry per failed shot, burned-in subtitles unless disabled; `chapters` lists the files. |
 | `series.episode.review.get`, `series.episode.review.set`, `series.shot.review.set` | Read an episode's staged review (mode, steps left, every shot's decisions and notes) and set the mode, decide shots or answer a note (`by: agent`); the setters take an envelope `intent_id`. |
 | `series.shot.get`, `series.shot.update` | Read and edit one shot by id or its number in the episode, in the script vocabulary; only what changed is written and a take that no longer fits loses its approval. |
-| `series.shot.voices`, `series.shot.voice` (+ `.status`) | List each line of a shot with the recording the next render reuses, and record one line now (or `retake` it) as a job; the take is untouched until the shot renders again. |
+| `series.shot.voices`, `series.shot.voice` (+ `.status`) | List each line of a shot with the recording the next render reuses, and record one line now (or `retake` it) as a job; the take is untouched until the shot renders again. A completed job's `result` includes `filename`, `duration`, `wer`, `attempt`, `key`, `reused`, `retake`, `warning` / `warnings` and `cleanliness` (the same object `qa.speech` and the server render attach). |
 | `series.location.plate3d` (+ `.status`) | Render a Video 3D scene or document as the looping plate of a location; when the export is ready it becomes the location video. |
 
 The same module publishes the character tools the profile also serves (`characters.list`, `characters.get`, `characters.save`, `characters.styles`, `characters.rig.flat`), next to `qa.speech` and `studio.key` from the shared catalog; `tests/test_series_commands.py` and `tests/test_local_mcp.py` keep the HTTP and MCP surfaces aligned.
@@ -105,7 +105,9 @@ it the shot's `scene3d.scene` and refreshes its objects from the editor (an obje
 speaking cast member's object must stay), then writes it with the shot edit and returns to the shot. One line's voice
 (`services/series_line_voice.py`) is recorded with `SeriesNativeRender.record_line`, the render's own path, as
 `ln-<episode>-<beat>-<key>.wav`; a retake records under another name (another seed) and replaces the recording only
-when it is good. Nothing records while the episode renders on the server.
+when it is good. The finished job copies the render's `cleanliness` and `warnings` (`voice_unclean`,
+`voice_out_of_band`, `expression_moved_for_speech` is a render-item warning, not this job). Nothing records while
+the episode renders on the server.
 
 ## Staged review (production modes)
 

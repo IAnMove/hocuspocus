@@ -79,8 +79,16 @@ Relevant tools include:
 | `generation.music` | Submit literal lyrics and a music caption to an installed local model |
 | `generation.sfx` | Generate MMAudio effects from text or replace a canonical video's audio |
 | `tools.upscale` | Submit a typed upscale request for an existing image/video |
+| `image.remove_background` | Still-image cutout (`auto` / `u2net` / `screen`). `auto` copies an already-transparent PNG and records `background_already_removed`; see [Tools HOWUSEIT](../tools/HOWUSEIT.md) |
+| `workspaces.list` / `workspaces.create` | Output **folders** (not `collections.*`). Same name rules as the UI; creating an existing name is a no-op. See [WORKSPACE_COMMANDS](WORKSPACE_COMMANDS.md) |
 | `generation.receipt` | Recover a shared admission and its canonical task |
 | `status` | Follow the returned native job ID |
+
+`generation.image` and `generation.speech` also admit the isolated FLUX 3 /
+Drama 3 model ids once that runtime is installed
+([FLUX3_DRAMA3](../generation/FLUX3_DRAMA3.md)). Cancel while the engine is
+still loading returns `cancelled` at once; cancel after sampling has started
+stays `cancelling` until the worker releases.
 
 The previous `generate`, `upscale` and other legacy tools remain available.
 Their schemas differ from the typed operations above; do not mix envelopes.

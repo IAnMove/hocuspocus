@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Docs: the FLUX 3 / Drama 3 operator runbook and the Tools, workspace-folder, Director and Series assembly guides now match the code.** `docs/generation/FLUX3_DRAMA3.md` documents the warm runtime, the memory cgroup, the 15-minute stall and cancel-while-loading; the Tools guide documents `image.remove_background` (`auto` skips a PNG that already has transparency); the workspace-folder tools are told apart from `collections.*`; Repeat `wait: false`, take ranges with 16-clip assembly blocks and the `series.shot.voice` result fields are listed (Cursor PR #1161).
+
 **Fixed: a superseded `scene3d.room.paint` can no longer overwrite the pictures of the newer one.** Two overlapping paints of the same room wrote the same `rooms/<name>/<surface>.png`, so the older job woke up after the newer had published and left its own pictures under the newer look's fingerprint (a later rebuild then baked the wrong look). Each request now writes to `rooms/<name>/.paint-<fp>/`, skips processing once it is no longer the room's current paint, and moves its pictures onto the canonical names only under the store lock while it still owns the room (Cursor PR #1164).
 
 **Fixed: a production GPU render of a metric box room no longer paints the studio floor over it.** `stageRoomBox` wrote `floorStyle: 'none'` only when the document already had an `environment`; cinema templates such as `two-shot` have none, so the compiler treated the shot as a painted set (a `backdrop` floor plus a giant background plane). It now always sets the environment, as a mold room does (Cursor PR #1155).
