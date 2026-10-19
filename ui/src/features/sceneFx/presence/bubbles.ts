@@ -39,3 +39,5 @@ void main() {
 }))
 
 export const paintBubbles = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) => drawLayer(ctx, BUBBLES(), frame)
+
+export const bubblesEffect = { paint: paintBubbles, layers: [BUBBLES] }

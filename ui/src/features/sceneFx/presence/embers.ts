@@ -33,3 +33,5 @@ void main() {
 }))
 
 export const paintEmbers = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) => drawLayer(ctx, EMBERS(), frame)
+
+export const embersEffect = { paint: paintEmbers, layers: [EMBERS] }

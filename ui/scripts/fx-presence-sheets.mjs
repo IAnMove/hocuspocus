@@ -1,7 +1,9 @@
 // Contact sheets, timing and determinism checks of the presence effects, painted by the real painter in Chromium on the CPU.
 //
-//   node scripts/fx-presence-sheets.mjs --out DIR [--kinds a,b] [--tag before] [--no-webgl] [--light] [--wide 1280]
-//   node scripts/fx-presence-sheets.mjs --time [--kinds a,b]     # ms per frame at 1280 x 720, two effects at once
+//   node scripts/fx-presence-sheets.mjs --out DIR [--kinds a,b] [--tag before] [--no-webgl] [--light] [--wide 1280] [--cue '{"size":50}']
+//   node scripts/fx-presence-sheets.mjs --out DIR --compare          # before (2D) over after (Three.js), three instants
+//   node scripts/fx-presence-sheets.mjs --out DIR --still --at 3    # one full-size frame per effect
+//   node scripts/fx-presence-sheets.mjs --time [--kinds a,b] [--wide 1280]   # ms per frame, each alone and the two together
 //
 // One PNG per effect: its frames at the start, the middle and the end of a 6 s shot over a scene-like backdrop. ``--tag``
 // names the file (``before``/``after``); ``--no-webgl`` hides WebGL so the 2D painters are the ones shown.
@@ -52,6 +54,7 @@ const argAfter = (args, flag) => { const at = args.indexOf(flag); return at >= 0
 
 async function main() {
   const args = process.argv.slice(2)
+  const extra = JSON.parse(argAfter(args, '--cue') ?? '{}')
   const kinds = (argAfter(args, '--kinds') ?? Object.keys(SHEET_CUES).join(',')).split(',')
   const webgl = !args.includes('--no-webgl'), light = args.includes('--light')
   const { chromium } = await import('playwright')
@@ -61,9 +64,10 @@ async function main() {
   try {
     const page = await sheetPage(browser, script, { webgl })
     if (args.includes('--time')) {
-      const pair = [sheetCue(kinds[0], {}, 0), sheetCue(kinds[1] ?? kinds[0], {}, 1)]
+      const pair = [sheetCue(kinds[0], extra, 0), sheetCue(kinds[1] ?? kinds[0], extra, 1)]
       for (const cues of [[pair[0]], [pair[1]], pair]) {
-        const result = await page.evaluate(([c, w, h]) => window.fxSheet.time(c, w, h, 8, 6), [cues, 1280, 720])
+        const wide = Number(argAfter(args, '--wide') ?? 1280)
+        const result = await page.evaluate(([c, w, h]) => window.fxSheet.time(c, w, h, 8, 6), [cues, wide, Math.round(wide * 9 / 16)])
         console.log(cues.map(cue => cue.kind).join(' + '), `warm ${result.warm.toFixed(0)} ms, ${result.perFrame.toFixed(0)} ms/frame`)
       }
       return
@@ -74,7 +78,7 @@ async function main() {
       // One full-size frame per effect at `--at` seconds (default 3), as `kind.tag.still.png`.
       fs.mkdirSync(out, { recursive: true })
       for (const kind of kinds) {
-        const url = await page.evaluate(([cue, at, w, h, back]) => window.fxSheet.still([cue], at, w, h, back), [sheetCue(kind), Number(argAfter(args, '--at') ?? 3), Number(argAfter(args, '--wide') ?? 1280), Math.round(Number(argAfter(args, '--wide') ?? 1280) * 9 / 16), light ? 'light' : 'scene'])
+        const url = await page.evaluate(([cue, at, w, h, back]) => window.fxSheet.still([cue], at, w, h, back), [sheetCue(kind, extra), Number(argAfter(args, '--at') ?? 3), Number(argAfter(args, '--wide') ?? 1280), Math.round(Number(argAfter(args, '--wide') ?? 1280) * 9 / 16), light ? 'light' : 'scene'])
         fs.writeFileSync(path.join(out, `${kind}.${tag}.still${webgl ? '' : '.2d'}.png`), Buffer.from(url.split(',')[1], 'base64'))
       }
       return
@@ -82,8 +86,13 @@ async function main() {
     const width = Number(argAfter(args, '--wide') ?? 1280), height = Math.round(width * 9 / 16)
     fs.mkdirSync(out, { recursive: true })
     for (const kind of kinds) {
+      // `--compare`: the 2D painters (before) over the Three.js ones (after), one picture per effect.
+      const rows = args.includes('--compare')
+        ? [{ label: `${kind} before`, cues: [sheetCue(kind, extra)], presence: false }, { label: `${kind} after`, cues: [sheetCue(kind, extra)], presence: true }]
+        : [{ label: kind, cues: [sheetCue(kind, extra)] }]
+      const tileWidth = Number(argAfter(args, '--tile') ?? 560)
       const url = await page.evaluate(spec => window.fxSheet.sheet(spec),
-        { rows: [{ label: kind, cues: [sheetCue(kind)] }], instants: INSTANTS, duration: SHOT, width, height, tileWidth: 560, backdrop: light ? 'light' : 'scene' })
+        { rows, instants: INSTANTS, duration: SHOT, width, height, tileWidth, backdrop: light ? 'light' : 'scene' })
       fs.writeFileSync(path.join(out, `${kind}.${tag}${webgl ? '' : '.2d'}${light ? '.light' : ''}.png`), Buffer.from(url.split(',')[1], 'base64'))
     }
   } finally {

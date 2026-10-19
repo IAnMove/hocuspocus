@@ -59,3 +59,5 @@ void main() {
 
 export const paintAura = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) =>
   drawLayer(ctx, BODY(), frame) && drawLayer(ctx, SPARKS(), frame)
+
+export const auraEffect = { paint: paintAura, layers: [BODY, SPARKS] }

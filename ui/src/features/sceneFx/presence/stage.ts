@@ -75,6 +75,10 @@ function ensureStage(): Stage | null {
   if (stage === null || typeof document === 'undefined') return null
   if (stage && !stage.renderer.getContext().isContextLost()) return stage
   try {
+    // Without WebGL the renderer would log an error to the console: ask a throwaway canvas first.
+    const probe = document.createElement('canvas').getContext('webgl2')
+    if (!probe) { stage = null; return null }
+    probe.getExtension('WEBGL_lose_context')?.loseContext()
     const canvas = document.createElement('canvas')
     canvas.width = 16; canvas.height = 16
     const renderer = new WebGLRenderer({ canvas, alpha: true, antialias: false, premultipliedAlpha: true, preserveDrawingBuffer: true, depth: false, stencil: false })
@@ -167,10 +171,10 @@ export function lazyLayer(def: () => LayerDef): () => Layer {
   return () => layer ??= makeLayer(def())
 }
 
-type Window = readonly [number, number, number, number]
+export type Window = readonly [number, number, number, number]
 
 /** The part of the layer's region the frame shows, in the context's current space; null when none of it is on the frame. */
-function visibleWindow(ctx: CanvasRenderingContext2D, region?: Region): { win: Window; scale: number } | null {
+export function visibleWindow(ctx: CanvasRenderingContext2D, region?: Region): { win: Window; scale: number } | null {
   const matrix = ctx.getTransform(), scale = Math.hypot(matrix.a, matrix.b)
   if (!(scale > 1e-6) || !Number.isFinite(scale)) return null
   const inverse = matrix.inverse(), width = ctx.canvas.width, height = ctx.canvas.height
@@ -185,7 +189,7 @@ function visibleWindow(ctx: CanvasRenderingContext2D, region?: Region): { win: W
 }
 
 /** Render pixels for a window: the frame's resolution, shrunk to the layer's budget. */
-function renderSize(win: Window, scale: number, maxPixels: number): [number, number] {
+export function renderSize(win: Window, scale: number, maxPixels: number): [number, number] {
   let w = Math.max(2, Math.ceil((win[2] - win[0]) * scale)), h = Math.max(2, Math.ceil((win[3] - win[1]) * scale))
   const shrink = Math.sqrt(maxPixels / (w * h))
   if (shrink < 1) { w = Math.max(2, Math.round(w * shrink)); h = Math.max(2, Math.round(h * shrink)) }

@@ -28,7 +28,7 @@ void main() {
   vec2 grad = vec2(texture2D(uNoise, uv + vec2(e, 0.)).r - texture2D(uNoise, uv - vec2(e, 0.)).r,
                    texture2D(uNoise, uv + vec2(0., e)).r - texture2D(uNoise, uv - vec2(0., e)).r) / (2. * e);
   // The puff's normal: a dome (more tilted toward its edge) bent by the noise's slope; the light comes from above-left.
-  vec3 nrm = normalize(vec3(vQ.x * .55 - grad.x * .12, vQ.y * .55 - grad.y * .12, .75));
+  vec3 nrm = normalize(vec3(vQ.x * .55 - grad.x * .085, vQ.y * .55 - grad.y * .085, .75));
   float diff = clamp(dot(nrm, normalize(vec3(-.45, -.7, .55))), 0., 1.);
   float alpha = body * pow(sin(3.1416 * life), 1.1) * .62 * uEnv * min(1.5, uPower);
   vec3 col = mix(uColor * .22, mix(uColor, vec3(1.), .28), smoothstep(.1, .85, diff));
@@ -37,3 +37,5 @@ void main() {
 }))
 
 export const paintSmoke = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) => drawLayer(ctx, SMOKE(), frame)
+
+export const smokeEffect = { paint: paintSmoke, layers: [SMOKE] }

@@ -278,24 +278,24 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   it and its `preparedClips` says so.
 - **fx:** screen effects at the same kind of time: `kind` from `scenes.effects.catalog` (confetti, manga_impact,
   speedlines…), `duration` (seconds, 0.1–30, clamped; `"shot"` to the shot's end; left out: auras, shields, light, weather
-  and grades last the shot, hits 0.25–1 s), `x`/`y`/`size` in % (left out: those cover the person or screen, hits fit the framing), `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
+  and grades last the shot, hits 0.25–1 s), `x`/`y`/`size` in % (left out: those cover the person or screen, hits fit the frame), `color`, `rotation` (degrees; a `laser` drawn across `x`/`y`
   points right at 0), `speed` (the effect's own clock, 0.02–4: `0.05` hangs `rain` or `dust` in the air, a slowed
   `explosion` is slow motion). A `laser` or `lightning` fired by someone starts at `from`: `{"cast": 0, "point": [95, 46]}` is a point
-  in % of that cast member's pose image (`cast`: its index in the shot's `cast`, or a character id), so the beam leaves
-  the muzzle at any size, even under a push; `{"point": [70, 40]}` is a frame point.
+  in % of that cast member's pose image (`cast`: its index in the shot's `cast` or a character id), so the beam leaves
+  the muzzle at any size, even pushed; `{"point": [70, 40]}` is a frame point.
   The beam runs from `from` to `x`/`y` (where it lands); `rotation` is unused. A `cast` not in the
   shot fails the render; a 3D shot keeps only frame points. Put an aura, shield or light on its person;
-  hits stay off faces. Under 2 s on one of those in a shot over 4 s warns `fx_presence_too_short`. Light for dark, painted frames: `shockwave` is a ring of light from `x`/`y` (`size` its reach) with flash, halo,
-  echoes and sparks; `shield` is a see-through dome of light around someone (`size` its height) that reads even at
+  hits stay off faces. Presence effects are volumetric: `"shot"`, large `size`; under 2 s in a shot over 4 s warns `fx_presence_too_short`. Light for dark, painted frames: `shockwave` is a ring of light from `x`/`y` (`size` its reach) with flash, halo,
+  echoes and sparks; `shield` is a see-through dome around someone (`size` its height) that reads even at
   `intensity` 0.4; `embers` rise and cool from their box's bottom; all keep `color`.
-  `impact_flash` (a white frame, then ink focus lines) and `impact_invert` (the negative of the frame) cover the
+  `impact_flash` (a white frame, then ink focus lines) and `impact_invert` (the frame's negative) cover the
   whole picture: give them 2–4 frames (`duration` 0.08–0.17 s at 24 fps) on the hit. `code_rain` (falling
   green code; `size` the glyph height in %, default 3) covers it too, faces included: for code behind the cast use a
-  location plate from the `anime-code-rain` Video 3D shot.
+  plate from the `anime-code-rain` Video 3D shot.
   The cinematic grades cover the whole picture: `candlelight` (key light, `x`/`y` the flame,
   `size` its radius), `vignette`, `film_grain`, `light_rays` (`x`/`y` the window, `rotation` where the light
   goes), `glitch` (digital tearing) and `canvas` (painted texture). A grade lasts the shot
-  unless you give `duration`; it repeats over its cue, so a plate as long as the cue loops.
+  unless you give `duration`; it repeats over its cue, so a cue-long plate loops.
 - **timing:** `intro` (silence before the first line, default 0.35 s), `gap` (between lines, 0.22), `tail` (after the
   last, 0.45). A line's `pauseBefore` adds a dramatic beat.
 - **delivery:** a line's `delivery` and `emotion` (`{"who": "ana", "es": "Ven.", "delivery": "susurrando, muy despacio"}`)

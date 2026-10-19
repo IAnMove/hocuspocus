@@ -51,3 +51,5 @@ void main() {
 
 export const paintDust = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) =>
   drawLayer(ctx, HAZE(), frame) && drawLayer(ctx, MOTES(), frame)
+
+export const dustEffect = { paint: paintDust, layers: [HAZE, MOTES] }

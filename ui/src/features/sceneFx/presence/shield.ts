@@ -26,7 +26,7 @@ float ripple(vec3 n, float seed, float t) {
   float cell = floor(t / period + hash(vec2(seed + 9., uSeed)));
   vec3 at = normalize(vec3(hash(vec2(seed, cell + 3.)) * 1.6 - .8, hash(vec2(seed + 4., cell + 7.)) * 1.6 - .8, .6));
   float away = acos(clamp(dot(n, at), -1., 1.));
-  return exp(-pow((away - life * 1.5) / .09, 2.)) * (1. - life) * (1. - life);
+  return exp(-pow((away - life * 1.5) / .16, 2.)) * (1. - life) * (1. - life);
 }
 void main() {
   vec2 p = vP / vec2(uRadius * ${SHIELD_ASPECT.toFixed(3)}, uRadius);
@@ -44,10 +44,12 @@ void main() {
   // A band of light sweeps over it, tilted, and comes round again.
   float sweep = pow(.5 + .5 * sin((n.y * 1.3 + n.x * .7) * 4.2 - t * 1.25), 5.);
   float body = .03 + .2 * pow(1. - z, 1.4);
-  float rim = exp(-pow((r - .985) / .03, 2.));
-  float halo = exp(-max(0., r - 1.) * 9.) * .5 * step(1., r) + exp(-pow((r - .985) / .12, 2.)) * .22;
+  // The rim is a Fresnel glow, brightest at the silhouette and uneven round it, not a drawn circle.
+  float wave = .55 + .9 * fbm(vec2(atan(p.y, p.x) * 2.4 + t * .35, t * .22 + uSeed));
+  float rim = (exp(-pow((r - .98) / .085, 2.)) * .45 + pow(1. - z, 3.) * .75 * disc) * wave;
+  float halo = exp(-max(0., r - 1.) * 8.) * .42 * step(1., r) * (.7 + .5 * wave) + exp(-pow((r - .98) / .16, 2.)) * .2;
   float ring = (ripple(n, 1., t) + ripple(n, 2., t + 1.7) + ripple(n, 3., t + 3.1)) * disc;
-  float k = body * disc + line * (.1 + .55 * fres) * (.55 + .9 * sweep) + fill * .22 + ring * .5 + rim * .85 + halo;
+  float k = body * disc + line * (.1 + .55 * fres) * (.55 + .9 * sweep) + fill * .22 + ring * .3 + rim * .7 + halo;
   // Soft at the hit rim, never a hard disc.
   vec3 hot = whiten(uColor, .55);
   vec3 col = mix(uColor, hot, clamp(rim * .8 + ring * .6 + line * fres * .4, 0., 1.));
@@ -83,3 +85,5 @@ export function paintShield(ctx: CanvasRenderingContext2D, frame: PresenceFrame)
   if (state.light <= .003) return true
   return drawLayer(ctx, DOME(), frame, { uLight: state.light * state.power, uRadius: state.radius }) && drawLayer(ctx, MOTES(), frame)
 }
+
+export const shieldEffect = { paint: paintShield, layers: [DOME, MOTES] }

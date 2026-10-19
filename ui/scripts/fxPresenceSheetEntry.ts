@@ -3,10 +3,11 @@
 // sky into warm ground, a figure in the middle) at the start, middle and end of the shot, and lays the frames out as one
 // PNG per call. It is also the timing harness: ``time`` paints the frames of a shot and reports ms per frame.
 import { paintSceneFx } from '../src/features/sceneFx/paint.ts'
-import { setPresenceEnabled } from '../src/features/sceneFx/presence/index.ts'
+import { PRESENCE_KINDS, setPresenceEnabled } from '../src/features/sceneFx/presence/index.ts'
 import { parseSceneFx } from '../src/features/sceneFx/types.ts'
 
-export type SheetRow = { label?: string; cues: Array<Record<string, unknown>> }
+/** `presence: false` paints the row with the 2D painters (and the filmed 3D sprites) that the Three.js effects replaced. */
+export type SheetRow = { label?: string; cues: Array<Record<string, unknown>>; presence?: boolean }
 export type SheetSpec = { rows: SheetRow[]; instants: number[]; duration: number; width: number; height: number; tileWidth: number; backdrop?: 'scene' | 'light' }
 
 /** The picture under the effects: a dusk gradient, a floor and a standing figure (the subject an aura or a shield wraps). */
@@ -46,6 +47,7 @@ function sheet(spec: SheetSpec): string {
   const g = out.getContext('2d')!
   g.fillStyle = '#000'; g.fillRect(0, 0, out.width, out.height)
   rows.forEach((row, r) => {
+    setPresenceEnabled(row.presence !== false)
     g.fillStyle = '#fff'; g.font = '13px monospace'
     g.fillText(row.label ?? String(row.cues[0]?.kind ?? ''), 6, r * (tileHeight + gutter) + 18)
     instants.forEach((at, c) => {
@@ -53,6 +55,7 @@ function sheet(spec: SheetSpec): string {
       g.drawImage(tile, label + c * (tileWidth + gutter), r * (tileHeight + gutter), tileWidth, tileHeight)
     })
   })
+  setPresenceEnabled(true)
   return out.toDataURL('image/png')
 }
 
@@ -78,7 +81,7 @@ function time(cues: unknown, width: number, height: number, frames: number, dura
   const parsed = parseSceneFx(cues)
   const canvas = document.createElement('canvas')
   canvas.width = width; canvas.height = height
-  const ctx = canvas.getContext('2d')!
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
   const paint = (index: number) => {
     ctx.clearRect(0, 0, width, height)
     paintSceneFx(ctx, width, height, index / frames * duration, parsed)
@@ -95,4 +98,4 @@ function hasWebgl() {
   return Boolean(probe.getContext('webgl2') ?? probe.getContext('webgl'))
 }
 
-;(window as unknown as { fxSheet: unknown }).fxSheet = { sheet, still, pixels, time, hasWebgl, presence: setPresenceEnabled }
+;(window as unknown as { fxSheet: unknown }).fxSheet = { sheet, still, pixels, time, hasWebgl, presence: setPresenceEnabled, kinds: [...PRESENCE_KINDS] }

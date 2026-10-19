@@ -12,7 +12,7 @@ float curtain(vec2 p, float t, float shift, float seed, out float up) {
   up = h;
   float rays = fbm(vec2(p.x * 13. + sin(t * .2 + p.x * 2.) * .9 + seed, t * .08 + h * .7));
   float fine = fbm(vec2(p.x * 31. - t * .17 + seed * 2., h * 1.1 + 3.));
-  float edge = smoothstep(-.012, .018, h);
+  float edge = smoothstep(-.03, .045, h);
   float reach = exp(-max(h, 0.) * 2.4);
   float lip = exp(-pow((h - .02) / .09, 2.)) * .22;
   return edge * reach * (.3 + rays * 1.15) * (.45 + .55 * fine) + lip * (.6 + rays) * edge;
@@ -26,9 +26,13 @@ void main() {
   vec3 high = uColor * vec3(.85, .45, 1.15);
   vec3 col1 = mix(uColor, high, smoothstep(.02, .38, u1)), col2 = mix(uColor * vec3(.7, 1., .9), high, smoothstep(.02, .38, u2));
   vec3 col = (col1 * c1 + col2 * c2) / max(c1 + c2, 1e-3);
-  float k = (c1 + c2) * ends * mix(1., top, .6) * .7 * uEnv * min(1.5, uPower);
+  // The curtains thin out toward the top of their box as well as toward its ends: no edge at any size.
+  float sky = smoothstep(-.6, -.36, p.y);
+  float k = (c1 + c2) * ends * sky * mix(1., top, .6) * .7 * uEnv * min(1.5, uPower);
   gl_FragColor = vec4(col * k, clamp(k, 0., 1.));
 }`,
 }))
 
 export const paintAurora = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) => drawLayer(ctx, CURTAINS(), frame)
+
+export const auroraEffect = { paint: paintAurora, layers: [CURTAINS] }

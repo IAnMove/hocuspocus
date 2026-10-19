@@ -57,3 +57,5 @@ void main() {
 
 export const paintStars = (ctx: CanvasRenderingContext2D, frame: PresenceFrame) =>
   drawLayer(ctx, NEBULA(), frame) && drawLayer(ctx, STARS(), frame)
+
+export const starsEffect = { paint: paintStars, layers: [NEBULA, STARS] }

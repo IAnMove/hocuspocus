@@ -9,6 +9,9 @@ export const PRESENCE_UNIFORMS = `uniform vec4 uWin; uniform float uTime, uSeed,
  * [0, 1) per particle and salt, fixed by the cue's seed: nothing is stored between frames. */
 export const PRESENCE_LIB = `${PRESENCE_UNIFORMS}
 ${ENERGY_NOISE}
+// Three octaves, a softer noise than fbm (five): for mist and haze.
+float fbm3(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 3; i++) { s += a * noise2(p); p = p * 2.03 + vec2(17.2, 31.7); a *= .5; } return s * 1.14; }
+float fbm4(vec2 p) { float s = 0., a = .5; for (int i = 0; i < 4; i++) { s += a * noise2(p); p = p * 2.05 + vec2(17.2, 31.7); a *= .5; } return s * 1.07; }
 float rnd(float id, float salt) { return hash(vec2(id + salt * 4099., uSeed)); }
 vec3 whiten(vec3 c, float k) { return mix(c, vec3(1.), clamp(k, 0., 1.)); }
 float ell(vec2 p, vec2 radius, float from) { return 1. - smoothstep(from, 1., length(p / radius)); }
