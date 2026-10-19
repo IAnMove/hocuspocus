@@ -46,6 +46,16 @@ test('the wide camera matches the shared frame and an adult measures the door', 
   })
   assert.equal(parseScene3DDocument(JSON.parse(JSON.stringify(staged)))?.roomBox?.characters.length, 1)
   assert.equal(staged.slots.some(slot => slot.id === 'subject_1'), true)
+  assert.equal(staged.environment?.floorStyle, 'none')
+})
+
+test('a document with no environment still gets floorStyle none, like a mold room', () => {
+  const staged = stageRoomBox(createDefaultScene3DDocument(), {
+    size: { w: 4, d: 5, h: 2.6 }, door: { wall: 'back', x: 0, w: 0.9, h: 2 },
+  })
+  assert.equal(createDefaultScene3DDocument().environment, undefined)
+  assert.equal(staged.environment?.floorStyle, 'none')
+  assert.equal(staged.environment?.reflectiveFloor, false)
 })
 
 test('a staged box room with a file keeps the GLB on the ungrounded room-box slot', () => {

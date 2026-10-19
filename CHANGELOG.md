@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a production GPU render of a metric box room no longer paints the studio floor over it.** `stageRoomBox` wrote `floorStyle: 'none'` only when the document already had an `environment`; cinema templates such as `two-shot` have none, so the compiler treated the shot as a painted set (a `backdrop` floor plus a giant background plane). It now always sets the environment, as a mold room does (Cursor PR #1155).
+
 **Fixed: a production GPU render of a metric box room now mounts the room.** `resolve_media` keeps the built GLB on `background.file` beside `background.roomBox`, but the Video 3D production compiler passed only the spec to `stageRoomBox`, so no `room-box` slot was created and the camera looked into an empty interior (the CPU preview still painted a checkered floor, so it failed silently). The compiler now joins `file` to the spec (Cursor PR #1154).
 
 **Fixed: a voice-band retry that never speaks no longer deletes the line's recording.** A recording outside the kit's pitch band is spoken again onto the same wav, and each empty seed discarded that file, so a later render could lose the only take and fail with `speech_empty`. The previous take is now copied aside first and put back when none of the three seeds speak; the line keeps it with `voice_out_of_band` (a first-ever line that never speaks still fails with `speech_empty`) (Cursor PR #1153).
