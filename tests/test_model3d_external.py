@@ -11,6 +11,228 @@ import pytest
 from app.services.asset_manifest import read_asset_manifest
 from app.services import model3d_external as engines
 from app.services import model3d_service as service
+from app.services.runtime_profiles import select_profiles
+from app.services.trellis2 import assets
+
+
+def test_cuda_link_stubs_never_leak_into_the_runtime_loader_path(tmp_path):
+    from app.services.trellis2.install_native import build_environment
+    stubs = tmp_path / "lib/stubs"
+    stubs.mkdir(parents=True)
+    (stubs / "libcuda.so").touch()
+    original = {"LD_LIBRARY_PATH": "/host/driver", "LIBRARY_PATH": "/other/build/libs"}
+    result = build_environment(tmp_path, original)
+    assert result["LD_LIBRARY_PATH"] == original["LD_LIBRARY_PATH"]
+    assert str(stubs) in result["LIBRARY_PATH"]
+    assert result["CUDA_HOME"] == str(tmp_path)
+    assert "CUDA_HOME" not in original
+
+
+@pytest.mark.parametrize("platform,gpu,compute,memory,supported", [
+    ("linux", "nvidia", "8.9", 24564, True),
+    ("linux", "nvidia", "8.0", 81920, True),
+    ("linux", "nvidia", "9.0", 81920, True),
+    ("win32", "nvidia", "8.9", 24564, False),
+    ("darwin", "amd", None, None, False),
+    ("linux", "amd", None, 24576, False),
+    ("linux", "nvidia", "8.6", 16384, False),
+    ("linux", "nvidia", "7.5", 24576, False),
+    ("linux", "nvidia", "10.0", 32768, False),
+    ("linux", "nvidia", None, 24576, False),
+    ("linux", "nvidia", "8.9", None, False),
+])
+def test_optional_trellis_hardware_contract(platform, gpu, compute, memory, supported):
+    result = select_profiles(platform, "x64", gpu, "580.82.09", compute, memory)
+    engine = result["engines"]["trellis2"]
+    assert engine["supported"] is supported
+    assert engine["defaultInstall"] is False
+    assert engine["env"] != result["engines"]["wangp"]["env"]
+    if not supported:
+        assert engine["reason"]
+
+
+def test_trellis_download_receipt_rejects_partial_changed_and_escaping_files(tmp_path):
+    assert not assets.downloaded(tmp_path)
+    bundle = tmp_path / "bundle"
+    bundle.mkdir()
+    config = bundle / "pipeline.json"
+    config.write_bytes(b"{}")
+    weight = tmp_path / "weight.safetensors"
+    weight.write_bytes(b"12345")
+    receipt = {"revisions": {repo: value[0] for repo, value in assets.REPOSITORIES.items()},
+               "files": {"bundle/pipeline.json": 2, "weight.safetensors": 5}}
+    manifest = tmp_path / "complete.json"
+    manifest.write_text(json.dumps(receipt))
+    assert assets.downloaded(tmp_path)
+    weight.write_bytes(b"123")
+    assert not assets.downloaded(tmp_path)
+    weight.write_bytes(b"12345")
+    receipt["revisions"]["microsoft/TRELLIS.2-4B"] = "main"
+    manifest.write_text(json.dumps(receipt))
+    assert not assets.downloaded(tmp_path)
+    receipt["revisions"] = {repo: value[0] for repo, value in assets.REPOSITORIES.items()}
+    outside = tmp_path.parent / "outside.safetensors"
+    outside.write_bytes(b"1")
+    receipt["files"] = {"bundle/pipeline.json": 2, "../outside.safetensors": 1}
+    manifest.write_text(json.dumps(receipt))
+    assert not assets.downloaded(tmp_path)
+
+
+@pytest.mark.parametrize("field", ["compatible", "weights_downloaded"])
+def test_trellis_job_refused_before_queue_if_incompatible_or_not_downloaded(monkeypatch, tmp_path, field):
+    monkeypatch.setattr(service, "_active_profile", lambda: {})
+    monkeypatch.setattr(engines, "installation_status", lambda engine: {
+        "installed": True, "compatible": True, "weights_downloaded": True,
+        field: False, "install_hint": "Download or install compatible TRELLIS.2 first",
+    })
+    initial = set(service._jobs)
+    with pytest.raises(RuntimeError, match="compatible TRELLIS"):
+        service.start_job(body={"provider": "local", "model_id": "trellis2"},
+                          image_paths={"front": "x"}, output_dir=str(tmp_path))
+    assert set(service._jobs) == initial
+
+
+def test_official_download_gates_access_before_any_large_snapshot(monkeypatch, tmp_path):
+    hub = pytest.importorskip("huggingface_hub")
+    from huggingface_hub.errors import GatedRepoError
+    downloads = []
+    monkeypatch.setattr(hub, "HfApi", lambda: SimpleNamespace(model_info=lambda repo, **k:
+        SimpleNamespace(siblings=[SimpleNamespace(rfilename=("ckpts/ss_dec_conv3d_16l8_fp16.safetensors" if repo == "microsoft/TRELLIS-image-large" else "ckpts/model.safetensors" if repo == "microsoft/TRELLIS.2-4B" else "model.safetensors"), size=10)])))
+    def metadata(url, **kwargs):
+        if "dinov3" in url:
+            raise GatedRepoError("gated")
+    monkeypatch.setattr(hub, "get_hf_file_metadata", metadata)
+    monkeypatch.setattr(hub, "snapshot_download", lambda *a, **k: downloads.append(a))
+    with pytest.raises(RuntimeError, match="Accept their Hugging Face access terms"):
+        assets.download(tmp_path)
+    assert downloads == []
+    assert not assets.downloaded(tmp_path)
+
+
+def test_official_download_builds_complete_local_pipeline_and_repairs_truncation(monkeypatch, tmp_path):
+    hub = pytest.importorskip("huggingface_hub")
+    inventories = {}
+    for repo, (revision, _) in assets.REPOSITORIES.items():
+        folder = tmp_path / "hub" / ("models--" + repo.replace("/", "--")) / "snapshots" / revision
+        folder.mkdir(parents=True)
+        weight_name = "ckpts/ss_dec_conv3d_16l8_fp16.safetensors" if repo == "microsoft/TRELLIS-image-large" else "ckpts/model.safetensors" if repo == "microsoft/TRELLIS.2-4B" else "model.safetensors"
+        files = {weight_name: b"weights"}
+        if repo == "microsoft/TRELLIS.2-4B":
+            config = {"args": {"models": {"decoder": "microsoft/TRELLIS-image-large/ckpts/decoder", "flow": "ckpts/flow"},
+                               "image_cond_model": {"args": {}}, "rembg_model": {"args": {}}}}
+            files["pipeline.json"] = json.dumps(config).encode()
+        for name, data in files.items():
+            (folder / name).parent.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_bytes(data)
+        inventories[repo] = (folder, files)
+    monkeypatch.setattr(hub, "HfApi", lambda: SimpleNamespace(model_info=lambda repo, **k: SimpleNamespace(
+        siblings=[SimpleNamespace(rfilename=name, size=len(data)) for name, data in inventories[repo][1].items()])))
+    monkeypatch.setattr(hub, "get_hf_file_metadata", lambda *a, **k: None)
+    def snapshot(repo, **kwargs):
+        folder, files = inventories[repo]
+        for name, data in files.items():
+            (folder / name).parent.mkdir(parents=True, exist_ok=True)
+            (folder / name).write_bytes(data)
+        assert kwargs["revision"] == assets.REPOSITORIES[repo][0]
+        return str(folder)
+    monkeypatch.setattr(hub, "snapshot_download", snapshot)
+    assets.download(tmp_path)
+    assert assets.downloaded(tmp_path)
+    config = json.loads((tmp_path / "bundle/pipeline.json").read_text())["args"]
+    assert config["models"]["decoder"] == str(inventories["microsoft/TRELLIS-image-large"][0] / "ckpts/decoder")
+    assert config["image_cond_model"]["args"]["model_name"] == str(inventories["facebook/dinov3-vitl16-pretrain-lvd1689m"][0])
+    weight = inventories["microsoft/TRELLIS.2-4B"][0] / "ckpts/model.safetensors"
+    weight.write_bytes(b"short")
+    assert not assets.downloaded(tmp_path)
+    assets.download(tmp_path)
+    assert assets.downloaded(tmp_path)
+
+
+def _catalog(monkeypatch, status):
+    """The catalog handlers with TRELLIS' runtime status stubbed; wgp knows no ``trellis2`` model definition."""
+    import threading
+    from services import model3d_external, model_downloads
+    monkeypatch.setattr(model_downloads, "wgp", SimpleNamespace(get_model_def=lambda _model: None))
+    monkeypatch.setattr(model_downloads, "_model_downloads", {})
+    monkeypatch.setattr(model_downloads, "_model_downloads_lock", threading.RLock())
+    monkeypatch.setattr(model_downloads.threading, "Thread", lambda **k: SimpleNamespace(start=lambda: None))
+    monkeypatch.setattr(model3d_external, "installation_status", lambda engine: status)
+    return model_downloads
+
+
+def test_catalog_download_uses_official_route_without_a_wangp_model_definition(monkeypatch):
+    from fastapi import HTTPException
+    catalog = _catalog(monkeypatch, {"installed": True, "compatible": True})
+    assert catalog.download_model("trellis2")["status"] == "downloading"
+    assert catalog.download_model("trellis2")["status"] == "downloading"
+    assert len(catalog._model_downloads) == 1
+    with pytest.raises(HTTPException) as error:
+        catalog.delete_model("trellis2")
+    assert error.value.status_code == 409
+
+
+def test_catalog_refuses_download_on_an_incompatible_machine(monkeypatch):
+    from fastapi import HTTPException
+    catalog = _catalog(monkeypatch, {
+        "installed": False, "compatible": False, "install_hint": "Linux NVIDIA 24GB required"})
+    with pytest.raises(HTTPException) as error:
+        catalog.download_model("trellis2")
+    assert error.value.status_code == 409 and "24GB" in error.value.detail
+    assert catalog._model_downloads == {}
+
+
+def test_other_models_keep_the_wangp_definition_check_and_the_extras_stay_trellis_only(monkeypatch):
+    from services.trellis2 import catalog as trellis_row
+    catalog = _catalog(monkeypatch, {"installed": False, "compatible": False, "install_hint": "unused"})
+    assert catalog.download_model("not_a_model").status_code == 404
+    assert catalog._model_downloads == {}
+    assert trellis_row.catalog_extras({"id": "pixal3d", "description": "x"}) == {}
+
+
+def test_catalog_row_names_the_optional_runtime_and_the_weights_step(monkeypatch):
+    from services.trellis2 import catalog as trellis_row
+    _catalog(monkeypatch, {"installed": False, "compatible": True, "weights_downloaded": False, "install_hint": "Install"})
+    row = trellis_row.catalog_extras({"id": "trellis2", "description": "single image"})
+    assert row["official"] and row["optional"] and row["runtime"]["installed"] is False
+    assert row["resource_requirements"]["vram_gb"] == 24 and "download its weights" in row["selector_help"]
+
+
+def test_not_installed_machine_imports_nothing_from_trellis_and_reports_it_missing(tmp_path):
+    """The central start-up must not load TRELLIS, huggingface_hub or CUDA code; the row says «not installed»."""
+    import os
+    import subprocess
+    code = (
+        "import sys\n"
+        "from services import model3d_external, model3d_service, model_downloads, runtime_profiles\n"
+        "bad = [m for m in sys.modules if m.split('.')[0] in {'trellis2', 'o_voxel', 'flash_attn', 'huggingface_hub'}"
+        " and m != 'services.trellis2' and not m.startswith('services.trellis2.')]\n"
+        "assert not bad, bad\n"
+        "status = model3d_external.installation_status('trellis2')\n"
+        "assert status['installed'] is False and isinstance(status['weights_downloaded'], bool), status\n"
+        "assert status['install_hint'], status\n"
+        "pixal = model3d_external.installation_status('pixal3d')\n"
+        "assert 'compatible' not in pixal and 'weights_downloaded' not in pixal, pixal\n"
+    )
+    root = Path(__file__).resolve().parents[1]
+    # A runtime installed on this machine must not change the verdict: point both engines at nothing.
+    env = {**os.environ, "PYTHONPATH": str(root / "app"), "CUDA_VISIBLE_DEVICES": "-1",
+           "HOCUSPOCUS_TRELLIS2_ROOT": str(tmp_path / "none"), "HOCUSPOCUS_TRELLIS2_PYTHON": str(tmp_path / "none/python"),
+           "HOCUSPOCUS_PIXAL3D_ROOT": str(tmp_path / "none"), "HOCUSPOCUS_PIXAL3D_PYTHON": str(tmp_path / "none/python")}
+    done = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, text=True, capture_output=True, timeout=120)
+    assert done.returncode == 0, done.stderr[-2000:]
+
+
+def test_hardware_verdict_is_remembered_for_a_few_seconds(monkeypatch):
+    from services import model3d_external as external, runtime_profiles
+    calls = []
+    def detect(**_kwargs):
+        calls.append(1)
+        return {"engines": {"trellis2": {"supported": False, "reason": "Linux NVIDIA 24GB required"}}}
+    monkeypatch.setattr(runtime_profiles, "detect_profiles", detect)
+    monkeypatch.setattr(external, "_support_memo", None)
+    assert external.installation_status("trellis2")["install_hint"] == "Linux NVIDIA 24GB required"
+    assert external.installation_status("trellis2")["compatible"] is False
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize("model_id", ["trellis2", "pixal3d"])

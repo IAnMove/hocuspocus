@@ -360,3 +360,27 @@ def test_snapshot_pack_shape_has_build_platform_and_capabilities():
     assert pack["platform"]["backend"] == "none"
     assert isinstance(pack["capabilities"]["engines"], list)
     assert {engine["id"] for engine in pack["capabilities"]["engines"]} >= {"wangp", "hunyuan3d"}
+
+
+def test_optional_trellis2_is_judged_on_the_observed_gpu_with_its_own_runtime():
+    ready = {"present": True, "installed": True, "fingerprint_match": True}
+    host = _nvidia_observe(compute_cap="8.9", receipts={**READY_ENGINES, "trellis2": ready})
+    pack = collect_report(observe=host)
+    engines = {engine["id"]: engine for engine in pack["capabilities"]["engines"]}
+    assert engines["trellis2"]["supported"] is True and engines["trellis2"]["optional"] is True
+    model = next(item for item in pack["availability"] if item["id"] == "trellis2")
+    assert model["component"] == "trellis2" and model["available"] is True
+
+    missing = collect_report(observe=_nvidia_observe(compute_cap="8.9", receipts=dict(READY_ENGINES)))
+    model = next(item for item in missing["availability"] if item["id"] == "trellis2")
+    assert model["available"] is False and model["repair_path"]["id"] == "install_optional"
+
+
+def test_trellis2_is_unsupported_on_small_unverified_or_blackwell_gpus():
+    for observe in (
+        _nvidia_observe(gpu_csv="NVIDIA GeForce RTX 3060, 570.124.06, 12288", compute_cap="8.6"),
+        _nvidia_observe(compute_cap=None),
+        _nvidia_observe(compute_cap="12.0"),
+    ):
+        engines = {engine["id"]: engine for engine in collect_report(observe=observe)["capabilities"]["engines"]}
+        assert engines["trellis2"]["supported"] is False and engines["trellis2"]["reason"]

@@ -181,7 +181,7 @@ def test_detect_profiles_reads_compute_capability_from_nvidia_smi(monkeypatch):
         field = command[1].split("=", 1)[1]
         if field == "compute_cap" and nvidia_smi.legacy:
             raise subprocess.CalledProcessError(2, command, stderr="Field \"compute_cap\" is not a valid field")
-        output = {"driver_version": "580.82.09\n", "compute_cap": "8.9\n"}[field]
+        output = {"driver_version": "580.82.09\n", "compute_cap": "8.9\n", "memory.total": "24564 MiB\n"}[field]
         return subprocess.CompletedProcess(command, 0, stdout=output, stderr="")
 
     nvidia_smi.legacy = False
@@ -319,7 +319,7 @@ def test_a_single_gpu_has_unambiguous_identity_in_every_cuda_order(monkeypatch, 
         field = command[1].split('=', 1)[1]
         if field != 'uuid,pci.bus_id':
             assert '--id=GPU-only' in command
-        output = {'uuid,pci.bus_id': 'GPU-only, 00000000:01:00.0', 'driver_version': '580.82.09', 'compute_cap': '8.9'}[field]
+        output = {'uuid,pci.bus_id': 'GPU-only, 00000000:01:00.0', 'driver_version': '580.82.09', 'compute_cap': '8.9', 'memory.total': '24564 MiB'}[field]
         return subprocess.CompletedProcess(command, 0, stdout=output, stderr='')
 
     monkeypatch.setattr(profiles.subprocess, 'run', nvidia_smi)
@@ -832,6 +832,6 @@ def test_install_summary_names_missing_features_and_why():
     assert any("(WanGP)" in line and "older than Turing" in line and "6.1" in line for line in pascal)
     nvidia = summary("linux", "x64", "nvidia", "580.82.09")
     assert nvidia[0].startswith("Installs the full studio")
-    assert not any(line.startswith("Not available") for line in nvidia)
+    assert any("TRELLIS.2" in line and "24GB" in line for line in nvidia)
     assert "(SAM 3.1)" in nvidia[-1] and "Advanced" in nvidia[-1]
     assert summary("darwin", "x64", "apple")[0].startswith("Nothing can be installed")
