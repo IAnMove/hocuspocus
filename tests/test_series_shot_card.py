@@ -572,3 +572,19 @@ def test_a_card_scene_renders_its_walker_in_a_real_cpu_export(tmp_path, monkeypa
     finally:
         server.shutdown(); server.server_close(); worker.join(timeout=2)
     assert len(frames) == len(times) and len({frame.read_bytes() for frame in frames}) == len(times), "the walker moves: three different pictures"
+
+
+def test_a_reaction_card_over_its_own_voice_warns_and_a_listeners_does_not(tmp_path):
+    """A card plays its sheet from the first second and cannot be moved, so the card says the character speaks over its own face."""
+    world = World(tmp_path)
+    world.kits["kit-kevin"]["animations"] = {"angry": animation(count=4, loop="once")}
+    world.kits["kit-gloria"]["animations"]["angry"] = animation(count=4, loop="once")
+    list(record(world))
+    own = world.apply(shot="s02", card="character-reaction", cast=[{"characterId": "kevin", "animation": "angry"}])
+    assert [text for text in own["warnings"] if text.startswith("expression_during_speech")] == [
+        "expression_during_speech: kevin speaks while its 'angry' expression plays; a card plays its sheet from the start of the shot and "
+        "cannot be moved: use the shot's own cast animation (at, duration) or apply the card to a shot where kevin is silent"]
+    listening = world.apply(shot="s02", card="character-reaction", cast=[{"characterId": "gloria", "animation": "angry"}])
+    assert not any(text.startswith("expression_during_speech") for text in listening["warnings"])
+    cycle = world.apply(shot="s02", card="walk-cycle-sheet", cast=[{"characterId": "gloria", "animation": "walk"}])
+    assert not any(text.startswith("expression_during_speech") for text in cycle["warnings"]), "a cycle is not an expression"

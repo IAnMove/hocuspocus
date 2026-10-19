@@ -44,7 +44,7 @@ The agent makes these calls for a finished video:
 
 Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
 
-- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Without `image_model` they use the run's default (Qwen Image 2.1, at its own steps). Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
+- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Without `image_model` they use the run's default (Qwen Image 2.1 Turbo, at its own 8 steps). Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
 - `{workspace, production_id, spec, through:"frames"}` stops after cast and frames (`status` `frames_ready`). Restart the isolated runtime if a large image model would slow H3, then resume with `production.run` `{workspace, production_id}` and continue at step 2.
 - `{workspace, production_id, spec, through:"animatic"}` builds a CPU preview after those frames: the start frames play as stills with the lyrics, titles and the song (`status` `animatic_ready`). `production.status` reports the preview as `animatic` (not `video`) plus `contact_sheet` and `animatic_warnings` (a title card covering the picture, the same image used twice, a still stretch over 10 seconds, or an unreadable caption). A restart does not treat `animatic_ready` as `running`, so it does not start a GPU run by itself. Resume with `production.run` `{workspace, production_id}` and the run continues at the clips, reuses the frames, and re-exports a scene once its clip is different from the still it previewed.
 
@@ -178,7 +178,7 @@ in place of the scene phrase; `dry_run.windows` shows every trailer window's `be
 |---|---|---|
 | song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL, or `song.model`) in `song.language` | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
-| cast | `generation.image` (`style.image_model`, Qwen Image 2.1 by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
+| cast | `generation.image` (`style.image_model`, Qwen Image 2.1 Turbo by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
 | frames | `generation.image` with that portrait as the reference (the sheet if the portrait failed) | one start frame per `h3` shot |
 | clips | `generate` with the H3 model in `spec.video` (default MiniMax H3 Fused Turbo, 4 steps) and the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
@@ -308,8 +308,8 @@ An unknown id fails with code `unknown_style_preset`. The full style block in th
 
 Style fields beyond the example:
 
-- `image_model` (default `qwen_image_21`, or `qwen_image_21_gguf_q4_k` on a 10–16 GB card) and `image_params`: model for
-  cast sheets and frames. Qwen takes 40 steps from `app/defaults`. `flux2_klein_9b` stays selectable (4 steps, fast; it does not
+- `image_model` (default `qwen_image_21_turbo`, or `qwen_image_21_gguf_q4_k` on a 10–16 GB card) and `image_params`: model for
+  cast sheets and frames. The Turbo takes 8 steps and no negative prompt, the base Qwen 40 steps, both from `app/defaults`. `flux2_klein_9b` stays selectable (4 steps, fast; it does not
   recognise public figures). A model chosen without `image_steps` runs at its own steps from `app/defaults`, never at the
   steps a preset set for another model. Do not run Qwen next to H3 on one GPU: `production.run` already makes every cast
   sheet, portrait and start frame before it submits the first H3 clip. `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
@@ -380,7 +380,7 @@ Shot fields:
 
 Style fields for native Video 2D finishing:
 
-- `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21`; `flux2_klein_9b` is the fast alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
+- `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21_turbo`; `qwen_image_21` is the 40-step base and `flux2_klein_9b` the 4-step alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
 - `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate. The 3D grade names are 2D finishes too, with the same intention: `natural`, `teal_orange`, `bleach`, `noir`, `sepia`, `flashback`, `dream`, `giallo`, `cold`, `warm`, `vhs`, `film` (next to warmCinema, oldDoc, nightNeon, paperComic and risoPress).
 - `lyric_template` may be `ransom` or `dymo` as well as `social-caption`. `title_style` and `lyric_style` are Video 2D text patches, for example `{"font":"mono","color":"#A9B1D6"}`.
 - `footer` adds a persistent small-print line to every scene. `footer_style` can set its color, font and background through the Video 2D text patch fields.

@@ -1,6 +1,6 @@
 # Official Qwen Image 2.1 Turbo
 
-Added on October 10, 2026 as `qwen_image_21_turbo`. This is the official eight-step checkpoint, separate from the existing Viggle six-step LoRA. The 40-step base remains the default: the local comparison shows a substantial speed improvement, but does not establish identical quality or instruction following.
+Added on October 10, 2026 as `qwen_image_21_turbo`. This is the official eight-step checkpoint, separate from the existing Viggle six-step LoRA. It became the default image model on October 19, 2026, after the owner compared it with the FLUX Klein models and found it clearly better: productions, the Character Creator animation job, game assets and new production profiles use it, with its eight steps, CFG 1 and no negative prompt (`generation.image` refuses one). The 40-step base stays selectable and any explicit model choice wins. Cards of 10-16 GiB keep the Q4 GGUF of the base model, because no quantized Turbo exists. The local comparison shows a substantial speed improvement, but does not establish identical quality or instruction following.
 
 ## Model recipe
 

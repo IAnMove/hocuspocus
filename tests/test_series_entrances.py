@@ -247,6 +247,33 @@ def test_the_compiled_walk_puts_the_feet_down_on_the_footsteps(tmp_path):
     assert [frames[round(time, 3)]["x"] for time in steps] == sorted(frames[round(time, 3)]["x"] for time in steps)
 
 
+def test_the_compiler_plays_the_expression_where_series_expression_silence_left_it(tmp_path):
+    """The real tsx compile of the spec the render hands over: a moved expression starts at its new second, an opted-out one
+    stays at its own, a dropped one is not drawn, and the compiler accepts the allowDuringSpeech key."""
+    from services.series_expression_silence import quiet_expressions
+    from services.series_shot_bridge import run_series_shot
+    from services.video2d_compile import TSX
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    kevin, monk = _kit("kit-kevin", [[(220, 40, 40)], [(40, 180, 60)]]), _kit("kit-monk", [[(50, 80, 220)]])
+    kevin["animations"]["angry"] = kevin["animations"]["blocks"]
+    kits = {"kit-kevin": kevin, "kit-monk": monk}
+
+    def starts(animation, seconds):
+        cast = [{"characterId": "kevin", "x": 30, "motion": "still", "animation": animation}, {"characterId": "monk", "x": 70}]
+        value = {"id": "s1", "sceneId": "a", "locationId": "nave", "layout2d": {"framing": "wide", "cast": cast},
+                 "dialogueBeats": [{"id": "b1", "characterId": "kevin", "text": "Hola."}, {"id": "b2", "characterId": "monk", "text": "Adiós."}]}
+        recorded = {"b1": {"filename": "l1.wav", "duration": 1.0}, "b2": {"filename": "l2.wav", "duration": seconds}}
+        spec, _warnings = quiet_expressions(build_shot_spec(series(), {"id": "ep1"}, value, workspace="cast", recorded=recorded), kits, "s1")
+        document = run_series_shot({"mode": "shot", "kits": kits, "shot": spec})
+        return [layer["sequence"]["start"] for layer in document["layers"] if (layer.get("sequence") or {}).get("kind") == "sheet"]
+
+    assert starts({"id": "angry", "at": 0}, 4.0) == [1.55], "kevin speaks from 0.35 to 1.35: the face comes right after"
+    assert starts({"id": "angry", "at": 0, "allowDuringSpeech": True}, 4.0) == [0.0], "the opt-out is the author's call"
+    assert starts({"id": "angry", "at": 3.0}, 4.0) == [3.0], "already in kevin's silence: as written"
+    assert starts({"id": "angry", "at": 0}, 0.2) == [], "no silence long enough: the figure keeps its pose"
+
+
 # A real render (CPU) --------------------------------------------------------------------
 
 def _png(draw, size) -> str:
