@@ -91,19 +91,23 @@ export function shotEditMessage(reply: ShotReply): string {
   return i18n.t('wizard:replies.shotEdited', { shot, changed, summary, approval, missing }).replace('..', '.')
 }
 
-export async function activeShotTarget(seriesId: string, episodeId: string, workspace?: string): Promise<ShotTarget> {
+/** The open Series Lab state, its unsaved edits saved first (unless ``save`` is false), so a server edit starts from what the user sees. */
+export async function activeSeriesState(save = true) {
   const { useSeriesStore } = await import('../series/store')
   const state = useSeriesStore.getState()
-  // Unsaved edits in Series Lab go first, so the server edit starts from what the user sees.
-  await state.saveNow().catch(() => null)
+  if (save) await state.saveNow().catch(() => null)
+  return state
+}
+
+export async function activeShotTarget(seriesId: string, episodeId: string, workspace?: string): Promise<ShotTarget> {
+  const state = await activeSeriesState()
   const target = { workspace: workspace || state.workspace, seriesId: seriesId || state.activeSeriesId, episodeId: episodeId || state.activeEpisodeId }
   if (!target.seriesId || !target.episodeId) throw new Error('Open the episode in Series Lab, or name its series and episode.')
   return target
 }
 
 export async function reloadSeries(): Promise<void> {
-  const { useSeriesStore } = await import('../series/store')
-  await useSeriesStore.getState().reload().catch(() => undefined)
+  await (await activeSeriesState(false)).reload().catch(() => undefined)
 }
 
 export async function executeSeriesShotEdit(action: AgentEditSeriesShotAction | AgentRerenderSeriesShotAction, workspace?: string) {

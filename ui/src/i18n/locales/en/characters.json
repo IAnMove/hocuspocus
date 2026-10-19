@@ -815,7 +815,10 @@
     "view": {
       "bust": "Bust (head and shoulders)",
       "front": "Whole figure, front",
-      "side": "Whole figure, side"
+      "side": "Whole figure, side",
+      "front34": "Whole figure, three-quarter front",
+      "back34": "Whole figure, three-quarter back",
+      "back": "Whole figure, from behind"
     },
     "custom": {
       "title": "Make your own",
@@ -831,6 +834,49 @@
       "tooLong": "Each pose takes up to {{max}} characters.",
       "full": "This character already has the most animations; delete one to make another."
     },
-    "groupCount": "{{done}} of {{total}} made"
+    "groupCount": "{{done}} of {{total}} made",
+    "sets": {
+      "title": "Full walks",
+      "intro": "A character that moves in a 3D set needs to be drawn from five directions. «Create full walks» makes the twelve-pose walk of the side, the front three-quarter, the front, the back three-quarter and the back, one after another (the ones that look left are these mirrored when rendered). It keeps the character's identity by taking the neighbouring direction as a second reference. Each sheet is saved to review; if it stops, press it again to continue.",
+      "makeDirections": "Create full walks",
+      "makeWalk12": "Twelve-pose walk only",
+      "makeIdle": "Breathing in five directions",
+      "resume": "Continue",
+      "allMade": "The character already has all of these.",
+      "missing_one": "{{count}} sheet to make.",
+      "missing_other": "{{count}} sheets to make.",
+      "progress": "{{done}} of {{total}} sheets",
+      "autoApproved": "approved by the agent",
+      "failedChecks": "checks failed: {{checks}}",
+      "job": {
+        "queued": "Queued: it starts when the GPU is free.",
+        "running": "Making the sheets, one after another…",
+        "cancelling": "Cancelling…",
+        "completed": "Done.",
+        "failed": "It stopped. Every sheet and pose already made is kept: continue makes only what is missing.",
+        "cancelled": "Cancelled. Every sheet and pose already made is kept.",
+        "interrupted": "The server restarted while it was being made. Every sheet and pose already made is kept."
+      },
+      "sheet": {
+        "waiting": "waiting",
+        "running": "making",
+        "completed": "made, to review",
+        "skipped": "already made",
+        "failed": "failed",
+        "cancelled": "cancelled"
+      }
+    },
+    "motion": {
+      "walk": "walk",
+      "idle": "breathing"
+    },
+    "dir": {
+      "side": "side",
+      "front": "front",
+      "front34": "front three-quarter",
+      "back34": "back three-quarter",
+      "back": "back"
+    },
+    "contract": "For 3D sets: {{motion}} · {{dir}} (the left-facing version is this sheet mirrored)"
   }
 }

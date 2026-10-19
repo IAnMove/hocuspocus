@@ -1,6 +1,7 @@
 """Capabilities and strict request contract for isolated image-to-3D engines.
 
-No model imports, installation, network requests or GPU probes in the API process.
+No model imports, installation, network requests or CUDA initialisation in the API process; the optional
+TRELLIS.2 row only asks ``nvidia-smi`` (a short-lived subprocess) whether the machine can run it.
 Runtime paths are administrator configuration, never accepted from a request.
 """
 from __future__ import annotations
@@ -9,12 +10,14 @@ import math
 import os
 import secrets
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 EXTERNAL_MODELS = [
     {
-        "id": "trellis2", "label": "TRELLIS.2", "engine": "trellis2", "provider": "trellis2",
+        "id": "trellis2", "label": "TRELLIS.2 · Official Microsoft 4B", "engine": "trellis2", "provider": "trellis2",
+        "official": True, "optional": True, "minimum_vram_gb": 24, "supported_platforms": ["linux"],
         "repo": "microsoft/TRELLIS.2-4B", "subfolder": "", "parameters": "4B",
         "multiview": False, "supports_text": False, "turbo": False,
         "recommended_vram_gb": 24,
@@ -42,14 +45,52 @@ def runtime_paths(engine: str) -> tuple[Path, Path]:
     prefix = f"HOCUSPOCUS_{engine.upper()}"
     root = Path(os.environ.get(f"{prefix}_ROOT") or Path(__file__).parent / "model3d_runtimes" / engine).resolve()
     python = Path(os.environ.get(f"{prefix}_PYTHON") or root / "env" / "bin" / "python").resolve()
+    if engine == "trellis2" and not os.environ.get(f"{prefix}_ROOT"):
+        root = root / "vendor/TRELLIS.2"
     return root, python
+
+
+TRELLIS2_INSTALL_HINT = (
+    "Optional TRELLIS.2: run Advanced > Install TRELLIS.2, restart HocusPocus, then download its weights in "
+    "Settings > Model Visibility > 3D. Requires Hugging Face access to DINOv3 and RMBG-2.0."
+)
+TRELLIS2_WEIGHTS_HINT = (
+    "TRELLIS.2 runtime is installed. Download its weights in Settings > Model Visibility > 3D. "
+    "Requires Hugging Face access to DINOv3 and RMBG-2.0."
+)
+_SUPPORT_SECONDS = 15.0
+_support_memo: tuple[float, bool, str | None] | None = None
+
+
+def _trellis2_support() -> tuple[bool, str | None]:
+    """Hardware verdict (nvidia-smi). It is a subprocess, so keep it a few seconds for catalog/status polling."""
+    global _support_memo
+    now = time.monotonic()
+    if _support_memo is None or now - _support_memo[0] > _SUPPORT_SECONDS:
+        from .runtime_profiles import detect_profiles
+        support = detect_profiles(inspect_engines=set())["engines"]["trellis2"]
+        _support_memo = (now, support["supported"], support["reason"])
+    return _support_memo[1], _support_memo[2]
+
+
+def _trellis2_status(configured: bool) -> dict[str, Any]:
+    """Compatibility, managed-runtime readiness and weights of the optional official engine."""
+    from .runtime_profiles import managed_ready
+    from .trellis2.assets import downloaded
+    compatible, reason = _trellis2_support()
+    installed = configured and managed_ready("trellis2")
+    weights = downloaded()
+    hint = reason if not compatible else (
+        TRELLIS2_INSTALL_HINT if not installed else None if weights else TRELLIS2_WEIGHTS_HINT)
+    return {"installed": installed, "compatible": compatible, "compatibility_reason": reason,
+            "weights_downloaded": weights, "install_hint": hint}
 
 
 def installation_status(engine: str) -> dict[str, Any]:
     root, python = runtime_paths(engine)
     entry = root / ("trellis2/pipelines/__init__.py" if engine == "trellis2" else "inference.py")
     configured = sys.platform == "linux" and entry.is_file() and python.is_file() and os.access(python, os.X_OK)
-    return {
+    status = {
         "installed": configured,
         "validation": "configured_not_gpu_validated" if configured else "not_configured",
         "isolated_runtime": True, "releases_vram_after_job": True,
@@ -58,6 +99,10 @@ def installation_status(engine: str) -> dict[str, Any]:
             "for an isolated Linux/CUDA installation. See docs/development/MODEL3D_ENGINES.md."
         ),
     }
+    if engine == "trellis2":
+        status.update(_trellis2_status(configured))
+        status["validation"] = "configured_not_gpu_validated" if status["installed"] else "not_configured"
+    return status
 
 
 def _integer(body: dict, key: str, default: int, low: int, high: int) -> int:

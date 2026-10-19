@@ -4,7 +4,8 @@
 // "Uncanny Valley" production, where they were tuned by eye on a full episode. A layered set
 // (series_layers.py) gives the background and each layer its share of the camera push by depth.
 // A pose cut by its image border is moved so the cut stays out of the frame (snapToEdges), a
-// grounded prop stands on the floor (groundedY) and a video layer can play on its own clock.
+// grounded prop stands on the floor (groundedY) and a video layer can play on its own clock. A location with a ``stage``
+// (seriesStage.ts) sizes a wide or two-shot cast by its height and depth on the plate instead of by the framing alone.
 import { characterKitLayerId, mountCharacterKitLayers, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit.ts'
 import { rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
@@ -12,6 +13,7 @@ import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
 import { holdFields } from '../src/features/stopMotion.ts'
 import { gateSheets, sheetLayer, sheetPlacement, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
+import { ADULT_M, FEET_LINE, figureShare, STAGE_FRAMINGS, stageStanding, type PlateView, type Stage } from './seriesStage.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
@@ -20,6 +22,9 @@ export type CastSpec = {
   kitId: string; characterId?: string; poseId?: string; x: number; z?: number; motion?: Motion
   /** Size multiplier for this character (a small robot, a tall giant). */
   boost?: number
+  /** With the shot's ``stage``: how tall the person is (metres) and where their feet stand, 0 at the far floor line and 1 (the
+   * default) at the framing's feet line. The planner sets both; ``boost`` then multiplies the perspective size only. */
+  depth?: number; heightM?: number
   transform?: Pose; blinks?: number[]
   /** Sits on a prop (a laptop on its desk): the prop's image size, its top surface (fraction from the top) and width vs the character. */
   perch?: { source: string; width: number; height: number; top?: number; widthRatio?: number }
@@ -70,6 +75,8 @@ export type ShotSpec = {
   name: string; workspace: string; width: number; height: number; fps: 24 | 30 | 60; duration: number
   framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number; detail?: PlateDetail }
   cast: CastSpec[]; lines: LineSpec[]; props?: PropSpec[]
+  /** The plate's perspective (``location.layout2d.stage``): wide and two-shot casts are sized by it. Absent, by the framing. */
+  stage?: Stage
   /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
   layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
@@ -93,7 +100,7 @@ export const FRAMING: Record<'wide' | 'two' | 'medium' | 'close', { scale: numbe
 export const FRAMING_PORTRAIT: typeof FRAMING = {
   wide: { scale: 0.42, eye: null }, two: { scale: 0.55, eye: null }, medium: { scale: 0.78, eye: 30 }, close: { scale: 1.1, eye: 38 },
 }
-const FEET = 94
+const FEET = FEET_LINE
 /** Medium shots and close-ups cut the body below the frame: the figure must end past this line (% of frame height), so not even the shoes show. */
 const CROP_LINE = 112
 export const BACKGROUND_ZOOM: Record<Framing, number> = { wide: 1, two: 1.12, medium: 1.28, close: 1.5, insert: 1, title: 1 }
@@ -218,6 +225,36 @@ export function castTransform(kit: CharacterKit, cast: CastSpec, framing: Framin
   return snapToEdges(base, size, cut, aspect, { line: framingPreset(framing, aspect).eye, fraction: eyeFraction(kit, poseId, size) })
 }
 
+/** The layer scale at which a pose image of ``size`` is ``height`` % of the frame tall: the inverse of ``drawnHeight``. */
+function scaleForHeight(size: { width: number; height: number }, height: number, aspect: number) {
+  const ratio = size.width / size.height
+  return ratio < aspect ? height / 100 : height / 100 * ratio / aspect
+}
+
+/** The plate view a stage sizes the cast by: only a wide or two-shot on a plate with a stage (medium shots and close-ups cut the
+ * feet, so their eye-line framing stays), else null. */
+export function stageView(shot: Pick<ShotSpec, 'stage' | 'background' | 'framing'>): PlateView | null {
+  if (!shot.stage || !shot.background || !(STAGE_FRAMINGS as readonly string[]).includes(shot.framing)) return null
+  const { zoom, y } = backgroundView(shot.background, shot.framing)
+  return { zoom, y }
+}
+
+/** A whole figure on a plate with a stage: its feet where its ``depth`` puts them and its own height from the perspective
+ * (``heightM`` metres at that depth), times ``boost`` when the shot gave one; the pose image is that plus the rig's margin. A pose cut at the bottom (a bust) is not a whole
+ * figure: null, and the framing places it. Side cuts are slid out of the frame as ever (``snapToEdges``). */
+export function stagedTransform(kit: CharacterKit, cast: CastSpec, stage: Stage, view: PlateView, aspect: number): Pose | null {
+  const poseId = cast.poseId ?? 'base'
+  const found = (poseId === 'base' ? kit.base : kit.poses[poseId]) as (CharacterKitAsset & { cut?: CutEdges }) | undefined
+  if (cutRuns(found?.cut?.bottom).length) return null
+  const size = poseAsset(kit, poseId)
+  const standing = stageStanding(stage, cast.heightM ?? ADULT_M, cast.depth ?? 1, view)
+  // The pose image is the figure plus the rig's margin: size the image, and let its bottom edge hang below the feet by that margin.
+  const share = figureShare(size)
+  const height = standing.height * (cast.boost ?? 1) / share
+  const base = { x: cast.x, y: round(standing.feetY + (1 - share) / 2 * height - height / 2), scale: round(scaleForHeight(size, height, aspect)) }
+  return cast.edgeSnap === false || !found?.cut ? base : snapToEdges(base, size, found.cut, aspect, { line: null, fraction: eyeFraction(kit, poseId, size) })
+}
+
 /** The floor a grounded prop stands on (% of the frame height): the cast's feet line where the framing shows people on
  * their feet; in an eye-line framing, the set's floor through the background zoom (below the frame in a medium shot or
  * a close-up, as the cast's feet are). */
@@ -257,14 +294,20 @@ export function perchTransforms(size: { width: number; height: number }, framing
     prop: { x, y: round(propY), scale: round(propScale) } }
 }
 
-/** The full-frame background, zoomed and panned by the framing, or framed on a ``detail`` of the plate. In a layered
- * set it is the far plane (depth 0) and takes only its parallax share of the camera zoom. */
-export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number, layered = false): SceneLayer {
+/** How the background is shown: its zoom and the frame position (%) of its centre, panned toward ``focusX`` or framed on a ``detail``. */
+export function backgroundView(background: NonNullable<ShotSpec['background']>, framing: Framing): PlateView & { x: number } {
   const detail = background.detail
   const zoom = detail?.zoom ?? BACKGROUND_ZOOM[framing]
   const span = 50 * (zoom - 1)
   const pan = (point: number) => Math.max(50 - span, Math.min(50 + span, 50 - (point / 100 - 0.5) * 100 * zoom))
-  const transform = { x: round(pan(detail?.x ?? background.focusX ?? 50)), y: detail ? round(pan(detail.y)) : 50, scale: zoom, opacity: 1, rotation: 0 }
+  return { zoom, x: pan(detail?.x ?? background.focusX ?? 50), y: detail ? round(pan(detail.y)) : 50 }
+}
+
+/** The full-frame background, zoomed and panned by the framing, or framed on a ``detail`` of the plate. In a layered
+ * set it is the far plane (depth 0) and takes only its parallax share of the camera zoom. */
+export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number, layered = false): SceneLayer {
+  const view = backgroundView(background, framing)
+  const transform = { x: round(view.x), y: view.y, scale: view.zoom, opacity: 1, rotation: 0 }
   return {
     id: 'background', name: 'Background', type: background.kind, source: background.source, visible: true, locked: false, z: 0,
     fill: true, parallax: FAR_PARALLAX, transform,
@@ -502,6 +545,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
   const mouths: string[][] = []
   const poseLayerIds: string[] = []
   const gates: SheetGate[] = []
+  const plate = stageView(shot)
   shot.cast.forEach((cast, index) => {
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
@@ -513,7 +557,8 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
       const perchId = instanceKey === undefined ? `perch-${kit.id}` : `perch-${kit.id}-${index}`
       layers.push(propLayer({ id: perchId, name: `${kit.name} seat`, source: cast.perch.source, ...seat.prop, z: z - 1 }, shot.duration))
     }
-    const base = cast.transform ?? seat?.character ?? castTransform(kit, cast, shot.framing, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
+    const standing = !cast.transform && !cast.perch && plate ? stagedTransform(kit, cast, shot.stage!, plate, aspect) : null
+    const base = cast.transform ?? seat?.character ?? standing ?? castTransform(kit, cast, shot.framing, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
     const talking = shot.lines.filter(line => lineOwnsAppearance(shot.cast, line, index))
       .map(line => [line.start, line.end] as [number, number])
     const windows = sheetWindows(kit, cast, shot.duration)
@@ -528,7 +573,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
       const poseHeight = drawnHeight(size, base.scale, aspect)
       const pose = mounted.layers[0]
       layers.push(...windows.map(window => {
-        const placed = sheetPlacement(window.animation, window.part === 'walk-in' ? 'walk' : window.part, size, base.y, poseHeight)
+        const placed = sheetPlacement(window.animation, window.id, size, base.y, poseHeight)
         return sheetLayer(kit, window, { layerId: characterKitLayerId(kit.id, `sheet-${window.part}`, instanceKey), z: pose.z,
           workspace: shot.workspace, body: pose.animation.keyframes!, restY: base.y, ground: placed.ground, poseHeight: placed.figure, aspect, duration: shot.duration })
       }))

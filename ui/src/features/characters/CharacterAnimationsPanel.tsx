@@ -7,11 +7,14 @@ import {
   animationGroups, animationReference, animationState, animationsOf, canAddAnimation, freeAnimationId, kitAnimations, kitCustomDefs, localized, templateControls,
   type AnimationDef, type AnimationState, type KitAnimation,
 } from '../../lib/characterAnimations'
+import { contractOf } from '../../lib/characterAnimationDirections'
 import { characterImageModels, preferredCharacterImageModel } from '../../lib/characterImageModels'
 import type { CharacterKit, CharacterKitReviewState } from '../../lib/characterKit'
 import { AnimationAgentBadge } from './AnimationAgentBadge'
+import { AnimationSetBar } from './AnimationSetBar'
 import { AnimationSheetPlayer } from './AnimationSheetPlayer'
 import { CustomAnimationForm } from './CustomAnimationForm'
+import { useAnimationSets } from './useAnimationSets'
 import { pendingCustomDefs, useCharacterAnimations } from './useCharacterAnimations'
 import { useCharacterKitLibrary } from './useCharacterKitLibrary'
 
@@ -85,11 +88,13 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
   const state = animationState(kit, def.id)
   const made = kitAnimations(kit)[def.id]
   const run = actions.runs[def.id]
+  const contract = contractOf(def.id, { ...def, ...made })
   return <article data-testid={`animation-${def.id}`} className="space-y-2 rounded-lg border border-border bg-bg-secondary p-3">
     <header className="flex items-start justify-between gap-2">
       <div className="min-w-0 flex-1">
         <h5 className="text-sm font-medium">{localized(def.title, i18n.language)}</h5>
         <p className="text-[11px] text-text-muted">{def.custom ? t('animations.custom.summary', { count: def.poses.length, view: t(`animations.view.${def.view}`) }) : localized(def.summary, i18n.language)}</p>
+        {contract.motion && contract.dir && <p data-testid="animation-contract" className="text-[10px] text-text-muted">{t('animations.contract', { motion: t(`animations.motion.${contract.motion}`), dir: t(`animations.dir.${contract.dir}`) })}</p>}
       </div>
       <div className="flex shrink-0 flex-wrap justify-end gap-1">
         {made && <AnimationAgentBadge animation={made} />}
@@ -118,8 +123,10 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const imageModels = characterImageModels(models, true)
   const model = imageModels.some(item => item.model_type === modelId) ? modelId : preferredCharacterImageModel(imageModels, false)
   const work = useCharacterAnimations(workspace, kit?.id, reload)
+  const sets = useAnimationSets(workspace, kit?.id)
+  const busy = work.busy || sets.active
   const actions: Actions = {
-    busy: work.busy, runs: work.runs, cancel: id => { void work.cancel(id) },
+    busy, runs: work.runs, cancel: id => { void work.cancel(id) },
     make: (def, remake) => { if (kit && model) void work.start(kit, def, model, remake) },
     review: (id, state) => { if (kit) void work.review(kit.id, id, state) },
     remove: id => { if (kit) void work.remove(kit.id, id) },
@@ -130,17 +137,18 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
     {!loading && !usable.length && !loadError && <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">{t('animations.noKits')}</p>}
     {kit && <div className="flex flex-wrap gap-3">
       <label className="text-xs text-text-secondary">{t('animations.kit')}
-        <select value={kit.id} disabled={work.busy} onChange={event => setKitId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
+        <select value={kit.id} disabled={busy} onChange={event => setKitId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
           {usable.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select></label>
       <label className="text-xs text-text-secondary">{t('lips.imageModel')}
-        <select value={model} disabled={work.busy} onChange={event => setModelId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
+        <select value={model} disabled={busy} onChange={event => setModelId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
           {!imageModels.length && <option value="">{t('lips.noImageModel')}</option>}
           {imageModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
         </select></label>
     </div>}
-    {work.error && <p role="alert" className="text-sm text-red-300">{work.error}</p>}
+    {(work.error || sets.error) && <p role="alert" className="text-sm text-red-300">{work.error || sets.error}</p>}
     {work.saved && <p role="status" className="text-sm text-emerald-200">{t('animations.saved')}</p>}
+    {kit && <AnimationSetBar kit={kit} model={model} busy={busy} latest={sets.latest} onStart={set => { if (model) void sets.start(set, model) }} onCancel={id => { void sets.cancel(id) }} />}
     {kit && animationGroups.map(group => {
       // An animation the author described is not on the kit until its first run is saved: it shows with that run, which keeps the words.
       const showing = group.id === 'custom' ? [...kitCustomDefs(kit), ...pendingCustomDefs(work.runs, kit)] : animationsOf(group.id)
@@ -150,7 +158,7 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
           {localized(group.title, i18n.language)} <span className="font-normal normal-case text-text-muted">· {t('animations.groupCount', { done, total: showing.length })}</span></summary>
         <div className="mt-2 grid gap-3 md:grid-cols-2">{showing.map(def => <AnimationCard key={def.id} def={def} kit={kit} actions={actions} />)}</div>
         {group.id === 'custom' && (canAddAnimation(kit)
-          ? <CustomAnimationForm disabled={work.busy || !model} freeId={name => freeAnimationId(kit, name, Object.keys(work.runs))} onCreate={def => actions.make(def)} />
+          ? <CustomAnimationForm disabled={busy || !model} freeId={name => freeAnimationId(kit, name, Object.keys(work.runs))} onCreate={def => actions.make(def)} />
           : <p className="text-[11px] text-text-muted">{t('animations.custom.full')}</p>)}
       </details>
     })}

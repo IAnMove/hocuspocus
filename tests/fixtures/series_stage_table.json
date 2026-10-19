@@ -1,0 +1,15 @@
+{
+  "note": "Hand-checked rows of the stage formula: height = h / ref.heightM * ref.heightPct * (feet - horizon) / (ref.baseY - horizon). Python (services/series_stage.py) and the compiler (ui/scripts/seriesStage.ts) must both give them. feetY and height are % of the frame height.",
+  "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62, "heightM": 2.0}},
+  "farStage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62, "heightM": 2.0}, "floorTop": 0.6},
+  "rows": [
+    {"stage": "stage", "zoom": 1, "viewY": 50, "heightM": 1.8, "depth": 1, "feetY": 94, "height": 80.352},
+    {"stage": "stage", "zoom": 1, "viewY": 50, "heightM": 1.4, "depth": 1, "feetY": 94, "height": 62.496},
+    {"stage": "stage", "zoom": 1, "viewY": 50, "heightM": 1.8, "depth": 0, "feetY": 72, "height": 55.8},
+    {"stage": "stage", "zoom": 1, "viewY": 50, "heightM": 1.8, "depth": 0.5, "feetY": 83, "height": 68.076},
+    {"stage": "stage", "zoom": 1, "viewY": 50, "heightM": 1.4, "depth": 0, "feetY": 72, "height": 43.4},
+    {"stage": "stage", "zoom": 1.12, "viewY": 50, "heightM": 1.8, "depth": 1, "feetY": 94, "height": 84.102},
+    {"stage": "stage", "zoom": 1.12, "viewY": 50, "heightM": 1.8, "depth": 0, "feetY": 74.64, "height": 62.496},
+    {"stage": "farStage", "zoom": 1, "viewY": 50, "heightM": 1.8, "depth": 0, "feetY": 60, "height": 42.408}
+  ]
+}

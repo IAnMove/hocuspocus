@@ -49,7 +49,8 @@ import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
-import { executeMakeCharacterAnimation, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
+import { executeCheckSeriesLocationStage, executeSetSeriesLocationStage } from './seriesStageCapabilities'
+import { executeMakeCharacterAnimation, executeMakeCharacterAnimationSet, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
@@ -205,9 +206,12 @@ export interface WizardApplicationAdapters {
     rerender(action: import('./seriesShotEditCapabilities').AgentRerenderSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
     voice(action: import('./seriesShotEditCapabilities').AgentRecordSeriesLineAction, workspace?: string): Promise<AdapterOutcome>
     applyCard(action: import('./seriesShotCardCapabilities').AgentApplySeriesShotCardAction, workspace?: string): Promise<AdapterOutcome>
+    setStage(action: import('./seriesStageCapabilities').AgentSetSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
+    checkStage(action: import('./seriesStageCapabilities').AgentCheckSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
   }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
+    makeSet(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationSetAction, workspace?: string): Promise<AdapterOutcome>
     review(action: import('./characterAnimationCapabilities').AgentReviewCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
   }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
@@ -798,9 +802,12 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async rerender(action, workspace) { return executeSeriesShotEdit(action, workspace) },
     async voice(action, workspace) { return executeSeriesLineVoice(action, workspace) },
     async applyCard(action, workspace) { return executeApplySeriesShotCard(action, workspace) },
+    async setStage(action, workspace) { return executeSetSeriesLocationStage(action, workspace) },
+    async checkStage(action, workspace) { return executeCheckSeriesLocationStage(action, workspace) },
   }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },
+    async makeSet(action, workspace) { return executeMakeCharacterAnimationSet(action, workspace) },
     async review(action, workspace) { return executeReviewCharacterAnimation(action, workspace) },
   }
   adapters.mediaTools = {

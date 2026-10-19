@@ -296,13 +296,23 @@
     "programmaticPrepared": "I am preparing Video3D from your request word for word and without generative video. I will not create new resources unless you explicitly allow it. Review the assets and the recipe in the form before building or exporting; there is no finished video yet.",
     "characterAnimationStarted": "Starting the “{{animation}}” animation of {{name}} ({{poses}} poses, job {{jobId}}). It is made on the server, one pose after another with Qwen: it takes a few minutes. You will see it in Characters › Animaciones, where you can review and approve it.",
     "characterAnimationQueued": "The “{{animation}}” animation of {{name}} is queued (job {{jobId}}): it is made when the GPU is free. You will see it in Characters › Animaciones, where you can review and approve it.",
+    "characterAnimationSetStarted": "Starting “{{set}}” for {{name}} ({{sheets}} sheets, job {{jobId}}). It is made on the server, one sheet after another with Qwen, and takes many minutes. You will see each sheet in Characters › Animaciones, where you review and approve it. If it stops, ask again and it continues.",
+    "characterAnimationSetQueued": "“{{set}}” for {{name}} is queued (job {{jobId}}): it starts when the GPU is free. You will see each sheet in Characters › Animaciones, where you review and approve it.",
+    "characterAnimationSetNothing": "{{name}} already has every sheet of “{{set}}”. Nothing to make: review them in Characters › Animaciones.",
     "characterAnimationApproved": "I approved the “{{animation}}” animation of {{name}} as the agent (one-shot mode is on). It shows as “approved by the agent” in Characters › Animaciones, where you can audit it and revert it.",
     "characterAnimationRejected": "I rejected the “{{animation}}” animation of {{name}} as the agent (one-shot mode is on). Its poses are kept: redo one pose or all of it in Characters › Animaciones.",
     "shotCardTake": "{{shot}}: the card {{card}} is a new take of the shot{{approved}}. Its scene {{scene}} opens in Video 2D.",
     "shotCardReused": "{{shot}}: the card {{card}} was already the shot's take{{approved}}. Its scene is {{scene}}.",
     "shotCardApproved": " and I approved it (one-shot mode)",
     "shotCardWaits": ", waiting for your approval in Series Lab",
-    "shotCardExporting": "{{shot}}: the scene of {{card}} ({{scene}}) is still being exported; ask me again in a moment and I will attach the take."
+    "shotCardExporting": "{{shot}}: the scene of {{card}} ({{scene}}) is still being exported; ask me again in a moment and I will attach the take.",
+    "stageSet": "The stage of {{location}} is saved: 2D wide and two-shots there are sized by it, and {{count}} shots render again on the next production. The numbers put the camera {{eye}} m high.",
+    "stageCleared": "The stage of {{location}} is removed: its shots are sized by their framing again.",
+    "stageGrid": "I drew a grid over the plate of {{location}}: {{file}} (open {{url}}).",
+    "stageGuess": "A horizon guess, only a guess: {{horizon}} (confidence {{confidence}}).",
+    "stageNoGuess": "I found no horizon guess for this picture.",
+    "stageEye": "The numbers put the camera {{eye}} m high.",
+    "stageLook": "I cannot see the image: look at it and read the horizon, the reference foot and its height off the grid (fractions of the plate height from the top), and I will save them."
   },
   "progress": {
     "addingAlternateSong": "Adding the alternative song to the music video…",
@@ -344,6 +354,7 @@
     "linkingCharacterKitIdentity": "Linking the Character Kit identity…",
     "linkingVisualReferences": "Linking and approving visual references…",
     "makingCharacterAnimation": "Making the character animation on the server…",
+    "makingCharacterAnimationSet": "Making the character's full walks on the server…",
     "reviewingCharacterAnimation": "Reviewing the character animation…",
     "mountingVideoclipAlternateSong": "Assembling the music video with the alternative song…",
     "openingCharacterKit": "Opening Character Kit…",
@@ -380,6 +391,8 @@
     "generatingLipsMouths": "Generating Lips Creator mouths…",
     "searchingWork": "Searching the work…",
     "preparingFile": "Preparing the file…",
-    "applyingShotCard": "Putting the card on the shot…"
+    "applyingShotCard": "Putting the card on the shot…",
+    "settingLocationStage": "Saving the plate's perspective…",
+    "checkingLocationStage": "Drawing the grid over the plate…"
   }
 }

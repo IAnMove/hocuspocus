@@ -29,6 +29,7 @@ import copy
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import threading
 import time
@@ -234,6 +235,16 @@ def _replace_with_sidecar(source: str, target: str) -> None:
     os.replace(source, target)
     if os.path.isfile(_sidecar(source)):
         os.replace(_sidecar(source), _sidecar(target))
+    else:
+        with contextlib.suppress(OSError):
+            os.remove(_sidecar(target))
+
+
+def _copy_with_sidecar(source: str, target: str) -> None:
+    """A byte copy of a recording and its sidecar, so a retry can still put the previous take back."""
+    shutil.copyfile(source, target)
+    if os.path.isfile(_sidecar(source)):
+        shutil.copyfile(_sidecar(source), _sidecar(target))
     else:
         with contextlib.suppress(OSError):
             os.remove(_sidecar(target))
@@ -707,8 +718,11 @@ class SeriesNativeRender:
         root = self.deps.workspace_dir(workspace)
         stem = stem or self._stem(job, beat_id, key)
         final, best_path = os.path.join(root, f"{stem}.wav"), os.path.join(root, f"{stem}.best.wav")
+        previous = os.path.join(root, f"{stem}.prev.wav")
         best: dict[str, Any] | None = None
+        had_usable = False
         try:
+            had_usable = self._set_aside(final, previous, text)
             for attempt in range(MAX_TAKES):
                 raw = self._speak(workspace, job, stem, text, voice, attempt)
                 clean = self.deps.cleanliness(os.path.join(root, raw)) if self.deps.check_speech else None
@@ -734,8 +748,16 @@ class SeriesNativeRender:
                     break
         finally:
             # The best take so far becomes the recording even when a later attempt fails, so a resume reuses it.
-            if os.path.isfile(best_path):
-                _replace_with_sidecar(best_path, final)
+            # If no new seed spoke, the recording that was on disk goes back instead of the line going missing.
+            try:
+                if os.path.isfile(best_path):
+                    _replace_with_sidecar(best_path, final)
+                elif had_usable and os.path.isfile(previous):
+                    _replace_with_sidecar(previous, final)
+            finally:
+                _discard(previous)
+        if best is None and had_usable and os.path.isfile(final):
+            best = self._kept_take(workspace, job, key, stem, text, voice)
         if best is None:
             raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
                                     "try another reference voice or reword the line", 502)
@@ -743,6 +765,31 @@ class SeriesNativeRender:
         self.deps.level(final)
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
         return {**best, **cues, "audioDigest": file_digest(final)}
+
+    def _set_aside(self, final: str, previous: str, text: str) -> bool:
+        """Copy a usable recording aside before a retry trims onto its file (an empty new seed discards that file)."""
+        if not os.path.isfile(final):
+            return False
+        try:
+            kept = self.deps.probe(final)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return False
+        if kept < shortest_line(text):
+            return False
+        _copy_with_sidecar(final, previous)
+        return True
+
+    def _kept_take(self, workspace: str, job: dict, key: str, stem: str, text: str, voice: dict) -> dict[str, Any]:
+        """The recording a retry put back, described like a new take: no new seed spoke, so it stays with its gate warnings."""
+        final = os.path.join(self.deps.workspace_dir(workspace), f"{stem}.wav")
+        clean = self.deps.cleanliness(final) if self.deps.check_speech else None
+        wer, _limit, notes = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
+        try:
+            duration = self.deps.probe(final)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            duration = 0.0
+        return {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer, "attempt": 0,
+                **notes, **_gate_fields(take_reason(voice, notes), clean)}
 
     def _trim(self, raw: str, final: str) -> float:
         """The trimmed take's length; 0 when nothing was left (ffprobe has no duration for an empty file)."""

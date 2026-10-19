@@ -151,6 +151,18 @@ def test_without_a_cast_the_shots_own_people_fill_the_slots_and_a_walk_card_walk
     assert world.compiled[0]["input"]["assets"]["subject_1"] == SHEET and reply["bindings"][0]["animation"] == "walk"
 
 
+def test_a_walk_card_with_no_animation_named_plays_the_twelve_pose_walk_when_it_is_approved(tmp_path):
+    world = World(tmp_path)
+    twelve = {**animation(count=12, fps=12), "sheet": {**animation(count=12)["sheet"], "source": "/api/v1/file/walk-12-sheet.png?workspace=cast", "columns": 6, "rows": 2}}
+    world.kits["kit-gloria"]["animations"]["walk-12"] = twelve
+    reply = world.apply()
+    assert reply["bindings"][0]["animation"] == "walk-12" and world.compiled[0]["input"]["assets"]["subject_1"].endswith("walk-12-sheet.png?workspace=cast")
+    named = world.apply(cast=[{"slot": "subject_1", "characterId": "gloria", "animation": "walk"}])
+    assert named["bindings"][0]["animation"] == "walk", "an animation the caller names is the one played"
+    world.kits["kit-gloria"]["animations"]["walk-12"]["reviewState"] = "pending"
+    assert world.apply()["bindings"][0]["animation"] == "walk", "a pending walk-12 is never played: the approved walk is"
+
+
 def test_a_card_that_draws_a_pose_gets_the_shots_pose_of_that_character_or_the_one_asked(tmp_path):
     world = World(tmp_path)
     list(record(world))
@@ -304,6 +316,26 @@ def test_applying_the_same_card_again_does_nothing_twice_and_other_inputs_replac
     assert attempts == {"attempt-1": "rejected", "attempt-2": None}
     assert json.loads((tmp_path / first["scene"]).read_text(encoding="utf-8"))["layers"], "one scene file for the shot and the card"
     assert [path.name for path in tmp_path.glob("*.scene.json")] == [first["scene"]]
+
+
+def test_a_same_input_reapply_does_not_overwrite_video2d_edits(tmp_path):
+    """The take's sceneFilename is the file a person opens in Video 2D. An agent retry of the same apply
+    (or a Wizard that calls again) used to rewrite that file with a fresh compile while reporting reused,
+    so the edits and the approved MP4 no longer matched."""
+    world = World(tmp_path)
+    first = world.apply(cast=WALK)
+    path = tmp_path / first["scene"]
+    edited = json.loads(path.read_text(encoding="utf-8"))
+    edited["layers"].append({"id": "person-mouth", "type": "image", "source": "/api/v1/file/mouth.png?workspace=cast"})
+    path.write_text(json.dumps(edited), encoding="utf-8")
+    again = world.apply(cast=WALK)
+    assert again["take"]["reused"] is True and again["take"]["attemptId"] == first["take"]["attemptId"]
+    kept = json.loads(path.read_text(encoding="utf-8"))
+    assert kept["layers"][-1]["id"] == "person-mouth", "Video 2D work survives an identical apply"
+    assert again["scene"] == first["scene"] and world.tool_names().count("scenes.video2d.export") == 1
+    path.unlink()
+    recovered = world.apply(cast=WALK)
+    assert recovered["take"]["reused"] is True and (tmp_path / first["scene"]).is_file(), "a missing scene is written again"
 
 
 def test_an_approved_card_take_is_not_superseded(tmp_path):

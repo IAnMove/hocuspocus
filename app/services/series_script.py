@@ -14,7 +14,8 @@ clear message instead of halfway through a render::
      "scenes": [{"id": "cold_open", "location": "street", "variant": "day", "purpose": "..."}],
      "shots": [{"scene": "cold_open", "framing": "wide", "camera": "push",
                 "cast": [["kevin", "base", 58], {"characterId": "mark", "poseId": "wave", "x": 30, "enterFrom": "left"},
-                         ["boss", "bust", 80, {"edgeSnap": false, "lookRoom": false}]],
+                         ["boss", "bust", 80, {"edgeSnap": false, "lookRoom": false}],
+                         {"characterId": "ana", "x": 70, "depth": 0.4, "heightM": 1.6}],  # depth/heightM: see series_stage
                 "lines": [{"who": "kevin", "es": "...", "en": "...", "pauseBefore": 0.6},
                           {"who": "narrator", "es": "...", "voiceRoom": "radio"}],
                 "card": {"kind": "title", "es": ["TITLE", "Episode 3"], "en": [...]},
@@ -49,7 +50,7 @@ from services import series_hearing
 from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
 from services.series_continuity import same_picture_warnings
-from services import series_fx_warnings
+from services import series_fx_warnings, series_stage_checks
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
 from services.series_render import SERIES_RESOLUTIONS, series_resolution_preset
@@ -219,6 +220,7 @@ class EpisodeScript:
         if shot.get("kind") not in (None, "2d", *METHODS):
             check.problems.append(f"{where}: kind must be 2d, {', '.join(METHODS)}")
         self._check_cast(shot, where)
+        series_stage_checks.check_script_shot(self, shot, where, self.shot_id(index))
         self._check_animations(index, shot, where)
         series_directional.check_shot(check, shot, where, self.shot_id(index), self.warnings, self.series, check.root)
         self._check_lines(shot, where)

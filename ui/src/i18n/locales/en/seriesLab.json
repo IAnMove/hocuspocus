@@ -868,6 +868,42 @@
     "done": "3D background ready: 2D shots in this location use it.",
     "failed": "The 3D background failed: {{error}}"
   },
+  "stage": {
+    "title": "Plate perspective (stage)",
+    "hint": "Measure the plate once so people are sized by where they stand and how tall they are, not by the framing alone. Numbers are fractions of the plate's height, from the top.",
+    "active": "Wide and two-shots here size each person by this stage. Edit the numbers and save to change it.",
+    "depthHint": "In a shot's cast give each person heightM (metres) and depth: 1 near the camera (default) to 0 far, at the back wall. Medium shots and close-ups keep their framing.",
+    "horizon": "Horizon (eye line)",
+    "refBase": "Reference foot (y)",
+    "refHeight": "Reference height (fraction)",
+    "refMeters": "Reference height (m)",
+    "floorTop": "Far floor (y, optional)",
+    "previewAlt": "Location plate with the stage lines",
+    "noPlate": "This location has no still picture to calibrate yet: add a reference image first.",
+    "look": "Look at the grid",
+    "save": "Save stage",
+    "clear": "Remove stage",
+    "gridAlt": "The plate with a grid every 10 %",
+    "guess": "Horizon guess {{horizon}} (confidence {{confidence}}).",
+    "guessUse": "Use as horizon",
+    "guessNone": "No horizon guess for this picture: read it off the grid.",
+    "guessNote": "Only a guess: a room has no visible horizon (it is the camera's eye height, about 1.6 m up any wall). Read the numbers off the grid and check the lines before saving.",
+    "confidence": {
+      "low": "low",
+      "medium": "medium",
+      "high": "high"
+    },
+    "saved": "Stage saved. {{count}} 2D shots in this location will render again.",
+    "cleared": "Stage removed: shots are sized by their framing again.",
+    "failed": "The stage could not be saved or drawn: {{error}}",
+    "errors": {
+      "number": "{{field}} is missing or out of range.",
+      "belowHorizon": "The reference foot must be below the horizon.",
+      "floorTop": "The far floor must be below the horizon (0 to 1)."
+    },
+    "eye": "These numbers put the camera {{height}} m high (about 1.6 m is eye level).",
+    "eyeOdd": "These numbers put the camera {{height}} m high; eye level is about 1.6 m. Re-read the horizon and the reference on the grid unless the plate really is a low or high angle."
+  },
   "templates": {
     "title": "Start from a template",
     "language": "Language",

@@ -192,7 +192,8 @@ def _router(tmp_path, store, plan_changes=None):
     router = create_series_shot_edit_router(change_series=store.change, read_library=store.read, read_kits=lambda _ws: KITS,
                                             workspace_dir=lambda _ws: str(tmp_path), call=store.call, bind_loop=lambda _loop: None,
                                             plan_changes=plan_changes)
-    return {(route.path, tuple(route.methods)[0]): route.endpoint for route in router.routes}
+    # The router also carries included routers (the plate stage, the card): only its own routes are looked up here.
+    return {(route.path, tuple(route.methods)[0]): route.endpoint for route in router.routes if hasattr(route, "path")}
 
 
 def test_the_route_edits_the_fifth_shot_and_renders_just_that_shot(tmp_path):

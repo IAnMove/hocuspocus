@@ -13,6 +13,20 @@ const input = { model, provider: 'local', operation: 'generate' as const,
   runtimeInstalled: true, hasSource: false, hasFront: false,
   hasPrompt: true, textureMode: 'native-pbr' }
 
+test('TRELLIS cannot run before explicit weights download or on incompatible hardware', () => {
+  for (const runtime of [
+    { installed: true, compatible: true, weights_downloaded: false, install_hint: 'Download weights' },
+    { installed: true, compatible: false, weights_downloaded: true, install_hint: 'Linux NVIDIA 24GB required' },
+    { installed: false, compatible: true, weights_downloaded: true, install_hint: 'Install optional runtime' },
+  ]) {
+    const state = model3dInputState({ ...input, hasFront: true, model: { ...model, id: 'trellis2', engine: 'trellis2', runtime } })
+    assert.equal(state.canRun, false)
+  }
+  const state = model3dInputState({ ...input, hasFront: true, model: { ...model, id: 'trellis2', engine: 'trellis2',
+    runtime: { installed: true, compatible: true, weights_downloaded: true, install_hint: null } } })
+  assert.equal(state.canRun, true)
+})
+
 test('a Hunyuan installation cannot enable Pixal3D and text cannot replace its image', () => {
   const state = model3dInputState(input)
   assert.equal(state.installed, false)

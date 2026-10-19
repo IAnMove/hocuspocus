@@ -36,7 +36,10 @@ if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
 if (config.background?.room) stageRoomSet(document, { ...config.background.room, camera: config.roomCamera ?? config.background.room.camera })
-else if (config.background?.roomBox) stageRoomBox(document, config.background.roomBox)
+else if (config.background?.roomBox) {
+  // resolve_media keeps the GLB on background.file; the spec itself cannot carry file (unknown room field).
+  stageRoomBox(document, { ...config.background.roomBox, file: config.background.file })
+}
 else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
 if (config.camera_template) takeCamera(document, config.camera_template)

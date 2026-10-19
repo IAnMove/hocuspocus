@@ -116,9 +116,27 @@ def test_default_does_not_mutate_input_or_explicit_choices():
     expanded = validate_spec(spec)
     assert "image_model" not in spec["style"]
     assert expanded["style"]["image_model"] == "qwen_image_21_turbo"
-    assert expanded["style"]["image_steps"] == 28
+    # Turbo admits only 8 steps; 28 was legal on the old 40-step default and would 422 here.
+    assert expanded["style"]["image_steps"] == 8
     explicit = {"image_model": "flux2_klein_9b", "image_steps": 4}
     assert validate_spec(_spec(explicit))["style"] == explicit
+
+
+def test_orphan_image_steps_do_not_ride_along_with_locked_turbo():
+    """A spec that only set image_steps (valid on qwen_image_21) must not become Turbo+28.
+
+    generation.image v2 rejects num_inference_steps outside inference_steps_min/max (Turbo is 8..8).
+    """
+    from services.production_image_defaults import image_choice, image_step_range, legal_image_steps
+    assert image_step_range("qwen_image_21_turbo") == (8, 8)
+    assert legal_image_steps("qwen_image_21_turbo", 28) == 8
+    assert legal_image_steps("qwen_image_21", 28) == 28
+    style = validate_spec(_spec({"image_steps": 40}))["style"]
+    assert style == {"image_model": "qwen_image_21_turbo", "image_steps": 8}
+    assert image_choice({}, style) == ("qwen_image_21_turbo", 8)
+    assert image_choice({"image_steps": 28}, {"image_model": "qwen_image_21_turbo", "image_steps": 8}) == (
+        "qwen_image_21_turbo", 8)
+    assert validate_spec(_spec({"image_model": "qwen_image_21", "image_steps": 28}))["style"]["image_steps"] == 28
 
 
 @pytest.mark.parametrize("memory,model", [(24564, "qwen_image_21_turbo"), (16384, "qwen_image_21_turbo"),
@@ -173,7 +191,9 @@ def test_low_memory_default_reaches_the_validated_production_spec(monkeypatch):
 def test_explicit_qwen_does_not_inherit_flux_four_step_preset(model, steps):
     style = {"preset": "neo-noir-realista", "image_model": model}
     assert validate_spec(_spec(style))["style"]["image_steps"] == steps
-    assert validate_spec(_spec({**style, "image_steps": 28}))["style"]["image_steps"] == 28
+    # Turbo is locked at 8; 28 stays only on models that admit it.
+    assert validate_spec(_spec({**style, "image_steps": 28}))["style"]["image_steps"] == (
+        8 if model == "qwen_image_21_turbo" else 28)
 
 
 def test_an_explicit_base_qwen_wins_over_the_turbo_default_with_its_own_steps():

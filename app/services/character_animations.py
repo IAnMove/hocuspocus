@@ -29,6 +29,9 @@ CATALOG = Path(__file__).resolve().parents[1] / "shared" / "character_animations
 LOOPS = ("loop", "pingpong", "once")
 GROUPS = ("cycle", "gesture", "expression", "custom")
 FACINGS = ("left", "right", "front")
+# What a sheet does and which way the character faces in it: the data contract with the 3D engine (services/character_animation_directions.py).
+MOTIONS = ("walk", "idle")
+DIRS = ("side", "front", "front34", "back34", "back")
 REVIEW_STATES = ("pending", "approved", "rejected")
 # Who gave the review: a person in the app, or an agent in «Modo un solo disparo» (services/agent_autonomy.py). Data made before this
 # has neither, and stays valid.
@@ -207,6 +210,17 @@ def _frames(raw: Any) -> list[dict[str, str]]:
     return frames
 
 
+def _contract(raw: dict[str, Any], label: str) -> dict[str, str]:
+    """The ``motion`` and ``dir`` an entry stores (the data contract with the 3D engine), each one of its list."""
+    found = {}
+    for key, allowed in (("motion", MOTIONS), ("dir", DIRS)):
+        if raw.get(key) is not None:
+            if raw[key] not in allowed:
+                raise CharacterAnimationError(f"{label} {key} is one of {', '.join(allowed)}")
+            found[key] = raw[key]
+    return found
+
+
 def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
     """One animation of a kit: its sheet, the keyed pose pictures it was joined from and how it plays."""
     if not isinstance(raw, dict):
@@ -236,7 +250,7 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["group"] not in GROUPS:
             raise CharacterAnimationError(f"{label} group is one of {', '.join(GROUPS)}")
         result["group"] = raw["group"]
-    return result
+    return {**result, **_contract(raw, label)}
 
 
 def normalize_kit_animations(raw: Any) -> dict[str, dict[str, Any]]:
@@ -354,5 +368,5 @@ def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, w
             "poses": [{"width": pose.width, "height": pose.height} for pose in poses]}
 
 
-__all__ = ["CUSTOM_VIEWS", "CharacterAnimationError", "animation_def", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
+__all__ = ["CUSTOM_VIEWS", "DIRS", "MOTIONS", "CharacterAnimationError", "animation_def", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
            "normalize_kit_animations", "pose_prompt", "sheet_layout"]

@@ -11,6 +11,11 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
   automatic checks (``services/character_animation_checks.py``): the approval is the agent's review (``reviewedBy: agent``), the job
   reports ``autoApproved`` and ``checks``, and a sheet that fails stays pending for a person with the list of what failed.
 * A job is a small file under ``.character-animation-jobs-v1`` of the workspace, so it can be followed after a reload and listed.
+* ``references`` are extra pictures (the picture of another direction of the same character) sent after the character's own as
+  ``image_refs``: a model that takes only one reference refuses them, and the job goes on with the character's picture alone
+  (``refsDropped``). ``services/character_animation_set_job.py`` makes several animations in turn with this.
+* The sheet of a twelve-pose cycle is a grid of six columns, and the entry saved on the kit carries ``motion`` and ``dir``
+  (``services/character_animation_directions.py``); the checks of a direction also read the other directions of the kit.
 """
 from __future__ import annotations
 
@@ -27,6 +32,8 @@ from typing import Any
 
 from services import agent_autonomy
 from services.character_animation_checks import failed, sheet_checks, summary
+from services.character_animation_cycle_checks import sibling_sheets
+from services.character_animation_directions import contract_of
 from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
                                            pose_prompt)
@@ -43,6 +50,7 @@ AUTO_APPROVE_OFF = ("autoApprove was ignored: agent_autonomy is review, so a per
 DEFAULT_MODEL = DEFAULT_IMAGE_MODEL
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 _SAVE_TRIES = 4
+MAX_REFERENCES = 4
 
 
 class AnimationJobError(RuntimeError):
@@ -82,8 +90,8 @@ def style_of(kit: dict[str, Any]) -> str | None:
 class JobStore:
     """One JSON file per job, replaced atomically."""
 
-    def __init__(self, root: str) -> None:
-        self.directory = os.path.join(root, JOBS_DIR)
+    def __init__(self, root: str, directory: str = JOBS_DIR) -> None:
+        self.directory = os.path.join(root, directory)
 
     def path(self, job_id: str) -> str:
         if not job_id or os.path.basename(job_id) != job_id or job_id in {".", ".."}:
@@ -112,7 +120,7 @@ class JobStore:
 
 
 def public(job: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in job.items() if key not in {"definition", "reference", "description", "style"}}
+    return {key: value for key, value in job.items() if key not in {"definition", "reference", "description", "style", "extraRefs"}}
 
 
 class CharacterAnimationJobs:
@@ -124,6 +132,8 @@ class CharacterAnimationJobs:
         self._threads: dict[str, threading.Thread] = {}
         self._tools: dict[str, LocalTools] = {}
         self._guard = threading.Lock()
+        # Other services that make animations through this one (the set job) add their live jobs to the same busy probe.
+        self.live_sources: list[Callable[[str], list[dict[str, Any]]]] = []
 
     def _store(self, workspace: str) -> JobStore:
         return JobStore(self.deps.workspace_dir(workspace))
@@ -133,6 +143,14 @@ class CharacterAnimationJobs:
         if not kit:
             raise AnimationJobError("kit_not_found", f"Character Kit {kit_id} is not in the {workspace} workspace", 404)
         return kit
+
+    def kit(self, workspace: str, kit_id: str) -> dict[str, Any]:
+        """The character as it is in the library now (the set job reads what the last sheet added)."""
+        return self._kit(workspace, kit_id)
+
+    def auto_fields(self, requested: bool) -> dict[str, Any]:
+        """What a job records of an ``autoApprove`` request (the set job records the same)."""
+        return self._auto_fields(requested)
 
     def _alive(self, job_id: str) -> bool:
         """Whether a worker thread of this service still owns the job (one that has not started yet counts)."""
@@ -145,11 +163,12 @@ class CharacterAnimationJobs:
         Reads only. A checkpoint that says running without a thread was cut by a restart: it is not
         busy, and ``jobs()`` turns it into ``interrupted`` the next time something reads it.
         """
-        return [
+        own = [
             {"jobId": job["jobId"], "status": job["status"], "workspace": job.get("workspace")}
             for job in JobStore(workspace_dir).list()
             if job.get("status") in ACTIVE and self._alive(str(job.get("jobId") or ""))
         ]
+        return [*own, *(item for source in self.live_sources for item in source(workspace_dir))]
 
     def jobs(self, workspace: str, kit_id: str | None = None) -> list[dict[str, Any]]:
         listed = [self._reconcile(workspace, job) for job in self._store(workspace).list()]
@@ -204,7 +223,8 @@ class CharacterAnimationJobs:
             raise AnimationJobError("animation_limit", f"Character Kit {kit.get('name') or kit['id']} already has {MAX_ANIMATIONS} animations, the most a kit keeps")
         return definition
 
-    def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None) -> dict[str, Any]:
+    def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None,
+                 references: list[str] | None = None) -> dict[str, Any]:
         ids = [item["id"] for item in definition["poses"]]
         kept = self._kept(workspace, kit, definition["id"], pose, ids)
         takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
@@ -213,6 +233,8 @@ class CharacterAnimationJobs:
                "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
                "remake": pose, "createdAt": _now(), "updatedAt": _now(), "definition": definition, "reference": reference_of(kit),
                "description": (kit.get("lookNotes") or "").strip() or kit.get("name") or kit["id"], "style": style_of(kit)}
+        if references:
+            job["extraRefs"] = references
         if definition.get("custom"):
             # What the author wrote stays visible on the job, so an animation that is not on the kit yet can be shown and tried again.
             job["custom"] = {"title": definition["title"]["es"], "view": definition["view"], "poses": [item["prompt"] for item in definition["poses"]]}
@@ -227,20 +249,29 @@ class CharacterAnimationJobs:
             return {}
         return {"autoApprove": True} if agent_autonomy.is_one_shot(self._services()) else {"autoApprove": False, "autoApproveNote": AUTO_APPROVE_OFF}
 
+    @staticmethod
+    def _references(references: list[str] | None) -> list[str]:
+        found = [str(item or "").strip() for item in references or []]
+        if len(found) > MAX_REFERENCES or any(not item or len(item) > 1200 or item.startswith("blob:") for item in found):
+            raise AnimationJobError("invalid_reference", f"references are up to {MAX_REFERENCES} persistent picture URLs, not browser blob URLs")
+        return found
+
     def start(self, workspace: str, kit_id: str, animation_id: str, *, custom: dict[str, Any] | None = None, pose: str | None = None,
-              model: str | None = None, auto_approve: bool = False) -> dict[str, Any]:
+              model: str | None = None, auto_approve: bool = False, references: list[str] | None = None) -> dict[str, Any]:
         """Make (or, with ``pose``, make one pose again of) an animation of a saved character. Returns the job; a request for an
         animation that is already being made returns that job. ``auto_approve`` asks the job to approve what it made when the sheet passes
-        the automatic checks; it is ignored (the job says so) unless ``agent_autonomy`` is ``one_shot``."""
+        the automatic checks; it is ignored (the job says so) unless ``agent_autonomy`` is ``one_shot``. ``references`` are extra pictures
+        sent after the character's own (see the module docstring)."""
         if model and not _MODEL.fullmatch(model):
             raise AnimationJobError("invalid_model", "model is the id of an image model")
+        extra = self._references(references)
         kit = self._kit(workspace, kit_id)
         definition = self._definition(kit, animation_id, custom, pose)
         with self._guard:
             running = next((job for job in self.jobs(workspace, kit_id) if job.get("animationId") == animation_id and job.get("status") in ACTIVE), None)
             if running:
                 return running
-            job = {**self._new_job(workspace, kit, definition, pose, model), **self._auto_fields(auto_approve)}
+            job = {**self._new_job(workspace, kit, definition, pose, model, extra), **self._auto_fields(auto_approve)}
             self._store(workspace).save(job)
             thread = threading.Thread(target=self._run, args=(workspace, job["jobId"]), name=f"character-animation-{job['jobId']}", daemon=True)
             self._threads[job["jobId"]] = thread
@@ -285,8 +316,9 @@ class CharacterAnimationJobs:
         if self.deps.model_defaults:
             own = self.deps.model_defaults(model) or {}
             steps, guidance = own.get("num_inference_steps") or steps, own.get("guidance_scale") or guidance
+        extra = [] if job.get("refsDropped") else job.get("extraRefs") or []
         params: dict[str, Any] = {"prompt": built["prompt"], "model_type": model, "resolution": built["resolution"], "seed": seed,
-                                  "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": [job["reference"]], "video_prompt_type": "I"}
+                                  "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": [job["reference"], *extra], "video_prompt_type": "I"}
         if steps > 8 and model_takes_negative_prompt(model):
             params["negative_prompt"] = built["negative"]
         return params
@@ -300,7 +332,15 @@ class CharacterAnimationJobs:
         take["status"] = "generating"
         self._update(store, job)
         # The file name carries the job: a pose made again never overwrites the picture the saved animation still uses.
-        name = tools.image(f"{job['jobId']}-{pose['id']}-image", params, f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}")
+        output = f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}"
+        try:
+            name = tools.image(f"{job['jobId']}-{pose['id']}-image", params, output)
+        except ToolError as error:
+            if not job.get("extraRefs") or job.get("refsDropped") or "image_refs" not in str(error):
+                raise
+            # This model takes fewer references than were sent: the character's own picture alone is what every pose needs.
+            job["refsDropped"] = True
+            name = tools.image(f"{job['jobId']}-{pose['id']}-image-alone", self._image_params(job, built, take["seed"]), output)
         take.update(status="keying", raw=file_url(name, job["workspace"]))
         self._update(store, job)
         take.update(status="ready", keyed=tools.key(f"{job['jobId']}-{pose['id']}-key", name, built["screen"]))
@@ -341,7 +381,8 @@ class CharacterAnimationJobs:
         definition, workspace = job["definition"], job["workspace"]
         root = self.deps.workspace_dir(workspace)
         sheet = build_sheet([take["keyed"] for take in job["takes"]], uploads_root=self.deps.uploads_root(), workspace_root=root,
-                            workspace=workspace, name=f"{job['kitId']}-{definition['id']}", scale_by=definition["scaleBy"], output_dir=root)
+                            workspace=workspace, name=f"{job['kitId']}-{definition['id']}", scale_by=definition["scaleBy"], output_dir=root,
+                            columns=definition.get("columns"))
         entry: dict[str, Any] = {
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
@@ -350,6 +391,7 @@ class CharacterAnimationJobs:
                        for take, pose in zip(job["takes"], definition["poses"])],
             "fps": definition["fps"], "loop": definition["loop"], "facing": definition["facing"], "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            **contract_of(definition["id"], definition),
             **({"title": definition["title"]["es"]} if definition.get("custom") else {}), **({"prompt": job["prompt"]} if job.get("prompt") else {}),
         }
         normalize_kit_animations({definition["id"]: entry})
@@ -364,7 +406,9 @@ class CharacterAnimationJobs:
     def _auto_approve(self, job: dict[str, Any], sheet: dict[str, Any], definition: dict[str, Any]) -> dict[str, Any]:
         """The agent's review of the animation just saved: approved when every automatic check passes, else it stays pending with the
         checks that failed. The approval is the same operation a review over MCP is (``review_kit_animation``, actor ``agent``)."""
-        checks = sheet_checks(sheet, definition)
+        root = self.deps.workspace_dir(job["workspace"])
+        siblings = sibling_sheets(self._kit(job["workspace"], job["kitId"]), definition, uploads_root=self.deps.uploads_root(), workspace_root=root)
+        checks = sheet_checks(sheet, definition, siblings)
         outcome = {"autoApproved": False, "checks": checks, "reviewState": "pending", "reviewNote": summary(checks)}
         if failed(checks):
             return outcome
