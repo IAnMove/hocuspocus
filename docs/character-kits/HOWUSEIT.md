@@ -296,7 +296,7 @@ server (one GPU); asking for one already being made returns that job. The job is
 What the job does:
 
 1. Each pose is one Qwen picture made with the character's own picture (`identityReference`, else `base`) as
-   `image_refs`, one after another, on a plain screen colour (default model `qwen_image_21`; another model runs its own steps and a
+   `image_refs`, one after another, on a plain screen colour (default model `qwen_image_21_turbo`, 8 steps and no negative prompt; another model runs its own steps and a
    distilled one takes no negative prompt). The style preset the kit was made in (`character-style-create` in its provenance)
    keeps its look through `animation.identity` in `character_styles.json`. Every picture has its own file name and intent id, so a
    pose made again never overwrites the picture the saved animation still uses.

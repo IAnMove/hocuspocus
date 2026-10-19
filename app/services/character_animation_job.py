@@ -32,6 +32,7 @@ from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationErr
                                            pose_prompt)
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.local_generation import LocalTools, ToolError, file_url
+from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
 
 JOBS_DIR = ".character-animation-jobs-v1"
 ACTIVE = ("queued", "running", "cancelling")
@@ -39,7 +40,7 @@ RESUMABLE = ("failed", "cancelled", "interrupted")
 INTERRUPTED = "The server restarted while this animation was being made; make it again and the poses already made are kept"
 AUTO_APPROVE_OFF = ("autoApprove was ignored: agent_autonomy is review, so a person approves this animation in Personajes › Animaciones "
                     "(or the owner turns on «Modo un solo disparo» in Ajustes › Servicios).")
-DEFAULT_MODEL = "qwen_image_21"
+DEFAULT_MODEL = DEFAULT_IMAGE_MODEL
 _MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
 _SAVE_TRIES = 4
 
@@ -277,15 +278,16 @@ class CharacterAnimationJobs:
         store.save(job)
 
     def _image_params(self, job: dict[str, Any], built: dict[str, str], seed: int) -> dict[str, Any]:
-        """One pose's request: the character's picture is the identity reference. The default model runs the settings that work for it;
-        another model runs its own steps and guidance, and a distilled one (a few steps) takes no negative prompt."""
-        steps, guidance = 40, 1
-        if job["model"] != DEFAULT_MODEL and self.deps.model_defaults:
-            own = self.deps.model_defaults(job["model"]) or {}
+        """One pose's request: the character's picture is the identity reference. Every model runs its own steps and guidance (the server's
+        settings for it, else its definition in app/defaults: the default Turbo runs 8 and CFG 1), and one that takes no negative prompt gets none."""
+        model = job["model"]
+        steps, guidance = default_image_steps(model), 1
+        if self.deps.model_defaults:
+            own = self.deps.model_defaults(model) or {}
             steps, guidance = own.get("num_inference_steps") or steps, own.get("guidance_scale") or guidance
-        params: dict[str, Any] = {"prompt": built["prompt"], "model_type": job["model"], "resolution": built["resolution"], "seed": seed,
+        params: dict[str, Any] = {"prompt": built["prompt"], "model_type": model, "resolution": built["resolution"], "seed": seed,
                                   "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": [job["reference"]], "video_prompt_type": "I"}
-        if steps > 8:
+        if steps > 8 and model_takes_negative_prompt(model):
             params["negative_prompt"] = built["negative"]
         return params
 

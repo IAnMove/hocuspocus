@@ -15,8 +15,8 @@ RISO_ZINE = json.loads(r"""
 {
   "image": "Wide 16:9 cyberpunk paper zine, bold flat risograph spot inks in persimmon orange, electric pink, cobalt blue and near-black on warm paper, coarse halftone grain, tiny offset registration, torn paper collage, punchy editorial composition, hand-cut shapes, expressive caricature, zero anime, zero photorealism, no embedded words or letters.",
   "video": "Cyberpunk paper zine motion, flat risograph ink, halftone texture, paper fibers and offset registration. Handmade cutout movement and snappy editorial rhythm.",
-  "image_model": "qwen_image_21",
-  "image_steps": 40,
+  "image_model": "qwen_image_21_turbo",
+  "image_steps": 8,
   "lyric_template": "dymo",
   "footer_style": {
     "color": "#F4EEE2",
@@ -71,10 +71,10 @@ def test_riso_zine_expands_to_the_generic_zine_look():
 def test_each_preset_validates_and_fills_the_look():
     expect = {
         "anime": {"image": "Cinematic anime key frame", "lyric_template": "social-caption"},
-        "riso-zine": {"image_model": "qwen_image_21", "lyric_template": "dymo"},
+        "riso-zine": {"image_model": "qwen_image_21_turbo", "lyric_template": "dymo"},
         "omarchy-desktop": {"theme": "tokyo-night", "lyric_template": "social-caption"},
-        "neo-noir-realista": {"image_model": "qwen_image_21", "lyric_template": "social-caption"},
-        "ps1-backplates": {"image_model": "qwen_image_21", "singer": False},
+        "neo-noir-realista": {"image_model": "qwen_image_21_turbo", "lyric_template": "social-caption"},
+        "ps1-backplates": {"image_model": "qwen_image_21_turbo", "singer": False},
     }
     for preset, fields in expect.items():
         style = validate_spec(_spec({"preset": preset}))["style"]
@@ -100,23 +100,30 @@ def test_unknown_preset_is_a_stable_production_error():
     assert caught.value.code == "unknown_style_preset"
 
 
-def test_style_without_a_preset_uses_qwen_with_its_own_step_count():
-    assert validate_spec(_spec({}))["style"] == {"image_model": "qwen_image_21", "image_steps": 40}
+def test_style_without_a_preset_uses_qwen_turbo_with_its_own_step_count():
+    assert validate_spec(_spec({}))["style"] == {"image_model": "qwen_image_21_turbo", "image_steps": 8}
+
+
+def test_the_stored_looks_name_the_model_they_expand_to():
+    """image_style_defaults overwrites a preset's model unless the spec sets one, so the stored value must say what runs."""
+    from services.production_style_presets import PRESETS
+    for name in ("riso-zine", "ps1-backplates"):
+        assert (PRESETS[name]["image_model"], PRESETS[name]["image_steps"]) == ("qwen_image_21_turbo", 8), name
 
 
 def test_default_does_not_mutate_input_or_explicit_choices():
     spec = _spec({"image": "painted background", "image_steps": 28})
     expanded = validate_spec(spec)
     assert "image_model" not in spec["style"]
-    assert expanded["style"]["image_model"] == "qwen_image_21"
+    assert expanded["style"]["image_model"] == "qwen_image_21_turbo"
     assert expanded["style"]["image_steps"] == 28
     explicit = {"image_model": "flux2_klein_9b", "image_steps": 4}
     assert validate_spec(_spec(explicit))["style"] == explicit
 
 
-@pytest.mark.parametrize("memory,model", [(24564, "qwen_image_21"), (16384, "qwen_image_21"),
+@pytest.mark.parametrize("memory,model", [(24564, "qwen_image_21_turbo"), (16384, "qwen_image_21_turbo"),
     (12288, "qwen_image_21_gguf_q4_k"), (10240, "qwen_image_21_gguf_q4_k"),
-    (8192, "qwen_image_21"), (None, "qwen_image_21")])
+    (8192, "qwen_image_21_turbo"), (None, "qwen_image_21_turbo")])
 def test_image_default_uses_capacity_without_claiming_unmeasured_quality(memory, model):
     from services.production_image_defaults import image_model_for_memory
     assert image_model_for_memory(memory) == model
@@ -128,14 +135,14 @@ def test_hardware_probe_failure_keeps_qwen_and_explicit_model_avoids_probe(monke
         raise OSError("nvidia-smi unavailable")
     monkeypatch.setattr(defaults.subprocess, "run", unavailable)
     defaults.default_image_model.cache_clear()
-    assert defaults.default_image_model() == "qwen_image_21"
+    assert defaults.default_image_model() == "qwen_image_21_turbo"
     defaults.default_image_model.cache_clear()
     monkeypatch.setattr(defaults, "default_image_model", lambda: pytest.fail("explicit choice probed hardware"))
     assert defaults.image_style_defaults({"image_model": "custom"}, {"image_model": "custom"}) == {"image_model": "custom"}
 
 
 @pytest.mark.parametrize("output,model", [("12288\n", "qwen_image_21_gguf_q4_k"),
-    ("24564\n", "qwen_image_21"), ("8192\n24564\n", "qwen_image_21")])
+    ("24564\n", "qwen_image_21_turbo"), ("8192\n24564\n", "qwen_image_21_turbo")])
 def test_capacity_probe_is_cached_and_does_not_guess_a_multi_gpu_target(monkeypatch, output, model):
     from services import production_image_defaults as defaults
     import subprocess
@@ -162,11 +169,22 @@ def test_low_memory_default_reaches_the_validated_production_spec(monkeypatch):
     assert spec["style"]["image_steps"] == 40
 
 
-@pytest.mark.parametrize("model", ["qwen_image_21", "qwen_image_21_gguf_q4_k"])
-def test_explicit_qwen_does_not_inherit_flux_four_step_preset(model):
+@pytest.mark.parametrize("model,steps", [("qwen_image_21", 40), ("qwen_image_21_gguf_q4_k", 40), ("qwen_image_21_turbo", 8)])
+def test_explicit_qwen_does_not_inherit_flux_four_step_preset(model, steps):
     style = {"preset": "neo-noir-realista", "image_model": model}
-    assert validate_spec(_spec(style))["style"]["image_steps"] == 40
+    assert validate_spec(_spec(style))["style"]["image_steps"] == steps
     assert validate_spec(_spec({**style, "image_steps": 28}))["style"]["image_steps"] == 28
+
+
+def test_an_explicit_base_qwen_wins_over_the_turbo_default_with_its_own_steps():
+    explicit = validate_spec(_spec({"image_model": "qwen_image_21"}))["style"]
+    assert explicit == {"image_model": "qwen_image_21", "image_steps": 40}
+    from services.production_image_defaults import default_image_steps, image_choice, model_takes_negative_prompt
+    assert default_image_steps("qwen_image_21_turbo") == 8 and default_image_steps("qwen_image_21") == 40
+    assert image_choice({}, {}) == ("qwen_image_21_turbo", None)
+    assert image_choice({"image_model": "qwen_image_21"}, {"image_model": "qwen_image_21_turbo", "image_steps": 8}) == ("qwen_image_21", None)
+    assert model_takes_negative_prompt("qwen_image_21_turbo") is False
+    assert model_takes_negative_prompt("qwen_image_21") is True and model_takes_negative_prompt("no_such_model") is True
 
 
 def test_no_preset_carries_a_person_or_project_name():
@@ -199,8 +217,8 @@ def test_ps1_native_style_validates_and_keeps_authored_shots():
     raw = _ps1_spec()
     expanded = validate_spec(raw)
     assert expanded["style"]["preset"] == "ps1-backplates"
-    assert expanded["style"]["image_model"] == "qwen_image_21"
-    assert expanded["style"]["image_steps"] == 40
+    assert expanded["style"]["image_model"] == "qwen_image_21_turbo"
+    assert expanded["style"]["image_steps"] == 8
     assert expanded["style"]["singer"] is False
     assert expanded["shots"] is raw["shots"]
     assert raw["style"] == {"preset": "ps1-backplates"}

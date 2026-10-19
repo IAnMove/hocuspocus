@@ -41,8 +41,8 @@ image-studio draft (`resetImageStudio`). It does not cancel a queued job.
    (`qwen_image_21`, plus `_turbo`, `_bf16`, `_gguf_*`, and `_uncensored_gguf_*`).
    Identity/style still uses `subject` / `style` refs (up to `max_image_refs`,
    10 on 2.1). `qwen_image_21_turbo` is the official eight-step checkpoint
-   (CFG 1, ~7.3 GB extra transformer). The 40-step base stays the default;
-   Turbo is a faster optional pick, not the Viggle six-step LoRA. Native 2K
+   (CFG 1, ~7.3 GB extra transformer). Turbo is the default image model (the 40-step base stays
+   selectable); it is not the Viggle six-step LoRA. Native 2K
    and up to ten refs remain available, but the local comparison measured only
    1K text-to-image pairs; the model entry recommends a 24 GB GPU for native 2K
    and 1K on smaller GPUs.

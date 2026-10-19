@@ -46,7 +46,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
-        "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21), "
+        "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo), "
         "keyed on its screen, joined into one sprite sheet that keeps the figure one size, and saved on the kit as animations.<id> "
         "with reviewState pending. animation is an id from characters.animations (walk, wave, angry, cheer...); for one of your own "
         "pass a new slug and custom {title, view bust|front|side, poses: one text per pose, up to 6}. pose makes that one pose of an "
