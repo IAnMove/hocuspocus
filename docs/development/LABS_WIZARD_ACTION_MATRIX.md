@@ -1405,3 +1405,5 @@ the same names run. It is read-only; the Wizard puts the card in a production sp
 in `ui/tests/video2dTemplatesWizard.test.ts` and `tests/test_video2d_template_commands_router.py`.
 
 `scene3d.room.put` (`room_sets`) stores a metric box room through `roomSets.command` and `put_room` in `app/services/room_box_commands.py`, posted to `/api/v1/scene3d/rooms/commands`. Coverage is in `ui/tests/roomSetsWizard.test.ts`.
+
+`scene3d.room.paint` (`room_sets`, with `scene3d.room.paint.status`) paints a stored box room with the image model in the background through `roomSets.command` and `paint_room` in `app/services/room_box_commands.py`, the same endpoint. Coverage is in `ui/tests/roomSetsWizard.test.ts` and `tests/test_room_box.py`.

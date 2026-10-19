@@ -49,4 +49,19 @@ test('wizard capability stores a room through the shared command and does not op
     } } },
   })
   assert.equal(getIntent, false)
+  // paint changes the room, so it carries an intent id like put; its status is a read and carries none.
+  const paint = stored.resolve({ type: 'room_sets', operation: 'scene3d.room.paint', input: { name: 'kitchen', floor: 'worn linoleum' } })
+  const poll = stored.resolve({ type: 'room_sets', operation: 'scene3d.room.paint.status', input: { name: 'kitchen' } })
+  if (!paint || !poll) throw new Error('paint did not resolve')
+  const seenIntents: Record<string, boolean> = {}
+  const adapters = { roomSets: { command: async (got: { operation: string, input: Record<string, unknown> }) => {
+    seenIntents[got.operation] = typeof got.input.intent_id === 'string'
+    return { message: 'ok' }
+  } } }
+  await stored.execute(paint, { workspace: 'studio', generationContext: { commandId: 'wizard-room-2' }, adapters })
+  await stored.execute(poll, { workspace: 'studio', generationContext: { commandId: 'wizard-room-3' }, adapters })
+  assert.deepEqual(seenIntents, { 'scene3d.room.paint': true, 'scene3d.room.paint.status': false })
+  assert.equal(roomSetMessage({ result: { name: 'kitchen', status: 'running' } }, 'scene3d.room.paint'), 'Room kitchen paint: running.')
+  assert.equal(roomSetMessage({ result: { name: 'kitchen', status: 'completed', warnings: [{}] } }, 'scene3d.room.paint.status'), 'Room kitchen paint: completed, 1 warning(s).')
+  assert.equal(roomSetMessage({ result: { name: 'kitchen', file: 'rooms/kitchen.glb' } }, 'scene3d.room.put'), 'Stored room kitchen at rooms/kitchen.glb.')
 })
