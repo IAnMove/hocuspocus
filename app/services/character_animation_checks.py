@@ -21,14 +21,19 @@ walks 0.93 to 0.99 as big at the smallest, legs 0.94 to 0.99, heads 0.85 to 0.96
   equalised them; 45 % for a jump or a bow, whose poses are low on purpose).
 * ``scale_measure``: a sheet asked to scale by legs or head was scaled by that, not by the height it falls back to when the part could
   not be measured.
+
+The long cycles and the directions (``checks`` of an animation in the catalog) add ``figure_height``, ``repeated_poses`` and
+``direction_mirror`` (``services/character_animation_cycle_checks.py``); the animations without ``checks`` are checked as before.
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 from PIL import Image
 
+from services.character_animation_cycle_checks import cycle_checks
 from services.character_animations import MAX_REVIEW_NOTE, catalog
 
 MIN_FILL = 0.03
@@ -88,12 +93,14 @@ def _spread(sheet: dict[str, Any], definition: dict[str, Any], figures: list[dic
     ]
 
 
-def sheet_checks(sheet: dict[str, Any], definition: dict[str, Any]) -> list[dict[str, Any]]:
-    """Every check on a sheet ``build_sheet`` wrote (``sheet``: its reply; ``definition``: the animation it was made from)."""
+def sheet_checks(sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+    """Every check on a sheet ``build_sheet`` wrote (``sheet``: its reply; ``definition``: the animation it was made from;
+    ``siblings``: the other directions of the same kit as ``{"id", "dir", "path"}``, for ``direction_mirror``)."""
     contract = catalog()["sheet"]
     checks = _structure(sheet, definition, contract)
     with Image.open(sheet["path"]) as image:
         figures = [_figure(cell, contract["alphaFloor"]) for cell in _cells(image, sheet["columns"], sheet["rows"], sheet["count"], sheet["cell"])]
+        extra = cycle_checks(image, sheet, definition, siblings)
     if not figures:
         return [*checks, _check("filled_cells", False, 0, MIN_FILL, "no cell to read")]
     height = sheet["cell"]["height"]
@@ -108,7 +115,7 @@ def sheet_checks(sheet: dict[str, Any], definition: dict[str, Any]) -> list[dict
                "most a figure fills of its own box"),
         _check("ground_line", drift <= MAX_GROUND_DRIFT, round(drift, 4), MAX_GROUND_DRIFT, "most a figure's feet are off the ground line (share of the cell)"),
     ]
-    return [*checks, *_spread(sheet, definition, figures)]
+    return [*checks, *_spread(sheet, definition, figures), *extra]
 
 
 def failed(checks: list[dict[str, Any]]) -> list[dict[str, Any]]:

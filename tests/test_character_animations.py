@@ -43,7 +43,9 @@ def test_every_animation_has_poses_prompts_and_a_template():
         assert {"en", "es"} <= set(item["title"]) and {"en", "es"} <= set(item["summary"])
         assert 1 <= len(item["poses"]) <= data["sheet"]["maxPoses"]
         assert item["template"] in {"walk-cycle-sheet", "walk-two-pose", "character-reaction"}
-        assert item["scaleBy"] in animations.SCALE_BY and item["scaleBy"] == {"front": "base", "bust": "face", "side": "height"}[item["view"]]
+        # A gesture is sized by what it does not move (legs, head); a walk and the other directions by their height.
+        by_view = {"front": "base", "bust": "face"}.get(item["view"], "height")
+        assert item["scaleBy"] in animations.SCALE_BY and item["scaleBy"] == ("height" if item.get("motion") == "walk" else by_view)
         pose_ids = [pose["id"] for pose in item["poses"]]
         assert len(pose_ids) == len(set(pose_ids)) and all(pose["prompt"].strip() and {"en", "es"} <= set(pose["label"]) for pose in item["poses"])
     assert next(item for item in data["animations"] if item["id"] == "walk")["facing"] == "right"
@@ -340,3 +342,196 @@ def test_the_http_routes_serve_the_catalog_a_prompt_and_a_sheet(folder):
 
 def test_the_catalog_file_is_plain_json_for_the_ui():
     json.loads(animations.CATALOG.read_text(encoding="utf-8"))
+
+
+# ----- five directions, the twelve-pose walk and the data contract (services/character_animation_directions.py) -----
+
+def _walker(path: Path, phase: int, *, height: int = 200, flip: bool = False) -> Path:
+    """A keyed walker whose two legs and one arm are different in each of the twelve phases (the legs swing like sin and cos)."""
+    pixels = np.zeros((height, 150, 4), dtype=np.uint8)
+    left, right = round(30 * np.sin(phase * np.pi / 6)), round(30 * np.cos(phase * np.pi / 6))
+    pixels[10:40, 55:85] = (20 + 18 * phase, 160, 120, 255)  # the head's red says which pose it is
+    pixels[40:110, 48:92] = (230, 180, 30, 255)
+    pixels[110:height - 4 * (phase % 6), 64 + left:76 + left] = (30, 30, 40, 255)  # a dark leg, lifted a little more in each phase
+    pixels[110:height, 64 + right:76 + right] = (235, 235, 245, 255)  # and a light one
+    pixels[45:60 + 3 * phase, 94:104] = (200, 160, 120, 255)
+    image = Image.fromarray(pixels)
+    (image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if flip else image).save(path)
+    return path
+
+
+def _walk_sheet(folder: Path, name: str = "walk", *, heights: dict[int, int] | None = None, same: dict[int, int] | None = None, flip: bool = False) -> dict:
+    """Twelve walker poses joined into a 6 x 2 sheet. ``heights``: phase -> picture height; ``same``: phase -> the phase it copies."""
+    poses = [_walker(folder / f"{name}-{index}.png", (same or {}).get(index, index), height=(heights or {}).get(index, 200), flip=flip) for index in range(12)]
+    return build_sheet([pose.name for pose in poses], uploads_root=str(folder / "uploads"), workspace_root=str(folder), workspace="demo", name=name,
+                       columns=6, output_dir=str(folder))
+
+
+def test_the_catalog_has_five_directions_each_with_a_twelve_pose_walk_at_twelve_frames_a_second():
+    data = catalog()
+    for view in ("front34", "back34", "back"):
+        spec = data["custom"]["views"][view]
+        assert view in data["views"] and spec["resolution"] == "896x1152" and spec["scaleBy"] == "height" and spec["facing"] in ("right", "front")
+    assert [data["custom"]["views"][view]["facing"] for view in ("front34", "back34", "back")] == ["right", "right", "front"], "a back view looks neither left nor right"
+    walks = {item["dir"]: item for item in data["animations"] if item.get("motion") == "walk" and len(item["poses"]) == 12}
+    assert {direction: item["id"] for direction, item in walks.items()} == {"side": "walk-12", "front": "walk-front", "front34": "walk-front34", "back34": "walk-back34", "back": "walk-back"}
+    for direction, item in walks.items():
+        assert item["group"] == "cycle" and item["fps"] == 12 and item["loop"] == "loop" and item["template"] == "walk-cycle-sheet" and item["scaleBy"] == "height"
+        assert item["view"] == direction and item["columns"] == 6 and set(item["checks"]) == {"height", "repeats", "mirror"}
+        assert len({pose["id"] for pose in item["poses"]}) == 12 == len({pose["prompt"] for pose in item["poses"]}), "twelve different drawings"
+    # The old four-pose walk stays as it was, and says what it is.
+    walk = next(item for item in data["animations"] if item["id"] == "walk")
+    assert len(walk["poses"]) == 4 and walk["fps"] == 4 and (walk["motion"], walk["dir"]) == ("walk", "side") and "checks" not in walk
+    idles = {item["dir"] for item in data["animations"] if item.get("motion") == "idle"}
+    assert idles == {"front", "side", "front34", "back34", "back"}
+    assert all(len(item["poses"]) == 2 for item in data["animations"] if item.get("motion") == "idle")
+    sets = data["sets"]
+    assert [step["animation"] for step in sets["walk-directions"]["sheets"]] == ["walk-12", "walk-front34", "walk-front", "walk-back34", "walk-back"]
+    assert [step["animation"] for step in sets["walk-12"]["sheets"]] == ["walk-12"]
+    known = {item["id"] for item in data["animations"]}
+    for name, spec in sets.items():
+        ids = [step["animation"] for step in spec["sheets"]]
+        assert set(ids) <= known and len(ids) == len(set(ids)), name
+        assert all(step.get("reference") in (None, *ids[:index]) for index, step in enumerate(spec["sheets"])), "a sheet is drawn after the one it takes as a reference"
+
+
+def test_the_prompts_of_the_new_directions_say_which_way_the_character_faces():
+    side = pose_prompt("walk-12", "contact-a", "a detective")
+    assert "Exact side view" in side["prompt"] and "heel of the boot just touching the ground" in side["prompt"] and side["resolution"] == "896x1152"
+    front34 = pose_prompt("walk-front34", "passing-b", "a detective")["prompt"]
+    assert "Three-quarter front view" in front34 and "toward the viewer and to the viewer's right" in front34
+    back = pose_prompt("walk-back", "contact-a", "a detective")
+    assert "from behind" in back["prompt"] and "no face" in back["prompt"] and "face" in back["negative"] and "viewer's left" in back["prompt"]
+    assert "Three-quarter back view" in pose_prompt("walk-back34", "up-a")["prompt"]
+    # Opposite arms: the leg that leads is the one whose arm swings back.
+    assert "leg nearest the viewer stretched forward" in pose_prompt("walk-12", "contact-a")["prompt"]
+    assert "far leg stretched forward" in pose_prompt("walk-12", "contact-b")["prompt"] and "far arm swinging back" in pose_prompt("walk-12", "contact-b")["prompt"]
+    for item in catalog()["animations"]:
+        if item.get("motion"):
+            assert all(pose_prompt(item["id"], pose["id"], "x")["prompt"] for pose in item["poses"])
+
+
+def test_a_custom_animation_takes_up_to_twelve_poses_in_any_of_the_directions():
+    assert animations.MAX_CUSTOM_POSES == 12 and catalog()["sheet"]["maxPoses"] == 12
+    assert set(animations.CUSTOM_VIEWS) == {"bust", "front", "side", "front34", "back34", "back"}
+    twelve = animations.animation_def("my-turn", custom={"title": "Giro", "view": "back34", "poses": [f"pose {number}" for number in range(12)]})
+    assert len(twelve["poses"]) == 12 and twelve["view"] == "back34" and twelve["scaleBy"] == "height" and twelve["facing"] == "right"
+    with pytest.raises(CharacterAnimationError):
+        animations.animation_def("my-turn", custom={"title": "Giro", "view": "back", "poses": [f"pose {number}" for number in range(13)]})
+    built = pose_prompt("my-turn", "pose-1", "x", custom={"view": "back", "text": "Looking over the shoulder"})
+    assert "from behind" in built["prompt"] and built["resolution"] == "896x1152"
+
+
+def test_the_contract_motion_and_dir_is_read_from_the_animation_or_deduced_from_its_view_and_id():
+    from services import character_animation_directions as directions
+    assert directions.DIRS == ("side", "front", "front34", "back34", "back") and directions.MOTIONS == ("walk", "idle")
+    # Written on the animation: that is the contract.
+    assert directions.contract_of("walk-front34", {"motion": "walk", "dir": "front34"}) == {"motion": "walk", "dir": "front34"}
+    # Missing: dir from the view (side, front and the three new ones), motion from a cycle whose id starts with walk or idle.
+    assert directions.contract_of("walk", {"view": "side", "group": "cycle"}) == {"motion": "walk", "dir": "side"}
+    assert directions.contract_of("idle", {"view": "front", "group": "cycle"}) == {"motion": "idle", "dir": "front"}
+    assert directions.contract_of("walk-back34", {"view": "back34", "group": "cycle"}) == {"motion": "walk", "dir": "back34"}
+    assert directions.contract_of("wave", {"view": "front", "group": "gesture"}) == {"dir": "front"}, "a gesture is no motion"
+    assert directions.contract_of("run", {"view": "side", "group": "cycle"}) == {"dir": "side"}, "only walk and idle are motions"
+    assert directions.contract_of("angry", {"view": "bust", "group": "expression"}) == {}, "a bust looks no way"
+    assert directions.contract_of("walk-mine", {"view": "side", "group": "custom"}) == {"dir": "side"}, "a custom id that says walk is not a cycle"
+    assert directions.contract_of("walk-12", None) == {"motion": "walk", "dir": "side"}, "a catalog id with no stored entry reads the catalog"
+    assert directions.contract_of("unknown", None) == {}
+    # What is stored wins over what the id suggests, and a value off the list is ignored.
+    assert directions.contract_of("walk", {"view": "side", "dir": "back", "motion": "idle"}) == {"motion": "idle", "dir": "back"}
+    assert directions.contract_of("walk", {"view": "side", "dir": "up", "motion": "fly"}) == {"motion": "walk", "dir": "side"}
+
+
+def test_a_kit_keeps_motion_and_dir_and_refuses_what_is_off_the_list():
+    kept = normalize_kit_animations({"walk-12": _entry(motion="walk", dir="side", view="side")})["walk-12"]
+    assert (kept["motion"], kept["dir"]) == ("walk", "side")
+    assert "motion" not in normalize_kit_animations({"walk": _entry()})["walk"], "older data stays as it was"
+    for bad in (_entry(motion="run"), _entry(dir="left"), _entry(dir=3)):
+        with pytest.raises(CharacterAnimationError):
+            normalize_kit_animations({"walk-12": bad})
+
+
+def test_the_approved_twelve_pose_walk_comes_before_the_four_pose_one():
+    from services import character_animation_directions as directions
+
+    def made(state, count=4, **extra):
+        return _entry(reviewState=state, sheet={**_entry()["sheet"], "count": count}, **extra)
+    both = {"walk": made("approved"), "walk-12": made("approved", 12)}
+    assert directions.walk_sheet(both)[0] == "walk-12"
+    assert directions.walk_sheet({**both, "walk-12": made("pending", 12)})[0] == "walk", "a pending sheet is never played"
+    assert directions.walk_sheet({"walk-12": made("rejected", 12)}) is None and directions.walk_sheet({}) is None
+    assert directions.walk_sheet({"walk": made("approved")})[0] == "walk"
+    pool = {"walk-front34": made("approved", 12, dir="front34", motion="walk"), "walk-back": made("approved", 12, dir="back", motion="walk"), "walk": made("approved")}
+    assert [name for name, _entry_ in directions.sheets_for(pool, "walk", "front34")] == ["walk-front34"]
+    assert [name for name, _entry_ in directions.sheets_for(pool, "walk", "side")] == ["walk"], "a walk with no dir stored is a side walk"
+    assert directions.sheets_for(pool, "idle", "side") == []
+
+
+def test_twelve_poses_join_into_a_six_by_two_sheet_whose_cells_read_in_order(folder):
+    built = _walk_sheet(folder)
+    assert (built["count"], built["columns"], built["rows"]) == (12, 6, 2)
+    cell = built["cell"]
+    assert built["width"] == cell["width"] * 6 and built["height"] == cell["height"] * 2
+    sheet = np.asarray(Image.open(built["path"]).convert("RGBA"))
+    reds = []
+    for index in range(12):
+        row, column = divmod(index, 6)
+        part = sheet[row * cell["height"]:(row + 1) * cell["height"], column * cell["width"]:(column + 1) * cell["width"]]
+        solid = part[..., 3] > catalog()["sheet"]["alphaFloor"]
+        assert solid.any(), f"cell {index} holds a figure"
+        top = int(np.nonzero(solid.any(axis=1))[0][0])
+        head = part[top + 6:top + 10][solid[top + 6:top + 10]]
+        reds.append(int(head[:, 0].mean()))
+    assert all(abs(red - (20 + 18 * phase)) <= 3 for phase, red in enumerate(reds)), f"the cells follow the order of the poses: {reds}"
+
+
+def _checks(built: dict, animation_id: str = "walk-12", siblings=()) -> dict[str, dict]:
+    from services.character_animation_checks import sheet_checks
+    return {check["id"]: check for check in sheet_checks(built, animations.animation(animation_id), siblings=siblings)}
+
+
+def test_a_twelve_pose_walk_passes_the_cycle_checks_when_the_figures_are_one_size_and_no_pose_repeats(folder):
+    checks = _checks(_walk_sheet(folder))
+    assert all(check["ok"] for check in checks.values()), {key: check for key, check in checks.items() if not check["ok"]}
+    assert {"figure_height", "repeated_poses", "ground_line", "cell_count"} <= set(checks)
+    assert checks["figure_height"]["limit"] == 0.03 and checks["repeated_poses"]["value"] == 1 and checks["repeated_poses"]["limit"] == 2
+    assert "direction_mirror" in checks and checks["direction_mirror"]["ok"], "a kit with no other direction has nothing to repeat"
+
+
+def test_a_pose_drawn_a_tenth_smaller_fails_the_same_height_check_and_a_hair_of_difference_does_not(folder):
+    small = _checks(_walk_sheet(folder, "small", heights={5: 170}))
+    assert not small["figure_height"]["ok"] and small["figure_height"]["value"] > 0.03
+    near = _checks(_walk_sheet(folder, "near", heights={5: 196}))
+    assert near["figure_height"]["ok"] and near["figure_height"]["value"] <= 0.03
+
+
+def test_the_same_drawing_in_more_than_two_cells_in_a_row_fails_and_two_in_a_row_does_not(folder):
+    twice = _checks(_walk_sheet(folder, "twice", same={4: 3}))
+    assert twice["repeated_poses"]["ok"] and twice["repeated_poses"]["value"] == 2
+    thrice = _checks(_walk_sheet(folder, "thrice", same={4: 3, 5: 3}))
+    assert not thrice["repeated_poses"]["ok"] and thrice["repeated_poses"]["value"] == 3 and "3 cells" in thrice["repeated_poses"]["detail"]
+    apart = _checks(_walk_sheet(folder, "apart", same={6: 0, 7: 1}))
+    assert apart["repeated_poses"]["ok"], "the same drawing far apart in the cycle is allowed"
+
+
+def test_the_mirror_of_one_direction_is_not_another_direction_of_the_same_kit(folder):
+    first = _walk_sheet(folder, "front34")
+    mirror = _walk_sheet(folder, "back34", flip=True)
+    other = _walk_sheet(folder, "back", same={index: (index * 5) % 12 for index in range(12)})
+    sibling = {"id": "walk-front34", "dir": "front34", "path": first["path"]}
+    copied = _checks(mirror, "walk-back34", siblings=[sibling])["direction_mirror"]
+    assert not copied["ok"] and copied["value"] == 1 and "walk-front34" in copied["detail"] and "mirror" in copied["detail"]
+    same = _checks(_walk_sheet(folder, "twin"), "walk-back", siblings=[sibling])["direction_mirror"]
+    assert not same["ok"] and "walk-front34 (same drawing)" in same["detail"]
+    assert _checks(other, "walk-back", siblings=[sibling])["direction_mirror"]["ok"], "a different drawing of the cycle is fine"
+    own = {"id": "walk-back34", "dir": "back34", "path": mirror["path"]}
+    assert _checks(mirror, "walk-back34", siblings=[own])["direction_mirror"]["ok"], "a sheet is not compared with itself"
+    unreadable = {"id": "walk-front", "dir": "front", "path": str(folder / "missing.png")}
+    assert _checks(other, "walk-back", siblings=[unreadable])["direction_mirror"]["ok"], "a sheet that cannot be read is not a failure"
+
+
+def test_the_cycle_checks_run_only_on_the_animations_that_ask_for_them(folder):
+    four = [_figure(folder / f"p{index}.png", legs=(30 + index, 100 - index)) for index in range(4)]
+    built = _sheet_of(folder, four)
+    ids = set(_checks(built, "walk"))
+    assert not ids & {"figure_height", "repeated_poses", "direction_mirror"}, "the old walk is checked as it always was"
