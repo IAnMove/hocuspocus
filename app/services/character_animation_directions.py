@@ -33,8 +33,6 @@ from typing import Any
 
 from services.character_animations import DIRS, MOTIONS, animation as catalog_animation
 
-# The view of a sheet is the direction it shows; a bust is a portrait and has none.
-_VIEW_DIR = {direction: direction for direction in DIRS}
 WALK_SHEETS = ("walk-12", "walk")
 _APPROVED = "approved"
 
@@ -57,7 +55,7 @@ def contract_of(animation_id: str, entry: dict[str, Any] | None = None) -> dict[
     stored = entry or {}
     found = {"dir": _listed(stored.get("dir"), DIRS), "motion": _listed(stored.get("motion"), MOTIONS)}
     if found["dir"] is None:
-        found["dir"] = _VIEW_DIR.get(str(stored.get("view") or listed.get("view") or ""))
+        found["dir"] = _listed(stored.get("view") or listed.get("view"), DIRS)  # the view of a sheet is the direction it shows; a bust has none
     if found["motion"] is None:
         group = stored.get("group") or listed.get("group")
         found["motion"] = next((motion for motion in MOTIONS if group == "cycle" and animation_id.startswith(motion)), None)
@@ -84,8 +82,3 @@ def walk_sheet(animations: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
         if isinstance(made, dict) and made.get("reviewState") == _APPROVED:
             return name, made
     return None
-
-
-def has_walk_sheet(animations: dict[str, Any]) -> bool:
-    """Whether the kit has any sheet of ``WALK_SHEETS`` at all, whatever its review state."""
-    return any(isinstance(animations.get(name), dict) for name in WALK_SHEETS)

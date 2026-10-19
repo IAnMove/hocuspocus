@@ -862,3 +862,19 @@ def test_the_http_routes_start_follow_and_cancel_a_set_and_the_jobs_routes_still
     assert client.post(f"{base}/make-set", json={"workspace": WS, "kitId": "ghost", "set": "walk-12"}).status_code == 404
     assert client.get(f"{base}/sets/animset-none", params={"workspace": WS}).status_code == 404
     assert client.post(f"{base}/make-set", json={"workspace": WS, "kitId": "hero", "set": "walk-12", "extra": 1}).status_code == 422
+
+
+def test_the_make_route_takes_a_custom_animation_of_twelve_poses_in_any_direction_and_refuses_a_view_it_does_not_know(directions):
+    root, server, jobs, _sets = directions
+    app = FastAPI()
+    app.include_router(create_character_animation_jobs_router(jobs), prefix="/api/v1/character-kits")
+    client = TestClient(app)
+    url = "/api/v1/character-kits/animations/make"
+    turn = lambda view, count: {"workspace": WS, "kitId": "hero", "animation": f"giro-{view}", "custom": {"title": "Giro", "view": view, "poses": [f"turning, step {number}" for number in range(count)]}}
+    made = client.post(url, json=turn("back34", 12))
+    assert made.status_code == 200 and made.json()["job"]["status"] == "completed" and made.json()["job"]["result"]["count"] == 12
+    entry = _kit(root)["animations"]["giro-back34"]
+    assert (entry["view"], entry["dir"], entry["facing"], entry["scaleBy"]) == ("back34", "back34", "right", "height") and "motion" not in entry
+    assert "Three-quarter back view" in server.of("generation.image")[0]["params"]["prompt"]
+    assert client.post(url, json=turn("top", 2)).status_code == 422, "a view the catalog does not list"
+    assert client.post(url, json=turn("back", 13)).status_code == 422, "thirteen poses are too many"

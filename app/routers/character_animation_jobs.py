@@ -21,12 +21,13 @@ from starlette.concurrency import run_in_threadpool
 
 from services import workspace_busy
 from services.character_animation_job import AnimationJobError, CharacterAnimationJobs
+from services.character_animations import CUSTOM_VIEWS
 
 
 class CustomAnimation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title: str = Field(min_length=1, max_length=80)
-    view: str = Field(pattern="^(bust|front|side)$")
+    view: str = Field(pattern="^(" + "|".join(CUSTOM_VIEWS) + ")$")  # the catalog's views: a bust and the five directions
     poses: list[str] = Field(min_length=1, max_length=12)
 
 
