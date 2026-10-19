@@ -96,7 +96,7 @@ def _default_words(surface: str, spec: dict, metal: bool) -> str:
 
 
 def _prompt(surface: str, words: str, tile: float, style: str) -> str:
-    scale = f"One repeat of this picture covers about {tile:g} metres." if surface in TILING else ""
+    scale = f"One repeat of this picture covers about {tile:g} m." if surface in TILING else ""
     if surface == "floor":
         text = f"A seamless tileable floor texture seen from straight above: {words}. {GROUND_STAGING}. {scale}"
     elif surface == "walls":
@@ -107,20 +107,20 @@ def _prompt(surface: str, words: str, tile: float, style: str) -> str:
         text = f"A seamless tileable texture of {words}, straight-on flat view, the pattern fills the picture edge to edge, no perspective, no people. {scale}"
     else:
         text = (f"A closed door seen straight on from the front: {words}. The door leaf fills the whole picture edge to edge, "
-                "no frame, no wall, no floor, flat even lighting, no perspective, no people, no text")
+                "no frame, no wall, no floor, flat even lighting, no perspective, no people, no text.")
     return f"{text} Material look: {style}." if style else text
 
 
 def plan_of(spec: dict, request: dict, name: str) -> dict:
     """Per surface: the prompt, size, metres per repeat and seed the image model is asked for."""
-    metal = room_materials.defaults_for(spec)["walls"]["material"] in ("metal_panels", "riveted_steel")
+    metal = room_materials.pick("walls", request["words"].get("walls") or spec["walls"])["material"] in ("metal_panels", "riveted_steel")
     base = request["seed"] if request["seed"] is not None else spec.get("seed", int(hashlib.sha256(name.encode()).hexdigest()[:6], 16))
     plan = {}
     for index, surface in enumerate(present(spec)):
         tile = request["tile_m"].get(surface) or TILE_M.get(surface, 1.0)
         words = request["words"].get(surface) or _default_words(surface, spec, metal)
         plan[surface] = {"words": words, "prompt": _prompt(surface, words, tile, request["style"]), "size": SIZE[surface],
-                         "tile_m": tile, "seed": base + index}
+                         "tile_m": tile, "seed": (base + index) % 2**31}
     return plan
 
 

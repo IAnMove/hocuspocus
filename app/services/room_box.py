@@ -357,7 +357,7 @@ def _picture(source, tone, alpha=None) -> bytes:
     else:
         image = Image.new("RGBA" if alpha is not None else "RGB", (64, 64), (*tone, 255 if alpha is None else alpha))
     out = io.BytesIO()
-    image.save(out, "PNG", optimize=True)
+    image.save(out, "PNG", compress_level=6)   # not optimize=True: it costs seconds on a noisy picture and saves little
     return out.getvalue()
 
 

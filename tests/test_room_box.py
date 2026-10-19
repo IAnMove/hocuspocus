@@ -424,7 +424,7 @@ def test_paint_asks_the_model_for_each_surface_then_finds_its_own_work(tmp_path,
     assert done["status"] == "completed" and done["painted"] == ["door", "floor", "trim", "walls"] and done["warnings"] == []
     prompts = {call["input"]["output_name"].split("-")[-2]: call["input"]["params"] for call in model.admitted if "heal" not in call["input"]["output_name"]}
     assert set(prompts) == {"floor", "walls", "door", "trim"}, "no ceiling picture for a room without a ceiling"
-    assert "worn green linoleum" in prompts["floor"]["prompt"] and "about 0.6 metres" in prompts["floor"]["prompt"]
+    assert "worn green linoleum" in prompts["floor"]["prompt"] and "about 0.6 m." in prompts["floor"]["prompt"]
     assert all("1950s space hangar" in item["prompt"] and "a small kitchen" not in item["prompt"] for item in prompts.values())
     assert prompts["floor"]["resolution"] == "1024x1024" and prompts["door"]["resolution"] == "576x1280"
     assert prompts["floor"]["model_type"] == "qwen_image_21_turbo" and "hangar door with warning stripes" in prompts["door"]["prompt"]
@@ -452,7 +452,7 @@ def test_a_model_that_cannot_paint_leaves_the_procedural_look_and_says_so(tmp_pa
     assert partial["status"] == "completed" and partial["painted"] == ["door", "floor", "trim"]
     assert [(item["code"], item["surface"]) for item in partial["warnings"]] == [("paint_failed", "walls")]
     assert partial["surfaces"]["walls"]["source"] == "procedural" and partial["surfaces"]["floor"]["source"] == "ai"
-    failed = _paint(_Model(root, fail=("texture", "door", "metres", "skirting")), root, {"style": "no model today"})
+    failed = _paint(_Model(root, fail=("texture", "door", "skirting")), root, {"style": "no model today"})
     assert failed["status"] == "failed" and "procedural" in failed["error"] and len(failed["warnings"]) == 4
     assert failed["surfaces"]["floor"]["source"] == "ai", "what was painted before stays"
     fresh = _stored(tmp_path / "fresh", monkeypatch)

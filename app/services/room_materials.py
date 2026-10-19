@@ -278,10 +278,12 @@ def _tile(rng, base, n, count: int = 4):
 def _carpet(rng, base, n):
     raw = rng.random((n, n)) - 0.5
     fibre = 0.5 * raw + 0.5 * (np.roll(raw, 1, 0) + np.roll(raw, -1, 1)) / 2
-    weave = 0.03 * np.sin(2 * np.pi * (np.arange(n)[None, :] * 64 / n)) * np.sin(2 * np.pi * (np.arange(n)[:, None] * 64 / n))
-    light = 1 + 0.16 * fibre + weave + 0.07 * _fbm(rng, ((3, 3, 0.6), (9, 9, 0.4)), n)
-    wear = np.clip(_fbm(rng, ((2, 2, 1.0), (6, 6, 0.5)), n) - 0.2, 0, 1)
-    return _paint(base, light + 0.09 * wear)
+    loops = (_noise(rng, 96, 96, n) - 0.5) * 2
+    mid = _fbm(rng, ((10, 10, 0.5), (28, 28, 0.5)), n)
+    lines = np.sin(2 * np.pi * (6 * np.arange(n)[:, None] / n + 0.6 * _noise(rng, 3, 3, n)))
+    light = 1 + 0.15 * fibre + 0.10 * loops + 0.08 * mid + 0.035 * lines + 0.07 * _fbm(rng, ((3, 3, 0.6), (6, 6, 0.4)), n)
+    wear = np.clip(_fbm(rng, ((2, 2, 1.0), (5, 5, 0.5)), n) - 0.2, 0, 1)
+    return _paint(base, light + 0.11 * wear)
 
 
 def _brick(rng, base, n, rows: int = 16, cols: int = 5):
