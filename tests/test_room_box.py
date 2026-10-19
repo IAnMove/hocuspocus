@@ -546,3 +546,28 @@ def test_repainting_renders_again_only_the_shots_in_that_room(tmp_path, monkeypa
     assert after["kitchen"] != before["kitchen"], "the room that was painted"
     assert after["attic"] == before["attic"] and after[None] == before[None], "the shots in other rooms, or in none, keep their takes"
     assert render_inputs(series, shot("kitchen"), {}, str(root)) == after["kitchen"]
+
+
+def test_the_rest_door_paints_through_the_same_operation(tmp_path, monkeypatch):
+    """``POST /api/v1/scene3d/rooms/commands`` hands the image model to ``run`` like MCP does."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from routers.set_catalog import create_set_catalog_router
+    root = _stored(tmp_path, monkeypatch)
+    model = _Model(root)
+    api = FastAPI()
+    api.include_router(create_set_catalog_router(model))
+    client = TestClient(api)
+    body = {"operation": "scene3d.room.paint", "version": 1, "intent_id": "rest-1",
+            "input": {"workspace": "default", "name": "kitchen", "engine": "procedural", "walls": "red brick"}}
+    first = client.post("/api/v1/scene3d/rooms/commands", json=body)
+    assert first.status_code == 200 and first.json()["result"]["surfaces"]["walls"]["material"] == "brick"
+    asked = client.post("/api/v1/scene3d/rooms/commands", json={**body, "intent_id": "rest-2", "input": {"workspace": "default", "name": "kitchen"}})
+    assert asked.status_code == 200 and asked.json()["result"]["status"] in ("queued", "running", "completed")
+    assert client.post("/api/v1/scene3d/rooms/commands", json={**body, "operation": "scene3d.room.bake"}).status_code == 422
+    from services import room_paint
+    import time
+    stop = time.time() + 20
+    while time.time() < stop and room_paint.status(root, "kitchen")["status"] in ("queued", "running"):
+        time.sleep(0.05)
+    assert room_paint.status(root, "kitchen")["status"] == "completed" and len(model.admitted) >= 4
