@@ -106,15 +106,15 @@ character's ink.
 
 `characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
-approves it in Characters › Animaciones. Cards `walk-cycle-sheet`, `character-reaction` play it.
+approves it in Characters › Animaciones.
 Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
 `autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
 pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.
 The app marks it «aprobada por el agente» so the owner can revert it. In `review` mode both are refused.
 
 In a Series shot a cast entry plays an **approved** animation of its kit (`animation`, see *cast*), and `enterGait: "walk"`
-walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet: «animation
-'walk' of 'ana' is pending approval: approve it in Characters › Animaciones». Ask the person; an agent cannot approve.
+walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet
+(«pending approval: approve it in Characters › Animaciones»): ask the person; an agent cannot approve.
 A walk-in whose sheet is not approved keeps the bob and the check warns `walk_sheet_not_approved`.
 `"cast": [{"characterId": "gloria", "x": 34, "enterFrom": "left", "enterDuration": 3, "enterGait": "walk", "animation":
 {"id": "shrug", "at": 3.4}}, {"characterId": "leo", "poseId": "bust", "x": 70, "animation": {"id": "angry", "at": 2}}]`
@@ -203,10 +203,11 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   With an approved `walk` sheet the entrance is walked by its drawings: same slide, feet on the ground, no bob, one
   cycle per `2 × enterStep` (steps and sounds still land on the feet), mirrored against the way the sheet looks.
 - **animation:** `"wave"` or `{"id": "wave", "at": 2.5, "duration": 1.2, "loop": "once"}` plays an approved kit animation
-  in the pose's place, at its snapped size and ground line; the pose, mouth and eyes are hidden meanwhile (nobody speaks
-  over a body sheet). `at`: seconds inside the shot (0); `duration`: one pass, or 2.5 s for an expression; `loop`: `loop`,
-  `pingpong` or `once` (the sheet's). Whole-figure poses take gestures and `walk`, busts take expressions (`angry`,
-  `happy`) in `medium`/`close`. It cannot start inside a walk-in that plays the sheet: start it when the walk ends.
+  in the pose's place, at its snapped size and ground line; the pose, mouth and eyes are hidden meanwhile, so an expression
+  never plays during its own character's voice: before the line or in a silence ≥ 2.5 s (`allowDuringSpeech: true` opts
+  out). `at`: seconds inside the shot (0); `duration`: one pass, or 2.5 s for an expression; `loop`: `loop`, `pingpong` or
+  `once` (the sheet's). Whole-figure poses take gestures and `walk`, busts take expressions (`angry`, `happy`) in
+  `medium`/`close`. It cannot start inside a walk-in sheet: start it after.
 - **look room:** stand a character on the side away from where they look (the bible's `facing` per pose): facing
   `left` right of centre, facing `right` left of it; two people face each other. `from_script` moves a 2D cast member
   who looks out of the frame (`lookRoom` in the reply); `"lookRoom": false` on a cast entry or a shot keeps your `x`.
