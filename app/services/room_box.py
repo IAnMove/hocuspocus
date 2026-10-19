@@ -38,12 +38,12 @@ _FRAME = json.loads((Path(__file__).resolve().parents[1] / "shared" / "room_box_
 TILE = float(_FRAME["floorTile"])
 WALLS = ("back", "left", "right")
 _NAME = __import__("re").compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
-_FIELDS = {"kind", "prompt", "size", "floor", "walls", "ceiling", "door", "windows", "props", "seed", "tile"}
+_FIELDS = {"kind", "prompt", "size", "floor", "walls", "ceiling", "door", "windows", "props", "seed", "tile", "plate"}
 _EMPTY = (np.zeros((0, 3), np.float32), np.zeros((0, 3), np.float32), np.zeros((0, 2), np.float32), np.zeros(0, np.uint16))
 _SIZE = {"w", "d", "h"}
 _DOOR = {"wall", "x", "w", "h"}
 _WINDOW = {"wall", "x", "y", "w", "h"}
-_PROP = {"prompt", "on", "wall", "floor", "x", "z", "height_m"}
+_PROP = {"prompt", "on", "wall", "floor", "x", "z", "y", "height_m", "image"}
 _TONES = {"floor": (186, 154, 104), "walls": (214, 208, 196), "ceiling": (232, 232, 228), "door": (128, 74, 38), "prop": (86, 138, 156),
           "trim": (232, 228, 218), "handle": (196, 160, 84)}
 # The surfaces that get a self-lit share (everything but the handle and the props), so a wall the lights miss never goes
@@ -89,6 +89,9 @@ def normalize(entry: dict) -> dict:
     unknown = set(entry) - _FIELDS
     if unknown:
         raise ValueError(f"unknown room fields: {', '.join(sorted(unknown))}")
+    if "plate" in entry or isinstance(entry.get("walls"), dict):
+        from services import room_plate
+        return room_plate.normalize_room(entry)
     size = _size(entry.get("size"))
     _text(entry.get("prompt"), "prompt")
     _text(entry.get("floor"), "floor")
@@ -137,6 +140,10 @@ def build_room(target: str | Path, spec: dict, textures: dict | None = None, *, 
     keeps flat colours (``placeholder_room``)."""
     spec = spec if _is_canonical(spec) else normalize(spec)
     textures = dict(textures or {})
+    if spec.get("plate"):
+        from services import room_plate_parts
+        _write(target, room_plate_parts.build_parts(spec, textures))
+        return {"width": spec["size"]["w"], "depth": spec["size"]["d"], "height": spec["size"]["h"]}
     if procedural:
         from services.room_surfaces import complete_textures
         textures = complete_textures(spec, textures)
@@ -153,6 +160,8 @@ def placeholder_room(target: str | Path, spec: dict) -> dict:
 def _is_canonical(spec: dict) -> bool:
     size = spec.get("size") if isinstance(spec, dict) else None
     door = spec.get("door") if isinstance(spec, dict) else None
+    if isinstance(spec, dict) and isinstance(spec.get("plate"), dict):
+        return isinstance(size, dict) and "h" in size and "tile" in spec and "metres" in spec["plate"]
     return isinstance(size, dict) and "h" in size and isinstance(door, dict) and "w" in door and "tile" in spec
 
 
@@ -214,19 +223,34 @@ def _props(value, size: dict) -> list:
 
 def _prop(prop, size: dict, index: int) -> dict:
     if not isinstance(prop, dict) or set(prop) - _PROP:
-        raise ValueError(f"props[{index}] is {{prompt, on: floor|wall, wall?, x, z, height_m}}")
+        raise ValueError(f"props[{index}] is {{prompt, on: floor|wall, wall?, x, z, y?, height_m, image?}}")
     _text(prop.get("prompt"), f"props[{index}].prompt")
     on = _prop_on(prop, index)
-    height = _measure(prop.get("height_m"), 0.05, min(4, size["h"]), f"props[{index}].height_m")
+    height = _measure(prop.get("height_m"), 0.05, min(4, size["h"]) if "image" not in prop else min(8, size["h"]), f"props[{index}].height_m")
     x = _measure(prop.get("x"), -20, 20, f"props[{index}].x")
+    extra = _prop_extra(prop, size, index)
     if on == "floor":
         z = _measure(prop.get("z"), -20, 20, f"props[{index}].z")
         _inside_floor(size, x, z, f"props[{index}]")
-        return {"prompt": prop["prompt"].strip(), "on": "floor", "x": x, "z": z, "height_m": height}
+        return {"prompt": prop["prompt"].strip(), "on": "floor", "x": x, "z": z, "height_m": height, **extra}
     wall = _wall(prop.get("wall"), f"props[{index}].wall")
     inset = _inset(prop.get("z", 0.02), size, wall, index)
     along = _measure(x, -_length(size, wall) / 2 + 0.05, _length(size, wall) / 2 - 0.05, f"props[{index}].x")
-    return {"prompt": prop["prompt"].strip(), "on": "wall", "wall": wall, "x": along, "z": inset, "height_m": height}
+    return {"prompt": prop["prompt"].strip(), "on": "wall", "wall": wall, "x": along, "z": inset, "height_m": height, **extra}
+
+
+def _prop_extra(prop: dict, size: dict, index: int) -> dict:
+    """``y`` (metres up to the cut-out's foot) and ``image`` (the cut-out picture, already read as ``{file, w, h}``)."""
+    extra: dict = {}
+    if prop.get("y") is not None:
+        extra["y"] = _measure(prop["y"], 0, size["h"], f"props[{index}].y")
+    if "image" in prop:
+        image = prop["image"]
+        if not (isinstance(image, dict) and isinstance(image.get("file"), str) and set(image) <= {"file", "w", "h"}
+                and all(type(image.get(key)) is int and image[key] > 0 for key in ("w", "h"))):
+            raise ValueError(f"props[{index}].image is a PNG with alpha of the workspace: {{file}} (read by scene3d.room.put)")
+        extra["image"] = {"file": image["file"], "w": image["w"], "h": image["h"]}
+    return extra
 
 
 def _prop_on(prop: dict, index: int) -> str:
@@ -339,8 +363,13 @@ def _parts(spec: dict, textures: dict) -> list[dict]:
         parts.append(_part("ceiling", _ceiling_quad(size, tile("ceiling")), _picture(textures.get("ceiling"), _TONES["ceiling"]), repeat=True, glow=True))
     pictures = list(textures.get("props") or [])
     for index, prop in enumerate(spec["props"]):
+        source = pictures[index] if index < len(pictures) else None
+        if prop.get("image") and source is not None:
+            from services import room_plate_parts
+            parts.append(room_plate_parts.prop_part(spec, prop, source, index, unlit=False))
+            continue
         parts.append(_part(f"prop-{index + 1}", _prop_quad(spec, prop),
-                           _picture(pictures[index] if index < len(pictures) else None, _TONES["prop"], alpha=255), repeat=False, alpha=True))
+                           _picture(source, _TONES["prop"], alpha=255), repeat=False, alpha=True))
     return [part for part in parts if part["arrays"][0].size]
 
 
@@ -503,23 +532,18 @@ def _write(target: str | Path, parts: list[dict]) -> None:
                                wrapS=pygltflib.CLAMP_TO_EDGE, wrapT=pygltflib.CLAMP_TO_EDGE)
     gltf.samplers.extend((repeat, clamp))
     primitives = []
+    textures_by_picture: dict[tuple[bytes, bool], int] = {}
     for part in parts:
         positions, normals, uvs, indices = part["arrays"]
-        image = len(gltf.images)
-        gltf.images.append(pygltflib.Image(bufferView=view(part["png"]), mimeType="image/png", name=part["name"]))
-        gltf.textures.append(pygltflib.Texture(source=image, sampler=0 if part["repeat"] else 1))
-        texture_at = len(gltf.textures) - 1
-        material = pygltflib.Material(
-            name=part["name"], doubleSided=True,
-            alphaMode=pygltflib.BLEND if part["alpha"] else pygltflib.OPAQUE,
-            pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(
-                baseColorTexture=pygltflib.TextureInfo(index=texture_at),
-                baseColorFactor=[part["tint"], part["tint"], part["tint"], 1], metallicFactor=0.0, roughnessFactor=0.9))
-        if part["glow"]:
-            # A share of the picture lights itself: a wall the key light misses stays a wall, not a black slab.
-            material.emissiveTexture = pygltflib.TextureInfo(index=texture_at)
-            material.emissiveFactor = [_GLOW, _GLOW, _GLOW]
-        gltf.materials.append(material)
+        texture_at = textures_by_picture.get((part["png"], part["repeat"]))
+        if texture_at is None:
+            image = len(gltf.images)
+            gltf.images.append(pygltflib.Image(bufferView=view(part["png"]), mimeType="image/png", name=part["name"]))
+            gltf.textures.append(pygltflib.Texture(source=image, sampler=0 if part["repeat"] else 1))
+            texture_at = textures_by_picture[(part["png"], part["repeat"])] = len(gltf.textures) - 1
+        gltf.materials.append(_material(part, texture_at))
+        if part.get("unlit") and "KHR_materials_unlit" not in gltf.extensionsUsed:
+            gltf.extensionsUsed.append("KHR_materials_unlit")
         attributes = pygltflib.Attributes(
             POSITION=accessor(positions, "VEC3", pygltflib.FLOAT, pygltflib.ARRAY_BUFFER),
             NORMAL=accessor(normals, "VEC3", pygltflib.FLOAT, pygltflib.ARRAY_BUFFER),
@@ -532,6 +556,26 @@ def _write(target: str | Path, parts: list[dict]) -> None:
     gltf.set_binary_blob(bytes(blob))
     Path(target).parent.mkdir(parents=True, exist_ok=True)
     gltf.save_binary(str(target))
+
+
+def _material(part: dict, texture_at: int):
+    """One part's glTF material: lit and double sided, ``unlit`` for a picture that carries its own light, a mask when it
+    has a cut-out edge (it then writes depth like a solid)."""
+    import pygltflib
+
+    mode = pygltflib.MASK if part.get("mask") else pygltflib.BLEND if part["alpha"] else pygltflib.OPAQUE
+    material = pygltflib.Material(
+        name=part["name"], doubleSided=True, alphaMode=mode, alphaCutoff=0.5 if part.get("mask") else None,
+        pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(
+            baseColorTexture=pygltflib.TextureInfo(index=texture_at),
+            baseColorFactor=[part["tint"], part["tint"], part["tint"], 1], metallicFactor=0.0, roughnessFactor=0.9))
+    if part.get("unlit"):
+        material.extensions = {"KHR_materials_unlit": {}}
+    elif part["glow"]:
+        # A share of the picture lights itself: a wall the key light misses stays a wall, not a black slab.
+        material.emissiveTexture = pygltflib.TextureInfo(index=texture_at)
+        material.emissiveFactor = [_GLOW, _GLOW, _GLOW]
+    return material
 
 
 def image_count(entry) -> int:

@@ -18,9 +18,19 @@ export interface RoomBoxCharacter {
   id?: string
 }
 
+/** The camera of a plate room (`plate.camera` of the spec): the plate's own viewpoint and its lens shift. */
+export interface RoomPlateCamera {
+  eye: Vec3
+  look: Vec3
+  fov: number
+  lensShift: number
+}
+
 export interface RoomBoxSpec {
   size: { w: number; d: number; h: number }
-  door: { wall: string; x: number; w: number; h: number }
+  door?: { wall: string; x: number; w: number; h: number } | null
+  /** A plate room: the painted back wall, seen from this camera. */
+  plate?: { camera: RoomPlateCamera }
   file?: string
   framing?: 'wide' | 'medium'
   characters?: RoomBoxCharacter[]
@@ -42,10 +52,12 @@ function round4(value: number): number {
 
 /** Place the room and its cast. A document without this call is left alone. */
 export function stageRoomBox(document: Scene3DDocument, spec: RoomBoxSpec): Scene3DDocument {
-  const pose = roomBoxCamera(spec.size.d, spec.framing !== 'medium')
+  const plate = spec.plate?.camera
+  const pose = plate ?? roomBoxCamera(spec.size.d, spec.framing !== 'medium')
   const camera = { ...document.camera }
   delete camera.framing
-  document.camera = { ...camera, family: 'fixed', eye: pose.eye, look: pose.look, fov: pose.fov }
+  delete camera.lensShift
+  document.camera = { ...camera, family: 'fixed', eye: [...pose.eye], look: [...pose.look], fov: pose.fov, ...(plate ? { lensShift: plate.lensShift } : {}) }
   applyNamedLight(document, 'soft')
   const characters = (spec.characters ?? []).map((person, index) => ({
     x: person.x,
@@ -53,7 +65,7 @@ export function stageRoomBox(document: Scene3DDocument, spec: RoomBoxSpec): Scen
     heightM: person.heightM ?? frame.defaultHeight,
     color: person.color ?? PALETTE[index % PALETTE.length],
   }))
-  const paint: RoomBoxPaint = { size: { ...spec.size }, door: { ...spec.door }, characters }
+  const paint: RoomBoxPaint = { size: { ...spec.size }, ...(spec.door ? { door: { ...spec.door } } : {}), characters }
   document.roomBox = paint
   if (spec.file) document.slots = [...document.slots.filter(slot => slot.id !== 'room-box'), roomSlot(spec.file, spec.size.h)]
   spec.characters?.forEach((person, index) => {

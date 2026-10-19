@@ -75,8 +75,26 @@ def _extras(value: dict[str, Any]) -> dict[str, Any]:
     extras.update({key: value[key] for key in ("roomCamera", "roomSet", "roomFingerprint") if key in value})
     if isinstance(value.get("roomBox"), dict):
         extras["roomBox"] = value["roomBox"]
+    if _camera_move(value.get("camera")):
+        extras["camera"] = _camera_move(value["camera"])
     extras.update(_look(value))
     return extras
+
+
+def _camera_move(value: Any) -> dict[str, Any]:
+    """``camera`` of a shot in a plate room: ``{shift: {x, y, z} metres, yaw, pitch degrees}``, the numbers that are numbers."""
+    if not isinstance(value, dict):
+        return {}
+    move: dict[str, Any] = {}
+    shift = value.get("shift") if isinstance(value.get("shift"), dict) else {}
+    moved = {axis: _number(shift.get(axis), -5, 5) for axis in "xyz"}
+    if any(item is not None for item in moved.values()):
+        move["shift"] = {axis: item for axis, item in moved.items() if item is not None}
+    for key in ("yaw", "pitch"):
+        angle = _number(value.get(key), -90, 90)
+        if angle is not None:
+            move[key] = angle
+    return move
 
 
 def _look(value: dict[str, Any]) -> dict[str, Any]:
@@ -403,7 +421,7 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
     from services.world3d_stage_documents import stage_camera
     if config.get("roomBox"):
         from services.series_room_box import box_camera
-        setup["camera"] = box_camera(config["roomBox"])
+        setup["camera"] = box_camera(config["roomBox"], config.get("camera"))
     elif stage_camera(config):
         setup["camera"] = stage_camera(config)
     if effects:

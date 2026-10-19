@@ -36,7 +36,7 @@ _MAX_SLOTS = 24
 _ADDED_MEDIA = ("model3d", "image")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
 _CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat",
-                  "shake"}
+                  "shake", "lensShift"}
 # Same bounds as ui/src/features/scene3d/cameraShake.ts; the editor rejects a document outside them.
 _SHAKE_RANGES = {"start": (0, 600), "end": (0, 600), "amplitude": (0, 2), "frequency": (0, 60), "decay": (0, 60), "seed": (0, 1_000_000)}
 _SHAKE_REQUIRED = {"start", "end", "amplitude", "frequency"}

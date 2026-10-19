@@ -309,6 +309,8 @@ class EpisodeScript:
         from services.series_room_box import shot_problems
         from services.series_sets import script_scene3d
         problems += [f"{where}: {item}" for item in shot_problems(shot, self.series, self.checker.root, self._room_location(shot))]
+        from services.series_room_box import plate_warnings
+        self.warnings.extend({**warning, "shot": where} for warning in plate_warnings(shot, self.series, self.checker.root))
         config = normalize_scene3d(script_scene3d(shot, self._room_location(shot), series=self.series, root=self.checker.root))
         if not config:
             problems.append(f"{where}: a 3d shot needs scene3d with a template or a saved scene and its cast")

@@ -65,6 +65,7 @@ import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
+import { applyLensShift } from './lensShift'
 import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
 import { findHandBone, followHand, parseHold } from './handHold'
 
@@ -616,6 +617,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   for (const slot of posedSlots) {
     if (slot.billboard && slot.media === 'image') paintActor(world, { ...slot, rotationY: Math.atan2(shaken.eye[0]-slot.position[0], shaken.eye[2]-slot.position[2]) }, sceneSeconds, document.duration)
   }
+  applyLensShift(world.camera, document.camera.lensShift)
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)

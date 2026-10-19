@@ -27,7 +27,9 @@ GEOMETRY_VERSION = 1
 
 
 def present(spec: dict) -> tuple[str, ...]:
-    """The surfaces this room has: no ceiling picture unless the room has a ceiling."""
+    """The surfaces this room has: no ceiling picture unless the room has a ceiling. A plate room has the pictures it was given."""
+    if spec.get("plate"):
+        return tuple(name for name, side in (("plate", "back"), ("left", "left"), ("right", "right")) if side in spec["plate"])
     return tuple(surface for surface in SURFACES if surface != "ceiling" or spec.get("ceiling"))
 
 
@@ -64,6 +66,8 @@ def complete_textures(spec: dict, textures: dict) -> dict:
 def textures_of(root: Path, spec: dict, entries: dict) -> dict:
     """The ``build_room`` textures a stored room's entries describe: picture files for ``ai`` surfaces, a procedural
     picture for the others."""
+    if spec.get("plate"):
+        return _plate_textures(root, spec)
     textures: dict = {"tile_m": {}}
     for surface, entry in entries.items():
         if surface not in present(spec):
@@ -71,7 +75,22 @@ def textures_of(root: Path, spec: dict, entries: dict) -> dict:
         textures["tile_m"][surface] = float(entry["tile_m"])
         textures[surface] = (root / entry["file"]) if entry.get("source") == "ai" else procedural_picture(spec, surface, entry)
     textures["door_panels"] = (entries.get("door") or {}).get("source") != "ai"
+    props = _prop_pictures(root, spec)
+    if props:
+        textures["props"] = props
     return textures
+
+
+def _prop_pictures(root: Path, spec: dict) -> list:
+    """Each prop's cut-out picture (a path) or None; an empty list when no prop has one."""
+    rows = [root / prop["image"]["file"] if prop.get("image") else None for prop in spec.get("props") or []]
+    return rows if any(row is not None for row in rows) else []
+
+
+def _plate_textures(root: Path, spec: dict) -> dict:
+    """The pictures a plate room is built from: its plate, its own side walls if it has any, and the props' cut-outs."""
+    plate = {side: root / spec["plate"][side]["file"] for side in ("back", "left", "right") if side in spec["plate"]}
+    return {"plate": plate, "props": _prop_pictures(root, spec)}
 
 
 def file_sha(path: Path) -> str:
