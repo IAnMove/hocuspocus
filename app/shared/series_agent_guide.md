@@ -110,19 +110,19 @@ approves it in Characters › Animaciones. Cards `walk-cycle-sheet`, `character-
 Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
 `autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
 pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.
-The app marks it «aprobada por el agente» so the owner can revert it. In `review` mode both are refused.
+The app marks it «aprobada por el agente»: the owner can revert it. In `review` mode both are refused.
 
 In a Series shot a cast entry plays an **approved** animation of its kit (`animation`, see *cast*), and `enterGait: "walk"`
-walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet: «animation
-'walk' of 'ana' is pending approval: approve it in Characters › Animaciones». Ask the person; an agent cannot approve.
+walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet («pending approval»).
+Ask the person: an agent cannot approve (Characters › Animaciones).
 A walk-in whose sheet is not approved keeps the bob and the check warns `walk_sheet_not_approved`.
 `"cast": [{"characterId": "gloria", "x": 34, "enterFrom": "left", "enterDuration": 3, "enterGait": "walk", "animation":
-{"id": "shrug", "at": 3.4}}, {"characterId": "leo", "poseId": "bust", "x": 70, "animation": {"id": "angry", "at": 2}}]`
+{"id": "shrug", "at": 3.4}}]`
 
-A whole Video 2D card as a shot's take, in one call: `series.shot.card.apply` {shot, card (`walk-cycle-sheet`,
+A Video 2D card as a shot's take, in one call: `series.shot.card.apply` {shot, card (`walk-cycle-sheet`,
 `character-reaction`, `walk-toward-camera`...), cast [{slot, characterId, animation?, poseId?}], assets, controls}. It uses the
-approved sheets and poses, the shot's plate and recorded lines; a candidate (`approve` only in one-shot). `exporting`: repeat it.
-`characters.voice.band` {character_id, voiceType man|woman|child|robot} sets that voice's pitch band. A take outside it is retried and may warn `voice_out_of_band`.
+approved sheets and poses, the shot's plate and recorded lines; a candidate (`approve` only in one-shot). `exporting`: repeat.
+`characters.voice.band` {character_id, voiceType man|woman|child|robot} sets the pitch band; an off-band or dirty take is retried, then warns `voice_out_of_band`/`voice_unclean`. A voice reference must be clean (floor ≤ -60 dB, SNR ≥ 45, little bass): design it with VoxCPM2, clone with `drama3_base`.
 
 ## The script
 

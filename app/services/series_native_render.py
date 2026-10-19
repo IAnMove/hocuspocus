@@ -59,6 +59,7 @@ from services import series_hearing
 from services.series_shot_plan import build_shot_spec, kit_ref, language_key, plan_timing, recording_key, sound_tracks, voice_for
 from services.speech_text_es import line_notes, pronounce, qa_verdict
 from services.voice_band import band_applies, take_reason
+from services.voice_cleanliness import clean_reason, dirt_score, measure_file, unclean_warning
 from services.series_take_inputs import INPUTS_VERSION, accepted_inputs, render_inputs, stale_shot_ids
 from services.series_voice_rooms import RoomError, apply_room, roomed
 
@@ -121,6 +122,8 @@ class NativeRenderDeps:
     sleep: Callable[[float], None] = time.sleep
     poll_seconds: float = 3.0
     check_speech: bool = True
+    # The cleanliness of a raw take (noise floor, SNR, rumble), measured before the trim removes its pauses.
+    cleanliness: Callable[[str], dict | None] = measure_file
     # Sets shot.durationSeconds to the rendered length; a take shorter than its shot is refused on import.
     set_shot_duration: Callable[[str, str, str, str, float], None] | None = None
     # Approves a take in a language version: (workspace, series, episode, language, shot, attempt).
@@ -179,15 +182,22 @@ def _carry_sidecar(raw: str, trimmed: str) -> None:
             os.remove(temporary)
 
 
-def _outranks(take: dict, best: dict | None) -> bool:
-    """An in-band take beats any out-of-band take. Inside one class, a lower word error rate wins.
+def _rank(take: dict, limit: float) -> tuple[bool, bool, bool, float]:
+    """What a take loses by, most serious first: out of its pitch band, words past the limit, unclean, how unclean."""
+    wer = take.get("wer")
+    return (bool(take.get("voiceBand")), isinstance(wer, (int, float)) and wer > limit, bool(take.get("voiceClean")),
+            dirt_score(take.get("cleanliness")))
 
-    A take whose error rate was not measured does not replace one that was.
-    """
+
+def _outranks(take: dict, best: dict | None, limit: float = MAX_WER) -> bool:
+    """A take that loses by less beats one that loses by more: an in-band take beats an out-of-band one, right words
+    beat wrong words, a clean take beats an unclean one and a cleaner one beats a dirtier one. Inside one class,
+    a lower word error rate wins; a take whose error rate was not measured does not replace one that was."""
     if best is None:
         return True
-    if bool(take.get("voiceBand")) != bool(best.get("voiceBand")):
-        return not take.get("voiceBand")
+    ours, theirs = _rank(take, limit), _rank(best, limit)
+    if ours != theirs:
+        return ours < theirs
     wer, previous = take.get("wer"), best.get("wer")
     if wer is None:
         return False
@@ -195,10 +205,28 @@ def _outranks(take: dict, best: dict | None) -> bool:
 
 
 def _keep_take(best: dict | None, take: dict, wer: float | None, limit: float) -> tuple[dict, bool]:
-    """The take to keep, and whether the loop can stop (in band, and the words are close enough)."""
-    chosen = take if _outranks(take, best) else best
-    stop = not take.get("voiceBand") and (wer is None or wer <= limit)
+    """The take to keep, and whether the loop can stop (in band, clean or unjudged, and the words are close enough)."""
+    chosen = take if _outranks(take, best, limit) else best
+    stop = not take.get("voiceBand") and not take.get("voiceClean") and (wer is None or wer <= limit)
     return chosen, stop
+
+
+def _gate_fields(band: str | None, clean: dict | None) -> dict[str, Any]:
+    """What the take records about the two gates: why it left its pitch band, and how clean it measured."""
+    dirt = clean_reason(clean)
+    return {**({"voiceBand": band} if band else {}), **({"cleanliness": clean} if clean else {}), **({"voiceClean": dirt} if dirt else {})}
+
+
+def _line_flags(take: dict) -> dict[str, Any]:
+    """The recorded line's warnings: ``warning`` is the first (the pitch band outranks the noise), ``warnings`` all."""
+    flags = [name for name, key in (("voice_out_of_band", "voiceBand"), ("voice_unclean", "voiceClean")) if take.get(key)]
+    return {"warning": flags[0], "warnings": flags} if flags else {}
+
+
+def _item_warnings(beat_id: str, recorded: dict) -> list[dict[str, Any]]:
+    """The render item's entries for a recorded line; ``voice_unclean`` carries the numbers and the remedy."""
+    return [unclean_warning(beat_id, recorded["cleanliness"]) if name == "voice_unclean" else {"id": beat_id, "warning": name}
+            for name in recorded.get("warnings") or []]
 
 
 def _replace_with_sidecar(source: str, target: str) -> None:
@@ -633,8 +661,8 @@ class SeriesNativeRender:
                 continue
             recorded = self._reuse(workspace, job, beat["id"], text, key, voice) or self._record(workspace, job, beat["id"], text, voice, key)
             item["lines"][beat["id"]] = recorded
-            if recorded.get("warning") == "voice_out_of_band":
-                item.setdefault("warnings", []).append({"id": beat["id"], "warning": "voice_out_of_band"})
+            if recorded.get("warnings"):
+                item.setdefault("warnings", []).extend(_item_warnings(beat["id"], recorded))
             self._save(workspace, job)
             if self._cancelled(job["jobId"]):
                 raise NativeRenderError("cancelled", "Cancelled")
@@ -682,6 +710,7 @@ class SeriesNativeRender:
         try:
             for attempt in range(MAX_TAKES):
                 raw = self._speak(workspace, job, stem, text, voice, attempt)
+                clean = self.deps.cleanliness(os.path.join(root, raw)) if self.deps.check_speech else None
                 try:
                     duration = self._trim(os.path.join(root, raw), final)
                     if duration:
@@ -695,7 +724,7 @@ class SeriesNativeRender:
                 wer, limit, notes = self._wer(workspace, f"{stem}.wav", text, job["language"], voice)
                 reason = take_reason(voice, notes)
                 take = {"key": key, "filename": f"{stem}.wav", "duration": round(duration, 3), "wer": wer,
-                        "attempt": attempt, **notes, **({"voiceBand": reason} if reason else {})}
+                        "attempt": attempt, **notes, **_gate_fields(reason, clean)}
                 chosen, stop = _keep_take(best, take, wer, limit)
                 if chosen is not best:
                     best = chosen
@@ -709,8 +738,7 @@ class SeriesNativeRender:
         if best is None:
             raise NativeRenderError("speech_empty", f"The voice gave no speech for «{text}» in {MAX_TAKES} takes; "
                                     "try another reference voice or reword the line", 502)
-        if best.get("voiceBand"):
-            best = {**best, "warning": "voice_out_of_band"}
+        best = {**best, **_line_flags(best)}
         self.deps.level(final)
         cues = self._cues(workspace, best["filename"], best["duration"], text, job["language"])
         return {**best, **cues, "audioDigest": file_digest(final)}
