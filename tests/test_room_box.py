@@ -286,7 +286,7 @@ def test_a_surface_names_its_material_from_its_words():
     assert pick("walls", "red brick")["material"] == "brick"
     assert pick("walls", "rugged cliffs")["material"] == "plaster", "'rug' is a word, not the start of 'rugged'"
     assert pick("floor", "")["material"] == "wood_planks" and pick("walls", "")["material"] == "plaster"
-    assert pick("walls", "dark green paint")["color"] == "#413c43"[:0] + room_materials.hex_of((65, 90, 67))
+    assert pick("walls", "dark green paint")["color"] == room_materials.hex_of((65, 90, 67))
     assert pick("walls", "", "stone hall")["material"] == "stone", "the style decides only when the words name nothing"
     defaults = room_materials.defaults_for({"floor": "oak boards", "walls": "welded steel plates"})
     assert defaults["door"]["material"] == "metal_panels" and defaults["trim"]["material"] == "metal_panels"

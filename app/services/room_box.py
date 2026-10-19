@@ -46,7 +46,8 @@ _WINDOW = {"wall", "x", "y", "w", "h"}
 _PROP = {"prompt", "on", "wall", "floor", "x", "z", "height_m"}
 _TONES = {"floor": (186, 154, 104), "walls": (214, 208, 196), "ceiling": (232, 232, 228), "door": (128, 74, 38), "prop": (86, 138, 156),
           "trim": (232, 228, 218), "handle": (196, 160, 84)}
-# The surfaces that get a self-lit share, so a wall the lights miss never goes black (see ``_write``).
+# The surfaces that get a self-lit share (everything but the handle and the props), so a wall the lights miss never goes
+# black and the door does not read as the darkest thing in the room (see ``_write``).
 _GLOW = 0.16
 _RECESS = 0.74
 
@@ -329,11 +330,11 @@ def _parts(spec: dict, textures: dict) -> list[dict]:
     parts = [_part("floor", _floor(size, tile("floor")), _picture(textures.get("floor"), _TONES["floor"]), repeat=True, glow=True),
              _part("walls", _walls(spec, tile("walls")), _picture(textures.get("walls"), _TONES["walls"]), repeat=True, glow=True),
              # With raised panels the leaf is the recess and the rails: darker than the panels that stand out of it.
-             _part("door", _door_slab(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False, tint=_RECESS if panels else 1.0),
+             _part("door", _door_slab(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False, glow=True, tint=_RECESS if panels else 1.0),
              _part("trim", room_box_trim.frames(spec, tile("trim")), _picture(textures.get("trim"), _TONES["trim"]), repeat=True, glow=True),
              _part("handle", room_box_trim.handle(spec), _picture(None, _TONES["handle"]), repeat=False)]
     if panels:
-        parts.insert(3, _part("door-panels", room_box_trim.door_panels(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False))
+        parts.insert(3, _part("door-panels", room_box_trim.door_panels(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False, glow=True))
     if spec.get("ceiling"):
         parts.append(_part("ceiling", _ceiling_quad(size, tile("ceiling")), _picture(textures.get("ceiling"), _TONES["ceiling"]), repeat=True, glow=True))
     pictures = list(textures.get("props") or [])
