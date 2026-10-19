@@ -442,6 +442,30 @@ def test_the_sam_service_start_evicts_an_idle_warm_runtime(comfy, monkeypatch):
     assert comfy.processes[0].stopped.is_set()
 
 
+def test_an_already_running_sam_service_still_evicts_an_idle_warm_runtime(comfy, monkeypatch):
+    """A mask preview leaves SAM up; /health stays available after the model unloads."""
+    from services import inpaint_service
+    comfy.job(name="one")
+    monkeypatch.setattr(inpaint_service, "check_sam_status", lambda: {"status": "available", "model_loaded": False})
+
+    def refuse(*args, **kwargs):
+        raise OSError("SAM was already up; starting it again is the bug")
+
+    monkeypatch.setattr(subprocess, "Popen", refuse)
+    assert inpaint_service.ensure_sam_running() is True
+    assert comfy.processes[0].stopped.is_set()
+
+
+def test_a_missing_sam_install_does_not_evict_the_warm_runtime(comfy, monkeypatch):
+    from services import inpaint_service
+    comfy.job(name="one")
+    monkeypatch.setattr(inpaint_service, "check_sam_status", lambda: {"status": "not_installed"})
+    monkeypatch.setattr(inpaint_service, "_find_sam_env", lambda: None)
+    monkeypatch.setattr(inpaint_service, "_find_sam_service_script", lambda: None)
+    assert inpaint_service.ensure_sam_running() is False
+    assert not comfy.processes[0].stopped.is_set()
+
+
 def test_a_lane_less_eviction_never_waits_for_a_running_job(comfy, monkeypatch):
     started, release = threading.Event(), threading.Event()
     original = comfy.service._request
