@@ -3,7 +3,7 @@
 //   node scripts/fx-presence-sheets.mjs --out DIR [--kinds a,b] [--tag before] [--no-webgl] [--light] [--wide 1280] [--cue '{"size":50}']
 //   node scripts/fx-presence-sheets.mjs --out DIR --compare          # before (2D) over after (Three.js), three instants
 //   node scripts/fx-presence-sheets.mjs --out DIR --still --at 3    # one full-size frame per effect
-//   node scripts/fx-presence-sheets.mjs --time [--kinds a,b] [--wide 1280]   # ms per frame, each alone and the two together
+//   node scripts/fx-presence-sheets.mjs --time [--kinds a,b] [--wide 1280] [--before]   # ms per frame, each alone and the two together (--before: the 2D painters)
 //
 // One PNG per effect: its frames at the start, the middle and the end of a 6 s shot over a scene-like backdrop. ``--tag``
 // names the file (``before``/``after``); ``--no-webgl`` hides WebGL so the 2D painters are the ones shown.
@@ -64,6 +64,7 @@ async function main() {
   try {
     const page = await sheetPage(browser, script, { webgl })
     if (args.includes('--time')) {
+      if (args.includes('--before')) await page.evaluate(() => window.fxSheet.presence(false))
       const pair = [sheetCue(kinds[0], extra, 0), sheetCue(kinds[1] ?? kinds[0], extra, 1)]
       for (const cues of [[pair[0]], [pair[1]], pair]) {
         const wide = Number(argAfter(args, '--wide') ?? 1280)
