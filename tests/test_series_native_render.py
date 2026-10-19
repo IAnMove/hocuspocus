@@ -1214,6 +1214,7 @@ def test_an_expression_over_its_own_voice_is_moved_in_the_render_and_the_job_say
     assert shot["cast"][0]["animation"] == {"id": "angry", "at": 1.8, "duration": 2.5}, "after kevin's line, before gary answers"
     assert [(w["code"], w["subject"], w["shots"]) for w in item["warnings"]] == [("expression_moved_for_speech", "kevin", ["s01"])]
     assert "from 0 s to 1.8 s" in item["warnings"][0]["message"]
+    assert public_job({"items": [item]})["items"][0]["warnings"] == item["warnings"], "what series.episode.render_native.status returns"
 
 
 def test_an_expression_that_fits_in_no_silence_is_dropped_in_the_render_and_the_job_says_so(tmp_path, monkeypatch):

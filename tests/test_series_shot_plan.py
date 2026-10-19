@@ -378,9 +378,9 @@ EXPRESSION_KITS = {"kit-kevin": {"animations": {"angry": _approved(), "wave": _a
                    "kit-gary": {"animations": {"angry": _approved()}}}
 
 
-def _expression_spec(cast, beats, kits=None):
+def _expression_spec(cast, beats, **layout):
     """The spec of a shot whose beats are {who, seconds, pauseBefore?, castIndex?}; recorded as long as ``seconds``."""
-    shot = {"id": "s1", "sceneId": "a", "locationId": "garage", "layout2d": {"framing": "two", "cast": cast},
+    shot = {"id": "s1", "sceneId": "a", "locationId": "garage", "layout2d": {"framing": "two", "cast": cast, **layout},
             "dialogueBeats": [{"id": f"b{number}", "characterId": beat["who"], "text": "Hola.",
                                **{key: beat[key] for key in ("pauseBefore", "castIndex") if key in beat}} for number, beat in enumerate(beats)]}
     recorded = {f"b{number}": {"filename": f"b{number}.wav", "duration": beat["seconds"]} for number, beat in enumerate(beats)}
@@ -448,6 +448,9 @@ def test_a_shot_without_audio_is_not_touched():
     """No dialogue (or a deaf shot, whose lines are dropped) has no voice to keep clear of."""
     spec, quiet, warnings = _quiet(_kevin(ANGRY), [])
     assert spec["lines"] == [] and quiet == spec and warnings == []
+    deaf = _expression_spec(_kevin(ANGRY), KEVIN_THEN_GARY, hearing="deaf")
+    from services.series_expression_silence import quiet_expressions
+    assert deaf["lines"] == [] and quiet_expressions(deaf, EXPRESSION_KITS, "s1") == (deaf, [])
 
 
 def test_a_gesture_and_a_cycle_may_play_over_the_voice():
