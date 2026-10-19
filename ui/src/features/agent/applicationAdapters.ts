@@ -49,7 +49,7 @@ import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
-import { executeMakeCharacterAnimation, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
+import { executeMakeCharacterAnimation, executeMakeCharacterAnimationSet, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
@@ -208,6 +208,7 @@ export interface WizardApplicationAdapters {
   }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
+    makeSet(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationSetAction, workspace?: string): Promise<AdapterOutcome>
     review(action: import('./characterAnimationCapabilities').AgentReviewCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
   }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
@@ -801,6 +802,7 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },
+    async makeSet(action, workspace) { return executeMakeCharacterAnimationSet(action, workspace) },
     async review(action, workspace) { return executeReviewCharacterAnimation(action, workspace) },
   }
   adapters.mediaTools = {

@@ -21,6 +21,7 @@ export const AGENT_ACTION_TYPES = [
   'regenerate_series_line_voice',
   'apply_series_shot_card',
   'make_character_animation',
+  'make_character_animation_set',
   'review_character_animation',
   'set_voice_band',
   'media_tool',

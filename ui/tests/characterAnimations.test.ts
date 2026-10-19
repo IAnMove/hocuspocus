@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
-  animationSlug, canAddAnimation, customAnimationDef, freeAnimationId, kitCustomDefs, MAX_ANIMATIONS, MAX_CUSTOM_POSES,
+  animationSets, animationSlug, canAddAnimation, customAnimationDef, customViews, freeAnimationId, kitCustomDefs, MAX_ANIMATIONS, MAX_CUSTOM_POSES,
   controlsForCard, findKitAnimationBySheet,
   ANIMATION_SHEET, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
   kitStyleId, localized, reviewedByAgent, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
@@ -23,7 +23,8 @@ test('the catalog groups cycles, gestures and anime expressions, each with poses
   }
   assert.equal(animationDef('walk')?.facing, 'right')
   assert.ok(animationDefs.length >= 30 && animationDefs.length <= MAX_ANIMATIONS && animationsOf('gesture').length >= 10 && animationsOf('expression').length >= 16, 'a standard set of cycles, gestures and expressions, all of which fit on one kit')
-  for (const def of animationDefs) assert.equal(def.scaleBy, { side: 'height', front: 'base', bust: 'face' }[def.view], def.id)
+  // A walk, and every view that is not the plain front or the bust, is sized by its height; a gesture by what it does not move.
+  for (const def of animationDefs) assert.equal(def.scaleBy, def.motion === 'walk' ? 'height' : { side: 'height', front: 'base', bust: 'face', front34: 'height', back34: 'height', back: 'height' }[def.view], def.id)
   assert.equal(localized(animationDef('angry')!.title, 'es-ES'), 'Enfado')
   assert.equal(localized(animationDef('angry')!.title, 'en'), 'Angry')
 })
@@ -125,7 +126,7 @@ test('an animation the author names gets a free slug, and its poses are the line
   assert.equal(freeAnimationId(kit(), 'Mi guiño'), 'mi-guino')
   assert.equal(freeAnimationId(kit(), 'angry'), 'angry-2', 'a catalog id is never reused')
   assert.equal(freeAnimationId(withOwn, 'angry'), 'angry-3', 'nor one the kit already has')
-  const def = customAnimationDef('mi-guino', 'Mi guiño', 'bust', ['  Anime expression: a wink  ', '', 'Anime expression: a big wink', ...Array.from({ length: 9 }, (_, index) => `pose ${index}`)])
+  const def = customAnimationDef('mi-guino', 'Mi guiño', 'bust', ['  Anime expression: a wink  ', '', 'Anime expression: a big wink', ...Array.from({ length: 14 }, (_, index) => `pose ${index}`)])
   assert.equal(def.poses.length, MAX_CUSTOM_POSES)
   assert.deepEqual([def.custom, def.group, def.view, def.scaleBy, def.resolution, def.template, def.loop], [true, 'custom', 'bust', 'face', '1024x1024', 'character-reaction', 'once'])
   assert.deepEqual(def.poses.slice(0, 2).map(pose => [pose.id, pose.label.es, pose.prompt]), [['pose-1', 'a wink', 'Anime expression: a wink'], ['pose-2', 'a big wink', 'Anime expression: a big wink']])
@@ -159,7 +160,9 @@ test('the job to show per animation is its latest, unless it completed; the auth
 })
 
 test('the ids and limits of the author\'s own animations come from the catalog the server reads', () => {
-  assert.equal(MAX_CUSTOM_POSES, 6)
+  assert.equal(MAX_CUSTOM_POSES, 12, 'a full walk is twelve poses')
+  assert.deepEqual(customViews, ['bust', 'front', 'side', 'front34', 'back34', 'back'])
+  assert.deepEqual([customAnimationDef('x', 'X', 'back34', ['a']).scaleBy, customAnimationDef('x', 'X', 'back34', ['a']).facing, customAnimationDef('x', 'X', 'back', ['a']).facing], ['height', 'right', 'front'])
   const def = customAnimationDef('x', 'X', 'side', ['a'])
   assert.deepEqual([def.scaleBy, def.facing, def.loop, def.fps, def.template, def.resolution], ['height', 'right', 'once', 3, 'character-reaction', '896x1152'])
 })
@@ -170,4 +173,19 @@ test('a kit can hold every catalog animation, and a full kit cannot add one', ()
   assert.equal(canAddAnimation(kit()), true)
   assert.equal(canAddAnimation(full), false)
   assert.equal(canAddAnimation({ ...kit(), animations: Object.fromEntries(animationDefs.map(def => [def.id, entry])) }), true)
+})
+
+test('the catalog has five directions, a twelve-pose walk for each and the sets that make them together', () => {
+  const walks = animationDefs.filter(def => def.motion === 'walk' && def.poses.length === 12)
+  assert.deepEqual(Object.fromEntries(walks.map(def => [def.dir, def.id])), { side: 'walk-12', front: 'walk-front', front34: 'walk-front34', back34: 'walk-back34', back: 'walk-back' })
+  for (const def of walks) {
+    assert.deepEqual([def.group, def.fps, def.loop, def.template, def.scaleBy, def.view, def.columns], ['cycle', 12, 'loop', 'walk-cycle-sheet', 'height', def.dir, 6], def.id)
+    assert.equal(new Set(def.poses.map(pose => pose.id)).size, 12, def.id)
+  }
+  assert.deepEqual(animationDef('walk')?.poses.length, 4, 'the four-pose walk stays')
+  assert.deepEqual(animationSets['walk-directions'].sheets.map(step => step.animation), ['walk-12', 'walk-front34', 'walk-front', 'walk-back34', 'walk-back'])
+  assert.deepEqual(animationSets['walk-directions'].sheets.map(step => step.reference ?? null), [null, 'walk-12', 'walk-front34', 'walk-12', 'walk-back34'])
+  assert.deepEqual(Object.keys(animationSets), ['walk-12', 'walk-directions', 'idle-directions'])
+  assert.deepEqual(templateControls({ ...made({ fps: 12, facing: 'right' }), reviewState: 'approved', sheet: { ...made().sheet, count: 12, columns: 6, rows: 2 } }, 'walk-cycle-sheet'),
+    { frames: 12, columns: 6, facing: 'right', step: 0.5 }, 'twelve cells at twelve a second are one cycle in a second: two steps of half a second')
 })

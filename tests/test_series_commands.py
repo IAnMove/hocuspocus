@@ -245,6 +245,39 @@ def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_th
     assert "characters.animation.review" in SERIES_TOOLS
 
 
+def test_a_set_of_animations_is_made_followed_and_cancelled_over_mcp_through_the_routes_of_the_wizard_and_the_panel(tmp_path):
+    from services.mcp_profiles import SERIES_TOOLS
+    from services.series_commands import _operation_schema
+    handlers, calls, _, _ = harness(tmp_path, [{"job": {"jobId": "animset-1", "sheets": []}}, {"job": {"jobId": "animset-1"}}, {"job": {"jobId": "animset-1"}},
+                                               {"job": {"jobId": "anim-9"}}, {"job": {"jobId": "anim-9"}}])
+    made = call(handlers, "characters.animation.make_set", {"workspace": "w", "character_id": "ana", "set": "walk-directions", "autoApprove": True, "model": "qwen_image_21_turbo"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make-set",
+                        {"workspace": "w", "kitId": "ana", "set": "walk-directions", "autoApprove": True, "model": "qwen_image_21_turbo"})
+    assert made["result"]["job"]["jobId"] == "animset-1"
+    call(handlers, "characters.animation.status", {"workspace": "w", "job_id": "animset-1"})
+    assert calls[1][:2] == ("GET", "http://127.0.0.1:9/api/v1/character-kits/animations/sets/animset-1?workspace=w"), "a set job is followed with the same status tool"
+    call(handlers, "characters.animation.cancel", {"workspace": "w", "job_id": "animset-1"})
+    assert calls[2] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/sets/animset-1/cancel", {"workspace": "w"})
+    call(handlers, "characters.animation.status", {"workspace": "w", "job_id": "anim-9"})
+    call(handlers, "characters.animation.cancel", {"workspace": "w", "job_id": "anim-9"})
+    assert calls[3][1].endswith("/animations/jobs/anim-9?workspace=w") and calls[4][1].endswith("/animations/jobs/anim-9/cancel"), "an animation job is followed as before"
+    schema = _operation_schema("characters.animation.make_set", *OPERATIONS["characters.animation.make_set"])
+    assert schema["mutation"] is True and schema["inputSchema"]["properties"]["input"]["required"] == ["workspace", "character_id", "set"]
+    properties = schema["inputSchema"]["properties"]["input"]["properties"]
+    assert properties["set"] == {"enum": ["walk-12", "walk-directions", "idle-directions"]} and properties["autoApprove"] == {"type": "boolean"}
+    text = OPERATIONS["characters.animation.make_set"][3]
+    assert "one_shot" in text and "mirror" in text and "walk-directions" in text and "characters.animation.status" in text
+    assert "characters.animation.make_set" in SERIES_TOOLS
+
+
+def test_a_custom_animation_takes_twelve_poses_over_mcp_in_any_direction():
+    make, listed = OPERATIONS["characters.animation.make"], OPERATIONS["characters.animations"]
+    custom = make[0]["custom"]["properties"]
+    assert custom["poses"]["maxItems"] == 12 and custom["view"] == {"enum": ["bust", "front", "side", "front34", "back34", "back"]}
+    assert listed[0]["custom"]["properties"]["view"] == custom["view"]
+    assert "up to 12" in make[3] and "up to 6" not in make[3] and "walk-12" in listed[3] and "motion" in listed[3]
+
+
 def test_a_voice_band_is_set_over_mcp_through_the_same_route_as_the_wizard(tmp_path):
     from services.mcp_profiles import SERIES_TOOLS
     handlers, calls, _, _ = harness(tmp_path, [{"kits": {"gary": {"id": "gary"}}}])

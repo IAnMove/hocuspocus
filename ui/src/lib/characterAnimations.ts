@@ -31,6 +31,12 @@ export const animationDef = (id: string): AnimationDef | undefined => animationD
 export const localized = (text: Localized, language: string): string => language.startsWith('es') ? text.es : text.en
 export const animationsOf = (group: AnimationGroupId): AnimationDef[] => animationDefs.filter(item => item.group === group)
 
+/** The sets of animations made together as one server job (characters.animation.make_set): the sheets in the order they are made, and the
+ * sheet each one takes its neighbouring direction from. */
+export type AnimationSetName = keyof typeof catalog.sets
+export type AnimationSetDef = { title: Localized; sheets: Array<{ animation: string; reference?: string }> }
+export const animationSets = catalog.sets as Record<AnimationSetName, AnimationSetDef>
+
 export type KitAnimationSheet = {
   source: string; width: number; height: number; count: number; columns: number; rows: number
   cell: { width: number; height: number }
@@ -164,7 +170,7 @@ export function controlsForCard(animation: KitAnimation, template: string, contr
 const CUSTOM = catalog.custom
 export type CustomView = keyof typeof CUSTOM.views
 export const customViews = Object.keys(CUSTOM.views) as CustomView[]
-/** The most poses of one animation the author describes, and the most words for one pose (the server's limit). */
+/** The most poses of one animation the author describes (twelve, the cells of a full walk), and the most words for one pose (the server's limit). */
 export const MAX_CUSTOM_POSES = CUSTOM.maxPoses
 export const MAX_CUSTOM_TEXT = CUSTOM.maxText
 /** The most animations one kit keeps (the server's limit, from the shared catalog): the whole catalog fits, with room for the author's own. */

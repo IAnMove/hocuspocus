@@ -5,7 +5,7 @@ import { evaluateSceneLayer } from '../src/lib/sceneTimeline'
 import { createSceneEvaluator } from '../src/lib/scene2d/evaluate.ts'
 import { normalizeScene2D } from '../src/lib/scene2d/normalize.ts'
 import { blinkTimes, bodyKeyframes, CAMERA_MOVES, castTransform, compileSeriesShot, PERCH, perchTransforms, personTransform, runSeriesShot, WALK_BOB, type CameraMove, type ShotFxSpec, type ShotSpec } from '../scripts/seriesShot.ts'
-import { sequenceFrame } from '../src/lib/scene2d/motion.ts'
+import { sequenceFrame, sheetCrop } from '../src/lib/scene2d/motion.ts'
 import { heldFrameTime } from '../src/features/stopMotion.ts'
 import { ANIMATION_SHEET, type KitAnimation } from '../src/lib/characterAnimations.ts'
 
@@ -511,6 +511,37 @@ test('an approved walk sheet plays through the whole entrance on the same slide,
   assert.ok(Math.abs(at(0.8).y - at(1.1).y) < 1e-9 && Math.abs(at(1.4).y - at(1.1).y) < 1e-9 && at(0.8).rotation === 0, 'feet on the line: no bob, no sway')
   assert.ok(Math.abs(evaluator.layerState(poseLayer(scene), 3.6 / scene.duration).x - 60) < 1e-6)
   assert.equal(sheet.sequence?.kind === 'sheet' && sheet.sequence.mirror, undefined, 'a right-facing sheet entering from the left is not mirrored')
+})
+
+// A full walk: twelve cells in two rows of six, at twelve a second (the sheet of walk-12).
+const twelveCells = (extra: Partial<KitAnimation> = {}): KitAnimation => {
+  const cell = { width: 300, height: 640 }
+  return { sheet: { source: '/api/v1/file/walk-12-sheet.png?workspace=cast', width: cell.width * 6, height: cell.height * 2, count: 12, columns: 6, rows: 2, cell },
+    frames: [], fps: 12, loop: 'loop', facing: 'right', reviewState: 'approved', motion: 'walk', dir: 'side', ...extra }
+}
+
+test('an entrance walks with the approved twelve-pose walk-12 before the four-pose walk, and the painter reads its twelve cells in order', () => {
+  const enter = { fromX: -15, start: 0.5, end: 3.5, gait: 'walk' as const, step: 0.6, sway: 1.5 }
+  const spec = alone([{ kitId: 'kevin', x: 60, motion: 'still', enter }])
+  const scene = compileSeriesShot({ ...kits, kevin: animated({ 'walk-12': twelveCells() }) }, spec)
+  const sheet = scene.layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!
+  assert.deepEqual(sheet.sequence, { kind: 'sheet', source: '/api/v1/file/walk-12-sheet.png?workspace=cast', columns: 6, rows: 2, count: 12, fps: 10, loop: 'loop', start: 0.5 },
+    'twelve cells in two steps of 0.6 s')
+  // What the painter draws (sheetCrop and sequenceFrame of lib/scene2d/motion.ts): every cell of the grid, in the order of the poses, then again.
+  const sequence = sheet.sequence!
+  const cells = Array.from({ length: 24 }, (_, step) => sheetCrop(sequence, 0.5 + (step + 0.5) / sequence.fps, 1800, 1280)!)
+  assert.deepEqual(cells.slice(0, 12).map(crop => [crop.x / 300, crop.y / 640]), Array.from({ length: 12 }, (_, index) => [index % 6, Math.floor(index / 6)]), 'six columns, then the second row')
+  assert.deepEqual(cells.slice(12), cells.slice(0, 12), 'a loop: the cycle starts again after twelve cells')
+  assert.deepEqual([cells[0].width, cells[0].height], [300, 640])
+  const four = compileSeriesShot(withSheets, spec)
+  assert.equal(four.layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!.sequence?.kind === 'sheet' && (four.layers.find(layer => layer.id === 'kit-kevin-sheet-walk-in')!.sequence as { count: number }).count, 4)
+  const pending = compileSeriesShot({ ...kits, kevin: animated({ 'walk-12': twelveCells({ reviewState: 'pending' }) }) }, spec)
+  assert.deepEqual(pending, four, 'a pending walk-12 changes nothing: the approved four-pose walk still walks')
+  const bob = compileSeriesShot({ ...kits, kevin: animated({ walk: sheetOf('walk', 4, { reviewState: 'pending' }), 'walk-12': twelveCells({ reviewState: 'rejected' }) }) }, spec)
+  assert.deepEqual(bob, compileSeriesShot(kits, spec), 'no approved walk at all: the body bob it always was')
+  const alone12 = animated({ 'walk-12': twelveCells() })
+  delete alone12.animations!.walk
+  assert.equal(compileSeriesShot({ ...kits, kevin: alone12 }, spec).layers.some(layer => layer.id === 'kit-kevin-sheet-walk-in'), true, 'a kit with only the twelve-pose walk walks with it')
 })
 
 test('a walk sheet is mirrored when the character walks against the way the sheet looks', () => {

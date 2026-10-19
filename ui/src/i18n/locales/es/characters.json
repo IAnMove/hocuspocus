@@ -815,7 +815,10 @@
     "view": {
       "bust": "Busto (cabeza y hombros)",
       "front": "Figura entera de frente",
-      "side": "Figura entera de perfil"
+      "side": "Figura entera de perfil",
+      "front34": "Figura entera, tres cuartos de frente",
+      "back34": "Figura entera, tres cuartos de espaldas",
+      "back": "Figura entera, de espaldas"
     },
     "custom": {
       "title": "Crear una a medida",
@@ -831,6 +834,49 @@
       "tooLong": "Cada pose admite hasta {{max}} caracteres.",
       "full": "Este personaje ya tiene el máximo de animaciones; borra alguna para crear otra."
     },
-    "groupCount": "{{done}} de {{total}} hechas"
+    "groupCount": "{{done}} de {{total}} hechas",
+    "sets": {
+      "title": "Andares completos",
+      "intro": "Un personaje que se mueve en un decorado 3D necesita dibujarse desde cinco direcciones. «Crear andares completos» hace el andar de doce poses de perfil, de tres cuartos de frente, de frente, de tres cuartos de espaldas y de espaldas, una hoja tras otra (las que miran a la izquierda son estas mismas hojas espejadas al renderizar). Mantiene la identidad del personaje usando la dirección vecina como segunda referencia. Cada hoja queda para revisar; si se detiene, púlsalo otra vez para continuar.",
+      "makeDirections": "Crear andares completos",
+      "makeWalk12": "Solo el andar de doce poses",
+      "makeIdle": "Respirar en cinco direcciones",
+      "resume": "Continuar",
+      "allMade": "El personaje ya tiene todas.",
+      "missing_one": "Falta {{count}} hoja por hacer.",
+      "missing_other": "Faltan {{count}} hojas por hacer.",
+      "progress": "{{done}} de {{total}} hojas",
+      "autoApproved": "aprobada por el agente",
+      "failedChecks": "comprobaciones que fallan: {{checks}}",
+      "job": {
+        "queued": "En cola: empieza cuando la GPU esté libre.",
+        "running": "Haciendo las hojas, una tras otra…",
+        "cancelling": "Cancelando…",
+        "completed": "Hecho.",
+        "failed": "Se detuvo. Se conserva cada hoja y cada pose ya hecha: continuar hace solo lo que falta.",
+        "cancelled": "Cancelado. Se conserva cada hoja y cada pose ya hecha.",
+        "interrupted": "El servidor se reinició mientras se hacía. Se conserva cada hoja y cada pose ya hecha."
+      },
+      "sheet": {
+        "waiting": "en espera",
+        "running": "haciéndose",
+        "completed": "hecha, por revisar",
+        "skipped": "ya hecha",
+        "failed": "falló",
+        "cancelled": "cancelada"
+      }
+    },
+    "motion": {
+      "walk": "andar",
+      "idle": "respirar"
+    },
+    "dir": {
+      "side": "perfil",
+      "front": "frente",
+      "front34": "tres cuartos de frente",
+      "back34": "tres cuartos de espaldas",
+      "back": "espaldas"
+    },
+    "contract": "Para decorados 3D: {{motion}} · {{dir}} (la versión que mira a la izquierda es esta hoja espejada)"
   }
 }
