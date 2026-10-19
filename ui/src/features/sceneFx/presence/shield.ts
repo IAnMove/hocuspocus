@@ -39,7 +39,9 @@ void main() {
   vec2 map = n.xy / (1. + z) * 3.3 + vec2(uSeed * .31, 0.);
   float edge = hexEdge(map, id);
   float line = (1. - smoothstep(.0, .045, edge)) * disc;
-  float cellLight = pow(hash(id * 1.7 + uSeed), 3.) * (.55 + .45 * sin(t * (.8 + hash(id) * 1.6) + hash(id + 3.) * TAU));
+  // The cell's number, rounded: its centre is a float that lands on a whole number in some cells, and a hash of it would flicker per pixel.
+  vec2 cid = floor(id / vec2(.5, .8660254) + .5);
+  float cellLight = pow(hash(cid + uSeed), 3.) * (.55 + .45 * sin(t * (.8 + hash(cid + 101.) * 1.6) + hash(cid + 203.) * TAU));
   float fill = smoothstep(.04, .3, edge) * cellLight * disc;
   // A band of light sweeps over it, tilted, and comes round again.
   float sweep = pow(.5 + .5 * sin((n.y * 1.3 + n.x * .7) * 4.2 - t * 1.25), 5.);
