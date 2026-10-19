@@ -1,3 +1,5 @@
+import { DUST_ID, stageRoomSet } from '../src/features/scene3d/roomSet.ts'
+import { stageRoomBox } from '../src/features/scene3d/roomBox.ts'
 // Native template compilation for the production runner. The window is exported length.
 import { readFileSync } from 'node:fs'
 import { applyScene3DTemplate, SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/templates.ts'
@@ -6,6 +8,11 @@ import { scene3dPlaybackSpeed } from '../src/features/scene3d/clock.ts'
 import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/scene3d/frameFormat.ts'
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
+import { scrollDirection, stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
+import { isGroundStyle } from '../src/features/scene3d/groundStyles.ts'
+import { applyGrade, applyLens, applyNamedLight, copyCamera } from '../src/features/scene3d/modifiers.ts'
+import { isCameraTechnique } from '../src/features/scene3d/techniqueTemplates.ts'
+import { pictureInModelSlot, turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
 
 const SET_BEHIND = 12
 const SET_MAX_TURNS = 0.06
@@ -13,29 +20,31 @@ const SET_COVER = 2
 const WORLD_KEYS = ['dressing', 'atmos', 'environment', 'light', 'worldSfx', 'screenBackdrop', 'pixelWorld']
 /** The camera's distance to its subject, as a share of the template's. */
 const FRAMES = { close: 0.6, medium: 0.8, wide: 1.35, far: 1.8 }
-/** Named lights: the sun (direction it travels, strength, colour) and the ambient share. */
-const LIGHTS = {
-  noon: { direction: [-0.2, -1, -0.3], intensity: 1.5, color: '#fffaf0', ambient: 0.35 },
-  golden: { direction: [-0.85, -0.3, -0.4], intensity: 1.35, color: '#ffc98a', ambient: 0.28 },
-  overcast: { direction: [-0.15, -1, -0.2], intensity: 0.75, color: '#e6edf5', ambient: 0.6 },
-  night: { direction: [0.35, -0.75, -0.45], intensity: 0.5, color: '#9fb6ff', ambient: 0.12 },
-  neon: { direction: [0.55, -0.5, -0.65], intensity: 1.0, color: '#ff6fd8', ambient: 0.3 },
-  stage: { direction: [0, -0.8, -0.6], intensity: 1.8, color: '#ffffff', ambient: 0.08 },
-  campfire: { direction: [0.25, -0.35, -0.9], intensity: 1.1, color: '#ff9b45', ambient: 0.1 },
-}
+/** A model is drawn this tall at scale 1; framing offsets are in these units. */
+const MODEL_HEIGHT = 1.7
+/** The room a nearer frame keeps above the head, and the most it raises the aim above the centre (about the chin). */
+const HEADROOM = 0.1
+const MAX_LIFT = 0.6
 const request = JSON.parse(readFileSync(0, 'utf8'))
 const config = request.scene3d
+/** Ids of the pictures cast where the template authored a model. */
+const standIns = new Set()
 const document = config.document ? structuredClone(config.document) : documentFromTemplate(config.template)
 // A template drawn for a painted set already hangs its plate where its camera needs it.
 const drawnAsSet = document.environment?.floorStyle === 'backdrop'
 if (config.slots) document.slots = config.slots.map(explicitSlot)
 if (config.subject) bindSubject(document, config)
 for (const [key, entry] of Object.entries(config.cast ?? {})) bindCast(document, key, sourced(entry))
-if (config.background) bindBackground(document, sourced(config.background))
+if (config.background?.room) stageRoomSet(document, { ...config.background.room, camera: config.roomCamera ?? config.background.room.camera })
+else if (config.background?.roomBox) stageRoomBox(document, config.background.roomBox)
+else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
+if (config.camera_template) takeCamera(document, config.camera_template)
 if (config.camera) document.camera = { ...document.camera, ...config.camera }
 if (config.frame !== undefined) reframe(document, config.frame)
-if (typeof config.light === 'string') lightPreset(document, config.light)
+if (config.lens) applyLens(document, config.lens)
+if (config.frame !== undefined && (FRAMES[config.frame] ?? Number(config.frame)) < 1) keepHeadInFrame(document)
+if (typeof config.light === 'string') applyNamedLight(document, config.light)
 for (const key of ['atmos', 'environment', 'light', 'dressing', 'pixelWorld', 'renderLook', 'toon', 'rhythm']) {
   if (config[key] === undefined || (key === 'light' && typeof config.light === 'string')) continue
   document[key] = structuredClone(config[key])
@@ -47,11 +56,25 @@ const authored = Number(request.duration) * speed
 if (!(authored > 0) || authored > 600) throw new Error(`duration_exceeds_clock:${request.duration}`)
 document.playbackSpeed = speed
 document.duration = authored
+// The room was staged at the template's length: its dust spans the whole shot.
+for (const cue of document.worldSfx ?? []) if (cue.id === DUST_ID) cue.end = authored
+if (config.grade) applyGrade(document, config.grade)
 document.fps = config.fps ?? document.fps
 delete document.soundtrack
 retargetFraming(document)
 if (config.background && !drawnAsSet && document.environment?.floorStyle === 'backdrop') stagePaintedSet(document)
-if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background)]
+turnPicturesToCamera(document, standIns)
+// A ground style, asked by the shot (floor) or named as the set's ground, is drawn by the scene instead of the set's slab.
+const groundStyle = isGroundStyle(config.floor) ? config.floor : isGroundStyle(config.background?.ground?.style) ? config.background.ground.style : undefined
+if (config.background?.houses) document.slots = [...document.slots, ...stageDioramaSet(document, config.background, { styledGround: Boolean(groundStyle) })]
+if (config.background?.layers) document.slots = [...document.slots, ...stageParallaxSet(document, config.background, { scroll: config.scroll, groundStyle })]
+if (groundStyle) {
+  const { groundScroll: _old, ...environment } = document.environment ?? { reflectiveFloor: false, platform: false, bloom: 0 }
+  document.environment = { ...environment, reflectiveFloor: false, floorStyle: groundStyle,
+    ...(config.scroll ? { groundScroll: { speed: config.scroll, direction: scrollDirection(document) } } : {}) }
+}
+// A runner on a scrolling set runs on the spot: the place moves, the cast stays under the camera.
+if (config.scroll) for (const slot of document.slots) if (slot.media === 'model3d' && !slot.id.startsWith('set-')) slot.inPlace = true
 const parsed = parseScene3DDocument(document)
 if (!parsed) throw new Error('Invalid Video 3D document')
 process.stdout.write(JSON.stringify(parsed))
@@ -73,7 +96,10 @@ function explicitSlot(binding, index) {
 function bindSubject(document, config) {
   const current = document.slots.find(slot => slot.slot === 'subject_1' || slot.id === 'subject_1')
   if (!current) throw new Error('subject_slot_missing')
-  const next = { ...current, sourceUrl: config.subject, media: subjectMedia(config.subject, current.media), clip: config.clip ?? current.clip ?? null }
+  const bound = { ...current, sourceUrl: config.subject, media: subjectMedia(config.subject, current.media), clip: config.clip ?? current.clip ?? null }
+  const picture = current.media === 'model3d' && bound.media === 'image'
+  const next = picture ? pictureInModelSlot(bound, config) : bound
+  if (picture && config.rotationY === undefined) standIns.add(next.id)
   if (config.motion !== undefined) next.motion = config.motion
   if (config.position !== undefined) next.position = config.position
   if (config.scale !== undefined) next.scale = config.scale
@@ -93,18 +119,23 @@ function bindCast(document, key, entry) {
   const current = document.slots.find(slot => slot.id === key) ?? (byRole.length === 1 ? byRole[0] : null)
   if (!current && !entry.add) throw new Error(byRole.length > 1 ? `cast_role_ambiguous:${key}` : `cast_slot_missing:${key}`)
   const base = current ?? { id: key, slot: 'prop', position: [0, 0, 0], rotationY: 0, scale: 1, media: 'model3d', clip: null }
-  const next = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
+  const bound = { ...base, sourceUrl: entry.source, media: subjectMedia(entry.source, base.media), clip: entry.clip ?? base.clip ?? null }
+  // A picture in a model's place stands in as a grounded cutout as tall as the model; its scale and look are settled there.
+  const picture = base.media === 'model3d' && bound.media === 'image'
+  const next = picture ? pictureInModelSlot(bound, entry) : bound
+  if (picture && entry.rotationY === undefined) standIns.add(next.id)
   // A generated model is centred on its origin; standing it on its feet keeps its animated legs above the floor.
   if (next.media === 'model3d' && entry.grounded === undefined) next.grounded = true
-  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance']) {
-    if (entry[field] !== undefined) next[field] = structuredClone(entry[field])
+  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard', 'inPlace']) {
+    if (entry[field] !== undefined && !(picture && (field === 'scale' || field === 'imageLook'))) next[field] = structuredClone(entry[field])
   }
   document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]
 }
 
 /** The template's background picture. On a cutout plane it is also projected onto the floor (see applyFloor).
  * The painted set replaces the template's procedural dressing (a street, a stage...) unless the shot asks for one.
- * A diorama set (houses, ground) keeps its picture as the sky and builds its pieces once the camera is known. */
+ * A diorama set (houses, ground) or a parallax set (layers, ground) keeps its picture as the sky and builds its pieces
+ * once the camera is known. */
 function bindBackground(document, entry) {
   const slots = document.slots.filter(slot => slot.slot === 'background')
   if (!slots.length) throw new Error('background_slot_missing')
@@ -112,10 +143,11 @@ function bindBackground(document, entry) {
   // An unbound object (a second subject or a prop nobody cast) is an editor placeholder, a plain block:
   // in front of a painted set it would hide the picture.
   document.slots = document.slots.filter(slot => slot.slot === 'background' || slot.sourceUrl || slot.screen?.sourceUrl)
-  const surface = entry.houses ? 'environment' : entry.surface
+  const built = Boolean(entry.houses || entry.layers)
+  const surface = built ? 'environment' : entry.surface
   document.slots = document.slots.map(slot => slot.slot !== 'background' ? slot
     : withoutLoop({ ...slot, sourceUrl: entry.source, media: 'image', ...(surface ? { surface } : {}) }, surface))
-  if (entry.houses) document.environment = { reflectiveFloor: false, platform: false, bloom: 0, ...document.environment, floorStyle: 'none' }
+  if (built) document.environment = { reflectiveFloor: false, platform: false, bloom: 0, ...document.environment, floorStyle: 'none' }
 }
 
 /** The camera nearer to or farther from what it looks at, keeping its angle: a framed camera scales its offsets
@@ -131,14 +163,29 @@ function reframe(document, frame) {
   else camera.eye = camera.look.map((at, axis) => at + (camera.eye[axis] - at) * factor)
 }
 
-/** A named light replaces the template's sun and sets the ambient share; the rest of the lighting stays. */
-function lightPreset(document, name) {
-  const preset = LIGHTS[name]
-  if (!preset) throw new Error(`unknown_light:${name}`)
-  const { ambient, ...sun } = preset
-  document.light = { kind: 'directional', ...sun }
-  const environment = { source: 'room', rotation: 0, background: 'set', blur: 0, ...document.lighting?.environment, intensity: ambient }
-  document.lighting = { ...document.lighting, environment }
+/** A framing camera pushed nearer to a figure's middle loses the head off the top of the frame: aim it a little higher
+ * (eye and look together, so the angle holds) until the frame keeps room above the head. Only a camera that looks at
+ * the centre itself; one that aims at a chosen point (`lookFrom`/`lookTo`) keeps it. Offsets are in figure units:
+ * a figure is MODEL_HEIGHT tall and its centre anchor stands half way up. */
+function keepHeadInFrame(document) {
+  const camera = document.camera
+  const framing = camera.framing
+  if (!framing || framing.anchor !== 'center' || framing.lookFrom || framing.lookTo) return
+  const top = MODEL_HEIGHT / 2 + HEADROOM
+  const lift = (eye, fov) => Math.min(MAX_LIFT, Math.max(0, top - Math.hypot(...eye) * Math.tan((fov * Math.PI) / 360)))
+  const fovFrom = framing.fovFrom ?? camera.fov
+  const start = lift(framing.from, fovFrom), end = lift(framing.to, framing.fovTo ?? fovFrom)
+  if (!start && !end) return
+  const up = ([x, y, z], by) => [x, y + by, z]
+  camera.framing = { ...framing, from: up(framing.from, start), to: up(framing.to, end), lookFrom: [0, start, 0], lookTo: [0, end, 0] }
+}
+
+/** The camera and framing of a camera card (the symmetric of `world`): this shot keeps its duration, cast and place.
+ * A `frame` or `lens` given with it applies after; the framing is re-targeted to this shot's subject at the end. */
+function takeCamera(document, id) {
+  const technique = documentFromTemplate(id)
+  if (!isCameraTechnique(id)) throw new Error(`invalid_camera_template:${id}`)
+  copyCamera(document, technique)
 }
 
 /** A picture moved to the sky no longer scrolls round a cylinder. */

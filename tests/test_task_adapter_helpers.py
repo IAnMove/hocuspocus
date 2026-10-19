@@ -9,15 +9,23 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from fastapi import HTTPException
 
 from services import resource_scheduler
+from services.kernel.config import ConfigStore
+from services.kernel.workspaces import WorkspaceService
 from routers.canonical_tasks import task_event_cursor
 
 
 ROOT = Path(__file__).parents[1]
 LAUNCH_PATH = ROOT / "app" / "_launch_runtime.py"
-SOURCE = LAUNCH_PATH.read_text(encoding="utf-8")
-TREE = ast.parse(SOURCE, filename=str(LAUNCH_PATH))
+# Field, publisher and sync helpers moved out of launch. The exec namespace below is unchanged.
+_FUNCTION_FILES = (
+    "app/services/canonical_task_fields.py",
+    "app/services/canonical_task_publishers.py",
+    "app/services/canonical_task_sync.py",
+    "app/_launch_runtime.py",
+)
 
 
 class DummyHTTPException(Exception):
@@ -28,10 +36,19 @@ class DummyHTTPException(Exception):
 
 
 def _function(name: str) -> ast.FunctionDef:
-    for node in TREE.body:
-        if isinstance(node, ast.FunctionDef) and node.name == name:
-            return node
-    raise AssertionError(f"Function {name!r} not found")
+    found: list[ast.FunctionDef] = []
+    for relative in _FUNCTION_FILES:
+        path = ROOT / relative
+        if not path.is_file():
+            continue
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        found.extend(
+            node for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == name
+        )
+    if len(found) != 1:
+        raise AssertionError(f"Function {name!r} found {len(found)} times")
+    return found[0]
 
 
 def _load_helpers(*names: str, save_path: Path | None = None) -> dict:
@@ -53,9 +70,16 @@ def _load_helpers(*names: str, save_path: Path | None = None) -> dict:
     return namespace
 
 
+def _workspace_service(save_path: Path) -> WorkspaceService:
+    engine = SimpleNamespace(server_config={
+        "save_path": str(save_path),
+        "services": {"active_workspace": "active-one"},
+    })
+    return WorkspaceService(ConfigStore(lambda: engine))
+
+
 def test_workspace_dir_accepts_only_exact_names_and_returns_real_paths(tmp_path):
-    helpers = _load_helpers("_get_active_workspace", "_workspace_dir", save_path=tmp_path)
-    workspace_dir = helpers["_workspace_dir"]
+    workspace_dir = _workspace_service(tmp_path).workspace_dir
 
     assert workspace_dir("default") == os.path.realpath(tmp_path)
     assert workspace_dir(None) == os.path.realpath(tmp_path / "active-one")
@@ -63,7 +87,7 @@ def test_workspace_dir_accepts_only_exact_names_and_returns_real_paths(tmp_path)
 
     for invalid in ("", ".", "..", "../escape", "nested/name", "nested\\name",
                     " leading", "trailing ", "has.dot", "café", 123):
-        with pytest.raises(DummyHTTPException) as error:
+        with pytest.raises(HTTPException) as error:
             workspace_dir(invalid)
         assert error.value.status_code == 400
 
@@ -79,10 +103,8 @@ def test_workspace_dir_rejects_valid_named_symlink_that_escapes_base(tmp_path):
     except (NotImplementedError, OSError):
         pytest.skip("directory symlinks are unavailable on this platform")
 
-    workspace_dir = _load_helpers(
-        "_get_active_workspace", "_workspace_dir", save_path=base,
-    )["_workspace_dir"]
-    with pytest.raises(DummyHTTPException) as error:
+    workspace_dir = _workspace_service(base).workspace_dir
+    with pytest.raises(HTTPException) as error:
         workspace_dir("linked")
     assert error.value.status_code == 400
 
@@ -307,13 +329,10 @@ def test_upsert_keeps_reserved_task_identity():
             return {**existing, **{key: value for key, value in fields.items()
                                    if key not in {"force", "event_type", "event_exclude_fields"}}}
 
-    namespace = {
-        "_task_registry": lambda _workspace: Registry(),
-    }
-    node = _function("_upsert_canonical_task")
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(LAUNCH_PATH), "exec"), namespace)
+    from services.canonical_task_helpers import upsert_canonical_task
 
-    result = namespace["_upsert_canonical_task"](
+    result = upsert_canonical_task(
+        Registry(),
         "default",
         "task-minimax-music-abc",
         workflow="minimax-music",
@@ -330,6 +349,8 @@ def test_upsert_keeps_reserved_task_identity():
         },
     )
 
+    assert updated["force"] is True
+    assert updated["event_type"] == "adapter.synced"
     assert "workflow" not in updated
     assert "title" not in updated
     assert result["workflow"] == "generate_story_song"

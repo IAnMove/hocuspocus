@@ -233,6 +233,8 @@
     },
     "voiceAudition": {
       "language": "Sample sentence language",
+      "languageEs": "Spanish",
+      "languageEn": "English",
       "sample": {
         "es": "Hola, esta es mi voz. Así sueno al contar una historia en español.",
         "en": "Hello, this is my voice. This is how I sound when telling a story in English."
@@ -256,6 +258,15 @@
       "transcript": "Exact sample transcript",
       "transcriptPlaceholder": "Enter the same words heard in the audio. This is not the dialogue to generate.",
       "language": "Language for new dialogue",
+      "engine": "Voice engine",
+      "engines": {
+        "qwen3_tts_base": "Qwen3 — clones the sample in 10 languages",
+        "voxcpm2_base": "VoxCPM2 — 48 kHz clone in 30 languages, takes a speaking style",
+        "drama3_base": "Drama 3 — clones the sample; the transcript is required"
+      },
+      "style": "Speaking style (optional)",
+      "stylePlaceholder": "whispering, excited, slower…",
+      "styleHint": "How this voice should speak by default. With a style VoxCPM2 clones from the sample alone, without its transcript.",
       "saveHint": "Save the whole character to keep this voice. You can select it for other characters; new or regenerated shots will use that configuration.",
       "incomplete": "To preview or save this voice, add its name, an audio sample, and its exact transcript.",
       "voiceFileSize": "Choose a nonempty audio file up to 20 MB.",
@@ -313,8 +324,10 @@
   "search": "Search templates",
   "all": "All",
   "allSettings": "Any set",
+  "allKinds": "Any kind",
   "filterCategory": "Shot type",
   "filterSetting": "Set",
+  "filterKind": "Kind",
   "filterCount": "{{shown}} / {{total}}",
   "noResults": "No templates match your search.",
   "play": "Play",
@@ -365,7 +378,8 @@
     "perspective": "Perspectives",
     "animated": "Living backgrounds",
     "pixel": "Pixel worlds",
-    "anime": "Anime"
+    "anime": "Anime",
+    "transition": "Transitions"
   },
   "setting": {
     "sea": "Sea",
@@ -391,6 +405,14 @@
     "grid": "Grid",
     "circuit": "Circuit",
     "mainframe": "Mainframe"
+  },
+  "kind": {
+    "scene": "Scenes",
+    "stage": "Stages",
+    "camera": "Camera",
+    "look": "Looks",
+    "transition": "Transitions",
+    "title": "Titles"
   },
   "template": {
     "topdown-dragon-portals": {
@@ -558,7 +580,7 @@
       "description": "Close oblique framing to inspect the object surface."
     },
     "product-pair": {
-      "title": "Product comparison",
+      "title": "Product pair",
       "description": "Two products share a calm, symmetrical frontal composition."
     },
     "product-pedestal": {
@@ -2094,16 +2116,16 @@
       "description": "Framing. A wide locked view that can cover two people."
     },
     "cine-two-shot": {
-      "title": "Two-Shot",
+      "title": "Two-Shot (framing)",
       "description": "Framing. Two people share a medium-wide frame."
     },
     "cine-three-shot": {
       "title": "Three-Shot",
-      "description": "Framing. Three figures in one frame."
+      "description": "Framing. Three figures in one frame: two cast slots and a third standing figure in the prop slot."
     },
     "cine-group-shot": {
       "title": "Group Shot",
-      "description": "Framing. A wider three-figure group, with air on both sides."
+      "description": "Framing. A wider three-figure group, with air on both sides: two cast slots and a third standing figure in the prop slot."
     },
     "cine-insert": {
       "title": "Insert Shot",
@@ -2719,7 +2741,7 @@
     },
     "cine-stop-motion": {
       "title": "Stop Motion",
-      "description": "Time. A locked pose. The model is not stepped like a puppet."
+      "description": "Time. A locked pose stepped like a puppet: the picture holds every three frames."
     },
     "cine-low-shutter": {
       "title": "Low Shutter",
@@ -2747,11 +2769,11 @@
     },
     "cine-lens-flare": {
       "title": "Lens Flare",
-      "description": "Effect. A low sun-style key aimed into the lens. There is no flare pass."
+      "description": "Effect. A low sun-style key aimed into the lens, with light rays streaming across the frame."
     },
     "cine-anamorphic-flare": {
       "title": "Anamorphic Flare",
-      "description": "Effect. A wide, low, bright frame. Streaks are not drawn."
+      "description": "Effect. A wide, low, bright frame with light rays drawn over it."
     },
     "cine-halation": {
       "title": "Halation",
@@ -2759,7 +2781,7 @@
     },
     "cine-film-grain": {
       "title": "Film Grain",
-      "description": "Effect. A contrasty close frame. Grain is not applied."
+      "description": "Effect. A contrasty close frame under film grain over the whole shot."
     },
     "cine-bokeh": {
       "title": "Bokeh",
@@ -2787,15 +2809,15 @@
     },
     "cine-light-leak": {
       "title": "Light Leak",
-      "description": "Effect. A hot edge light from the side, standing in for a leak."
+      "description": "Effect. A hot edge light from the side and light rays leaking across the frame."
     },
     "cine-vignette": {
       "title": "Vignette",
-      "description": "Effect. A pool of light in the center and a darker grade around it."
+      "description": "Effect. A pool of light in the center and a vignette that darkens the edges."
     },
     "cine-chromatic-aberration": {
       "title": "Chromatic Aberration",
-      "description": "Effect. A wide lens close to the figure, where color fringes would show. Fringes are not drawn."
+      "description": "Effect. A wide lens close to the figure, with a low glitch that fringes the edges."
     },
     "cine-infrared": {
       "title": "Infrared",
@@ -2847,7 +2869,7 @@
     },
     "cine-datamosh": {
       "title": "Datamosh",
-      "description": "Effect. A fast broken push with roll. Pixels are not melted."
+      "description": "Effect. A fast broken push with roll, under a glitch that tears the picture."
     },
     "cine-diorama": {
       "title": "Diorama",
@@ -3468,6 +3490,134 @@
     "motion-particle-morph": {
       "title": "Particle shape typography",
       "description": "A genuine 3D point cloud morphs between a sphere, torus, heart and editable block lettering."
+    },
+    "transition-whip-pan": {
+      "title": "Whip pan",
+      "description": "A very fast slide with a roll over radial speed lines; the camera lands centred on the figure with a short settle."
+    },
+    "transition-iris-in": {
+      "title": "Iris in",
+      "description": "A fast push to the centre while a vignette closes in four steps over a dark backdrop."
+    },
+    "transition-flash-white": {
+      "title": "Flash to white",
+      "description": "Three white frames, then two more, over a tight push on the face; plain colours, no ink lines."
+    },
+    "transition-wipe-prop": {
+      "title": "Prop wipe",
+      "description": "A prop crosses the frame left to right close to the lens and covers it at mid-shot: a door, a bus, a cloud. It keeps facing the camera; turn it if its wide side is elsewhere."
+    },
+    "transition-match-shape": {
+      "title": "Match on shape",
+      "description": "A centred close frame holds for a second, then snaps out to the whole figure: the shape a match cut lands on."
+    },
+    "transition-eyecatch": {
+      "title": "Eyecatch (plain)",
+      "description": "A scene-change card in two plain tones: the figure spins in from the distance over focus lines, and an optional title lands under it."
+    },
+    "transition-smash-in": {
+      "title": "Smash in",
+      "description": "An abrupt snap from the whole figure to the face in a fifth of a second, with a burst of lines and a shake that dies away."
+    },
+    "transition-rise-off": {
+      "title": "Rise off",
+      "description": "The camera lifts off the figure into a blank backdrop with soft light from above; the next shot can start on anything."
+    },
+    "speed-run-toward": {
+      "title": "Run toward camera",
+      "description": "A low lens creeps in on a figure running on the spot over faint radial speed lines. The template brings no clip: bind a GLB with a run clip (clip: run)."
+    },
+    "speed-foot-chase": {
+      "title": "Foot chase",
+      "description": "Two figures sprint down the street on parallel lanes; the camera tracks the runner from ahead and shakes lightly as the chaser closes in."
+    },
+    "speed-flyby": {
+      "title": "Fly-by",
+      "description": "A craft crosses the sky from left to right, 32 m in six seconds, trailing smoke; the camera pans with it over the head of a figure on the ground."
+    },
+    "speed-rush-lines": {
+      "title": "Rush lines",
+      "description": "A hard push from a medium shot to the face over radial speed lines; the camera shakes where the push lands."
+    },
+    "speed-side-dash": {
+      "title": "Side dash",
+      "description": "Seen from the side, the figure dashes ten metres across the set while the frame slides fast from one side of it to the other."
+    },
+    "title-lower-third": {
+      "title": "Lower third",
+      "description": "A name on a bar and a role line slide in from the left, hold under the figure and slide out, over a slow push."
+    },
+    "title-kinetic-stage": {
+      "title": "Kinetic stage",
+      "description": "One big word per beat punches in over a dark mirror stage under a shaft of light, with a slow push on the figure. The line splits into words, up to eight."
+    },
+    "title-chapter": {
+      "title": "Chapter card",
+      "description": "A centred chapter card: the kicker types in, a rule draws itself and the title wipes on, over a vignette and a slow push."
+    },
+    "title-end-card": {
+      "title": "End card",
+      "description": "A title rises and a pulsing call to action lands under it while the camera drifts sideways over faint stars."
+    },
+    "dialogue-ots-a": {
+      "title": "Over the shoulder A",
+      "description": "Two figures face each other 1.7 m apart; the camera looks over the left speaker’s shoulder onto the right one’s face, medium-close with a slow push. Use A for one speaker and B for the other: the eyelines match."
+    },
+    "dialogue-ots-b": {
+      "title": "Over the shoulder B",
+      "description": "The reverse of A: the same two figures, the camera over the right speaker’s shoulder onto the left one’s face, at the same distance and with the same push, so cutting A and B keeps the eyelines."
+    },
+    "dialogue-table": {
+      "title": "Seated at a table",
+      "description": "Two figures sit across a table, three-quarter to the camera, at seated eye height (1.15 m) with a gentle slide. The cast needs a seated clip (sit_down held) or seated cutouts; bind a table GLB to the table slot."
+    },
+    "dialogue-triangle": {
+      "title": "Triangle of three",
+      "description": "Three figures in a triangle: one at the back facing the camera and two in profile in front; a master shot with a slow arc. The third figure is the prop slot person_3."
+    },
+    "dialogue-embrace": {
+      "title": "Embrace",
+      "description": "Two figures close together in a tight two-shot at head height, with a slow push and a shallow arc: a kiss, a hug, a farewell."
+    },
+    "dialogue-phone-split": {
+      "title": "Phone split",
+      "description": "Two figures far apart face the camera as the two halves of the frame, with a thin dark divider between them; each half a medium-close, with a slow symmetric push: a phone call, a video call."
+    },
+    "reaction-push-face": {
+      "title": "Push on the face",
+      "description": "One figure; after a short hold the camera pushes slowly from a medium-close to a close-up on the face."
+    },
+    "reaction-orbit-face": {
+      "title": "Orbit on the face",
+      "description": "A slow arc of a tenth of a turn around the head at close distance; the face stays framed while the place turns behind it."
+    },
+    "reaction-turn-to-camera": {
+      "title": "Turn to camera",
+      "description": "The figure turns in place from profile to face the camera while the camera holds close with a tiny push."
+    },
+    "reaction-look-up": {
+      "title": "Look up",
+      "description": "A low angle on the face that rises and tilts up as it pushes in, close."
+    },
+    "reaction-impact": {
+      "title": "Impact on the face",
+      "description": "A hit lands: two white frames, a short shake and a snap push to the face over plain colours."
+    },
+    "group-arc-five": {
+      "title": "Arc of five",
+      "description": "One figure in front and four behind in an arc, all facing the camera, with a slow wide push. The four behind are the prop slots person_2 to person_5."
+    },
+    "group-line-four": {
+      "title": "Line of four",
+      "description": "Four figures in a line facing the camera, with a lateral slide at chest height. The outer two are the prop slots person_3 and person_4."
+    },
+    "group-audience": {
+      "title": "Performer and crowd",
+      "description": "A performer on a low platform and a crowd of six cutouts seen from behind at the bottom of the frame; the camera cranes up over the crowd toward the stage. The crowd is the prop slots crowd_1 to crowd_6; one picture bound to crowd fills them all."
+    },
+    "group-circle": {
+      "title": "Circle of five",
+      "description": "Five figures in a circle facing the centre; the camera orbits slowly above them. Three of them are the prop slots person_3 to person_5."
     }
   },
   "atmos": {
@@ -4040,6 +4190,40 @@
     "invalid": "This workspace template is not a valid Video 3D document.",
     "shotTitle": "Workspace template · {{id}}"
   },
+  "stages": {
+    "title": "Stages",
+    "help": "Rooms and open places with marks for the cast and named cameras. Pick one and press “Use this shot”: it opens with its room, then bind your characters and choose a room camera.",
+    "loading": "Loading the stages",
+    "noWorkspace": "Open a workspace to see the stages.",
+    "error": "Could not load the stages: {{reason}}",
+    "retry": "Retry",
+    "empty": "The library has no stages.",
+    "openError": "Could not open the stage: {{reason}}",
+    "invalid": "This stage is not a valid Video 3D document with a room.",
+    "shape": {
+      "interior": "Interior",
+      "exterior": "Exterior"
+    },
+    "marks_one": "{{count}} mark",
+    "marks_other": "{{count}} marks",
+    "cameras_one": "{{count}} camera",
+    "cameras_other": "{{count}} cameras",
+    "cameraList": "Cameras: {{cameras}}",
+    "shotTitle": "Stage · {{id}}"
+  },
+  "roomCamera": {
+    "label": "Room camera",
+    "custom": "Custom",
+    "names": {
+      "two_shot": "Two-shot",
+      "ots_a": "Over the shoulder A",
+      "ots_b": "Over the shoulder B",
+      "wide": "Wide",
+      "close_1": "Close-up 1",
+      "close_2": "Close-up 2",
+      "entrance": "Entrance"
+    }
+  },
   "motionLab": {
     "controls": "Native motion scenes",
     "bpm": "Tempo (BPM)",
@@ -4053,5 +4237,21 @@
     "sound": "Local contact music",
     "volume": "Music volume",
     "audioBlocked": "Allow browser audio and press Play again."
+  },
+  "props": {
+    "title": "Props",
+    "search": "Search props",
+    "filterStyle": "Filter by style",
+    "allStyles": "All styles",
+    "add": "Add prop",
+    "approve": "Approve",
+    "reject": "Reject",
+    "new": "New object",
+    "description": "Object description",
+    "height": "Height (metres)",
+    "style": "Style",
+    "generate": "Generate candidates",
+    "generating": "Generating prop candidates…",
+    "remove": "Remove"
   }
 }

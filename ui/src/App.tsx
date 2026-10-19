@@ -20,6 +20,7 @@ import { BrandIdentity } from './components/BrandIdentity'
 import { HocusPocusIntro } from './components/HocusPocusIntro'
 import { LanAuthGate } from './components/LanAuthGate'
 import { ExecutionModeBanner } from './components/ExecutionModeBanner'
+import { ProductionProfileNotice } from './components/ProductionProfileNotice'
 import { SeriesNativeBatchBanner } from './features/series/SeriesNativeBatchBanner'
 import { SeriesShotEditBanner } from './features/series/SeriesShotEditBanner'
 import { catalogFromOutputs, GenerationInspectorHost } from './features/generation-inspector'
@@ -253,6 +254,7 @@ function AppContent() {
   return (
     <div className="flex flex-col h-full w-full bg-bg-primary">
       <ExecutionModeBanner />
+      <ProductionProfileNotice />
       <SeriesNativeBatchBanner />
       <SeriesShotEditBanner />
       {/* Mobile header */}

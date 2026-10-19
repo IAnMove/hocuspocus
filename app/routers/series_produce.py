@@ -15,6 +15,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.agent_activity import current_actor
 from services.series_produce import ProduceError, SeriesProduce, public_job
 from services.series_library import EpisodeNumberTaken
@@ -73,6 +74,7 @@ def create_series_produce_router(service: SeriesProduce, *, call: Callable[[str,
                                  read_library: Callable[[str], dict], read_kits: Callable[[str], dict],
                                  workspace_dir: Callable[[str], str]) -> APIRouter:
     router = APIRouter()
+    workspace_busy.register("series-produce", lambda _workspace, folder: service.live_jobs(folder))
 
     async def job(function: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict[str, Any]:
         # The job runs tools on this loop (see services/local_mcp.py).

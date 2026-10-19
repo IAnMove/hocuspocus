@@ -13,8 +13,10 @@ scene. Declared in ``layout2d`` they are planned with the lines:
   its footfalls (``series_entrances``).
 * ``fx``: ``[{kind, line, anchor, offset, at, duration, x, y, size, ...}]``
   screen effects from ``shared/scene_effects.json`` at the same kind of time.
-  ``duration`` is seconds (0.1-30, a value outside is clamped to that range,
-  1 when missing or not a number) or ``"shot"``: until the end of the shot.
+  ``duration`` is seconds (0.1-30, a value outside is clamped to that range)
+  or ``"shot"``: until the end of the shot. Left out (or not a number), a
+  presence effect (aura, light, weather) lasts the shot and a hit (impact,
+  burst) 0.25-1 s, sized by its class and the framing (``series_fx_classes``).
   A beam (a catalog entry with ``aim``: laser, lightning) can start at
   ``from``: ``{"cast": 0, "point": [88, 41]}`` is a point in % of that cast
   member's pose image (``cast`` is an index in the shot's cast or a character
@@ -33,6 +35,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services import series_entrances as entrances
+from services import series_fx_classes as fx_classes
 from services.series_sound_cuts import cut_fields, track_cut
 
 _EFFECTS = json.loads((Path(__file__).resolve().parents[1] / "shared" / "scene_effects.json").read_text(encoding="utf-8"))
@@ -46,7 +49,6 @@ TIMING_DEFAULTS = {"intro": 0.35, "gap": 0.22, "tail": 0.45}
 _FILE = re.compile(r"^(?!/)(?!.*(?:^|/)\.\.(?:/|$))[^\\\x00]{1,300}$")
 _COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
 FX_DURATION_RANGE = (0.1, 30.0)
-FX_DEFAULT_DURATION = 1.0
 FX_TO_SHOT_END = "shot"
 CLIP_AUDIO = ("keep", "drop")
 CLIP_FIT = ("cover", "contain")
@@ -56,13 +58,13 @@ def _number(value: Any, low: float, high: float) -> float | None:
     return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high else None
 
 
-def fx_duration(value: Any) -> float | str:
+def fx_duration(value: Any) -> float | str | None:
     """How long a screen effect lasts: seconds clamped to 0.1-30 (an author who writes 99 means "long", not 1 s),
-    ``"shot"`` for the rest of the shot, and 1 s only when it is missing or not a number."""
+    ``"shot"`` for the rest of the shot, and None when it is missing or not a number: the effect's class decides."""
     if isinstance(value, str) and value.strip().lower() == FX_TO_SHOT_END:
         return FX_TO_SHOT_END
     if isinstance(value, bool) or not isinstance(value, (int, float)) or math.isnan(value):
-        return FX_DEFAULT_DURATION
+        return None
     low, high = FX_DURATION_RANGE
     return float(min(max(value, low), high))
 
@@ -127,11 +129,13 @@ def fx_origin(value: Any) -> dict[str, Any] | None:
 def fx_entry(value: Any) -> dict[str, Any] | None:
     if not isinstance(value, dict) or value.get("kind") not in EFFECT_KINDS:
         return None
-    entry = {"kind": value["kind"], **_when(value), "duration": fx_duration(value.get("duration"))}
+    length = fx_duration(value.get("duration"))
+    entry = {"kind": value["kind"], **_when(value), **({} if length is None else {"duration": length})}
     # rotation turns directional effects (a laser across the cue point points left at 180); a beam with ``from``
     # runs from its origin to x/y instead.
+    # speed runs the effect's own time slower or faster (0.05: rain hanging in the air).
     for key, low, high in (("x", 0, 100), ("y", 0, 100), ("size", 1, 200), ("intensity", 0.1, 2), ("volume", 0, 1),
-                           ("rotation", -180, 180)):
+                           ("rotation", -180, 180), ("speed", 0.02, 4)):
         if _number(value.get(key), low, high) is not None:
             entry[key] = float(value[key])
     if isinstance(value.get("color"), str) and _COLOR.match(value["color"]):
@@ -190,16 +194,24 @@ def sfx_tracks(layout: dict[str, Any], timing: list[tuple[float, float]], durati
 
 
 def fx_cues(layout: dict[str, Any], timing: list[tuple[float, float]], duration: float,
-            moves: list | None = None) -> list[dict[str, Any]]:
+            moves: list | None = None, framing: str | None = None) -> list[dict[str, Any]]:
+    """The shot's screen effects as timed cues. What a cue leaves out comes from its class (``series_fx_classes``): a
+    presence effect lasts the shot, a hit a moment, and ``framing`` sizes them; what it gives is kept as it is."""
     cues = []
     for index, cue in enumerate(layout.get("fx") or []):
         start = cue_time(cue, timing, duration, moves)
         length = fx_duration(cue.get("duration"))
+        if length is None:
+            length = fx_classes.default_duration(cue["kind"])
         # "shot" lasts to the end of the shot, like any cue that would run past it.
         end = round(min(duration - 0.01, duration if length == FX_TO_SHOT_END else start + length), 3)
         if end <= start:
             continue
-        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation", "from") if key in cue}
+        extra = {key: cue[key] for key in ("x", "y", "size", "intensity", "color", "sound", "volume", "rotation", "speed", "from") if key in cue}
+        if "size" not in extra:
+            size = fx_classes.default_size(cue["kind"], framing, any(key in cue for key in ("x", "y", "cast")))
+            if size is not None:
+                extra["size"] = size
         cues.append({"id": f"fx-{index}", "kind": cue["kind"], "start": start, "end": end, **extra})
     return cues
 

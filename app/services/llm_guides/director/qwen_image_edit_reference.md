@@ -23,6 +23,7 @@ RULES:
 - Keep character references BRIEF — the model sees the photos and preserves identity when anchored.
 - Under 80 words per prompt.
 
+<!-- CLOTHING -->
 CLOTHING — NEVER NAME GARMENTS, EVER. THIS IS THE #1 RULE:
 The single most common and damaging mistake is naming garment types. The
 reference image already shows what each character wears — if you name a
@@ -61,6 +62,7 @@ The ONLY time it is acceptable to name a garment is when clothing explicitly
 CHANGES in the scene: "now in workout clothes after changing", "wearing a new
 red dress she just put on". Changes require the garment word so the model
 knows what is different. For every other case, use color alone or omit entirely.
+<!-- /CLOTHING -->
 
 BODY POSITION — describe PHYSICAL MECHANICS, not emotions or narrative:
 - The image model cannot interpret "lost in the moment" or "locked together emotionally" — these
@@ -88,7 +90,6 @@ STYLE CONSISTENCY:
   people/skin, photography, or 3D CGI unless the user explicitly requests it.
 - A Story visual-style contract, when present, overrides generic examples in
   this guide and must appear consistently in every generated frame.
-- End with "Use lighting and color temp from reference image." to preserve the look.
 
 CRITICAL — EVERY IMAGE PROMPT MUST BE VISUALLY UNIQUE:
 - VARY composition: close-up, wide shot, low angle, overhead, profile, over-shoulder.
@@ -104,14 +105,16 @@ into your prompts. Everything in your prompts must come from THIS production's s
 description and reference images.
 
 GOOD EXAMPLES:
-- "create new scene, same environment. Close-up of the woman from the reference image, relaxed expression. Use lighting and color temp from reference image. Preserve character identity, attire, body attributes, and the art style of the reference image."
-- "create new scene, new kitchen environment. The man from the reference image is now seated at the table. Use lighting and color temp from reference image. Preserve character identity, attire, body attributes, and the art style of the reference image."
-- Scene where woman removes dress → IMAGE shows: "create new scene, bedroom. The woman from the reference image is now standing by the bed. Use lighting and color temp from reference image. Preserve character identity, attire, body attributes, and the art style of the reference image." (NOT already undressed)
+- "create new scene, same environment. Close-up of the woman from the reference image, relaxed expression. Preserve character identity, attire, body attributes, and the art style of the reference image."
+- "create new scene, new kitchen environment. The man from the reference image is now seated at the table. Preserve character identity, attire, body attributes, and the art style of the reference image."
+- Scene where woman removes dress → IMAGE shows: "create new scene, bedroom. The woman from the reference image is now standing by the bed. Preserve character identity, attire, body attributes, and the art style of the reference image." (NOT already undressed)
 
 BAD EXAMPLES:
 - "create new scene, same environment. Blonde man playing guitar." — no reference anchoring.
 - Describing the END state: "the woman is now topless on the bed" when the scene is ABOUT her undressing.
+<!-- CLOTHING -->
 - "wearing her delicate lace bodice and updo" — describing clothing causes inconsistency.
+<!-- /CLOTHING -->
 - "cartoon style illustration of..." (for a PHOTOREALISTIC reference) — introducing a style not in the reference.
 - "photorealistic, 8k detailed photo of..." (for a HAND-DRAWN reference) — same mistake in the other direction.
 

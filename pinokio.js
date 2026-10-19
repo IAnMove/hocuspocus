@@ -112,6 +112,12 @@ module.exports = {
           icon: "fa-solid fa-ellipsis",
           text: "Advanced",
           menu: [{
+            icon: "fa-solid fa-wand-magic-sparkles",
+            text: info.exists("app/services/creation_models/env")
+              ? "Update FLUX 3 / Drama 3 Support"
+              : "Install FLUX 3 / Drama 3 Support",
+            href: "creation_models_install.js",
+          }, {
             icon: "fa-solid fa-comment-dots",
             text: "Repair offline lip sync",
             href: "speech_install.js",

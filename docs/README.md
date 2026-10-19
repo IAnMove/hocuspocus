@@ -19,11 +19,16 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 
 ## Guías de operador (por subsistema)
 
+- [generation/FLUX3_DRAMA3.md](generation/FLUX3_DRAMA3.md) — guía · FLUX 3 Klein con referencias y Drama 3 con voz en español/inglés y clonación.
+
 - [3d-video-compositor/HOWUSEIT.md](3d-video-compositor/HOWUSEIT.md) — guía · compositor 3D programático (Scene Animator).
 - [character-kits/HOWUSEIT.md](character-kits/HOWUSEIT.md) — guía · kits de personaje 2D y Face Rig.
 - [character-kits/SPEECH_QUALITY.md](character-kits/SPEECH_QUALITY.md) — guía · calidad del habla 2D, packs de bocas y su API.
 - [cut-paper/HOWUSEIT.md](cut-paper/HOWUSEIT.md) — guía · ejemplo Tijeral de animación recortable y descargas opcionales.
-- [image-studio/HOWUSEIT.md](image-studio/HOWUSEIT.md) — guía · intenciones y edición en Studio → Imagen.
+- [image-studio/HOWUSEIT.md](image-studio/HOWUSEIT.md) — guía · intenciones y edición en Studio → Imagen, incluido Qwen 2.1 Turbo.
+- [development/LAN_AUTH.md](development/LAN_AUTH.md) — contrato · autenticación LAN al compartir en el servidor completo (token, cookie, MCP aparte); el servidor core no tiene esa puerta.
+- [development/VIDEO_COMMANDS.md](development/VIDEO_COMMANDS.md) — contrato · `generation.video` v2 (Wan t2v) y v3 (H3 / LTX-2.3).
+- [development/VOXCPM2.md](development/VOXCPM2.md) — contrato · motor de voz por defecto.
 - [tools/HOWUSEIT.md](tools/HOWUSEIT.md) — guía · Studio Tools: upscale, revoice, quitar fondo.
 - [video-editor/HOWUSEIT.md](video-editor/HOWUSEIT.md) — guía · Video Editor y mezclas ensambladas.
 - [video-editor/MONTAGES.md](video-editor/MONTAGES.md) — guía · montajes editables y export Video 2D en servidor.
@@ -35,6 +40,8 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 - [DLSS5.md](DLSS5.md) — guía · puente DLSS opcional en postprocesado y Tools.
 
 ## Series Lab y agentes
+
+- [story-lab/WRITING_GUIDE.md](story-lab/WRITING_GUIDE.md) — guía · preguntas, ejemplos y propuestas editables para historias y series.
 
 - [series-lab/CHATGPT_MCP.md](series-lab/CHATGPT_MCP.md) — guía · hacer una serie con ChatGPT conectado por MCP y OAuth.
 - [series-lab/IMPLEMENTATION.md](series-lab/IMPLEMENTATION.md) — contrato vivo · modelo, persistencia, superficie HTTP y MCP de Series Lab.

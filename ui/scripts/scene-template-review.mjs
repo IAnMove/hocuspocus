@@ -2,66 +2,14 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs/promises'
-import { parsePort, startReviewServer, validateListenHost, LOOPBACK_HOST } from './sceneTemplateReview/server.mjs'
+import { startReviewServer } from './sceneTemplateReview/server.mjs'
+import { parseArgs, usage } from './sceneTemplateReview/args.mjs'
 import { buildReviewUi } from './sceneTemplateReview/build.mjs'
 import { prepareShowcase, registerShowcaseInputs } from './sceneTemplateReview/showcase.mjs'
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const uiRoot = path.resolve(scriptDir, '..')
 const repoRoot = path.resolve(uiRoot, '..')
-
-function usage() {
-  return `Usage: tsx scripts/scene-template-review.mjs [--render] [--showcase-dir DIR] [--host 192.168.x.x] [--port N] [template-id ...]
-
-Builds the actual UI into a temporary directory and serves a provider-free review sandbox.
-The default bind is loopback on an ephemeral port; --host may expose the same server on
-one RFC1918 address present on a local interface. Every run writes only to a fresh
-directory under the operating system temporary directory. --showcase-dir loads a local
-manifest.json plus its explicitly referenced media and canonical image inputs before the
-server indexes the UI; no network or video generator is used.
-`
-}
-
-function parseArgs(argv) {
-  let render = false
-  let host = LOOPBACK_HOST
-  let port = 0
-  let showcaseDir = null
-  const templateIds = []
-  for (let index = 0; index < argv.length; index += 1) {
-    const argument = argv[index]
-    if (argument === '--help' || argument === '-h') return { help: true }
-    if (argument === '--render') { render = true; continue }
-    if (argument === '--showcase-dir') {
-      const value = argv[index + 1]
-      if (!value || value.startsWith('--')) throw new Error(`${argument} needs a value.`)
-      index += 1
-      showcaseDir = value
-      continue
-    }
-    if (argument === '--host' || argument === '--port') {
-      const value = argv[index + 1]
-      if (!value || value.startsWith('--')) throw new Error(`${argument} needs a value.`)
-      index += 1
-      if (argument === '--host') host = value
-      else port = parsePort(value)
-      continue
-    }
-    if (argument.startsWith('--host=')) { host = argument.slice('--host='.length); continue }
-    if (argument.startsWith('--port=')) { port = parsePort(argument.slice('--port='.length)); continue }
-    if (argument.startsWith('--showcase-dir=')) {
-      const value = argument.slice('--showcase-dir='.length)
-      if (!value) throw new Error('--showcase-dir needs a value.')
-      showcaseDir = value
-      continue
-    }
-    if (argument.startsWith('--')) throw new Error(`Unknown option “${argument}”.`)
-    templateIds.push(argument)
-  }
-  if (templateIds.length && !render) throw new Error('Template IDs require --render.')
-  validateListenHost(host)
-  return { render, host, port, templateIds, showcaseDir: showcaseDir ? path.resolve(process.cwd(), showcaseDir) : null }
-}
 
 async function holdServer(server) {
   let stopped = false
@@ -117,8 +65,9 @@ async function main() {
     if (options.render) {
       try {
         const { renderTemplates } = await import('./sceneTemplateReview/render.mjs')
-        const result = await renderTemplates({ server, repoRoot, templateIds: options.templateIds })
+        const result = await renderTemplates({ server, repoRoot, templateIds: options.templateIds, assetsFile: options.assetsFile })
         console.log(`REVIEW_RENDERED=${result.results.length}`)
+        console.log(`REVIEW_INDEX=${result.index}`)
         if (result.failures.length) {
           process.exitCode = 1
           console.error(`REVIEW_RENDER_FAILED=${result.failures.length}; no placeholder previews were created.`)

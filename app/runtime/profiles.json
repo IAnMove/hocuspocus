@@ -308,6 +308,38 @@
         8,
         10
       ]
+    },
+    "creation_models": {
+      "label": "FLUX 3 Klein / Drama 3",
+      "installStepsVersion": 1,
+      "env": "app/services/creation_models/env",
+      "environment": "conda",
+      "python": "3.11",
+      "required": false,
+      "platforms": [
+        "linux",
+        "win32"
+      ],
+      "cuda": "13.0",
+      "torch": "2.10.0",
+      "torchvision": "0.25.0",
+      "torchaudio": "2.10.0",
+      "requirements": "app/services/creation_models/vendor/ComfyUI/requirements.txt",
+      "constraints": {
+        "numpy": "2.2.6",
+        "transformers": "4.57.1",
+        "tokenizers": "0.22.1"
+      },
+      "windows": {
+        "constraints": {
+          "triton-windows": "3.6.0.post26"
+        }
+      },
+      "vendors": [
+        "creation_comfy",
+        "drama3_nodes"
+      ],
+      "defaultInstall": false
     }
   }
 }

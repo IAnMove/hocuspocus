@@ -191,11 +191,18 @@ _BODIES = {
     "arms_raised": lambda: _human(-20.0),
     "arms_up": lambda: _human(-50.0),
     "with_orb": lambda: _human(0.0, extra=(("sphere", (1.12, 1.18, 0.3), 0.07),)),
+    # Two locks of hair from the head's sides down onto the shoulders: above the neck notch, past the head's width.
+    "mane": lambda: _human(0.0, extra=tuple(("capsule", (side * 0.10, 1.68, 0.0), (side * 0.19, 1.44, 0.0), 0.05, 0.05) for side in (1.0, -1.0))),
     "on_base": lambda: _human(30.0, extra=tuple(("capsule", (-0.38, -0.04, z), (0.38, -0.04, z), 0.035, 0.035) for z in (-0.12, 0.0, 0.12, 0.24))),
     # Hair down to the shoulders hides the neck notch and a flared skirt makes the waist the narrowest row.
     "long_hair_skirt": lambda: _human(0.0, extra=(
         ("capsule", (0.0, 1.00, 0.0), (0.0, 0.80, 0.0), 0.16, 0.22),
         *(("capsule", (side * 0.085, 1.66, -0.04), (side * 0.10, 1.38, -0.06), 0.06, 0.055) for side in (1.0, -1.0)))),
+    # A flared dress makes the waist a deep notch, arms held a little down draw no T-pose arm line, and two locks
+    # beside the neck leave only a shallow neck notch: the doll of the 2026-10-11 template pilot.
+    "dress_locks": lambda: _human(20.0, extra=(
+        ("frustum", (0.0, 0.0), 0.55, 1.02, 0.36, 0.16, 0.85),
+        *(("capsule", (side * 0.05, 1.62, -0.02), (side * 0.05, 1.45, -0.03), 0.04, 0.04) for side in (1.0, -1.0)))),
     # A short cape over the shoulders and upper arms: a front and a back sheet hang from a top sheet that
     # rests on the arms, so the front view joins the arms to the torso down to the chest.
     "cape": lambda: _human(0.0, extra=_CAPE),

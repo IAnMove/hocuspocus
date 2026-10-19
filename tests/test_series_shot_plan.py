@@ -4,8 +4,8 @@ import shutil
 import pytest
 
 from services.series_shot_plan import (
-    background_for, build_shot_spec, card_texts, classify_camera, classify_framing, frame_size, language_key, normalize_layout2d, plan_cast,
-    plan_timing, sound_tracks, spread,
+    CAMERAS, background_for, build_shot_spec, card_texts, classify_camera, classify_framing, frame_size, language_key, normalize_layout2d,
+    plan_cast, plan_timing, sound_tracks, spread,
 )
 
 
@@ -40,6 +40,23 @@ def test_camera_spread_language_and_timing():
     timing, duration = plan_timing([1.0, 2.0])
     assert timing == [(0.35, 1.35), (1.57, 3.57)] and duration == round(round(4.02 * 24) / 24, 4)
     assert plan_timing([], at_least=6)[1] == 6
+
+
+def test_a_shot_names_its_camera_move_and_old_words_read_as_they_always_did():
+    assert CAMERAS == ("static", "push", "pull", "pan-left", "pan-right", "drift")
+    for move in CAMERAS:
+        assert normalize_layout2d({"camera": move}) == {"camera": move} and classify_camera(f" {move.upper()} ") == move
+    # Stored planner shots say such words and rendered static; their take fingerprint does not see the words, so they
+    # must keep rendering static. Only a move's own name moves the camera, as push-in words always did.
+    for words in ("Cámara fija con paneo suave", "Paneo horizontal lento de izquierda a derecha", "slow pan left", "pull back to reveal",
+                  "zoom out", "drifting", "pan left"):
+        assert classify_camera(words) == "static", words
+    assert classify_camera("slow push-in") == "push" and classify_camera("Cámara fija, ligero push-in") == "push"
+    assert normalize_layout2d({"camera": "Pan-Left"}) is None, "the stored plan takes the exact name"
+    shot = {"id": "s1", "locationId": "garage", "visibleCharacterIds": ["kevin"], "camera": "slow push-in"}
+    plan = lambda value: build_shot_spec(series(), {"id": "ep1"}, value, workspace="cast", recorded={})["camera"]
+    assert plan(shot) == "push" and plan({**shot, "camera": "pan-right"}) == "pan-right"
+    assert plan({**shot, "layout2d": {"camera": "drift"}}) == "drift", "the plan's own camera wins over the words"
 
 
 def test_backgrounds_prefer_the_variant_then_the_location_and_quote_paths():
@@ -217,6 +234,28 @@ def test_the_bridge_compiles_a_planned_shot_with_the_editor_code(tmp_path):
     assert any(layer.get("characterKitRef", {}).get("id") == "kit-kevin" for layer in document["layers"])
 
 
+def test_a_stored_shot_compiles_to_the_video2d_document_it_always_did():
+    """The native render hashes the compiled document: a shot stored before camera moves and finishes were choices
+    compiles to the same one (fixtures and the digests at bc518b86 in test_series_finish)."""
+    from services.series_shot_bridge import run_series_shot
+    from services.video2d_compile import TSX
+    from tests.test_series_finish import KITS, digest, planned_spec, stored_cases
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    for name, value, shot, expected in stored_cases():
+        spec = planned_spec(value, shot)
+        document = run_series_shot({"mode": "shot", "kits": {cast["kitId"]: KITS[cast["kitId"]] for cast in spec["cast"]}, "shot": spec})
+        assert digest(document) == expected[3], name
+        assert any(layer["type"] == "camera" for layer in document["layers"]) is (expected[4] == "push"), name
+    # "none" plans no finish key at all and a Video 2D finish plans the preset: the compiler takes both as they are.
+    from services.video2d_preset_catalog import finish_presets
+    from tests.test_series_finish import SHOTS, series as finish_series
+    for choice, expected_finish in (("none", None), ("film", finish_presets()["film"])):
+        spec = planned_spec(finish_series(look={"finish": choice}), SHOTS["static"])
+        document = run_series_shot({"mode": "shot", "kits": {cast["kitId"]: KITS[cast["kitId"]] for cast in spec["cast"]}, "shot": spec})
+        assert document.get("finish") == expected_finish, choice
+
+
 def test_props_stand_on_background_anchors_and_follow_the_framing_zoom():
     from services.series_shot_plan import background_point, plan_props
     value = series()
@@ -326,3 +365,178 @@ def test_a_document_clip_paints_its_paper_and_layout_once_and_the_same_frames(tm
     monkeypatch.undo()
     expected = b"".join(cards.render_frame(card, frame, 6, width=96, height=54).tobytes() for frame in range(6))
     assert raw == expected
+
+
+# An expression never plays while its own character speaks ---------------------------------------------------------
+
+def _approved(**more):
+    return {"reviewState": "approved", "sheet": {"count": 4, "columns": 4, "rows": 1}, "fps": 4, "loop": "once", **more}
+
+
+# angry is an expression of the catalog (held 2.5 s: one pass is 1 s), wave a gesture (one pass is 1 s), walk and run cycles; the
+# made-up ids are the sheets an agent makes with characters.animation.make: "determined-full" has no group, "worried-full" is custom.
+EXPRESSION_KITS = {"kit-kevin": {"animations": {"angry": _approved(), "wave": _approved(), "walk": _approved(loop="loop"), "run": _approved(loop="loop"),
+                                                "determined-full": _approved(), "worried-full": _approved(group="custom"),
+                                                "dance": _approved(group="cycle"), "walk-fast": _approved(group="gesture")}},
+                   "kit-gary": {"animations": {"angry": _approved()}}}
+
+
+def _expression_spec(cast, beats, **layout):
+    """The spec of a shot whose beats are {who, seconds, pauseBefore?, castIndex?}; recorded as long as ``seconds``."""
+    shot = {"id": "s1", "sceneId": "a", "locationId": "garage", "layout2d": {"framing": "two", "cast": cast, **layout},
+            "dialogueBeats": [{"id": f"b{number}", "characterId": beat["who"], "text": "Hola.",
+                               **{key: beat[key] for key in ("pauseBefore", "castIndex") if key in beat}} for number, beat in enumerate(beats)]}
+    recorded = {f"b{number}": {"filename": f"b{number}.wav", "duration": beat["seconds"]} for number, beat in enumerate(beats)}
+    return build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded=recorded)
+
+
+def _quiet(cast, beats):
+    from services.series_expression_silence import quiet_expressions
+    spec = _expression_spec(cast, beats)
+    return spec, *quiet_expressions(spec, EXPRESSION_KITS, "s1")
+
+
+ANGRY = {"id": "angry", "at": 0}
+KEVIN_THEN_GARY = [{"who": "kevin", "seconds": 1.0}, {"who": "gary", "seconds": 4.0}]  # kevin 0.35-1.35, gary 1.57-5.57, the shot lasts 6 s
+
+
+def _kevin(animation, **more):
+    return [{"characterId": "kevin", "x": 30, **({"animation": animation} if animation else {}), **more}, {"characterId": "gary", "x": 70}]
+
+
+@pytest.mark.parametrize("at", [0, 1.0])
+def test_an_expression_over_its_own_voice_moves_to_the_first_silence_that_holds_it(at):
+    """Full overlap (at 0, inside the phrase) and partial overlap (at 1, past its end): both go to the silence after the line."""
+    spec, quiet, warnings = _quiet(_kevin({"id": "angry", "at": at}), KEVIN_THEN_GARY)
+    assert spec["cast"][0]["animation"]["at"] == at and spec["duration"] == 6.0
+    assert quiet["cast"][0]["animation"] == {"id": "angry", "at": 1.55, "duration": 2.5}, "0.2 s after the line, held 2.5 s"
+    assert quiet["cast"][1] == spec["cast"][1] and quiet["lines"] == spec["lines"], "only that expression changes"
+    assert [(w["code"], w["subject"], w["shots"]) for w in warnings] == [("expression_moved_for_speech", "kevin", ["s1"])]
+    assert f"from {at:g} s to 1.55 s" in warnings[0]["message"] and "'angry'" in warnings[0]["message"]
+
+
+def test_an_expression_goes_right_before_the_first_phrase_when_it_fits():
+    """kevin waits 3 s before speaking (phrase at 3.35): the expression ends 0.2 s before it."""
+    spec, quiet, warnings = _quiet(_kevin({"id": "angry", "at": 1.5}), [{"who": "kevin", "seconds": 1.0, "pauseBefore": 3.0}])
+    assert spec["lines"][0]["start"] == 3.35
+    assert quiet["cast"][0]["animation"] == {"id": "angry", "at": 0.65, "duration": 2.5}
+    assert [w["code"] for w in warnings] == ["expression_moved_for_speech"]
+
+
+def test_an_explicit_duration_is_kept_when_the_expression_moves():
+    _spec, quiet, _warnings = _quiet(_kevin({"id": "angry", "at": 0, "duration": 2.0, "loop": "pingpong"}), KEVIN_THEN_GARY)
+    assert quiet["cast"][0]["animation"] == {"id": "angry", "at": 1.55, "duration": 2.0, "loop": "pingpong"}
+
+
+def test_an_expression_that_fits_nowhere_is_dropped_with_a_warning():
+    spec, quiet, warnings = _quiet(_kevin(ANGRY), [{"who": "kevin", "seconds": 4.0}])
+    assert spec["cast"][0]["animation"] == ANGRY and spec["lines"][0]["end"] == 4.35
+    assert "animation" not in quiet["cast"][0] and quiet["cast"][0]["characterId"] == "kevin", "the figure stays, drawn by its pose"
+    assert [(w["code"], w["subject"], w["shots"]) for w in warnings] == [("expression_dropped_during_speech", "kevin", ["s1"])]
+    assert "allowDuringSpeech" in warnings[0]["message"]
+
+
+def test_the_expression_of_a_listener_is_left_alone():
+    """gary speaks while kevin, who listens, makes his face."""
+    spec, quiet, warnings = _quiet(_kevin(ANGRY), [{"who": "gary", "seconds": 4.0}])
+    assert quiet == spec and warnings == []
+
+
+def test_allow_during_speech_keeps_the_expression_where_it_was_asked():
+    spec, quiet, warnings = _quiet(_kevin({**ANGRY, "allowDuringSpeech": True}), KEVIN_THEN_GARY)
+    assert quiet == spec and warnings == []
+
+
+def test_a_shot_without_audio_is_not_touched():
+    """No dialogue (or a deaf shot, whose lines are dropped) has no voice to keep clear of."""
+    spec, quiet, warnings = _quiet(_kevin(ANGRY), [])
+    assert spec["lines"] == [] and quiet == spec and warnings == []
+    deaf = _expression_spec(_kevin(ANGRY), KEVIN_THEN_GARY, hearing="deaf")
+    from services.series_expression_silence import quiet_expressions
+    assert deaf["lines"] == [] and quiet_expressions(deaf, EXPRESSION_KITS, "s1") == (deaf, [])
+
+
+@pytest.mark.parametrize("animation", ["determined-full", "worried-full", "wave", "walk-fast"])
+def test_a_sheet_of_any_other_group_is_kept_clear_of_its_voice_too(animation):
+    """A custom sheet with no group, a custom one and a gesture hide the mouth like an expression: they move to the silence, one pass long
+    (the compiler holds only an expression 2.5 s), and say so as an animation."""
+    spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 0}), KEVIN_THEN_GARY)
+    assert quiet["cast"][0]["animation"] == {"id": animation, "at": 1.55, "duration": 1.0}, "0.2 s after the line, one pass (4 cells at 4 fps)"
+    assert quiet["cast"][1] == spec["cast"][1] and quiet["lines"] == spec["lines"]
+    assert [(w["code"], w["subject"], w["shots"]) for w in warnings] == [("expression_moved_for_speech", "kevin", ["s1"])]
+    assert f"animation '{animation}' moved from 0 s to 1.55 s" in warnings[0]["message"]
+
+
+def test_a_sheet_with_no_group_that_fits_nowhere_is_dropped_and_the_opt_out_keeps_it():
+    spec, quiet, warnings = _quiet(_kevin({"id": "determined-full", "at": 0}), [{"who": "kevin", "seconds": 4.0}])
+    assert "animation" not in quiet["cast"][0] and quiet["cast"][0]["characterId"] == "kevin"
+    assert [w["code"] for w in warnings] == ["expression_dropped_during_speech"]
+    assert "no silence of 1.4 s" in warnings[0]["message"] and "allowDuringSpeech" in warnings[0]["message"]
+    kept, same, silent = _quiet(_kevin({"id": "determined-full", "at": 0, "allowDuringSpeech": True}), [{"who": "kevin", "seconds": 4.0}])
+    assert same == kept and silent == []
+
+
+def test_a_listener_and_a_sheet_clear_of_the_voice_keep_any_sheet():
+    for animation in ("determined-full", "wave"):
+        spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 0}), [{"who": "gary", "seconds": 4.0}])
+        assert quiet == spec and warnings == [], f"{animation}: kevin listens"
+        spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 1.55, "duration": 1.0}), KEVIN_THEN_GARY)
+        assert quiet is spec and warnings == [], f"{animation}: already in kevin's silence"
+
+
+@pytest.mark.parametrize("animation", ["walk", "run", "dance"])
+def test_a_cycle_and_the_walk_may_play_over_the_voice(animation):
+    """The group cycle (a catalog one or a made-up one) and the id walk are continuous body motion with their own treatment: never moved."""
+    spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 0}), KEVIN_THEN_GARY)
+    assert quiet == spec and warnings == []
+
+
+def test_the_walk_id_is_a_cycle_even_when_the_kit_copy_has_another_group():
+    from services.series_expression_silence import quiet_expressions
+    kits = {"kit-kevin": {"animations": {"walk": _approved(group="custom", loop="loop")}}}
+    spec = _expression_spec(_kevin({"id": "walk", "at": 0}), KEVIN_THEN_GARY)
+    assert quiet_expressions(spec, kits, "s1") == (spec, [])
+
+
+def test_an_expression_clear_of_its_voice_compiles_exactly_as_before():
+    """Between kevin's phrase (ends 1.35) and nothing of his again: the saved shot is not changed."""
+    spec, quiet, warnings = _quiet(_kevin({"id": "angry", "at": 1.55, "duration": 2.5}), KEVIN_THEN_GARY)
+    assert quiet is spec and warnings == []
+    touching = _quiet(_kevin({"id": "angry", "at": 1.35}), KEVIN_THEN_GARY)
+    assert touching[1] is touching[0] and touching[2] == [], "ending where a phrase starts, or starting where one ends, is not an overlap"
+
+
+def test_the_speaker_is_the_copy_the_compiler_moves_the_mouth_of():
+    """Two copies of one kit: castIndex says which one speaks; the other one listens and keeps its face."""
+    twins = [{"characterId": "kevin", "x": 30, "animation": ANGRY}, {"characterId": "kevin", "x": 70, "animation": ANGRY}]
+    spec, quiet, warnings = _quiet(twins, [{"who": "kevin", "seconds": 4.0, "castIndex": 1}])
+    assert spec["lines"][0]["castIndex"] == 1
+    assert quiet["cast"][0] == spec["cast"][0] and "animation" not in quiet["cast"][1]
+    assert [w["code"] for w in warnings] == ["expression_dropped_during_speech"]
+
+
+def test_an_expression_never_moves_back_into_the_walk_in_of_its_sheet():
+    """The compiler starts the animation after the walk sheet has ended (3 s), so 'before the phrase' must not fall inside the walk."""
+    walking = _kevin(ANGRY, enterFrom="left", enterAt=0.5, enterDuration=2.5, enterGait="walk")
+    spec, quiet, warnings = _quiet(walking, [{"who": "kevin", "seconds": 1.0, "pauseBefore": 4.0}])
+    assert spec["cast"][0]["enter"]["end"] == 3.0 and spec["lines"][0]["start"] == 4.35
+    assert "animation" not in quiet["cast"][0], "4.35 - 2.5 - 0.2 is before the walk ends"
+    assert [w["code"] for w in warnings] == ["expression_dropped_during_speech"]
+
+
+def test_a_render_item_keeps_one_copy_of_each_expression_warning_across_retries():
+    from services.series_expression_silence import note
+    voice = {"id": "b1", "warning": "voice_out_of_band"}
+    found = {"code": "expression_dropped_during_speech", "subject": "kevin", "shots": ["s1"], "message": "kevin: ..."}
+    item = {"warnings": [voice]}
+    note(item, [found])
+    note(item, [found])
+    assert item["warnings"] == [voice, found], "a lost export asks for the scene again: no duplicate"
+    note(item, [])
+    assert item["warnings"] == [voice], "an expression that now fits clears its old warning"
+    alone = {"warnings": [found]}
+    note(alone, [])
+    assert "warnings" not in alone
+    clean: dict = {}
+    note(clean, [])
+    assert clean == {}

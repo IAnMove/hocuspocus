@@ -6,12 +6,14 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.scene2d_export import command_catalog
 from services.world3d_export import http_error
 
 
 def create_scene2d_export_router(service) -> APIRouter:
     router = APIRouter()
+    workspace_busy.register("scene2d-export", lambda _workspace, _folder: service.live_jobs())
 
     @router.get("/api/v1/scenes/video2d/export/commands")
     def commands():

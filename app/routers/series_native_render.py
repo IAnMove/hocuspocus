@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.series_native_render import NativeRenderError, SeriesNativeRender, public_job
 
 
@@ -33,6 +34,7 @@ def _http(error: NativeRenderError) -> HTTPException:
 
 def create_series_native_render_router(service: SeriesNativeRender, bind_loop: Callable[[asyncio.AbstractEventLoop], None]) -> APIRouter:
     router = APIRouter()
+    workspace_busy.register("series-native", lambda _workspace, folder: service.live_jobs(folder))
 
     async def call(function: Callable[..., dict[str, Any]], *args: Any, **kwargs: Any) -> dict[str, Any]:
         # The job runs tools on this loop (see services/local_mcp.py).

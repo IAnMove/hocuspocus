@@ -463,3 +463,118 @@ def test_lora_multiplier_phases_are_validated_without_normalizing_or_mutating_in
             },
             maximum_phases=2,
         )
+
+
+def _rgba(path: Path, opaque_color=(255, 255, 255), size=(32, 20)):
+    """What ``media.compose`` writes: an RGBA PNG, here with an opaque left half and a transparent right half."""
+    picture = Image.new("RGBA", size, (*opaque_color, 255))
+    picture.paste((9, 9, 9, 0), (size[0] // 2, 0, size[0], size[1]))
+    picture.save(path)
+
+
+def test_a_guide_and_a_mask_with_alpha_reach_the_engine_as_three_channel_pictures(resources_fixture):
+    """Sol 2026-10-15: inpaint/outpaint with an RGBA PNG failed in 0.3 s (``shapes (480,864,4,1) (480,864,4)``, ``expanded size (4) must
+    match the existing size (3)``): the engine reads a guide and a mask as three-channel frames."""
+    fixture = resources_fixture
+    _rgba(fixture["uploads"] / "mask.png", (255, 255, 255))
+    _rgba(fixture["uploads"] / "room.png", (200, 100, 50))
+    write_image(fixture["uploads"] / "plain.png", (1, 2, 3))
+    params = {"workspace": "output", "image_guide": canonical_upload("room.png"), "image_mask": canonical_upload("mask.png"),
+              "image_refs": [canonical_upload("plain.png")]}
+
+    working, resources = fixture["service"].prepare_media(params)
+
+    with Image.open(working["image_mask"]) as mask, Image.open(working["image_guide"]) as guide:
+        assert mask.mode == guide.mode == "RGB" and mask.size == guide.size == (32, 20)
+        assert mask.getpixel((4, 4)) == (255, 255, 255) and mask.getpixel((28, 4)) == (0, 0, 0), "transparent is not masked: black"
+        assert guide.getpixel((4, 4)) == (200, 100, 50) and guide.getpixel((28, 4)) == (127, 127, 127), "transparent is neutral grey"
+    assert working["image_refs"] == [str((fixture["uploads"] / "plain.png").resolve())], "a picture without alpha is passed as it is"
+    # The recorded identity is still the picture the person chose, and that file is not touched.
+    assert [item["sha256"] for item in resources if item["role"] == "image_mask"] == [hashlib.sha256((fixture["uploads"] / "mask.png").read_bytes()).hexdigest()]
+    with Image.open(fixture["uploads"] / "mask.png") as original:
+        assert original.mode == "RGBA"
+    # The same picture is flattened once: the second request finds the copy.
+    again, _ = fixture["service"].prepare_media(params)
+    assert again["image_mask"] == working["image_mask"] and again["image_guide"] == working["image_guide"]
+
+
+def test_an_opaque_rgba_mask_made_by_the_app_keeps_its_shape_and_a_picture_without_alpha_is_untouched(resources_fixture):
+    fixture = resources_fixture
+    Image.new("RGBA", (16, 8), (0, 0, 0, 255)).save(fixture["uploads"] / "canvas.png")
+    write_image(fixture["uploads"] / "photo.png", (20, 30, 40))
+    working, _ = fixture["service"].prepare_media({"workspace": "output", "image_mask": canonical_upload("canvas.png"),
+                                                   "image_guide": canonical_upload("photo.png")})
+    with Image.open(working["image_mask"]) as mask:
+        assert mask.mode == "RGB" and mask.size == (16, 8) and mask.getpixel((3, 3)) == (0, 0, 0)
+    assert working["image_guide"] == str((fixture["uploads"] / "photo.png").resolve())
+
+
+def test_only_a_guide_or_mask_with_real_transparency_is_copied_and_every_other_picture_is_passed_untouched(tmp_path):
+    """Reviewer probe: a JPEG, a plain RGB/grey/palette picture, or a reference never gets a copy (same path, same bytes); every kind of
+    transparency (alpha channel, grey+alpha, palette or colour-key ``transparency``) is composited onto the role's flat background."""
+    from services.studio_image_alpha import FLATTENED_DIR, flattened
+
+    def save(name, picture, **options):
+        path = tmp_path / name
+        picture.save(path, **options)
+        return str(path), hashlib.sha256(path.read_bytes()).hexdigest()
+
+    palette = Image.new("P", (6, 4), 1)
+    palette.putpalette([0, 0, 0, 255, 255, 255] + [0] * 762)
+    for name, picture, options in [("photo.jpg", Image.new("RGB", (6, 4), (200, 10, 10)), {"quality": 61}), ("flat.png", Image.new("RGB", (6, 4), (1, 2, 3)), {}),
+                                   ("grey.png", Image.new("L", (6, 4), 255), {}), ("palette.png", palette, {})]:
+        path, digest = save(name, picture, **options)
+        before = Path(path).read_bytes()
+        assert flattened(path, "image_mask", digest, str(tmp_path)) == path and Path(path).read_bytes() == before
+    path, digest = save("ref.png", Image.new("RGBA", (6, 4), (9, 9, 9, 0)))
+    assert flattened(path, "image_refs", digest, str(tmp_path)) == path, "only a guide and a mask are flattened"
+
+    clear = (255, 255, 255, 0)
+    half = Image.new("RGBA", (6, 4), (255, 255, 255, 128))
+    transparent_palette = palette.copy()
+    transparent_palette.info["transparency"] = 1
+    cases = {"grey-alpha.png": (Image.new("LA", (6, 4), (255, 0)), {}), "rgba.png": (Image.new("RGBA", (6, 4), clear), {}),
+             "palette-clear.png": (transparent_palette, {"transparency": 1}), "colour-key.png": (Image.new("RGB", (6, 4), (255, 255, 255)), {"transparency": (255, 255, 255)}),
+             "half.png": (half, {})}
+    for name, (picture, options) in cases.items():
+        path, digest = save(name, picture, **options)
+        copy = flattened(path, "image_mask", digest, str(tmp_path))
+        assert Path(copy).parent == tmp_path / FLATTENED_DIR and Path(copy).name == f"{digest[:32]}-image_mask.png", name
+        with Image.open(copy) as flat:
+            assert flat.mode == "RGB" and flat.size == (6, 4), name
+            assert flat.getpixel((1, 1)) == ((128, 128, 128) if name == "half.png" else (0, 0, 0)), name
+    path, digest = save("half-guide.png", half)
+    with Image.open(flattened(path, "image_guide", digest, str(tmp_path))) as guide:
+        assert guide.getpixel((1, 1)) == (191, 191, 191), "half-transparent white over neutral grey (127)"
+    assert not [item for item in (tmp_path / FLATTENED_DIR).iterdir() if item.suffix == ".tmp"], "no half-written copy is left behind"
+
+
+def test_a_guides_alpha_is_saved_beside_its_flattened_copy_also_for_a_copy_made_before_that_existed(tmp_path):
+    """The engine returns RGB: the inpainted picture's transparency is put back from this plane (``studio_image_alpha_restore``)."""
+    from services.studio_image_alpha import FLATTENED_DIR, alpha_plane_path, flattened
+
+    picture = Image.new("RGBA", (6, 4), (10, 20, 30, 255))
+    picture.paste((10, 20, 30, 0), (0, 0, 2, 4))
+    picture.putpixel((5, 0), (10, 20, 30, 77))
+    path = tmp_path / "keyed.png"
+    picture.save(path)
+    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    copy = flattened(str(path), "image_guide", digest, str(tmp_path))
+    plane = alpha_plane_path(copy)
+    assert plane == Path(copy).with_name(f"{digest[:32]}-image_guide.alpha.png") and plane.parent.name == FLATTENED_DIR
+    with Image.open(plane) as alpha:
+        assert alpha.mode == "L" and alpha.size == (6, 4)
+        assert alpha.getpixel((0, 0)) == 0 and alpha.getpixel((5, 0)) == 77 and alpha.getpixel((3, 3)) == 255
+    # a copy the previous release made has none: the next request adds it and leaves the copy as it was
+    plane.unlink()
+    before = Path(copy).read_bytes()
+    assert flattened(str(path), "image_guide", digest, str(tmp_path)) == copy
+    assert plane.is_file() and Path(copy).read_bytes() == before
+    # only a guide has one: a mask is read from its black copy, a reference and a picture without alpha are passed untouched
+    flattened(str(path), "image_mask", digest, str(tmp_path))
+    assert alpha_plane_path(str(tmp_path / FLATTENED_DIR / f"{digest[:32]}-image_mask.png")) is None
+    assert sorted(item.name for item in (tmp_path / FLATTENED_DIR).iterdir()) == sorted(
+        [Path(copy).name, plane.name, f"{digest[:32]}-image_mask.png"])
+    flat = tmp_path / "flat.png"
+    Image.new("RGB", (6, 4), (1, 2, 3)).save(flat)
+    assert flattened(str(flat), "image_guide", "f" * 64, str(tmp_path)) == str(flat) and alpha_plane_path(str(flat)) is None

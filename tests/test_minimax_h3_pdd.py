@@ -23,6 +23,8 @@ _PDD_PATH = _APP / "models" / "minimax_h3" / "pdd.py"
 _TURBO_PATH = _APP / "models" / "minimax_h3" / "turbo.py"
 _MODEL_PATH = _APP / "models" / "minimax_h3" / "minimax_h3_main.py"
 _LAUNCH_PATH = _APP / "_launch_runtime.py"
+# The request layer: POST /api/v1/generate validates the reference detail here.
+_GENERATE_PATH = _APP / "services" / "studio_generate.py"
 
 
 def _load_module(name: str, path: Path):
@@ -178,18 +180,20 @@ class MiniMaxH3PDDTests(unittest.TestCase):
 
     def test_request_and_runtime_layers_do_not_force_high_detail(self):
         launch_source = _LAUNCH_PATH.read_text(encoding="utf-8")
+        generate_source = _GENERATE_PATH.read_text(encoding="utf-8")
         model_source = _MODEL_PATH.read_text(encoding="utf-8")
-        self.assertNotIn(
-            'body["minimax_h3_reference_detail"] = "max"',
-            launch_source,
-        )
+        for request_source in (launch_source, generate_source):
+            self.assertNotIn(
+                'body["minimax_h3_reference_detail"] = "max"',
+                request_source,
+            )
         self.assertNotIn(
             'minimax_h3_reference_detail = "max"',
             model_source,
         )
         self.assertIn(
             "reference_detail",
-            launch_source,
+            generate_source,
         )
         self.assertIn(
             "Match output (no reference upscaling)",

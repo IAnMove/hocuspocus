@@ -103,5 +103,20 @@
     "loadFailed": "No se pudieron cargar los Workspaces",
     "deleteConfirm": "¿Eliminar el Workspace “{{name}}”? No se borrará ningún proyecto ni asset.",
     "emptyType": "Todavía no hay elementos de este tipo."
+  },
+  "actionErrors": {
+    "uploadsReadOnly": "Subidas es una vista virtual de sólo lectura, no un workspace seleccionable para generar.",
+    "missing": "No existe el workspace “{{name}}”. Los disponibles son: {{available}}.",
+    "none": "ninguno",
+    "switchUnconfirmed": "El backend no confirmó el cambio al workspace “{{name}}”; no afirmaré que se completó.",
+    "invalidName": "Ese nombre de workspace no es válido.",
+    "createUnconfirmed": "El backend no confirmó la creación y selección de “{{name}}”."
+  },
+  "replies": {
+    "ready": "Workspace listo.",
+    "alreadyActive": "El workspace “{{name}}” ya estaba activo.",
+    "switched": "He cambiado al workspace “{{name}}”. El chat y las siguientes acciones continúan en ese contexto.",
+    "alreadyExisted": "El workspace “{{name}}” ya existía. {{summary}}",
+    "created": "He creado y seleccionado el workspace “{{name}}”. El chat continúa aquí y las nuevas generaciones se guardarán en él."
   }
 }

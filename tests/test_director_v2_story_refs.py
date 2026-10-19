@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import ast
 import json
 import re
 import tempfile
@@ -10,7 +9,13 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
+from app.services.director.guide_loader import load_guide
 from app.services.director.planners.comic_movie import ComicMoviePlanner
+from app.services.director.music_video_coverage import (
+    COVERAGE_RULE, COVERAGE_SEQUENCE, treatment_chorus_set, treatment_coverage, treatment_rules_for,
+)
 from app.services.director.planners.music_video import (
     MusicVideoPlanner,
     build_music_video_cast_lock,
@@ -22,27 +27,8 @@ from app.services.director.planners.short_film import ShortFilmPlanner
 from app.services.director.schema import CharacterProfile
 from app.services import director_pipeline
 from app.services.director_pipeline import _has_visual_references
+from app.services.director_v2_plan import _director_v2_planner_kwargs
 from app.services.director_video_strategy import SHOT_IMAGE_PROMPT_ONLY
-
-
-def _load_planner_kwargs():
-    source = Path(__file__).parents[1].joinpath("app", "_launch_runtime.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
-    selected = []
-    for node in tree.body:
-        if isinstance(node, ast.Assign) and any(
-            isinstance(target, ast.Name) and target.id == "_DIRECTOR_V2_PLANNER_KEYS"
-            for target in node.targets
-        ):
-            selected.append(node)
-        if isinstance(node, ast.FunctionDef) and node.name == "_director_v2_planner_kwargs":
-            selected.append(node)
-    namespace: dict = {}
-    exec(compile(ast.Module(body=selected, type_ignores=[]), "_launch_runtime.py", "exec"), namespace)
-    return namespace["_director_v2_planner_kwargs"]
-
-
-_director_v2_planner_kwargs = _load_planner_kwargs()
 
 
 def _music_shot(index: int) -> dict:
@@ -838,3 +824,160 @@ class TestDirectorV2StoryRefs(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ── The coverage cycle and chorus sets, visible and editable (glass walls 3a, 2026-10-13) ──
+#
+# Clip i gets coverage line i % 6 and every chorus returns to the first
+# recurring set (PR #5). Both stay the default; the treatment can now change
+# the cycle (``coverage``, ``[]`` = no hint) and the chorus set
+# (``chorus_set``: ``first``, ``rotate`` or ``free``).
+
+CLIPS = [
+    {"label": label, "beat_count": 8}
+    for label in ("intro", "verse", "chorus", "verse", "chorus", "bridge", "chorus", "outro")
+]
+SETS = ["gold stage", "city", "white void"]
+TS_DEFAULTS = Path(__file__).resolve().parents[1] / "ui" / "src" / "features" / "director" / "treatmentDefaults.ts"
+
+
+def _coverage(**treatment):
+    return build_music_video_coverage(CLIPS, normalize_music_video_treatment({"recurring_sets": SETS, **treatment}))
+
+
+def _contexts(**treatment) -> list[str]:
+    plan = _coverage(**treatment)
+    return MusicVideoPlanner()._build_clip_contexts(CLIPS, None, {}, {}, None, plan)
+
+
+def test_missing_fields_are_filled_with_todays_defaults():
+    treatment = normalize_music_video_treatment({})
+    assert treatment_coverage(treatment) == list(COVERAGE_SEQUENCE) and treatment_chorus_set(treatment) == "first"
+    assert treatment_chorus_set(normalize_music_video_treatment({"chorus_set": "bogus"})) == "first"
+    assert normalize_music_video_treatment({"chorus_set": "rotate"})["chorus_set"] == "rotate"
+    assert normalize_music_video_treatment({"coverage": []})["coverage"] == []
+    assert normalize_music_video_treatment({"coverage": " wide\n\n close-up "})["coverage"] == ["wide", "close-up"]
+
+
+def test_a_default_treatment_stays_byte_identical():
+    # The planner prints the treatment as JSON in its system prompt, and plans
+    # and saved runs store it: the default (or a default typed back in) adds
+    # no keys, so those stay exactly as before the fields existed.
+    for raw in ({}, {"coverage": list(COVERAGE_SEQUENCE), "chorus_set": "first"}, {"chorus_set": "bogus"}):
+        treatment = normalize_music_video_treatment(raw)
+        assert "coverage" not in treatment and "chorus_set" not in treatment
+    prompts: list[str] = []
+
+    def provider(**kwargs):
+        prompts.append(str(kwargs.get("system_prompt") or ""))
+        return json.dumps([])
+
+    with pytest.raises(RuntimeError):
+        MusicVideoPlanner(llm_generate=provider).plan(
+            clips=CLIPS[:2], scene_description="A singer at a harbour.", bpm=120,
+        )
+    assert '"chorus_set"' not in prompts[0] and '"coverage"' not in prompts[0]
+
+
+def test_the_defaults_plan_exactly_as_before():
+    plan = _coverage()
+    assert [item["coverage"] for item in plan] == [COVERAGE_SEQUENCE[i % 6] for i in range(len(CLIPS))]
+    assert [item["recurring_set"] for item in plan if item["reuse_chorus_signature"]] == ["gold stage"] * 3
+    assert plan[5]["recurring_set"] == "white void"  # the bridge: the last set
+    contexts = _contexts()
+    assert "Planned role: " in contexts[2]
+    assert "; recurring set: gold stage; coverage: beauty close-up; section direction: " in contexts[2]
+    assert contexts[2].count("Return to the same chorus signature instead of inventing a new location.") == 1
+
+
+def test_an_empty_cycle_gives_no_coverage_hint():
+    plan = _coverage(coverage=[])
+    assert {item["coverage"] for item in plan} == {""}
+    assert not any("coverage:" in context for context in _contexts(coverage=[]))
+
+
+def test_a_custom_cycle_is_used_in_order():
+    plan = _coverage(coverage=["wide", "close-up"])
+    assert [item["coverage"] for item in plan[:4]] == ["wide", "close-up", "wide", "close-up"]
+
+
+def test_rotate_sends_each_chorus_to_the_next_set():
+    plan = _coverage(chorus_set="rotate")
+    choruses = [item for clip, item in zip(CLIPS, plan) if clip["label"] == "chorus"]
+    assert [item["recurring_set"] for item in choruses] == SETS
+    assert not any(item["reuse_chorus_signature"] for item in plan)
+    assert not any("Return to the same chorus signature" in context for context in _contexts(chorus_set="rotate"))
+
+
+def test_free_leaves_the_chorus_set_to_the_planner():
+    plan = _coverage(chorus_set="free")
+    choruses = [item for clip, item in zip(CLIPS, plan) if clip["label"] == "chorus"]
+    assert {item["recurring_set"] for item in choruses} == {""}
+    contexts = _contexts(chorus_set="free")
+    assert "recurring set:" not in contexts[2] and "Return to the same chorus signature" not in contexts[2]
+    assert "recurring set: white void" in contexts[1]  # verses keep their sets
+
+
+def test_the_rules_text_follows_the_treatment():
+    guide = load_guide("music_video_treatment_rules.md")
+    # The sentences replaced below must still be in the guide.
+    assert COVERAGE_RULE in guide
+    assert "Choruses return to the signature setup at peak scale." in guide
+    assert treatment_rules_for(guide, normalize_music_video_treatment({})) == guide
+    rotate = treatment_rules_for(guide, normalize_music_video_treatment({"chorus_set": "rotate"}))
+    assert "Choruses rotate through the recurring sets" in rotate and "signature chorus set" not in rotate
+    free = treatment_rules_for(guide, normalize_music_video_treatment({"chorus_set": "free", "coverage": []}))
+    assert "choose each chorus setting freely" in free and "hero wide" not in free
+
+
+@pytest.mark.parametrize(
+    ("chorus_set", "line"),
+    [
+        ("first", "Revisit the same chorus set, wardrobe and visual motif."),
+        ("rotate", "Choruses rotate through the recurring sets; keep the wardrobe and visual motif."),
+        ("free", "Each chorus may use any setting."),
+    ],
+)
+def test_the_system_prompt_states_the_chosen_chorus_rule(chorus_set, line):
+    prompts: list[str] = []
+
+    def provider(**kwargs):
+        prompts.append(str(kwargs.get("system_prompt") or ""))
+        return json.dumps([])
+
+    with pytest.raises(RuntimeError):
+        MusicVideoPlanner(llm_generate=provider).plan(
+            clips=CLIPS[:2], scene_description="A singer at a harbour.", bpm=120,
+            music_video_treatment={"chorus_set": chorus_set},
+        )
+    assert line in prompts[0]
+
+
+def test_the_editor_shows_the_same_default_cycle():
+    source = TS_DEFAULTS.read_text(encoding="utf-8")
+    block = re.search(r"DEFAULT_COVERAGE_CYCLE[^=]*=\s*\[(.*?)\]", source, re.S)
+    assert block, "DEFAULT_COVERAGE_CYCLE not found"
+    assert re.findall(r"'([^']+)'", block.group(1)) == list(COVERAGE_SEQUENCE)
+
+
+def test_a_wrongly_typed_plan_field_is_a_422_that_names_it_before_any_job_or_activity_exists(tmp_path, monkeypatch):
+    """lyrics as a string was accepted, made a durable job and answered a 500 with "'str' object has no attribute 'get'"
+    from inside the planner (and a resume repeated it)."""
+    import asyncio
+
+    from fastapi import HTTPException
+
+    from app.services import director_v2_plan as plan
+    from app.services import llm_service
+
+    tracked = []
+    monkeypatch.setattr(llm_service, "begin_activity_tracking", lambda *a, **k: tracked.append(a))
+    monkeypatch.setattr(plan, "_workspace_dir", lambda workspace=None: str(tmp_path))
+    monkeypatch.setattr(plan, "_get_active_workspace", lambda: "default")
+    for field, value in (("lyrics", "la la la"), ("lyrics", [{"text": "ok", "start": 0, "end": 1}, "bad"]),
+                         ("clips", "one clip"), ("characters", {"name": "Ana"})):
+        body = {"skill_type": "music_video", "activity_id": "act-1", "scene_description": "x", "clips": [{"start": 0}], field: value}
+        with pytest.raises(HTTPException) as raised:
+            asyncio.run(plan._director_v2_plan_body(body))
+        assert raised.value.status_code == 422 and field in str(raised.value.detail), (field, raised.value.detail)
+    assert list(tmp_path.iterdir()) == [] and tracked == [], "no job directory and no Activity row were made"

@@ -15,12 +15,16 @@ from typing import Any, Callable
 
 from starlette.concurrency import run_in_threadpool
 
+from services.music_model_contract import ACE_DEFAULT, MUSIC3_LOCAL, YUE2_LOCAL
+
 OPERATION = "media.options"
 IMAGE_ARCH = re.compile(r"^(flux|pi_flux2|qwen_image|z_image|krea2|hidream|minimax_image)")
+# The local music models generation.music (Studio, production.*) accepts. Paid MiniMax music is not
+# listed under cloud: an assistant cannot use it (only a person can, in Story Lab, after confirming).
+LOCAL_MUSIC = (ACE_DEFAULT, MUSIC3_LOCAL, YUE2_LOCAL)
 # provider -> (profile kind, services flag that says its key is configured, the model a profile would use)
 CLOUD = {
     "image": [("minimax", "minimax_image_api_key_set", "image-01")],
-    "music": [("minimax", "minimax_music_api_key_set", "music-3.0")],
     "model3d": [("meshy", "meshy_api_key_set", "latest"), ("hi3d", "hi3d_api_key_set", "hitem3dv2.1")],
     "text": [("minimax", "minimax_llm_api_key_set", "MiniMax-M3"), ("openai", "openai_api_key_set", ""),
              ("anthropic", "anthropic_api_key_set", ""), ("google", "google_api_key_set", ""),
@@ -28,7 +32,8 @@ CLOUD = {
 }
 GUIDANCE = ("Choose with the user before creating: if more than one option fits (a local model and a cloud provider that is ready) "
             "and they have not said which, ask once, naming the options and what each costs (local = GPU time and no tokens; "
-            "cloud = provider tokens). If they already said, or only one fits, go. `profile` is what a request with no choice would use.")
+            "cloud = provider tokens). If they already said, or only one fits, go. `profile` is what a request with no choice would use. "
+            "Music is local only: paid MiniMax music is disabled for assistants.")
 
 
 def _local_images(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -46,6 +51,22 @@ def _local_images(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
             entry["vram_gb"] = needs["vram_gb"]
         if "edit" in model_type:
             entry["needs_input_image"] = True
+        found.append(entry)
+    return sorted(found, key=lambda entry: entry["id"])
+
+
+def _local_music(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    found = []
+    for model in models:
+        model_type = str(model.get("model_type") or "")
+        if model_type not in LOCAL_MUSIC or model.get("is_downloaded") is not True:
+            continue
+        entry = {"id": model_type, "name": model.get("name") or model_type}
+        needs = model.get("resource_requirements") or {}
+        if isinstance(needs.get("vram_gb"), (int, float)):
+            entry["vram_gb"] = needs["vram_gb"]
+        if model_type == ACE_DEFAULT:
+            entry["default"] = True
         found.append(entry)
     return sorted(found, key=lambda entry: entry["id"])
 
@@ -68,7 +89,7 @@ def _profile(response: dict[str, Any]) -> dict[str, Any]:
 def build(models: list[dict[str, Any]], services: dict[str, Any], profile_response: dict[str, Any]) -> dict[str, Any]:
     return {
         "profile": _profile(profile_response),
-        "local": {"image": _local_images(models)},
+        "local": {"image": _local_images(models), "music": _local_music(models)},
         "cloud": _cloud(services),
         "guidance": GUIDANCE,
     }
@@ -77,7 +98,7 @@ def build(models: list[dict[str, Any]], services: dict[str, Any], profile_respon
 def command_catalog() -> list[dict[str, Any]]:
     return [{
         "name": OPERATION, "version": 1, "domain": "studio", "mutation": False,
-        "description": ("What this machine can create with: installed local image models, which cloud providers have a key "
+        "description": ("What this machine can create with: installed local image and music models, which cloud providers have a key "
                         "(never the key), and the profile a request with no choice would use. About 1 KB; read it before creating "
                         "images, music, 3D or text and ask the user which to use when more than one fits."),
         "inputSchema": {"type": "object", "additionalProperties": False,

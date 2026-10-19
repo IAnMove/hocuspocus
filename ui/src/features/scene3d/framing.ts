@@ -12,6 +12,7 @@ export function validFraming(raw: unknown): raw is Scene3DFraming {
     && [f.orbitTurns, f.rollFrom, f.rollTo, f.fovFrom, f.fovTo].every(n => n == null || (typeof n === 'number' && Number.isFinite(n)))
     && [f.fovFrom, f.fovTo].every(n => n == null || (n > 8 && n < 140))
     && (f.relativeToFacing == null || typeof f.relativeToFacing === 'boolean')
+    && (f.track == null || f.track === 'rest' || f.track === 'pose')
     && validMoveWindow(f)
 }
 

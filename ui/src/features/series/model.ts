@@ -1,8 +1,9 @@
 import type {
   SeriesCharacter, SeriesLibrary, SeriesLocation, SeriesProject, SeriesProp, SeriesVisualVariant,
 } from './types'
-import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { normalizeLanguageIntent, savedProjectLanguage } from '../../lib/languageIntent'
 import { randomUuid } from '../../lib/uuid'
+import { normalizeGuide } from '../writing-guide/model'
 
 export const seriesId = (prefix: string): string =>
   `${prefix}_${randomUuid().replaceAll('-', '')}`
@@ -19,6 +20,7 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
   if (!value || typeof value !== 'object') return null
   const project = value as Partial<SeriesProject>
   if (!text(project.id).trim()) return null
+  const savedLanguage = savedProjectLanguage(project)
   const now = new Date().toISOString()
   const canon = project.canon && typeof project.canon === 'object' ? project.canon : {} as SeriesProject['canon']
   const provider = project.provider && typeof project.provider === 'object' ? project.provider : {} as SeriesProject['provider']
@@ -27,6 +29,7 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     ? project.episodesById : {}
   return {
     ...project,
+    ...(project.writingGuide ? { writingGuide: normalizeGuide(project.writingGuide) } : {}),
     version: 1,
     id: text(project.id),
     revision: Math.max(1, Number(project.revision) || 1),
@@ -34,18 +37,18 @@ export function normalizeSeriesProject(value: unknown): SeriesProject | null {
     logline: text(project.logline), premise: text(project.premise),
     format: project.format === 'serial' || project.format === 'hybrid' ? project.format : 'episodic',
     defaultEpisodeDurationSeconds: Math.max(15, Number(project.defaultEpisodeDurationSeconds) || 75),
-    language: text(project.language, 'Español'), genre: text(project.genre),
-    spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+    language: savedLanguage.language, genre: text(project.genre),
+    spokenLanguage: savedLanguage.spokenLanguage,
     languageIntent: normalizeLanguageIntent(project.languageIntent, {
-      contentLanguage: text(project.language, 'Español'),
-      spokenLanguage: text(project.spokenLanguage, text(project.language, 'Español de España')),
+      contentLanguage: savedLanguage.language,
+      spokenLanguage: savedLanguage.spokenLanguage,
       technicalPromptLanguage: 'en',
     }),
     protagonistConsistency: project.protagonistConsistency === true,
     protagonistCharacterId: objects<SeriesCharacter>(project.characters)
       .some(character => character.id === text(project.protagonistCharacterId))
       ? text(project.protagonistCharacterId) : '',
-    tone: text(project.tone, 'Cinematic'), audience: text(project.audience, 'General'),
+    tone: text(project.tone), audience: text(project.audience, 'General'),
     visualStyle: text(project.visualStyle), characterVisualStyle: text(project.characterVisualStyle),
     cameraLanguage: text(project.cameraLanguage), allowClipText: project.allowClipText === true,
     sourceMode: project.sourceMode === 'known_universe_experimental' || project.sourceMode === 'hybrid'

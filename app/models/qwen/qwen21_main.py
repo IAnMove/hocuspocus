@@ -23,6 +23,9 @@ _VAE_FILENAME = "qwen_image_2.1_vae_bf16.safetensors"
 _TEXT_ENCODER_FOLDER = "Qwen3-VL-8B-Instruct"
 # Viggle v0.2.1 raw sigma nodes; the pipeline applies resolution shifting.
 _VIGGLE_TURBO_SIGMAS = (1.0, 0.9375, 0.875, 0.75, 0.5, 0.25)
+# Qwen/Qwen-Image-2.1-Turbo model_index.json at d65dbc9a7e8f6b5479e33dee6030eaab2a906509.
+# Already shifted, at every resolution; scheduler_config.json disables dynamic shifting.
+_OFFICIAL_TURBO_SIGMAS = (1.0, 0.978453, 0.95418, 0.926626, 0.89508, 0.845148, 0.704534, 0.414568)
 
 
 def _remap_qwen3vl_comfy_keys(state_dict):
@@ -65,6 +68,7 @@ class model_factory:
     ):
         model_def = model_def or {}
         self.viggle_turbo = bool(model_def.get("qwen21_viggle_turbo"))
+        self.official_turbo = bool(model_def.get("qwen21_official_turbo"))
         transformer_filename = model_filename[0]
         text_encoder_folder = model_def.get("text_encoder_folder") or _TEXT_ENCODER_FOLDER
         tokenizer_path = fl.locate_folder(text_encoder_folder)
@@ -136,11 +140,11 @@ class model_factory:
             max_shift=0.9,
             num_train_timesteps=1000,
             shift=1.0,
-            shift_terminal=None if self.viggle_turbo else 0.02,
+            shift_terminal=None if self.viggle_turbo or getattr(self, "official_turbo", False) else 0.02,
             stochastic_sampling=False,
             time_shift_type="exponential",
             use_beta_sigmas=False,
-            use_dynamic_shifting=True,
+            use_dynamic_shifting=not getattr(self, "official_turbo", False),
             use_exponential_sigmas=False,
             use_karras_sigmas=False,
         )
@@ -186,8 +190,11 @@ class model_factory:
         **kwargs,
     ):
         turbo = getattr(self, "viggle_turbo", False)
+        official_turbo = getattr(self, "official_turbo", False)
         if turbo and (sampling_steps != 6 or guide_scale != 1):
             raise ValueError("Qwen Image 2.1 Viggle Turbo requires 6 steps and CFG 1.")
+        if official_turbo and (sampling_steps != 8 or guide_scale != 1):
+            raise ValueError("Qwen Image 2.1 Official Turbo requires 8 steps and CFG 1.")
         if n_prompt is None or len(n_prompt) == 0:
             n_prompt = " "
 
@@ -215,6 +222,8 @@ class model_factory:
             images = None
 
         image_mask = None if input_masks is None else convert_tensor_to_image(input_masks, mask_levels=True)
+        sigmas = (list(_OFFICIAL_TURBO_SIGMAS) if official_turbo
+                  else list(_VIGGLE_TURBO_SIGMAS) if turbo else None)
         image = self.pipeline(
             prompt=input_prompt,
             negative_prompt=n_prompt if guide_scale and guide_scale > 1 else None,
@@ -223,7 +232,7 @@ class model_factory:
             width=width,
             height=height,
             num_inference_steps=sampling_steps,
-            sigmas=list(_VIGGLE_TURBO_SIGMAS) if turbo else None,
+            sigmas=sigmas,
             num_images_per_prompt=batch_size,
             true_cfg_scale=guide_scale,
             callback=callback,

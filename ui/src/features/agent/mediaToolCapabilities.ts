@@ -1,3 +1,4 @@
+import i18n from '../../i18n'
 import type { defineCapability } from './capabilityRegistry'
 
 /**
@@ -33,20 +34,24 @@ const operations = new Set<string>(MEDIA_TOOL_OPERATIONS)
 export function mediaToolMessage(operation: MediaToolOperation, reply: MediaReply): string {
   const file = reply.result?.file || ''
   const verb: Record<MediaToolOperation, string> = {
-    'media.frame': 'Fotograma guardado', 'media.compose': 'Imagen compuesta', 'audio.trim': 'Sonido recortado',
-    'assets.import_from_workspace': reply.result?.already_present ? 'Ya estaba en este espacio' : 'Archivo traído',
-    'studio.key': 'Fondo quitado',
+    'media.frame': i18n.t('wizard:replies.frameSaved'),
+    'media.compose': i18n.t('wizard:replies.imageComposed'),
+    'audio.trim': i18n.t('wizard:replies.soundTrimmed'),
+    'assets.import_from_workspace': reply.result?.already_present
+      ? i18n.t('wizard:replies.alreadyInWorkspace')
+      : i18n.t('wizard:replies.fileBrought'),
+    'studio.key': i18n.t('wizard:replies.backgroundRemoved'),
   }
   const report = reply.result?.report
   const haze = report?.haze
-    ? ` Queda un velo en el ${Math.round((report.semiTransparentShare || 0) * 100)} % de la imagen: prueba otra pantalla (mode).`
+    ? i18n.t('wizard:replies.hazeLeft', { percent: Math.round((report.semiTransparentShare || 0) * 100) })
     : ''
   return `${verb[operation]}: ${file}.${haze}`
 }
 
 export async function executeMediaTool(action: AgentMediaToolAction, workspace?: string, commandId?: string) {
   if (workspace && action.input.workspace && action.input.workspace !== workspace) {
-    throw new Error('La acción multimedia debe guardar su resultado en el espacio activo.')
+    throw new Error(i18n.t('wizard:actionErrors.mediaMustSaveActiveWorkspace'))
   }
   const input = { ...action.input, workspace: typeof action.input.workspace === 'string' && action.input.workspace ? action.input.workspace : workspace || '' }
   const intentId = commandId || globalThis.crypto?.randomUUID?.() || `media-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -78,7 +83,7 @@ export function registerMediaToolCapabilities(register: typeof defineCapability)
       properties: { type: { const: 'media_tool' }, operation: { enum: [...MEDIA_TOOL_OPERATIONS] }, input: { type: 'object' } },
       required: ['type', 'operation', 'input'],
     },
-    risk: 'edit', confirmation: 'none', progress: 'Preparando el archivo…',
+    risk: 'edit', confirmation: 'none', progress: 'wizard:progress.preparingFile',
     resolve(raw) {
       if (typeof raw.operation !== 'string' || !operations.has(raw.operation) || !raw.input || typeof raw.input !== 'object' || Array.isArray(raw.input)) return null
       return { type: 'media_tool', operation: raw.operation as MediaToolOperation, input: raw.input as Record<string, unknown> }

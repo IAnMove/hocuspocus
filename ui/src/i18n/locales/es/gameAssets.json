@@ -133,6 +133,7 @@
   "selectAsset": "Seleccionar {{id}}",
   "dependsOn": "Necesita: {{ids}}",
   "listText": "Lista de recursos",
+  "exampleList": "personaje heroe: caballero bajito con armadura de bronce y capa roja | jugador\nanim heroe: idle, andar, saltar, atacar, herido, morir\npersonaje slime: babosa verde gelatinosa | enemigo\nobjeto moneda: moneda de oro | anim girar | 8 frames\ntileset hierba: suelo de hierba sobre tierra\nfondo bosque: bosque al atardecer | capas 3\nui boton: botón de madera | 9-slice\nefecto explosion: explosión pequeña con chispas | 12 frames\nsfx salto: salto corto y ligero | variantes 3\nmusica nivel1: tema alegre de bosque | bucle 60 s",
   "listFormat": "Formato",
   "listFormats": {
     "lines": "Líneas",

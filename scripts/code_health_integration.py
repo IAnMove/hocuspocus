@@ -8,6 +8,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import replace
 from pathlib import Path, PurePosixPath
 
 import code_health as health
@@ -282,7 +283,7 @@ def source_complexity(trees: list[dict[str, str]], sources: dict[str, str]) -> d
                 if suffix == ".py":
                     collector = health._PythonFunctionCollector(path)
                     collector.visit(health.ast.parse(sources[blob], filename=path))
-                    metrics[key] = [item.complexity for item in collector.metrics]
+                    metrics[key] = list(collector.metrics)
                 else:
                     (folder / "src" / f"{blob}{suffix}").write_text(sources[blob], encoding="utf-8")
                     metrics[key] = []
@@ -306,16 +307,23 @@ def source_complexity(trees: list[dict[str, str]], sources: dict[str, str]) -> d
                     match = re.search(r"complexity of (\d+)", message["message"])
                     if not match:
                         raise ValueError("Unrecognized ESLint complexity result")
-                    metrics[key].append(int(match.group(1)))
+                    label = message["message"].split(" has a complexity", 1)[0]
+                    metrics[key].append(health.FunctionMetric("", label, int(message["line"]), int(match.group(1))))
         if seen != {key for key in metrics if key[1] != ".py"}:
             raise ValueError("Historical UI measurement omitted source files")
     return metrics
 
 
 def checkpoint(tree: dict[str, str], sources: dict[str, str], metrics: dict) -> dict:
+    """One integration step, measured like collect(), with the move and split evidence."""
     lines = {path: len(sources[blob].splitlines()) for path, blob in tree.items()}
-    functions = {path: metrics[(blob, Path(path).suffix)] for path, blob in tree.items()}
-    values = [value for items in functions.values() for value in items]
+    # The same blob can sit at another path in another tree (a moved file).
+    functions = {
+        path: [replace(item, path=path) for item in metrics[(blob, Path(path).suffix)]]
+        for path, blob in tree.items()
+    }
+    measured = [item for items in functions.values() for item in items]
+    values = [item.complexity for item in measured]
     return {
         "policy": health.POLICY, "policy_version": health.POLICY_VERSION,
         "measurement": {"ui": "complete"}, "product_paths": sorted(tree),
@@ -323,12 +331,15 @@ def checkpoint(tree: dict[str, str], sources: dict[str, str], metrics: dict) -> 
             "production_lines": sum(lines.values()),
             "complex_functions": sum(value >= health.COMPLEXITY_WARNING for value in values),
             "max_complexity": max(values, default=0), "functions_measured": len(values),
+            "decisions": sum(value - 1 for value in values),
         },
         "hotspots": {path: count for path, count in lines.items() if count >= health.HOTSPOT_LINES},
         "complexity_hotspots": {
-            path: max(items) for path, items in functions.items()
-            if items and max(items) >= health.COMPLEXITY_WARNING
+            path: max(item.complexity for item in items) for path, items in functions.items()
+            if items and max(item.complexity for item in items) >= health.COMPLEXITY_WARNING
         },
+        # Split credit at each step needs the same evidence as the PR check.
+        "fingerprints": health._fingerprint_records(measured),
     }
 
 
@@ -337,7 +348,9 @@ def compare_release(current: dict, baseline: dict, chain: list[str], reports: li
     if len(chain) != len(reports) or not reports:
         raise ValueError("Missing integration checkpoint reports")
     for expected, measured in ((baseline, reports[0]), (current, reports[-1])):
-        for key in ("production_lines", "complex_functions", "max_complexity", "functions_measured"):
+        for key in ("production_lines", "complex_functions", "max_complexity", "functions_measured", "decisions"):
+            if key == "decisions" and key not in expected.get("summary", {}):
+                continue  # written by an analyzer from before the decision total
             if expected.get("summary", {}).get(key) != measured["summary"][key]:
                 raise ValueError(f"Historical and full-tree measurements disagree: {key}")
         for key in ("product_paths", "hotspots", "complexity_hotspots"):

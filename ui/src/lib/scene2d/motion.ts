@@ -4,7 +4,9 @@ import type { AnimatorLayer, LayerState } from './types'
 
 export type ScenePath = { points: Array<{ x: number; y: number }>; orient: boolean; rotationOffset?: number }
 export type FrameSequence = { kind: 'frames'; sources: string[]; fps: number; loop: 'loop' | 'pingpong' | 'once' }
-  | { kind: 'sheet'; source: string; columns: number; rows: number; count: number; fps: number; loop: 'loop' | 'pingpong' | 'once' }
+  /** `start` is the scene second the sheet plays from (its cells count from there; the first cell before it); absent, the
+   * scene's own clock, as always. `mirror` draws every cell flipped left to right. */
+  | { kind: 'sheet'; source: string; columns: number; rows: number; count: number; fps: number; loop: 'loop' | 'pingpong' | 'once'; start?: number; mirror?: boolean }
 export type AtmosphereEmitter = { mode: 'frame' | 'point' | 'layer'; x?: number; y?: number; targetLayerId?: string; offsetX?: number; offsetY?: number; direction: number; spread: number; rate: number; lifetime: number; speed: number; gravity: number }
 export type SceneRhythm = { bpm: number; beats: number[]; downbeats?: number[]; energy?: { fps: number; values: number[] } }
 
@@ -29,14 +31,16 @@ export function parseSequence(raw: unknown): FrameSequence | undefined {
     return sources.length ? { kind: 'frames', sources, fps, loop } : undefined
   }
   if (value.kind === 'sheet' && typeof value.source === 'string' && value.source.trim()) {
-    return { kind: 'sheet', source: value.source.trim(), columns: Math.round(num(value.columns, 1, 1, 32)), rows: Math.round(num(value.rows, 1, 1, 32)), count: Math.round(num(value.count, 1, 1, 120)), fps, loop }
+    const start = num(value.start, 0, 0, 3600)
+    return { kind: 'sheet', source: value.source.trim(), columns: Math.round(num(value.columns, 1, 1, 32)), rows: Math.round(num(value.rows, 1, 1, 32)), count: Math.round(num(value.count, 1, 1, 120)), fps, loop,
+      ...(start > 0 ? { start } : {}), ...(value.mirror === true ? { mirror: true } : {}) }
   }
   return undefined
 }
 
 export function sequenceFrame(sequence: FrameSequence, seconds: number) {
   const count = sequence.kind === 'frames' ? sequence.sources.length : sequence.count
-  const raw = Math.floor(Math.max(0, seconds) * sequence.fps)
+  const raw = Math.floor(Math.max(0, seconds - (sequence.kind === 'sheet' ? sequence.start ?? 0 : 0)) * sequence.fps)
   if (sequence.loop === 'once') return Math.min(count - 1, raw)
   if (sequence.loop === 'pingpong') {
     const cycle = Math.max(1, count * 2 - 2)

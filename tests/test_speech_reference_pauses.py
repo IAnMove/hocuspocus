@@ -13,6 +13,7 @@ import wave
 import pytest
 
 from services import speech_reference_pauses as pauses
+from tests.support.launch_ast import generation_module
 from services.speech_reference_pauses import (
     keep_filter,
     parse_duration,
@@ -256,7 +257,7 @@ def test_a_resolver_error_or_an_empty_reference_changes_nothing(source, monkeypa
 
 
 def test_the_generation_worker_shortens_references_before_the_model_reads_them():
-    tree = ast.parse((ROOT / "app" / "_launch_runtime.py").read_text(encoding="utf-8"))
+    tree = generation_module()
     handler = next(node for node in ast.walk(tree) if isinstance(node, ast.FunctionDef) and node.name == "error_handler"
                    and "generate_video" in ast.unparse(node))
     calls = [ast.unparse(node.func) for node in sorted((node for node in ast.walk(handler) if isinstance(node, ast.Call)),

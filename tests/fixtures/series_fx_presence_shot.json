@@ -1,0 +1,32 @@
+{
+ "note": "A full-shot halo as a Series script writes it (no duration, no size) and as the planner compiles it (tests/test_series_shot_extras.py checks `cue`); ui/e2e/specs/scene-fx-presence.spec.ts paints it at the three frames.",
+ "shot": {
+  "framing": "wide",
+  "cast": [
+   {
+    "characterId": "kevin"
+   }
+  ],
+  "fx": [
+   {
+    "kind": "anime_aura",
+    "at": 0
+   }
+  ]
+ },
+ "width": 1920,
+ "height": 1080,
+ "duration": 6.0,
+ "frames": [
+  0.1,
+  3.0,
+  5.9
+ ],
+ "cue": {
+  "id": "fx-0",
+  "kind": "anime_aura",
+  "start": 0.0,
+  "end": 5.99,
+  "size": 178.0
+ }
+}

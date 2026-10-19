@@ -145,6 +145,8 @@ export async function updateModelSelections(
 export interface ProductionProfileSettings {
   configured: boolean
   profile: import('../types').ProductionProfile
+  /** Why the saved profile could not be read; the defaults stand in until it is saved again. */
+  invalid_reason?: string
 }
 
 export async function fetchProductionProfile(): Promise<ProductionProfileSettings> {
@@ -462,6 +464,7 @@ export async function segmentPreview(params: {
   video_path: string; text: string; frame_index?: number;
   start_time?: number; end_time?: number;
   full_video?: boolean; invert_mask?: boolean;
+  workspace?: string;
 }): Promise<{ mask_preview: string; target: string; frame_index: number; masks_path?: string; prompt?: string; negative_prompt?: string }> {
   const res = await fetch(`${BASE}/api/v1/segment/preview`, {
     method: 'POST',
@@ -837,7 +840,8 @@ export async function submitBlend(params: {
   num_inference_steps?: number;
   guidance_scale?: number;
   negative_prompt?: string;
-  /** @deprecated no longer used; kept for back-compat with existing call sites */
+  /** Insert mode: seconds of generated footage added between A and B (the "Transition Duration" slider).
+   *  Overlap mode ignores it; the server falls back to `overlap_sec` when it is missing. */
   transition_sec?: number;
   /** @deprecated bell-curve weighting is applied automatically */
   strength_a?: number;

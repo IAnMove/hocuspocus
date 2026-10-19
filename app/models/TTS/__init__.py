@@ -6,5 +6,6 @@ from . import (
     kugelaudio_handler,
     minimax_music3_handler,
     qwen3_handler,
+    voxcpm2_handler,
     yue_handler,
 )

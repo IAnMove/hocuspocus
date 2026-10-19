@@ -8,6 +8,7 @@ import { ModalShell } from '../common/ModalShell'
 import i18n, { useUiTranslation } from '../../i18n'
 import { ProductionReviewHost } from '../../features/production-review/ProductionReviewHost'
 import { reviewCopy } from '../../features/production-review/copy'
+import { DirectorAnchorStrip, PlanFallbackNotice, PlannedCoverage } from '../../features/director/DirectorAnchorStrip'
 
 function applySavedReview(pipeline: SavedPipelineState, workspace: string) {
   useStore.setState(state => state.activeWorkspace === workspace
@@ -416,6 +417,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
           </button>
         </div>
       </div>
+      <PlannedCoverage plan={pipeline.clip_plans?.[clip.index]} />
 
       <div className="p-2 space-y-2">
         {/* Image section */}
@@ -1142,6 +1144,7 @@ function DirectorDashboardInner() {
               {selectedPipeline.scene_description && (
                 <p className="text-[11px] text-text-secondary">{selectedPipeline.scene_description}</p>
               )}
+              <PlanFallbackNotice pipeline={selectedPipeline} />
               <PipelineProgressBar pipeline={selectedPipeline} />
               {finalOutputFilename && (
                 <div className="pt-2 border-t border-border space-y-1.5">
@@ -1172,6 +1175,8 @@ function DirectorDashboardInner() {
               <LlmLogPanel pipeline={selectedPipeline} />
             </div>
 
+            <DirectorAnchorStrip pipeline={selectedPipeline} workspace={activeWorkspace} busy={repairBusy}
+              onSaved={pipeline => applySavedReview(pipeline, activeWorkspace)} />
             {/* Clip Grid */}
             <div>
               <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium mb-2">

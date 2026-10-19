@@ -1,3 +1,4 @@
+import { SeriesWritingGuide } from '../writing-guide/SeriesWritingGuide'
 import { useEffect, useRef, useState } from 'react'
 import { Check, CheckCircle2, ImagePlus, Loader2, Sparkles, Square } from 'lucide-react'
 import * as api from '../../api/client'
@@ -14,7 +15,8 @@ import {
   applySeriesGlobalProvider,
   seriesProviderFieldsFromProfile,
 } from '../../lib/productionProfile'
-import { SeriesSetupVideoFields } from './SeriesSetupVideoFields'
+import { SeriesSetupVideoFields, SeriesVideoShotResolutionField } from './SeriesSetupVideoFields'
+import { SeriesEpisodeFormatField, SeriesFinishField } from './SeriesSetupLookFields'
 import { SeriesProductionMethods } from './SeriesProductionMethods'
 import type { SeriesReferenceRoom } from './shotReferences'
 
@@ -215,6 +217,8 @@ export function SeriesSetupPanel({
         {job && !job.bootstrapKnownSeries && <div className="mt-3 rounded-lg border border-border bg-bg-primary p-3"><div className="flex items-center gap-2 text-xs text-text-secondary">{['queued', 'running', 'cancelling'].includes(job.status) && <Loader2 size={13} className="animate-spin" />}<span>{jobLine}</span><span className="ml-auto">{job.current}/{job.total}</span></div>{job.error && <p className="mt-2 text-[10px] text-red-300">{job.error}</p>}{job.status === 'completed' && job.seriesResult && <div className="mt-3 rounded-lg border border-green-500/30 bg-green-500/5 p-3"><p className="text-[11px] text-green-200">{t('setup.proposalSummary', { characters: job.seriesResult.characters.length, locations: job.seriesResult.locations.length, rules: job.seriesResult.canon.immutableRules.length })}</p><details className="mt-2 text-[10px] text-text-muted"><summary className="cursor-pointer">{t('setup.inspectProposal')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify(job.seriesResult, null, 2)}</pre></details><button className={`mt-3 ${greenButton}`} disabled={busy} onClick={() => void applyCanon()}><Check size={13} />{imageMode ? t('setup.applyCanonImages') : t('setup.applyCanon')}</button></div>}{(job.status === 'failed' || job.status === 'cancelled') && <button className={`mt-3 ${secondaryButton}`} disabled={jobAction.busy} onClick={() => void jobAction.run(() => api.resumeSeriesPlanJob(job.jobId), setJob)}>{t('setup.resumeCanon')}</button>}</div>}
       </SectionCard>
 
+      <SeriesWritingGuide seriesId={series.id} scope="series" />
+      {series.seasons.map(season => <div key={season.id}><p className="text-xs text-text-muted">{season.title}</p><SeriesWritingGuide seriesId={series.id} scope="season" targetId={season.id} /></div>)}
       <SectionCard title={t('identity.title')} description={t('identity.description')}>
         <div className="grid gap-3 lg:grid-cols-2">
           <SeriesField label={t('identity.titleField')} required><input className={inputClass} value={series.title} onChange={event => patch({ title: event.target.value })} /></SeriesField>
@@ -229,6 +233,7 @@ export function SeriesSetupPanel({
           <SeriesField label={t('identity.genre')}><input className={inputClass} value={series.genre} onChange={event => patch({ genre: event.target.value })} /></SeriesField>
           <SeriesField label={t('identity.tone')}><input className={inputClass} value={series.tone} onChange={event => patch({ tone: event.target.value })} /></SeriesField>
           <SeriesField label={t('identity.audience')}><input className={inputClass} value={series.audience} onChange={event => patch({ audience: event.target.value })} /></SeriesField>
+          <div className="lg:col-span-2"><SeriesEpisodeFormatField series={series} t={t} patch={patch} /></div>
         </div>
       </SectionCard>
 
@@ -237,6 +242,7 @@ export function SeriesSetupPanel({
           <SeriesField label={t('visual.visualStyle')} required><textarea className={textareaClass} value={series.visualStyle} onChange={event => patch({ visualStyle: event.target.value })} /></SeriesField>
           <SeriesField label={t('visual.characterVisualStyle')}><textarea className={textareaClass} value={series.characterVisualStyle} onChange={event => patch({ characterVisualStyle: event.target.value })} /></SeriesField>
           <SeriesField label={t('visual.cameraLanguage')}><textarea className={textareaClass} value={series.cameraLanguage} onChange={event => patch({ cameraLanguage: event.target.value })} /></SeriesField>
+          <SeriesFinishField series={series} t={t} patch={patch} />
           <SeriesField label={t('visual.textPolicy')} hint={t('visual.textPolicyHint')}>
             <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={series.allowClipText} onChange={event => patch({ allowClipText: event.target.checked })} />{t('visual.allowText')}</label>
           </SeriesField>
@@ -269,6 +275,7 @@ export function SeriesSetupPanel({
           <button type="button" className={`${secondaryButton} ${!series.provider.useGlobalProfile ? 'border-violet-400 text-violet-200' : ''}`} onClick={() => patchProvider({ useGlobalProfile: false })}>{t('providers.override')}</button>
         </div>
         {series.provider.useGlobalProfile && <p className="mb-3 text-[10px] text-green-300">{t('providers.globalSummary', { text: productionProfile.text.model, image: productionProfile.image.model, video: productionProfile.video.model })}</p>}
+        <div className="mb-3 grid gap-3 md:grid-cols-2 xl:grid-cols-3"><SeriesVideoShotResolutionField series={series} t={t} patch={patch} /></div>
         <fieldset disabled={series.provider.useGlobalProfile} className="disabled:opacity-50">
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           <SeriesField label={t('providers.writingProvider')}><select className={selectClass} value={series.provider.writingProvider} onChange={event => patchProvider({ writingProvider: event.target.value as SeriesProject['provider']['writingProvider'] })}>

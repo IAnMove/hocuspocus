@@ -50,6 +50,10 @@ class Series:
     def read(self):
         return self.series
 
+    def episode_patch(self):
+        """The ``input`` of the ``series.episode.update`` call (a script that adds a method to the series calls ``series.update`` first)."""
+        return next(data for tool, data in self.calls if tool == "series.episode.update")
+
     def __call__(self, tool, arguments):
         data = arguments["input"]
         self.calls.append((tool, data))
@@ -62,6 +66,11 @@ class Series:
             return {"result": {"episode": {"id": data["episode_id"]}}}
         if tool == "series.episode.language_version.set":
             return {"result": {"missingLines": []}}
+        if tool == "series.update":
+            assert data["base_revision"] == self.series["revision"]
+            self.series.update(data["series"])
+            self.series["revision"] += 1
+            return {"result": {"series": {"id": self.series["id"], "revision": self.series["revision"]}}}
         raise AssertionError(tool)
 
 
@@ -638,6 +647,18 @@ def test_a_kit_without_a_voice_fails_the_check():
     assert tools.calls == []
 
 
+def test_a_drama3_kit_voice_counts_for_the_script_check():
+    """from_script only asks that a voice exists for the language. Drama 3 is one."""
+    tools = Series()
+    clone = {"provider": "local", "model": "drama3_base", "voiceId": "reference", "name": "Kevin",
+             "referenceAudio": "/api/v1/uploads/kevin.wav", "transcript": "Hola.", "language": "spanish"}
+    design = {"provider": "local", "model": "drama3_voicedesign", "voiceId": "design", "name": "Kevin EN", "language": "english"}
+    kits = {**KITS, "kit-kevin": {"poses": {"panic": {}}, "voice": clone, "voicesByLanguage": {"english": design}}}
+    checked = apply_script(tools, tools.read, kits, FILES, "cast", SCRIPT, check_only=True)
+    assert checked["checked"] is True
+    assert not any("kevin has no" in problem for problem in checked.get("problems") or [])
+
+
 def test_cast_index_is_stored_on_the_beat_and_must_point_at_the_cast():
     from services.series_script import EpisodeScript
     tools = Series()
@@ -757,3 +778,153 @@ def test_a_template_backdrop_belongs_to_the_asset_at_that_exact_path(tmp_path):
     assert warned("/api/v1/file/assets/uv/asset_ma.png?workspace=cast") == ["madrid"]
     assert warned("/api/v1/file/uv/old.png?workspace=cast") == ["madrid"]
     assert warned("/api/v1/file/uv/old.png.bak?workspace=cast") == []
+
+
+# Kit animations in the script -----------------------------------------------------------
+
+def sheet(state="approved"):
+    return {"sheet": {"source": "/api/v1/file/walk-sheet.png?workspace=cast", "count": 4, "columns": 4, "rows": 1, "width": 1200, "height": 640,
+                      "cell": {"width": 300, "height": 640}}, "frames": [], "fps": 4, "loop": "loop", "facing": "right", "reviewState": state}
+
+
+def with_animations(**animations):
+    return {**KITS, "kit-kevin": {**KITS["kit-kevin"], "animations": animations}}
+
+
+def animated_script(entry, **shot):
+    return {"scenes": [{"id": "a", "location": "garage"}], "shots": [{"scene": "a", "framing": "wide", "duration": 8, "cast": [entry], **shot}]}
+
+
+def animation_check(kits, entry, **shot):
+    tools = Series()
+    return apply_script(tools, tools.read, kits, FILES, "cast", animated_script(entry, **shot), check_only=True)
+
+
+def animation_problems(kits, entry, **shot):
+    with pytest.raises(ScriptError) as raised:
+        animation_check(kits, entry, **shot)
+    return raised.value.problems
+
+
+def test_a_cast_entry_plays_an_approved_animation_of_its_kit():
+    kits = with_animations(wave=sheet(), walk=sheet())
+    for animation in ("wave", {"id": "wave"}, {"id": "wave", "at": 2.5, "duration": 1.5, "loop": "pingpong"}, {"id": "walk", "loop": True}):
+        assert animation_check(kits, {"characterId": "kevin", "x": 50, "animation": animation})["checked"] is True, animation
+
+
+def test_an_animation_the_kit_does_not_have_or_has_not_approved_is_refused_with_the_way_out():
+    kits = with_animations(wave=sheet(), angry=sheet("pending"), sad=sheet("rejected"))
+    entry = lambda animation: {"characterId": "kevin", "animation": animation}
+    assert "animation 'zoom' of 'kevin' is not in its Character Kit (approved animations: wave)" in animation_problems(kits, entry("zoom"))[0]
+    assert "animation 'angry' of 'kevin' is pending approval: approve it in Characters › Animaciones" in animation_problems(kits, entry("angry"))[0]
+    assert "animation 'sad' of 'kevin' was rejected: make it again in Characters › Animaciones" in animation_problems(kits, entry({"id": "sad"}))[0]
+    assert "has no approved animations" in animation_problems(KITS, entry("wave"))[0]
+    assert "shot 0 (e2s00)" in animation_problems(kits, entry("angry"))[0]
+
+
+def test_a_bad_window_is_refused_and_every_problem_is_listed():
+    kits = with_animations(wave=sheet(), walk=sheet())
+    problems = animation_problems(kits, {"characterId": "kevin", "animation": {"id": "wave", "at": -1, "duration": 0, "loop": "forever"}})
+    for text in ("animation at must be a number from 0 to 600", "animation duration must be a number from 0.1 to 600", "animation loop must be one of loop, pingpong, once"):
+        assert any(text in problem for problem in problems), (text, problems)
+    assert any("animation must be an animation id" in problem for problem in animation_problems(kits, {"characterId": "kevin", "animation": 3}))
+    late = animation_problems(kits, {"characterId": "kevin", "animation": {"id": "wave", "at": 9}})
+    assert "animation 'wave' of 'kevin' starts at 9 s, but the shot lasts 8 s" in late[0]
+
+
+def test_a_walk_in_with_a_sheet_is_not_shared_with_another_animation():
+    kits = with_animations(wave=sheet(), walk=sheet())
+    walking = {"characterId": "kevin", "x": 60, "enterFrom": "left", "enterAt": 0.5, "enterDuration": 3, "enterGait": "walk"}
+    problems = animation_problems(kits, {**walking, "animation": {"id": "wave", "at": 2}})
+    assert "animation 'wave' of 'kevin' overlaps its walk-in (0.5-3.5 s): start it at 3.5 s or later" in problems[0]
+    assert animation_check(kits, {**walking, "animation": {"id": "wave", "at": 3.5}})["warnings"] == []
+    hopping = {**walking, "enterGait": "hop"}
+    assert animation_check(kits, {**hopping, "animation": {"id": "wave", "at": 2}})["checked"] is True, "a hop has no sheet to share"
+    assert animation_check(KITS, walking)["warnings"] == [], "no sheet at all: the walk is the bob it always was"
+
+
+def test_a_walk_in_whose_sheet_is_not_approved_keeps_the_bob_and_says_so():
+    walking = {"characterId": "kevin", "x": 60, "enterFrom": "left", "enterGait": "walk"}
+    for state in ("pending", "rejected"):
+        warned = [item for item in animation_check(with_animations(walk=sheet(state)), walking)["warnings"] if item["code"] == "walk_sheet_not_approved"]
+        assert [(item["subject"], item["shots"]) for item in warned] == [("kevin", ["e2s00"])], state
+        assert "bob" in warned[0]["message"] and "Characters › Animaciones" in warned[0]["message"]
+    approved = animation_check(with_animations(walk=sheet()), walking)["warnings"]
+    assert not any(item["code"] == "walk_sheet_not_approved" for item in approved)
+    assert not any(item["code"] == "walk_sheet_not_approved" for item in animation_check(KITS, walking)["warnings"])
+
+
+def test_a_short_expression_warns_and_a_short_gesture_does_not():
+    """An explicit expression under 1.5 s is a check warning. The duration is still accepted. A gesture of 1 s is not an expression."""
+    kits = with_animations(angry=sheet(), wave=sheet(), **{"my-bust": sheet()})
+    short = animation_check(kits, {"characterId": "kevin", "animation": {"id": "angry", "duration": 1}})
+    assert short["checked"] is True
+    warned = [item for item in short["warnings"] if item["code"] == "expression_too_short"]
+    assert [(item["subject"], item["shots"]) for item in warned] == [("kevin", ["e2s00"])]
+    assert "1.5" in warned[0]["message"]
+    for animation in ({"id": "wave", "duration": 1}, {"id": "angry", "duration": 1.5}, "angry", {"id": "my-bust", "duration": 1}):
+        codes = [item["code"] for item in animation_check(kits, {"characterId": "kevin", "animation": animation})["warnings"]]
+        assert "expression_too_short" not in codes, animation
+    stored = with_animations(**{"my-bust": {**sheet(), "group": "expression"}})
+    assert any(item["code"] == "expression_too_short" for item in animation_check(
+        stored, {"characterId": "kevin", "animation": {"id": "my-bust", "duration": 1.2}})["warnings"])
+
+
+def test_a_written_script_keeps_the_animation_and_reads_back_the_same():
+    from services.series_shot_plan import normalize_layout2d
+    kits = with_animations(wave=sheet())
+    script = animated_script({"characterId": "kevin", "x": 40, "animation": {"id": "wave", "at": 1, "duration": 2}})
+    tools = Series()
+    apply_script(tools, tools.read, kits, FILES, "cast", script)
+    layout = tools.episode_patch()["episode"]["shots"][0]["layout2d"]
+    assert layout["cast"] == [{"characterId": "kevin", "x": 40, "animation": {"id": "wave", "at": 1, "duration": 2}}]
+    assert normalize_layout2d(layout)["cast"][0]["animation"] == {"id": "wave", "at": 1.0, "duration": 2.0}
+    assert normalize_layout2d(normalize_layout2d(layout)) == normalize_layout2d(layout)
+
+
+# A presence effect a script cuts short -----------------------------------------------------------------------------------
+
+def short_presence(fx, **shot):
+    checked = animation_check(KITS, {"characterId": "kevin"}, fx=fx, **shot)
+    return [(item["subject"], item["shots"], item["message"]) for item in checked["warnings"] if item["code"] == "fx_presence_too_short"]
+
+
+def test_a_presence_effect_given_under_two_seconds_in_a_long_shot_warns_and_the_script_still_checks():
+    warned = short_presence([{"kind": "anime_aura", "at": 0, "duration": 1}, {"kind": "shield", "at": 1, "duration": 1.9}])
+    assert [(subject, shots) for subject, shots, _ in warned] == [("anime_aura", ["e2s00"]), ("shield", ["e2s00"])]
+    assert "1 s" in warned[0][2] and "8 s" in warned[0][2] and "presence" in warned[0][2] and "shot" in warned[0][2]
+    assert animation_check(KITS, {"characterId": "kevin"}, fx=[{"kind": "anime_aura", "at": 0, "duration": 1}])["checked"] is True, "it does not block"
+
+
+def test_the_warning_is_for_a_short_explicit_presence_in_a_long_shot_and_nothing_else():
+    quiet = (
+        [{"kind": "anime_aura", "at": 0}], [{"kind": "anime_aura", "at": 0, "duration": "shot"}],
+        [{"kind": "anime_aura", "at": 0, "duration": 2}], [{"kind": "anime_aura", "at": 0, "duration": 6}],
+        [{"kind": "explosion", "at": 0, "duration": 0.5}, {"kind": "impact_flash", "at": 0, "duration": 0.1}],
+        [{"kind": "anime_aura", "at": 0, "duration": "soon"}],
+    )
+    for fx in quiet:
+        assert short_presence(fx) == [], fx
+    assert short_presence([{"kind": "anime_aura", "at": 0, "duration": 1}], duration=4) == [], "a shot of 4 s is not longer than 4"
+    assert short_presence([{"kind": "anime_aura", "at": 0, "duration": 1}], duration=4.5) != []
+
+
+def test_the_warning_reads_the_length_of_a_shot_that_has_lines():
+    line = {"who": "kevin", "es": "uno dos tres cuatro cinco seis siete ocho nueve diez once doce trece catorce"}
+    assert short_presence([{"kind": "fog", "at": 0, "duration": 1}], lines=[line], duration=None) != [], "14 words take about 5 s plus the intro and tail"
+    assert short_presence([{"kind": "fog", "at": 0, "duration": 1}], lines=[{"who": "kevin", "es": "Hola"}], duration=None) == []
+
+
+def test_allow_during_speech_is_kept_by_the_layout_and_must_be_a_boolean():
+    """The opt-out of series_expression_silence: written as true, kept as true, absent otherwise; a text is refused by the check."""
+    from services.series_shot_plan import normalize_layout2d
+    kits = with_animations(angry=sheet())
+    for flag, kept in ((True, {"id": "angry", "allowDuringSpeech": True}), (False, {"id": "angry"})):
+        entry = {"characterId": "kevin", "x": 40, "animation": {"id": "angry", "allowDuringSpeech": flag}}
+        assert animation_check(kits, entry)["checked"] is True
+        assert normalize_layout2d({"cast": [entry]})["cast"][0]["animation"] == kept, flag
+    assert any("animation allowDuringSpeech must be true or false" in problem for problem in animation_problems(
+        kits, {"characterId": "kevin", "animation": {"id": "angry", "allowDuringSpeech": "yes"}}))
+    from services.series_cast_animation import planned
+    assert planned({"animation": {"id": "angry", "at": 1, "allowDuringSpeech": True}}, 6.0) == {"id": "angry", "at": 1.0, "allowDuringSpeech": True}
+    assert planned({"animation": {"id": "angry", "at": 1}}, 6.0) == {"id": "angry", "at": 1.0}, "no flag, no key: as before"

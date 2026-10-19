@@ -5,6 +5,7 @@ import { sectionId, type PartContext } from './context'
 import { NumberInput, SelectInput, TextInput } from './fields'
 import { grid, languageName, withField } from './model'
 import { InspectorSection, type DraftProps } from './InspectorSection'
+import { CAMERA_LABELS, finishChoice, finishOptions, finishValue, isSeriesCamera, SERIES_CAMERAS } from '../shotLook'
 
 const FRAMINGS = ['wide', 'two', 'medium', 'close', 'insert', 'title'] as const
 type Timing = { intro?: number; gap?: number; tail?: number }
@@ -15,20 +16,30 @@ function planLength(t: TFunction<'seriesLab'>, context: PartContext): string {
     : t('inspector.plan.length', { seconds: context.script?.duration ?? context.shot.durationSeconds })
 }
 
-/** Framing, camera, length and pauses in words. */
-function planSummary(t: TFunction<'seriesLab'>, context: PartContext): string {
+/** The shot's own finish in words; nothing when it follows its series. */
+function finishSummary(t: TFunction<'seriesLab'>, names: TFunction<'kineticText'>, context: PartContext): string {
+  const value = finishValue(context.script?.finish)
+  const option = value ? finishOptions(t, names, value).find(item => item.value === value) : undefined
+  return option ? t('inspector.plan.finishShort', { finish: option.label }) : ''
+}
+
+/** Framing, camera, length, pauses and the shot's own finish in words. */
+function planSummary(t: TFunction<'seriesLab'>, names: TFunction<'kineticText'>, context: PartContext): string {
   const script = context.script || {}
   const timing = (script.timing || {}) as Timing
   const framing = FRAMINGS.find(item => item === script.framing)
-  const camera = (['push', 'static'] as const).find(item => item === script.camera)
-  return [framing ? t(`approval.framings.${framing}`) : script.framing, camera ? t(`approval.cameras.${camera}`) : script.camera, planLength(t, context),
+  const camera = isSeriesCamera(script.camera) ? script.camera : undefined
+  return [framing ? t(`approval.framings.${framing}`) : script.framing, camera ? t(CAMERA_LABELS[camera]) : script.camera, planLength(t, context),
     ...(['intro', 'gap', 'tail'] as const).filter(key => typeof timing[key] === 'number').map(key => t(`inspector.plan.${key}Short`, { seconds: timing[key] })),
+    finishSummary(t, names, context),
   ].filter(Boolean).join(' · ')
 }
 
-function PlanEditor({ draft, change, lines }: DraftProps & { lines: boolean }) {
+function PlanEditor({ draft, change, lines, twoD }: DraftProps & { lines: boolean; twoD: boolean }) {
   const { t } = useUiTranslation('seriesLab')
+  const { t: names } = useUiTranslation('kineticText')
   const next = (draft.timing || {}) as Timing
+  const finish = finishValue(draft.finish as Parameters<typeof finishValue>[0])
   const setTiming = (key: keyof Timing, value: number | undefined) => {
     const updated = withField(next, key, value)
     change(withField(draft, 'timing', Object.keys(updated).length ? updated : undefined))
@@ -37,7 +48,10 @@ function PlanEditor({ draft, change, lines }: DraftProps & { lines: boolean }) {
     <SelectInput title={t('approval.edit.framing')} value={draft.framing} empty={t('approval.edit.auto')} onChange={value => change(withField(draft, 'framing', value))}
       options={FRAMINGS.map(value => ({ value, label: t(`approval.framings.${value}`) }))} />
     <SelectInput title={t('approval.edit.camera')} value={draft.camera} empty={t('approval.edit.auto')} onChange={value => change(withField(draft, 'camera', value))}
-      options={(['static', 'push'] as const).map(value => ({ value, label: t(`approval.cameras.${value}`) }))} />
+      options={SERIES_CAMERAS.map(value => ({ value, label: t(CAMERA_LABELS[value]) }))} />
+    {twoD && <SelectInput title={t('approval.edit.finish')} value={finish} empty={t('inspector.plan.seriesFinish')}
+      onChange={value => { if (finishChoice(value) !== undefined) change(withField(draft, 'finish', value)) }}
+      options={finishOptions(t, names, finish)} />}
     <NumberInput title={t('approval.edit.intro')} value={next.intro} min={0} max={6} onChange={value => setTiming('intro', value)} />
     <NumberInput title={t('inspector.plan.gap')} value={next.gap} min={0} max={6} onChange={value => setTiming('gap', value)} />
     <NumberInput title={t('approval.edit.tail')} value={next.tail} min={0} max={6} onChange={value => setTiming('tail', value)} />
@@ -46,12 +60,14 @@ function PlanEditor({ draft, change, lines }: DraftProps & { lines: boolean }) {
   </div>
 }
 
-/** Framing, camera, the pauses around the lines and, for a shot without lines, its length. */
+/** Framing, camera, the pauses around the lines, for a shot without lines its length and, for a 2D shot, its finish. */
 export function PlanPart({ context }: { context: PartContext }) {
   const { t } = useUiTranslation('seriesLab')
+  const { t: names } = useUiTranslation('kineticText')
+  const twoD = context.shot.productionMethod === 'animation_2d'
   return <InspectorSection id={sectionId(context.shot.id, 'plan')} inspector={context.inspector} shotId={context.shot.id} section="plan"
     script={context.script} draft={context.drafts.plan} save={context.save} icon={<Clapperboard size={14} />} title={t('inspector.plan.title')}
-    summary={planSummary(t, context)} editor={props => <PlanEditor {...props} lines={Boolean(context.script?.lines?.length)} />} />
+    summary={planSummary(t, names, context)} editor={props => <PlanEditor {...props} lines={Boolean(context.script?.lines?.length)} twoD={twoD} />} />
 }
 
 type Card = { kind?: string; [language: string]: unknown }

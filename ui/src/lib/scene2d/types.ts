@@ -13,7 +13,9 @@ export type AnimatorLayer = Omit<SceneLayer, 'type' | 'animation'> & {
 }
 export type AnimatorScene = Omit<Scene, 'layers'> & { layers: AnimatorLayer[] }
 export type VisualAnimatorLayer = AnimatorLayer & { type: VisualLayerType }
-export type LayerState = { x: number; y: number; scale: number; opacity: number; rotation: number; z: number; modelYaw?: number }
+export type LayerState = { x: number; y: number; scale: number; opacity: number; rotation: number; z: number; modelYaw?: number
+  /** A mirrored strip copy (strip.mirror): drawn flipped along this axis. */
+  flip?: 'x' | 'y' }
 export type LayerEffects = Required<NonNullable<SceneLayer['effects']>>
 export type LayerStrip = Required<Omit<NonNullable<SceneLayer['strip']>, 'seamOccluder'>> & {
   seamOccluder: { enabled: boolean; kind: SeamOccluderKind; scale: number; opacity: number }

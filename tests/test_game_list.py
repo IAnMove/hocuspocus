@@ -86,6 +86,40 @@ def test_spanish_aliases_and_item_motion():
     assert by_id["suelo"]["kind"] == "tileset"
 
 
+def test_english_option_words_match_the_spanish_ones():
+    """The English UI shows an English example list; it must parse like the Spanish one."""
+    english = "\n".join([
+        "character hero: short knight | player",
+        "anim hero: idle, walk, jump, attack, hurt, death",
+        "character slime: green slug | enemy",
+        "character guardian: big | boss",
+        "item coin: gold coin | anim spin | 8 frames",
+        "item key: golden | anim bob | 6 frames",
+        "background forest: forest at dusk | layers 3",
+        "effect explosion: small explosion | 12 frames",
+        "sfx jump: short jump | variants 3",
+        "music level1: cheerful theme | loop 60 s",
+        "sprite knight: walking | method strip | size 64",
+    ])
+    items, problems = parse_report(english)
+    assert problems == []
+    by_id = {item["id"]: item for item in items}
+    assert by_id["hero"]["spec"]["role"] == "player"
+    assert by_id["slime"]["spec"]["role"] == "enemy"
+    assert by_id["guardian"]["spec"]["role"] == "boss"
+    assert by_id["hero-death"]["spec"]["action"] == "death"
+    assert by_id["coin"]["spec"]["anim"] == {"action": "spin", "frames": 8}
+    assert by_id["key"]["spec"]["anim"] == {"action": "bob", "frames": 6}
+    assert by_id["forest"]["spec"]["layers"] == 3
+    assert by_id["explosion"]["kind"] == "vfx"
+    assert by_id["jump"]["spec"]["variants"] == 3
+    assert by_id["level1"]["spec"]["loopSeconds"] == 60
+    assert by_id["knight"]["spec"]["method"] == "strip"
+    assert by_id["knight"]["spec"]["heightPx"] == 64
+    spanish = parse_lines("objeto moneda: oro | anim girar | 8 frames\nfondo bosque: bosque | capas 3")
+    assert [item["spec"] for item in spanish] == [by_id["coin"]["spec"], by_id["forest"]["spec"]]
+
+
 def test_line_errors_come_back_together():
     text = "\n".join([
         "nope cosa: nada",
@@ -152,7 +186,7 @@ def test_commit_writes_the_game_and_leaves_other_games(tmp_path):
 
 
 def test_mistyped_options_are_reported_not_dropped():
-    items, problems = parse_report("objeto moneda: oro | 8 frame\nsfx salto: corto | variants 3 | retro\nanim heroe: idle | 6 frame")
+    items, problems = parse_report("objeto moneda: oro | 8 frame\nsfx salto: corto | variante 3 | retro\nanim heroe: idle | 6 frame")
     assert [(item["line"], item["code"]) for item in problems] == [
         (1, "unknown_option"), (2, "unknown_option"), (3, "unknown_option"),
     ]

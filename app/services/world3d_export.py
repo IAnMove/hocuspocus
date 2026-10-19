@@ -216,17 +216,20 @@ try {
   await page.waitForFunction(name => !!window[name], bridge, { timeout: 60000 });
   const plan = snapshot.plan;
   const doc = snapshot.document;
+  // A still (a template thumbnail) names its output times; it needs no geometry report and no sound.
+  const times = Array.isArray(plan.times) ? plan.times : null;
+  const count = times ? times.length : plan.count;
   await page.evaluate(({ document: scene, plan: size, bridge: name }) => window[name].load(scene, size), { document: doc, plan, bridge });
   // Geometry warnings first; the stage is a pure function of time, so the frames do not change.
-  const geometry = await page.evaluate(name => (window[name].checkGeometry ? window[name].checkGeometry() : null), bridge).catch(() => null);
+  const geometry = times ? null : await page.evaluate(name => (window[name].checkGeometry ? window[name].checkGeometry() : null), bridge).catch(() => null);
   if (geometry) fs.writeFileSync(`${staging}/geometry.json`, JSON.stringify(geometry));
-  for (let index = 0; index < plan.count; index += 1) {
-    const png = await page.evaluate(({ seconds, bridge: name }) => window[name].frame(seconds), { seconds: Math.min(plan.duration, index / plan.fps), bridge });
+  for (let index = 0; index < count; index += 1) {
+    const png = await page.evaluate(({ seconds, bridge: name }) => window[name].frame(seconds), { seconds: times ? times[index] : Math.min(plan.duration, index / plan.fps), bridge });
     const name = String(index + 1).padStart(6, '0');
     fs.writeFileSync(`${frames}/frame_${name}.png`, Buffer.from(png.split(',')[1], 'base64'));
-    fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: plan.count }));
+    fs.writeFileSync(`${staging}/progress.json`, JSON.stringify({ current: index + 1, total: count }));
   }
-  const wav = await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(error => {
+  const wav = times ? '' : await page.evaluate(name => (window[name].audio ? window[name].audio() : ''), bridge).catch(error => {
     fs.writeFileSync(`${staging}/audio-error.txt`, String(error?.message || error).slice(0, 800));
     return '';
   });
@@ -353,6 +356,13 @@ def export_capabilities(app_url: str | None = None) -> dict:
         "fps": [24, 30, 60], "maxDuration": 600, "maxVoicedDuration": MAX_VOICED_SECONDS,
         "qualities": list(QUALITIES), "motionBlur": {"shutterDegrees": [0, 360], "default": 180},
     }
+
+
+def render_lane():
+    """The lane an owned-browser render holds: the GPU, or a CPU lane when the renderer is told to stay on CPU."""
+    if scene_render_device() == "cpu":
+        return resource_scheduler.cpu_lane("world3d-render")
+    return resource_scheduler.local_gpu_lane(0)
 
 
 def renderer_available(app_url: str | None) -> bool:
@@ -541,18 +551,33 @@ def _ref_from_url(slot: dict, url: str, workspace: str) -> dict:
     # parse_media_ref would hide gallery Uploads (`?workspace=__uploads__`)
     # and media picked from another workspace folder.
     path, scoped = parse_media_ref(url)
-    filename = os.path.basename((path or "").replace("\\", "/"))
+    inside = _inside_root((path or "").replace("\\", "/"))
+    filename = os.path.basename(inside)
     if not filename:
         raise http_error(422, "missing_ref", "Each used slot needs a durable media ref")
     record = {
         "slotId": slot["id"], "url": url, "kind": slot.get("media") or "model3d",
         "filename": filename,
     }
+    if inside != filename:
+        record["path"] = inside      # a file in a folder of the workspace (a model pack): looked up where it is
     if url.lower().startswith("/api/v1/uploads/") or scoped == "__uploads__":
         record["root"] = "uploads"
     else:
         record["workspace"] = scoped or workspace
     return record
+
+
+def _inside_root(path: str) -> str:
+    """The file's path inside its root (the workspace or the uploads), without the API prefix."""
+    for prefix in ("/api/v1/file/", "/api/v1/uploads/"):
+        if prefix in path:
+            path = path.split(prefix, 1)[1]
+            break
+    parts = [part for part in path.strip("/").split("/") if part]
+    if any(part in ("..", ".") for part in parts) or "\x00" in path:
+        raise http_error(422, "missing_ref", "Use a media path inside the workspace")
+    return "/".join(parts)
 
 
 def _index_refs(refs) -> dict:
@@ -738,6 +763,7 @@ class World3DExportService:
         self.owner = uuid.uuid4().hex
         self._lock = threading.RLock()
         self._workers: dict[str, threading.Thread] = {}
+        self._worker_workspaces: dict[str, str] = {}
 
     def capabilities(self) -> dict:
         return export_capabilities(self.app_url)
@@ -751,7 +777,7 @@ class World3DExportService:
         workspace_root = Path(self.workspace_dir(workspace))
         uploads_root = Path(self.uploads_dir())
         for ref in refs:
-            name = ref.get("filename")
+            name = ref.get("path") or ref.get("filename")
             if not name:
                 continue
             named = ref.get("workspace", workspace)
@@ -838,7 +864,16 @@ class World3DExportService:
                 name=f"{self.slug}-{intent_id[:12]}", daemon=True,
             )
             self._workers[intent_id] = thread
+            self._worker_workspaces[intent_id] = task["workspace"]
             thread.start()
+
+    def live_jobs(self) -> list[dict]:
+        """Exports whose worker is alive (``services.workspace_busy`` probe): it renders frames into the workspace."""
+        with self._lock:
+            return [
+                {"jobId": intent_id, "status": "running", "workspace": self._worker_workspaces.get(intent_id)}
+                for intent_id, thread in self._workers.items() if thread.is_alive()
+            ]
 
     def receipt(self, workspace: str, intent_id: str) -> dict:
         if not isinstance(intent_id, str) or not 1 <= len(intent_id) <= 160:
@@ -990,9 +1025,7 @@ class World3DExportService:
         return freeze_export_command(command)
 
     def resource_lane(self):
-        if scene_render_device() == "cpu":
-            return resource_scheduler.cpu_lane("world3d-render")
-        return resource_scheduler.local_gpu_lane(0)
+        return render_lane()
 
     def prepare_snapshot(self, snapshot: dict, cancelled) -> dict:
         return prepare_media_snapshot(snapshot, app_root=Path(__file__).resolve().parents[1],
@@ -1061,7 +1094,7 @@ class World3DExportService:
 __all__ = [
     "CANCEL_OPERATION", "OPERATION", "QUALITIES", "QUALITY_PROFILES", "RECEIPT_OPERATION", "World3DExportCancelled",
     "World3DExportPending", "World3DExportService", "build_snapshot", "command_catalog",
-    "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size",
+    "command_handlers", "even_dim", "export_capabilities", "export_plan", "export_size", "render_lane",
     "freeze_export_command", "http_error", "mux_frame_sequence", "mux_wav_audio", "plan_quality", "playwright_module",
     "staging_dir", "staging_token", "unsupported_capabilities", "write_png", "write_prores_master",
 ]

@@ -17,9 +17,7 @@ from urllib.parse import quote
 from services.mcp_intent import IntentConflict, check_intent_id, intent_digest, load_intent, store_intent
 from services.scene2d_schema import document_schema
 from services.scene_commands import DocumentInput, command_error
-from services.document_origin import write_document_origin
 from services.scene_library import preview_png, save_world3d
-from services.scene_links import remember_saved
 
 WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 FILE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,200}\.scene\.json")
@@ -104,27 +102,18 @@ def save_document(workspace: str, document: Any, *, name: str | None, preview: s
         raise SceneDocumentError("Upload local scene resources before saving")
     if _remote_sequence(valid):
         raise SceneDocumentError("Sequence frames must be durable workspace or example media")
+    from services.scene_save import publish_layer_scene
+
     png = preview_png(preview) if preview else None
     label = str(name or valid.get("name") or "scene")[:120]
     stem = (re.sub(r"[^A-Za-z0-9._-]+", "-", label).strip("-._")[:80] or "scene") + "-" + uuid.uuid4().hex[:10]
     folder = Path(workspace_dir(workspace))
     folder.mkdir(parents=True, exist_ok=True)
-    target = folder / (stem + ".scene.json")
-    temporary = folder / (stem + ".scene.json.tmp")
-    if png:
-        # A preview sent with the save is the scene's library picture, as for an editor save.
-        (folder / (stem + ".scene.preview.png")).write_bytes(png)
-    with temporary.open("x", encoding="utf-8") as handle:
-        handle.write(encoded)
-    temporary.replace(target)
     # An export of this document names this file and, without a preview, gives it its middle frame (scene_links).
-    remember_saved(folder, valid, target.name)
-    write_document_origin(target, capability)
-    saved = {"name": target.name, "type": "scene", "workspace_id": workspace, "url": _url(target.name, workspace),
-             "editor": "video2d"}
-    if png:
-        saved["thumbnail_url"] = _url(stem + ".scene.preview.png", workspace)
-    return saved
+    return publish_layer_scene(
+        folder=folder, stem=stem, encoded=encoded, png=png, workspace=workspace,
+        document=valid, capability=capability,
+    )
 
 
 def get_document(workspace: str, file: str, *, workspace_dir: Callable[[str], str]) -> dict[str, Any]:

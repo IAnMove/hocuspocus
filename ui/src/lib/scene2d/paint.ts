@@ -50,8 +50,13 @@ function drawLayerImage(context: CanvasRenderingContext2D, layer: VisualAnimator
   context.beginPath()
   context.rect(-width / 2, -height / 2, width, height)
   context.clip()
-  if (crop) context.drawImage(media, crop.x, crop.y, crop.width, crop.height, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
-  else context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+  if (!crop) {
+    context.drawImage(media, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
+    return
+  }
+  // A mirrored sheet cell is drawn flipped about the layer's centre, after the clip (which is symmetric).
+  if (layer.sequence?.kind === 'sheet' && layer.sequence.mirror) context.scale(-1, 1)
+  context.drawImage(media, crop.x, crop.y, crop.width, crop.height, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight)
 }
 
 function sourceFrame(layer: VisualAnimatorLayer, media: SceneMedia, seconds: number): [number, number] {
@@ -92,6 +97,11 @@ export function layerPicturePoint(canvas: { width: number; height: number }, cur
   }
 }
 
+/** A mirrored strip copy is drawn flipped about its own centre, after the move and the rotation. */
+export function applyStripFlip(context: Pick<CanvasRenderingContext2D, 'scale'>, state: Pick<LayerState, 'flip'>): void {
+  if (state.flip) context.scale(state.flip === 'x' ? -1 : 1, state.flip === 'y' ? -1 : 1)
+}
+
 function textInk(finish: AnimatorScene['finish']): TextInkTrap | undefined {
   if (!finish?.riso) return undefined
   return { riso: true, paper: finish.riso.paper }
@@ -119,6 +129,7 @@ export function paintScene2D(canvas: HTMLCanvasElement, current: AnimatorScene, 
     const width = canvas.width * (layer.type === 'model3d' ? .52 : 1) * draw.scale
     const height = canvas.height * (layer.type === 'model3d' ? .75 : 1) * draw.scale
     context.translate(canvas.width * draw.x / 100, canvas.height * draw.y / 100); context.rotate(draw.rotation * Math.PI / 180)
+    applyStripFlip(context, draw)
     applyLayerMask(context, effects, width, height)
     if (layer.type === 'effect') {
       drawAtmosphere(context, normalizedAtmosphere(layer.atmosphere), sceneSeconds, width, height, effectAnchor(current, layer, evaluator, sceneProgress))

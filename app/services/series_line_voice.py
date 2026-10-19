@@ -28,7 +28,7 @@ from datetime import datetime
 from typing import Any
 from urllib.parse import quote
 
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_kit_pins import kits_for_episode
 from services.series_language_versions import LANGUAGES, localized_view
 from services.series_native_render import ACTIVE, NativeRenderError, SeriesNativeRender
@@ -124,6 +124,10 @@ class SeriesLineVoice:
     def _store(self, workspace: str) -> SeriesJobStore:
         return SeriesJobStore(self.render.deps.workspace_dir(workspace), KIND)
 
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The line recordings in this folder a thread of this service is running (``services.workspace_busy`` probe)."""
+        return live_checkpoints(workspace_dir, KIND, ACTIVE, lambda job_id: worker_alive(self._threads.get(job_id)))
+
     def _shot(self, workspace: str, series_id: str, episode_id: str, shot_ref: Any, language: str | None) -> tuple[dict, dict, dict, str]:
         """The series, episode and shot in ``language`` (the series' own by default), and that language."""
         raw_series = (self.read_library(workspace).get("seriesById") or {}).get(series_id)
@@ -212,7 +216,8 @@ class SeriesLineVoice:
                 raise LineVoiceError("line_changed", "The line changed while it waited to record; record it again", 409)
             line = self.render.record_line(workspace, {"jobId": job_id, "episodeId": job["episodeId"], "language": language},
                                            series, beat, self._kits(workspace, episode), retake=job["retake"])
-            result = {key: line[key] for key in ("filename", "duration", "wer", "attempt", "key", "reused", "retake") if key in line}
+            keys = ("filename", "duration", "wer", "attempt", "key", "reused", "retake", "warning", "warnings", "cleanliness")
+            result = {key: line[key] for key in keys if key in line}
             job.update(status="completed", result={**result, "url": _file_url(line["filename"], workspace),
                                                    "cueCount": len(line.get("cues") or [])})
         except Exception as error:  # the job reports whatever stopped the recording

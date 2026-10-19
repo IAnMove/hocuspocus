@@ -28,7 +28,8 @@ from services import llm_service
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
+DIRECTOR = ROOT / "app" / "routers" / "director.py"
+DIRECTOR_V2 = ROOT / "app" / "services" / "director_v2_plan.py"
 REF2VA = ROOT / "app" / "models" / "minimax_h3" / "ref2va.py"
 MODELS_LANGUAGE = ROOT / "app" / "models" / "minimax_h3" / "spoken_language.py"
 LLM_SERVICE = ROOT / "app" / "services" / "llm_service.py"
@@ -72,17 +73,24 @@ def test_ref2va_quote_path_does_not_import_services():
             assert not module.startswith("app.services")
 
 
-def test_runtime_adapt_clip_plans_pass_explicit_policy():
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"))
-    functions = {
-        node.name: node
+def _module_function(path: Path, name: str):
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    return next(
+        node
         for node in tree.body
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
-        and node.name in {
-            "director_plan_prompts_and_images",
-            "director_plan_short_film_prompts",
-            "_director_v2_plan_body",
-        }
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name
+    )
+
+
+def test_runtime_adapt_clip_plans_pass_explicit_policy():
+    functions = {
+        "director_plan_prompts_and_images": _module_function(
+            DIRECTOR, "director_plan_prompts_and_images",
+        ),
+        "director_plan_short_film_prompts": _module_function(
+            DIRECTOR, "director_plan_short_film_prompts",
+        ),
+        "_director_v2_plan_body": _module_function(DIRECTOR_V2, "_director_v2_plan_body"),
     }
     assert set(functions) == {
         "director_plan_prompts_and_images",

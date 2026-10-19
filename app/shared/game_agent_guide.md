@@ -27,11 +27,12 @@ Send `text` (format `lines`, the default, or `csv`) or `items` (format `json`), 
 
 - A line is `<kind> <id>: <description> | option | option`. Lines starting with `#` are skipped.
 - Kinds: `personaje`/`character`, `sprite`, `anim`/`animation`, `objeto`/`item`, `icono`/`icon`, `ui`, `tile`,
-  `tileset`, `fondo`/`background`, `efecto`/`vfx`, `sfx`/`sonido`, `musica`/`music`, `jingle`, `voz`/`voice`,
+  `tileset`, `fondo`/`background`, `efecto`/`effect`/`vfx`, `sfx`/`sonido`, `musica`/`music`, `jingle`, `voz`/`voice`,
   `model3d`, `character3d`.
 - `anim heroe: idle, andar, saltar` makes one animation per action, with ids `heroe-idle`, `heroe-walk`, …
-- Options: `jugador`, `enemigo`, `npc`, `jefe`, `9-slice`, `retro`, `multivista`, `variantes N`, `capas N`, `N frames`, `tamano N`,
-  `bucle N s`, `bpm N`, `metodo tira|h3`, `anim girar|flotar|glow`.
+- Options: `jugador`/`player`, `enemigo`/`enemy`, `npc`, `jefe`/`boss`, `9-slice`, `retro`, `multivista`,
+  `variantes N`/`variants N`, `capas N`/`layers N`, `N frames`, `tamano N`/`size N`, `bucle N s`/`loop N s`, `bpm N`,
+  `metodo tira|h3`/`method strip|h3`, `anim girar|flotar|spin|bob|glow`.
 - CSV needs `kind` and `id` columns; `name`, `description` and `options` (split by `|`) are optional.
 - A JSON item with `spec` and no `options` keeps that spec. Put `seed` (a whole number from 0) in `spec` to repeat a result.
 

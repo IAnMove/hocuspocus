@@ -27,6 +27,7 @@ from services.scene2d_schema import document_schema, fill_sfx_colors
 from services.scene_commands import DocumentInput, command_error as scene_error
 from services.export_receipts import project_export_receipt
 from services.export_output_name import OUTPUT_NAME_SCHEMA, name_snapshot
+from services.scene2d_blank_frames import assert_no_blank_frames
 from services.audio_mix import (  # noqa: F401 — re-exported for callers and tests of the 2D mixer
     DUCK_ATTACK, DUCK_MARGIN, DUCK_RELEASE, audio_seconds, duck_db, duck_expression, mix_audio_tracks, mux_wav_audio,
 )
@@ -295,6 +296,11 @@ class Scene2DExportService(World3DExportService):
             },
             "generation_mode": "video", "tool": self.slug, "output_filename": name,
         }
+
+    def _render_frames(self, snapshot, staging, token, registry, task_id) -> list[Path]:
+        frames = super()._render_frames(snapshot, staging, token, registry, task_id)
+        assert_no_blank_frames(frames, snapshot["plan"]["fps"])
+        return frames
 
     def _owned_browser(self, snapshot, staging, progress, cancelled):
         if not renderer_available(self.app_url, playwright_module()):

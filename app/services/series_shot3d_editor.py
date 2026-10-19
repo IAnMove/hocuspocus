@@ -29,7 +29,7 @@ from services.series_shot_plan import sound_tracks
 from services.series_stop_motion import read_fields
 
 # What the render binds over the scene for each listed object (``series_shot3d._object_binding``).
-OBJECT_FIELDS = ("position", "rotationY", "scale", "motion", "grounded", "clips", "hold", "appearance", "clipPlayback")
+OBJECT_FIELDS = ("setItem", "imageLook", "billboard", "position", "rotationY", "scale", "motion", "grounded", "clips", "hold", "appearance", "clipPlayback")
 SHOT_FX_PREFIX, SCENE_TRACK_PREFIX = "shot-", "scene-"
 _FILE_URL = re.compile(r"^/api/v1/file/(?P<name>[^?#]+)")
 
@@ -56,6 +56,8 @@ def _first_of_scene(episode: dict[str, Any], shot: dict[str, Any]) -> bool:
 def editor_scene(call: Callable[[str, dict], dict], workspace: str, root: str | None, series: dict[str, Any],
                  episode: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
     """The shot's working scene to open in the Video 3D editor: ``sceneId``, ``revision``, ``document``."""
+    from services.series_sets import inherit_shot
+    shot = inherit_shot(series, shot)
     config = _config(shot)
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     duration = float(shot.get("durationSeconds") or 5)

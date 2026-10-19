@@ -6,6 +6,8 @@ import { useUiTranslation } from '../../../i18n'
 import { ensureUploadsPath } from '../../../lib/labsImagePick'
 import { useSeriesStore } from '../store'
 import { secondaryButton } from '../styles'
+import type { SeriesVideoResolution } from '../types'
+import { inheritedShotResolution, SERIES_VIDEO_RESOLUTION_LABELS, SERIES_VIDEO_RESOLUTIONS, shotHasVideoSize } from '../videoResolution'
 import { sectionId, type PartContext } from './context'
 import { FileInput, NumberInput, SelectInput } from './fields'
 import { InspectorSection, type DraftProps } from './InspectorSection'
@@ -84,9 +86,13 @@ function ReplaceClip({ context }: { context: PartContext }) {
   </>
 }
 
-function ClipSoundEditor({ draft, change }: DraftProps) {
+/** The clip's sound at the cut and, for an H3 clip, its size (empty follows the series). */
+function ClipSoundEditor({ draft, change, inherited }: DraftProps & { inherited?: SeriesVideoResolution }) {
   const { t } = useUiTranslation('seriesLab')
   return <div className={grid}>
+    {inherited && <SelectInput title={t('inspector.video.resolutionTitle')} value={draft.resolution}
+      empty={t('inspector.video.resolutionInherited', { resolution: inherited })} onChange={value => change(withField(draft, 'resolution', value))}
+      options={SERIES_VIDEO_RESOLUTIONS.map(value => ({ value, label: t(SERIES_VIDEO_RESOLUTION_LABELS[value]) }))} />}
     <SelectInput title={t('inspector.video.audioTitle')} value={draft.clipAudio || 'keep'} onChange={value => change({ ...draft, clipAudio: value })}
       options={(['keep', 'drop'] as const).map(value => ({ value, label: t(`inspector.video.audio.${value}`) }))} />
     <NumberInput title={t('inspector.video.volume')} value={draft.clipVolume} min={0} max={2} onChange={value => change(withField(draft, 'clipVolume', value))} />
@@ -99,7 +105,8 @@ function ClipSoundEditor({ draft, change }: DraftProps) {
 function clipSound(t: TFunction<'seriesLab'>, script: PartContext['script'], method: string): string {
   return [t(`production.methods.${method === 'imported_video' ? 'imported_video' : 'generated_video'}`), t(`inspector.video.audio.${script?.clipAudio === 'drop' ? 'drop' : 'keep'}`),
     typeof script?.clipVolume === 'number' ? t('inspector.video.volumeShort', { volume: script.clipVolume }) : '',
-    script?.clipFit === 'cover' || script?.clipFit === 'contain' ? t(`inspector.video.fit.${script.clipFit}`) : ''].filter(Boolean).join(' · ')
+    script?.clipFit === 'cover' || script?.clipFit === 'contain' ? t(`inspector.video.fit.${script.clipFit}`) : '',
+    typeof script?.resolution === 'string' ? t('inspector.video.resolutionShort', { resolution: script.resolution }) : ''].filter(Boolean).join(' · ')
 }
 
 /** A generated (H3) or imported clip: what made it, how its own sound plays at the cut, and a new clip as its take. */
@@ -109,6 +116,7 @@ export function VideoPart({ context }: { context: PartContext }) {
   const metadata = take?.asset.metadata || {}
   const source = typeof metadata.source === 'string' ? metadata.source : undefined
   const generation = useGeneration(context.workspace, source)
+  const inherited = shotHasVideoSize(context.shot) ? inheritedShotResolution(context.series, context.shot) : undefined
   return <InspectorSection id={sectionId(context.shot.id, 'video')} inspector={context.inspector} shotId={context.shot.id} section="video"
     script={context.script} draft={context.drafts.video} save={context.save} icon={<Clapperboard size={14} />} title={t('inspector.video.title')}
     summary={clipSound(t, context.script, context.shot.productionMethod || 'generated_video')}
@@ -119,5 +127,5 @@ export function VideoPart({ context }: { context: PartContext }) {
       <ReplaceClip context={context} />
       <p className="text-[10px] text-text-muted">{t('inspector.video.hint')}</p>
     </div>}
-    editor={props => <ClipSoundEditor {...props} />} />
+    editor={props => <ClipSoundEditor {...props} inherited={inherited} />} />
 }

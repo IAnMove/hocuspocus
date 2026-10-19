@@ -13,6 +13,7 @@ import {
 } from './storySongRecovery'
 import { inFlightJobIds, recoverInFlightStorySongs } from './storySongJobRecovery'
 import type { StoryProject, StoryProjectType } from './types'
+import i18n from '../../i18n'
 
 const LEGACY_AUTOSAVE_KEY = 'maestro-story-lab-v1'
 const LIBRARY_PREFIX = 'maestro-story-library-v2:'
@@ -698,7 +699,7 @@ export async function commitStoryProjectMutation(
   let library: Awaited<ReturnType<typeof api.saveStoryLibrary>> | null = null
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const source = baseline.projects[projectId]
-    if (!source) throw new Error('La historia activa desapareció antes de poder guardarla.')
+    if (!source) throw new Error(i18n.t('storyLab:errors.activeStoryDisappeared'))
     const project = mutate(source)
     try {
       const visibleId = useStoryStore.getState().project.id
@@ -733,7 +734,7 @@ export async function commitStoryProjectMutation(
       }
     }
   }
-  if (!library?.projects[projectId]) throw new Error('Story Lab guardó la biblioteca sin devolver la historia editada.')
+  if (!library?.projects[projectId]) throw new Error(i18n.t('storyLab:errors.libraryMissingEditedStory'))
   return library
 }
 

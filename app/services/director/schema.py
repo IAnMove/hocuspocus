@@ -412,6 +412,9 @@ class ProductionPlan:
     # slots automatically, but remain persisted for later clip replacement or
     # edit re-segmentation instead of being discarded.
     alternative_shots: Optional[list[dict]] = None
+    # "deterministic_fallback" when the planner returned no shots and the
+    # plan was built from the story without the LLM; None for a normal plan.
+    planning_source: Optional[str] = None
 
     def to_dict(self) -> dict:
         d = {
@@ -434,6 +437,8 @@ class ProductionPlan:
             d["treatment"] = self.treatment
         if self.alternative_shots:
             d["alternative_shots"] = self.alternative_shots
+        if self.planning_source:
+            d["planning_source"] = self.planning_source
         return d
 
     @staticmethod
@@ -449,6 +454,7 @@ class ProductionPlan:
             continuity_notes=d.get("continuity_notes"),
             treatment=d.get("treatment"),
             alternative_shots=d.get("alternative_shots"),
+            planning_source=d.get("planning_source"),
         )
 
     def get_character(self, character_id: str) -> Optional[CharacterProfile]:

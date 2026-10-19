@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
+from services import workspace_busy
 from services.game_library import GameNotFoundError, GameValidationError
 from services.game_list import STYLE_SAMPLES, check, commit_list, parse_csv_report, parse_json_report, parse_report
 from services.game_produce import GameProduce, ProduceError, iso_now, public_job
@@ -42,6 +43,8 @@ def create_game_produce_router(service: GameProduce, *, call: Callable[[str, dic
                                bind_loop: Callable[[asyncio.AbstractEventLoop], None],
                                read_game: Callable[[str, str], dict]) -> APIRouter:
     router = APIRouter()
+    # The probe closes over this service: it is the only one that knows which job threads are alive.
+    workspace_busy.register("game-produce", lambda _workspace, folder: service.live_jobs(folder))
 
     def fail(error: Exception) -> HTTPException:
         if isinstance(error, ProduceError):

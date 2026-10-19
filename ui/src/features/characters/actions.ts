@@ -8,6 +8,7 @@ import {
 import { applyFaceRigMouthPreset, FACE_RIG_PRESET_ROOT, type FaceRigMouthPresetPack } from '../../lib/characterKitFaceRig'
 import { queueFaceRigHandoff } from '../../lib/characterKitHandoff'
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
+import i18n from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import type {
   ApplyCharacterKitPresetCommand,
@@ -41,11 +42,11 @@ function findKit(library: CharacterKitLibrary, kitName: string): CharacterKit {
   if (kitName.trim()) {
     const wanted = normalizeName(kitName)
     const match = Object.values(library.kits).find(kit => normalizeName(kit.name) === wanted || kit.id === kitName)
-    if (!match) throw new Error(`No existe el Character Kit “${kitName}”.`)
+    if (!match) throw new Error(i18n.t('characters:actionErrors.kitMissing', { name: kitName }))
     return match
   }
   const active = library.kits[library.activeId] || Object.values(library.kits)[0]
-  if (!active) throw new Error('No hay un Character Kit abierto.')
+  if (!active) throw new Error(i18n.t('characters:actionErrors.noOpenKit'))
   return active
 }
 
@@ -106,10 +107,10 @@ export async function attachAgentCharacterKitReferences(command: AttachCharacter
   const outputs = await fetchOutputs(80, 0, { workspace: workspaceName(), mediaType: 'image' })
   const wanted = command.outputNames.map(name => name.trim()).filter(Boolean)
   if (wanted.length !== 1) {
-    throw new Error('Character Kit admite una única referencia de identidad. Indica un solo output exacto.')
+    throw new Error(i18n.t('characters:actionErrors.singleReference'))
   }
   const identity = outputs.outputs.find(output => output.name === wanted[0])
-  if (!identity) throw new Error(`No existe el output de imagen “${wanted[0]}” en este workspace.`)
+  if (!identity) throw new Error(i18n.t('characters:actionErrors.imageMissing', { name: wanted[0] }))
   const kit: CharacterKit = {
     ...current,
     identityReference: {
@@ -131,7 +132,7 @@ export async function buildAgentCharacterKit(command: BuildCharacterKitCommand):
   const library = await loadLibrary()
   const current = findKit(library, command.kitName)
   const source = current.identityReference || current.base
-  if (!source?.source) throw new Error('El kit no tiene una referencia de identidad para construir la pose base.')
+  if (!source?.source) throw new Error(i18n.t('characters:actionErrors.noIdentity'))
   const kit: CharacterKit = {
     ...current,
     base: { ...source, id: `${current.id}-base`, reviewState: 'approved' },
@@ -153,10 +154,10 @@ export async function applyAgentCharacterKitPreset(command: ApplyCharacterKitPre
   const library = await loadLibrary()
   const current = findKit(library, command.kitName)
   const response = await fetch(`${FACE_RIG_PRESET_ROOT}/manifest.json`)
-  if (!response.ok) throw new Error('No pude cargar los packs de visemas.')
+  if (!response.ok) throw new Error(i18n.t('characters:actionErrors.visemePacks'))
   const data = await response.json() as { packs?: FaceRigMouthPresetPack[] }
   const pack = (data.packs || []).find(item => item.id === command.presetId || item.label === command.presetId)
-  if (!pack) throw new Error(`No existe el preset de animación “${command.presetId}”.`)
+  if (!pack) throw new Error(i18n.t('characters:actionErrors.presetMissing', { name: command.presetId }))
   const kit = applyFaceRigMouthPreset(current, pack, workspaceName())
   await persist(library, kit)
   return kitResult(kit)

@@ -11,6 +11,7 @@ import {
 } from './actions'
 import { normalizeName } from '../../lib/labHelpers'
 import { useSeriesStore } from './store'
+import i18n from '../../i18n'
 import type {
   ApplySeriesPlanCommand,
   AssembleSeriesEpisodeCommand,
@@ -70,30 +71,30 @@ export function resolveSeriesComicCommand(action: {
     ? Object.values(library.seriesById).filter(item => normalizeName(item.title) === normalizeName(seriesTitle))
     : []
   if (seriesMatches.length > 1) {
-    throw new Error(`Hay varias series tituladas “${seriesTitle}”; nombra el id exacto o renombra una.`)
+    throw new Error(i18n.t('seriesLab:errors.ambiguousSeriesNameId', { title: seriesTitle }))
   }
   const series = requestedSeries
     || seriesMatches[0]
     || (!seriesTitle && !action.seriesId ? library.seriesById[store.activeSeriesId] : undefined)
   if (!series) {
     throw new Error(seriesTitle
-      ? `No existe la serie “${seriesTitle}” en este workspace.`
-      : 'No hay una serie activa ni un título exacto para adaptar a cómic.')
+      ? i18n.t('seriesLab:errors.seriesMissingInWorkspace', { title: seriesTitle })
+      : i18n.t('seriesLab:errors.noSeriesForComic'))
   }
   const requestedEpisode = action.episodeId ? series.episodesById[action.episodeId] : undefined
   const episodeMatches = !requestedEpisode && episodeTitle
     ? Object.values(series.episodesById).filter(item => normalizeName(item.title) === normalizeName(episodeTitle))
     : []
   if (episodeMatches.length > 1) {
-    throw new Error(`Hay varios episodios titulados “${episodeTitle}”; nombra el id exacto.`)
+    throw new Error(i18n.t('seriesLab:errors.ambiguousEpisodeNameId', { title: episodeTitle }))
   }
   const episode = requestedEpisode
     || episodeMatches[0]
     || (!episodeTitle && !action.episodeId ? series.episodesById[store.activeEpisodeId] : undefined)
   if (!episode) {
     throw new Error(episodeTitle
-      ? `No existe el episodio “${episodeTitle}” en “${series.title}”.`
-      : 'No hay un episodio activo ni un título exacto para adaptar a cómic.')
+      ? i18n.t('seriesLab:errors.episodeMissingInSeries', { title: episodeTitle, series: series.title })
+      : i18n.t('seriesLab:errors.noEpisodeForComic'))
   }
   return {
     seriesId: series.id,

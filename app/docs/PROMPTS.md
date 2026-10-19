@@ -59,6 +59,7 @@ Examples:
 - `TTS Chatterbox Multilingual`
 - `TTS Index TTS 2`
 - `TTS Qwen3 Base (12Hz) 1.7B`
+- `TTS VoxCPM2 Voice Clone 2B`
 - `TTS KugelAudio 0 Open 7B`
 
 Practical use:
@@ -66,7 +67,9 @@ Practical use:
 - The text is the script or speech content.
 - The audio input usually gives the voice identity, emotion, or speaking style.
 
-For dialogue-capable models such as `TTS Index TTS 2`, `TTS Qwen3 Base (12Hz) 1.7B`, and `TTS KugelAudio 0 Open 7B`, the prompt can contain speaker tags such as `Speaker 1:` and `Speaker 2:`.
+For dialogue-capable models such as `TTS Index TTS 2`, `TTS Qwen3 Base (12Hz) 1.7B`, `TTS VoxCPM2 Voice Clone 2B`, and `TTS KugelAudio 0 Open 7B`, the prompt can contain speaker tags such as `Speaker 1:` and `Speaker 2:`.
+
+VoxCPM2 reads a parenthesised lead as voice direction, not as words: `(whispering) Come here.` is whispered. Its Voice Design model takes the voice description in the second text field; the Voice Clone model takes the reference transcript there and an optional speaking style in its settings.
 
 ### Text + image + audio models
 

@@ -11,11 +11,11 @@ from urllib.parse import quote
 
 
 ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
+LISTING = ROOT / "app" / "services" / "output_listing.py"
 
 
 def load_list_outputs(namespace: dict):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+    tree = ast.parse(LISTING.read_text(encoding="utf-8"), filename=str(LISTING))
     node = copy.deepcopy(next(
         item for item in tree.body
         if isinstance(item, ast.FunctionDef) and item.name == "list_outputs"
@@ -23,7 +23,7 @@ def load_list_outputs(namespace: dict):
     node.decorator_list = []
     module = ast.Module(body=[node], type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(LISTING), "exec"), namespace)
 
 
 def list_test_outputs(tmp_path, favorites=(), **kwargs):

@@ -61,7 +61,7 @@ function audioMode(params: Record<string, unknown>): string {
   if (recorded) return recorded
   const model = text(params.model_type).toLowerCase()
   if (/ace|song|music/.test(model)) return 'music'
-  if (/tts|speech|voice/.test(model)) return 'speech'
+  if (/tts|speech|voice|voxcpm/.test(model)) return 'speech'
   return ''
 }
 

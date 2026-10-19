@@ -19,4 +19,21 @@ def create_director_review_router(workspace_dir) -> APIRouter:
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
 
+    @router.put("/api/v1/director/pipelines/{pid}/anchor")
+    async def anchor(pid: str, request: Request):
+        """Replace the shared reference with an image of the run, or clear it."""
+        from services.director_pipeline import PipelineBusyError
+        from services.director_review import set_reference_anchor
+        try:
+            body = await request.json()
+            if not isinstance(body, dict) or not isinstance(body.get("workspace"), str):
+                raise ValueError("Use an explicit workspace")
+            return await run_in_threadpool(
+                set_reference_anchor, workspace_dir(body["workspace"]), pid, body.get("filename"),
+            )
+        except PipelineBusyError as error:
+            raise HTTPException(409, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+
     return router

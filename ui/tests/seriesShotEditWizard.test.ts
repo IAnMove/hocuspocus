@@ -49,8 +49,8 @@ test('"edita el quinto plano y ponle un sombrero" becomes one shot edit with the
     const outcome = await capability.execute(action!, { adapters: createDefaultApplicationAdapters(), workspace: 'show' })
     assert.equal(calls[0].url, '/api/v1/series/pu/episodes/ep1/shots/edit')
     assert.deepEqual(calls[0].body, { workspace: 'show', shot: 5, instruction: 'ponle un sombrero a Kevin' })
-    assert.match(outcome.message, /Plano 5 \(e1s04\) editado: props\. Le pongo el sombrero a Kevin\./)
-    assert.match(outcome.message, /aprobación se quitó/)
+    assert.match(outcome.message, /Shot 5 \(e1s04\) edited: props\. Le pongo el sombrero a Kevin\./)
+    assert.match(outcome.message, /approval was removed/)
   } finally {
     globalThis.fetch = previousFetch
   }
@@ -74,11 +74,11 @@ test('an exact edit is sent as changes and rendering again is a separate confirm
     const outcome = await rerender.execute(action!, { adapters: createDefaultApplicationAdapters(), workspace: 'show' })
     assert.deepEqual(calls[0].body, { workspace: 'show', shot: 5, render: true, approve: true })
     assert.equal(outcome.jobId, 'native-1')
-    assert.match(outcome.message, /renderizando de nuevo/)
+    assert.match(outcome.message, /rendering again/)
   } finally {
     globalThis.fetch = previousFetch
   }
-  assert.match(shotEditMessage({ shotId: 'e1s09', number: 10, note: 'laid at the cut' }), /Plano 10 \(e1s09\): laid at the cut/)
+  assert.match(shotEditMessage({ shotId: 'e1s09', number: 10, note: 'laid at the cut' }), /Shot 10 \(e1s09\): laid at the cut/)
 })
 
 test('"vuelve a grabar la segunda línea del plano 12" records that line through the shot voice route and waits for it', async () => {
@@ -106,7 +106,7 @@ test('"vuelve a grabar la segunda línea del plano 12" records that line through
     assert.equal(calls[0].url, '/api/v1/series/pu/episodes/ep1/shots/12/voices')
     assert.deepEqual(calls[0].body, { workspace: 'show', line: 2, retake: true })
     assert.equal(calls[1].url, '/api/v1/series/voice-jobs/voice-1?workspace=show')
-    assert.match(outcome.message, /Línea 2 del plano 12: otra toma grabada \(ln-ep1-e1s11_b1-abc\.wav\)\. La toma del plano aún no la tiene/)
+    assert.match(outcome.message, /Line 2 of shot 12: another take recorded \(ln-ep1-e1s11_b1-abc\.wav\)\. The shot's take does not have it yet/)
     assert.equal(outcome.jobId, 'voice-1')
   } finally {
     globalThis.fetch = previousFetch

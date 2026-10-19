@@ -6,6 +6,14 @@ import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { studioMediaPath, useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
 
 /**
+ * The clips picked in this session, by guide URL. The panel unmounts on every sub-tab change
+ * while the guide stays in the form, and an uploaded clip is not among the workspace outputs
+ * the panel falls back to, so it used to come back as a raw URL. A guide restored from a
+ * sidecar is not here and keeps the visible-and-removable URL fallback below.
+ */
+const pickedGuides = new Map<string, ApiOutput>()
+
+/**
  * SFX mode controls for MMAudio — sound effects generation.
  * User can optionally upload a video clip, plus prompt/neg prompt and duration.
  */
@@ -21,7 +29,7 @@ export function SfxControls() {
   const videoGuide = typeof params.video_guide === 'string' ? params.video_guide : ''
   const matchesGuide = (item: ApiOutput) => Boolean(videoGuide) && [item.asset_id, item.url, studioMediaPath(item)].includes(videoGuide)
   const selectedVideo = chosenVideo && matchesGuide(chosenVideo)
-    ? chosenVideo : videoItems.find(matchesGuide)
+    ? chosenVideo : videoItems.find(matchesGuide) ?? pickedGuides.get(videoGuide)
   const { t: common } = useUiTranslation('common')
 
   const sfxPrompt = ((params as unknown as Record<string, unknown>).MMAudio_prompt as string) || ''
@@ -32,6 +40,7 @@ export function SfxControls() {
     // Keep the selected source identity, including its original workspace.
     // The server inspects its duration when preparing the command.
     setParam('video_guide', item?.url)
+    if (item) pickedGuides.set(item.url, item)
     setChosenVideo(item)
   }
 

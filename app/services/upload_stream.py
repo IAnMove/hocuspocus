@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import os
+import subprocess
 import threading
 from pathlib import Path
 from typing import Any, Callable, TypeVar
@@ -192,8 +193,30 @@ async def stream_upload_file(
             pass
 
 
+def _transcode_with_program(source: str, destination: str, *, is_video: bool) -> None:
+    """The same conversion through the ``ffmpeg`` program, for an install without the ffmpeg-python package."""
+    command = ["ffmpeg", "-nostdin", "-v", "error", "-y", "-i", source, "-acodec", "pcm_s16le"]
+    if is_video:
+        command.append("-vn")
+    command.append(destination)
+    try:
+        done = subprocess.run(command, capture_output=True, check=False)
+    except FileNotFoundError as err:
+        raise RuntimeError("ffmpeg was not found on PATH") from err
+    if done.returncode != 0:
+        raise UploadTranscodeError(
+            "ffmpeg could not transcode the upload",
+            stderr=done.stderr.decode("utf-8", errors="ignore").strip()[:300],
+        )
+
+
 def _transcode_sync(source: str, destination: str, *, is_video: bool) -> None:
-    import ffmpeg
+    try:
+        import ffmpeg
+    except ImportError:
+        # The core server installs the ffmpeg program but not the ffmpeg-python package.
+        _transcode_with_program(source, destination, is_video=is_video)
+        return
 
     output_kwargs: dict[str, Any] = {"acodec": "pcm_s16le"}
     if is_video:

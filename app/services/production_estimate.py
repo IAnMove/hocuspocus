@@ -2,12 +2,18 @@
 
 Enhance minutes are a provisional default (``EXTRA_MINUTES_PER_CLIP``), not a measurement.
 The history file is ``<workspace>/.production-timings.json``.
+
+Clip minutes are kept per H3 model and steps (``spec.video``): ``clip_s`` is H3 Fused Turbo at 4 steps, the default
+that every earlier run used, and another choice has its own list (``clip_s:<model>:<steps>``). Until a run with that
+choice has finished, its take is the default's ``H3_MINUTES`` scaled by its steps (``defaults+model_steps``).
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 from typing import Any
+
+from services.production_video_model import DEFAULT_MODEL, DEFAULT_STEPS, resolve_video
 
 NAME = ".production-timings.json"
 SEED_MINUTES = 2
@@ -34,7 +40,7 @@ def record_observation(root: Any, state: dict) -> None:
         return
     timing = state.get("timing") if isinstance(state.get("timing"), dict) else {}
     body = read_timings(root)
-    _append(body, "clip_s", _median_or_none(_clip_seconds(timing)))
+    _append(body, clip_key(state.get("video_model") or resolve_video(state.get("spec"))), _median_or_none(_clip_seconds(timing)))
     _append(body, "scene_s", _scene_each(state, timing))
     song = timing.get("song") if isinstance(timing.get("song"), (int, float)) else None
     if song is not None:
@@ -46,14 +52,18 @@ def estimate_minutes(spec: dict, h3_count: int, root: Any = None) -> tuple[float
     """``(minutes, estimate_source)``. ``history(n)`` or ``defaults``."""
     seeds = _seeds(spec)
     history = read_timings(root)
-    clips = _numbers(history.get("clip_s"))
+    video = resolve_video(spec)
+    key = clip_key(video)
+    clips = _numbers(history.get(key))
     seed_rates = _numbers(history.get("seed_min"))
     if clips:
         per_h3 = _median(clips) / 60.0
         per_seed = _median(seed_rates) if seed_rates else SEED_MINUTES
         source = f"history({len(clips)})"
-    else:
+    elif key == "clip_s":
         per_h3, per_seed, source = H3_MINUTES, SEED_MINUTES, "defaults"
+    else:
+        per_h3, per_seed, source = H3_MINUTES * video["steps"] / DEFAULT_STEPS, SEED_MINUTES, "defaults+model_steps"
     minutes = per_seed * seeds + per_h3 * h3_count + TAIL_MINUTES
     enhance = spec.get("enhance") if isinstance(spec.get("enhance"), dict) else None
     if enhance and enhance.get("method") in ("flashvsr", "rife"):
@@ -61,6 +71,13 @@ def estimate_minutes(spec: dict, h3_count: int, root: Any = None) -> tuple[float
         if source != "defaults":
             source = source + "+default_enhance"
     return float(round(minutes, 1)), source
+
+
+def clip_key(video: dict) -> str:
+    """The history list for one H3 model and step count; ``clip_s`` is the default every earlier run used."""
+    if (video.get("model"), video.get("steps")) == (DEFAULT_MODEL, DEFAULT_STEPS):
+        return "clip_s"
+    return f"clip_s:{video.get('model')}:{video.get('steps')}"
 
 
 def _seeds(spec: dict) -> int:

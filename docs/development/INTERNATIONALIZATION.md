@@ -73,9 +73,27 @@ Internal state `running` stays `running`. Presentation: EN “Running”, ES “
 
 ## Wizard and generated-content languages
 
-UI locale is presentation state only. It must never choose the language of a
-Wizard reply, a story, dialogue, lyrics or a provider prompt. Creative actions
-use the shared `LanguageIntent` contract in `ui/src/lib/languageIntent.ts`:
+UI locale is presentation state. It never overrides a language that the
+request names or that a saved project already has. It never chooses the
+language of a provider prompt or of a Wizard reply written by the model. It is
+only the default for new content when nothing names a language:
+
+1. A language named in the request, or in the `LanguageIntent` the Wizard
+   sends, wins.
+2. A saved project keeps its `language` and `spokenLanguage`. When a saved
+   record has no label, it comes from its saved `languageIntent`, then
+   English. The UI locale is not used for saved records.
+3. New stories, series, songs, comics and Director sessions with no named
+   language take the UI language (`contentLanguageForUi()` in
+   `ui/src/lib/contentLanguage.ts`): `Español` / `Español de España` for a
+   Spanish UI, `English` otherwise.
+4. The server uses English when a request omits a language.
+
+Fixed text that the app itself shows in the Wizard (progress lines, errors,
+confirmations) comes from the UI catalogs, like the rest of the interface.
+
+Creative actions use the shared `LanguageIntent` contract in
+`ui/src/lib/languageIntent.ts`:
 
 - `conversationLanguage`: ISO tag for the language used by the user in the
   current turn; the Wizard replies in it.

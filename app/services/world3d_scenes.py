@@ -6,6 +6,7 @@ save as the editor, so export reads that document rather than a second library.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -20,13 +21,17 @@ from services.agent_activity import actor_label
 from services.readable_names import ascii_slug
 from services.character_kit_library import read_character_kit_library
 from services.scene_documents import get_document, save_document
+from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
-from services.world3d_template_catalog import require_card, user_template_document
+from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_stage_cards import is_stage
+from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
+from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
 
 _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
 _COMPILED: dict[str, dict] = {}
-_SLOT_FIELDS = {"sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media"}
+_SLOT_FIELDS = {"setItem", "imageLook", "billboard", "sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media"}
 _MAX_SLOTS = 24
 _ADDED_MEDIA = ("model3d", "image")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
@@ -98,7 +103,7 @@ def _set_soundtrack(document: dict, tracks, workspace: str) -> None:
 
 SHOT_FX_PREFIX = "shot-"
 _SCREEN_FX_NUMBERS = {"start": (0, 600), "end": (0, 600), "x": (0, 100), "y": (0, 100), "size": (1, 200), "intensity": (0.1, 2),
-                      "volume": (0, 1), "rotation": (-180, 180)}
+                      "volume": (0, 1), "rotation": (-180, 180), "speed": (0.02, 4)}
 
 
 def _screen_fx_kinds(aimed: bool = False) -> frozenset:
@@ -174,9 +179,12 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     warnings = []
     _set_duration(document, changes)
     bindings = _bindings(changes)
+    stand_ins: set[str] = set()
     for binding in bindings:
-        warnings.extend(_bind(document, binding))
+        warnings.extend(_bind(document, binding, stand_ins))
     _check_carriers(document["slots"], bindings)
+    if "camera_template" in changes:
+        warnings.extend(_set_camera_template(document, changes["camera_template"]))
     if isinstance(changes.get("camera"), dict):
         if "shake" in changes["camera"]:
             _check_shake(changes["camera"]["shake"])
@@ -193,7 +201,9 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     if "motionLab" in changes:
         _set_motion_lab(document, changes["motionLab"])
     _set_render_look(document, changes)
+    _set_modifiers(document, changes)
     _retarget(document)
+    warnings.extend(_turn_pictures(document, stand_ins))
     record["revision"] += 1
     record["warnings"] = warnings
     record["templateId"] = document.get("templateId") or record["templateId"]
@@ -201,6 +211,32 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     viewed = _view(scene_id, record)
     viewed["warnings"] = warnings
     return viewed
+
+
+def _set_camera_template(document: dict, template_id) -> list[str]:
+    """``camera_template``: a ``kind: camera`` card's camera and framing on this scene, which keeps its duration, cast
+    and place. Camera fields patched alongside merge over it."""
+    try:
+        check_camera_template(template_id)
+    except World3DTemplateError:
+        raise
+    except ValueError as error:
+        raise World3DSceneError("invalid_camera_template", str(error)) from error
+    return apply_camera_template(document, compile_template_document(template_id))
+
+
+_MODIFIERS = (("light", set_light, "invalid_light"), ("lens", apply_lens, "invalid_lens"), ("grade", apply_grade, "invalid_grade"))
+
+
+def _set_modifiers(document: dict, changes: dict) -> None:
+    """``light`` (a name or a directional light), ``lens`` and ``grade`` in that order, so a grade tints the light it finds."""
+    for key, apply, code in _MODIFIERS:
+        if key not in changes:
+            continue
+        try:
+            apply(document, changes[key])
+        except ValueError as error:
+            raise World3DSceneError(code, str(error)) from error
 
 
 def _motion_lab_settings(raw) -> dict:
@@ -398,12 +434,15 @@ def compile_template_document(template_id: str) -> dict:
     if cached is not None:
         return deepcopy(cached)
     require_card(template_id)
-    try:
-        document = _run_tool("document", None, template_id)
-    except World3DSceneError as error:
-        if "unknown_template:" in str(error):
-            raise World3DSceneError("unknown_template", f"unknown_template:{template_id}", 404) from error
-        raise
+    if is_stage(template_id):
+        document = stage_document(template_id, compile_template_document(STAGE_BASE))
+    else:
+        try:
+            document = _run_tool("document", None, template_id)
+        except World3DSceneError as error:
+            if "unknown_template:" in str(error):
+                raise World3DSceneError("unknown_template", f"unknown_template:{template_id}", 404) from error
+            raise
     _COMPILED[template_id] = document
     return deepcopy(document)
 
@@ -420,20 +459,76 @@ def _bindings(changes: dict) -> list[dict]:
     return bindings
 
 
-def _bind(document: dict, binding: dict) -> list[str]:
+def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
+    """Apply one binding. A picture that takes a model's place without a turn of its own joins ``stand_ins``."""
     if binding.get("add") is True:
         _add_slot(document, binding)
     slot = _target(document["slots"], binding)
+    if binding.get("remove") is True:
+        if any((s.get("hold") or {}).get("carrier") == slot["id"] for s in document["slots"]):
+            raise World3DSceneError("item_in_use", "Remove held objects before their carrier")
+        document["slots"].remove(slot)
+        return []
     warnings = _clip_warning(slot, binding)
+    was_model = (slot.get("media") or "model3d") == "model3d"
     for key in _SLOT_FIELDS:
         snake = _snake(key)
         if key in binding:
             slot[key] = deepcopy(binding[key])
         elif snake in binding:
             slot[key] = deepcopy(binding[snake])
+    if was_model and slot.get("media") == "image":
+        _picture_for_model(slot, binding)
+        if not _given(binding, "rotationY"):
+            stand_ins.add(slot["id"])
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     return warnings
+
+
+PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
+
+
+def _picture_for_model(slot: dict, binding: dict) -> None:
+    """A picture bound in a model's place stands in as a cutout, as ``pictureInModelSlot`` does for a production cast:
+    an image with no surface is drawn as a flat backdrop card, not a figure. It stands on its feet unless the binding
+    says ``grounded: false``, is as tall as the model unless the binding gives a scale or the marker was already sized
+    as a cutout, and a path the model would travel nose first faces the camera instead (mirrored to the left), since a
+    flat picture turned along it vanishes."""
+    sized = slot.get("surface") == "cutout"     # a marker the template already sized for a picture (a Series room)
+    slot["surface"] = "cutout"
+    look = slot.get("imageLook") if isinstance(slot.get("imageLook"), dict) and _given(binding, "imageLook") else {}
+    slot["imageLook"] = {**({} if binding.get("grounded") is False else {"grounded": True}), **look}
+    if not sized and not _given(binding, "scale"):
+        slot["scale"] = round(float(slot.get("scale", 1)) * PICTURE_SCALE, 4)
+    motion = slot.get("motion")
+    if isinstance(motion, dict) and motion.get("faceTravel") and not _given(binding, "motion"):
+        slot["motion"] = {key: value for key, value in motion.items() if key not in ("faceTravel", "headingOffset")}
+        start, end = slot.get("position") or [0, 0, 0], motion.get("to") or [0, 0, 0]
+        slot["rotationY"] = math.pi if end[0] < start[0] else 0
+
+
+def _turn_pictures(document: dict, stand_ins: set[str]) -> list[str]:
+    """Pictures that took a model's place turn toward the camera as a production cast does (``turnPicturesToCamera``
+    in pictureStandIn.ts): a model in profile at a table reads, a flat picture in profile is a sliver, so none stays more
+    than 60° from facing the camera along the shot. The camera path is UI code, so the template tool measures it.
+    Without the UI dependencies (a Python-only run) the pictures keep the model's turn; a tool failure keeps it too and
+    says so, since the binding itself is good."""
+    if not stand_ins:
+        return []
+    try:
+        turned = _run_tool("turn-pictures", json.dumps({"document": document, "ids": sorted(stand_ins)}))
+    except World3DSceneError as error:
+        return [] if error.code == "template_tool_missing" else [f"picture_turn_skipped: {error}"]
+    rotations = turned.get("rotations") or {}
+    for slot in document["slots"]:
+        if type(rotations.get(slot.get("id"))) in (int, float):
+            slot["rotationY"] = rotations[slot["id"]]
+    return []
+
+
+def _given(binding: dict, key: str) -> bool:
+    return key in binding or _snake(key) in binding
 
 
 _CHECKED_FIELDS = ("clips", "hold", "appearance")
@@ -510,6 +605,10 @@ def _set_duration(document: dict, changes: dict) -> None:
     if changes.get("retime") is True:
         _retime(document, duration)
     document["duration"] = duration
+    # A staged room's dust spans the whole shot (roomDust), whatever the new length and with or without retime.
+    for cue in _dicts(document.get("worldSfx")):
+        if cue.get("id") == DUST_ID:
+            cue["end"] = duration
 
 
 def _retime(document: dict, duration) -> None:
@@ -634,7 +733,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "warnings": record.get("warnings") or [], "traits": _traits(document),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
-                     "renderLook", "toon", "motionLab"],
+                     "renderLook", "toon", "motionLab", "grade", "lens", "camera_template"],
     }
 
 

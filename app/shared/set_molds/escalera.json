@@ -1,0 +1,399 @@
+{
+  "id": "escalera",
+  "title": {
+    "es": "Escalera",
+    "en": "Stairs"
+  },
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      4.8,
+      5.6,
+      3.06
+    ],
+    "medium": [
+      6.0,
+      7.0,
+      3.4
+    ],
+    "large": [
+      7.5,
+      8.75,
+      3.808
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right",
+    "front"
+  ],
+  "openings": [
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.45,
+      "width": 1.5,
+      "height": 1.3,
+      "sill": 1.3
+    },
+    {
+      "wall": "right",
+      "kind": "door",
+      "x": 0.8,
+      "width": 0.9,
+      "height": 2.1
+    }
+  ],
+  "blocks": [
+    {
+      "id": "step_0",
+      "kind": "step",
+      "box": [
+        0.0,
+        0.0,
+        -1.0,
+        2.4,
+        0.18,
+        0.35
+      ],
+      "surfaces": [
+        "step_front",
+        "step_top"
+      ]
+    },
+    {
+      "id": "step_1",
+      "kind": "step",
+      "box": [
+        0.0,
+        0.0,
+        -1.35,
+        2.4,
+        0.36,
+        0.35
+      ],
+      "surfaces": [
+        "step_front",
+        "step_top"
+      ]
+    },
+    {
+      "id": "step_2",
+      "kind": "step",
+      "box": [
+        0.0,
+        0.0,
+        -1.7,
+        2.4,
+        0.54,
+        0.35
+      ],
+      "surfaces": [
+        "step_front",
+        "step_top"
+      ]
+    },
+    {
+      "id": "step_3",
+      "kind": "step",
+      "box": [
+        0.0,
+        0.0,
+        -2.05,
+        2.4,
+        0.72,
+        0.35
+      ],
+      "surfaces": [
+        "step_front",
+        "step_top"
+      ]
+    },
+    {
+      "id": "step_4",
+      "kind": "step",
+      "box": [
+        0.0,
+        0.0,
+        -2.4,
+        2.4,
+        0.9,
+        0.35
+      ],
+      "surfaces": [
+        "step_front",
+        "step_top"
+      ]
+    },
+    {
+      "id": "step_5",
+      "kind": "step",
+      "box": [
+        0.0,
+        0.0,
+        -2.75,
+        2.4,
+        1.08,
+        0.35
+      ],
+      "surfaces": [
+        "step_front",
+        "step_top"
+      ]
+    },
+    {
+      "id": "landing",
+      "kind": "landing",
+      "box": [
+        0.0,
+        0.0,
+        -3.2,
+        2.4,
+        1.08,
+        0.5
+      ],
+      "surfaces": [
+        "landing_front",
+        "landing_top"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "wall_front",
+    "window_view",
+    "door",
+    "step_front",
+    "step_top",
+    "landing_front",
+    "landing_top"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "stand",
+      "position": [
+        -0.6,
+        0.0,
+        -0.2
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "stand",
+      "position": [
+        0.5,
+        1.08,
+        -3.2
+      ],
+      "facing": 180
+    },
+    {
+      "id": "third",
+      "pose": "stand",
+      "position": [
+        0.0,
+        0.72,
+        -2.05
+      ],
+      "facing": 0
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        2.4,
+        0.0,
+        2.45
+      ],
+      "facing": 180
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0.0,
+        1.7,
+        3.3
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.2
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -2.1,
+        1.6,
+        -1.25
+      ],
+      "lookAt": [
+        0.5,
+        2.18,
+        -3.2
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        2.0,
+        2.6,
+        -2.15
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.2
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0.0,
+        3.15,
+        3.35
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.2
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -0.9,
+        1.6,
+        2.04
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.2
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        1.1,
+        2.4,
+        -1.6
+      ],
+      "lookAt": [
+        0.5,
+        2.18,
+        -3.2
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -2.4,
+        1.7,
+        2.1
+      ],
+      "lookAt": [
+        2.4,
+        1.1,
+        2.45
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "office_day",
+  "propAnchors": [
+    {
+      "id": "landing_left",
+      "on": "landing_top",
+      "position": [
+        -0.8,
+        1.08,
+        -3.2
+      ],
+      "maxHeight": 0.9
+    },
+    {
+      "id": "foot_corner",
+      "on": "floor",
+      "position": [
+        -2.4,
+        0.0,
+        -3.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "floor_corner",
+      "on": "floor",
+      "position": [
+        2.4,
+        0.0,
+        -3.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_left",
+      "position": [
+        -2.98,
+        1.6,
+        -2.4
+      ],
+      "maxHeight": 0.8
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#85715b"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
+    },
+    "window_view": {
+      "color": "#385872"
+    },
+    "door": {
+      "color": "#b89f80"
+    },
+    "step_front": {
+      "color": "#7b6754"
+    },
+    "step_top": {
+      "color": "#7b6754"
+    },
+    "landing_front": {
+      "color": "#7b6754"
+    },
+    "landing_top": {
+      "color": "#7b6754"
+    }
+  }
+}

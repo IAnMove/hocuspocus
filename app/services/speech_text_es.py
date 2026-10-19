@@ -148,6 +148,9 @@ def _accent_warning(call, workspace: str, filename: str, text: str) -> dict[str,
 def _take_notes(call, workspace: str, filename: str, said: str, voice: dict, result: dict) -> dict[str, Any]:
     """Pitch and accent warnings for the stored take. Neither one changes the accept limit."""
     notes: dict[str, Any] = {}
+    for key in ("medianPitchHz", "brightness", "centroidHz"):
+        if result.get(key) is not None:
+            notes[key] = result[key]
     notice = pitch_notice(result.get("medianPitchHz"), voice.get("pitchRange"))
     if notice:
         notes["pitch_out_of_range"] = notice

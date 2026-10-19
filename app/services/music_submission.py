@@ -19,7 +19,7 @@ from typing import Any, Callable, Mapping
 
 from .minimax_music_service import ALLOWED_MODELS, COVER_MODELS
 from .story_library import read_story_library
-from .task_manager import TaskRegistry
+from .task_manager import TaskRegistry, get_task_registry
 
 
 SCHEMA_NAME = "hocuspocus.music-submission"
@@ -63,7 +63,9 @@ def _portable_folder(value: Any) -> str | None:
 
 
 def classify_music_route(model: str | None) -> str:
-    token = _clean(model) or "music-3.0"
+    from .music_model_contract import DEFAULT_MUSIC_MODEL
+
+    token = _clean(model) or DEFAULT_MUSIC_MODEL
     if token in LOCAL_MODELS or token.startswith("ace_step"):
         return "local"
     if token in REMOTE_MODELS:
@@ -324,7 +326,9 @@ def submit_music_generation(
         stored = dict(stored)
         stored["replay"] = True
         return stored
-    registry = task_registry or TaskRegistry(workspace_dir, interrupt_stale=False)
+    # The folder's one shared registry: a private second object would leave this task for the first
+    # get_task_registry() of the folder to interrupt as a leftover.
+    registry = task_registry or get_task_registry(workspace_dir)
     registry.create(
         id=task_id,
         kind="music",

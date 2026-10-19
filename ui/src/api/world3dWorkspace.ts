@@ -41,6 +41,61 @@ export async function getWorld3DWorkspaceTemplate(workspace: string, id: string)
   return body.template
 }
 
+/** A card of the shared Video 3D library as ``world3d.templates.list`` returns it: the fields the editor shows. */
+export interface World3DLibraryCard {
+  id: string
+  titleEs: string
+  titleEn: string
+  lineEs: string
+  lineEn: string
+  kind: string
+  /** ``interior`` or ``exterior`` on a stage card. */
+  setting: string | null
+  place: string | null
+  /** Stage cards only: the mold's named cameras. */
+  cameras: string[]
+  subjects: number
+  props: number
+  shot: string | null
+  distance: number | null
+  duration: number
+  format: 'portrait' | 'landscape'
+}
+
+async function templateCommand<T>(operation: string, input: Record<string, unknown>, fallback: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(`${BASE}/api/v1/world3d/templates/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ operation, version: 1, input }),
+    signal,
+  })
+  const body = await readJson<{ result?: T }>(response, fallback)
+  if (!body.result) throw new Error(fallback)
+  return body.result
+}
+
+/** The library's page size, its maximum; a shelf reads at most this many pages. */
+const STAGE_PAGE = 50
+const STAGE_PAGES = 20
+
+/** Every ``stage-<mold>`` card (rooms and shape molds) in id order, page by page until the reply's ``total``. */
+export async function listWorld3DStageCards(workspace: string, signal?: AbortSignal): Promise<World3DLibraryCard[]> {
+  const cards: World3DLibraryCard[] = []
+  for (let page = 0; page < STAGE_PAGES; page++) {
+    const result = await templateCommand<{ templates?: World3DLibraryCard[]; total?: number }>('world3d.templates.list',
+      { workspace, kind: 'stage', limit: STAGE_PAGE, ...(page ? { offset: page * STAGE_PAGE } : {}) }, 'Could not list the Video 3D stages', signal)
+    const found = Array.isArray(result.templates) ? result.templates : []
+    cards.push(...found)
+    if (found.length < STAGE_PAGE || typeof result.total !== 'number' || cards.length >= result.total) break
+  }
+  return cards
+}
+
+/** One library card and the editable document the server builds for it (a stage: ``two-shot`` with its ``room``). */
+export async function getWorld3DTemplate(workspace: string, templateId: string, signal?: AbortSignal): Promise<{ card: World3DLibraryCard; document: unknown }> {
+  return templateCommand('world3d.templates.get', { workspace, template_id: templateId }, 'Could not open the Video 3D template', signal)
+}
+
 /** The current document of a Video 3D working scene (``w3d-…``) an agent instantiated and patched. */
 export async function getWorld3DWorkingScene(workspace: string, sceneId: string): Promise<unknown> {
   const response = await fetch(`${BASE}/api/v1/world3d/templates/commands`, {

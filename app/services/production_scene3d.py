@@ -15,29 +15,43 @@ from pathlib import Path
 from urllib.parse import quote, unquote, urlparse, parse_qs
 
 from services.production_scene_retry import receipt_action, _artifact_name
+from services import production_rooms as rooms
+from services.room_box import check_box
+from services.world3d_grades import GRADE_NAMES
 from services.world3d_look import check_document_look
+from services.world3d_modifiers import GROUND_STYLES, LENS_NAMES, LIGHT_NAMES, check_camera_template
+from services.world3d_stage_documents import resolve_production_stage
 
 ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
 CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
-               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame"}
+               "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera", "grade", "lens", "camera_template", "scroll"}
 CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add",
-               "sources", "formation", "spacing"}
+               "sources", "formation", "spacing", "imageLook", "setItem", "billboard", "inPlace"}
 GROUP_FIELDS = {"sources", "formation", "spacing", "position", "rotationY"}
 FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camera's distance to the subject, as a share of the template's
-LIGHTS = ("noon", "golden", "overcast", "night", "neon", "stage", "campfire")
+LIGHTS = LIGHT_NAMES     # app/shared/world3d_modifiers.json, the table the compiler and world3d.scene.patch read
 FORMATIONS = ("line", "arc", "wedge", "circle", "scatter")
 CAST_MEMBERS = 16
+# Bump when the World3D renderer changes what a compiled document looks like (camera, light, staging): every 3D clip
+# of a production is then exported again on its next run instead of reusing the stale file. 4: runners in place and
+# the near layer kept off the cast. 5: the head a skin moves, not a former skeleton's loose head. 6: honest technique
+# effects and three-shot cards, a picture in a model's place compiled as a grounded cutout, a head framed under the
+# rig's crown mark, and the close pack cards re-aimed so the eyes end near the upper third. 9: set layers settle only
+# under pieces standing just above the floor, bridging gaps and sloping at their ends, in the ground style's grain.
+RENDER_RECIPE = 9
 SURFACES = ("cutout", "environment", "wall", "floor")
-FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road")
-BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout"}
+# A ground style (grass, meadow, sand...) is a floor the scene draws itself; on a set it replaces the set's ground slab.
+FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road", *GROUND_STYLES)
+BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
+LAYER_DEPTHS = ("mid", "near")
 MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scale
 
 
 def validate_scene3d_shot(shot):
-    config = shot.get("scene3d")
+    config = resolve_production_stage(shot.get("scene3d"))
     if not isinstance(config, dict) or set(config) - CONFIG_KEYS:
         raise ValueError("scene3d needs a native template or document and supported overrides")
     if ("template" in config) == ("document" in config):
@@ -49,10 +63,10 @@ def validate_scene3d_shot(shot):
     if "world" in config and (not isinstance(config["world"], str) or not config["world"].strip()):
         raise ValueError("scene3d.world is the id of the template whose place the shot plays in")
     _check_looks(config)
-    _check_cast(config.get("cast"))
+    _check_cast(config.get("cast"), CAST_MEMBERS if rooms.has_room(config) else 8)
     _check_background(config)
     _check_composition(config)
-    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast")):
+    if "template" in config and not (config.get("subject") or config.get("slots") or config.get("cast") or rooms.has_room(config) or _has_box(config)):
         raise ValueError("A template shot needs a subject GLB, a cast or explicit slots")
     if shot.get("sing"):
         raise ValueError("scene3d does not promise H3 lip-sync; use rigid object motion or authored GLB clips")
@@ -71,13 +85,13 @@ def _source(value):
     return isinstance(value, str) and 0 < len(value) <= 2000
 
 
-def _check_cast(cast):
+def _check_cast(cast, limit=8):
     """cast maps a template role (subject_1, subject_2, background...) or an object id to a model or picture, or a
     group of models (sources) placed in a formation."""
     if cast is None:
         return
-    if not isinstance(cast, dict) or not 0 < len(cast) <= 8:
-        raise ValueError("scene3d.cast maps 1-8 template roles or object ids to a GLB or picture")
+    if not isinstance(cast, dict) or not 0 < len(cast) <= limit:
+        raise ValueError(f"scene3d.cast maps 1-{limit} template roles or object ids to a GLB or picture")
     members = 0
     for key, value in cast.items():
         entry = value if isinstance(value, dict) else {"source": value}
@@ -108,22 +122,56 @@ def _check_group(key, entry):
 
 
 def _check_composition(config):
-    """frame moves the template's camera nearer or farther; a light may be a named preset."""
+    """frame moves the template's camera nearer or farther; light, grade and lens may be named presets; camera_template
+    is a camera card whose camera this shot takes."""
     frame = config.get("frame")
     if frame is not None and frame not in FRAMES and not _measure(frame, 0.25, 4):
         raise ValueError(f"scene3d.frame is {', '.join(FRAMES)} or the camera distance as a share of the template's (0.25-4)")
     light = config.get("light")
     if isinstance(light, str) and light not in LIGHTS:
         raise ValueError(f"scene3d.light is a light object or one of {', '.join(LIGHTS)}")
+    for key, names, what in (("grade", GRADE_NAMES, "a colour grade"), ("lens", LENS_NAMES, "a full-frame lens")):
+        if key in config and config[key] not in names:
+            raise ValueError(f"scene3d.{key} is {what}: one of {', '.join(names)}")
+    if "camera_template" in config:
+        if not isinstance(config["camera_template"], str) or not config["camera_template"].strip():
+            raise ValueError("scene3d.camera_template is the id of the camera card whose camera and framing the shot takes")
+        check_camera_template(config["camera_template"])
+    scroll = config.get("scroll")
+    if scroll is not None and (isinstance(scroll, bool) or not isinstance(scroll, (int, float)) or not -10 <= scroll <= 10):
+        raise ValueError("scene3d.scroll is the speed, in metres per second, at which a parallax set slides past a running cast (-10..10)")
+
+
+def _has_box(config):
+    background = config.get("background")
+    return isinstance(background, dict) and "roomBox" in background
+
+
+def _check_room_box_background(entry):
+    """A box room is ``{roomBox: spec}`` plus the built GLB's ``file``. It is not a mold ``room``."""
+    if set(entry) - {"roomBox", "file"}:
+        raise ValueError("scene3d.background for a box room is {roomBox} and, once built, its file")
+    spec = entry.get("roomBox")
+    if not isinstance(spec, dict):
+        raise ValueError("scene3d.background.roomBox is the box room spec")
+    if entry.get("file") is not None and not _source(entry.get("file")):
+        raise ValueError("scene3d.background.file is the room's GLB")
+    why = check_box("background", spec if spec.get("kind") == "room" else {**spec, "kind": "room"})
+    if why:
+        raise ValueError(why.replace("sets.background: ", "scene3d.background.roomBox: ", 1))
 
 
 def _check_background(config):
-    if "background" in config:
+    if "background" in config and not rooms.check_background(config):
         entry = config["background"] if isinstance(config["background"], dict) else {"source": config["background"]}
-        if set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
+        if isinstance(entry, dict) and "roomBox" in entry:
+            _check_room_box_background(entry)
+        elif set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
             raise ValueError("scene3d.background is a picture (URL, workspace file, stills name or set) or "
                              "{source, surface: cutout|environment|wall|floor}")
-        if "houses" in entry or "ground" in entry:
+        if "layers" in entry or "key" in entry:
+            _check_parallax(entry)
+        elif "houses" in entry or "ground" in entry:
             _check_diorama(entry)
         if entry.get("layout", "plaza") not in ("plaza", "open"):
             raise ValueError("scene3d.background.layout is plaza or open")
@@ -142,10 +190,27 @@ def _check_diorama(entry):
             isinstance(house, dict) and set(house) == {"source", "width", "height"} and _source(house["source"])
             and _measure(house["width"], 0.5, 60) and _measure(house["height"], 0.5, 60) for house in houses):
         raise ValueError("scene3d.background.houses lists 1-16 {source, width, height} house models (metres)")
-    if ground is not None and not (isinstance(ground, dict) and set(ground) == {"source", "height", "size"}
-                                   and _source(ground["source"]) and _measure(ground["height"], 0.01, 5)
-                                   and _measure(ground["size"], 4, 1000)):
-        raise ValueError("scene3d.background.ground is {source, height, size}: a ground slab model and its size in metres")
+    styled = isinstance(ground, dict) and set(ground) == {"style"} and ground["style"] in GROUND_STYLES
+    if ground is not None and not styled and not (isinstance(ground, dict) and set(ground) == {"source", "height", "size"}
+                                                  and _source(ground["source"]) and _measure(ground["height"], 0.01, 5)
+                                                  and _measure(ground["size"], 4, 1000)):
+        raise ValueError("scene3d.background.ground is {source, height, size}: a ground slab model and its size in metres, "
+                         f"or {{style}}: one of {', '.join(GROUND_STYLES)}")
+
+
+def _check_parallax(entry):
+    """A parallax set spelled out: the far picture as source, cutout layers at depths, the key colour, a ground slab."""
+    layers, key = entry.get("layers"), entry.get("key", "#ff00ff")
+    if not isinstance(layers, list) or not 0 < len(layers) <= 3 or not all(
+            isinstance(layer, dict) and {"source", "depth"} <= set(layer) <= {"source", "depth", "foot"} and _source(layer["source"])
+            and layer["depth"] in LAYER_DEPTHS and _measure(layer.get("foot", 0), 0, 0.9) for layer in layers):
+        raise ValueError("scene3d.background.layers lists 1-3 {source, depth: mid|near, foot?} painted cutouts")
+    if not (isinstance(key, str) and len(key) == 7 and key[0] == "#" and all(ch in "0123456789abcdefABCDEF" for ch in key[1:])):
+        raise ValueError("scene3d.background.key is the layers' chroma-key colour, #rrggbb")
+    if "houses" in entry:
+        raise ValueError("scene3d.background is a diorama or a parallax set, not both")
+    if entry.get("ground") is not None:
+        _check_diorama({"houses": [{"source": "x", "width": 1, "height": 1}], "ground": entry["ground"]})
 
 
 def _rig_labels():
@@ -231,15 +296,32 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
                               for cue in entry["clips"]]
         return entry
 
-    resolved = json.loads(json.dumps(config))
+    resolved = resolve_production_stage(json.loads(json.dumps(config)))
     if resolved.get("cast"):
         resolved["cast"] = {key: member(key, value) for key, value in spread_groups(resolved["cast"]).items()}
     if _source(resolved.get("subject")):
         resolved["subject"] = url(resolved["subject"])
-    if "background" in resolved:
+    if "background" in resolved and not rooms.resolve_background(resolved, sets, workspace):
         entry = resolved["background"] if isinstance(resolved["background"], dict) else {"source": resolved["background"]}
-        resolved["background"] = _diorama(entry, (sets or {}).get(entry["source"])) or {**entry, "source": url(entry["source"])}
+        made = (sets or {}).get(entry.get("source")) if isinstance(entry, dict) else None
+        box = _box_background(made)
+        if isinstance(entry, dict) and "roomBox" in entry:
+            resolved["background"] = entry
+        elif box:
+            resolved["background"] = box
+        else:
+            resolved["background"] = _diorama(entry, made) or {**entry, "source": url(entry["source"])}
     return resolved
+
+
+def _box_background(made):
+    """A built box room named as the background: its spec and the GLB, not a painted plate."""
+    if not isinstance(made, dict) or not isinstance(made.get("roomBox"), dict):
+        return None
+    background = {"roomBox": made["roomBox"]}
+    if made.get("url"):
+        background["file"] = made["url"]
+    return background
 
 
 def spread_groups(cast):
@@ -284,10 +366,17 @@ def _jitter(index):
 
 
 def _diorama(entry, made):
-    """A diorama set named as the background: its sky becomes the source, its houses and ground come along."""
-    if not (made or {}).get("houses"):
+    """A diorama or parallax set named as the background: its sky becomes the source, its houses or layers and
+    its ground come along."""
+    made = made or {}
+    if made.get("houses"):
+        pieces = {"source": made["sky"], "houses": made["houses"]}
+    elif made.get("layers"):
+        pieces = {"source": made["sky"], "layers": made["layers"], "key": made["key"]}
+    else:
         return None
-    pieces = {"source": made["sky"], "houses": made["houses"], **({"ground": made["ground"]} if made.get("ground") else {})}
+    if made.get("ground"):
+        pieces["ground"] = made["ground"]
     return {**pieces, **{key: value for key, value in entry.items() if key in ("layout",)}}
 
 
@@ -299,7 +388,7 @@ def compile_document(shot, duration):
         raise ValueError("Native Video 3D template compilation requires the app's installed UI dependencies")
     result = subprocess.run(
         [node, "--import", str(loader), str(ROOT / "ui/scripts/production-scene3d.mjs")],
-        input=json.dumps({"scene3d": shot["scene3d"], "duration": duration}),
+        input=json.dumps({"scene3d": resolve_production_stage(shot["scene3d"]), "duration": duration}),
         capture_output=True, text=True, cwd=ROOT / "ui", timeout=30, check=False,
     )
     if result.returncode:
@@ -380,7 +469,8 @@ def export_scene3d_clips(production, spec, windows, retake=(), *, compiler=compi
         shot = {**shot, "scene3d": resolve_media(shot["scene3d"], stills=spec.get("stills"), root=production.root,
                                                  workspace=production.ws, models=production.state.get("models"),
                                                  sets=production.state.get("sets"))}
-        source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0)}, sort_keys=True)
+        source = json.dumps({"config": shot["scene3d"], "duration": duration, "revision": revisions.get(key, 0),
+                             "recipe": RENDER_RECIPE}, sort_keys=True)
         fingerprint = hashlib.sha256(source.encode()).hexdigest()[:16]
         if clips.get(key, {}).get("fingerprint") == fingerprint and (production.root / clips[key]["file"]).is_file():
             continue

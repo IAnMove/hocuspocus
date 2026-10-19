@@ -25,6 +25,7 @@ _ARCHITECTURE_MAP = {
 
     # Audio/TTS models
     "qwen3_tts": "audio_tts.md",
+    "voxcpm2": "audio_tts.md",
     "ace_step": "audio_tts.md",
     "chatterbox": "audio_tts.md",
 

@@ -4,7 +4,9 @@ interface AgentMarkdownProps {
   text: string
 }
 
-const INLINE_TOKEN = /(\*\*[^*\n]+\*\*|__[^_\n]+__|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|\*[^*\n]+\*|_[^_\n]+_)/g
+// `_` and `__` emphasis opens and closes at word boundaries only, so snake_case ids such as
+// qwen_image_21 or http_code (the Wizard names them all the time) are not mangled into <em>.
+const INLINE_TOKEN = /(\*\*[^*\n]+\*\*|(?<![\p{L}\p{N}_])__[^_\n]+__(?![\p{L}\p{N}_])|`[^`\n]+`|\[[^\]\n]+\]\([^)\s]+\)|\*[^*\n]+\*|(?<![\p{L}\p{N}_])_[^_\n]+_(?![\p{L}\p{N}_]))/gu
 
 function safeLink(value: string): string | null {
   try {

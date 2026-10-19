@@ -132,7 +132,8 @@ def _ffmpeg_remux_audio(video_path: str, new_audio_wav: str) -> bool:
                 "-b:a", "192k",
                 "-map", "0:v:0",
                 "-map", "1:a:0",
-                "-shortest",
+                # No -shortest: the converted voice keeps its own length and
+                # never cuts the copied picture's last frames.
                 tmp_out,
             ],
             capture_output=True, text=True, timeout=300,

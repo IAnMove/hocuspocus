@@ -1,9 +1,85 @@
 # Plantillas procedurales con assets de Library (P00D, primer corte)
 
 En Video3D, abrir **Plantillas · crear con mis assets de Library**. El selector
-ofrece las 24 acciones del piloto, no otras 24 variantes del mismo movimiento.
-La UI de este catálogo piloto está en español; no constituye una migración del
-idioma de UI, de conversación o del texto literal del usuario.
+ofrece 34 de las 41 fichas de `app/shared/scene_templates.json`: las fichas
+musicales, las 22 coreografías de recortes, las 6 espaciales y las postales de
+documental y ciudad. Las 7 `cinema-*` no salen aquí: sus intenciones viven en la
+rejilla narrativa (`ui/src/lib/sceneNarrative.ts`) y cada ficha nombra sus
+gemelas en `twins`. Siguen compilando por id (MCP, recetas guardadas). La UI de
+este catálogo está en español; no constituye una migración del idioma de UI, de
+conversación o del texto literal del usuario.
+
+## El modelo de fichas (2026-10-12)
+
+El contrato es `docs/development/VIDEO2D_TEMPLATE_MODEL.md`. En el código:
+
+- **Un solo vocabulario de slots**: `subject_1`, `subject_2`, `background`,
+  `prop_1`, `prop_2`, `foreground`. Los nombres viejos se aceptan en cada entrada
+  (compositor, `compileCandidateScene`, puente Node, `video2d_compile.py`) y se
+  traducen una vez: `hero` → `subject_1`, `plate` → `background`, `prop` →
+  `subject_2` en `cinema-two-shot` y `music-duet` (`slotAliases` de la ficha) y
+  `prop_1` en las demás (`slotAliases` del catálogo). Dos nombres para el mismo
+  slot fallan con `slot_alias_conflict`. Los ids de capa usan los nombres nuevos.
+- **Controles**: numéricos `{min, max, default}`, de elección `{options, default}`
+  y de texto `{text: true, maxLength, default}`. TypeScript
+  (`templateControls.ts`) y Python (`video2d_compile._controls`) los validan igual
+  (`template_bad_control`; el texto se mide en puntos de código). El flag
+  `exposed` del control decide qué muestra el compositor; BPM e intensidad solo se
+  activan donde `bpm.exposed` es `true` (`music-pulse`, `music-duet`, `music-orbit`).
+  Un slot puede ser obligatorio solo con una elección (`requiredWhen`:
+  `music-pinball` pide `prop_1` con `bouncer: prop`).
+- **Alias**: 9 ids fusionados (`aliases` en el JSON) compilan su ficha con un
+  preset de controles; el valor que pase quien llama gana al preset. La escena
+  guarda `narrative.templateId` = la ficha y `narrative.controls.alias` = el id
+  pedido.
+- **Retiradas**: `trailer-teaser` y `lyric-vertical` fallan con
+  `template_retired` y `use_instead` (`retired` en el JSON).
+- **Cada plano se mueve**: toda ficha `music-*` tiene una capa de cámara con
+  deriva lenta (`drift` 0–1, 0.5 por defecto; 0 deja el encuadre quieto). La
+  deriva se suma a la cámara propia de la ficha sin perder su empuje o su pulso
+  (`cameraDrift.ts`). En planos largos el movimiento conserva su velocidad: las
+  coreografías cíclicas se repiten, las órbitas dan más vueltas y las cámaras de
+  cine recorren hasta el doble, dentro de unos límites de encuadre.
+- **Fondo en vídeo**: `background` admite `image|video` (salvo las dos postales,
+  solo imagen). Un vídeo es una capa `video` en bucle (`playback.loop`); en las
+  coreografías con tira (`speed-flight`, `infinite-fall`, `conveyor`) un vídeo
+  sustituye a la tira. Las naves espaciales aceptan una imagen recortada o un GLB.
+- **Encuadre con assets reales** (revisión del 2026-10-12): el pintor encaja cada
+  imagen en una caja con la forma del cuadro (contain), así que una ficha que
+  mantiene la caja dentro del cuadro mantiene dentro cualquier imagen. Así lo hacen
+  el objeto de `cinema-detail` y de `music-product`, la figura de
+  `music-staircase-pop` (la cámara la sigue la mitad del camino) y las naves en
+  imagen de las `space-*` (una nave en imagen usa una parte de la escala de un GLB;
+  en `space-broadside` cada nave cabe en su mitad, ambas se balancean, la primera
+  retrocede al disparar y los disparos son un rayo largo `bolt`). Las tiras de fondo
+  (`speed-flight`, `infinite-fall`, `conveyor`) tienen copias que se tocan y una de
+  cada dos va en espejo (`strip.mirror`), así una placa que no es continua se
+  encuentra consigo misma en cada unión. Los rótulos de `documentary-history` (fecha
+  y pie abajo a la izquierda, contador arriba a la derecha) y la pancarta de
+  `city-postcard` (encima de la cabeza) no tapan al sujeto centrado.
+  `ui/tests/sceneTemplateFraming.test.ts` lo mide con formas reales (1:3, 1:1.9, 3:1).
+- **Alfa de los recortes**: `scenes.template.compile` avisa
+  `cutout_without_alpha` cuando `subject_1`, `subject_2` o `prop_1` de una
+  coreografía no tienen ningún píxel transparente (se leen los píxeles del PNG; un
+  JPEG no tiene alfa). Una URL remota no se descarga y no avisa.
+- **Estado de revisión**: el cargador acepta `candidate` y `approved`; cualquier
+  otro valor lanza. Las 41 son `approved` desde el 2026-10-12. Se aprobaron
+  viendo cada render con assets reales hechos en la app:
+  - recortes de Qwen Image 2.1 con `image.remove_background`;
+  - fondos sin nada que debiera moverse;
+  - dos bucles H3 sin costura.
+
+  Se renderizaron las 41 fichas y las opciones de las fusionadas con
+  `npm run scene:review -- --render --assets`. Cada ficha hace lo que dice su
+  línea, se mantiene en cuadro y se mueve durante todo el plano. Esa revisión
+  encontró y arregló cinco cosas:
+  - los vídeos desaparecían del MP4 exportado desde el editor;
+  - las partículas eran invisibles sobre fondos reales;
+  - las tiras tenían costuras;
+  - seis encuadres;
+  - el tiempo límite del render de revisión.
+
+  El dueño puede devolver una ficha a `candidate` en este JSON.
 
 ## Crear una composición nueva
 
@@ -16,8 +92,10 @@ idioma de UI, de conversación o del texto literal del usuario.
 3. Usar imágenes ya generadas en Studio y guardadas en Library. En esta fase no
    hay botón de generación integrado ni recorte/alpha/anclas automático. No se
    recurre a un generador cuando falte un asset.
-4. Duración: 3–12 s. BPM/intensidad sólo se habilitan en recetas que usan pulsos;
+4. Duración: 3–12 s. BPM/intensidad sólo se habilitan en fichas que usan pulsos;
    no son un generador de audio ni sincronización automática con una canción.
+   Los demás controles expuestos (deriva, cámara, atmósfera, desenlace, textos)
+   aparecen debajo y llegan a `narrative.controls`.
 5. Guardar el trabajo anterior y confirmar su reemplazo (incluido audio) antes
    de crear. La aplicación vuelve a consultar los IDs y bloquea desaparición,
    cambio de tipo o ubicación. Un fallo conserva el formulario, no abre otra escena.
@@ -34,7 +112,11 @@ archivo; esas garantías pertenecen a la base P01 y recuperación posterior.
 
 ## Ver o abrir la referencia original
 
-El usuario aprobó visualmente los 24 vídeos coral v1. Se publicaron aparte en
+El usuario aprobó visualmente los 24 vídeos coral v1. Siete de esos ids son hoy
+alias de otra ficha (`cinema-isolation`, `music-chorus`, `music-parallax`,
+`music-stage`, `music-finale`, `space-shield`, `space-explosion`); sus hashes se
+conservan en `approvedReferences.ts` como registro histórico y el test del índice
+comprueba que los 24 ids siguen compilando (como ficha o como alias). Se publicaron aparte en
 [procedural-style-reference-v1](https://github.com/IAnMove/hocuspocus/releases/tag/procedural-style-reference-v1),
 una prerelease de referencias, no una release de HocusPocus/Pinokio.
 

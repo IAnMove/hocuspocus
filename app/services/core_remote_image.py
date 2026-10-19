@@ -6,7 +6,7 @@ import time
 import uuid
 from typing import Any
 
-from services import core_workspace as core
+from services import core_workspace as core, workspace_busy
 from services.minimax_image_service import (
     MiniMaxImageError,
     SUPPORTED_ASPECT_RATIOS,
@@ -131,6 +131,19 @@ def get_job(job_id: str) -> dict[str, Any] | None:
 def list_active() -> list[dict[str, Any]]:
     with _LOCK:
         return [_public(job) for job in _JOBS.values() if job.get("status") in _ACTIVE]
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict[str, Any]]:
+    """MiniMax image jobs that still write into their workspace (``services.workspace_busy`` probe).
+
+    Reads the stored records, not ``list_active()``: the public payload has no workspace.
+    """
+    with _LOCK:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _JOBS.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
 
 
 def cancel_job(job_id: str) -> dict[str, Any] | None:

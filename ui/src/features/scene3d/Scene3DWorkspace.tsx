@@ -1,3 +1,5 @@
+import { PropLibraryPanel } from './PropLibraryPanel'
+import { propSlot, PROP_DRAG_TYPE, type LibraryProp } from './propLibrary'
 import { ExampleDownloads } from './ExampleDownloads'
 import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
@@ -30,6 +32,8 @@ import { MotionLabControls } from './motionlab/controls'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
+import { Scene3DRoomCameraPicker } from './Scene3DRoomCameraPicker'
+import { withRoomCamera } from './roomCamera'
 import { AtmosClearingControls } from './AtmosClearingControls.tsx'
 import { KineticTextControls } from '../../components/common/KineticTextControls'
 import { KineticTextOverlay } from '../../components/common/KineticTextOverlay'
@@ -491,6 +495,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
             {FAMILIES.map(family => <option key={family} value={family}>{t(`stage.family.${family}`)}</option>)}
           </select>
         </label>
+        <Scene3DRoomCameraPicker document={sceneDoc} disabled={exporting} onChange={id => applyScene(current => withRoomCamera(current, id))} />
         <button
           type="button"
           data-testid="world3d-export"
@@ -601,7 +606,12 @@ function WorkspaceStageColumn({
 }) {
   const pickKey = selected ? `${generation}/${selected.id}/${selected.sourceUrl}` : ''
   return (
-    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`}>
+    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes(PROP_DRAG_TYPE)) event.preventDefault() }} onDrop={event => {
+            const raw = event.dataTransfer.getData(PROP_DRAG_TYPE)
+            if (!raw || editingLocked) return
+            event.preventDefault()
+            try { const prop = JSON.parse(raw) as LibraryProp; if (prop.approved && prop.heightM > 0) applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] })) } catch { /* Ignore foreign drag data. */ }
+          }}>
       <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
         <Scene3DPreview width={sceneDoc.width} height={sceneDoc.height}>
           <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
@@ -644,7 +654,9 @@ function WorkspaceStageColumn({
           </Scene3DInteraction>
         </Scene3DPreview>
         <div className="min-w-0 space-y-3">
+          <PropLibraryPanel workspace={workspace} disabled={editingLocked} onAdd={prop => applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))} />
           <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
+          {selected?.slot === 'prop' && <button disabled={editingLocked} className="min-h-11 rounded-lg border border-border px-3" onClick={() => applyScene(current => ({ ...current, slots: current.slots.filter(slot => slot.id !== selected.id) }))}>{editorT('props.remove')}</button>}
           {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
             onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
             onReset={() => {

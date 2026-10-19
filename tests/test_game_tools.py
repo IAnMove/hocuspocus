@@ -57,6 +57,17 @@ def test_image_retries_jobs_wait_until_completed(tmp_path):
     assert "priority" not in fake.calls[0][1]
 
 
+def test_image_runs_the_default_turbo_with_its_eight_steps_and_no_negative_prompt(tmp_path):
+    """Qwen Image 2.1 Turbo locks 8 steps and CFG 1, and the command refuses a negative prompt, so none is sent."""
+    fake = Fake([{"status": "completed", "output_files": ["hero.png"]}])
+    ctx = _ctx(tmp_path, fake)
+    image(ctx, "still", prompt="knight", negative="text, watermark", resolution="768x1024", seed=7)
+    params = fake.calls[0][1]["input"]["params"]
+    assert params["model_type"] == "qwen_image_21_turbo" and params["num_inference_steps"] == 8 and params["guidance_scale"] == 1
+    assert "negative_prompt" not in params
+    assert (ctx.steps[0]["model"], ctx.steps[0]["num_inference_steps"]) == ("qwen_image_21_turbo", 8)
+
+
 def test_image_resumes_an_interrupted_job_once(tmp_path):
     fake = Fake([
         {"status": "interrupted", "timed_out": True},
@@ -89,9 +100,10 @@ def test_image_provenance_splits_queue_from_gpu_time(tmp_path):
     step = ctx.steps[0]
     assert step["queued_seconds"] == 40.5
     assert step["gpu_seconds"] == 15.0
-    assert step["num_inference_steps"] == 40
+    assert step["num_inference_steps"] == 8
     assert step["resolution"] == "768x1024"
     assert step["refCount"] == 1
+    assert step["leftovers"] == ["hero.png"]
     assert "seconds" in step
     bare = Fake([{"status": "completed", "output_files": ["hero.png"]}])
     quiet = _ctx(tmp_path, bare)
@@ -99,7 +111,7 @@ def test_image_provenance_splits_queue_from_gpu_time(tmp_path):
     omitted = quiet.steps[0]
     assert "queued_seconds" not in omitted
     assert "gpu_seconds" not in omitted
-    assert omitted["num_inference_steps"] == 40
+    assert omitted["num_inference_steps"] == 8
     assert omitted["refCount"] == 0
 
 

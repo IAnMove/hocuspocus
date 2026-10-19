@@ -16,6 +16,7 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from services.voxcpm2_speech_contract import DEFAULT_VOICE_DESIGN_MODEL
 from services.audio_levels import integrated_lufs
 from services.game_audio import (
     best_loop,
@@ -486,7 +487,7 @@ def _speak(ctx: GenContext, step: str, name: str, seed: int, line: str, speaker:
         model, extra = _speech_extra(voice, line, seed, language)
         return speech(ctx, step, prompt=line, model=model, seed=seed, output_name=name, extra=extra)
     extra = {"alt_prompt": traits} if traits else None
-    return speech(ctx, step, prompt=line, model="qwen3_tts_voicedesign", seed=seed, output_name=name, extra=extra)
+    return speech(ctx, step, prompt=line, model=DEFAULT_VOICE_DESIGN_MODEL, seed=seed, output_name=name, extra=extra)
 
 
 def _voice_take(ctx: GenContext, index: int, folder: Path, tag: str, lines: list[str], speaker) -> tuple[dict, list[str]]:

@@ -1,0 +1,911 @@
+{
+  "model3d cancel missing": {
+    "body": {
+      "detail": "3D generation job not found"
+    },
+    "status": 404
+  },
+  "model3d capabilities": {
+    "body": {
+      "active_jobs": 0,
+      "input_views": [
+        "front",
+        "left",
+        "right",
+        "back"
+      ],
+      "models": [
+        {
+          "description": "Fastest geometry model; best when sharing the GPU with other HocusPocus Lab workloads.",
+          "engine": "v2",
+          "id": "hunyuan3d-2mini-turbo",
+          "label": "Hunyuan3D 2 Mini Turbo",
+          "multiview": false,
+          "parameters": "0.6B",
+          "recommended_vram_gb": 6,
+          "repo": "tencent/Hunyuan3D-2mini",
+          "subfolder": "hunyuan3d-dit-v2-mini-turbo",
+          "supports_text": true,
+          "turbo": true
+        },
+        {
+          "description": "Small guidance-distilled model with a quality/speed balance.",
+          "engine": "v2",
+          "id": "hunyuan3d-2mini-fast",
+          "label": "Hunyuan3D 2 Mini Fast",
+          "multiview": false,
+          "parameters": "0.6B",
+          "recommended_vram_gb": 6,
+          "repo": "tencent/Hunyuan3D-2mini",
+          "subfolder": "hunyuan3d-dit-v2-mini-fast",
+          "supports_text": true,
+          "turbo": false
+        },
+        {
+          "description": "Full-step compact model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2mini",
+          "label": "Hunyuan3D 2 Mini",
+          "multiview": false,
+          "parameters": "0.6B",
+          "recommended_vram_gb": 6,
+          "repo": "tencent/Hunyuan3D-2mini",
+          "subfolder": "hunyuan3d-dit-v2-mini",
+          "supports_text": true,
+          "turbo": false
+        },
+        {
+          "description": "Fast full-size Hunyuan3D 2.0 geometry model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2-turbo",
+          "label": "Hunyuan3D 2 Turbo",
+          "multiview": false,
+          "parameters": "1.1B",
+          "recommended_vram_gb": 8,
+          "repo": "tencent/Hunyuan3D-2",
+          "subfolder": "hunyuan3d-dit-v2-0-turbo",
+          "supports_text": true,
+          "turbo": true
+        },
+        {
+          "description": "Guidance-distilled full-size model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2-fast",
+          "label": "Hunyuan3D 2 Fast",
+          "multiview": false,
+          "parameters": "1.1B",
+          "recommended_vram_gb": 8,
+          "repo": "tencent/Hunyuan3D-2",
+          "subfolder": "hunyuan3d-dit-v2-0-fast",
+          "supports_text": true,
+          "turbo": false
+        },
+        {
+          "description": "Original full-step Hunyuan3D 2.0 model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2",
+          "label": "Hunyuan3D 2",
+          "multiview": false,
+          "parameters": "1.1B",
+          "recommended_vram_gb": 8,
+          "repo": "tencent/Hunyuan3D-2",
+          "subfolder": "hunyuan3d-dit-v2-0",
+          "supports_text": true,
+          "turbo": false
+        },
+        {
+          "description": "Fast front/left/right/back image-to-3D model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2mv-turbo",
+          "label": "Hunyuan3D 2 Multi-view Turbo",
+          "multiview": true,
+          "parameters": "1.1B",
+          "recommended_vram_gb": 8,
+          "repo": "tencent/Hunyuan3D-2mv",
+          "subfolder": "hunyuan3d-dit-v2-mv-turbo",
+          "supports_text": false,
+          "turbo": true
+        },
+        {
+          "description": "Guidance-distilled multi-view geometry model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2mv-fast",
+          "label": "Hunyuan3D 2 Multi-view Fast",
+          "multiview": true,
+          "parameters": "1.1B",
+          "recommended_vram_gb": 8,
+          "repo": "tencent/Hunyuan3D-2mv",
+          "subfolder": "hunyuan3d-dit-v2-mv-fast",
+          "supports_text": false,
+          "turbo": false
+        },
+        {
+          "description": "Highest-quality full-step multi-view model.",
+          "engine": "v2",
+          "id": "hunyuan3d-2mv",
+          "label": "Hunyuan3D 2 Multi-view",
+          "multiview": true,
+          "parameters": "1.1B",
+          "recommended_vram_gb": 8,
+          "repo": "tencent/Hunyuan3D-2mv",
+          "subfolder": "hunyuan3d-dit-v2-mv",
+          "supports_text": false,
+          "turbo": false
+        },
+        {
+          "description": "Highest-fidelity geometry with optional production-ready PBR materials.",
+          "engine": "v21",
+          "id": "hunyuan3d-2.1",
+          "label": "Hunyuan3D 2.1 + PBR",
+          "multiview": false,
+          "parameters": "3.3B",
+          "recommended_vram_gb": 10,
+          "repo": "tencent/Hunyuan3D-2.1",
+          "subfolder": "hunyuan3d-dit-v2-1",
+          "supports_text": true,
+          "turbo": false
+        },
+        {
+          "description": "Single-image geometry and native PBR materials; isolated Linux/CUDA runtime.",
+          "engine": "trellis2",
+          "id": "trellis2",
+          "label": "TRELLIS.2",
+          "multiview": false,
+          "multiview_reason": "single_image",
+          "parameters": "4B",
+          "provider": "trellis2",
+          "recommended_vram_gb": 24,
+          "repo": "microsoft/TRELLIS.2-4B",
+          "resolutions": [
+            512,
+            1024,
+            1536
+          ],
+          "runtime": {
+            "install_hint": "Configure HOCUSPOCUS_TRELLIS2_ROOT and HOCUSPOCUS_TRELLIS2_PYTHON for an isolated Linux/CUDA installation. See docs/development/MODEL3D_ENGINES.md.",
+            "installed": false,
+            "isolated_runtime": true,
+            "releases_vram_after_job": true,
+            "validation": "not_configured"
+          },
+          "subfolder": "",
+          "supports_camera_fov": false,
+          "supports_low_vram": false,
+          "supports_text": false,
+          "turbo": false
+        },
+        {
+          "description": "Pixel-aligned image-to-3D with PBR. Multi-view camera contracts are not integrated yet.",
+          "engine": "pixal3d",
+          "id": "pixal3d",
+          "label": "Pixal3D",
+          "multiview": false,
+          "multiview_reason": "camera_contract",
+          "parameters": "—",
+          "provider": "pixal3d",
+          "recommended_vram_gb": null,
+          "repo": "TencentARC/Pixal3D",
+          "resolutions": [
+            1024,
+            1536
+          ],
+          "runtime": {
+            "install_hint": "Configure HOCUSPOCUS_PIXAL3D_ROOT and HOCUSPOCUS_PIXAL3D_PYTHON for an isolated Linux/CUDA installation. See docs/development/MODEL3D_ENGINES.md.",
+            "installed": false,
+            "isolated_runtime": true,
+            "releases_vram_after_job": true,
+            "validation": "not_configured"
+          },
+          "subfolder": "",
+          "supports_camera_fov": true,
+          "supports_low_vram": true,
+          "supports_text": false,
+          "turbo": false
+        }
+      ],
+      "output_formats": [
+        "glb",
+        "obj",
+        "ply",
+        "stl"
+      ],
+      "presets": [
+        {
+          "cpu_offload": true,
+          "description": "Mini Turbo, CPU offload, 128 octree, no texture.",
+          "flashvdm": true,
+          "guidance_scale": 5.0,
+          "id": "eco",
+          "label": "Low VRAM",
+          "model_id": "hunyuan3d-2mini-turbo",
+          "num_chunks": 8000,
+          "num_inference_steps": 5,
+          "octree_resolution": 128,
+          "texture_mode": "none"
+        },
+        {
+          "cpu_offload": true,
+          "description": "Full-size Turbo geometry with standard texture support.",
+          "flashvdm": true,
+          "guidance_scale": 5.0,
+          "id": "balanced",
+          "label": "Balanced",
+          "model_id": "hunyuan3d-2-turbo",
+          "num_chunks": 12000,
+          "num_inference_steps": 5,
+          "octree_resolution": 256,
+          "texture_mode": "v2-turbo"
+        },
+        {
+          "cpu_offload": true,
+          "description": "Hunyuan3D 2.1, 384 octree and PBR materials.",
+          "flashvdm": false,
+          "guidance_scale": 5.0,
+          "id": "quality",
+          "label": "Quality / PBR",
+          "model_id": "hunyuan3d-2.1",
+          "num_chunks": 20000,
+          "num_inference_steps": 30,
+          "octree_resolution": 384,
+          "texture_mode": "pbr"
+        },
+        {
+          "cpu_offload": true,
+          "description": "Multi-view Turbo using up to four reference views.",
+          "flashvdm": true,
+          "guidance_scale": 5.0,
+          "id": "multiview",
+          "label": "Multi-view Fast",
+          "model_id": "hunyuan3d-2mv-turbo",
+          "num_chunks": 12000,
+          "num_inference_steps": 5,
+          "octree_resolution": 256,
+          "texture_mode": "v2-turbo"
+        }
+      ],
+      "runtime": {
+        "install_hint": "Optional engine: in Pinokio, run Advanced > Install 3D Generation (Hunyuan3D).",
+        "installed": false,
+        "isolated_runtime": true,
+        "python": null,
+        "releases_vram_after_job": true,
+        "v21_source": false,
+        "v2_source": false
+      },
+      "texture_modes": [
+        {
+          "id": "none",
+          "label": "Geometry only",
+          "recommended_vram_gb": 6
+        },
+        {
+          "id": "v2",
+          "label": "Hunyuan3D Paint 2.0",
+          "recommended_vram_gb": 16
+        },
+        {
+          "id": "v2-turbo",
+          "label": "Hunyuan3D Paint 2.0 Turbo",
+          "recommended_vram_gb": 16
+        },
+        {
+          "id": "pbr",
+          "label": "Hunyuan3D Paint 2.1 PBR",
+          "recommended_vram_gb": 21
+        }
+      ]
+    },
+    "status": 200
+  },
+  "model3d images must be an object": {
+    "body": {
+      "detail": "images must be an object keyed by front/left/right/back"
+    },
+    "status": 400
+  },
+  "model3d missing front image": {
+    "body": {
+      "detail": "3D front image not found"
+    },
+    "status": 400
+  },
+  "model3d missing job": {
+    "body": {
+      "detail": "3D generation job not found"
+    },
+    "status": 404
+  },
+  "model3d unload": {
+    "body": {
+      "cancelled_jobs": 0,
+      "model_loaded": false,
+      "status": "ok"
+    },
+    "status": 200
+  },
+  "rig cancel missing": {
+    "body": {
+      "detail": "Rig job not found"
+    },
+    "status": 404
+  },
+  "rig capabilities": {
+    "body": {
+      "active_jobs": 0,
+      "animations": [
+        {
+          "category": "Ambient",
+          "description": "Gentle side-to-side spine sway, stronger toward the top.",
+          "id": "idle",
+          "label": "Idle Sway"
+        },
+        {
+          "category": "Ambient",
+          "description": "Soft squash-and-stretch breathing loop.",
+          "id": "breathe",
+          "label": "Breathe"
+        },
+        {
+          "category": "Ambient",
+          "description": "Smooth floating loop for pickups, drones, props and spirits.",
+          "id": "hover",
+          "label": "Hover"
+        },
+        {
+          "category": "Game",
+          "description": "A cautious scan with a small ready-state lean.",
+          "id": "alert",
+          "label": "Alert Look"
+        },
+        {
+          "category": "Locomotion",
+          "description": "In-place game walk with body bob, yaw and articulated sway.",
+          "id": "walk",
+          "label": "Walk Cycle"
+        },
+        {
+          "category": "Locomotion",
+          "description": "Fast in-place sprint loop with stronger lift and compression.",
+          "id": "run",
+          "label": "Run Cycle"
+        },
+        {
+          "category": "Locomotion",
+          "description": "Side-to-side evasive locomotion for gameplay shots.",
+          "id": "strafe",
+          "label": "Strafe Loop"
+        },
+        {
+          "category": "Action",
+          "description": "Anticipation, airborne stretch and a clean landing loop.",
+          "id": "jump",
+          "label": "Jump"
+        },
+        {
+          "category": "Action",
+          "description": "Quick wind-up, forward strike and recovery.",
+          "id": "attack",
+          "label": "Attack Lunge"
+        },
+        {
+          "category": "Action",
+          "description": "Sharp sideways recoil followed by recovery to idle.",
+          "id": "hit",
+          "label": "Hit Reaction"
+        },
+        {
+          "category": "Action",
+          "description": "Full forward tumble suitable for creatures and game props.",
+          "id": "roll",
+          "label": "Combat Roll"
+        },
+        {
+          "category": "Action",
+          "description": "Escalating pulse and tense sway for power-up moments.",
+          "id": "charge",
+          "label": "Charge Up"
+        },
+        {
+          "category": "Cinematic",
+          "description": "Celebratory jump with a complete showcase turn.",
+          "id": "victory",
+          "label": "Victory Jump"
+        },
+        {
+          "category": "Stylized",
+          "description": "Rhythmic hops with squash on landing.",
+          "id": "bounce",
+          "label": "Bounce"
+        },
+        {
+          "category": "Cinematic",
+          "description": "Full 360 degree showcase rotation.",
+          "id": "spin",
+          "label": "Turntable Spin"
+        },
+        {
+          "category": "Stylized",
+          "description": "Playful yaw wiggle with sway and a light hop.",
+          "id": "wobble",
+          "label": "Wobble Dance"
+        }
+      ],
+      "default_rig_profile": "prop",
+      "default_spine_joints": 5,
+      "engines": [
+        {
+          "description": "Spine-chain skeleton with distance-based skinning. Works on any object; no extra downloads.",
+          "id": "procedural",
+          "install_hint": null,
+          "installed": true,
+          "label": "Procedural (fast)"
+        },
+        {
+          "description": "VAST-AI UniRig predicts a real skeleton and learned skinning weights. Best for characters and creatures; ~8GB VRAM.",
+          "id": "unirig",
+          "install_hint": "Open HocusPocus Lab in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use.",
+          "installed": false,
+          "label": "UniRig (AI)"
+        },
+        {
+          "description": "Mixamo-named skeleton fitted to a character standing in a T or A pose, with clips baked for its proportions. CPU only. Refuses meshes it cannot rig safely (arms against the body, legs together).",
+          "id": "humanoid",
+          "install_hint": null,
+          "installed": true,
+          "label": "Humanoid (standard)"
+        }
+      ],
+      "humanoid_animations": [
+        {
+          "beats": 4,
+          "category": "Stand",
+          "description": "Relaxed standing loop: breathing, a slow weight shift and a glance.",
+          "id": "idle",
+          "label": "Idle",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Stand",
+          "description": "A deep breath that lifts the chest and shoulders.",
+          "id": "breathe",
+          "label": "Breathe",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Move",
+          "description": "Walk cycle in place with planted feet, hip sway and arm swing.",
+          "id": "walk",
+          "label": "Walk",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Move",
+          "description": "Run cycle in place with a flight phase and bent arms.",
+          "id": "run",
+          "label": "Run",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Move",
+          "description": "Crouch, take off, land and recover, in place.",
+          "id": "jump",
+          "label": "Jump",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Right hand raised and waving hello.",
+          "id": "wave",
+          "label": "Wave",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Both arms up, pumping on the beat.",
+          "id": "cheer",
+          "label": "Cheer",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Dance",
+          "description": "Knee bounce on every beat with swinging arms.",
+          "id": "dance_bounce",
+          "label": "Dance Bounce",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Dance",
+          "description": "Side to side sway with a foot lift on each side.",
+          "id": "dance_side",
+          "label": "Dance Side",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Dance",
+          "description": "Disco arms: one up, one down, switching each bar.",
+          "id": "dance_arms",
+          "label": "Dance Arms",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Hands meet in front of the chest on every beat.",
+          "id": "clap",
+          "label": "Clap",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Action",
+          "description": "Guard stance and a straight right punch.",
+          "id": "punch",
+          "label": "Punch",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Move",
+          "description": "Sit down on an unseen seat, hold, and stand up.",
+          "id": "sit_down",
+          "label": "Sit Down",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Arms raised in a V with a small bounce.",
+          "id": "victory",
+          "label": "Victory",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Gesture",
+          "description": "Conversation gestures with both hands and small nods.",
+          "id": "talk",
+          "label": "Talk",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Two nods yes.",
+          "id": "nod",
+          "label": "Nod",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Gesture",
+          "description": "Turns the head and chest left, then right.",
+          "id": "look_around",
+          "label": "Look Around",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Gesture",
+          "description": "A polite bow from the hips and back up.",
+          "id": "bow",
+          "label": "Bow",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Points forward with the right arm and holds.",
+          "id": "point",
+          "label": "Point",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Gesture",
+          "description": "Shoulders up with open palms: I don't know.",
+          "id": "shrug",
+          "label": "Shrug",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Action",
+          "description": "Two-handed rifle aim at shoulder height, feet in a stance, breathing sway.",
+          "id": "aim",
+          "label": "Aim",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Action",
+          "description": "Rifle aim with a recoil kick on every beat.",
+          "id": "shoot",
+          "label": "Shoot",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Action",
+          "description": "A creature's claw slashes, wind-up and swipe across, alternating arms.",
+          "id": "claw",
+          "label": "Claw",
+          "loop": true
+        },
+        {
+          "beats": 4,
+          "category": "Action",
+          "description": "Staggers back a step from a blow and recovers.",
+          "id": "hit",
+          "label": "Hit",
+          "loop": true
+        },
+        {
+          "beats": 2,
+          "category": "Move",
+          "description": "Hovers in the air: body bob on each beat, legs dangling behind, arms out.",
+          "id": "hover",
+          "label": "Hover",
+          "loop": true
+        },
+        {
+          "beats": 16,
+          "category": "Gesture",
+          "description": "Kneels down, joins the hands in prayer, bows the head and stays. Play once.",
+          "id": "kneel_pray",
+          "label": "Kneel Pray",
+          "loop": false
+        },
+        {
+          "beats": 8,
+          "category": "Action",
+          "description": "Crouches into cover, peeks up over it and stays down. Play once.",
+          "id": "crouch",
+          "label": "Crouch",
+          "loop": false
+        }
+      ],
+      "rig_profiles": [
+        {
+          "allowed_animations": [
+            "idle",
+            "breathe",
+            "hover",
+            "alert",
+            "jump",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory",
+            "bounce",
+            "spin",
+            "wobble"
+          ],
+          "default_axis_mode": "auto",
+          "default_spine_joints": 3,
+          "default_weight_falloff": 3.5,
+          "description": "Simple pickups, logos and softly deforming standalone objects.",
+          "id": "prop",
+          "label": "Prop / object",
+          "recommended_animations": [
+            "hover",
+            "bounce",
+            "spin",
+            "wobble",
+            "charge",
+            "hit"
+          ]
+        },
+        {
+          "allowed_animations": [
+            "idle",
+            "hover",
+            "alert",
+            "strafe",
+            "jump",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory",
+            "bounce",
+            "spin",
+            "wobble"
+          ],
+          "default_axis_mode": "auto",
+          "default_spine_joints": 3,
+          "default_weight_falloff": 5.5,
+          "description": "Ships, cars, robots and hard-surface machinery using a short, stiff dominant-axis chain.",
+          "id": "vehicle",
+          "label": "Vehicle / mechanical",
+          "recommended_animations": [
+            "hover",
+            "alert",
+            "strafe",
+            "attack",
+            "hit",
+            "charge",
+            "spin"
+          ]
+        },
+        {
+          "allowed_animations": [
+            "idle",
+            "breathe",
+            "hover",
+            "alert",
+            "walk",
+            "run",
+            "strafe",
+            "jump",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory",
+            "bounce",
+            "spin",
+            "wobble"
+          ],
+          "default_axis_mode": "y",
+          "default_spine_joints": 7,
+          "default_weight_falloff": 2.4,
+          "description": "Upright characters. UniRig maps recognizable Y-up limbs for idle, walk and wobble; other clips and the procedural engine use body-chain approximations.",
+          "id": "humanoid",
+          "label": "Humanoid",
+          "recommended_animations": [
+            "idle",
+            "breathe",
+            "alert",
+            "walk",
+            "run",
+            "strafe",
+            "jump",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory"
+          ]
+        },
+        {
+          "allowed_animations": [
+            "idle",
+            "breathe",
+            "alert",
+            "walk",
+            "run",
+            "jump",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory",
+            "bounce",
+            "spin",
+            "wobble"
+          ],
+          "default_axis_mode": "auto",
+          "default_spine_joints": 7,
+          "default_weight_falloff": 2.0,
+          "description": "Four-legged and horizontally oriented creatures using a flexible dominant-axis chain.",
+          "id": "quadruped",
+          "label": "Quadruped / creature",
+          "recommended_animations": [
+            "idle",
+            "breathe",
+            "alert",
+            "walk",
+            "run",
+            "jump",
+            "attack",
+            "hit",
+            "charge"
+          ]
+        },
+        {
+          "allowed_animations": [
+            "idle",
+            "breathe",
+            "hover",
+            "alert",
+            "strafe",
+            "jump",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory",
+            "bounce",
+            "spin",
+            "wobble"
+          ],
+          "default_axis_mode": "auto",
+          "default_spine_joints": 5,
+          "default_weight_falloff": 2.8,
+          "description": "Birds, winged creatures, ships and drones with a light dominant-axis chain.",
+          "id": "flying",
+          "label": "Flying creature / drone",
+          "recommended_animations": [
+            "hover",
+            "idle",
+            "alert",
+            "strafe",
+            "attack",
+            "hit",
+            "roll",
+            "charge"
+          ]
+        },
+        {
+          "allowed_animations": [
+            "idle",
+            "breathe",
+            "hover",
+            "alert",
+            "strafe",
+            "attack",
+            "hit",
+            "roll",
+            "charge",
+            "victory",
+            "bounce",
+            "spin",
+            "wobble"
+          ],
+          "default_axis_mode": "auto",
+          "default_spine_joints": 9,
+          "default_weight_falloff": 1.6,
+          "description": "Snakes, tails, tentacles and elongated flexible meshes with a long smooth chain.",
+          "id": "serpentine",
+          "label": "Serpentine / tentacle",
+          "recommended_animations": [
+            "idle",
+            "breathe",
+            "hover",
+            "alert",
+            "strafe",
+            "attack",
+            "hit",
+            "charge",
+            "wobble"
+          ]
+        }
+      ]
+    },
+    "status": 200
+  },
+  "rig missing job": {
+    "body": {
+      "detail": "Rig job not found"
+    },
+    "status": 404
+  },
+  "rig missing source": {
+    "body": {
+      "detail": "Source 3D model not found"
+    },
+    "status": 400
+  },
+  "rig source must be glb": {
+    "body": {
+      "detail": "Rigging currently supports GLB sources only"
+    },
+    "status": 400
+  },
+  "rig source required": {
+    "body": {
+      "detail": "source is required (a generated .glb output name)"
+    },
+    "status": 400
+  }
+}

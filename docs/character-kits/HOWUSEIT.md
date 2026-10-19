@@ -76,8 +76,11 @@ without creating or moving files. See the
 9. **Voice is local only.** Presets use `qwen3_tts_customvoice` plus a named
    id (`vivian`, `serena`, `uncle_fu`, `dylan`, `eric`, `ryan`, `aiden`,
    `ono_anna`, `sohee`) and optional direction (max 1000 chars). Custom
-   recordings use `qwen3_tts_base` with `voiceId: "reference"`. Do not store
-   credentials on the kit.
+   recordings use `qwen3_tts_base`, `voxcpm2_base`, or `drama3_base` with `voiceId: "reference"`;
+   a VoxCPM2 recording may add a speaking style (`instructions`, max 300 chars).
+   Drama 3 cloning requires the transcript and takes no style. `drama3_voicedesign`
+   stores a designed voice (`voiceId: "design"`, optional direction, no recording).
+   Do not store credentials on the kit.
 
 ---
 
@@ -91,13 +94,15 @@ CharacterKit
   identityReference?, base?, poses{}
   mouth { closed?, small?, wide?, round? }
   eyes { open?, blink? }
-  voice? PresetCharacterVoice | CustomCharacterVoice
+  voice? PresetCharacterVoice | CustomCharacterVoice | DesignCharacterVoice
     preset: { provider: local, model: qwen3_tts_customvoice, voiceId, instructions? }
-    custom: { provider: local, model: qwen3_tts_base, voiceId: "reference",
-              name, referenceAudio, transcript, language }
+    custom: { provider: local, model: qwen3_tts_base | voxcpm2_base | drama3_base, voiceId: "reference",
+              name, referenceAudio, transcript, language, instructions? (VoxCPM2 only) }
+    design: { provider: local, model: drama3_voicedesign, voiceId: "design", name, language, instructions? }
   lookNotes?
   speech3d? { model, digest, settings? }
   anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources? } }
+  animations? { [animationId]: { sheet, frames[], fps, loop, facing, reviewState, view?, prompt?, model?, createdAt? } }
   provenance[]
 ```
 
@@ -211,10 +216,12 @@ does not create audio.
 **Named preset** (`qwen3_tts_customvoice`): pick a catalog speaker and optional
 acting notes. Tijeral ships these presets; they are not cloned actors.
 
-**Add your own voice** (`qwen3_tts_base`):
+**Add your own voice** (`qwen3_tts_base`, `voxcpm2_base`, or `drama3_base`):
 
 1. Choose **Add your own voice: import or record**.
-2. Name the voice (max 120 chars).
+2. Name the voice (max 120 chars) and pick the **Voice engine**: VoxCPM2,
+   the default (48 kHz, 30 languages, optional **Speaking style** such as
+   «susurrando»; with a style VoxCPM2 clones from the sample alone), or Qwen3.
 3. Import WAV/MP3/M4A/FLAC/OGG (or record on HTTPS / localhost).
 4. Enter the **exact transcript** of that sample (max 4000 chars). This is
    not the dialogue to generate later.
@@ -265,6 +272,209 @@ mouth**. An agent does the same with `characters.rig.flat.preview` and
 
 A face in a full figure is small and its moving lips read less: add a bust
 pose (*bust, head and shoulders*) for close dialogue.
+
+### 4.7 Animations: walk, gestures and anime expressions
+
+**Characters › Animaciones del personaje** (a drawer right under "Crear personaje desde una descripción"; the character just saved is the one it opens on) makes small animations of a saved
+character. Each one is a few poses of the same figure joined into a sprite sheet that the Video 2D cards play. The list is
+`app/shared/character_animations.json` (MCP `characters.animations`):
+
+| group | animations |
+|---|---|
+| Cycles (5) | `walk` (four poses of the gait, side view, looks right), `run`, `step` (two poses: the stride and the legs together), `idle` (breathing), `jump` |
+| Gestures (11) | `wave`, `nod`, `shake` (head no), `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm`, `think` |
+| Anime expressions (18) | `angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`, `tired`, `love`, `disgusted`, `bored`, `worried`, `nervous` (nervous laugh), `laughing`, `wink`, `pout`: two poses each, from a hint to the full expression (anger vein, shock lines, sweat drop, hearts) |
+
+**Three doors, one job.** The Animaciones panel (**Crear**), any MCP client (`characters.animation.make`, then
+`characters.animation.status` / `.cancel` / `.review`) and Ask to the Wizard (`make_character_animation`: "hazle una cara de enfado a
+Heroína"; `review_character_animation`) all start the same server job, `POST /api/v1/character-kits/animations/make` (`services/character_animation_job.py`). The
+panel only asks and follows it (a poll, quick while a job runs and slow otherwise), so a run survives a reload, a tab change or a
+restart, and an animation an agent started shows up in the panel (and the other way round). One animation is made at a time on the
+server (one GPU); asking for one already being made returns that job. The job is a small file under
+`.character-animation-jobs-v1` of the workspace.
+
+What the job does:
+
+1. Each pose is one Qwen picture made with the character's own picture (`identityReference`, else `base`) as
+   `image_refs`, one after another, on a plain screen colour (default model `qwen_image_21_turbo`, 8 steps and no negative prompt; another model runs its own steps and a
+   distilled one takes no negative prompt). The style preset the kit was made in (`character-style-create` in its provenance)
+   keeps its look through `animation.identity` in `character_styles.json`. Every picture has its own file name and intent id, so a
+   pose made again never overwrites the picture the saved animation still uses.
+2. Each pose is keyed (`studio.key`) as soon as it arrives. A failed pose stops the job and stays on screen; the next job for that
+   animation (**Reintentar**, or the same request again) keeps the poses already made, also after a cancel or a restart
+   (`interrupted`), and **Rehacer** under a frame (`pose` in the request) makes only that pose again of a finished animation.
+3. The sheet is joined (`POST /api/v1/character-kits/animations/sheet` is the same step for an agent that makes the poses itself,
+   MCP `characters.animation.sheet`): each keyed pose is cropped, scaled so the figure keeps its size (`scaleBy`, below), stood on
+   one line (96 % of the cell) and its upper body centred (the mean of the top 55 % of the pose, so swinging legs and arms do not
+   move the torso). It writes `<kit>-<animation>-sheet-<8hex>.png` and never overwrites one.
+4. The animation joins the kit as `reviewState: pending`, read again from the library just before it is saved, so a character edited
+   meanwhile keeps its edits. Play it (the player uses the card's own frame rule), then approve or reject it in the panel.
+   **Approve** is a person's decision unless the owner turned on «Modo un solo disparo» (next section): nothing approves it otherwise.
+
+**«Modo un solo disparo» (one-shot mode).** Settings › Services has a switch (`agent_autonomy`: `review`, the default, or
+`one_shot`) so that one request to an agent can go from the idea to a finished animation. Off, nothing changes: a person approves.
+On, an agent may decide what a person normally decides, through the same operation from every door
+(`services/character_animation_review.py`, `POST /api/v1/character-kits/animations/review`): MCP `characters.animation.review`
+{character_id, animation, decision approve | reject, note} and Ask to the Wizard (`review_character_animation`). In `review` mode they
+answer an error that says to approve it in Characters › Animaciones or turn the mode on. The review is stamped on the animation
+(`reviewedBy` `person` or `agent`, `reviewNote`, `reviewedAt`; older data has none and reads as a person's) and the card shows
+«aprobada por el agente» with the note as its tooltip; **Aprobar** and **Rechazar** on the card take the decision back and stamp
+`reviewedBy: person`. A rejected animation keeps its sheet and poses, so **Rehacer** or `pose` makes one again; an agent never
+overturns a decision a person gave.
+
+`characters.animation.make` and the Wizard's `make_character_animation` take `autoApprove` / `auto_approve`. In `one_shot` the job
+reads the sheet it wrote (`services/character_animation_checks.py`), approves it as the agent only if every check passes and reports
+`autoApproved` and `checks` (id, ok, value, limit); otherwise the animation stays pending and the failed checks say why. In `review`
+mode it is ignored and the job says so (`autoApproveNote`). The checks, set against 57 real Qwen sheets (all passed the picture checks):
+
+| check | passes when |
+|---|---|
+| `cell_count` | the cells are the poses of the animation, in a grid that holds them |
+| `cell_size` | the sheet is exactly columns × rows cells of the contract height (640) |
+| `filled_cells` | every figure covers at least 3 % of its cell (real: 15 to 55 %) |
+| `clean_alpha` | at most 25 % of a figure's pixels are half-transparent (real: 1 to 5 %) |
+| `silhouette` | a figure fills at most 90 % of its box, so a key that left a rectangle fails (real: 53 to 75 %) |
+| `ground_line` | the lowest row of every figure is on the line `feet`, within 2 % of the cell (real: 0.1 %) |
+| `scale_spread` | the smallest figure is at least 80 % of the biggest (legs 80 %, head 70 %, measured before the sheet equalised them; jump and bow 45 %); real walks 0.93 to 0.99 |
+| `scale_measure` | the sheet was scaled by what was asked, not by the height it falls back to when the legs or head cannot be measured |
+
+The checks catch a pose drawn at another size, a bad key, a missing pose or a broken sheet. They do not judge identity (a walk sheet
+of a younger-looking character passes): the agent still looks at the sheet and rejects it when it is out of model.
+
+**An animation of your own** ("A medida" in the panel; `custom {title, view, poses}` in the request): a name, a framing (`bust`,
+`front`, `side`) and one line per pose (up to 6, 600 characters each). The words stay on the kit with each pose, so any pose can be
+made again alone, and on the job, so an animation not on the kit yet stays on screen after a reload. The defaults of one (fps, loop,
+`scaleBy` and `facing` by framing) live in `custom` of `app/shared/character_animations.json`, one place for the panel and the server.
+
+`scaleBy` keeps the figure one size from pose to pose, because the model draws every pose at a slightly different size and frames it a
+little differently (up to 6 % between the cells of one wave, and 30 % in the head of one pair of busts, where the second pose showed
+more of the body):
+- `height` (cycles): all poses share one scale, the tallest fills 86 % of a cell, so a crouch stays lower than a stand.
+- `base` (a whole figure making a gesture): each pose is scaled so its legs, the bottom 20 % of the picture, are as wide as in the
+  others. A raised hand only makes a figure taller, and arms hanging beside the coat make the rest of the body wider than with the
+  arms up (scaling by the whole lower body made the figure 20 % smaller in the cheer pose with its arms down), but the legs do not move.
+- `face` (a bust): each pose is scaled so its head is as big as in the others. The head is read with the face landmarks of the flat rig
+  (DWPose, on the CPU); when no face is found in some pose the sheet is joined by `height` and the reply says so (`scaleBy` is the mode
+  used, `requestedScaleBy` the one asked for, `measures` what was measured). The width of the head was tried first and failed: a
+  head turned or tipped back is narrower.
+The catalog gives each animation its own (`front` → `base`, `bust` → `face`, `side` → `height`).
+
+The Video 2D card that plays it is named in the list: `walk-cycle-sheet` for cycles (controls `frames`, `columns`, `facing`,
+`step`: two steps make a cycle), `walk-two-pose` for `step` (one step is a sheet of two poses; the figure stops on the last cell) and `character-reaction` for gestures and expressions (`frames`, `columns`, `fps`, `loop`,
+`framing`, `mark`). The panel prints the controls for the animation it shows.
+
+Limits: 48 animations per kit, 12 poses per sheet. The server drops a sheet it cannot read (`400`). Qwen cannot tell the near leg from the far one in a side view: the second contact pose and the
+second passing pose of `walk` often come out like the first ones (a fourth pose may even come out as a stride, not a passing).
+The cycle then plays two drawings twice, which still reads as a walk; make a pose again until it differs, or keep it. A
+bust is asked for with an explicit crop (`views.bust` and `viewNegatives` in the catalog) because a full-length reference
+picture pulls the composition: without it an expression came out as a whole figure with a small face. A cutout pose is one
+picture, so the animation is limited animation (a few poses a second), not fluid motion; a bust (`view: bust`) is made for
+expressions and a whole figure for gestures and cycles. A figure looks the way the picture says: a layer cannot be mirrored,
+so the card walks it the way it looks (`facing`); only a sheet `sequence` can be drawn mirrored (`mirror: true`), which is how a
+Series shot lets a character walk in against the way its sheet looks.
+
+### 4.8 Animations in a Series shot
+
+A Series script plays an **approved** animation of the kit (`app/services/series_cast_animation.py`,
+`ui/scripts/seriesSheet.ts`). A pending or rejected sheet is refused by the script check (and by `series.shot.update`) with
+«animation 'walk' of 'ana' is pending approval: approve it in Characters › Animaciones»: the person approves it first.
+
+- **`animation` on a `layout2d.cast` entry:** an id of the kit (`"wave"`, `"angry"`, one of your own) or
+  `{"id", "at", "duration", "loop"}`: `at` is seconds inside the shot (default 0). `duration` defaults to one pass of the sheet
+  (its cells at its fps; a `pingpong` there and back); an expression with no duration lasts at least 2.5 s. An explicit duration
+  under 1.5 s on an expression warns `expression_too_short` and is still played. `loop` is `loop`, `pingpong` or `once` (the sheet's own by default; a `once`
+  sheet holds its last cell until the window ends). The cast entry still says where the character stands (`x`) and which pose it has.
+- **What is drawn:** during the window the sheet uses the pose's final transform, after the edge snap, centered on the character's `x`, at that size and that base, with no extra zoom. It is drawn as the `walk-cycle-sheet` and `character-reaction`
+  cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %). A body sheet is as tall as the pose and stands on the pose's feet. A face sheet (`scaleBy: face` on a pose taller than it is wide) is the head only: the figure is `pose height × 0.18 / 0.5` and hangs from the crown. An expression fades in and out over about 0.25 s; a gesture or a cycle does not. The pose picture, its mouths and
+  its eyes are hidden meanwhile and come back when the window ends, so a character who speaks over a body sheet does not move its lips.
+- **A sheet never plays while its own character speaks.** A sheet has no lip-sync and hides the pose with its mouth, whatever its
+  group, so the server render (`app/services/series_expression_silence.py`) keeps every approved animation clear of the lines of the
+  character that plays it, using the real length of the recorded takes. It covers an `expression`, a `gesture`, a `custom` sheet (the
+  ones `characters.animation.make` creates) and one with no group; only a `cycle` and `walk` (continuous body motion) are left alone.
+  If the window `[at, at + duration]` overlaps one of that character's lines, it is moved: first to end 0.2 s before the character's
+  first line (when that fits inside the shot, and after the walk-in sheet), else to the first silence of that character that holds
+  it plus 0.2 s on each side, else dropped and the character keeps its pose. A window with no `duration` lasts one pass (an
+  expression at least 2.5 s), as the compiler plays it. The render job's item lists `expression_moved_for_speech` (from → to) or
+  `expression_dropped_during_speech`; the script is not changed. A character who *listens* while another speaks keeps its sheet; a
+  shot with no recorded lines is not touched. `{"id": "angry", "allowDuringSpeech": true}` opts one animation out. A `character-reaction`
+  card plays its sheet from the first second and cannot be moved: `series.shot.card.apply` warns `expression_during_speech` (same
+  criterion) when the character speaks in the shot.
+  The sheet is its own layer (`kit-<kit>-sheet-<id>`, a `sheet` sequence with `start` = the window's start second); stop-motion
+  holds (`motionStep`) apply to it like to every picture.
+- **`enterGait: "walk"` with the kit's approved `walk` sheet:** the sheet plays on loop for the whole entrance, on the same slide
+  at the same pace, with no bob or sway (the drawings step), one cycle (two steps) per `2 × enterStep` seconds, so the footfalls
+  and the `repeat: "steps"` sounds land on the feet. It is mirrored when the character enters against the way the sheet looks
+  (`facing`: a sheet that looks right entering from the right). Without an approved `walk` sheet the entrance is the bob it
+  always was (the check warns `walk_sheet_not_approved` when the sheet exists but is not approved).
+- **Limits:** one animation per cast entry; an `animation` that would start inside a walk-in that plays the walk sheet is refused
+  by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust expression goes with a bust pose in a `medium` or `close` shot and is sized from the head, not from the whole pose.
+
+### 4.9 A whole Video 2D card as a shot's take
+
+`series.shot.card.apply` (MCP) and `apply_series_shot_card` (Wizard) put any card of `scenes.templates.catalog` on a 2D Series
+shot as a **new take**, in one call: `POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`
+(`app/services/series_shot_card.py`). Before it, a walk-in took five steps by hand (find the card, compile it, edit it, export it,
+import and approve the take).
+
+```json
+{"workspace": "cast", "card": "walk-cycle-sheet",
+ "cast": [{"slot": "subject_1", "characterId": "gloria", "animation": "walk"}]}
+```
+
+- **Characters:** the `subject_N` slots take the shot's own people (in the shot's order) or the `cast` you give. The sheet cards
+  (`walk-cycle-sheet`, `walk-two-pose`, `character-reaction`) play the character's **approved** animation sheet: `walk` by default
+  for the walk cards, always named (`wave`, `angry`...) for `character-reaction`; `frames`, `columns` and `facing`/`step` or
+  `fps`/`loop` come from the sheet. A pending or rejected sheet is refused with the words of §4.8. Every other card draws a pose
+  picture (`poseId`, else the pose the shot gives that character).
+- **The rest of the card:** `background` is the shot's location plate; `foreground` and props come from `assets`
+  (`{slot: workspace file or URL}`); `controls` are the card's own. The card lasts as long as the shot (held inside the card's 3 to 12
+  seconds; longer shots are refused) and the shot takes the take's length, as the server render does.
+- **Lines:** a shot with spoken lines needs them recorded (`series.shot.voice`, or one render): the speech and the subtitles are laid
+  into the scene (`audioTracks`, `dialogueBeats`), timed as the render times them. A card has no mouths.
+- **What it leaves:** the scene `<series>-<episode>-<shot>-card-<card>.scene.json` in the workspace (a second apply replaces it)
+  opens in Video 2D, and the take (`productionMethod: animation_2d`, `sceneFilename`, `cardId`, `cardBindings`, the shot's
+  `renderInputs`) is a candidate in Series Lab. The same inputs again find the same take; other inputs reject the earlier
+  unapproved take of the scene as superseded and attach a new one.
+- **Approval:** `approve: true` approves the take only in «Modo un solo disparo» (`agent_autonomy` = `one_shot`); in `review` mode it
+  is refused (403 `agent_review_off`) and the person approves in Series Lab. A take a person approved is never replaced: the new one stays a
+  candidate and the reply says so (`approvalNote`).
+- **Export:** the scene is exported by `scenes.video2d.export`, the exporter the server render uses (a 5 s card takes seconds on a CPU).
+  If it is not ready after 60 s the reply is `status: "exporting"`; send the same request again and it attaches the take.
+
+### 4.10 Voice band
+
+A kit voice may carry `voiceType` (`man`, `woman`, `child`, `robot`), `pitchBandHz` `[low, high]`, `maxBrightness` (share of power at or above 3000 Hz) and `maxCentroidHz`. With none of them, a render records the line as before: `pitch_out_of_range` still only warns and does not ask for another take. With any of them, each take is measured (median pitch, that brightness, spectral centroid) and a take outside the band is spoken again, up to 3 seeds. If none lands inside, the best take is kept and the line warns `voice_out_of_band`. A man whose median pitch sits in the woman register (150–249 Hz) is retried even when a custom `pitchBandHz` would have allowed it. A missing measurement is not a failure.
+
+The default numbers are in `app/shared/voice_bands.json`, measured from real lines, not guessed: man 80–136 Hz, woman 108–249 Hz, child 180–230 Hz with centroid at most 510 Hz, robot 90–145 Hz. A stored field overrides its default. The type is never inferred from the character's description.
+
+**Cleanliness.** Every take is also measured for noise, whatever the voice (`services/voice_cleanliness.py`, the raw take before the trim): the noise floor (5th percentile of 50 ms frames, dBFS), the SNR (90th percentile minus the floor) and the share of energy between 40 and 100 Hz. A take with a floor above -60 dBFS, an SNR under 45 dB or 35 % or more of its energy in the bass is "unclean" and is spoken again, up to the same 3 seeds as the band; the cleanest take is kept and, if none is clean, the render does not stop: the item warns `voice_unclean` with the numbers (`cleanliness`) and the remedy. A clip under 1.5 s, or one with almost no pause, cannot show its floor: it is `inconclusive` and is never retried or warned (only the bass check applies). Reused recordings are not measured again. `qa.speech` returns the same `cleanliness` object for any workspace file. Voices made with Drama `voicedesign` measured a floor of -47 to -55 dBFS and 26 to 36 dB of SNR; a clone of a clean VoxCPM2 reference measured -93 dBFS and 76 dB. For final lines, design the reference with VoxCPM2 and clone it with Drama `drama3_base`; do not use `drama3_voicedesign`.
+
+Three doors, one function (`services/voice_band.py` `set_voice_band`):
+
+- `POST /api/v1/character-kits/library/kits/{kit_id}/voice-band` with `{workspace, voiceType?, pitchBandHz?, maxBrightness?, maxCentroidHz?, language?, baseRevision?}`. A bad value is HTTP 400.
+- MCP `characters.voice.band` posts that same body (`character_id` is the kit id; `language` selects `voicesByLanguage`).
+- Ask to the Wizard: `set_voice_band`.
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/character-kits/library/kits/gary/voice-band" \
+  -H "Content-Type: application/json" \
+  -d '{"workspace":"default","voiceType":"man"}'
+```
+
+```javascript
+await fetch(`${base}/api/v1/character-kits/library/kits/gary/voice-band`, {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'default', voiceType: 'man' }),
+})
+```
+
+```python
+import json, urllib.request
+body = json.dumps({"workspace": "default", "voiceType": "man"}).encode()
+request = urllib.request.Request(base + "/api/v1/character-kits/library/kits/gary/voice-band", data=body, method="POST")
+request.add_header("Content-Type", "application/json")
+urllib.request.urlopen(request)
+```
 
 ---
 
@@ -416,6 +626,29 @@ The response includes `filename`, public `source`, `original`, `width`,
 `padding`. `400` / `404` indicate a missing or disallowed image.
 
 ---
+
+### `GET /api/v1/character-kits/animations/catalog`
+
+The animation catalog (`character_animations.json`: groups, views, the sheet contract and every animation with its poses).
+
+### `POST /api/v1/character-kits/animations/prompt`
+
+`{animation, pose, description?, style?, screen?}` → `{prompt, negative, screen, resolution}`. `404` for an unknown
+animation, pose or style.
+
+### `POST /api/v1/character-kits/animations/sheet`
+
+`{workspace, sources[1..12], name?, columns?, scaleBy?}` → `{filename, source, width, height, count, columns, rows, cell, feet,
+figure, scaleBy, requestedScaleBy, measures, poses}`. Sources are keyed workspace or upload images; `400` for a source with nothing opaque in it.
+
+### `POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`
+
+`{workspace, card, controls?, cast?: [{slot?, characterId, animation?, poseId?}], assets?, language?, approve?}` → `{status:
+"completed" | "exporting", shotId, number, card, scene, sceneUrl, bindings, controls, duration, warnings, take?: {attemptId,
+assetId, approved, reused, superseded}, approvalNote?, exportIntent?}`. `shot` is the shot id or its number. Errors carry
+`{code, message}`: `template_unknown`, `template_retired`, `template_bad_control` (the compiler's own), `shot_not_found` (404), `shot_not_2d`, `animation_not_approved`,
+`animation_not_found`, `animation_required`, `card_not_sheet`, `slot_missing`, `bad_slot`, `bad_asset`, `unknown_pose`,
+`unknown_character`, `lines_not_recorded`, `card_shorter_than_shot`, `agent_review_off` (403), `export_failed`, `tool_failed`.
 
 ## 8. Pitfalls
 

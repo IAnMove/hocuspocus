@@ -5,7 +5,7 @@ A shot already says what the planner or the writer decided: free-text
 visible characters, the location and its variant, and the dialogue. An
 optional ``layout2d`` block overrides any of it explicitly:
 
-    {"framing": "two", "camera": "push",
+    {"framing": "two", "camera": "push", "finish": "none",
      "cast": [{"characterId": "kevin", "poseId": "panic", "x": 30, "motion": "shake", "enterFrom": "left",
                "enterAt": 0.5, "enterDuration": 2.4, "enterGait": "walk"}],
      "card": {"kind": "title", "title": "...", "body": "..."},
@@ -21,7 +21,8 @@ location (laid by the episode assembly instead when ``ambienceMode`` is
 heard in (``roomByLocation``, or ``layout2d.voiceRoom`` on one shot; the native
 render swaps the line audio for the room's copy, ``series_voice_rooms``).
 Timing follows the recorded lines: 0.35 s in, 0.22 s between lines, 0.45 s
-out, at least 1.5 s.
+out, at least 1.5 s. ``camera`` is one of ``CAMERAS`` (``static`` when nothing says otherwise) and ``finish`` the
+look over the picture (``series_finish``: the series' ``look.finish``, else paper).
 """
 from __future__ import annotations
 
@@ -29,7 +30,9 @@ import hashlib
 from typing import Any
 from urllib.parse import quote
 
+from services import series_cast_animation as cast_animation
 from services import series_entrances as entrances
+from services import series_finish
 from services import series_shot_extras as extras
 from services import series_hearing
 from services.series_ambience import ambience_mode
@@ -49,12 +52,22 @@ _FRAMING_WORDS = (
     ("wide", ("wide", "general", "establishing", "long shot", "full shot", "de situación", "plano de conjunto")),
 )
 _PUSH_WORDS = ("push", "dolly in", "zoom in", "creep in", "acerc", "zoom lento", "travelling hacia")
+# The 2D camera moves (``cameraLayer`` in ui/scripts/seriesShot.ts): a slow push-in or pull-out, a pan across the plate
+# and a slight drift. ``static`` adds no camera.
+CAMERAS = ("static", "push", "pull", "pan-left", "pan-right", "drift")
+# Where each move starts and ends, as the camera's (x, y, scale): ``CAMERA_MOVES`` of seriesShot.ts, kept equal by a
+# test. A camera that goes on from the shot before (the same picture) goes on only through ``CAMERA_CONTINUES``; the
+# other moves always start and end at these poses.
+CAMERA_POSES = {
+    "push": ((50, 50, 1), (50, 48.5, 1.07)), "pull": ((50, 48.5, 1.07), (50, 50, 1)),
+    "pan-left": ((53.5, 50, 1.08), (46.5, 50, 1.08)), "pan-right": ((46.5, 50, 1.08), (53.5, 50, 1.08)),
+    "drift": ((49, 50, 1.03), (51, 50, 1.03)),
+}
+CAMERA_CONTINUES = ("static", "push")
 LANGUAGE_KEYS = {"en": "english", "es": "spanish", "fr": "french", "de": "german", "it": "italian", "pt": "portuguese",
                  "ja": "japanese", "ko": "korean", "cmn": "chinese", "zh": "chinese", "ru": "russian"}
 MOTIONS = ("idle", "still", "shake")
 FPS = 24
-FINISH = {"texture": {"kind": "paper", "amount": 0.08}, "grain": {"amount": 0.03, "size": 1.2},
-          "vignette": {"amount": 0.12, "softness": 0.7}, "applyToTexts": False}
 
 
 def _number(value: Any, low: float, high: float) -> float | None:
@@ -85,7 +98,7 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
         return None
     return {"characterId": value["characterId"][:160], **_text_field(value, "poseId", 120),
             **_numbers(value, (("x", -50, 150), ("scale", 0.2, 4))), **_choice(value, "motion", MOTIONS),
-            **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value),
+            **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value), **cast_animation.entry_fields(value),
             **_explicit_transform(value.get("transform")),
             # A pose cut by its image border is moved so the cut stays out of the frame; false keeps it where x puts it.
             **({"edgeSnap": False} if value.get("edgeSnap") is False else {}),
@@ -104,6 +117,15 @@ def _prop_entry(value: Any) -> dict[str, Any] | None:
             **_numbers(value, (("x", -50, 150), ("y", -50, 150), ("z", 0, 100))),
             # Stands its lowest opaque row on the floor (``grounded`` as on a Video 3D object); y is then ignored.
             **({"ground": True} if value.get("ground") is True or value.get("grounded") is True else {})}
+
+
+def _layout_detail(value: Any) -> dict[str, Any]:
+    """``detail``: frame a point of the location's plate (``x``, ``y`` in % of the plate) at ``zoom`` (1.1 to 4), the
+    same picture closer instead of another one."""
+    if not isinstance(value, dict):
+        return {}
+    found = _numbers(value, (("x", 0, 100), ("y", 0, 100), ("zoom", 1.1, 4)))
+    return {"detail": found} if len(found) == 3 else {}
 
 
 def _layout_card(card: Any) -> dict[str, Any]:
@@ -135,23 +157,30 @@ def _layout_voice_room(value: dict) -> dict[str, str]:
     return {"voiceRoom": value["voiceRoom"]}
 
 
+def _layout_finish(value: dict) -> dict[str, Any]:
+    """``finish`` (``series_finish``) for this shot instead of its series'; null clears it, an unknown one is refused."""
+    if value.get("finish") is None:
+        return {}
+    return {"finish": series_finish.check_finish(value["finish"], "layout2d.finish")}
+
+
 def _layout_list(value: dict, key: str, limit: int, normalize: Any) -> dict[str, list]:
     items = [entry for entry in (normalize(item) for item in (value.get(key) or [])[:limit]) if entry]
     return {key: items} if items else {}
 
 
 def normalize_layout2d(value: Any) -> dict[str, Any] | None:
-    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` or a bad layer
-    is refused). ``layers: []`` is kept: it turns the location's layers off for this shot."""
+    """The editable 2D plan of a shot; unknown keys and bad values are dropped (an unknown ``voiceRoom`` or ``finish`` or
+    a bad layer is refused). ``layers: []`` is kept: it turns the location's layers off for this shot."""
     if not isinstance(value, dict):
         return None
-    layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", ("static", "push")),
+    layout = {**_choice(value, "framing", FRAMINGS), **_choice(value, "camera", CAMERAS), **_layout_finish(value),
               **_layout_list(value, "cast", 8, _cast_entry), **_layout_card(value.get("card")),
               **_layout_list(value, "props", 12, _prop_entry), **_layout_music(value.get("music")),
               **extras.normalize_timing(value.get("timing")), **_layout_list(value, "sfx", 12, extras.sfx_entry),
               **_layout_list(value, "fx", 12, extras.fx_entry), **_layout_voice_room(value), **layout_layers(value, "layout2d"),
               **extras.normalize_clip_fields(value), **({"lookRoom": False} if value.get("lookRoom") is False else {}),
-              **series_hearing.layout_field(value), **series_stop_motion.stored_fields(value)}
+              **series_hearing.layout_field(value), **series_stop_motion.stored_fields(value), **_layout_detail(value.get("detail"))}
     return layout or None
 
 
@@ -164,7 +193,12 @@ def classify_framing(text: str, cast_count: int) -> str:
 
 
 def classify_camera(text: str) -> str:
-    lowered = str(text or "").lower()
+    """A shot's camera in words: a move's own name (``pan-left``), else ``push`` for push-in words, else ``static``.
+    Other words for the newer moves ("slow pan left") stay ``static``: stored shots say such things and rendered
+    static, and their take fingerprint does not see these words, so reading them as moves would change old pictures."""
+    lowered = str(text or "").strip().lower()
+    if lowered in CAMERAS:
+        return lowered
     return "push" if any(word in lowered for word in _PUSH_WORDS) else "static"
 
 
@@ -298,6 +332,9 @@ def _cast_item(series: dict[str, Any], entry: dict[str, Any], x: float, duration
     enter = entrances.entrance(entry, duration)
     if enter:
         item["enter"] = enter
+    playing = cast_animation.planned(entry, duration)
+    if playing:
+        item["animation"] = playing
     if entry.get("edgeSnap") is False:
         item["edgeSnap"] = False
     return item
@@ -329,12 +366,25 @@ def _text(tid: str, value: str, start: float, end: float, y: float, size: float,
 BACKGROUND_ZOOM = {"wide": 1.0, "two": 1.12, "medium": 1.28, "close": 1.5, "insert": 1.0, "title": 1.0}
 
 
-def background_point(framing: str, focus: float, u: float, v: float) -> tuple[float, float]:
-    """Frame position (%) of a point (u, v) of a full-frame background, zoomed and panned like the compiler does."""
-    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+def shot_detail(shot: dict[str, Any]) -> dict[str, float] | None:
+    """The shot's ``layout2d.detail`` (a point of the plate framed closer), if it has one."""
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    return layout.get("detail") if isinstance(layout.get("detail"), dict) else None
+
+
+def background_view(framing: str, focus: float, detail: dict[str, float] | None = None) -> tuple[float, float, float]:
+    """(zoom, x, y) of the full-frame background: the framing's zoom panned toward ``focus``, or a ``detail`` of the
+    plate at its own zoom, centred on its point as far as the plate's edges allow (as ``seriesShot.ts`` does)."""
+    zoom = detail["zoom"] if detail else BACKGROUND_ZOOM.get(framing, 1.0)
     span = 50 * (zoom - 1)
-    x = max(50 - span, min(50 + span, 50 - (focus / 100 - 0.5) * 100 * zoom))
-    return round(x + (u - 0.5) * 100 * zoom, 3), round(50 + (v - 0.5) * 100 * zoom, 3)
+    pan = lambda point: max(50 - span, min(50 + span, 50 - (point / 100 - 0.5) * 100 * zoom))
+    return zoom, pan(detail["x"] if detail else focus), pan(detail["y"]) if detail else 50.0
+
+
+def background_point(framing: str, focus: float, u: float, v: float, detail: dict[str, float] | None = None) -> tuple[float, float]:
+    """Frame position (%) of a point (u, v) of a full-frame background, zoomed and panned like the compiler does."""
+    zoom, x, y = background_view(framing, focus, detail)
+    return round(x + (u - 0.5) * 100 * zoom, 3), round(y + (v - 0.5) * 100 * zoom, 3)
 
 
 def _prop_source(series: dict[str, Any], prop: dict[str, Any], workspace: str) -> str | None:
@@ -344,26 +394,29 @@ def _prop_source(series: dict[str, Any], prop: dict[str, Any], workspace: str) -
     return f"/api/v1/file/{quote(prop['file'])}?workspace={quote(workspace)}"
 
 
-def _prop_anchor(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float) -> tuple[float, float] | None:
+def _prop_anchor(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float,
+                 detail: dict[str, float] | None = None) -> tuple[float, float] | None:
     anchor = anchors.get(prop.get("anchor", "")) if prop.get("anchor") else None
     if isinstance(anchor, dict) and all(isinstance(anchor.get(key), (int, float)) for key in ("u", "v")):
-        return background_point(framing, focus, float(anchor["u"]), float(anchor["v"]))
+        return background_point(framing, focus, float(anchor["u"]), float(anchor["v"]), detail)
     return None
 
 
-def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float) -> tuple[float, float]:
-    point = _prop_anchor(prop, anchors, framing, focus)
+def _prop_position(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float, scale: float,
+                   detail: dict[str, float] | None = None) -> tuple[float, float]:
+    point = _prop_anchor(prop, anchors, framing, focus, detail)
     if point:
         return point[0], point[1] - scale * 50  # the prop stands on its anchor
     return prop.get("x", 50.0), prop.get("y", 60.0)
 
 
-def _prop_ground(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float) -> dict[str, Any]:
+def _prop_ground(prop: dict[str, Any], anchors: dict[str, Any], framing: str, focus: float,
+                 detail: dict[str, float] | None = None) -> dict[str, Any]:
     """``ground``: the compiler stands the prop's lowest opaque row on its anchor, else on the framing's floor line
     (``seriesShot.ts`` ``floorLine``), once ``series_shot_bridge.measure_props`` has read the image."""
     if not prop.get("ground"):
         return {}
-    point = _prop_anchor(prop, anchors, framing, focus)
+    point = _prop_anchor(prop, anchors, framing, focus, detail)
     return {"ground": {"floor": point[1]} if point else {}}
 
 
@@ -371,17 +424,18 @@ def plan_props(series: dict[str, Any], shot: dict[str, Any], framing: str, focus
     layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), {})
     anchors = ((location.get("layout2d") or {}).get("anchors") if isinstance(location.get("layout2d"), dict) else None) or {}
-    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    detail = shot_detail(shot)
+    zoom = background_view(framing, focus, detail)[0]
     props = []
     for index, prop in enumerate(layout.get("props") or []):
         source = _prop_source(series, prop, workspace)
         if not source:
             continue
         scale = round(prop.get("scale", 0.3) * zoom, 4)
-        x, y = _prop_position(prop, anchors, framing, focus, scale)
+        x, y = _prop_position(prop, anchors, framing, focus, scale, detail)
         props.append({"id": f"prop-{index + 1}", "name": prop.get("anchor") or f"Prop {index + 1}", "source": source,
                       "x": round(x, 3), "y": round(y, 3), "scale": scale, "z": prop.get("z", 8),
-                      **_prop_ground(prop, anchors, framing, focus)})
+                      **_prop_ground(prop, anchors, framing, focus, detail)})
     return props
 
 
@@ -389,14 +443,15 @@ def plan_layers(series: dict[str, Any], shot: dict[str, Any], framing: str, focu
     """The set's layers placed on the framed background, with the cast's depth, or nothing (the spec stays as it was)."""
     location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
     layers, cast_depth = shot_layers(location, shot)
-    zoom = BACKGROUND_ZOOM.get(framing, 1.0)
+    detail = shot_detail(shot)
+    zoom = background_view(framing, focus, detail)[0]
     planned = []
     for index, layer in enumerate(layers):
         found = _asset_url(series, layer["assetId"], workspace) if layer.get("assetId") else (
             f"/api/v1/file/{quote(layer['file'])}?workspace={quote(workspace)}", layer_kind(layer["file"]))
         if not found:
             continue
-        x, y = background_point(framing, focus, layer["x"] / 100, layer["y"] / 100)
+        x, y = background_point(framing, focus, layer["x"] / 100, layer["y"] / 100, detail)
         planned.append({"id": f"layer-{index + 1}", "name": f"{'Front' if layer['front'] else 'Back'} layer {index + 1}",
                         "source": found[0], "kind": found[1], "x": x, "y": y, "scale": round(layer["scale"] * zoom, 4),
                         "opacity": layer["opacity"], "depth": layer["depth"], "front": layer["front"],
@@ -508,12 +563,7 @@ def _shot_lines(series: dict[str, Any], episode: dict[str, Any], shot: dict[str,
 
 
 def _shot_camera(layout: dict[str, Any], shot: dict[str, Any]) -> str:
-    return layout["camera"] if layout.get("camera") in ("static", "push") else classify_camera(shot.get("camera", ""))
-
-
-def _focus(cast: list[dict[str, Any]], framing: str) -> float:
-    """Tighter framings pan the background toward the cast."""
-    return sum(item["x"] for item in cast) / len(cast) if cast and framing in ("two", "medium", "close") else 50.0
+    return layout["camera"] if layout.get("camera") in CAMERAS else classify_camera(shot.get("camera", ""))
 
 
 def _narrative(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, Any]) -> dict[str, Any]:
@@ -523,8 +573,9 @@ def _narrative(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, 
 
 def _with_set(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any], focus: float, workspace: str) -> dict[str, Any]:
     background = background_for(series, shot, workspace)
+    detail = shot_detail(shot)
     if background:
-        spec["background"] = {**background, "focusX": focus}
+        spec["background"] = {**background, "focusX": focus, **({"detail": detail} if detail else {})}
     props = plan_props(series, shot, spec["framing"], focus, workspace)
     if props:
         spec["props"] = props
@@ -552,14 +603,21 @@ def build_shot_spec(series: dict[str, Any], episode: dict[str, Any], shot: dict[
         "name": title[:200], "workspace": workspace, "width": size[0], "height": size[1], "fps": FPS, "duration": duration,
         "framing": framing, "cast": cast, "lines": _shot_lines(series, episode, shot, beats, timing, recorded, cast),
         "audioTracks": [*sound_tracks(series, shot, first_of_scene), *extras.sfx_tracks(layout, timing, duration, moves)],
-        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves),
-        "camera": _shot_camera(layout, shot), "finish": FINISH, "narrative": _narrative(series, episode, shot),
-        **series_stop_motion.read_fields(shot),
+        "texts": card_texts(card, duration, portrait) if card else [], "sfx": extras.fx_cues(layout, timing, duration, moves, framing),
+        "camera": _shot_camera(layout, shot), "finish": series_finish.shot_finish(series, shot),
+        "narrative": _narrative(series, episode, shot), **series_stop_motion.read_fields(shot),
     }
+    if spec["finish"] is None:
+        spec.pop("finish")  # "none": a clean picture
     spec["lines"], spec["audioTracks"] = series_hearing.shape(series, shot, spec["lines"], spec["audioTracks"])
     if document:
         return spec
-    return _with_set(spec, series, shot, _focus(cast, framing), workspace)
+    # Tighter framings pan the plate toward the cast (a lone character toward its place in the room), and a shot that
+    # shows the previous shot's picture goes on from its camera (series_continuity).
+    from services import series_continuity as continuity
+    shots = continuity.ordered(episode)
+    spec.update(continuity.camera_fields(series, shots, shot, spec["camera"]))
+    return _with_set(spec, series, shot, continuity.focus(series, shots, shot, framing), workspace)
 
 
 def recording_key(text: str, voice: dict[str, Any] | None) -> str:

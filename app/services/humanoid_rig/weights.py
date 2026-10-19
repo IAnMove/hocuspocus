@@ -39,12 +39,13 @@ def compute_weights(vertices: np.ndarray, indices: np.ndarray | None, skeleton: 
     segments = _segments(skeleton)
     capsule, along = _capsules(cells, segments)
     head = _head_region(cells, skeleton)
+    above = _above_notch(cells, skeleton)
     seeds = _seeds(capsule, along, head)
     table = _table(graph, seeds, capsule, height, cells)
     base = _base_region(cells, skeleton)
-    table = _only(_head_mask(_side_mask(table, cells, skeleton), head), base, "Hips")
-    table = _only(_head_mask(_side_mask(_smooth(table, graph), cells, skeleton), head), base, "Hips")
-    table = _only(_head_mask(drape(table, _adjacency(graph), cells, _cell_cloth(cloth, owner, len(cells)), skeleton), head), base, "Hips")
+    table = _only(_head_mask(_side_mask(table, cells, skeleton), head, above), base, "Hips")
+    table = _only(_head_mask(_side_mask(_smooth(table, graph), cells, skeleton), head, above), base, "Hips")
+    table = _only(_head_mask(drape(table, _adjacency(graph), cells, _cell_cloth(cloth, owner, len(cells)), skeleton), head, above), base, "Hips")
     return _top(table[owner])
 
 
@@ -121,6 +122,14 @@ def _head_region(cells: np.ndarray, skeleton: dict) -> np.ndarray:
     if not region:
         return np.zeros(len(cells), dtype=bool)
     return (cells[:, 1] > float(region["y"])) & (np.abs(cells[:, 0] - float(region["x"])) <= float(region["half"]) * 1.05)
+
+
+def _above_notch(cells: np.ndarray, skeleton: dict) -> np.ndarray:
+    """Everything above the neck notch, however wide: hair, a hat, horns, a raised hand."""
+    region = skeleton.get("head_region")
+    if not region:
+        return np.zeros(len(cells), dtype=bool)
+    return cells[:, 1] > float(region["y"])
 
 
 def _seeds(capsule: np.ndarray, along: np.ndarray, head: np.ndarray) -> list[np.ndarray]:
@@ -215,17 +224,23 @@ def _only(table: np.ndarray, region: np.ndarray, bone: str) -> np.ndarray:
     return out
 
 
-def _head_mask(table: np.ndarray, head: np.ndarray) -> np.ndarray:
-    """Inside the head region only the head and neck may pull."""
-    if not np.any(head):
+def _head_mask(table: np.ndarray, head: np.ndarray, above: np.ndarray) -> np.ndarray:
+    """Inside the head region only the head and neck may pull. Above the neck notch no shoulder pulls at all,
+    however far the hair or a hat reaches past the head's width: a shoulder that owned a fringe dragged the whole
+    head sideways with every swing of that arm."""
+    if not np.any(head) and not np.any(above):
         return table
     out = table.copy()
+    shoulders = [_DEFORM.index("LeftShoulder"), _DEFORM.index("RightShoulder")]
+    out[np.ix_(above, shoulders)] = 0.0
     keep = [_DEFORM.index("Head"), _DEFORM.index("Neck")]
     others = np.ones(len(_DEFORM), dtype=bool)
     others[keep] = False
     out[np.ix_(head, others)] = 0.0
     empty = out.sum(axis=1) <= 0
     out[empty & head, _DEFORM.index("Head")] = 1.0
+    stranded = empty & ~head                 # a thing above the notch only a shoulder reached (a pauldron's spike) keeps it
+    out[stranded] = table[stranded]
     return out
 
 

@@ -2,11 +2,28 @@
 from copy import deepcopy
 from pathlib import Path
 
-from routers.studio_sfx_commands import sfx_command_catalog
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_sfx_preparation import prepare_studio_sfx
 from services.studio_sfx_resources import missing_mmaudio_files, validate_mmaudio_files
-from services.studio_sfx_spec import SFX_MODEL_VARIANTS, freeze_studio_sfx_spec
+from services.studio_sfx_spec import SFX_MODEL_VARIANTS, freeze_studio_sfx_spec, studio_sfx_schema
+
+
+def sfx_command_catalog():
+    schema = studio_sfx_schema()
+    input_schema = dict(schema["input"])
+    definitions = input_schema.pop("$defs", {})
+    return {
+        "name": "generation.sfx", "version": 2, "supportedVersions": [2],
+        "domain": "studio", "mutation": True,
+        "description": "Generate sound effects with installed MMAudio files in an explicit output workspace. Preserve literal prompts. Text-only requests produce audio with a duration up to 20 seconds; video-guided requests use the inspected video duration and produce a video with new audio. Sources require canonical references. Reuse intent_id only to recover an existing admission; follow its task for completion.",
+        "inputSchema": {
+            "type": "object", "additionalProperties": False, "$defs": definitions,
+            "properties": {"version": {"type": "integer", "const": 2},
+                           "operation": {"const": "generation.sfx"},
+                           "intent_id": schema["intent_id"], "input": input_schema},
+            "required": ["version", "operation", "intent_id", "input"],
+        },
+    }
 
 
 def sfx_file_exists(runtime, filename):

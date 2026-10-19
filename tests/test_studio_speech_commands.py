@@ -9,7 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from routers.image_generation_commands import create_image_generation_commands_router, image_command_handlers
-from routers.studio_speech_commands import speech_command_catalog
+from services.studio_speech_commands import speech_command_catalog
 from services.native_generation_operation import NativeGenerationOperation
 from services.studio_speech_spec import freeze_studio_speech_spec, studio_speech_schema
 from tests.test_image_generation_commands import FakeNative, _command as image_command, _run, _db_counts

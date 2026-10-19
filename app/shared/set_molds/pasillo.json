@@ -1,0 +1,273 @@
+{
+  "id": "pasillo",
+  "title": {
+    "es": "Pasillo",
+    "en": "Corridor"
+  },
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      2.4,
+      9.6,
+      2.61
+    ],
+    "medium": [
+      3.0,
+      12.0,
+      2.9
+    ],
+    "large": [
+      3.75,
+      15.0,
+      3.248
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right",
+    "front"
+  ],
+  "openings": [
+    {
+      "wall": "left",
+      "kind": "door",
+      "x": 0.3,
+      "width": 0.9,
+      "height": 2.1,
+      "surface": "door_left"
+    },
+    {
+      "wall": "right",
+      "kind": "door",
+      "x": 0.7,
+      "width": 0.9,
+      "height": 2.1,
+      "surface": "door_right"
+    },
+    {
+      "wall": "back",
+      "kind": "door",
+      "x": 0.5,
+      "width": 1.0,
+      "height": 2.1,
+      "surface": "door_end"
+    }
+  ],
+  "blocks": [],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "wall_front",
+    "door_left",
+    "door_right",
+    "door_end"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "stand",
+      "position": [
+        -0.45,
+        0.0,
+        -0.8
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "stand",
+      "position": [
+        0.45,
+        0.0,
+        0.8
+      ],
+      "facing": 180
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        0.6,
+        0.0,
+        4.6
+      ],
+      "facing": 180
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0.0,
+        1.7,
+        2.4
+      ],
+      "lookAt": [
+        -0.45,
+        1.1,
+        -0.8
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -1.2,
+        1.6,
+        -2.6
+      ],
+      "lookAt": [
+        0.45,
+        1.1,
+        0.8
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        1.2,
+        1.6,
+        2.6
+      ],
+      "lookAt": [
+        -0.45,
+        1.1,
+        -0.8
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0.0,
+        2.65,
+        5.85
+      ],
+      "lookAt": [
+        -0.45,
+        1.1,
+        -0.8
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -0.6,
+        1.6,
+        3.04
+      ],
+      "lookAt": [
+        -0.45,
+        1.1,
+        -0.8
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        0.6,
+        1.6,
+        -3.04
+      ],
+      "lookAt": [
+        0.45,
+        1.1,
+        0.8
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -1.2,
+        1.7,
+        3.6
+      ],
+      "lookAt": [
+        0.6,
+        1.1,
+        4.6
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "office_day",
+  "propAnchors": [
+    {
+      "id": "floor_left",
+      "on": "floor",
+      "position": [
+        -1.1,
+        0.0,
+        -4.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "floor_right",
+      "on": "floor",
+      "position": [
+        1.1,
+        0.0,
+        -4.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "floor_corner",
+      "on": "floor",
+      "position": [
+        -1.1,
+        0.0,
+        4.5
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_left",
+      "position": [
+        -1.48,
+        1.4,
+        2.0
+      ],
+      "maxHeight": 0.8
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#85715b"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
+    },
+    "door_left": {
+      "color": "#b89f80"
+    },
+    "door_right": {
+      "color": "#b89f80"
+    },
+    "door_end": {
+      "color": "#b89f80"
+    }
+  }
+}

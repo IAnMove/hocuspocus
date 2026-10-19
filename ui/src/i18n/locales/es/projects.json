@@ -28,5 +28,15 @@
     "scene3d": "Escenas 3D",
     "characterKit": "Character Kits",
     "videoEditor": "Video Editor"
+  },
+  "actionErrors": {
+    "noLocation": "El proyecto no tiene una ubicación persistente.",
+    "workspaceFailed": "No se pudo abrir el workspace “{{name}}”.",
+    "storyMissing": "Story Lab no contiene ese proyecto.",
+    "seriesMissing": "Series Lab no contiene la serie de ese proyecto.",
+    "episodeMissing": "Series Lab no contiene ese episodio.",
+    "unsupported": "Este tipo de proyecto todavía no tiene almacenamiento durable que abrir.",
+    "discardUnsavedComic": "¿Abrir este cómic y descartar los cambios sin guardar?",
+    "loadFailed": "No se pudieron cargar las producciones"
   }
 }

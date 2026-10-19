@@ -102,6 +102,9 @@ def _music(root: str, workspace: str, production_id: str, shot_id: str) -> dict:
     if shot.get("kind") == "clip":
         raise ActionError("origin_unsupported", "An imported clip has no generator")
     mode = {"h3": "clip", "scene3d": "scene"}.get(shot.get("kind"), "frame")
+    if shot.get("kind") == "scene2d":
+        from services.production_scene2d import redo_origin
+        mode = redo_origin(shot)
     return {"executor": "http", "path": f"/api/v1/music-productions/{quote(production_id)}/shots/{quote(shot_id)}/redo?workspace={quote(workspace)}",
             "body": {"from": mode}}
 

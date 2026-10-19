@@ -15,6 +15,18 @@ Clients of the durable job route keep working. Extra fields on the 202 body
 (`generationId`, `commandId`, `candidateId`, `idempotencyKey`, `replay`) are
 additive.
 
+## Paid MiniMax music
+
+Every music default is the local `ace_step_v1_5_xl_sft_lm_4b`
+(`music_model_contract.DEFAULT_MUSIC_MODEL`). The remote routes never fill a
+model: a request with no `model` is refused (400), and a paid id needs
+`"paid_music_confirmed": true` (else 403). Story Lab sends that field only
+after the person confirms the cost. The Wizard, MCP `generate`,
+`generation.music` and `production.*` specs refuse paid ids with the local IDs
+to use. A Story saved with `music-3.0` / `music-2.6` and no
+`music.paidModelChosen` reads as the local model (`music.replacedPaidModel`
+drives the notice); nothing is rewritten on load.
+
 ## Request
 
 `command_id` / `idempotency_key`, project/cue/candidate IDs (never titles),

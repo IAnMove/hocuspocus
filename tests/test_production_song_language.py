@@ -131,13 +131,15 @@ def test_accented_words_still_match_what_whisper_wrote():
     assert [word["t0"] for word in lines[0]["words"]] == [1.0, 1.4, 1.6]
 
 
-def test_default_image_model_is_qwen_with_its_own_steps(monkeypatch):
+def test_default_image_model_is_qwen_turbo_with_its_own_steps(monkeypatch):
     from services import production_image_defaults as defaults
-    monkeypatch.setattr(defaults, "default_image_model", lambda: "qwen_image_21")
+    monkeypatch.setattr(defaults, "default_image_model", lambda: defaults.DEFAULT_IMAGE_MODEL)
     spec = {"title": "t", "song": {"lyrics": ENGLISH, "caption": "c", "duration": 30, "bpm": 72},
             "style": {}, "shots": [{"key": "s0", "kind": "still", "t0": 0, "still": "k"}]}
-    assert validate_spec(spec)["style"] == {"image_model": "qwen_image_21", "image_steps": 40}
+    assert defaults.DEFAULT_IMAGE_MODEL == "qwen_image_21_turbo"
+    assert validate_spec(spec)["style"] == {"image_model": "qwen_image_21_turbo", "image_steps": 8}
     assert model_image_steps("qwen_image_21") == 40
+    assert model_image_steps("qwen_image_21_turbo") == 8
     assert model_image_steps("flux2_klein_9b") == 4
     assert model_image_steps("qwen_image_21_viggle_turbo") == 6
     assert model_image_steps("../defaults/qwen_image_21") is None
@@ -145,7 +147,7 @@ def test_default_image_model_is_qwen_with_its_own_steps(monkeypatch):
 
 def test_flux_stays_selectable_at_its_own_steps(monkeypatch):
     from services import production_image_defaults as defaults
-    monkeypatch.setattr(defaults, "default_image_model", lambda: "qwen_image_21")
+    monkeypatch.setattr(defaults, "default_image_model", lambda: "qwen_image_21_turbo")
     spec = {"title": "t", "song": {"lyrics": ENGLISH, "caption": "c", "duration": 30, "bpm": 72},
             "style": {"preset": "riso-zine", "image_model": "flux2_klein_9b"},
             "shots": [{"key": "s0", "kind": "still", "t0": 0, "still": "k"}]}
@@ -154,17 +156,20 @@ def test_flux_stays_selectable_at_its_own_steps(monkeypatch):
     assert image_choice({}, style) == ("qwen_image_21", 28)
     assert image_choice({"image_model": "flux2_klein_9b"}, style) == ("flux2_klein_9b", None)
     assert image_choice({"image_model": "qwen_image_21"}, style) == ("qwen_image_21", 28)
-    assert image_choice({}, {}) == ("qwen_image_21", None)
+    assert image_choice({}, {}) == ("qwen_image_21_turbo", None)
 
 
-def test_unset_image_model_draws_with_qwen_at_forty_steps(tmp_path):
+def test_unset_image_model_draws_with_qwen_turbo_at_eight_steps(tmp_path):
     sent = []
     production = Production("ws", "p", workspace_dir=lambda _: str(tmp_path), uploads_dir=lambda: str(tmp_path),
                             mcp=lambda tool, arguments: sent.append(arguments["input"]["params"]) or {})
     production.image("k", "a prompt", None, "1280x704", 1)
     production.image("f", "a prompt", None, "1280x704", 1, "flux2_klein_9b")
-    assert (sent[0]["model_type"], sent[0]["num_inference_steps"]) == ("qwen_image_21", 40)
+    production.image("b", "a prompt", None, "1280x704", 1, "qwen_image_21")
+    assert (sent[0]["model_type"], sent[0]["num_inference_steps"]) == ("qwen_image_21_turbo", 8)
     assert (sent[1]["model_type"], sent[1]["num_inference_steps"]) == ("flux2_klein_9b", 4)
+    assert (sent[2]["model_type"], sent[2]["num_inference_steps"]) == ("qwen_image_21", 40)   # an explicit choice runs as before
+    assert all("negative_prompt" not in params and params["guidance_scale"] == 1 for params in sent)
 
 
 def test_preview_without_a_model_uses_the_run_default(tmp_path, monkeypatch):

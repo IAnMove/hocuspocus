@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from services.production_image_defaults import image_choice
+from services.production_seeds import default_seed
 
 PHRASE = "single full-body view, plain neutral background, exactly one subject"
 PORTRAIT_SIZE = "1024x1536"
@@ -79,7 +80,7 @@ def _portrait_jobs(production: Any, spec: dict) -> dict:
             continue
         jobs[cid] = production.image(
             "cast-single-" + cid, single_prompt(entry, style), None, PORTRAIT_SIZE,
-            entry.get("seed", 5), *image_choice(entry, settings),
+            entry.get("seed", default_seed(production, 5)), *image_choice(entry, settings),
             production._attempt("cast_single_attempts", cid),
         )
     return jobs

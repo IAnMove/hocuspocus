@@ -57,7 +57,7 @@ _KINDS = {
     "tile": "tile",
     "tileset": "tileset",
     "fondo": "background", "background": "background",
-    "efecto": "vfx", "vfx": "vfx",
+    "efecto": "vfx", "effect": "vfx", "vfx": "vfx",
     "sfx": "sfx", "sonido": "sfx",
     "musica": "music", "music": "music",
     "jingle": "jingle",
@@ -65,18 +65,22 @@ _KINDS = {
     "modelo3d": "model3d", "model3d": "model3d",
     "personaje3d": "character3d", "character3d": "character3d",
 }
-_ROLES = {"jugador": "player", "enemigo": "enemy", "npc": "npc", "jefe": "boss"}
-_ITEM_ANIM = {"girar": "spin", "flotar": "bob", "glow": "glow"}
+# Spanish and English option words are both accepted; the UI example list follows the UI language.
+_ROLES = {
+    "jugador": "player", "enemigo": "enemy", "npc": "npc", "jefe": "boss",
+    "player": "player", "enemy": "enemy", "boss": "boss",
+}
+_ITEM_ANIM = {"girar": "spin", "flotar": "bob", "glow": "glow", "spin": "spin", "bob": "bob"}
 _NEEDS_CHARACTER = {"animation", "voice"}
 _NUMBERED = (
-    (re.compile(r"variantes (\d+)$"), "variants"),
-    (re.compile(r"capas (\d+)$"), "layers"),
+    (re.compile(r"(?:variantes|variants) (\d+)$"), "variants"),
+    (re.compile(r"(?:capas|layers) (\d+)$"), "layers"),
     (re.compile(r"(\d+) frames$"), "frames"),
-    (re.compile(r"tamano (\d+)$"), "size"),
-    (re.compile(r"bucle (\d+)\s*s$"), "loop"),
+    (re.compile(r"(?:tamano|size) (\d+)$"), "size"),
+    (re.compile(r"(?:bucle|loop) (\d+)\s*s$"), "loop"),
     (re.compile(r"bpm (\d+)$"), "bpm"),
-    (re.compile(r"metodo (tira|h3)$"), "method"),
-    (re.compile(r"anim (girar|flotar|glow)$"), "anim"),
+    (re.compile(r"(?:metodo|method) (tira|strip|h3)$"), "method"),
+    (re.compile(r"anim (girar|flotar|spin|bob|glow)$"), "anim"),
 )
 
 
@@ -324,7 +328,7 @@ def _store_option(spec: dict[str, Any], kind: str, key: str, raw: str) -> None:
         spec["loopSeconds"] = int(raw)
         return
     if key == "method":
-        spec["method"] = "strip" if raw == "tira" else "h3"
+        spec["method"] = "strip" if raw in {"tira", "strip"} else "h3"
         return
     if key == "anim":
         spec["anim"] = {"action": _ITEM_ANIM[raw], "frames": int(spec.get("frames") or 8)}

@@ -74,7 +74,7 @@ def test_attention_override_is_model_scoped_and_models_discoverable():
     for name in ('minimax_h3_fused_turbo', 'minimax_h3_ref2va_fused_turbo'):
         model = json.loads((root / f'app/defaults/{name}.json').read_text())
         assert model['model']['minimax_h3_fused_turbo']
-        assert name in (root / 'ui/src/stores/useStore.ts').read_text()
+        assert name in (root / 'ui/src/stores/modelVisibility.ts').read_text()
 
 
 def test_native_generation_keeps_the_requested_multi_window_duration():

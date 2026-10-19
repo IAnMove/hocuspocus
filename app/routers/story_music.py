@@ -16,7 +16,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from services import execution_mode
+from services import execution_mode, task_controls
 
 
 _get_active_workspace: Callable[[], str]
@@ -33,6 +33,9 @@ _MINIMAX_MUSIC_TERMINAL: set[str]
 _finish_unstarted_music_children: Callable[..., None]
 _minimax_music_job_update: Callable[..., Any]
 wgp: Any
+_music_generation_gate: Callable[[dict], None] | None = None
+_music_before_reserve: Callable[[str], None] | None = None
+_music_resolve_workspace: Callable[[Any], str] | None = None
 
 
 def _bind_story_music_runtime(
@@ -51,6 +54,9 @@ def _bind_story_music_runtime(
     finish_unstarted_music_children: Callable[..., None],
     minimax_music_job_update: Callable[..., Any],
     wgp_module: Any,
+    music_generation_gate: Callable[[dict], None] | None = None,
+    before_reserve: Callable[[str], None] | None = None,
+    resolve_workspace: Callable[[Any], str] | None = None,
 ) -> None:
     """Install launcher primitives under the names the handlers already use."""
     global _get_active_workspace, _workspace_dir, _story_cover_reference_path
@@ -59,6 +65,7 @@ def _bind_story_music_runtime(
     global _run_minimax_music_job, _minimax_music_jobs, _minimax_music_jobs_lock
     global _MINIMAX_MUSIC_TERMINAL, _finish_unstarted_music_children
     global _minimax_music_job_update, wgp
+    global _music_generation_gate, _music_before_reserve, _music_resolve_workspace
     _get_active_workspace = get_active_workspace
     _workspace_dir = workspace_dir
     _story_cover_reference_path = story_cover_reference_path
@@ -73,6 +80,9 @@ def _bind_story_music_runtime(
     _finish_unstarted_music_children = finish_unstarted_music_children
     _minimax_music_job_update = minimax_music_job_update
     wgp = wgp_module
+    _music_generation_gate = music_generation_gate
+    _music_before_reserve = before_reserve
+    _music_resolve_workspace = resolve_workspace
 
 
 def _reserve_story_music_submission(body: dict, workspace: str):
@@ -94,19 +104,33 @@ def _reserve_story_music_submission(body: dict, workspace: str):
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
+def _confirmed_paid_model(body: dict) -> str:
+    """The paid model a person picked and confirmed in Story Lab; nothing else reaches MiniMax."""
+    from services.music_model_contract import MusicModelError, require_confirmed_paid_music
+
+    try:
+        return require_confirmed_paid_music(body)
+    except MusicModelError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+
+
 def start_story_music_candidates_job(body: dict):
     """Start observable MiniMax Music generation and return immediately."""
     from services import minimax_music_service
 
     workspace = body.get("workspace") if "workspace" in body else _get_active_workspace()
+    # Absent on the full server. Core maps a null or empty workspace to the active one.
+    if _music_resolve_workspace is not None:
+        workspace = _music_resolve_workspace(workspace)
     _workspace_dir(workspace)
+    # Absent on the full server. Core uses it to answer 409 before a paid-model check.
+    if _music_generation_gate is not None:
+        _music_generation_gate(body)
     try:
         execution_mode.validate_remote_provider(workspace, "minimax-music")
     except execution_mode.ExecutionModeError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    model = str(body.get("model") or "music-3.0").strip()
-    if model not in minimax_music_service.ALLOWED_MODELS:
-        raise HTTPException(status_code=400, detail=f"Unsupported MiniMax Music model: {model}")
+    model = _confirmed_paid_model(body)
     try:
         count = max(1, min(3, int(body.get("count") or 2)))
     except (TypeError, ValueError, OverflowError) as exc:
@@ -133,6 +157,9 @@ def start_story_music_candidates_job(body: dict):
                 detail="Upload a valid reference song before generating a cover",
             )
 
+    # Core opens its Activity registry here, before the reservation writes a task.
+    if _music_before_reserve is not None:
+        _music_before_reserve(workspace)
     reserved = _reserve_story_music_submission(body, workspace) or {}
     if reserved.get("replay"):
         existing = _load_minimax_music_job(str(reserved.get("job_id") or ""))
@@ -228,6 +255,15 @@ def start_story_music_candidates_job(body: dict):
     return _public_minimax_music_job(job)
 
 
+def _cancel_music_task(task: dict):
+    return cancel_story_music_candidates_job(task_controls.job_id(task))
+
+
+def _cancel_music_candidate_task(task: dict):
+    """A candidate row cancels the job it belongs to; its root task id is ``task-minimax-music-<job id>``."""
+    return cancel_story_music_candidates_job(str(task.get("root_id") or "").removeprefix("task-minimax-music-"))
+
+
 def get_story_music_candidates_job(job_id: str):
     job = _load_minimax_music_job(job_id)
     if not job:
@@ -270,8 +306,10 @@ async def generate_story_music_candidates(body: dict):
 
     services = wgp.server_config.get("services", {})
     workspace = str(body.get("workspace") or _get_active_workspace())
+    if _music_generation_gate is not None:
+        _music_generation_gate(body)
     execution_mode.validate_remote_provider(workspace, "minimax-music")
-    model = str(body.get("model") or "music-3.0").strip()
+    model = _confirmed_paid_model(body)
     reference_audio_path = None
     if model in {"music-cover", "music-cover-free"}:
         reference_audio_path = _story_cover_reference_path(
@@ -312,40 +350,38 @@ _generate_story_music_candidates = generate_story_music_candidates
 
 
 def create_story_music_router(
+    jobs: Any,
     *,
     get_active_workspace: Callable[[], str],
-    workspace_dir: Callable[..., str],
     story_cover_reference_path: Callable[[str, str], str | None],
-    load_minimax_music_job: Callable[[str], dict | None],
-    persist_minimax_music_job: Callable[[dict], None],
-    publish_minimax_music_job: Callable[[dict], None],
-    public_minimax_music_job: Callable[[dict], dict],
-    run_minimax_music_job: Callable[[str], None],
-    minimax_music_jobs: dict[str, dict],
-    minimax_music_jobs_lock: threading.RLock,
-    minimax_music_terminal: set[str],
-    finish_unstarted_music_children: Callable[..., None],
-    minimax_music_job_update: Callable[..., Any],
     wgp_module: Any,
+    music_generation_gate: Callable[[dict], None] | None = None,
+    before_reserve: Callable[[str], None] | None = None,
+    resolve_workspace: Callable[[Any], str] | None = None,
 ) -> APIRouter:
     """Mount Story MiniMax Music jobs without importing the launch module."""
     _bind_story_music_runtime(
         get_active_workspace=get_active_workspace,
-        workspace_dir=workspace_dir,
+        workspace_dir=jobs.workspace_dir,
         story_cover_reference_path=story_cover_reference_path,
-        load_minimax_music_job=load_minimax_music_job,
-        persist_minimax_music_job=persist_minimax_music_job,
-        publish_minimax_music_job=publish_minimax_music_job,
-        public_minimax_music_job=public_minimax_music_job,
-        run_minimax_music_job=run_minimax_music_job,
-        minimax_music_jobs=minimax_music_jobs,
-        minimax_music_jobs_lock=minimax_music_jobs_lock,
-        minimax_music_terminal=minimax_music_terminal,
-        finish_unstarted_music_children=finish_unstarted_music_children,
-        minimax_music_job_update=minimax_music_job_update,
+        load_minimax_music_job=jobs.load_minimax_music_job,
+        persist_minimax_music_job=jobs.persist_minimax_music_job,
+        publish_minimax_music_job=jobs.publish_minimax_music_job,
+        public_minimax_music_job=jobs.public_minimax_music_job,
+        run_minimax_music_job=jobs.run_minimax_music_job,
+        minimax_music_jobs=jobs.minimax_music_jobs,
+        minimax_music_jobs_lock=jobs.minimax_music_jobs_lock,
+        minimax_music_terminal=jobs.minimax_music_terminal,
+        finish_unstarted_music_children=jobs.finish_unstarted_music_children,
+        minimax_music_job_update=jobs.minimax_music_job_update,
         wgp_module=wgp_module,
+        music_generation_gate=music_generation_gate,
+        before_reserve=before_reserve,
+        resolve_workspace=resolve_workspace,
     )
     router = APIRouter()
+    task_controls.register("minimax-music", "cancel", _cancel_music_task)
+    task_controls.register("minimax-music-candidate", "cancel", _cancel_music_candidate_task)
 
     @router.post("/api/v1/stories/music-candidates/jobs", status_code=202)
     def start_story_music_candidates_job(body: dict):

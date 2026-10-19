@@ -408,12 +408,15 @@ def register_abort_state(
     state: MutableMapping[str, Any],
     *,
     interrupt_model: Callable[[], None] | None = None,
+    preparing_engine: bool = False,
 ) -> bool:
     """Register a worker's abort dictionary unless cancellation won first.
 
     Dummy states for non-Wan tools still receive ``abort=True`` but have no
     interrupt callback. Callback ownership is tracked separately by state
     identity so an old worker cannot interrupt or unregister a newer phase.
+    ``preparing_engine`` marks a job that holds the GPU only to load a model:
+    Cancel can settle it before any sample exists.
     """
     with _lifecycle_lock:
         state.setdefault("abort", False)
@@ -422,6 +425,8 @@ def register_abort_state(
             return False
         active_states[job_id] = state
         _registrations[job_id] = (job, state, interrupt_model)
+        if preparing_engine:
+            job["preparing_engine"] = True
         return True
 
 
@@ -509,6 +514,35 @@ def acknowledge_cancel(
     return changed
 
 
+def mark_producing(job: MutableMapping[str, Any]) -> None:
+    """Record that this job has left engine load and started sampling."""
+    with _lifecycle_lock:
+        job["producing"] = True
+        job["preparing_engine"] = False
+
+
+def _still_preparing(job: Mapping[str, Any]) -> bool:
+    """True when the job is loading an engine and has not sampled yet."""
+    return bool(job.get("preparing_engine")) and not job.get("producing")
+
+
+def _drop_generation_queue_slot(job: MutableMapping[str, Any]) -> None:
+    """Remove a cancelled waiter so the next job does not wait for it to poll."""
+    lock_key = job.get("_generation_queue_lock_key")
+    token = job.get("_generation_queue_token")
+    if lock_key is None or token is None:
+        return
+    with _generation_queue_condition:
+        _remove_generation_waiter(lock_key, token, job)
+
+
+def _invoke_interrupt(interrupt: Callable[[], None]) -> None:
+    try:
+        interrupt()
+    except Exception:
+        pass
+
+
 def request_cancel(
     job: MutableMapping[str, Any],
     *,
@@ -516,17 +550,15 @@ def request_cancel(
     active_states: MutableMapping[str, MutableMapping[str, Any]] | None = None,
 ) -> CancelResult:
     """Atomically request cancellation and signal the matching active state."""
-    result: CancelResult
+    interrupt: Callable[[], None] | None = None
+    immediate = False
     with _lifecycle_lock:
         status = job.get("status")
-        if status in TERMINAL_STATUSES:
-            return CancelResult(False, False, False)
-        if status == "cancelling":
+        if status in TERMINAL_STATUSES or status == "cancelling":
             return CancelResult(False, False, False)
 
         was_running = status == "running"
         job["cancel_requested"] = True
-
         abort_signalled = False
         state = active_states.get(job_id) if active_states is not None and job_id else None
         registration = _registrations.get(job_id) if job_id else None
@@ -539,26 +571,34 @@ def request_cancel(
         ):
             state["abort"] = True
             abort_signalled = True
-            if registration[2] is not None:
-                try:
-                    registration[2]()
-                except Exception:
-                    pass
+            interrupt = registration[2]
 
-        if was_running:
-            # The request is durable and inference has been signalled, but the
-            # worker still owns its resource until finish/unregister/explicit
-            # acknowledgement.  Do not publish a terminal timestamp early.
+        # Queued work, and a running job that is only loading its engine, have
+        # no sample yet. Settle now: the caller must not wait out the load.
+        # A job that has started producing stays `cancelling` until its worker
+        # releases the abort registration.
+        immediate = (not was_running) or _still_preparing(job)
+        if immediate:
+            _acknowledge_cancel_locked(job)
+        else:
             job["status"] = "cancelling"
             job["phase"] = "cancelling"
             job["message"] = "Cancelling…"
             job["finished_at"] = None
-        else:
-            # Queued/waiting jobs own no active model invocation and can settle
-            # synchronously without a worker acknowledgement.
-            _acknowledge_cancel_locked(job)
-
         result = CancelResult(True, was_running, abort_signalled)
+    _drop_generation_queue_slot(job)
+    if interrupt is not None:
+        # Engine-load interrupts can block on a runtime HTTP call. The abort
+        # flag is already set; do not make Cancel wait for that call.
+        if immediate:
+            threading.Thread(
+                target=_invoke_interrupt,
+                args=(interrupt,),
+                daemon=True,
+                name="maestro_cancel_interrupt",
+            ).start()
+        else:
+            _invoke_interrupt(interrupt)
     _notify_job_state(job)
     return result
 

@@ -25,6 +25,7 @@ from services.director.prompt_polish import (  # noqa: E402
     should_polish_director_video_prompts,
 )
 from tests.api_client_source import api_client_source  # noqa: E402
+from tests.support.launch_ast import launch_and_worker_source  # noqa: E402
 from services.director.planners.short_film import (  # noqa: E402
     ShortFilmPlanner,
     _route_video_pass2_guide,
@@ -1891,7 +1892,8 @@ class TestDirectorH3GenerationContract(unittest.TestCase):
 
 class TestDirectorUICatalogContract(unittest.TestCase):
     def test_ui_preserves_backend_director_capabilities(self):
-        store_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "useStore.ts")
+        store_path = os.path.join(_ROOT_DIR, "ui", "src", "features", "director", "store", "directorPipelineSlice.ts")
+        models_path = os.path.join(_ROOT_DIR, "ui", "src", "stores", "modelsSlice.ts")
         types_path = os.path.join(_ROOT_DIR, "ui", "src", "types", "index.ts")
         chat_path = os.path.join(
             _ROOT_DIR, "ui", "src", "components", "Sidebar", "DirectorChat.tsx",
@@ -1905,10 +1907,13 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             "DirectorLoraSelector.tsx",
         )
         launch_path = os.path.join(_APP_DIR, "_launch_runtime.py")
+        options_path = os.path.join(_APP_DIR, "services", "model_options.py")
         pipeline_path = os.path.join(_APP_DIR, "services", "director_pipeline.py")
         client = api_client_source()
         with open(store_path, encoding="utf-8") as handle:
             store = handle.read()
+        with open(models_path, encoding="utf-8") as handle:
+            models = handle.read()
         with open(types_path, encoding="utf-8") as handle:
             types = handle.read()
         with open(chat_path, encoding="utf-8") as handle:
@@ -1916,13 +1921,15 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         with open(lora_selector_path, encoding="utf-8") as handle:
             lora_selector = handle.read()
         with open(launch_path, encoding="utf-8") as handle:
-            launch = handle.read()
+            launch = launch_and_worker_source(handle.read())
+        with open(options_path, encoding="utf-8") as handle:
+            options = handle.read()
         with open(pipeline_path, encoding="utf-8") as handle:
             pipeline_source = handle.read()
 
         self.assertIn("director?: DirectorModelCompatibility", client)
-        self.assertIn("const backendModels: ModelDef[]", store)
-        self.assertIn("...m,", store)
+        self.assertIn("const backendModels: ModelDef[]", models)
+        self.assertIn("...m,", models)
         self.assertIn("shot_image_guidance: directorShotImageGuidance", store)
         self.assertIn("director_max_shot_frames: directorMaxShotFrames", store)
         self.assertIn("resolution: directorVideoResolution", store)
@@ -1942,7 +1949,7 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         self.assertIn("SHOT_IMAGE_PROMPT_ONLY", pipeline_source)
         self.assertIn("_director_video_execution_profile", pipeline_source)
         self.assertIn("sliding_window_memory_override", pipeline_source)
-        self.assertIn('"director_memory_policy": md.get', launch)
+        self.assertIn('"director_memory_policy": md.get', options)
         self.assertIn("per_clip_continue_from_previous", launch)
         self.assertIn('"_continuation_tail_skip", 8', launch)
 

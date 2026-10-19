@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from typing import Any
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -11,6 +12,10 @@ from routers.scene3d_speech import create_scene3d_speech_router
 from routers.scene3d_profiles import create_scene3d_profiles_router
 from routers.lips_creator import create_lips_creator_router
 
+from routers.character_animation_jobs import create_character_animation_jobs_router
+from routers.character_animation_review import create_character_animation_review_router
+from services.character_animation_job import AnimationJobDeps, CharacterAnimationJobs
+from services.character_animations import CharacterAnimationError, build_sheet, catalog as animation_catalog, pose_prompt
 from services.character_kit_face_cleanup import (
     CharacterKitFaceCleanupError,
     clean_character_kit_overlay,
@@ -23,15 +28,45 @@ class FaceRigCleanupRequest(BaseModel):
     padding: int = Field(default=8, ge=0, le=64)
 
 
+class AnimationPromptRequest(BaseModel):
+    animation: str = Field(min_length=1, max_length=64)
+    pose: str = Field(min_length=1, max_length=120)
+    description: str = Field(default="", max_length=2000)
+    style: str | None = Field(default=None, max_length=80)
+    screen: str | None = Field(default=None, pattern="^(green|blue|magenta)$")
+    custom: dict[str, str] | None = None
+
+
+class AnimationSheetRequest(BaseModel):
+    workspace: str = Field(min_length=1, max_length=120)
+    sources: list[str] = Field(min_length=1, max_length=12)
+    name: str = Field(default="animation", min_length=1, max_length=80)
+    columns: int | None = Field(default=None, ge=1, le=12)
+    scaleBy: str = Field(default="height", pattern="^(height|base|face)$")
+
+
 def create_character_kit_face_router(
     *,
     workspace_dir: Callable[[str | None], str],
     uploads_root: Callable[[], str],
+    local_mcp: Callable[[], Any] | None = None,
+    model_defaults: Callable[[str], dict[str, Any]] | None = None,
+    services: Callable[[], Any] | None = None,
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/character-kits", tags=["Character kits"])
     router.include_router(create_scene3d_speech_router())
     router.include_router(create_scene3d_profiles_router(workspace_dir))
     router.include_router(create_lips_creator_router(workspace_dir))
+    if services is not None:
+        # An agent's review of an animation reads «Modo un solo disparo» (agent_autonomy) from the services config.
+        router.include_router(create_character_animation_review_router(workspace_dir=workspace_dir, services=services))
+    if local_mcp is not None:
+        # Making an animation chains the server's own generation tools, as an MCP client would (services/character_animation_job.py).
+        router.include_router(create_character_animation_jobs_router(
+            CharacterAnimationJobs(AnimationJobDeps(call=lambda tool, arguments: local_mcp().call(tool, arguments), workspace_dir=workspace_dir,
+                                                    uploads_root=uploads_root, model_defaults=model_defaults,
+                                                    services=services)),
+            bind_loop=lambda loop: local_mcp().bind_loop(loop)))
 
     @router.post("/face-rig/cleanup")
     def cleanup_face_rig_overlay(payload: FaceRigCleanupRequest):
@@ -52,5 +87,36 @@ def create_character_kit_face_router(
         except OSError as exc:
             raise HTTPException(status_code=500, detail="Could not clean the Face Rig overlay") from exc
         return result
+
+    @router.get("/animations/catalog")
+    def get_animation_catalog():
+        """The small animations a character can have (walk, wave, anime expressions...) and the sheet contract."""
+        return animation_catalog()
+
+    @router.post("/animations/prompt")
+    def build_animation_prompt(payload: AnimationPromptRequest):
+        """Prompt, negative prompt, screen colour and resolution for one pose, made with the character as its reference."""
+        try:
+            return pose_prompt(payload.animation, payload.pose, payload.description, payload.style, payload.screen, payload.custom)
+        except CharacterAnimationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail=f"Unknown animation, pose or style: {exc.args[0]}") from exc
+
+    @router.post("/animations/sheet")
+    def build_animation_sheet(payload: AnimationSheetRequest):
+        """Join keyed pose pictures into one sprite sheet of equal cells: the figure on a ground line, its torso centred."""
+        try:
+            workspace = workspace_dir(payload.workspace)
+            result = build_sheet(payload.sources, uploads_root=uploads_root(), workspace_root=workspace, workspace=payload.workspace,
+                                 name=payload.name, columns=payload.columns, scale_by=payload.scaleBy,
+                                 output_dir=workspace if os.path.isdir(workspace) else None)
+        except (CharacterAnimationError, CharacterKitFaceCleanupError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail="Permitted image file was not found") from exc
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail="Could not build the sprite sheet") from exc
+        return {key: value for key, value in result.items() if key != "path"}
 
     return router

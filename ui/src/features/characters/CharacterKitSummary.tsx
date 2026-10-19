@@ -26,7 +26,7 @@ export function CharacterKitSummary({ kit }: { kit?: CharacterKit }) {
         <p className="font-medium text-text-primary">{kit.name}</p>
         <p>
           {tts.source === 'kit'
-            ? t('sheet.ttsVoice', { voiceId: tts.voiceName ?? tts.voiceId ?? '' })
+            ? t('sheet.ttsVoice', { engine: tts.engine ?? 'Qwen3', voiceId: tts.voiceName ?? tts.voiceId ?? '' })
             : t('sheet.ttsNone')}
         </p>
         {languageVoices.length ? <p data-testid="character-kit-language-voices">{t('sheet.languageVoices', { voices: languageVoices.join(' · ') })}</p> : null}

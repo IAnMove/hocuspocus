@@ -230,7 +230,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
               <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-0.5 text-[10px] text-text-muted">
                 {completedPanelTimings.map(item => (
                   <span key={`${item.panel_no}-${item.status}`}>
-                    Viñeta {item.panel_no}: {item.total_seconds!.toFixed(1)}s
+                    {tCommon('panelSeconds', { panel: item.panel_no, seconds: item.total_seconds!.toFixed(1) })}
                   </span>
                 ))}
               </div>

@@ -28,7 +28,7 @@ test('shared JSON catalog ids match the TypeScript modules', () => {
   assert.deepEqual(ids(VIDEO2D_SCENE_TEMPLATES), ids(byGroup('video2d')))
   assert.deepEqual(ids(MUSIC_MOTION_TEMPLATES), ids(byGroup('music-motion')))
   assert.deepEqual(ids(REEXPORTED_MUSIC), ids(MUSIC_MOTION_TEMPLATES))
-  assert.deepEqual(ids(ALL_SCENE_TEMPLATES), [...ids(CANDIDATE_SCENE_TEMPLATES), ...ids(MUSIC_MOTION_TEMPLATES)])
+  assert.deepEqual(ids(ALL_SCENE_TEMPLATES), ids(templates.entries))
   for (const template of [...CANDIDATE_SCENE_TEMPLATES, ...VIDEO2D_SCENE_TEMPLATES, ...MUSIC_MOTION_TEMPLATES]) {
     const entry = templates.entries.find(item => item.id === template.id)
     assert.ok(entry)

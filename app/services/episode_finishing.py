@@ -23,6 +23,7 @@ No step fails the assembly. A step that cannot run says why.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -92,8 +93,32 @@ def join_spans(durations: Sequence[float], joined_duration: float | None,
     return [(offset, offset + length) for offset, length in zip(offsets, lengths)], join
 
 
-def _chunks(text: str) -> list[str]:
-    """Split one line into cues of at most two subtitle lines, at word boundaries."""
+MIN_TAIL_WORDS = 3
+MIN_TAIL_SECONDS = 0.8
+_CLAUSE_END = (".", ",", ";", ":", "!", "?", "\u2026")
+
+
+def _rebalanced_tail(chunks: list[str], tail_characters: int) -> list[str]:
+    """The last cue is never a lone word or a flash. The characters limit left ``ellas?`` alone for 0.4 s at the end of
+    a line of 85; words move from the cue before it, back to the nearest clause end that leaves the last cue long
+    enough, else back as few words as that takes. Both cues stay within the characters limit."""
+    if len(chunks) < 2:
+        return chunks
+    before, tail = chunks[-2].split(), chunks[-1].split()
+    fits = [back for back in range(1, len(before) - 1)
+            if len(tail) + back >= MIN_TAIL_WORDS
+            and len(" ".join(before[-back:] + tail)) >= tail_characters
+            and len(" ".join(before[-back:] + tail)) <= CUE_CHARACTERS]
+    if len(tail) >= MIN_TAIL_WORDS and len(chunks[-1]) >= tail_characters or not fits:
+        return chunks
+    clause = [back for back in fits if before[-back - 1].endswith(_CLAUSE_END)]
+    back = clause[0] if clause else fits[0]
+    return chunks[:-2] + [" ".join(before[:-back]), " ".join(before[-back:] + tail)]
+
+
+def _chunks(text: str, tail_characters: int = 0) -> list[str]:
+    """Split one line into cues of at most two subtitle lines, at word boundaries. ``tail_characters``: the least the
+    last cue may have so that, at the line's speaking rate, it stays up for ``MIN_TAIL_SECONDS``."""
     words, chunks, current = text.split(), [], ""
     for word in words:
         candidate = f"{current} {word}".strip()
@@ -104,7 +129,7 @@ def _chunks(text: str) -> list[str]:
             current = candidate
     if current:
         chunks.append(current)
-    return chunks
+    return _rebalanced_tail(chunks, tail_characters)
 
 
 def _wrap(text: str) -> str:
@@ -129,7 +154,7 @@ def _beat_cues(beat: Any, offset: float, duration: float) -> list[dict[str, Any]
         return []
     if not text or end <= start:
         return []
-    chunks = _chunks(text)
+    chunks = _chunks(text, min(math.ceil(len(text) * MIN_TAIL_SECONDS / (end - start)), len(text) // 2))
     total = sum(len(chunk) for chunk in chunks)
     cues, cursor = [], start
     for chunk in chunks:
@@ -377,9 +402,16 @@ def measure_loudness(path: str, ffmpeg: str, timeout: float = 1800) -> dict[str,
     return _loudnorm_report(completed.stderr) if completed.returncode == 0 else None
 
 
-def _summary(report: dict[str, Any], prefix: str) -> dict[str, float]:
-    return {"lufs": float(report[f"{prefix}_i"]), "truePeakDb": float(report[f"{prefix}_tp"]),
-            "rangeLu": float(report[f"{prefix}_lra"])}
+def _finite(value: Any) -> float | None:
+    """The number, or None for the ``-inf`` / ``nan`` ffmpeg prints for a mix with no sound: JSON cannot carry them
+    (a ``-Infinity`` saved in the Series library made every Series read of the workspace answer 500)."""
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _summary(report: dict[str, Any], prefix: str) -> dict[str, float | None]:
+    return {"lufs": _finite(report[f"{prefix}_i"]), "truePeakDb": _finite(report[f"{prefix}_tp"]),
+            "rangeLu": _finite(report[f"{prefix}_lra"])}
 
 
 def normalize_loudness(path: str, *, ffmpeg: str, abort_callback: Callable[[], bool] | None = None) -> dict[str, Any]:
@@ -392,7 +424,7 @@ def normalize_loudness(path: str, *, ffmpeg: str, abort_callback: Callable[[], b
         before = _summary(measured, "input")
     except (KeyError, TypeError, ValueError):
         return {"applied": False, "reason": "ffmpeg returned an unreadable loudness report"}
-    if before["lufs"] < -70:
+    if before["lufs"] is None or before["lufs"] < -70:
         return {"applied": False, "reason": "The episode audio is silent", "before": before}
     temporary = f"{os.path.splitext(path)[0]}.loudnorm-tmp.mp4"
     command = [

@@ -24,6 +24,7 @@ export const TS_SCOPE_FILES = [
   'ui/src/api/director.ts',
   'ui/src/api/outputs.ts',
   'ui/src/stores/useStore.ts',
+  'ui/src/features/director/store/directorMusicSourceSlice.ts',
 ]
 
 const API_FUNCTIONS = [
@@ -44,12 +45,20 @@ const API_FILE_BY_FUNCTION = {
   getPlayableFileUrl: 'ui/src/api/outputs.ts',
   getFileUrl: 'ui/src/api/outputs.ts',
 }
+const STORE_FILE = 'ui/src/stores/useStore.ts'
 const STORE_ACTIONS = [
   'directorAdoptAndAnalyze',
   'directorUploadAndAnalyze',
   'directorLoadAudioSource',
   'directorAnalyzeAndPlan',
 ]
+// The four actions moved out of useStore.ts. Node ids stay store.<action>.
+const STORE_ACTION_FILES = {
+  directorAdoptAndAnalyze: 'ui/src/features/director/store/directorMusicSourceSlice.ts',
+  directorUploadAndAnalyze: 'ui/src/features/director/store/directorMusicSourceSlice.ts',
+  directorLoadAudioSource: 'ui/src/features/director/store/directorMusicSourceSlice.ts',
+  directorAnalyzeAndPlan: 'ui/src/features/director/store/directorMusicSourceSlice.ts',
+}
 const API_ROUTE_LITERALS = {
   adoptAudio: '/api/v1/audio/adopt',
   uploadAudio: '/api/v1/upload-audio',
@@ -285,20 +294,44 @@ function apiCallAllowed(reference, sourceFile, apiBodies) {
   return importedBindings(sourceFile).namespaces.has(reference.receiver)
 }
 
+function isDirectorStoreFile(fileName) {
+  return fileName === STORE_FILE || Object.values(STORE_ACTION_FILES).includes(fileName)
+}
+
 function storeCallAllowed(reference, sourceFile) {
   return Boolean(
     reference
     && (
-      (reference.receiver === 'get' && sourceFile.fileName === 'ui/src/stores/useStore.ts')
+      (reference.receiver === 'get' && isDirectorStoreFile(sourceFile.fileName))
       || (
         reference.receiver === 'useStore'
         && (
-          sourceFile.fileName === 'ui/src/stores/useStore.ts'
+          sourceFile.fileName === STORE_FILE
           || importedNamespacesFrom(sourceFile, '/stores/').has('useStore')
         )
       )
     ),
   )
+}
+
+function locateStoreAction(sourceFiles, action) {
+  const mapped = STORE_ACTION_FILES[action]
+  const homes = []
+  if (mapped && sourceFiles.has(mapped)) homes.push(mapped)
+  if (sourceFiles.has(STORE_FILE)) homes.push(STORE_FILE)
+  const found = []
+  for (const file of homes) {
+    const sourceFile = sourceFiles.get(file)
+    const functionNode = functionLikeForName(sourceFile, action)
+    if (functionNode) found.push({ file, sourceFile, functionNode })
+  }
+  if (found.length > 1) {
+    throw new Error(`Ambiguous required TypeScript function ${action}`)
+  }
+  if (found.length === 0) {
+    throw new Error(`Missing required TypeScript function ${action} in ${mapped || STORE_FILE}`)
+  }
+  return found[0]
 }
 
 function requiredFunction(sourceFiles, file, name) {
@@ -412,11 +445,11 @@ function addApiNodes(state, sourceFiles) {
 
 function addStoreNodes(state, sourceFiles, apiBodies) {
   const foundActions = new Map()
-  const storeFile = 'ui/src/stores/useStore.ts'
+  const storeFile = STORE_FILE
   for (const action of STORE_ACTIONS) {
-    const found = requiredFunction(sourceFiles, storeFile, action)
+    const found = locateStoreAction(sourceFiles, action)
     foundActions.set(action, found)
-    addNode(state, found.sourceFile, storeFile, `store.${action}`, 'store', `${action}()`, storeFile, found.functionNode)
+    addNode(state, found.sourceFile, found.file, `store.${action}`, 'store', `${action}()`, found.file, found.functionNode)
   }
   addNode(state, sourceFiles.get(storeFile), storeFile, 'store.slice', 'store', 'directorSlice.ts', 'directorAudioName / directorAudioPath / directorAnalysis', null)
 
@@ -426,16 +459,16 @@ function addStoreNodes(state, sourceFiles, apiBodies) {
         const reference = callReference(node)
         const called = reference?.name
         if (called && apiCallAllowed(reference, item.sourceFile, apiBodies)) {
-          addEdge(state, `store.${action}`, `api.${called}`, 'call', '', 1, item.sourceFile, storeFile, node)
+          addEdge(state, `store.${action}`, `api.${called}`, 'call', '', 1, item.sourceFile, item.file, node)
         }
         if (called && STORE_ACTIONS.includes(called) && storeCallAllowed(reference, item.sourceFile) && called !== action) {
-          addEdge(state, `store.${action}`, `store.${called}`, 'call', '', 1, item.sourceFile, storeFile, node)
+          addEdge(state, `store.${action}`, `store.${called}`, 'call', '', 1, item.sourceFile, item.file, node)
         }
       }
       if (ts.isPropertyAssignment(node)) {
         const name = declarationName(node)
         if (name === 'directorAudioName' || name === 'directorAnalysis') {
-          addEdge(state, `store.${action}`, 'store.slice', 'write', name, 0, item.sourceFile, storeFile, node)
+          addEdge(state, `store.${action}`, 'store.slice', 'write', name, 0, item.sourceFile, item.file, node)
         }
       }
     })

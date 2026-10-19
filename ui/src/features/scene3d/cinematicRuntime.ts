@@ -1,4 +1,5 @@
 import { EndlessRoad } from './endlessRoad'
+import { GroundStyleRuntime, isGroundStyle } from './groundStyles'
 import { Color, CylinderGeometry, DepthTexture, Group, HalfFloatType, Mesh, MeshStandardMaterial, PlaneGeometry, PointLight, ShaderMaterial, TorusGeometry, UniformsUtils, Vector2, WebGLRenderTarget, type IUniform, type Texture } from 'three'
 import { Reflector } from 'three/addons/objects/Reflector.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
@@ -35,6 +36,7 @@ const FINITE_SHADER = {
 /** Shared preview/export pipeline. No frame delta, random state or private assets. */
 export class CinematicRuntime {
   private road?: EndlessRoad
+  private ground?: GroundStyleRuntime
   private mirror?: Reflector
   private platform?: Group
   private composer?: EffectComposer
@@ -168,6 +170,16 @@ export class CinematicRuntime {
     // Fixed pool: many overlapping cues cannot create unbounded shader/light work.
     if (!this.lights.length) for (let i = 0; i < 3; i++) { const light = new PointLight(0xffffff, 0, 7, 2); world.scene.add(light); this.lights.push(light) }
   }
+  /** A ground style replaces the stage floor: the painted tile and its tufts, flowers or pebbles. */
+  private syncGround(doc: Scene3DDocument, seconds: number) {
+    const environment = doc.environment
+    const style = isGroundStyle(environment?.floorStyle) ? environment.floorStyle : undefined
+    if (style && !this.ground) this.ground = new GroundStyleRuntime(this.world.scene)
+    // Clearings where the cast stands: the models and cutouts that are not the set's own pieces.
+    const clearings = style ? doc.slots.filter(slot => slot.slot !== 'background' && !slot.id.startsWith('set-') && slot.grounded !== false)
+      .map(slot => [slot.position[0], slot.position[2]] as [number, number]) : []
+    if (this.ground?.sync(style, seconds, environment?.groundScroll, environment?.groundSeed, clearings)) this.world.floor.visible = false
+  }
   private syncRoad(doc: Scene3DDocument, seconds: number) {
     const road = doc.environment?.floorStyle === 'road'
     if (road && !this.road) this.road = new EndlessRoad(this.world.scene)
@@ -179,12 +191,13 @@ export class CinematicRuntime {
     this.syncBackground(doc, seconds); this.syncStage(doc)
     const active = Boolean(doc?.environment || doc?.worldSfx?.length || doc?.pixelWorld || isAtmosDressing(doc?.dressing))
     // Tone mapping lives in applyLook so a previous scene's look cannot stick on this renderer.
-    if (!active) { this.road?.sync(false, undefined, seconds); return }
+    if (!active) { this.road?.sync(false, undefined, seconds); this.ground?.sync(undefined, seconds); return }
     this.ensureComposer()
     this.bloom!.strength = doc.environment?.bloom ?? .48
     const frame = this.world.renderer.getDrawingBufferSize(new Vector2())
     syncPixelPass(this.pixel!, doc.pixelWorld, frame.x, frame.y)
     this.syncRoad(doc, seconds)
+    this.syncGround(doc, seconds)
     this.syncLights(doc, seconds)
     this.syncAtmos(doc, seconds)
   }
@@ -260,6 +273,7 @@ export class CinematicRuntime {
   }
   dispose() {
     this.road?.dispose()
+    this.ground?.dispose()
     this.backdropFloor.dispose()
     this.screenBackdrop.dispose()
     this.background?.dispose()

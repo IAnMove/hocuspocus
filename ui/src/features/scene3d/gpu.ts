@@ -1,3 +1,4 @@
+import { RoomSetRuntime } from './roomSetRuntime'
 import { applyN64Look, withN64Look } from './n64Look'
 import { ToonLook, resolveToon, type ToonTarget } from './toonLook'
 import { imageCutoutMesh, poseImageCutout } from './imageCutout'
@@ -9,8 +10,10 @@ import { SpeechFaceRuntime } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
-import { framingAnchor } from './framingAnchor'
+import { framingAnchor, markRestPose } from './framingAnchor'
+import { flattenRootMotion } from './rootMotion'
 import {
+  AdditiveBlending,
   AnimationMixer,
   type AnimationAction,
   BackSide,
@@ -84,6 +87,8 @@ export type SlotGpu = {
   loopTexture: Texture | null
   loopSpeed: number
   looping: boolean
+  /** Texture scroll in uv per second (a set sliding past a running cast). */
+  drift: number
   loaded: boolean
   contactShadow?: Mesh
   appearance?: MaterializationRuntime
@@ -97,6 +102,8 @@ export type SlotGpu = {
 }
 
 export type GpuWorld = {
+  room?: RoomSetRuntime
+  roomKey?: string
   cinema?: CinematicRuntime
   renderer: WebGLRenderer
   scene: Scene
@@ -117,6 +124,8 @@ export type GpuWorld = {
   exportRender?: ExportRenderQuality
   /** Set while an export paints frames (any quality); the editor preview leaves it unset. */
   exporting?: boolean
+  /** A template thumbnail export keeps the editor's placeholders for empty slots. */
+  exportPlaceholders?: boolean
   /** Environment light of scenes that ask for it (`document.lighting`). */
   lighting?: EnvironmentLighting
   /** Cel shading and ink of model slots (`renderLook: 'toon'`), created on the first scene that asks for it. */
@@ -302,6 +311,7 @@ export function bindMixer(root: Object3D, animations: GLTF['animations'], slot: 
   if (!slot.clip) return null
   const clip = animations[slot.clip.index]
   if (!clip || clip.name !== slot.clip.name) return null
+  if (slot.inPlace) flattenRootMotion(root, clip)
   const mixer = new AnimationMixer(root)
   const action = mixer.clipAction(clip)
   action.setLoop(LoopOnce, 1)
@@ -347,12 +357,15 @@ export function placeSlot(
 ) {
   dropSlot(world, slot.id)
   world.scene.add(root)
+  // Before any clip moves it: the camera frames these points wherever the slot later places the model.
+  if (slot.media === 'model3d') markRestPose(root)
   const contactShadow = slot.media === 'model3d' ? new Mesh(new CircleGeometry(.4, 24), new MeshBasicMaterial({ color: 0x03070d, transparent: true, opacity: .25, depthWrite: false })) : undefined
   if (contactShadow) {
     contactShadow.rotation.x = -Math.PI / 2
     world.scene.add(contactShadow)
   }
   applyMeshShadows(root, world.renderer.shadowMap.enabled, slot.media === 'model3d')
+  applyGlowBlending(root)
   if (contactShadow && world.renderer.shadowMap.enabled) contactShadow.visible = false
   world.slots.set(slot.id, {
     contactShadow,
@@ -367,6 +380,7 @@ export function placeSlot(
     loopTexture: firstMap(root),
     loopSpeed: slot.loop?.speed ?? 0,
     looping: isCylinderBackdrop(slot),
+    drift: slot.drift ?? 0,
     loaded,
   })
 }
@@ -393,7 +407,7 @@ function screenAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean
 }
 
 export function worldAssetsReady(world: GpuWorld, slots: readonly Scene3DSlot[]): boolean {
-  if (!world.dressingReady) return false
+  if (!world.dressingReady || (world.room && !world.room.ready)) return false
   return slots.every(slot => {
     const gpu = world.slots.get(slot.id)
     if (!speechAssetsReady(gpu, slot) || !screenAssetsReady(gpu, slot)) return false
@@ -536,9 +550,9 @@ function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number, sh
   const local = performanceClipTime(slot.performance === 'idle' ? 0 : sceneSeconds, clip?.duration ?? null, slot.clipPlayback)
   if (local != null && clip && gpu.mixer) seekBoundMixer(gpu.mixer, clip, local)
   if (slot.performance === 'idle' && clip && gpu.mixer) {
-    gpu.root.updateMatrixWorld(true)
-    const center = new Box3().setFromObject(gpu.root, true).getCenter(new Vector3())
-    gpu.root.position.x += slot.position[0] - center.x; gpu.root.position.z += slot.position[2] - center.z
+    // Centre the model at rest, not its pose of the moment: an arm swinging forward must not slide the body back.
+    const [centerX, , centerZ] = framingAnchor(gpu.root, 'center')
+    gpu.root.position.x += slot.position[0] - centerX; gpu.root.position.z += slot.position[2] - centerZ
     gpu.root.rotation.y += Math.sin(sceneSeconds * .8) * .025
   }
   groundLoadedSlot(gpu, slot)
@@ -561,8 +575,18 @@ function paintPixelLight(world: GpuWorld, document: Scene3DDocument, slots: read
 }
 
 export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeconds: number) {
+  const roomKey = JSON.stringify(document.room)
+  if (world.roomKey !== roomKey) {
+    world.room?.dispose(); world.room = document.room ? new RoomSetRuntime(document.room) : undefined
+    world.roomKey = roomKey
+    if (world.room) world.scene.add(world.room.root)
+  }
   document = withN64Look(document)
   if (world.dir) applyLight(world.dir, document.light)
+  if (world.room) {
+    if (world.dir) world.dir.intensity *= world.room.sunBreath(sceneSeconds)
+    void world.room.seek(sceneSeconds).catch(() => {})
+  }
   syncEnvironmentLighting(world, document)
   const posedSlots = document.slots.map(slot => ({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }))
   applyLoopOffset(world, sceneSeconds)
@@ -580,7 +604,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const framing = document.camera.family === 'fixed' ? undefined : document.camera.framing
   const target = posedSlots.find(slot => slot.id === framing?.targetSlot)
   const root = target && world.slots.get(target.id)?.root
-  const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor), target, sceneSeconds, document.duration) : null
+  const shot = framing && target && root ? framingPose(framing, framingAnchor(root, framing.anchor, framing.track), target, sceneSeconds, document.duration) : null
   const rawEye = shot?.eye ?? cameraEyeAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const posed = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
@@ -589,6 +613,9 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   world.camera.position.set(...shaken.eye)
   world.camera.lookAt(...shaken.look)
   world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
+  for (const slot of posedSlots) {
+    if (slot.billboard && slot.media === 'image') paintActor(world, { ...slot, rotationY: Math.atan2(shaken.eye[0]-slot.position[0], shaken.eye[2]-slot.position[2]) }, sceneSeconds, document.duration)
+  }
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
@@ -602,14 +629,17 @@ function restoreExportCutouts(world: GpuWorld) {
   exportCutoutVisibility.delete(world)
 }
 
-/** An image cutout with no picture is an editor placeholder. An export draws nothing in its
- * place, so a shot whose figure was left empty still renders as a clean plate. */
+/** A cutout with no picture is an editor placeholder, whether the slot waits for an image or for a
+ * model (a room template's cast marks are model slots with a cutout surface). An export draws nothing
+ * in its place, so a shot whose figure was left empty still renders as a clean plate. A template
+ * thumbnail (`exportPlaceholders`) keeps the placeholder, so the picture shows where the cast stands. */
 export function hideEmptyCutoutsInExport(world: GpuWorld, slots: readonly Scene3DSlot[]) {
-  if (!world.exporting) { restoreExportCutouts(world); return }
+  if (!world.exporting || world.exportPlaceholders) { restoreExportCutouts(world); return }
   let hidden = exportCutoutVisibility.get(world)
   if (!hidden) { hidden = new Map(); exportCutoutVisibility.set(world, hidden) }
   for (const slot of slots) {
-    const empty = slot.media === 'image' && slot.surface === 'cutout' && !slot.sourceUrl && !slot.screen?.sourceUrl
+    const empty = (slot.media === 'image' || slot.media === 'model3d') && slot.surface === 'cutout' && !slot.sourceUrl
+      && !slot.screen?.sourceUrl
     const gpu = empty ? world.slots.get(slot.id) : undefined
     if (gpu) {
       if (!hidden.has(gpu.root)) hidden.set(gpu.root, gpu.root.visible)
@@ -698,7 +728,7 @@ export function setWorldSize(world: GpuWorld, width: number, height: number) {
 export function applyLoopOffset(world: GpuWorld, sceneSeconds: number) {
   for (const gpu of world.slots.values()) {
     if (!gpu.loopTexture) continue
-    gpu.loopTexture.offset.x = gpu.looping ? cylinderUvOffset(sceneSeconds, gpu.loopSpeed) : 0
+    gpu.loopTexture.offset.x = gpu.looping ? cylinderUvOffset(sceneSeconds, gpu.loopSpeed) : gpu.drift ? sceneSeconds * gpu.drift : 0
   }
 }
 
@@ -724,6 +754,21 @@ export function pruneSlots(world: GpuWorld, slots: readonly Scene3DSlot[]) {
   }
 }
 
+/** A material the clean-up marked as a glow on black (``extras.hocusBlend: additive``) adds its light to the picture
+ * instead of painting its black square: a fairy's light, a flame, a spark. */
+export function applyGlowBlending(root: Object3D) {
+  root.traverse((child: Object3D) => {
+    if (!(child instanceof Mesh)) return
+    for (const material of Array.isArray(child.material) ? child.material : [child.material]) {
+      if (!material || material.userData?.hocusBlend !== 'additive') continue
+      material.blending = AdditiveBlending
+      material.transparent = true
+      material.depthWrite = false
+      material.needsUpdate = true
+    }
+  })
+}
+
 function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
   root.traverse((child: Object3D) => {
     if (!(child instanceof Mesh)) return
@@ -735,6 +780,7 @@ function applyMeshShadows(root: Object3D, enabled: boolean, cast: boolean) {
 export function setWorldExportQuality(world: GpuWorld, enabled: boolean, render: ExportRenderQuality = DRAFT_RENDER) {
   world.exportRender = enabled && (render.samples > 0 || render.supersample > 1) ? { ...render } : undefined
   world.exporting = enabled
+  world.exportPlaceholders = enabled && render.placeholders === true
   if (!enabled) restoreExportCutouts(world)
   world.cinema?.setRenderQuality(world.exportRender)
   world.renderer.shadowMap.enabled = enabled
@@ -800,6 +846,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
 }
 
 export function disposeWorld(world: GpuWorld) {
+  world.room?.dispose()
   world.cinema?.dispose()
   world.lighting?.dispose()
   world.toon?.dispose()
@@ -825,6 +872,7 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
   }
   current.loopSpeed = slot.loop?.speed ?? 0
   current.looping = isCylinderBackdrop(slot)
+  current.drift = slot.drift ?? 0
   const scale = Math.max(0.05, slot.scale)
   if (current.kind === 'image' && isCylinderBackdrop(slot)) {
     current.root.position.set(0, CYLINDER_HEIGHT * 0.35 * scale, 0)

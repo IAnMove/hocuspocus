@@ -27,7 +27,8 @@ export function scriptOf(shot: SeriesShot) {
     ...Object.fromEntries(LINE_KEYS.filter(key => (beat as Record<string, unknown>)[key]).map(key => [key, (beat as Record<string, unknown>)[key]])) }))
   return { scene: shot.sceneId, location: shot.locationId, ...Object.fromEntries(Object.entries(layout).filter(([key]) => key !== 'card' && key !== 'music')),
     ...(lines.length ? { lines } : { duration: shot.durationSeconds }), ...(shot.scene3d ? { scene3d: shot.scene3d, kind: '3d' } : {}),
-    ...(shot.foley ? { foley: shot.foley } : {}), ...(layout.music ? { music: layout.music } : {}) }
+    ...(shot.foley ? { foley: shot.foley } : {}), ...(layout.music ? { music: layout.music } : {}),
+    ...(shot.resolution ? { resolution: shot.resolution } : {}) }
 }
 
 /**
@@ -90,6 +91,7 @@ export function installServer(t: { after: (fn: () => void) => void }, project: S
             text: line.spanish || '', emotion: line.emotion || '', delivery: line.delivery || '' }))
         } else if (key === 'scene3d') target.scene3d = value as SeriesShot['scene3d']
         else if (key === 'foley') target.foley = value as SeriesShot['foley']
+        else if (key === 'resolution') target.resolution = (value ?? undefined) as SeriesShot['resolution']
         else {
           const layout = { ...(target.layout2d || {}) } as Record<string, unknown>
           if (value === null) delete layout[key]; else layout[key] = value

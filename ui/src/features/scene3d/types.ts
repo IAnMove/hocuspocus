@@ -9,6 +9,12 @@ import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
 import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
 import { ANIME_TEMPLATE_IDS } from './animeTemplateIds'
 import { MOTION_LAB_IDS, type MotionLabId } from './motionlab/types'
+import { TRANSITION_TEMPLATE_IDS } from './transitionTemplateIds'
+import { SPEED_TEMPLATE_IDS } from './speedTemplateIds'
+import { TITLE_TEMPLATE_IDS } from './titleTemplateIds'
+import { DIALOGUE_TEMPLATE_IDS } from './dialogueTemplateIds'
+import { REACTION_TEMPLATE_IDS } from './reactionTemplateIds'
+import { GROUP_TEMPLATE_IDS } from './groupTemplateIds'
 import type { AtmosSetId } from './atmos/registryIds.ts'
 import type { AtmosSettings } from './atmos/params.ts'
 
@@ -132,6 +138,12 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...TECHNIQUE_TEMPLATE_IDS,
   ...ANIME_TEMPLATE_IDS,
   ...MOTION_LAB_IDS,
+  ...TRANSITION_TEMPLATE_IDS,
+  ...SPEED_TEMPLATE_IDS,
+  ...TITLE_TEMPLATE_IDS,
+  ...DIALOGUE_TEMPLATE_IDS,
+  ...REACTION_TEMPLATE_IDS,
+  ...GROUP_TEMPLATE_IDS,
 ] as const
 
 export type Scene3DTemplateId = (typeof SCENE3D_TEMPLATE_IDS)[number]
@@ -178,6 +190,8 @@ export type Scene3DSourceRef = {
 }
 
 export type Scene3DSlot = {
+  billboard?: boolean
+  setItem?: { heightM: number; prop?: string; at?: { mark?: string; anchor?: string; position?: Vec3 } }
   rhythm?: import('./rhythm').Scene3DSlotRhythm
   character?: { id: string; name: string; kitRef?: import('../../lib/characterVoice').CharacterKitRef;
     libraryRevision?: number; voice?: import('../../lib/characterVoice').CharacterVoice
@@ -196,6 +210,10 @@ export type Scene3DSlot = {
   imageLook?: import('./imageLook').ImageLook
   appearance?: { start: number; duration: number; color: string }
   textureRepeat?: number
+  /** Its texture slides this many uv units per second: a set's layers and ground passing a running cast. */
+  drift?: number
+  /** Its clip plays on the spot: the root's travel across the floor is dropped (a runner on a scrolling set). */
+  inPlace?: boolean
   performance?: 'typing' | 'idle'
   grounded?: boolean
   clip: Scene3DClipRef | null
@@ -244,6 +262,9 @@ export type Scene3DFraming = {
   moveEnd?: number
   /** `smooth` (default) eases in and out; `snap` leaves at full speed, like a crash zoom. */
   ease?: 'smooth' | 'snap'
+  /** `rest` (default) frames the point measured when the model mounted and follows only where the slot places it;
+   * `pose` re-reads the head bone or the live bounding box every frame. */
+  track?: 'rest' | 'pose'
 }
 
 export type Scene3DLight = {
@@ -268,6 +289,9 @@ export type Scene3DToon = {
 }
 
 export type Scene3DDocument = {
+  room?: import('./roomSet').RoomSet
+  /** Metric box room painted by the CPU preview. Absent on every document that is not a box room. */
+  roomBox?: import('./roomBoxRaster').RoomBoxPaint
   /** Native procedural sets: shared by editor, MCP, Wizard and both export paths. */
   motionLab?: import('./motionlab/types').MotionLabSettings
   rhythm?: import('./rhythm').Scene3DRhythm
@@ -303,7 +327,9 @@ export type Scene3DDocument = {
   templateId: Scene3DTemplateId
   camera: Scene3DCamera
   light: Scene3DLight
-  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road'; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number }
+  environment?: { reflectiveFloor: boolean; platform: boolean; bloom: number; floorStyle?: 'tiles' | 'mirror' | 'none' | 'backdrop' | 'road' | import('./groundStyles').GroundStyle; road?: import('./endlessRoad').EndlessRoadSettings; floorColor?: string; floorSourceHeight?: number
+    /** A ground style's slide under a cast that runs on the spot, and the seed of its painted tile and scattered pieces. */
+    groundScroll?: import('./groundStyles').GroundScroll; groundSeed?: number }
   dressing?: Scene3DDressing
   atmos?: AtmosSettings
   /** Light from the environment (reflections, soft fill). New scenes get a generated room. */

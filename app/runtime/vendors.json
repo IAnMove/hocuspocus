@@ -111,5 +111,25 @@
       "utils3d"
     ],
     "recursive": true
+  },
+  "creation_comfy": {
+    "url": "https://github.com/Comfy-Org/ComfyUI",
+    "path": "app/services/creation_models/vendor/ComfyUI",
+    "revision": "9fa63b0acc1fe3503db536109e104bba3bb1614f",
+    "marker": "app/services/creation_models/env/.creation_comfy_9fa63b0acc1fe3503db536109e104bba3bb1614f.installed",
+    "requiredPaths": [
+      "main.py",
+      "requirements.txt"
+    ]
+  },
+  "drama3_nodes": {
+    "url": "https://github.com/PedroMarinhoDev/ComfyUI-Drama3",
+    "path": "app/services/creation_models/vendor/ComfyUI/custom_nodes/ComfyUI-Drama3",
+    "revision": "66c4fb9cd3c0151e1e2ccd207847cb8335e87ab4",
+    "marker": "app/services/creation_models/env/.drama3_nodes_66c4fb9cd3c0151e1e2ccd207847cb8335e87ab4.installed",
+    "requiredPaths": [
+      "nodes.py",
+      "drama3"
+    ]
   }
 }

@@ -76,7 +76,7 @@ All three fields are optional. Writes propagate to `clips`, `clip_plans`, and `p
 
 Errors:
 
-- `409` `{ "error": "Pipeline is still active; try again shortly." }`
+- `409` `{ "error": "Pipeline is still active: job <id> is running (<stage>)." }` while a job, repair, or edit is still writing. A finished run with no live job does not answer 409.
 - `400` `{ "error": "Clip not found" }` (or pipeline missing)
 
 Clip tags: `PUT .../clips/{clip_index}/tag` with `{ "tag": "good" | "needs_work" | null }`.

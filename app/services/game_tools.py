@@ -8,10 +8,14 @@ from __future__ import annotations
 
 import time
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, unquote, urlencode
 
-from services.game_generators.base import GenContext
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from services.game_generators.base import GenContext
 from services.lyrics_language import detect_language
+from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
 
 
 class GameToolError(Exception):
@@ -84,7 +88,8 @@ def _split_clocks(payload) -> dict:
     return clocks
 
 
-def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None, steps=None, resolution=None) -> None:
+def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None, steps=None,
+          resolution=None, leftovers=None) -> None:
     listed = list(refs or [])
     row = {
         "tool": tool,
@@ -100,6 +105,8 @@ def _note(ctx, *, tool, model, seed, prompt, refs, job_id, seconds, payload=None
         row["num_inference_steps"] = int(steps)
     if resolution:
         row["resolution"] = str(resolution)
+    if leftovers:
+        row["leftovers"] = list(leftovers)
     row.update(_split_clocks(payload))
     ctx.steps.append(row)
 
@@ -138,12 +145,27 @@ def _job_id(submitted: dict) -> str:
     return str(job)
 
 
+def _job_missing(reply: dict) -> bool:
+    """``jobs.wait`` on a job the queue does not know: the journal replayed the id of a job that died with the
+    previous server process. In-process calls carry ``status: 404``; the MCP envelope only says "not found"."""
+    error = reply.get("error") if isinstance(reply, dict) else None
+    if not isinstance(error, dict) or error.get("job_id") or reply.get("job_id"):    # a job's own failure names it
+        return False
+    if not (reply.get("_is_error") or reply.get("_http_error") or reply.get("status") == "failed"):
+        return False
+    return error.get("status") == 404 or error.get("code") == "not_found" or "not found" in str(error.get("message") or "").lower()
+
+
 def _wait_job(ctx: GenContext, job_id: str, intent_id: str | None = None) -> dict:
-    """Wait until the image job finishes. A restart leaves it interrupted: resume that same job once."""
+    """Wait until the image job finishes. A restart leaves it interrupted: resume that same job once.
+    A job the server does not know raises ``not_found`` so the caller can admit the request again."""
     resumed = False
     while True:
         _check(ctx)
-        payload = _status_payload(ctx.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 110}}))
+        reply = ctx.call("jobs.wait", {"version": 1, "input": {"job_id": job_id, "timeout_s": 110}})
+        if _job_missing(reply):
+            raise GameToolError("not_found", f"job {job_id} is not known to the server")
+        payload = _status_payload(reply)
         status = str(payload.get("status") or "")
         if status in _TERMINAL:
             return payload
@@ -210,10 +232,41 @@ def _source_name(ctx: GenContext, path) -> str:
     return text
 
 
-def _finish(ctx, *, tool, model, seed, prompt, refs, job_id, started, payload=None, steps=None, resolution=None) -> None:
+def root_file_name(value, root=None) -> str | None:
+    """The file name when ``value`` is a file directly in the workspace root: a bare name, a ``/api/v1/file/`` URL, or
+    (given ``root``) an absolute path in that folder. A file in a folder stays put, so it is not a leftover."""
+    text = str(value).split("?")[0].replace("\\", "/").rstrip("/")
+    if "/api/v1/file/" in text:
+        text = unquote(text.split("/api/v1/file/", 1)[1])
+    if text.startswith("/"):
+        return Path(text).name if root is not None and Path(text).parent == Path(root) else None
+    parts = [part for part in text.split("/") if part]
+    if len(parts) != 1 or parts[0] in {".", ".."}:
+        return None
+    return parts[0]
+
+
+def _leftover_names(root, *groups) -> list[str]:
+    names: list[str] = []
+    for group in groups:
+        for item in group or []:
+            name = root_file_name(item, root)
+            if name and name not in names:
+                names.append(name)
+    return names
+
+
+def _finish(ctx, *, tool, model, seed, prompt, refs, job_id, started, payload=None, steps=None,
+            resolution=None, leftovers=None) -> None:
+    found = list(leftovers or [])
+    if payload:
+        found.extend(_files_of(payload))
+        if payload.get("filename") or payload.get("file"):
+            found.append(str(payload.get("filename") or payload.get("file")))
     _note(
         ctx, tool=tool, model=model, seed=seed, prompt=prompt, refs=refs, job_id=job_id,
         seconds=time.perf_counter() - started, payload=payload, steps=steps, resolution=resolution,
+        leftovers=_leftover_names(Path(ctx.workspace_dir(ctx.workspace)), found),
     )
     ctx.log(f"{tool} {job_id}")
 
@@ -223,17 +276,19 @@ def image(ctx, step, *, prompt, negative, resolution, refs=(), seed, batch=1, gu
     snapped = _resolution(resolution)
     _check(ctx)
     prepared = _api_refs(ctx, refs)
+    model, steps = DEFAULT_IMAGE_MODEL, default_image_steps(DEFAULT_IMAGE_MODEL)
     params = {
         "prompt": prompt,
-        "negative_prompt": negative,
-        "model_type": "qwen_image_21",
+        "model_type": model,
         "resolution": snapped,
         "seed": int(seed),
         "guidance_scale": 1,
-        "num_inference_steps": 40,
+        "num_inference_steps": steps,
         "priority": int(priority),
         "batch_size": max(1, int(batch)),
     }
+    if model_takes_negative_prompt(model):   # the Turbo refuses a negative prompt
+        params["negative_prompt"] = negative
     if guide and mask:
         params["image_guide"] = guide if str(guide).startswith("/") else file_ref(ctx, guide)
         params["image_mask"] = mask if str(mask).startswith("/") else file_ref(ctx, mask)
@@ -253,8 +308,8 @@ def image(ctx, step, *, prompt, negative, resolution, refs=(), seed, batch=1, gu
     payload = _wait_job(ctx, job_id, _intent(ctx, step))
     files = _require_files(payload)
     _finish(
-        ctx, tool="generation.image", model="qwen_image_21", seed=int(seed), prompt=prompt, refs=prepared,
-        job_id=job_id, started=started, payload=payload, steps=40, resolution=snapped,
+        ctx, tool="generation.image", model=model, seed=int(seed), prompt=prompt, refs=prepared,
+        job_id=job_id, started=started, payload=payload, steps=steps, resolution=snapped,
     )
     return files
 
@@ -272,7 +327,8 @@ def key(ctx, step, path, screen) -> str:
     name = payload.get("file") or _mapping(result.get("result")).get("file")
     if not name:
         raise GameToolError("key_failed", "studio.key returned no file")
-    _finish(ctx, tool="studio.key", model="screen", seed=None, prompt="", refs=[str(path)], job_id=str(name), started=started)
+    _finish(ctx, tool="studio.key", model="screen", seed=None, prompt="", refs=[str(path)], job_id=str(name),
+            started=started, leftovers=[str(name)])
     return str(name)
 
 

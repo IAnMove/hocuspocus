@@ -29,6 +29,10 @@ test('description-only generation selects a text model and never asks for a refe
   const textModels = characterImageModels(models, false)
   assert.deepEqual(textModels.map(item => item.model_type), ['qwen_image_21'])
   assert.equal(preferredCharacterImageModel(textModels, false), 'qwen_image_21')
+  const withTurbo = [...models, model('qwen_image_21_turbo', { supports_ref_images: true })]
+  assert.equal(preferredCharacterImageModel(characterImageModels(withTurbo, false), false), 'qwen_image_21_turbo', 'Turbo is the default when it is installed')
+  assert.equal(preferredCharacterImageModel(characterImageModels(withTurbo.filter(item => item.model_type !== 'qwen_image_21'), false), false), 'qwen_image_21_turbo')
+  assert.equal(preferredCharacterImageModel([model('qwen_image_21_turbo'), model('qwen_image_21')], false), 'qwen_image_21_turbo', 'order does not decide')
   assert.equal(preferredCharacterImageModel(characterImageModels(models, true), true), 'qwen_image_edit_20b')
   const pack = fullPack(); pack.lookNotes = 'Burgundy watercolor lips'
   const textPrompt = lipsGenerationPrompt(pack, 'wide', false)

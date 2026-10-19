@@ -4,7 +4,7 @@ import os
 import threading
 
 from services.image_generation_commands import ImageGenerationCommands, validate_image_model, command_error
-from services.job_lifecycle import request_cancel
+from services.job_lifecycle import register_generation_job, request_cancel
 
 
 def create_image_generation_commands(runtime):
@@ -18,7 +18,12 @@ def create_image_generation_commands(runtime):
                                   name=f"command-generation-{job['id']}", daemon=False)
         try:
             runtime["_jobs"][job["id"]] = job
-            runtime["register_generation_job"](runtime["_gen_lock"], job)
+            params = job.get("params") if isinstance(job.get("params"), dict) else {}
+            # Studio generate and recovery leave a pending H3 window plan off
+            # the GPU FIFO so LLM planning does not block later jobs. Command
+            # admission also uses generate(), which can set this marker.
+            if not isinstance(params.get("_h3_window_plan_pending"), dict):
+                register_generation_job(runtime["_gen_lock"], job)
             runtime["_cancel_h3_idle_release"]()
             thread.start()
         except Exception:
@@ -87,10 +92,10 @@ def create_image_generation_commands(runtime):
 
     from services.studio_speech_spec import freeze_studio_speech_spec
     from services.studio_speech_preparation import prepare_studio_speech
-    from routers.studio_speech_commands import speech_command_catalog
+    from services.studio_speech_commands import speech_command_catalog
     from services.studio_music_spec import freeze_studio_music_spec
     from services.studio_music_preparation import prepare_studio_music
-    from routers.studio_music_commands import music_command_catalog
+    from services.studio_music_commands import music_command_catalog
     from services.video_generation_commands import create_video_operation
 
     operations = {

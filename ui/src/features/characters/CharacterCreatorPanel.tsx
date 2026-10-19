@@ -20,6 +20,7 @@ import {
 } from './characterCreatorHistory'
 import { useUiTranslation } from '../../i18n'
 import { CharacterSpeechWorkshopEntry } from './CharacterSpeechWorkshopEntry'
+import { CharacterAnimationsEntry } from './CharacterAnimationsEntry'
 import { CharacterFacePackMaker } from './CharacterFacePackMaker'
 import { CharacterImageCreator } from './CharacterImageCreator'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
@@ -600,6 +601,7 @@ function CharacterCreatorWorkshop() {
           setKind('character'); setAPrompt(description); setShowAPrompt(true)
           setRefs(current => [{ id: newId(), role: 'subject', preview: asset.source, path: uploaded.path, filename: uploaded.filename, url: uploaded.url }, ...current.filter(ref => ref.role !== 'subject').slice(0, MAX_REFS - 1)])
         }} />
+        <CharacterAnimationsEntry workspace={activeWorkspace} />
         <CharacterFacePackMaker />
         <CharacterSpeechWorkshopEntry workspace={activeWorkspace} />
         <Character3DLibraryEntry workspace={activeWorkspace} />

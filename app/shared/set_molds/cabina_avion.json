@@ -1,0 +1,726 @@
+{
+  "id": "cabina_avion",
+  "title": {
+    "es": "Cabina de avión",
+    "en": "Aircraft cabin"
+  },
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      4.8,
+      8.0,
+      2.52
+    ],
+    "medium": [
+      6,
+      10,
+      2.8
+    ],
+    "large": [
+      7.5,
+      12.5,
+      3.136
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right",
+    "front"
+  ],
+  "openings": [
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.18,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_left_0"
+    },
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.39,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_left_1"
+    },
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.61,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_left_2"
+    },
+    {
+      "wall": "left",
+      "kind": "window",
+      "x": 0.82,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_left_3"
+    },
+    {
+      "wall": "right",
+      "kind": "window",
+      "x": 0.18,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_right_0"
+    },
+    {
+      "wall": "right",
+      "kind": "window",
+      "x": 0.39,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_right_1"
+    },
+    {
+      "wall": "right",
+      "kind": "window",
+      "x": 0.61,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_right_2"
+    },
+    {
+      "wall": "right",
+      "kind": "window",
+      "x": 0.82,
+      "width": 1,
+      "height": 0.7,
+      "sill": 1.25,
+      "surface": "window_right_3"
+    }
+  ],
+  "blocks": [
+    {
+      "id": "seat_0_0",
+      "kind": "seat",
+      "box": [
+        -2,
+        0,
+        -3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_0_0_front",
+        "seat_0_0_top"
+      ]
+    },
+    {
+      "id": "seat_0_1",
+      "kind": "seat",
+      "box": [
+        -2,
+        0,
+        -1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_0_1_front",
+        "seat_0_1_top"
+      ]
+    },
+    {
+      "id": "seat_0_2",
+      "kind": "seat",
+      "box": [
+        -2,
+        0,
+        1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_0_2_front",
+        "seat_0_2_top"
+      ]
+    },
+    {
+      "id": "seat_0_3",
+      "kind": "seat",
+      "box": [
+        -2,
+        0,
+        3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_0_3_front",
+        "seat_0_3_top"
+      ]
+    },
+    {
+      "id": "seat_1_0",
+      "kind": "seat",
+      "box": [
+        -1,
+        0,
+        -3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_1_0_front",
+        "seat_1_0_top"
+      ]
+    },
+    {
+      "id": "seat_1_1",
+      "kind": "seat",
+      "box": [
+        -1,
+        0,
+        -1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_1_1_front",
+        "seat_1_1_top"
+      ]
+    },
+    {
+      "id": "seat_1_2",
+      "kind": "seat",
+      "box": [
+        -1,
+        0,
+        1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_1_2_front",
+        "seat_1_2_top"
+      ]
+    },
+    {
+      "id": "seat_1_3",
+      "kind": "seat",
+      "box": [
+        -1,
+        0,
+        3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_1_3_front",
+        "seat_1_3_top"
+      ]
+    },
+    {
+      "id": "seat_2_0",
+      "kind": "seat",
+      "box": [
+        1,
+        0,
+        -3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_2_0_front",
+        "seat_2_0_top"
+      ]
+    },
+    {
+      "id": "seat_2_1",
+      "kind": "seat",
+      "box": [
+        1,
+        0,
+        -1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_2_1_front",
+        "seat_2_1_top"
+      ]
+    },
+    {
+      "id": "seat_2_2",
+      "kind": "seat",
+      "box": [
+        1,
+        0,
+        1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_2_2_front",
+        "seat_2_2_top"
+      ]
+    },
+    {
+      "id": "seat_2_3",
+      "kind": "seat",
+      "box": [
+        1,
+        0,
+        3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_2_3_front",
+        "seat_2_3_top"
+      ]
+    },
+    {
+      "id": "seat_3_0",
+      "kind": "seat",
+      "box": [
+        2,
+        0,
+        -3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_3_0_front",
+        "seat_3_0_top"
+      ]
+    },
+    {
+      "id": "seat_3_1",
+      "kind": "seat",
+      "box": [
+        2,
+        0,
+        -1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_3_1_front",
+        "seat_3_1_top"
+      ]
+    },
+    {
+      "id": "seat_3_2",
+      "kind": "seat",
+      "box": [
+        2,
+        0,
+        1,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_3_2_front",
+        "seat_3_2_top"
+      ]
+    },
+    {
+      "id": "seat_3_3",
+      "kind": "seat",
+      "box": [
+        2,
+        0,
+        3,
+        0.7,
+        1,
+        0.75
+      ],
+      "surfaces": [
+        "seat_3_3_front",
+        "seat_3_3_top"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "wall_front",
+    "window_left_0",
+    "window_left_1",
+    "window_left_2",
+    "window_left_3",
+    "window_right_0",
+    "window_right_1",
+    "window_right_2",
+    "window_right_3",
+    "seat_0_0_front",
+    "seat_0_0_top",
+    "seat_0_1_front",
+    "seat_0_1_top",
+    "seat_0_2_front",
+    "seat_0_2_top",
+    "seat_0_3_front",
+    "seat_0_3_top",
+    "seat_1_0_front",
+    "seat_1_0_top",
+    "seat_1_1_front",
+    "seat_1_1_top",
+    "seat_1_2_front",
+    "seat_1_2_top",
+    "seat_1_3_front",
+    "seat_1_3_top",
+    "seat_2_0_front",
+    "seat_2_0_top",
+    "seat_2_1_front",
+    "seat_2_1_top",
+    "seat_2_2_front",
+    "seat_2_2_top",
+    "seat_2_3_front",
+    "seat_2_3_top",
+    "seat_3_0_front",
+    "seat_3_0_top",
+    "seat_3_1_front",
+    "seat_3_1_top",
+    "seat_3_2_front",
+    "seat_3_2_top",
+    "seat_3_3_front",
+    "seat_3_3_top"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "sit",
+      "position": [
+        -0.3,
+        0,
+        -0.5
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "sit",
+      "position": [
+        0.3,
+        0,
+        0.5
+      ],
+      "facing": 180
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        2.4,
+        0,
+        4.0
+      ],
+      "facing": 180
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0,
+        1.7,
+        4.8
+      ],
+      "lookAt": [
+        -0.3,
+        1.1,
+        -0.5
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -2.0999999999999996,
+        1.6,
+        -2.5
+      ],
+      "lookAt": [
+        0.3,
+        1.1,
+        0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        2.0999999999999996,
+        1.6,
+        2.5
+      ],
+      "lookAt": [
+        -0.3,
+        1.1,
+        -0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0,
+        2.55,
+        4.85
+      ],
+      "lookAt": [
+        -0.3,
+        1.1,
+        -0.5
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -0.8999999999999999,
+        1.6,
+        2.2
+      ],
+      "lookAt": [
+        -0.3,
+        1.1,
+        -0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        0.8999999999999999,
+        1.6,
+        -2.2
+      ],
+      "lookAt": [
+        0.3,
+        1.1,
+        0.5
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -2.4000000000000004,
+        1.7,
+        3.0
+      ],
+      "lookAt": [
+        2.4,
+        1.1,
+        4.0
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "clinical",
+  "propAnchors": [
+    {
+      "id": "table_left",
+      "on": "seat_0_0_top",
+      "position": [
+        -2.175,
+        1,
+        -3
+      ],
+      "maxHeight": 0.6
+    },
+    {
+      "id": "table_right",
+      "on": "seat_0_0_top",
+      "position": [
+        -1.825,
+        1,
+        -3
+      ],
+      "maxHeight": 0.6
+    },
+    {
+      "id": "floor_corner",
+      "on": "floor",
+      "position": [
+        -2.4,
+        0,
+        -4.0
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_back",
+      "position": [
+        2.0999999999999996,
+        1.2,
+        -4.98
+      ],
+      "maxHeight": 0.8
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#85715b"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "window_left_0": {
+      "color": "#385872"
+    },
+    "window_left_1": {
+      "color": "#385872"
+    },
+    "window_left_2": {
+      "color": "#385872"
+    },
+    "window_left_3": {
+      "color": "#385872"
+    },
+    "window_right_0": {
+      "color": "#385872"
+    },
+    "window_right_1": {
+      "color": "#385872"
+    },
+    "window_right_2": {
+      "color": "#385872"
+    },
+    "window_right_3": {
+      "color": "#385872"
+    },
+    "seat_0_0_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_0_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_1_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_1_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_2_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_2_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_3_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_0_3_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_0_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_0_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_1_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_1_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_2_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_2_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_3_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_1_3_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_0_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_0_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_1_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_1_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_2_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_2_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_3_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_2_3_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_0_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_0_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_1_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_1_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_2_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_2_top": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_3_front": {
+      "color": "#b6c7cc"
+    },
+    "seat_3_3_top": {
+      "color": "#b6c7cc"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
+    }
+  }
+}

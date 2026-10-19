@@ -42,6 +42,8 @@ def test_constructors_produce_ids_defaults_and_frozen_snapshot():
     assert series["provider"]["videoModel"] == "minimax_h3_legacy"
     assert series["provider"]["useGlobalProfile"] is True
     assert series["provider"]["videoSettings"]["orientation"] == "landscape"
+    # No invented look: a new series has no tone and no style until its author writes one.
+    assert (series["tone"], series["visualStyle"], series["characterVisualStyle"], series["cameraLanguage"]) == ("", "", "", "")
     assert re.fullmatch(r"episode_[0-9a-f]{32}", episode["id"])
     assert episode["canonSnapshot"]["revision"] == series["canon"]["revision"]
     series["canon"]["worldSummary"] = "Changed later"
@@ -413,7 +415,7 @@ def test_bulk_attempt_approval_is_atomic_and_rejects_duplicate_shots():
 
 def test_an_episode_number_is_optional_and_unique_in_its_season():
     from fastapi import HTTPException
-    from routers.series_episode import apply_series_episode_update, create_checked_episode
+    from services.series_episode import apply_series_episode_update, create_checked_episode
     from services.series_library import EpisodeNumberTaken
 
     series = create_series_project("default")
@@ -516,7 +518,7 @@ def test_a_series_put_keeps_omitted_fields_and_replaces_a_nested_object_whole():
 
 def test_an_episode_number_is_unique_per_season_and_checked_only_when_it_changes():
     """Season 2 has its own episode 1, and the editor re-sending a number an episode already has is no change."""
-    from routers.series_episode import apply_series_episode_update
+    from services.series_episode import apply_series_episode_update
     from services.series_library import EpisodeNumberTaken
 
     series = create_series_project("default")
@@ -545,3 +547,33 @@ def test_an_episode_number_is_unique_per_season_and_checked_only_when_it_changes
     assert second["episodesById"][other_one["id"]]["number"] == 2, "season 1's episode 2 does not block season 2"
     with pytest.raises(EpisodeNumberTaken):
         update_series_episode(moved, other_one["id"], {"number": 1, "seasonId": first_season}, base_series_revision=2)
+
+
+def _library_with_loudness(tmp_path, before):
+    """A library whose series asset carries a silent assembly's loudness record, as routers/series_assembly stores it."""
+    series = create_series_project("default")
+    series["assets"] = {"asset_silent": {
+        "id": "asset_silent", "workspaceId": "default", "kind": "video", "uri": "outputs/silent.mp4",
+        "ownerType": "series", "ownerId": series["id"], "isDerivedThumbnail": False,
+        "metadata": {"loudness": {"applied": False, "reason": "The episode audio is silent", "before": before}}}}
+    return {"seriesById": {series["id"]: series}, "seriesOrder": [series["id"]]}
+
+
+def test_a_non_finite_number_is_never_saved_and_never_breaks_a_read(tmp_path):
+    """Starlette's JSONResponse refuses -Infinity: once one was saved, every Series read of the workspace answered 500."""
+    from starlette.responses import JSONResponse
+    from services.series_library import series_library_path
+
+    silent = {"lufs": float("-inf"), "truePeakDb": float("-inf"), "rangeLu": 0.0}
+    write_series_library(str(tmp_path), _library_with_loudness(tmp_path, silent), "default")
+    raw = Path(series_library_path(str(tmp_path))).read_text(encoding="utf-8")
+    assert "Infinity" not in raw and "NaN" not in raw, "a non-finite number is repaired when it is written"
+    JSONResponse(read_series_library(str(tmp_path), "default"))
+    # A file an older version already wrote: the number is read as null.
+    Path(series_library_path(str(tmp_path))).write_text(raw.replace('"lufs":null', '"lufs":-Infinity'), encoding="utf-8")
+    assert "-Infinity" in Path(series_library_path(str(tmp_path))).read_text(encoding="utf-8")
+    stored = read_series_library(str(tmp_path), "default")
+    before = next(iter(next(iter(stored["seriesById"].values()))["assets"].values()))["metadata"]["loudness"]["before"]
+    assert before["lufs"] is None and before["rangeLu"] == 0.0
+    JSONResponse(stored)
+    write_series_library(str(tmp_path), stored, "default")

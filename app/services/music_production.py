@@ -39,6 +39,7 @@ from services.production_review import review_for_status
 from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
 from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps
 from services.production_style_presets import expand_style_preset
+from services.production_video_model import DEFAULT_MODEL as DEFAULT_VIDEO_MODEL, VIDEO_MODELS, check_video
 from services.production_commands import extra_catalog, extra_handlers
 from services.production_control import Cancelled, sleep_until
 from services.production_package import editable_summary
@@ -55,6 +56,7 @@ DYMO_READABLE = {"color": "#141210", "box": {"kind": "tape", "color": "#F4EEE2",
 MAX_LOST_JOBS = 3                                        # per shot: then a vanished job counts as a failed take
 H3_FRAMES = [124 + 17 * k for k in range(14)]            # H3 window lengths (124 … 345 frames at 24 fps)
 STEPS = ("song", "analyze", "cast", "frames", "clips", "scenes", "montage")
+SHOT_KINDS = ("h3", "still", "clip", "screen", "scene3d", "scene2d")
 _threads: dict[str, threading.Thread] = {}
 _edits: dict[str, threading.Thread] = {}
 _lock = threading.Lock()
@@ -81,7 +83,8 @@ SPEC_SCHEMA: dict[str, Any] = {
             "lyrics": {"type": "string", "maxLength": 20000}, "caption": {"type": "string", "maxLength": 2000},
             "duration": {"type": "number", "minimum": 10, "maximum": 300}, "bpm": {"type": "integer", "minimum": 60, "maximum": 200},
             "key": {"type": "string"}, "seeds": {"type": "array", "items": {"type": "integer"}, "maxItems": 6},
-            "model": {"type": "string"}, "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
+            "model": {"type": "string", "description": "local music model: ace_step_v1_5_xl_sft_lm_4b (default), minimax_music3 or yue2; paid MiniMax API music is refused"},
+            "file": {"type": "string", "description": "Use an existing workspace song instead of generating"},
             "language": {"type": "string", "description": "sung language (es, en, Spanish, ...). Default: told from the lyrics, else en"}}},
         "style": {"type": "object", "properties": {"image": {"type": "string"}, "video": {"type": "string"},
                                                    "image_model": {"type": "string"}, "image_steps": {"type": "integer"},
@@ -100,23 +103,29 @@ SPEC_SCHEMA: dict[str, Any] = {
                                                         "group": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 4,
                                                                   "description": "ids of other cast entries: one reference image with their portraits side by side (no sheet_prompt needed)"}}}},
         "stills": {"type": "object", "description": "name -> durable media URL"},
-        "sets": {"type": "object", "description": "name -> {prompt, seed}: painted sets for scene3d background, drawn eye-level with an open floor and nobody in it, in the same image batch as the models"},
+        "sets": {"type": "object", "description": "name -> {prompt, seed, staging}: painted sets for scene3d background, in the same image batch as the models. staging floor (default): eye-level with an open empty floor and nobody in it, for the projected floor; backdrop: a far view with a clear horizon and nobody in it, no floor asked for; none: the prompt and the look as written (people may appear). dry_run shows each prompt and the look sentences left out"},
         "models": {"type": "object", "description": "name -> {from (cast id, stills name or picture URL) or prompt, rig (humanoid, prop, vehicle, quadruped, flying, serpentine, none; humanoid for a cast id), animations [clip names], seed}: textured Hunyuan3D GLBs, rigged with clips on the song's tempo, made in one batch after cast. A scene3d cast entry uses the name."},
         "shots": {"anyOf": [{"type": "string", "const": "auto"}, {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["key", "kind"], "properties": {
-            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
+            "key": {"type": "string"}, "kind": {"enum": ["h3", "still", "clip", "screen", "scene3d", "scene2d"]}, "line": {"type": "integer"}, "span": {"type": "integer"},
             "t0": {"type": "number"}, "after": {"type": "integer"}, "cast": {"type": "array"}, "sing": {"type": "boolean"},
             "frame": {"type": "string"}, "action": {"type": "string"}, "still": {"type": "string"}, "clip": {"type": "string"},
             "image_model": {"type": "string"}, "image_steps": {"type": "integer"}, "graphic": {"type": "object"},
             "scene3d": {"type": "object", "description": "Native Video 3D: template or document; cast {role or object id: GLB/picture or {source, clip, motion...}}, background (painted set projected on the floor), floor, GLB subject/slots, camera, atmosphere and movement"},
+            "scene2d": {"type": "object", "description": "Video 2D music card (music-*, see scenes.catalog): template, cast {slot: picture or cast id (its cutout)}, background (picture or seamless video; default the shot's still or a frame drawn from its frame prompt), controls. The card moves its own camera; shot camera does not apply"},
             "desktop": {"type": "object", "description": "kind screen: tiling desktop fields (layout, apps, focus, workspace, switch, theme)"},
             "focus": {"type": "object"}, "zoom": {"type": "array"}, "camera": {"type": "string"}, "title": {"type": "object"},
-            "allow": {"type": "array", "maxItems": 3, "items": {"enum": ["still", "dark", "secondary"]},
-                      "description": "Deliberate: still skips frozen_shot, dark skips black_bars, secondary skips duplicate_people and appearance_changed"}}}}]},
+            "allow": {"type": "array", "maxItems": 4, "items": {"enum": ["still", "dark", "secondary", "title_card"]},
+                      "description": "Deliberate: still skips frozen_shot and the quality gate's still checks, dark skips black_bars, secondary skips duplicate_people and appearance_changed, title_card keeps a full-frame title over a moving shot"}}}}]},
         "fill": {"type": "array", "description": "Shots used to fill instrumental stretches longer than a clip"},
+        "section_actions": {"type": "object", "additionalProperties": False, "description": "shots auto only: scene is where every planned shot takes place (default: verse, else the title); verse, pre-chorus and chorus replace the sung action of those sections",
+                            "properties": {"scene": {"type": "string", "maxLength": 200}, "verse": {"type": "string"},
+                                           "pre-chorus": {"type": "string"}, "chorus": {"type": "string"}}},
+        "video": {"type": "object", "additionalProperties": False, "description": f"the H3 model that shoots the clips (default {DEFAULT_VIDEO_MODEL} at 4 steps); steps default to the model's own (20 for the others) and must be in its range ({DEFAULT_VIDEO_MODEL} 4-8, the others 1-50). Another model or steps shoots the kept clips of unlocked shots again; dry_run and production.status show it as video_model",
+                  "properties": {"model": {"enum": list(VIDEO_MODELS)}, "steps": {"type": "integer", "minimum": 1, "maximum": 50}}},
         "max_takes": {"type": "integer", "minimum": 1, "maximum": 5},
         "structure": {"enum": ["clip", "trailer"], "description": "clip (default): verse/chorus shots on the song's lines; trailer: five beats on time (presentation, tension, escalation, reveal, close) with designed silence, risers and hits"},
         "treatment": {"type": "object", "description": "what happens: arc (what changes first image to last), want, obstacle, moments [{at, event}] (at: chorus2, bridge, line:N), motifs. dry_run checks the plan carries it"},
-        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: fills song seeds and max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"},
+        "quality": {"enum": ["draft", "standard", "max"], "description": "how much the run spends to make it good: picks how many song candidates are made, fills max_takes the spec left out and sets the bar dry_run measures (share of stills, clips per minute)"},
         "resolution": {"type": "object", "properties": {
             "frames": {"enum": ["1280x704", "1152x640", "1024x576", "1536x1024", "1024x1536"]},
             "clips": {"enum": ["1280x704", "1152x640", "1024x576"]}}},
@@ -135,8 +144,9 @@ def _require_spec_fields(spec: dict) -> None:
         raise ProductionError("invalid_spec", "spec.song needs lyrics, caption, duration and bpm")
     if not isinstance(spec.get("style"), dict):
         raise ProductionError("invalid_spec", "spec.style must be an object")
-    from services.production_song import require_song_language
+    from services.production_song import require_local_song_model, require_song_language
     require_song_language(song)
+    require_local_song_model(song)
 
 
 def _image_models(spec: dict) -> list:
@@ -156,8 +166,8 @@ def _require_image_models(spec: dict) -> None:
 
 
 def _require_shot(shot: Any, keys: set) -> None:
-    if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in ("h3", "still", "clip", "screen", "scene3d"):
-        raise ProductionError("invalid_spec", "each shot needs key and kind h3|still|clip|screen|scene3d")
+    if not isinstance(shot, dict) or not shot.get("key") or shot.get("kind") not in SHOT_KINDS:
+        raise ProductionError("invalid_spec", "each shot needs key and kind " + "|".join(SHOT_KINDS))
     if shot["key"] in keys:
         raise ProductionError("invalid_spec", f"duplicate shot key {shot['key']}")
     keys.add(shot["key"])
@@ -174,12 +184,23 @@ def _require_scene3d(shot: Any) -> None:
         raise ProductionError("invalid_spec", str(error)) from error
 
 
+def _require_scene2d(shot: Any) -> None:
+    if not isinstance(shot, dict) or shot.get("kind") != "scene2d":
+        return
+    from services.production_scene2d import Scene2dError, validate_scene2d_shot
+    try:
+        validate_scene2d_shot(shot)
+    except Scene2dError as error:
+        raise ProductionError(error.code, str(error)) from error
+
+
 def _require_shots(spec: dict) -> None:
     keys: set = set()
     for shot in spec["shots"]:
         _require_shot(shot, keys)
     for shot in [*spec["shots"], *(spec.get("fill") or [])]:
         _require_scene3d(shot)
+        _require_scene2d(shot)
 
 
 def validate_spec(spec: Any) -> dict:
@@ -190,11 +211,15 @@ def validate_spec(spec: Any) -> dict:
     _require_spec_fields(spec)
     _require_image_models(spec)
     _require_shots(spec)
-    from services.production_lyric_looks import LyricLookError, check_lyric_looks
+    check_video(spec)
+    from services.production_shot_plan import check_section_actions
+    check_section_actions(spec)
+    from services.production_lyric_looks import LyricLookError, check_finish, check_lyric_looks
     from services.production_models import ModelError, check_models
     try:
         check_models(spec)
         check_lyric_looks(spec["style"])
+        check_finish(spec["style"])
     except (ModelError, LyricLookError) as error:
         raise ProductionError("invalid_spec", str(error)) from error
     from services.production_resolution import check_resolution
@@ -269,10 +294,13 @@ def title_cue_count(template: str, fields: dict, start: float, length: float) ->
         return 1
 
 
+SCENE_RECIPE = 2      # 2: camera presets play on a camera layer over the whole shot (production_camera)
+
+
 def scene_fingerprint(shot: dict, style: dict, stills: dict, score: dict, start: float, end: float) -> str:
-    """Invalidate a rendered scene when its spec, window, or lyric timing changes on resume."""
+    """Invalidate a rendered scene when its spec, window, lyric timing or the scene recipe changes on resume."""
     source = {"shot": shot, "style": style, "stills": stills, "lines": score.get("lines") or [],
-              "start": round(float(start), 3), "end": round(float(end), 3)}
+              "start": round(float(start), 3), "end": round(float(end), 3), "recipe": SCENE_RECIPE}
     return hashlib.sha256(json.dumps(source, sort_keys=True).encode()).hexdigest()[:16]
 
 
@@ -539,11 +567,18 @@ def status_summary(state: dict, workspace: str, root: str | None = None, product
     counted = mismatches(state)
     if counted:
         summary["subject_counts"] = counted
+    from services.production_rooms import set_warnings
+    if set_warnings(state):
+        summary["set_warnings"] = set_warnings(state)
+    from services.production_quality_gate import allow_thin_status
+    summary.update(allow_thin_status(state))
     from services.production_smoothness import for_status
     smooth = for_status(state)
     if smooth:
         summary["smoothness"] = smooth
     summary.update(review_for_status(state, root))
+    from services.production_video_model import resolve_video
+    summary["video_model"] = resolve_video(state.get("spec"))      # "video" is the finished video's URL
     from services.production_progress import progress_summary
     summary["progress"] = progress_summary(state, root)
     from services.production_shot_review import apply_artistic
@@ -567,12 +602,18 @@ def command_catalog() -> list[dict[str, Any]]:
                                       "and their scenes re-exported); retake lists clip keys to shoot again, keeping the better take. "
                                       "Returns immediately; "
                                       "poll production.status. dry_run checks the spec before any GPU work. "
+                                      "A new or changed spec that would look static (one still in three or more shots, too much "
+                                      "still runtime, a full-frame title over a moving shot) is refused with quality_gate and a "
+                                      "message naming the shots; allow_thin true runs it anyway and returns those as warnings. "
                                       "through frames stops after the start frames (frames_ready); through animatic builds a CPU preview "
                                       "from those frames (animatic_ready) and a later run continues at the clips. "
+                                      "spec.video picks the H3 model and steps (default minimax_h3_fused_turbo, 4 steps; dry_run and "
+                                      "production.status show it as video_model). "
                                       "See docs/agents/VIDEO_PRODUCTION_RUNBOOK.md."),
          "inputSchema": envelope({"workspace": ws, "production_id": pid, "spec": SPEC_SCHEMA,
                                           "retake": {"type": "array", "items": {"type": "string", "maxLength": 80}, "maxItems": 20},
                                           "dry_run": {"type": "boolean"},
+                                          "allow_thin": {"type": "boolean", "description": "true: run a plan the quality gate refuses only for looking static (still_reused, too_static, title_card_hides_shot); they come back as warnings and production.status lists them as allow_thin. A clip a model will not have or a camera that does not exist is refused all the same. Off unless asked; dry_run takes it too."},
                                           "project": {"type": "object", "required": ["kind", "id"], "properties": {"kind": {"enum": ["story", "episode"]}, "id": {"type": "string"}}},
                                           "package": {"type": "boolean", "description": "true: make a finished production editable shot by shot (scene documents, manifest, montage origins) without any GPU or export"},
                                           "auto_resume": {"type": "boolean", "description": "true: after a server restart this production continues by itself (for 24 h). Off unless asked (or HOCUS_PRODUCTION_AUTORESUME=1)."},
@@ -583,9 +624,9 @@ def command_catalog() -> list[dict[str, Any]]:
                                               "resolution": {"type": "string"},
                                               "seeds": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"type": "integer"}}}}},
                                          ["workspace", "production_id"])},
-        {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them), an optional footer (small print on every scene) and an optional idioma/language (else told from the lyrics; fills song.language).",
+        {"name": PLAN, "mutation": False, "description": "Turn an eight-field brief into a spec that passes a dry run. Fields: tema, publico, duracion, musica, estilo, protagonista, cta, limites, plus lyrics (required: the plan does not write them), an optional footer (small print on every scene) and an optional idioma/language (else told from the lyrics; fills song.language). tema becomes section_actions.scene (where the planned shots take place) and cta goes on the end cards only.",
          "inputSchema": envelope({"brief": {"type": "object"}}, ["brief"])},
-        {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
+        {"name": STATUS, "mutation": False, "description": "Short summary of a production: status, progress, the H3 model that shoots its clips (video_model), stage timings, usage (mcp_calls, response_bytes, h3_takes, gpu_seconds, cpu_seconds, retry_seconds, reused_seconds), per-clip lip-sync verdicts, video and contact-sheet URLs, code review (execution, technical, artistic, retake_keys), what allow_thin let through (allow_thin), last log lines. wait_s blocks until the chosen until condition or the wait elapses. A client may still poll at 300 s; the server accepts up to 1200 s.",
          "inputSchema": envelope({"workspace": ws, "production_id": pid,
                                   "wait_s": {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S, "default": 0,
                                              "description": "Seconds to wait. 0 returns at once. Maximum 1200. 300 remains a safe client poll."},
@@ -643,7 +684,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if data.get("dry_run") is True:
             from services.production_dry_run import dry_run
             return {"version": 1, "status": "completed", "operation": RUN,
-                    "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]), production_id=data["production_id"])}
+                    "result": dry_run(data.get("spec"), root=workspace_dir(data["workspace"]), production_id=data["production_id"],
+                                      workspace=data["workspace"], allow_thin=data.get("allow_thin") is True)}
         if mcp is None and (not token() or not app_url()):
             raise HTTPException(503, {"code": "mcp_unavailable", "message": "Enable MCP access so the production can call the studio tools", "retryable": False})
         key = f"{data['workspace']}/{data['production_id']}"
@@ -656,6 +698,7 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
         if "auto_resume" in data:
             production.state["auto_resume"] = data["auto_resume"] is True
         preview = data.get("preview")
+        allowed: list[dict] = []
         if preview is not None:
             if (not isinstance(preview, dict) or not isinstance(preview.get("prompts"), list)
                     or len(preview["prompts"]) != 3 or any(not isinstance(p, str) or not p.strip() for p in preview["prompts"])
@@ -670,8 +713,8 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
                 spec = validate_spec(data.get("spec") or production.state.get("spec"))
             except ProductionError as error:
                 raise HTTPException(422, {"code": error.code, "message": str(error), "retryable": False}) from error
-            from services.production_quality_gate import refuse_thin_plan
-            refuse_thin_plan(spec, production.state.get("spec"))
+            from services.production_quality_gate import gate_run
+            allowed = gate_run(production.state, spec, production.root, allow_thin=data.get("allow_thin") is True)
             through = data.get("through", "all")
             if through not in ("all", "frames", "animatic"):
                 raise HTTPException(422, {"code": "invalid_stage", "message": "through must be all, frames or animatic", "retryable": False})
@@ -696,7 +739,10 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
             thread = threading.Thread(target=target, args=args, name=f"production-{data['production_id']}", daemon=True)
             _threads[key] = thread
             thread.start()
-        return {"version": 1, "status": "completed", "operation": RUN, "result": {"production_id": data["production_id"], "running": True, **(registered if data.get("package") is not True else {})}}
+        result = {"production_id": data["production_id"], "running": True, **(registered if data.get("package") is not True else {})}
+        if allowed:
+            result["warnings"] = allowed        # the thin checks allow_thin let through (production_quality_gate)
+        return {"version": 1, "status": "completed", "operation": RUN, "result": result}
 
     async def status(arguments: Any) -> dict:
         data = _input(arguments)

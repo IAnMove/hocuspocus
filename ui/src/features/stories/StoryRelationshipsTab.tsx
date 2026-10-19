@@ -1,3 +1,4 @@
+import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { Plus, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { button, input, panel, Field, SectionHeader, type StoryLabSectionTabProps } from './storyLabChrome'
@@ -49,6 +50,7 @@ function RelationshipEditor({
   })
   return (
     <div className={`${panel} grid md:grid-cols-2 gap-3`}>
+      <div className="md:col-span-2"><StoryWritingGuide projectId={project.id} scope="relationship" targetId={relationship.id} /></div>
       <label className="text-[10px] text-text-muted">{t('relationships.from')}
         <select className={`${input} mt-1`} value={relationship.fromCharacterId} onChange={event => set({ fromCharacterId: event.target.value })}>
           {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}

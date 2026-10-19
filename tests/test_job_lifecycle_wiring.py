@@ -3,11 +3,15 @@ from __future__ import annotations
 
 import ast
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
+
+from tests.support.launch_ast import generation_module, generation_source
 
 
 _ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -65,7 +69,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
     def test_worker_stream_error_survives_final_failure_message(self):
         from services.job_lifecycle import update_job, finish_job
 
-        generation = _function(self.launch, "_run_generation")
+        generation = generation_module()
         error_branch = next(node for node in ast.walk(generation)
                             if isinstance(node, ast.If)
                             and ast.unparse(node.test) == "cmd == 'error'")
@@ -89,7 +93,12 @@ class TestJobLifecycleWiring(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.launch = _parse("app/_launch_runtime.py")
+        cls.sfx = _parse("app/services/generation_sfx.py")
+        cls.director = _parse("app/routers/director.py")
         cls.tools_upscale = _parse("app/services/tools_upscale.py")
+        cls.tools_router = _parse("app/routers/tools.py")
+        cls.recast_endpoint = _parse("app/services/recast_endpoint.py")
+        cls.blend_run = _parse("app/services/blend_run.py")
 
     def test_each_worker_uses_lifecycle_transitions(self):
         expected = {
@@ -112,9 +121,21 @@ class TestJobLifecycleWiring(unittest.TestCase):
         }
         for function_name, required in expected.items():
             with self.subTest(function=function_name):
-                tree = self.tools_upscale if function_name == "_run_tool_upscale" else self.launch
+                if function_name == "_run_tool_upscale":
+                    tree = self.tools_upscale
+                elif function_name == "_run_tool_revoice":
+                    tree = self.tools_router
+                elif function_name == "_run_recast":
+                    tree = self.recast_endpoint
+                elif function_name == "_run_blend_generation":
+                    tree = self.blend_run
+                elif function_name == "_run_sfx_generation":
+                    tree = self.sfx
+                else:
+                    tree = self.launch
                 lookup_name = "run_tool_upscale" if function_name == "_run_tool_upscale" else function_name
-                function = _function(tree, lookup_name)
+                function = (generation_module() if function_name == "_run_generation"
+                            else _function(tree, lookup_name))
                 functions = [function]
                 if function_name == "_run_tool_upscale":
                     functions.append(_function(tree, "_publish_upscale_outputs"))
@@ -124,7 +145,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 self.assertTrue(required <= calls, required - calls)
 
     def test_cancel_endpoint_routes_through_shared_helper(self):
-        cancel = _function(self.launch, "cancel_job")
+        cancel = _function(_parse("app/services/generation_jobs.py"), "cancel_job")
         self.assertIn("request_cancel", _called_names(cancel))
         self.assertIn("_remove_persisted_generation_job", _called_names(cancel))
         self.assertFalse(any(
@@ -133,7 +154,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         ))
 
     def test_generation_lifecycle_is_connected_to_canonical_task_events(self):
-        observer = _function(self.launch, "_observe_generation_job_state")
+        observer = _function(_parse("app/services/canonical_task_publishers.py"), "_observe_generation_job_state")
         self.assertIn("_publish_generation_task", _called_names(observer))
         registrations = [
             node for node in ast.walk(self.launch)
@@ -149,7 +170,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         )
 
     def test_generate_and_submit_accept_optional_queue_priority(self):
-        generate = _function(self.launch, "generate")
+        generate = _function(_parse("app/services/studio_generate.py"), "generate")
         self.assertIn("ensure_generation_priority", _called_names(generate))
         commands = _parse("app/services/image_generation_commands.py")
         submit = _function(commands, "submit")
@@ -157,10 +178,23 @@ class TestJobLifecycleWiring(unittest.TestCase):
         self.assertIn("priority_fields", _called_names(submit))
 
     def test_generation_jobs_reserve_fifo_position_before_worker_start(self):
-        new_job = _function(self.launch, "_new_generation_job")
+        queue = _parse("app/services/kernel/jobs.py")
+        new_job = _function(queue, "new_job")
         self.assertIn("register_generation_job", _called_names(new_job))
-        manual_job = _function(self.launch, "_register_manual_generation_job")
+        manual_job = _function(queue, "register_manual_job")
         self.assertIn("register_generation_job", _called_names(manual_job))
+        edit_requests = _parse("app/services/studio_edit_requests.py")
+        sources = {
+            "tools_upscale": self.tools_router,
+            "tools_revoice": self.tools_router,
+            "retake_video_endpoint": edit_requests,
+            "edit_anything_endpoint": edit_requests,
+            "inpaint_endpoint": edit_requests,
+            "repaint_endpoint": _parse("app/routers/repaint.py"),
+            "recast_endpoint": self.recast_endpoint,
+            "outpaint_endpoint": _parse("app/routers/outpaint.py"),
+            "blend_endpoint": _parse("app/routers/blend.py"),
+        }
         for endpoint_name in (
             "retake_video_endpoint",
             "edit_anything_endpoint",
@@ -173,9 +207,10 @@ class TestJobLifecycleWiring(unittest.TestCase):
             "tools_revoice",
         ):
             with self.subTest(endpoint=endpoint_name):
+                tree = sources.get(endpoint_name, self.launch)
                 self.assertIn(
                     "_register_manual_generation_job",
-                    _called_names(_function(self.launch, endpoint_name)),
+                    _called_names(_function(tree, endpoint_name)),
                 )
 
         director = _parse("app/services/director_pipeline.py")
@@ -185,11 +220,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         )
 
     def test_generation_timer_starts_from_lifecycle_active_timestamp(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            source = ast.get_source_segment(handle.read(), generation)
+        source = generation_source()
         self.assertIsNotNone(source)
         transition_at = source.index("if not try_start(")
         timer_at = source.index('start_time = float(job.get("started_at")', transition_at)
@@ -243,7 +274,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         }
         for endpoint_name, worker_name in expected.items():
             with self.subTest(endpoint=endpoint_name):
-                endpoint = _function(self.launch, endpoint_name)
+                endpoint = _function(self.director, endpoint_name)
                 awaited_thread_targets = {
                     call.args[0].id
                     for node in ast.walk(endpoint)
@@ -257,13 +288,13 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 self.assertIn(worker_name, awaited_thread_targets)
 
     def test_director_bulk_repair_routes_to_server_owned_worker(self):
-        repair = _function(self.launch, "repair_saved_pipeline")
-        cancel = _function(self.launch, "cancel_saved_pipeline_repair")
+        repair = _function(self.director, "repair_saved_pipeline")
+        cancel = _function(self.director, "cancel_saved_pipeline_repair")
         self.assertIn("start_pipeline_repair", _called_names(repair))
         self.assertIn("cancel_pipeline_repair", _called_names(cancel))
 
     def test_blend_defers_generation_completion(self):
-        blend = _function(self.launch, "_run_blend_generation")
+        blend = _function(self.blend_run, "_run_blend_generation")
         matching_calls = [
             node for node in ast.walk(blend)
             if isinstance(node, ast.Call)
@@ -277,6 +308,51 @@ class TestJobLifecycleWiring(unittest.TestCase):
         )
         self.assertIsInstance(finalize, ast.Constant)
         self.assertIs(finalize.value, False)
+
+    def test_blend_concat_uses_filter_complex_script(self):
+        """`-/filter_complex` is ffmpeg 7+ only; CI and Ubuntu 24.04 ship 6.1.1."""
+        blend = _function(self.blend_run, "_run_blend_generation")
+        flags = {
+            node.value
+            for node in ast.walk(blend)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+            and node.value.startswith("-") and "filter_complex" in node.value
+        }
+        self.assertEqual(flags, {"-filter_complex_script"})
+
+    @unittest.skipUnless(
+        shutil.which("ffmpeg"), "needs an ffmpeg with libx264 on PATH",
+    )
+    def test_blend_concat_script_flag_is_accepted_by_ffmpeg(self):
+        """The worker's script flag must load a filter graph on this machine's ffmpeg."""
+        with tempfile.TemporaryDirectory() as tmp:
+            clip = os.path.join(tmp, "src.mp4")
+            script = os.path.join(tmp, "concat_filter.txt")
+            out = os.path.join(tmp, "out.mp4")
+            make = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-f", "lavfi", "-i", "color=c=red:s=32x32:r=8:d=0.5",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", clip,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(make.returncode, 0, make.stderr[-400:])
+            with open(script, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(
+                    "[0:v]scale=w=32:h=32,setsar=1,fps=8,format=yuv420p[outv];"
+                    "anullsrc=channel_layout=stereo:sample_rate=48000:d=0.500[outa]"
+                )
+            concat = subprocess.run(
+                [
+                    "ffmpeg", "-y", "-i", clip,
+                    "-filter_complex_script", script,
+                    "-map", "[outv]", "-map", "[outa]",
+                    "-c:v", "libx264", "-c:a", "aac", "-shortest", out,
+                ],
+                capture_output=True, text=True, timeout=30,
+            )
+            self.assertEqual(concat.returncode, 0, concat.stderr[-400:])
+            self.assertTrue(os.path.isfile(out))
 
     def test_wan_checks_abort_before_resetting_interrupt(self):
         wgp = _parse("app/wgp.py")
@@ -305,15 +381,14 @@ class TestJobLifecycleWiring(unittest.TestCase):
             self.assertLess(cleanup, abort_return)
 
     def test_flashvsr_checks_cancel_before_replacing_source_video(self):
-        upscale = _function(
-            self.launch, "_apply_spatial_upsampling_to_file",
-        )
+        relative = "app/services/generation_postprocess.py"
+        module = _parse(relative)
+        upscale = _function(module, "_apply_spatial_upsampling_to_file")
         with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"),
-            "r", encoding="utf-8",
+            os.path.join(_ROOT, relative), "r", encoding="utf-8",
         ) as handle:
-            launch_source = handle.read()
-        source = ast.get_source_segment(launch_source, upscale)
+            module_source = handle.read()
+        source = ast.get_source_segment(module_source, upscale)
         self.assertIsNotNone(source)
         for replacement in (
             "os.replace(tmp_muxed, video_path)",
@@ -323,15 +398,40 @@ class TestJobLifecycleWiring(unittest.TestCase):
             check_at = source.rfind("abort_check()", 0, replace_at)
             self.assertGreaterEqual(check_at, 0)
 
+    def test_generation_owns_abort_state_only_after_registration(self):
+        """A cancel that lands after try_start and before register_abort_state must settle.
+
+        `_run_generation`'s finally unregisters a non-None abort state and
+        acknowledges the cancel otherwise. Unregistering a dict that never
+        entered the active states is a no-op, so the worker keeps the dict in
+        `pending_abort` and owns it (`abort_state`) only once registered.
+        """
+        start = _function(generation_module(), "_run_generation_start")
+        owned = [
+            node for node in ast.walk(start)
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "abort_state" for target in node.targets)
+        ]
+        self.assertEqual(len(owned), 1)
+        self.assertIsInstance(owned[0].value, ast.Name)
+        self.assertEqual(owned[0].value.id, "pending_abort")
+        registration = next(
+            node for node in ast.walk(start)
+            if isinstance(node, ast.If) and isinstance(node.test, ast.UnaryOp)
+            and isinstance(node.test.operand, ast.Call)
+            and getattr(node.test.operand.func, "id", "") == "register_abort_state"
+        )
+        self.assertEqual(
+            [getattr(arg, "id", None) for arg in registration.test.operand.args],
+            ["job", "job_id", "_active_gen_states", "pending_abort"],
+        )
+        self.assertIsInstance(registration.body[-1], ast.Return)
+        self.assertGreater(owned[0].lineno, registration.end_lineno)
+
     def test_generation_stamps_partial_outputs_before_cancel_return(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            launch_source = handle.read()
-        source = ast.get_source_segment(launch_source, generation)
+        source = generation_source()
         self.assertIsNotNone(source)
-        publish_at = source.index("record_job_outputs(\n                    job,")
+        publish_at = re.search(r"record_job_outputs\(\n\s+job,", source).start()
         stamp_at = source.index("_write_output_sidecars(new_files)", publish_at)
         cancel_at = source.index("if cancelled or is_cancel_requested(job):", stamp_at)
         cancel_return = source.index("return False", cancel_at)
@@ -340,7 +440,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         self.assertLess(cancel_at, cancel_return)
 
     def test_director_sidecars_cover_every_supported_media_extension(self):
-        generation = _function(self.launch, "_run_generation")
+        generation = generation_module()
         sidecar_writer = next(
             node for node in ast.walk(generation)
             if isinstance(node, ast.FunctionDef)
@@ -358,12 +458,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
         })
 
     def test_continuation_accepts_all_generated_video_containers(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            launch_source = handle.read()
-        source = ast.get_source_segment(launch_source, generation)
+        source = generation_source()
         continuation = source.split(
             "# Find the latest video explicitly registered by", 1,
         )[1].split("if latest_video:", 1)[0]
@@ -522,11 +617,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
             self.assertIn("-shortest", command)
 
     def test_multiclip_dispatch_preserves_audio_origin(self):
-        generation = _function(self.launch, "_run_generation")
-        with open(
-            os.path.join(_ROOT, "app", "_launch_runtime.py"), "r", encoding="utf-8",
-        ) as handle:
-            source = ast.get_source_segment(handle.read(), generation)
+        source = generation_source()
         self.assertIn('raw_params.get("audio_frame_offset", 0)', source)
         self.assertGreaterEqual(source.count(
             '"audio_start_sec": multi_clip_audio_start_sec'
@@ -542,6 +633,8 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 "get_mp4_audio_codec_settings": lambda _key: {
                     "codec": "aac", "bitrate": None,
                 },
+                # The picture probe is its own helper in the module; "input.mp4" does not exist, so no bound.
+                "_picture_bound_seconds": lambda _path: None,
             },
         )
         with tempfile.TemporaryDirectory() as directory:

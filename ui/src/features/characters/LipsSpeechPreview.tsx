@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Play, Square, Volume2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
+import { PREFERRED_SPEECH_MODEL } from '../../lib/preferredModels'
 import { getFileUrl } from '../../api/client'
 import { analyzeSceneSpeechDetailed } from '../../api/scene3dSpeech'
 import { createCharacterSpeechPreview } from '../../lib/characterSpeechPreview'
@@ -16,14 +17,15 @@ import { LipsMorphPreview, type LipsMorphImage } from './LipsMorphPreview'
 type Preview = { url: string; cues: MouthCue[]; text: string }
 
 function speechModelKind(modelType: string) {
-  return /tts|kugelaudio/.test(modelType)
+  return /tts|kugelaudio|voxcpm/.test(modelType)
 }
 
 function chosenSpeechModel(model: string, models: { model_type: string }[], selected: string | undefined) {
   if (model) return model
   if (models.some(item => item.model_type === selected)) return selected || ''
-  const custom = models.find(item => item.model_type === 'qwen3_tts_customvoice')
-  return custom?.model_type || models[0]?.model_type || ''
+  const preferred = models.find(item => item.model_type === PREFERRED_SPEECH_MODEL)
+    || models.find(item => item.model_type === 'qwen3_tts_customvoice')
+  return preferred?.model_type || models[0]?.model_type || ''
 }
 
 function speechSample(language: string | undefined) {

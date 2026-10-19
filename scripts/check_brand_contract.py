@@ -37,8 +37,11 @@ def main() -> int:
         ),
         ROOT / "app" / "_launch_runtime.py": (
             'FastAPI(title="HocusPocus Lab API"',
-            "HocusPocus Lab UI:",
             "[HocusPocus Lab] React UI serving",
+        ),
+        # The startup banner Pinokio waits for lives in the shared server entry.
+        ROOT / "app" / "services" / "server_entry.py": (
+            "HocusPocus Lab UI:",
         ),
         ROOT / "README.md": (
             "# HocusPocus · Creation Lab",
@@ -51,6 +54,14 @@ def main() -> int:
             if snippet not in text:
                 errors.append(f"{path.relative_to(ROOT)}: missing {snippet!r}")
 
+    old_launch_strings = (
+        'FastAPI(title="Maestro API"',
+        "  Maestro UI:",
+        "[Maestro] React UI serving",
+        'FastAPI(title="Loreframe Lab API"',
+        "Loreframe Lab UI:",
+        "[Loreframe Lab] React UI serving",
+    )
     old_visible = {
         ROOT / "update.js": (
             "Maestro has uncommitted changes",
@@ -58,14 +69,8 @@ def main() -> int:
             "Loreframe Lab has uncommitted changes",
             "Already up to date. Loreframe Lab",
         ),
-        ROOT / "app" / "_launch_runtime.py": (
-            'FastAPI(title="Maestro API"',
-            "  Maestro UI:",
-            "[Maestro] React UI serving",
-            'FastAPI(title="Loreframe Lab API"',
-            "Loreframe Lab UI:",
-            "[Loreframe Lab] React UI serving",
-        ),
+        ROOT / "app" / "_launch_runtime.py": old_launch_strings,
+        ROOT / "app" / "services" / "server_entry.py": old_launch_strings,
         ROOT / "pinokio.js": (
             'title: "Loreframe Lab · Experimental"',
         ),

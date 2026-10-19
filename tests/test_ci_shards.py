@@ -206,6 +206,22 @@ def test_python_shards_do_not_weaken_required_jobs():
     assert "test -s" in b
 
 
+def test_characterization_tests_run_alone_in_shard_a():
+    """tests/characterization imports the full server; inside a shard run it skips, so its own step must exist."""
+    a = _job(_workflow(), "python-tests-a")
+    start = a.index("name: Characterization tests")
+    step = a[start:a.index("- name:", start)]
+    assert "python -m pytest" in step
+    assert "tests/characterization" in step
+    assert "if: ${{ !cancelled() }}" in step
+    assert "continue-on-error:" not in step
+    assert a.index("--group python-a") < a.index("name: Characterization tests")
+    assert "pytest-characterization.xml" in a
+    grouped = {path for group in _manifest()["groups"] for path in group["paths"]}
+    own = {path.relative_to(ROOT).as_posix() for path in (ROOT / "tests" / "characterization").glob("test_*.py")}
+    assert own and own <= grouped
+
+
 def test_pip_cache_keys_include_locks_and_python_requirements():
     workflow = _workflow()
     a = _job(workflow, "python-tests-a")

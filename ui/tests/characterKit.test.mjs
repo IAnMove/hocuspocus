@@ -234,7 +234,7 @@ test('identity still prefers identityReference then base, and TTS prefers the ki
   assert.equal(characterKitStillSource(kit), '/examples/berta-face.png')
   assert.equal(characterKitStillSource({ ...kit, identityReference: undefined }), '/examples/berta-body.png')
   assert.deepEqual(resolvedCharacterTts(kit, { voiceId: 'dylan' }), {
-    source: 'kit', voiceId: 'serena', provider: 'local', instructions: undefined,
+    source: 'kit', engine: 'Qwen3', voiceId: 'serena', provider: 'local', instructions: undefined,
   })
   assert.deepEqual(resolvedCharacterTts(undefined, { provider: 'local', voiceId: 'dylan' }), {
     source: 'profile', voiceId: 'dylan', provider: 'local',

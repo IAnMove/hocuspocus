@@ -1,3 +1,4 @@
+import i18n from '../../i18n'
 import type { AgentSeriesSection, AgentStorySection } from '../../lib/uiBus'
 import type { StoryProjectType } from './types'
 import { storyLabTabIds } from './storyLabTabs'
@@ -94,7 +95,7 @@ export function resolveStoryLabNavigation(
 ): StoryLabNavigationResolution {
   const section = canonicalizeStoryLabSection(requested)
   if (!section) {
-    return { ok: false, requested, reason: `Story Lab no tiene una sección llamada “${requested}”.` }
+    return { ok: false, requested, reason: i18n.t('storyLab:errors.unknownSection', { name: requested }) }
   }
   const visible = storyLabTabIds(projectType)
   if (visible.includes(section)) {
@@ -127,23 +128,23 @@ export function resolveStoryLabNavigation(
   return {
     ok: false,
     requested: section,
-    reason: `Story Lab → ${section} no está visible para un proyecto ${projectType}.`,
+    reason: i18n.t('storyLab:errors.sectionHidden', { section, projectType }),
   }
 }
 
 export function resolveSeriesLabNavigation(requested: string): SeriesLabNavigationResolution {
   const section = canonicalizeSeriesLabSection(requested)
   if (!section) {
-    return { ok: false, requested, reason: `Series Lab no tiene una sección llamada “${requested}”.` }
+    return { ok: false, requested, reason: i18n.t('seriesLab:errors.unknownSection', { name: requested }) }
   }
   return { ok: true, requested: section, tab: section, equivalent: false }
 }
 
 export function describeStoryLabNavigation(resolution: Extract<StoryLabNavigationResolution, { ok: true }>): string {
-  if (!resolution.equivalent) return `He abierto Story Lab → ${resolution.tab}.`
-  return `He abierto Story Lab → ${resolution.tab}, donde está ${resolution.requested} en este tipo de proyecto.`
+  if (!resolution.equivalent) return i18n.t('storyLab:replies.openedSection', { tab: resolution.tab })
+  return i18n.t('storyLab:replies.openedEquivalent', { tab: resolution.tab, section: resolution.requested })
 }
 
 export function describeSeriesLabNavigation(resolution: Extract<SeriesLabNavigationResolution, { ok: true }>): string {
-  return `He abierto Series Lab → ${resolution.tab}.`
+  return i18n.t('seriesLab:replies.openedSection', { tab: resolution.tab })
 }

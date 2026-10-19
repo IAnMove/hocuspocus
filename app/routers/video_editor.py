@@ -1,7 +1,9 @@
-"""Video Editor HTTP surface extracted from the launch runtime.
+"""Video Editor HTTP surface, mounted by the launch runtime.
 
 The launcher injects workspace and path primitives so this module never
-imports WanGP, Gradio, model weights, or ``_launch_runtime``.
+imports WanGP, Gradio, model weights, or ``_launch_runtime``. The job registry
+lives here and is the only one: the launch runtime imports it for the comic
+animatic, alternative songs, Activity sync and canonical task cancel.
 """
 
 from __future__ import annotations
@@ -20,10 +22,12 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
-from services import resource_scheduler
+from services import resource_scheduler, task_controls, workspace_busy
+from services.agent_activity import agent_attribution, requested_by as export_requested_by
 from services.asset_manifest import publish_generation_sidecar
 from services.media_refs import parse_media_ref
 from services.media_thumbnails import ensure_media_thumbnail
+from services.montage_documents import montage_link
 from services.video_layout import stamp_layout
 from services.video_editor_layers import (
     LayerValidationError,
@@ -122,6 +126,20 @@ def list_video_editor_jobs() -> list[dict]:
     """Snapshot editor jobs for Activity's canonical sync."""
     with _video_editor_jobs_lock:
         return [copy.deepcopy(job) for job in _video_editor_jobs.values()]
+
+
+def busy_jobs(workspace: str, workspace_dir: str) -> list[dict]:
+    """Exports, remounts and animatics that still write into their workspace (``services.workspace_busy`` probe).
+
+    The registry is in memory only and nothing reloads it from disk, so an entry that is not
+    finished is a job of this process. Cancelling jobs count until FFmpeg reaches its safe boundary.
+    """
+    with _video_editor_jobs_lock:
+        return [
+            {"jobId": job_id, "status": job.get("status"), "workspace": job.get("workspace")}
+            for job_id, job in _video_editor_jobs.items()
+            if workspace_busy.is_active(job.get("status"))
+        ]
 
 
 def _public_video_editor_job(job: dict) -> dict:
@@ -283,8 +301,8 @@ def _resolve_video_editor_source(source: str, workspace: str | None = None) -> s
     resolved = _runtime.resolve_input_path(path, workspace)
     if not resolved or not os.path.isfile(resolved):
         raise ValueError(f"Video source could not be found: {os.path.basename(path) or path}")
-    suffix = os.path.splitext(resolved)[1].lower()
-    if suffix not in _VIDEO_EDITOR_EXTENSIONS:
+    suffix = os.path.splitext(resolved)[1]
+    if suffix.lower() not in _VIDEO_EDITOR_EXTENSIONS:
         raise ValueError(f"Unsupported video format: {suffix or 'unknown'}")
     return resolved
 
@@ -297,15 +315,15 @@ def _resolve_video_editor_audio_source(source: str, workspace: str | None = None
     resolved = _runtime.resolve_input_path(path, workspace)
     if not resolved or not os.path.isfile(resolved):
         raise ValueError(f"Audio source could not be found: {os.path.basename(path) or path}")
-    suffix = os.path.splitext(resolved)[1].lower()
-    if suffix not in _VIDEO_EDITOR_AUDIO_EXTENSIONS:
+    suffix = os.path.splitext(resolved)[1]
+    if suffix.lower() not in _VIDEO_EDITOR_AUDIO_EXTENSIONS:
         raise ValueError(f"Unsupported audio format: {suffix or 'unknown'}")
     return resolved
 
 
 def _raise_http(exc: Exception, *, failed: str):
-    if isinstance(exc, HTTPException):
-        raise exc
+    # As the inline routes did: a bad reference is a 400, anything else
+    # (an HTTPException from the workspace check included) is a 500.
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     raise HTTPException(status_code=500, detail=f"{failed}: {exc}") from exc
@@ -611,8 +629,10 @@ def _export_sidecar_payload(
                 "fps": int(body["fps"]),
                 "clips": [_clip_sidecar(clip) for clip in body["clips"]],
                 "source_manifest": build_source_provenance_manifest(resolved_clips),
-                "soundtrack": _soundtrack_sidecar(body.get("soundtrack")),
                 "layers": body.get("layers"),
+                "soundtrack": _soundtrack_sidecar(body.get("soundtrack")),
+                # The saved montage it was made from: the video's "Edit montage" opens it again.
+                **({"montage": montage} if (montage := montage_link(body.get("montage"))) else {}),
             },
             "source": "video_editor",
         },
@@ -622,6 +642,7 @@ def _export_sidecar_payload(
         "root_task_id": root_task_id,
         "workspace": workspace,
         "created_at": time.time(),
+        **export_requested_by(body.get("requested_by")),
     }
 
 
@@ -869,15 +890,18 @@ def _start_video_editor_export(body: dict) -> dict:
     width, height, fps = _parse_export_geometry(body)
     clean_clips = [_clean_export_clip(index, clip) for index, clip in enumerate(clips)]
     clean_soundtrack = _clean_export_soundtrack(body.get("soundtrack"))
+    workspace, out_dir, output_path = _allocate_export_output(body)
     try:
+        # Timed overlays/audio cues (montages) are validated before queueing.
         clean_layers = clean_export_layers(body)
     except LayerValidationError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    workspace, out_dir, output_path = _allocate_export_output(body)
     clean_body = dict(body)
     clean_body.update({
         "width": width, "height": height, "fps": fps,
         "clips": clean_clips, "soundtrack": clean_soundtrack, "layers": clean_layers,
+        # Only an MCP agent's montages.export is attributed; a body cannot claim it.
+        "requested_by": agent_attribution("montages.export"),
     })
     job_id = f"video-edit-{uuid.uuid4().hex[:12]}"
     task_id, root_task_id, parent_task_id = _video_editor_task_identity(body, job_id)
@@ -963,6 +987,11 @@ def cancel_video_editor_export(job_id: str) -> dict:
 _cancel_export_job = cancel_video_editor_export
 
 
+def _cancel_export_task(task: dict) -> dict:
+    """Activity's Cancel on an editor task (exports, alternative-song remounts and comic animatics share the registry)."""
+    return cancel_video_editor_export(task_controls.job_id(task))
+
+
 def create_video_editor_router(
     *,
     workspace_dir: Callable[..., str],
@@ -972,6 +1001,7 @@ def create_video_editor_router(
     thumbnail_cache_dir: str,
 ) -> APIRouter:
     """Probe, thumbnail, screenshot and export queue at the original ordinals."""
+    task_controls.register("video-editor", "cancel", _cancel_export_task)
     _bind_video_editor_runtime(
         workspace_dir=workspace_dir,
         get_active_workspace=get_active_workspace,
@@ -1026,6 +1056,7 @@ def create_video_editor_jobs_router() -> APIRouter:
 
 
 __all__ = [
+    "_start_video_editor_export",
     "cancel_video_editor_export",
     "create_video_editor_jobs_router",
     "create_video_editor_router",
@@ -1035,6 +1066,8 @@ __all__ = [
     "_VIDEO_EDITOR_FFMPEG_LANE",
     "_VIDEO_EDITOR_TERMINAL",
     "_finish_video_editor_cancelled",
+    "_resolve_video_editor_audio_source",
+    "_resolve_video_editor_source",
     "_public_video_editor_job",
     "_register_video_editor_job",
     "_remove_video_editor_output_bundle",

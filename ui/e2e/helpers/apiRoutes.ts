@@ -551,6 +551,17 @@ export async function installApiRoutes(page: Page, options: ApiRouteOptions = {}
     const method = request.method().toUpperCase()
     const pathname = url.pathname
 
+    if (method === 'POST' && pathname === '/api/v1/props/commands' && request.postDataJSON()?.operation === 'props.list') {
+      await route.fulfill(json({ version: 1, operation: 'props.list', status: 'completed', result: { version: 1, revision: 0, props: [] } }))
+      return
+    }
+    // The shot library's «All» shelf ends with the server's stages; this library has none.
+    if (method === 'POST' && pathname === '/api/v1/world3d/templates/commands' && request.postDataJSON()?.operation === 'world3d.templates.list') {
+      await route.fulfill(json({ version: 1, operation: 'world3d.templates.list', status: 'completed',
+        result: { templates: [], total: 0, partial: false, unknown_words: [] } }))
+      return
+    }
+
     // A save must acknowledge the captured messages, otherwise the real UI
     // endlessly rebases and resubmits against an artificial empty receipt.
     if (pathname === '/api/v1/wizard/conversations' && (method === 'GET' || method === 'PUT')) {

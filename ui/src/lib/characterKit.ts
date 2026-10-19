@@ -4,9 +4,9 @@ import { usableCharacterAsset, type CharacterKitReviewPolicy } from './character
 import { assertFacePatchPose, facePatchSceneTransform, isFacePatchCompatible, type FacePatchMetadata } from './characterFacePatch'
 import { CHARACTER_MOUTH_STATES, mouthStateForSound, type CharacterMouthState } from './characterMouthStates'
 import { characterRestPoseSource } from './characterRestPose'
-import { characterVoiceFor } from './characterVoice'
+import { characterVoiceFor, isDesignVoice, isReferenceVoice, speechEngineName } from './characterVoice'
+import type { KitAnimation } from './characterAnimations'
 export type { CharacterMouthState } from './characterMouthStates'
-
 export type CharacterKitStyle = 'cutout' | 'children-illustration' | 'anime-2d'
 export type CharacterKitReviewState = 'pending' | 'approved' | 'rejected'
 export type CharacterKitAlphaStatus = 'unknown' | 'transparent' | 'opaque'
@@ -76,6 +76,8 @@ export interface CharacterKit {
     mouthSources?: Partial<Record<CharacterMouthState, string>>
   }>
   provenance: Array<Record<string, unknown>>
+  /** Small animations (walk, wave, anime expressions): a sprite sheet of poses of this character, by animation id. */
+  animations?: Record<string, KitAnimation>
   /** Style + traits the user picked; Face Rig fills overlay prompts from this. */
   lookNotes?: string
   createdAt?: string
@@ -125,15 +127,16 @@ export function resolvedCharacterTts(
   kit?: CharacterKit,
   fallback?: { provider?: string; voiceId?: string },
   language?: string,
-): { source: 'kit' | 'profile' | 'none'; voiceId?: string; voiceName?: string; provider?: string; instructions?: string } {
+): { source: 'kit' | 'profile' | 'none'; voiceId?: string; voiceName?: string; provider?: string; instructions?: string; engine?: string } {
   const voice = characterVoiceFor(kit, language)
   if (voice) {
     return {
       source: 'kit',
+      engine: speechEngineName(voice.model),
       voiceId: voice.voiceId,
-      ...(voice.model === 'qwen3_tts_base' ? { voiceName: voice.name } : {}),
+      ...(isReferenceVoice(voice) || isDesignVoice(voice) ? { voiceName: voice.name } : {}),
       provider: voice.provider,
-      instructions: voice.model === 'qwen3_tts_customvoice' ? voice.instructions : undefined,
+      instructions: voice.instructions,
     }
   }
   if (fallback?.voiceId) {

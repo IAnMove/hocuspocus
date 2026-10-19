@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from services.music_production import command_handlers
 from services.production_dry_run import dry_run
-from services.production_quality_gate import blocking_problems, plan_warnings
+from services.production_quality_gate import _brought, blocking_problems, plan_warnings
 
 SONG = {"lyrics": "[Verse]\nla luz se queda", "caption": "lullaby", "duration": 40, "bpm": 96}
 
@@ -41,7 +41,8 @@ def test_one_picture_panned_across_many_shots_is_refused_but_title_cards_are_not
 def test_too_much_still_runtime_is_refused_at_the_quality_bar():
     shots = [card("a", 0), {**card("b", 10), "still": "other"}, h3("c", 20)]
     problems = blocking_problems({"song": SONG, "shots": shots})
-    assert problems == [{"code": "too_static", "ratio": 0.5, "limit": 0.35, "hint": problems[0]["hint"]}]
+    assert problems == [{"code": "too_static", "ratio": 0.5, "limit": 0.35, "shots": ["a", "b"], "message": problems[0]["message"],
+                         "hint": problems[0]["hint"]}]
     assert blocking_problems({"song": SONG, "shots": shots, "quality": "draft"}) == []
 
 
@@ -133,10 +134,66 @@ def test_a_3d_shot_asking_a_model_for_a_clip_its_rig_will_not_bake_is_refused():
              shot3d("b", {"subject_1": {"source": "lia", "clip": "wave"}}),
              shot3d("c", {"subject_1": {"source": "kite", "clip": "Strafe Loop"}}),
              shot3d("d", {"subject_1": {"source": "ape", "clip": "dance_bounce"}}),
-             shot3d("e", {"subject_1": {"source": "/api/v1/file/x.glb?workspace=w", "clip": "anything"}})]
+             shot3d("e", {"subject_1": {"source": "/api/v1/file/x.glb?workspace=w", "clip": "anything"}}),
+             shot3d("f", {"subject_1": {"source": "ape", "clip": "look_around"}})]
     problems = blocking_problems({"song": SONG, "models": models, "shots": shots})
-    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 wave"])]
+    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 wave", "f:subject_1 look_around"])], \
+        "a humanoid with a fallback still only bakes its animations"
+
+
+def test_a_glb_played_as_it_is_passes_the_gate_with_the_clips_it_brought(tmp_path):
+    import struct
+
+    body = json.dumps({"asset": {"version": "2.0"}, "animations": [{"name": "zelda_armature_zelda_wait_a"}]}).encode()
+    body += b" " * (-len(body) % 4)
+    (tmp_path / "pack").mkdir()
+    (tmp_path / "pack" / "zelda.glb").write_bytes(b"glTF" + struct.pack("<II", 2, 20 + len(body)) + struct.pack("<II", len(body), 0x4E4F534A) + body)
+    models = {"zelda": {"glb": "pack/zelda.glb", "rig": "none"}, "ghost": {"prompt": "a ghost", "rig": "none"}}
+
+    def shot3d(key, cast):
+        return {"key": key, "kind": "scene3d", "t0": 0, "scene3d": {"template": "cine-medium-shot", "cast": cast}}
+    shots = [shot3d("a", {"subject_1": {"source": "zelda", "clip": "zelda_armature_zelda_wait_a"}}),
+             shot3d("b", {"subject_1": {"source": "zelda", "clip": "dance_side"}}),
+             shot3d("c", {"subject_1": {"source": "ghost", "clip": "hover"}})]
+    problems = blocking_problems({"song": SONG, "models": models, "shots": shots}, tmp_path)
+    assert [(item["code"], item["shots"]) for item in problems] == [("clip_not_baked", ["b:subject_1 dance_side", "c:subject_1 hover"])]
+    assert blocking_problems({"song": SONG, "models": models, "shots": shots[:1]}) == [], "with no workspace at hand the file is trusted"
+    assert _brought({"glb": "../zelda.glb", "rig": "none"}, tmp_path) is None
+    assert _brought({"glb": "pack/../zelda.glb", "rig": "none"}, tmp_path) is None
 
 
 def test_two_shots_starting_together_do_not_break_the_gate():
     assert blocking_problems({"song": SONG, "shots": [h3("a", 0), h3("b", 0)]}) == []
+
+
+def stage(key, template="stage-sala", **more):
+    return {"key": key, "kind": "scene3d", "t0": 0, "scene3d": {"template": template, "cast": {"subject_1": "hero"}, **more}}
+
+
+def test_a_stage_in_its_mold_colours_is_warned_once_per_set_or_template(tmp_path):
+    sets = {"office": {"kind": "room", "mold": "despacho", "skin": {"wall_back": {"image": "shelves"}}},
+            "plain": {"kind": "room", "mold": "sala", "skin": {"wall_left": {"color": "#112233"}}},
+            "bare": {"kind": "room", "mold": "cocina"}}
+    shots = [stage("a"), stage("b", roomCamera="ots_a"), stage("c", "stage-plaza"), stage("d", "two-shot", background="office"),
+             stage("e", "two-shot", background="plain"), stage("f", "two-shot", background="bare"), stage("g", "two-shot", background="bare"),
+             stage("h", "two-shot", background={"room": {"mold": {"id": "sala"}, "skin": {"floor": {"texture": {"asset": "t.png"}}}}})]
+    spec = {"song": SONG, "cast": [{"id": "hero", "sheet_prompt": "x"}], "models": {"hero": {"from": "hero"}}, "sets": sets, "shots": shots}
+    found = [(item["set"], item["shots"]) for item in plan_warnings(spec, tmp_path) if item["code"] == "stage_unskinned"]
+    assert found == [("stage-sala", ["a", "b"]), ("stage-plaza", ["c"]), ("plain", ["e"]), ("bare", ["f", "g"])]
+    hint = next(item["hint"] for item in plan_warnings(spec, tmp_path) if item["code"] == "stage_unskinned")
+    assert "sets" in hint and "skin" in hint
+
+
+def test_the_same_template_and_place_in_more_than_four_shots_in_a_row_looks_samey(tmp_path):
+    spec = {"song": SONG, "cast": [{"id": "hero", "sheet_prompt": "x"}], "models": {"hero": {"from": "hero"}},
+            "shots": [stage(f"s{i}", roomCamera=("ots_a", "ots_b")[i % 2]) for i in range(5)]}
+    samey = [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"]
+    assert len(samey) == 1 and samey[0]["template"] == "stage-sala" and samey[0]["background"] is None
+    assert samey[0]["shots"] == ["s0", "s1", "s2", "s3", "s4"] and "roomCamera" in samey[0]["hint"]
+    spec["shots"][2] = h3("cut", 8)
+    assert not [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"], "a cut away ends the run"
+    spec["shots"] = [stage(f"o{i}", "two-shot", background="office") for i in range(4)] + [stage("p", "two-shot", background="park")]
+    assert not [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"], "four in a row is a scene"
+    spec["shots"].append(stage("q", "two-shot", background="park"))
+    spec["shots"] += [stage(f"r{i}", "two-shot", background="park") for i in range(4)]
+    assert [item["shots"] for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"] == [["p", "q", "r0", "r1", "r2", "r3"]]

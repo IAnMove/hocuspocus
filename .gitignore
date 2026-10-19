@@ -1,6 +1,9 @@
 # Python virtual environment
 env/
 app/env/
+
+# Local logs from scripts/dev/gates.py. Never commit them.
+.dev-gates/
 # Cloud Agent / local dev virtualenv created by .cursor/install.sh
 .venv/
 
@@ -163,3 +166,12 @@ scripts/*_song.json
 scripts/*_pipeline.json
 scripts/*_concat.txt
 scripts/joke_*.json
+# Optional FLUX 3 / Drama 3 runtime, dependencies and downloaded vendors.
+app/services/creation_models/env/
+app/services/creation_models/vendor/
+
+app/services/creation_models/input/
+app/services/creation_models/output/
+app/services/creation_models/extra_model_paths.json
+app/services/creation_models/runtime.json
+app/services/creation_models/runtime.json.tmp

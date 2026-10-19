@@ -1,4 +1,6 @@
 import { commandResultFromSlice, type CommandResult } from '../../lib/commandContract'
+import { contentLanguageForUi, scaffoldLanguage } from '../../lib/contentLanguage'
+import i18n from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { compileProviderPrompt, mergeLanguageIntent } from '../../lib/languageIntent'
 import type { CreateComicCommand, GenerateComicCommand } from './commands'
@@ -43,24 +45,28 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
     import('./store'),
     import('./model'),
   ])
+  const authoredLanguage = action.language || contentLanguageForUi().language
+  const lng = scaffoldLanguage(authoredLanguage)
   const characters = (action.characters.length ? action.characters : [{
-    name: 'Protagonista',
-    role: 'Protagonista',
+    name: i18n.t('comics:scaffold.leadName', { lng }),
+    role: i18n.t('comics:scaffold.roleLead', { lng }),
     personality: '',
     desire: '',
     flaw: '',
-    appearance: 'Silueta clara y reconocible',
+    appearance: i18n.t('comics:scaffold.appearance', { lng }),
     voice: '',
   }]).map((character, index) => ({
     id: comicId('character'),
-    name: character.name || `Personaje ${index + 1}`,
+    name: character.name || i18n.t('comics:scaffold.characterName', { lng, index: index + 1 }),
     description: character.appearance || character.role || character.name,
-    role: character.role || (index ? 'Secundario' : 'Protagonista'),
+    role: character.role || (index
+      ? i18n.t('comics:scaffold.roleSupport', { lng })
+      : i18n.t('comics:scaffold.roleLead', { lng })),
     personality: character.personality,
     motivation: character.desire,
     voice: character.voice,
-    wardrobe: character.appearance || 'Vestuario fijo y reconocible durante todo el cómic.',
-    visualNotes: [character.appearance, action.styleName, 'Silueta, escala y paleta constantes.'].filter(Boolean).join('. '),
+    wardrobe: character.appearance || i18n.t('comics:scaffold.wardrobe', { lng }),
+    visualNotes: [character.appearance, action.styleName, i18n.t('comics:scaffold.visualNotes', { lng })].filter(Boolean).join('. '),
     negativePrompt: 'inconsistent face, changed wardrobe, duplicate character, extra limbs, unreadable silhouette',
     referenceAssetIds: [],
     locked: false,
@@ -68,17 +74,21 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
   const panels = action.panels.length ? action.panels : [
     { caption: action.synopsis || action.title, dialogue: '', sfx: '', scene: action.synopsis },
   ]
-  const requestedPages = action.pages.length ? action.pages : [{ title: 'Página 1', stage: '', panels }]
+  const requestedPages = action.pages.length ? action.pages : [{
+    title: i18n.t('comics:scaffold.pageTitle', { lng, number: 1 }),
+    stage: '',
+    panels,
+  }]
   const allPanels = requestedPages.flatMap(page => page.panels)
   const languageIntent = mergeLanguageIntent(undefined, action.languageIntent, {
-    contentLanguage: action.language || 'Español',
+    contentLanguage: authoredLanguage,
     technicalPromptLanguage: 'en',
   })
   const ending = allPanels.at(-1)?.dialogue
     || allPanels.at(-1)?.caption
-    || `El conflicto de “${action.title}” se resuelve con una consecuencia visual clara.`
+    || i18n.t('comics:scaffold.ending', { lng, title: action.title })
   const castBible = characters.map(character => [
-    `${character.name} (${character.role || 'personaje'})`,
+    `${character.name} (${character.role || i18n.t('comics:scaffold.roleFallback', { lng })})`,
     character.description,
     character.personality,
     character.motivation,
@@ -106,12 +116,12 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
     title: action.title,
     logline: action.synopsis,
     synopsis: action.synopsis || action.title,
-    language: languageIntent.contentLanguage || action.language || 'Español',
-    styleBible: action.styleName || 'Tira cómica clara, 4 viñetas',
+    language: languageIntent.contentLanguage || authoredLanguage,
+    styleBible: action.styleName || i18n.t('comics:scaffold.styleBible', { lng }),
     characters,
     storyStructure: requestedPages.map((page, pageIndex) => ({
       pageNumber: pageIndex + 1, stage: page.stage || page.title,
-      goal: `Representar con claridad la etapa “${page.title}”.`,
+      goal: i18n.t('comics:scaffold.stageGoal', { lng, title: page.title }),
       turningPoint: page.panels.at(-1)?.dialogue || page.panels.at(-1)?.caption || page.stage || page.title,
     })),
     pages: requestedPages.map((page, pageIndex) => ({
@@ -123,7 +133,7 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
         return {
           id: comicId('panel-plan'),
           order: index + 1,
-          narrativeRole: `${page.title} · viñeta ${index + 1}`,
+          narrativeRole: i18n.t('comics:scaffold.narrativeRole', { lng, page: page.title, number: index + 1 }),
           sceneDescription: beat,
           imagePrompt: compileProviderPrompt([
             `Single comic panel for "${action.title}".`,
@@ -137,7 +147,7 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
           dialogue: panel.dialogue ? [{ text: panel.dialogue, bubbleType: 'speech' as const }] : [],
           captions: panel.caption ? [panel.caption] : [],
           soundEffects: panel.sfx ? [panel.sfx] : [],
-          continuityNotes: `Conservar identidad, vestuario, paleta, iluminación y eje espacial respecto a la viñeta ${Math.max(1, index)}.`,
+          continuityNotes: i18n.t('comics:scaffold.continuity', { lng, number: Math.max(1, index) }),
         }
       }),
     })),
@@ -171,7 +181,7 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
       storyContext: compileProviderPrompt(storyContext, languageIntent, { medium: 'comic' }),
       productionMode: 'comic',
       pageCount: requestedPages.length,
-      language: languageIntent.contentLanguage || action.language || 'Español',
+      language: languageIntent.contentLanguage || authoredLanguage,
       format: project.format.preset,
       panelsPerPage: Math.max(...requestedPages.map(page => page.panels.length)),
       genre: 'Comedy',
@@ -201,11 +211,23 @@ export async function createFilledComic(action: CreateComicCommand): Promise<Com
     sum + page.elements.filter(element => element.type === 'panel' && !element.parentId).length
   ), 0)
   if (stored.pages.length !== requestedPages.length || storedPanels !== allPanels.length) {
-    throw new Error(`El cómic guardado tiene ${stored.pages.length} páginas y ${storedPanels} viñetas; pediste ${requestedPages.length} páginas y ${allPanels.length} viñetas.`)
+    throw new Error(i18n.t('comics:actionErrors.storedMismatch', {
+      storedPages: stored.pages.length,
+      storedPanels,
+      requestedPages: requestedPages.length,
+      requestedPanels: allPanels.length,
+    }))
   }
+  const imageSource = provider === 'minimax' ? 'MiniMax image-01' : imageModel || i18n.t('comics:replies.selectedLocalModel')
   return comicResult(
     project,
-    `He creado desde cero “${project.title}” con ${requestedPages.length} páginas, ${characters.length} personajes y ${allPanels.length} viñetas. Comic Director usará ${provider === 'minimax' ? 'MiniMax image-01' : imageModel || 'el modelo local seleccionado'}. No he generado imágenes todavía.`,
+    i18n.t('comics:replies.created', {
+      title: project.title,
+      pages: requestedPages.length,
+      characters: characters.length,
+      panels: allPanels.length,
+      imageSource,
+    }),
   )
 }
 
@@ -221,19 +243,20 @@ export async function generateFilledComicArtwork(
   const state = useComicStore.getState()
   if (!state.project.director) {
     const project = state.project
+    const lng = scaffoldLanguage(project.language)
     const characters = (project.characters.length ? project.characters : [{
       id: comicId('character'),
-      name: 'Protagonista',
-      description: 'Silueta clara',
+      name: i18n.t('comics:scaffold.leadName', { lng }),
+      description: i18n.t('comics:scaffold.appearance', { lng }),
       locked: false,
     }]).map(character => ({
       ...character,
-      role: character.role || 'Personaje principal',
-      personality: character.personality || 'Expresivo y coherente con el tono del cómic.',
-      motivation: character.motivation || project.synopsis || 'Resolver el conflicto de la historia.',
-      voice: character.voice || 'Voz breve, clara y diferenciada.',
-      wardrobe: character.wardrobe || character.description || 'Vestuario fijo y reconocible.',
-      visualNotes: character.visualNotes || `${character.description}. Silueta, escala y paleta constantes.`,
+      role: character.role || i18n.t('comics:scaffold.roleLead', { lng }),
+      personality: character.personality || i18n.t('comics:scaffold.personality', { lng }),
+      motivation: character.motivation || project.synopsis || i18n.t('comics:scaffold.motivation', { lng }),
+      voice: character.voice || i18n.t('comics:scaffold.voice', { lng }),
+      wardrobe: character.wardrobe || character.description || i18n.t('comics:scaffold.wardrobe', { lng }),
+      visualNotes: character.visualNotes || `${character.description}. ${i18n.t('comics:scaffold.visualNotes', { lng })}`,
       negativePrompt: character.negativePrompt || 'inconsistent face, changed wardrobe, duplicate character, extra limbs',
       referenceAssetIds: character.referenceAssetIds || [],
     }))
@@ -260,7 +283,7 @@ export async function generateFilledComicArtwork(
           return {
             id: comicId('panel-plan'),
             order: index + 1,
-            narrativeRole: `Viñeta ${index + 1}`,
+            narrativeRole: i18n.t('comics:scaffold.narrativeRole', { page: pageIndex + 1, number: index + 1, lng }),
             sceneDescription: beat,
             imagePrompt: compileProviderPrompt([
               `Single comic panel for "${project.title}".`,
@@ -273,13 +296,13 @@ export async function generateFilledComicArtwork(
             dialogue: dialogue.map(text => ({ text, bubbleType: 'speech' as const })),
             captions,
             soundEffects,
-            continuityNotes: `Conservar identidad, vestuario, paleta y eje espacial respecto a la viñeta ${Math.max(1, index)}.`,
+            continuityNotes: i18n.t('comics:scaffold.continuity', { number: Math.max(1, index), lng }),
           }
         }),
       }
     })
     if (!pages.some(page => page.panels.length)) {
-      throw new Error('El cómic abierto no tiene viñetas que dibujar.')
+      throw new Error(i18n.t('comics:actionErrors.noPanels'))
     }
     const studio = useStore.getState()
     const provider = studio.productionProfile.image.provider === 'minimax' ? 'minimax' as const : 'maestro' as const
@@ -295,11 +318,11 @@ export async function generateFilledComicArtwork(
       characters,
       storyStructure: pages.map((page, index) => ({
         pageNumber: page.pageNumber,
-        stage: index === 0 ? 'Planteamiento y complicación' : `Desarrollo ${index + 1}`,
-        goal: project.synopsis || `Hacer avanzar “${project.title}”.`,
+        stage: i18n.t('comics:scaffold.stage', { number: index + 1, total: pages.length, lng }),
+        goal: project.synopsis || i18n.t('comics:scaffold.advanceTitle', { title: project.title, lng }),
         turningPoint: page.panels.at(-1)?.dialogue.at(-1)?.text
           || page.panels.at(-1)?.captions.at(-1)
-          || `Cerrar el beat de la página ${page.pageNumber}.`,
+          || i18n.t('comics:scaffold.closePageBeat', { page: page.pageNumber, lng }),
       })),
       pages,
     }
@@ -345,11 +368,11 @@ export async function generateFilledComicArtwork(
     })
   }
   if (!useComicStore.getState().project.director) {
-    throw new Error('No hay un cómic con plan de Director abierto. Pide primero un cómic de ejemplo o crea uno con tema.')
+    throw new Error(i18n.t('comics:actionErrors.noDirectorPlan'))
   }
   const current = useComicStore.getState().project.director!
   if (current.factualBiography && !current.biographyReviewedAt && !action.biographyReview) {
-    throw new Error('Este cómic es una biografía factual. Confirma hechos, inferencias y dramatización (biography_review=true) antes de dibujar; no inventaré familiares, citas ni acontecimientos.')
+    throw new Error(i18n.t('comics:actionErrors.biographyBlocked'))
   }
   if (action.biographyReview && !current.biographyReviewedAt) {
     useComicStore.getState().patchProject({
@@ -373,16 +396,16 @@ export async function generateFilledComicArtwork(
   })
   const project = useComicStore.getState().project
   const provider = project.director?.provider
-  const providerLabel = provider === 'minimax' ? 'MiniMax image-01' : 'el proveedor local configurado'
+  const providerLabel = provider === 'minimax' ? 'MiniMax image-01' : i18n.t('comics:replies.configuredLocalProvider')
   if (!result.total) {
-    return comicResult(project, 'Todas las viñetas de este cómic ya tenían dibujo.', {
+    return comicResult(project, i18n.t('comics:replies.alreadyDrawn'), {
       status: 'completed', generated: 0, failed: 0, cancelled: false,
     })
   }
   if (result.cancelled) {
     return comicResult(
       project,
-      `He cancelado el lote con ${result.generated} viñetas terminadas y ${result.failed} fallidas; no he perdido lo ya dibujado.`,
+      i18n.t('comics:replies.cancelled', { generated: result.generated, failed: result.failed }),
       {
         status: result.generated > 0 ? 'partial' : 'failed',
         generated: result.generated,
@@ -394,7 +417,7 @@ export async function generateFilledComicArtwork(
   if (result.failed) {
     return comicResult(
       project,
-      `He dibujado ${result.generated} viñetas con ${providerLabel} y han fallado ${result.failed}. Puedo reanudar desde la primera pendiente o reintentar las fallidas.`,
+      i18n.t('comics:replies.partial', { generated: result.generated, failed: result.failed, provider: providerLabel }),
       {
         status: result.generated > 0 ? 'partial' : 'failed',
         generated: result.generated,
@@ -405,7 +428,7 @@ export async function generateFilledComicArtwork(
   }
   return comicResult(
     project,
-    `He dibujado ${result.generated} viñetas con ${providerLabel}. Aparecen dentro de cada recuadro al terminar.`,
+    i18n.t('comics:replies.drawn', { generated: result.generated, provider: providerLabel }),
     { status: 'completed', generated: result.generated, failed: 0, cancelled: false },
   )
 }
@@ -420,16 +443,21 @@ export async function generateComicPanelArtwork(
     import('./generateArtwork'),
   ])
   if (!useComicStore.getState().project.director) {
-    throw new Error('El cómic abierto no tiene un plan de Director. Crea primero el borrador completo antes de regenerar una viñeta.')
+    throw new Error(i18n.t('comics:actionErrors.regenerateNeedsPlan'))
   }
   const result = await generateDirectorArtwork({
     force: true,
     target: { pageNumber, panelNumber },
     onProgress: (message, current, total) => onProgress?.(`${message} (${current}/${total})`),
   })
-  if (result.failed) throw new Error(`No pude regenerar la viñeta ${panelNumber} de la página ${pageNumber}.`)
+  if (result.failed) throw new Error(i18n.t('comics:actionErrors.regenerateFailed', { panel: panelNumber, page: pageNumber }))
   return comicResult(
     useComicStore.getState().project,
-    `He regenerado únicamente la viñeta ${panelNumber} de la página ${pageNumber}; las demás imágenes permanecen intactas (${result.generated}/${result.total}).`,
+    i18n.t('comics:replies.regenerated', {
+      panel: panelNumber,
+      page: pageNumber,
+      generated: result.generated,
+      total: result.total,
+    }),
   )
 }

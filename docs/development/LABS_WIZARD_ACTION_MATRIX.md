@@ -1193,6 +1193,8 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.generate_comic` | `generate_comic` | `generate` | `ui/src/features/agent/applicationAdapters.ts` | `comic.generate` |
 | `other.generate_comic_panel` | `generate_comic_panel` | `generatePanel` | `ui/src/features/agent/applicationAdapters.ts` | `comic.generatePanel` |
 | `other.create_character_kit` | `create_character_kit` | `create` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.create` |
+| `other.make_character_animation` | `make_character_animation` | `registerCharacterAnimationCapabilities` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.make` |
+| `other.review_character_animation` | `review_character_animation` | `executeReviewCharacterAnimation` | `ui/src/features/agent/characterAnimationCapabilities.ts` | `characterAnimations.review` |
 | `other.open_character_kit` | `open_character_kit` | `openKit` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.openKit` |
 | `other.update_character_kit` | `update_character_kit` | `update` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.update` |
 | `other.attach_character_kit_references` | `attach_character_kit_references` | `attachReference` | `ui/src/features/agent/applicationAdapters.ts` | `characterKit.attachReference` |
@@ -1369,6 +1371,19 @@ of the shot reuses the recording; `retake` records another take and replaces the
 only when it is good. The shot inspector's Dialogue part (Record voice, New take) calls
 the same route. Coverage is in `ui/tests/seriesShotEditWizard.test.ts` and
 `tests/test_series_line_voice.py`.
+`series.shots.apply_card` (`apply_series_shot_card`) puts a Video 2D card on a 2D shot as a new take through `seriesShots.applyCard`,
+registered by `registerSeriesShotCardCapabilities` in `ui/src/features/agent/seriesShotCardCapabilities.ts`. It posts to
+`POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card`, the route behind the MCP tool `series.shot.card.apply`
+(`app/services/series_shot_card.py`), with the same body: `card`, `cast` (`{slot, characterId, animation?, poseId?}`), `controls`,
+`assets`, `language` and `approve`. The server binds the card to the shot's characters (pose pictures, or the approved animation sheet
+for the sheet cards), compiles it, saves the scene so it opens in Video 2D, exports it and attaches the take as a candidate;
+`approve_take` approves it only in «Modo un solo disparo» and never over a take a person approved. A scene still being exported
+answers `exporting` and the Wizard sends the same request again for a few minutes. Coverage is in
+`ui/tests/seriesShotCardWizard.test.ts` and `tests/test_series_shot_card.py`.
+`characters.voice.band` (`set_voice_band`) stores a pitch band on a saved character's voice through `characterKit.setVoiceBand`,
+registered by `registerVoiceBandCapabilities` in `ui/src/features/agent/voiceBandCapabilities.ts`. It posts to
+`POST /api/v1/character-kits/library/kits/{kit_id}/voice-band`, the route behind the MCP tool `characters.voice.band`
+(`app/services/voice_band.py`). A voice with no band is recorded as before.
 
 ## Media tools
 
@@ -1379,3 +1394,16 @@ registered by `registerMediaToolCapabilities` in
 `/api/v1/media/commands`, the handlers the MCP tools of the same names run. Each
 result is a workspace file with a provenance sidecar. Coverage is in
 `ui/tests/mediaToolWizard.test.ts` and `tests/test_production_media_router.py`.
+
+## Video 2D music cards
+
+`video2d.templates.suggest` (`video2d_templates`) reads the Video 2D music cards through
+`video2dTemplates.command`, registered by `registerVideo2DTemplateCapabilities` in
+`ui/src/features/agent/video2dTemplateCapabilities.ts`: `scenes.templates.suggest` (a line, its speakers, mood,
+beat and format) or `scenes.catalog`, posted to `/api/v1/scenes/templates/commands`, the handlers the MCP tools of
+the same names run. It is read-only; the Wizard puts the card in a production spec as a `scene2d` shot. Coverage is
+in `ui/tests/video2dTemplatesWizard.test.ts` and `tests/test_video2d_template_commands_router.py`.
+
+`scene3d.room.put` (`room_sets`) stores a metric box room through `roomSets.command` and `put_room` in `app/services/room_box_commands.py`, posted to `/api/v1/scene3d/rooms/commands`. Coverage is in `ui/tests/roomSetsWizard.test.ts`.
+
+`scene3d.room.paint` (`room_sets`, with `scene3d.room.paint.status`) paints a stored box room with the image model in the background through `roomSets.command` and `paint_room` in `app/services/room_box_commands.py`, the same endpoint. Coverage is in `ui/tests/roomSetsWizard.test.ts` and `tests/test_room_box.py`.

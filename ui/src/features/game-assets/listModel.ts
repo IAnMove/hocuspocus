@@ -2,17 +2,6 @@ import type { GameAsset, GameEstimate, ProduceStep } from './types'
 
 export const OPEN_STATUSES = ['pending', 'rejected', 'failed'] as const
 
-export const EXAMPLE_LIST = `personaje heroe: caballero bajito con armadura de bronce y capa roja | jugador
-anim heroe: idle, andar, saltar, atacar, herido, morir
-personaje slime: babosa verde gelatinosa | enemigo
-objeto moneda: moneda de oro | anim girar | 8 frames
-tileset hierba: suelo de hierba sobre tierra
-fondo bosque: bosque al atardecer | capas 3
-ui boton: botón de madera | 9-slice
-efecto explosion: explosión pequeña con chispas | 12 frames
-sfx salto: salto corto y ligero | variantes 3
-musica nivel1: tema alegre de bosque | bucle 60 s`
-
 export const SPEC_FIELDS: Record<string, { key: string; input: 'text' | 'number' }[]> = {
   character: [{ key: 'role', input: 'text' }, { key: 'heightPx', input: 'number' }],
   sprite: [{ key: 'pose', input: 'text' }, { key: 'heightPx', input: 'number' }],

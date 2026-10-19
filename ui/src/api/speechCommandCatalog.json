@@ -34,6 +34,20 @@
                 "default": null,
                 "title": "Auto Split Every S"
               },
+              "expert_cache_gb": {
+                "anyOf": [
+                  {
+                    "maximum": 16.0,
+                    "minimum": 0.0,
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Expert Cache Gb"
+              },
               "exaggeration": {
                 "anyOf": [
                   {
@@ -93,6 +107,19 @@
                 ],
                 "default": null,
                 "title": "Duration Multiplier"
+              },
+              "style": {
+                "anyOf": [
+                  {
+                    "maxLength": 300,
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "default": null,
+                "title": "Style"
               }
             },
             "title": "StudioSpeechCustomSettings",
@@ -961,6 +988,20 @@
               "default": null,
               "title": "Auto Split Every S"
             },
+            "expert_cache_gb": {
+              "anyOf": [
+                {
+                  "maximum": 16.0,
+                  "minimum": 0.0,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Expert Cache Gb"
+            },
             "exaggeration": {
               "anyOf": [
                 {
@@ -1020,6 +1061,19 @@
               ],
               "default": null,
               "title": "Duration Multiplier"
+            },
+            "style": {
+              "anyOf": [
+                {
+                  "maxLength": 300,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Style"
             }
           },
           "title": "StudioSpeechCustomSettings",
@@ -1908,13 +1962,17 @@
       "auk",
       "auk_flash",
       "chatterbox",
+      "drama3_base",
+      "drama3_voicedesign",
       "dramabox_audio",
       "index_tts2",
       "kugelaudio_0_open",
       "qwen3_tts_base",
       "qwen3_tts_customvoice",
       "qwen3_tts_voicedesign",
-      "scenema_audio"
+      "scenema_audio",
+      "voxcpm2_base",
+      "voxcpm2_voicedesign"
     ],
     "effects": {
       "generation_mode": "audio",

@@ -17,12 +17,18 @@ from services import minimax_music_service, resource_scheduler
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
 STORY_MUSIC = ROOT / "app" / "routers" / "story_music.py"
+STORY_MUSIC_JOBS = ROOT / "app" / "services" / "story_music_jobs.py"
 LAUNCH_TREE = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
 STORY_MUSIC_TREE = ast.parse(STORY_MUSIC.read_text(encoding="utf-8"), filename=str(STORY_MUSIC))
+STORY_MUSIC_JOBS_TREE = ast.parse(STORY_MUSIC_JOBS.read_text(encoding="utf-8"), filename=str(STORY_MUSIC_JOBS))
 
 
 def _function(name: str) -> tuple[ast.FunctionDef, Path]:
-    for tree, source in ((STORY_MUSIC_TREE, STORY_MUSIC), (LAUNCH_TREE, LAUNCH)):
+    for tree, source in (
+        (STORY_MUSIC_JOBS_TREE, STORY_MUSIC_JOBS),
+        (STORY_MUSIC_TREE, STORY_MUSIC),
+        (LAUNCH_TREE, LAUNCH),
+    ):
         for node in tree.body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
                 clone = copy.deepcopy(node)
@@ -90,6 +96,10 @@ def _base_namespace(tmp_path: Path) -> dict:
         "_reserve_story_music_submission": lambda _body, _workspace: {},
         "_load_minimax_music_job": lambda _job_id: None,
         "_finalize_reserved_music_attempt": lambda *_args, **_kwargs: None,
+        # The full server binds neither hook; core binds both (see routers/story_music.py).
+        "_music_generation_gate": None,
+        "_music_before_reserve": None,
+        "_music_resolve_workspace": None,
     }
 
 
@@ -157,13 +167,15 @@ def test_start_returns_a_durable_job_before_provider_work(tmp_path):
             Thread=_DeferredThread,
         ),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
 
     before = time.monotonic()
     result = start({
         "prompt": "cinematic dream pop",
+        "model": "music-3.0",
+        "paid_music_confirmed": True,
         "lyrics": "[Verse]\nAcross the night",
         "count": 3,
         "workspace": "default",
@@ -212,11 +224,13 @@ def test_replay_without_checkpoint_starts_the_worker(tmp_path):
         },
         "threading": SimpleNamespace(Thread=CaptureThread),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
     result = start({
         "prompt": "cinematic dream pop",
+        "model": "music-3.0",
+        "paid_music_confirmed": True,
         "lyrics": "[Verse]\nAcross the night",
         "workspace": "default",
     })
@@ -259,7 +273,7 @@ def test_concurrent_replay_without_checkpoint_starts_one_worker(tmp_path):
         },
         "threading": SimpleNamespace(Thread=CaptureThread),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
     results: list[dict | None] = [None] * 8
@@ -270,6 +284,8 @@ def test_concurrent_replay_without_checkpoint_starts_one_worker(tmp_path):
             barrier.wait(timeout=2)
             results[index] = start({
                 "prompt": "cinematic dream pop",
+                "model": "music-3.0",
+                "paid_music_confirmed": True,
                 "lyrics": "[Verse]\nAcross the night",
                 "workspace": "default",
             })
@@ -303,13 +319,15 @@ def test_start_rejects_a_non_numeric_candidate_count_as_bad_input(tmp_path):
         "_public_minimax_music_job": lambda job: job,
         "threading": SimpleNamespace(Thread=_DeferredThread),
     })
-    start = _load("start_story_music_candidates_job", namespace=namespace)[
+    start = _load("_confirmed_paid_model", "start_story_music_candidates_job", namespace=namespace)[
         "start_story_music_candidates_job"
     ]
 
     try:
         start({
             "prompt": "cinematic dream pop",
+            "model": "music-3.0",
+            "paid_music_confirmed": True,
             "lyrics": "[Verse]\nAcross the night",
             "count": "many",
         })

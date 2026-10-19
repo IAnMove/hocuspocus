@@ -2129,7 +2129,7 @@ def update_generation_status(html_content):
     if(html_content):
         return gr.update(value=html_content)
 
-family_handlers = ["models.h3_advanced.handler", "models.sensenova_u1.handler", "models.wan.wan_handler", "models.wan.ovi_handler", "models.wan.df_handler", "models.hyvideo.hunyuan_handler", "models.ltx_video.ltxv_handler", "models.ltx2.ltx2_handler", "models.ltx2.scenema_audio_handler", "models.ltx2.ltx_audio_tts_handler", "models.minimax_h3.minimax_h3_handler", "models.longcat.longcat_handler", "models.flux.flux_handler", "models.qwen.qwen_handler", "models.kandinsky5.kandinsky_handler",  "models.z_image.z_image_handler", "models.krea2.krea2_handler", "models.hidream.hidream_handler", "models.TTS.ace_step_handler", "models.TTS.chatterbox_handler", "models.TTS.qwen3_handler", "models.TTS.yue_handler", "models.TTS.heartmula_handler", "models.TTS.kugelaudio_handler", "models.TTS.minimax_music3_handler", "models.TTS.index_tts2_handler", "models.TTS.auk.auk_handler", "models.TTS.yue2.yue2_handler"]
+family_handlers = ["models.creation_models.handler", "models.h3_advanced.handler", "models.sensenova_u1.handler", "models.wan.wan_handler", "models.wan.ovi_handler", "models.wan.df_handler", "models.hyvideo.hunyuan_handler", "models.ltx_video.ltxv_handler", "models.ltx2.ltx2_handler", "models.ltx2.scenema_audio_handler", "models.ltx2.ltx_audio_tts_handler", "models.minimax_h3.minimax_h3_handler", "models.longcat.longcat_handler", "models.flux.flux_handler", "models.qwen.qwen_handler", "models.kandinsky5.kandinsky_handler",  "models.z_image.z_image_handler", "models.krea2.krea2_handler", "models.hidream.hidream_handler", "models.TTS.ace_step_handler", "models.TTS.chatterbox_handler", "models.TTS.qwen3_handler", "models.TTS.voxcpm2_handler", "models.TTS.yue_handler", "models.TTS.heartmula_handler", "models.TTS.kugelaudio_handler", "models.TTS.minimax_music3_handler", "models.TTS.index_tts2_handler", "models.TTS.auk.auk_handler", "models.TTS.yue2.yue2_handler"]
 DEFAULT_LORA_ROOT = "loras"
 
 def register_family_lora_args(parser, lora_root):
@@ -6602,7 +6602,7 @@ def _trim_video_tail(clip_path, trim_frames, fps):
 
 def concatenate_multi_clip_videos(
     clip_paths, output_path, audio_path=None, audio_start_sec=0.0,
-    abort_callback=None, pad_audio=False, audio_duration_sec=None,
+    abort_callback=None, pad_audio=False, audio_duration_sec=None, allow_soft_join=True,
 ):
     """Concatenate video clips into one video, optionally adding a full audio track.
 
@@ -6675,22 +6675,32 @@ def concatenate_multi_clip_videos(
 
     try:
         from services.mix_concat import (
+            ASSEMBLY_BLOCK_CLIPS,
+            FfmpegOutOfMemory,
             build_hard_concat_filter,
+            child_process_options,
             concat_with_tail_hold_and_crossfade,
             driving_soundtrack_bound,
             probe_audio_flags,
             probe_duration_seconds,
+            raise_if_out_of_memory,
             should_use_hold_crossfade,
         )
+        from services.mix_concat_blocks import hard_join_in_blocks
     except ImportError:
         from app.services.mix_concat import (
+            ASSEMBLY_BLOCK_CLIPS,
+            FfmpegOutOfMemory,
             build_hard_concat_filter,
+            child_process_options,
             concat_with_tail_hold_and_crossfade,
             driving_soundtrack_bound,
             probe_audio_flags,
             probe_duration_seconds,
+            raise_if_out_of_memory,
             should_use_hold_crossfade,
         )
+        from app.services.mix_concat_blocks import hard_join_in_blocks
 
     # Probe every clip. A video-only bumper (or mute H3 shot) in slot 0
     # used to hide later dialogue; a later video-only clip crashed ffmpeg
@@ -6703,7 +6713,7 @@ def concatenate_multi_clip_videos(
 
     use_clip_audio = clips_have_audio and not audio_path
     audio_label = "with embedded audio" if use_clip_audio else ("with external audio" if audio_path else "video only")
-    if should_use_hold_crossfade(
+    if allow_soft_join and should_use_hold_crossfade(
         n,
         has_driving_audio=bool(audio_path),
         pad_audio=bool(pad_audio),
@@ -6717,6 +6727,17 @@ def concatenate_multi_clip_videos(
         if abort_callback is not None and abort_callback():
             return False
         print("[Multi-Clip] Soft join failed; falling back to hard concat")
+    if n > ASSEMBLY_BLOCK_CLIPS:
+        # One graph keeps a decoder per clip: join in blocks, then join the blocks (with the driving soundtrack).
+        print(f"[Multi-Clip] Joining {n} clips in blocks of at most {ASSEMBLY_BLOCK_CLIPS}")
+        return hard_join_in_blocks(
+            valid_paths, output_path,
+            lambda blocks: concatenate_multi_clip_videos(
+                blocks, output_path, audio_path, audio_start_sec=audio_start_sec, abort_callback=abort_callback,
+                pad_audio=pad_audio, audio_duration_sec=audio_duration_sec, allow_soft_join=False,
+            ),
+            with_clip_audio=use_clip_audio, ffmpeg_bin=ffmpeg_bin, abort_callback=abort_callback,
+        )
     print(f"[Multi-Clip] Joining {n} clips using concat filter (re-encode, {audio_label})")
     if audio_path and audio_start_sec > 0:
         print(f"[Multi-Clip] External audio begins at source time {audio_start_sec:.3f}s")
@@ -6840,6 +6861,7 @@ def concatenate_multi_clip_videos(
                 capture_output=True,
                 text=True,
                 timeout=1200,
+                **child_process_options(),
             )
             returncode = completed.returncode
             stderr = completed.stderr
@@ -6849,6 +6871,7 @@ def concatenate_multi_clip_videos(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
+                **child_process_options(),
             )
             deadline = time.monotonic() + 1200.0
             while True:
@@ -6885,6 +6908,7 @@ def concatenate_multi_clip_videos(
                 tail = err[-1000:] if len(err) > 1000 else err
                 print(tail)
             _remove_partial_output()
+            raise_if_out_of_memory(returncode, stderr, cmd)
             return False
 
         # Verify output file has content; an ffmpeg zero-byte success is not a
@@ -6904,6 +6928,8 @@ def concatenate_multi_clip_videos(
             process.communicate()
         _remove_partial_output()
         return False
+    except FfmpegOutOfMemory:
+        raise
     except Exception as e:
         print(f"[Multi-Clip] Concatenation failed: {e}")
         _remove_partial_output()
@@ -8385,6 +8411,8 @@ def generate_video(
         requested_frames_to_generate = default_requested_frames_to_generate # num  of num frames to create (if any source window this num includes also the overlapped source window frames)
         cached_video_guide_processed = cached_video_mask_processed = cached_video_guide_processed2 = cached_video_mask_processed2 = None
         cached_video_video_start_frame = cached_video_video_end_frame = -1
+        handler_prompts = {}  # window -> prompt a model handler rewrote; saved so the metadata shows what the model got
+        gen.pop("model_prompts", None)
         start_time = time.time()
         if prompt_enhancer_image_caption_model != None and prompt_enhancer !=None and len(prompt_enhancer)>0 and enhancer_mode == 0:
             send_cmd("progress", [0, get_latest_status(state, "Enhancing Prompt")])
@@ -8448,7 +8476,10 @@ def generate_video(
             refresh_preview  = {"image_guide" : image_guide, "image_mask" : image_mask} if image_mode >= 1 else {}
 
             if hasattr(model_handler, "custom_prompt_preprocess"):
+                requested_prompt = prompt
                 prompt = model_handler.custom_prompt_preprocess(**locals())
+                if prompt != requested_prompt:
+                    handler_prompts[window_no] = prompt
             image_start_tensor = image_end_tensor = None
             if window_no == 1 and (video_source is not None or image_start is not None):
                 if image_start is not None:
@@ -9538,6 +9569,9 @@ def generate_video(
                 configs["prompt"] = "\n".join(original_prompts)
                 if prompt_enhancer_image_caption_model != None and prompt_enhancer !=None and len(prompt_enhancer)>0 and enhancer_mode != 1:
                     configs["enhanced_prompt"] = "\n".join(prompts)
+                if handler_prompts:
+                    configs["model_prompts"] = {str(key): value for key, value in sorted(handler_prompts.items())}
+                    gen["model_prompts"] = configs["model_prompts"]      # the app's own sidecar shows them too
                 configs["generation_time"] = round(end_time-start_time)
                 configs["creation_date"] = datetime.fromtimestamp(end_time).isoformat(timespec="seconds")
                 configs["creation_timestamp"] = int(end_time)

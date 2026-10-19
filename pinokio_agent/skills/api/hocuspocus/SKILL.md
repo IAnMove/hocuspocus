@@ -7,6 +7,16 @@ description: Generate Qwen background plates and export editable Video 3D shots 
 
 ## Clients
 
+`clients/creation_job.py --base-url <discovered> --command <json> --output <evidence-json>`
+submits a native image or speech command and polls the canonical task to completion.
+Reusing the identical intent resumes observation without generating again. Image editing
+and speech use version 2 with `input:{workspace,params:{...}}`; plain text-to-image also
+accepts version 1. FLUX 3 edit uses `image_guide`, optional `image_refs` and
+`video_prompt_type:"VI"` (or `"V"` without extra references). Drama cloning uses
+`audio_guide`, `audio_prompt_type:"A"` and the exact reference words in `alt_prompt`.
+Read model readiness before submitting. `POST /api/v1/qa/speech` takes a flat
+`{workspace,file,text,language,names}` body and reports transcript, signal timing and WER.
+
 `clients/native.py` provides JSON HTTP requests and a fixed-camera backplate document.
 Pass the discovered base URL, workspace, durable image URL and animated GLB URL at runtime.
 `backplate_shot(key, image_url, actor_url, t0=..., duration=..., clip=..., start=..., end=...)`

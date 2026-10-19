@@ -63,8 +63,8 @@ def normalize_story_library(value: Any) -> dict[str, Any]:
         project["id"] = project_id
         project["languageIntent"] = normalize_language_intent(
             project.get("languageIntent"),
-            content_language=str(project.get("language") or "Español"),
-            spoken_language=str(project.get("spokenLanguage") or project.get("language") or "Español de España"),
+            content_language=str(project.get("language") or "English"),
+            spoken_language=str(project.get("spokenLanguage") or project.get("language") or "English"),
         )
         projects[project_id] = project
 

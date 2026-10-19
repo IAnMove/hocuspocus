@@ -45,6 +45,8 @@ from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.types import Send, Receive, Scope
 
+from services.kernel.paths import safe_join as safe_join_under
+
 
 _IS_WINDOWS = sys.platform == "win32"
 
@@ -649,22 +651,3 @@ def recycle_file(path: str) -> bool:
         return result == 0 and not op.fAnyOperationsAborted and not os.path.exists(path)
     except Exception:
         return False
-
-
-def safe_join_under(base: str, *parts: str):
-    """Join `parts` under `base`; return the absolute path only if it stays
-    inside `base` after resolving symlinks, else None. Shared with services
-    that cannot import launch.py's _safe_join (circular import)."""
-    try:
-        base_real = os.path.realpath(base)
-        joined = os.path.realpath(os.path.join(base_real, *parts))
-        if os.name == "nt":
-            if os.path.normcase(joined) != os.path.normcase(base_real) and \
-               not os.path.normcase(joined).startswith(os.path.normcase(base_real) + os.sep):
-                return None
-        else:
-            if joined != base_real and not joined.startswith(base_real + os.sep):
-                return None
-        return joined
-    except (ValueError, OSError):
-        return None

@@ -1,11 +1,11 @@
-"""Keep native 3D cuts on the montage's one shared frame clock."""
+"""Keep native 3D and 2D-card cuts on the montage's one shared frame clock."""
 from __future__ import annotations
 
 import math
 
 
 def align_native_cuts(segments, fps=24):
-    if not any(shot.get("kind") == "scene3d" for shot, _, _ in segments):
+    if not any(shot.get("kind") in ("scene3d", "scene2d") for shot, _, _ in segments):
         return segments
     # Round absolute boundaries, not each duration: independent rounding
     # moves every later scene relative to the continuous soundtrack.

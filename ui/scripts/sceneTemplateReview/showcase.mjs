@@ -4,6 +4,7 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { TextDecoder } from 'node:util'
 import { parseShowcaseManifest } from '../../src/features/sceneTemplates/showcaseManifest.ts'
+import { builtInGraphicSources } from '../../src/features/sceneTemplates/sceneBuilders.ts'
 
 export const MAX_SHOWCASE_BYTES = 512 * 1024 * 1024
 export const MAX_SHOWCASE_REFERENCES = 256
@@ -18,16 +19,10 @@ const SHOWCASE_URL_PREFIX = '/scene-showcase/'
 const SHOWCASE_EXTENSIONS = new Set(['mp4', 'png', 'jpg', 'json'])
 const decoder = new TextDecoder('utf-8', { fatal: true })
 
-// These are the four deterministic SVG overlays emitted by
-// sceneBuilders.effect(). They remain inline because they are compositor
-// primitives, not user-provided raster inputs. Keep this exact-match set
-// deliberately small: arbitrary SVG/data URLs must stay rejected.
-const SHOWCASE_GRAPHIC_SOURCES = new Set([
-  '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><path d="M15 256H497" stroke="#4deaff" stroke-width="18"/><path d="M15 256H497" stroke="white" stroke-width="5"/></svg>',
-  '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><ellipse cx="256" cy="256" rx="215" ry="175" fill="#77dcff" fill-opacity=".08" stroke="#87ecff" stroke-width="8"/><ellipse cx="256" cy="256" rx="195" ry="156" fill="none" stroke="#eaffff" stroke-opacity=".5" stroke-width="2"/></svg>',
-  '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><defs><radialGradient id="f"><stop stop-color="#fff"/><stop offset=".15" stop-color="#fff0a1"/><stop offset=".42" stop-color="#ff9d48" stop-opacity=".95"/><stop offset="1" stop-color="#fa4127" stop-opacity="0"/></radialGradient></defs><circle cx="256" cy="256" r="254" fill="url(#f)"/><path d="M256 15L281 223L486 256L281 282L256 499L233 282L17 256L231 226Z" fill="#ffe0a5" opacity=".8"/></svg>',
-  '<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512"><path d="M80 105l60 12-23 52-47-15ZM311 52l37 5 12 37-47-8ZM398 323l40 38-12 42-43-18ZM114 373l62-16 22 31-42 33ZM239 211l34-18 36 54-41 20Z" fill="#88919e" stroke="#e8aa7b" stroke-width="3"/></svg>',
-].map(markup => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`))
+// The deterministic SVG overlays emitted by sceneBuilders.effect(), taken from the builders themselves so a new
+// one (the broadside bolt) is accepted without a second copy. They stay inline because they are compositor
+// primitives, not user-provided raster inputs; any other SVG/data URL stays rejected (exact match).
+const SHOWCASE_GRAPHIC_SOURCES = new Set(builtInGraphicSources())
 
 const SHOWCASE_ATMOSPHERE_KINDS = new Set([
   'rain', 'snow', 'dust', 'embers', 'fog', 'smoke', 'ash', 'fireflies',

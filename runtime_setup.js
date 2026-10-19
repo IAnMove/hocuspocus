@@ -11,6 +11,9 @@ module.exports = {
     }},
     ...runtime.installEngines(['core', 'wangp', 'minimax_h3']),
     ...runtime.call('speech_install.js'),
+    ...runtime.call('creation_models_install.js').map(step => ({...step,
+      when: "{{args.update && exists('app/services/creation_models/env') && local.runtime.engines.creation_models.supported}}",
+    })),
     // Optional engines, installed from the Advanced menu, are refreshed only if present.
     ...runtime.call('trellis2_install.js').map(step => ({...step,
       when: `{{args.update && exists('app/services/model3d_runtimes/trellis2/env') && local.runtime.engines.trellis2.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,

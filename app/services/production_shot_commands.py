@@ -132,6 +132,8 @@ def _shoot_frame(production: Any, spec: dict, key: str, frame_prompt: str | None
     if frame_prompt:
         window["frame"] = frame_prompt
     production.frames(spec, [window])
+    if window.get("kind") == "scene2d":      # the drawn frame is the card's background: its scene shows it at once
+        _export_scene(production, spec, key)
 
 
 def _shoot_clip(production: Any, spec: dict, key: str, action: str | None) -> None:

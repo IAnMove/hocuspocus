@@ -94,6 +94,51 @@ broken into lumps lit from above (darker undersides) that swell, turn and drift 
 wind, and the flames of `anime_aura` fade in from the bottom of their card instead of
 ending on a straight cut.
 
+### Effects end in the air, never in a box
+
+A placed effect is drawn in the cue's footprint (`x`, `y`, `size`); paint that stops flat at that
+rectangle reads as a sticker. `node scripts/fx-footprint-audit.mjs` (run from `ui/`) paints every
+catalog effect alone with the real painter in headless Chromium, with WebGL and without it (the
+filmed 3D sprites and the 2D painters they fall back to), and measures a flat cut along the painted
+box and rectangular scatters (`ui/scripts/fxFootprint.ts`); `--sheet <dir>` writes contact sheets.
+`ui/e2e/specs/scene-fx-footprint.spec.ts` runs it in CI. The audit found `bubbles` and `stars` (their
+field was a rectangle: it now thins out toward an ellipse), `aurora` (its bands fade at both ends),
+`energy_beam` (the 2D beam's far end fades), `fire` and `tornado` (their 3D sheets faded over too
+little of their card), and `scanline`, which is now a whole-frame scanner like the grades above:
+hairlines edge to edge, `size` the pattern height, `x`, `y` and `rotation` not used.
+
+### Presence and hit: what a Series effect lasts and covers by default
+
+A Series shot's `fx` cue that gives no `duration` or `size` takes them from its class
+(`app/shared/scene_effect_classes.json`, read by `services/series_fx_classes.py`; every effect of the
+catalog is classified, a test lists them). A value the script gives always wins, and a layout saved with its
+`duration` written out compiles as it did.
+
+| Class | Effects | Default `duration` | Default `size` |
+| --- | --- | --- | --- |
+| `presence` | aura, shield, light, smoke, fire, weather, fog, portals and circles, the retro looks and the cinematic grades | `"shot"`: from its start to the end of the shot | `cover` effects (`anime_aura`, `shield`, `dust`, `embers`, `bubbles`, `stars`, `aurora`, `meteor_shower`, `lightning_storm`): 178 % of the shorter side (the whole 16:9 screen) when the cue names no one, or the person it names (`cast`, `x`/`y`) by framing: 80 wide, 125 two, 190 medium, 200 close. Objects (`smoke`, `fire`, `portal`...) are sized to the framing like a hit; the rest keep their own `size` (drop size, glyph height, pattern height) |
+| `hit` | impacts, flashes, bursts, waves, beams | 0.25 to 1 s by effect (`impact_flash` 0.25, `lightning` 0.5, `explosion` 1) | to the framing: 65 wide, 80 two, 100 medium, 120 close (80 in a 3D shot), times 1.3 to 1.5 for the painters that draw small in their box (`sparks`, `fireworks`, `confetti`) |
+
+`check` warns `fx_presence_too_short` (it does not stop the script) when a script gives a presence effect under two
+seconds in a shot of more than four: that is almost always a halo someone shortened. The numbers live in the
+JSON so they can be tuned without touching code.
+
+### Presence effects drawn with Three.js
+
+Ten presence effects are not painted with 2D vector strokes: `anime_aura`, `shield`, `fog`, `smoke`, `dust`, `stars`,
+`aurora`, `bubbles`, `embers` and `meteor_shower` are WebGL passes on an orthographic camera
+(`ui/src/features/sceneFx/presence/`): noise shaders for smoke, fog, haze, nebula and aura; instanced quads for
+sparks, stars, bubbles, motes and meteors; soft edges by construction. Their ids, parameters (`x`, `y`, `size`,
+`rotation`, `intensity`, `color`, `seed`, `speed`), class and default duration are the ones above: a saved script
+paints the same cue, only better. A layer is a pure function of the cue's seed and clock (a Series render paints frame by
+frame), painted at the frame's own resolution up to a pixel budget, and falls back to the 2D painter that was the
+effect before when WebGL is not there (`paintSceneFx` needs no change). Check them with
+`node scripts/fx-presence-sheets.mjs --out DIR --compare` (before and after contact sheets),
+`--time` (ms per frame) and `npm run test:e2e:fx` (`scene-fx-presence-three.spec.ts`: no cut at the box, same frame
+same pixels, the 2D fallback, a halo and a shield on a full frame, a frame-time bound). Not yet drawn this way:
+`light_rays`, `energy_orb`, `black_hole`, `portal`, `magic_circle`, `fire`, `tornado`, the rain and snow weather and
+the grades.
+
 ### Beams from a point: `from`
 
 A `laser` or `lightning` cue (catalog entries with `"aim": true`) can start at `from` and
@@ -224,7 +269,8 @@ auth is off; MCP uses its own token when shared-LAN protection is on. This does
 not unlock other API routes. Disabled MCP returns 503; missing/wrong keys 401.
 
 Enable/rotate requests are restricted to the application's own trusted origin
-and retain normal LAN authentication. Keys grant the tools advertised by this
+and retain normal LAN authentication on the full server (the core server has no
+LAN gate; see [LAN_AUTH](LAN_AUTH.md)). Keys grant the tools advertised by this
 app; keep them in the client configuration and out of screenshots or prompts.
 
 ## Acceptance run (10 September 2026)

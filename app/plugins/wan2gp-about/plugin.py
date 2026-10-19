@@ -28,6 +28,7 @@ class AboutPlugin(WAN2GPPlugin):
         gr.Markdown("- <B>HeartMuLa Team</B> for the open music generation models (https://github.com/HeartMuLa/heartlib)")
         gr.Markdown("- <B>ACE-Step Team</B> for the ACE-Step music generation model (https://github.com/ace-step/ACE-Step) & ACE-Step 1.5 (https://github.com/ace-step/ACE-Step-1.5)")
         gr.Markdown("- <B>Alibaba Qwen Team</B> for Qwen 3 TTS (https://github.com/QwenLM/Qwen3-TTS)")
+        gr.Markdown("- <B>OpenBMB</B> for VoxCPM2 (https://github.com/OpenBMB/VoxCPM)")
         gr.Markdown("- <B>KugelAudio</B> for Kugel Audio (https://huggingface.co/kugelaudio/kugelaudio-0-open)")
         gr.Markdown("- <B>Remade_AI</B> : for their awesome Loras collection (https://huggingface.co/Remade-AI)")
         gr.Markdown("- <B>ByteDance</B> : for their great Wan and Flux extensions Lynx (https://github.com/bytedance/lynx), UMO (https://github.com/bytedance/UMO), USO (https://github.com/bytedance/USO) ")

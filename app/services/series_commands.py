@@ -60,13 +60,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "characters.styles": (
         {"style": {"type": "string", "maxLength": 80}, "kind": {"enum": ["character", "pose", "prop"]},
-         "description": {"type": "string", "maxLength": 2000}},
+         "description": {"type": "string", "maxLength": 2000}, "screen": {"enum": ["green", "blue", "magenta"]}},
         [], False,
         "List character style presets (prompt fragments, kit style, rig: the default look for characters.rig.flat). "
         "paper-cutout makes paper mouths; graphic-novel (painted art, bold ink, flat black shadows, clear white eyes, "
         "the rest mouth painted as one line) rigs with warp mouths: each pose talks with its own drawing. "
         "With style, kind and description, also returns the prompt, negative prompt and screen colour to generate "
-        "with: magenta when the description has green in it, else green. Key the result with studio.key in that mode. "
+        "with: magenta when the description has green in it, else green, or the screen you pass. A new pose of a "
+        "character goes on the screen its character was made on (the screen of its character prompt): the pose text "
+        "alone rarely names the clothes. Key the result with studio.key in that mode. "
         "Save the kit with provenance [{\"method\": \"character-style-create\", \"style\": \"<style id>\"}] and "
         "characters.rig.flat uses that style's rig with no style given (or pass the rig as its style).",
     ),
@@ -78,7 +80,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
              "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
-                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"}}}]}},
+                 "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"},
+                 "blink": {"type": "boolean"}}}]}},
          "poses": {"type": "array", "items": ID, "maxItems": 32}},
         ["workspace", "character_id", "base_revision"], True,
         "Make a flat cutout character talk: find the eyes and painted mouth on each keyed pose, wipe the mouth, "
@@ -105,7 +108,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "realistic proportions (small eyes in a wide head) is detected and its mouth taken lower down, past eye bags and "
         "spectacles. Closed lids cover each eye's whole white in the face colour under the eyes, or in the shadow's "
         "colour when the eye sits in a flat black shadow. "
-        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w}} in % of that pose image "
+        "hints {\"<pose id>\": {\"mouth\": [x, y], \"eyes\": [x, y], \"mouthWidth\": w, \"blink\": false}} in % of that pose image "
         "(before cropping; mouthWidth corner to corner in % of its width) search only there; a mouth hint with no mark "
         "there places the mouth at it, nothing wiped (with warp mouths it is a point on the line between the lips). "
         "A mouth hint is followed as given only with exact: true (you looked at the image, as the Face Rig editor does); "
@@ -114,13 +117,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "the painted lips. Hints are "
         "kept and reused by later rigs; null clears a pose's. Style keys left out keep the kit's look (its last rig's, "
         "else the rig of the style preset it was made in): a re-rig after adding a pose or placing a mouth line stays "
-        "warp unless mouthStyle says otherwise; style in the result is the look used. Returns the saved kit, a review image URL (each pose, and "
+        "warp unless mouthStyle says otherwise; style in the result is the look used. poses (optional) limits the rig to those "
+        "poses; the base is always rigged with them (the blink and the shared mouths come from it). Returns the saved kit, a review image URL (each pose, and "
         "its face enlarged before and after the wipe; poses with warnings framed in red), unwipedPoses (no painted "
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
         "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
-        "is saved with anchors.<pose>.blink false and never blinks.",
+        "is saved with anchors.<pose>.blink false and never blinks; so is one hinted blink: false (clear spectacles, "
+        "whose frames a closed lid would paint over), and like other hints it is kept for later rigs.",
     ),
     "characters.rig.flat.preview": (
         {"workspace": WORKSPACE, "character_id": ID, "pose": ID, "mouth": POINT, "mouthWidth": MOUTH_WIDTH,
@@ -184,15 +189,21 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"},
          "number": {"type": "integer", "minimum": 1}},
         ["workspace", "series_id", "script"], True,
-        "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera, cast "
+        "Write a whole episode from a compact script (format in series.guide): scenes, shots with framing, camera (static | "
+        "push | pull | pan-left | pan-right | drift), finish (a 2d shot's own; else the series' look.finish), cast "
         "[[character, pose, x, {edgeSnap: false, lookRoom: false}]] (a pose cut by its image border is otherwise moved so "
         "the cut never shows; an entrance: enterFrom left/right, enterAt and enterDuration seconds, enterGait walk with "
-        "enterStep seconds; look room: a 2D cast member looking out of the frame is moved, one facing left stands right of "
+        "enterStep seconds (it walks with the kit's approved walk sheet when it has one, else a body bob); animation: "
+        "a kit animation id (wave, angry, happy...) or {id, at, duration, loop, allowDuringSpeech} seconds inside the shot, only an "
+        "approved one (a pending sheet is refused: a person approves it in Characters > Animaciones), it takes the pose's place and "
+        "hides its mouth while it plays, so a sheet (not a cycle or walk) is moved before its character's line or into its silence, or dropped "
+        "with a warning, unless allowDuringSpeech is true; look room: a 2D cast member looking out of the frame is moved, one facing left stands right of "
         "centre and one facing right left of it (x becomes 100 - x), two who look away from each other swap x, three or "
         "more are only reported; the reply's lookRoom lists each move, lookRoomKept who still looks out and why; lookRoom "
         "false on the entry or the shot, an entrance or a transform keeps x), "
         "lines {who, es, en, pauseBefore, voiceRoom}, cards, music, video shots (kind video = an imported take, generated "
-        "= a MiniMax H3 take: their sfx, music, foley and clipAudio keep | drop, clipVolume, clipFit are laid at the cut), "
+        "= a MiniMax H3 take: their sfx, music, foley and clipAudio keep | drop, clipVolume, clipFit are laid at the cut; "
+        "resolution 480p | 540p | 720p | 768p sizes the shot's H3 clip, else the series' videoShotResolution, else 480p), "
         "timed sfx (in and length play only that part of the file) and fx at a line, a "
         "second or a cast member's entrance ({\"anchor\": \"enter\", \"cast\": index or id}; an sfx with \"repeat\": "
         "\"steps\" plays on every footfall; an fx duration is seconds, "
@@ -207,7 +218,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "Optional number (integer >= 1), only when there is no episode_id: a number taken in the first season (where "
         "the episode goes) is 409 episode_number_taken with the holder's id. "
         "warnings ({code, subject, shots, message}) lists speaker_not_on_screen, location_differs_from_scene, "
-        "template_backdrop_other_location, document_text_too_long and video_budget and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
+        "template_backdrop_other_location, document_text_too_long, video_budget and imported_video_not_allowed (video shots on a series "
+        "that does not allow imported_video: writing the script adds it) and does not block, even with check: true. scene3d.backdrop is template (the default, omitted), "
         "location (the shot location's plate) or {asset: id}. "
         "castIndex on a line (0-based) binds it to that cast copy when the same kit is in the shot twice; without it the "
         "first cast member who is that character speaks. "
@@ -333,7 +345,14 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         ["workspace", "series_id", "series", "base_revision"], True,
         "Update a Series Lab project at an exact revision: the fields you send replace theirs, fields you omit keep their "
         "value (send an empty list or object to clear one). A nested object or list is replaced whole, so send the whole "
-        "soundDesign, not one key inside it. Changing canon inputs returns the canon to draft. soundDesign: stinger, "
+        "soundDesign, not one key inside it. Changing canon inputs returns the canon to draft. videoShotResolution "
+        "480p | 540p | 720p | 768p (480p when absent) sizes the H3 clips of the script's video shots; a shot's "
+        "resolution overrides it and provider.videoSettings.resolution stays the Series Lab render's. episodeFormat (text, "
+        "up to 2000 characters) is how the series builds each episode: parts, lengths, number of shots; empty, agents "
+        "follow the guide's default shape. look {finish} is the finish over every 2D shot: paper (the default: paper "
+        "texture, grain and vignette), none (a clean picture), a Video 2D finish id (scenes.catalog kind finish) or "
+        "{texture {kind, amount}, grain {amount, size}, vignette {amount, softness}}; a shot's own finish overrides it, "
+        "and changing it renders the 2D shots again. soundDesign: stinger, "
         "ambienceByLocation {locationId: {file, volume}} and ambienceMode \"shot\" (each shot mixes it) or \"episode\" "
         "(the assembly lays one bed per location run; takes stay up to date when it changes); ambienceDuckDb 0-24 "
         "lowers episode-mode beds under the lines; roomByLocation "
@@ -366,7 +385,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "image border is moved so the cut stays out of the frame (layout2d.cast[].edgeSnap false keeps it at x); a prop "
         "with ground true stands its lowest opaque row on the floor (or its anchor) and ignores y; a dialogue beat's voiceRoom "
         "is the room of that line alone (on screen or off; none keeps it dry); a layout2d.cast entry's enterAt, "
-        "enterDuration, enterGait walk and enterStep time its entrance, and an sfx or fx {anchor: enter, cast} starts with "
+        "enterDuration, enterGait walk and enterStep time its entrance (the kit's approved walk sheet walks it, else a bob), "
+        "its animation (a kit animation id or {id, at, duration, loop, allowDuringSpeech}; only an approved sheet) plays in the pose's place, "
+        "and an sfx or fx {anchor: enter, cast} starts with "
         "it (repeat: steps on every footfall). A change renders again only the shots it reaches. score: music the assembly "
         "lays under runs of shots, [{fromShotId, toShotId | sceneId, file, volume 0.18, fadeIn 1.5, fadeOut 2.0, "
         "duck true}]; cues may not overlap, dip 9 dB under the lines and go silent under a shot with its own music; "
@@ -460,10 +481,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "instruction": {"type": "string", "minLength": 1, "maxLength": 2000}, "check": {"type": "boolean"}, "render": {"type": "boolean"}, "approve": {"type": "boolean"}, "produce": {"type": "boolean"}},
         ["workspace", "series_id", "episode_id", "shot"], True,
         "Edit one shot by instruction, by id (e1s04) or number in the episode (5 = the fifth shot): changes replaces "
-        "script keys of series.episode.from_script (scene, location, variant, framing, camera, cast, lines {who, es, en, "
+        "script keys of series.episode.from_script (scene, location, variant, framing, camera static|push|pull|pan-left|"
+        "pan-right|drift, finish paper|none|a Video 2D finish id|{texture, grain, vignette} (a 2d shot's own; null "
+        "follows the series' look.finish again), cast, lines {who, es, en, "
         "pauseBefore, voiceRoom}, card, music, sfx {file, at, line, anchor, offset, volume, in, length}, fx, props, timing, "
         "voiceRoom, layers, castDepth, clipAudio keep|drop, clipVolume, clipFit cover|contain, kind 2d|3d|video|generated, "
-        "scene3d, foley, duration; null removes a key) and append adds items to cast, lines, sfx, fx, props or layers "
+        "scene3d, foley, duration, resolution 480p|540p|720p|768p (a video shot's H3 size; it clears only the take's "
+        "approval); null removes a key) and append adds items to cast, lines, sfx, fx, props or layers "
         "without resending them. instruction (words, without changes or append: \"put a hat on him\", \"push in on the "
         "punchline\") has the configured LLM write the edit from the shot, the series' characters, poses, files and effects; "
         "the reply's instruction says what it wrote. Only render or produce, without changes, renders the shot as it is. "
@@ -537,7 +561,7 @@ def _kit_summary(kit: dict[str, Any]) -> dict[str, Any]:
     def label(voice: Any) -> str | None:
         if not isinstance(voice, dict):
             return None
-        return voice.get("name") if voice.get("model") == "qwen3_tts_base" else voice.get("voiceId")
+        return voice.get("name") or voice.get("voiceId")
     return {"id": kit.get("id"), "name": kit.get("name"), "style": kit.get("style"),
             "poses": ["base", *sorted(kit.get("poses") or {})] if kit.get("base") else sorted(kit.get("poses") or {}),
             "mouths": sorted(kit.get("mouth") or {}), "voice": label(kit.get("voice")),
@@ -606,7 +630,7 @@ def _character_styles(data: dict[str, Any], _request: Callable[..., Any], **_ext
     result: dict[str, Any] = {"styles": style_catalog()["styles"], "screens": sorted(style_catalog()["screens"])}
     if data.get("style") and data.get("kind"):
         try:
-            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "")
+            result["prompt"] = style_prompt(data["style"], data["kind"], data.get("description") or "", data.get("screen"))
         except KeyError as error:
             raise SeriesCommandError(f"Unknown style {data['style']}", status=404) from error
     return result
@@ -968,6 +992,20 @@ _RUNNERS: dict[str, Callable[..., Any]] = {
     "series.shot.voice": _shot_voice,
     "series.shot.voice.status": _shot_voice_status,
 }
+
+
+# The character animation tools live in their own module (services/character_animation_commands.py).
+from services.character_animation_commands import OPERATIONS as _ANIMATION_OPERATIONS, RUNNERS as _ANIMATION_RUNNERS  # noqa: E402
+OPERATIONS.update(_ANIMATION_OPERATIONS)
+_RUNNERS.update(_ANIMATION_RUNNERS)
+# So is the card tool (services/series_card_commands.py).
+from services.series_card_commands import OPERATIONS as _CARD_OPERATIONS, RUNNERS as _CARD_RUNNERS  # noqa: E402
+OPERATIONS.update(_CARD_OPERATIONS)
+_RUNNERS.update(_CARD_RUNNERS)
+# So is the voice band (services/voice_band_commands.py).
+from services.voice_band_commands import OPERATIONS as _VOICE_BAND_OPERATIONS, RUNNERS as _VOICE_BAND_RUNNERS  # noqa: E402
+OPERATIONS.update(_VOICE_BAND_OPERATIONS)
+_RUNNERS.update(_VOICE_BAND_RUNNERS)
 
 
 def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:

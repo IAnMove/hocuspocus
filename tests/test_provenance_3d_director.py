@@ -187,6 +187,51 @@ def test_model3d_writer_keeps_wizard_command_provenance(tmp_path):
     assert loaded["execution"]["task_id"] == task_id
 
 
+def test_model3d_result_publishes_lineage_refs_and_a_provider_default(tmp_path):
+    output = tmp_path / "cabinet.glb"
+    output.write_bytes(b"mesh")
+    model3d_service._publish_model3d_result({
+        "job_id": "mesh-job",
+        "id": "not-the-job",
+        "task_id": "task-model3d-mesh-job",
+        "root_task_id": "task-model3d-mesh-job",
+        "workspace": str(tmp_path / "studio-a"),
+        "created_at": 1_700_000_000,
+        "started_at": 1_700_000_002,
+        "finished_at": 1_700_000_010,
+        "provenance": {
+            "actor": "wizard",
+            "capability": "start_generation",
+            "project_id": "story-9",
+            "production_id": "production-9",
+            "cue_id": "cue-9",
+            "candidate_id": "candidate-9",
+            "song_version": "3",
+            "command": {"command_id": "command-9"},
+        },
+    }, output, {
+        "generation_mode": "model3d",
+        "params": {"model_type": "hunyuan3d-2-turbo"},
+    })
+
+    loaded = read_asset_manifest(output)
+    raw = json.loads(output.with_suffix(".meta.json").read_text(encoding="utf-8"))
+    assert loaded["origin"]["output_folder"] == "studio-a"
+    assert loaded["origin"]["tool"] == "model3d"
+    assert loaded["origin"]["project"] == {"kind": "story", "id": "story-9"}
+    assert loaded["origin"]["production"] == {"kind": "director_production", "id": "production-9"}
+    assert loaded["generation"]["model"]["provider"] == "local"
+    assert raw["job_id"] == "mesh-job"
+    assert raw["job_id"] != "not-the-job"
+    assert raw["params"]["provider"] == "local"
+    assert raw["project_id"] == "story-9"
+    assert raw["production_id"] == "production-9"
+    assert raw["cue_id"] == "cue-9"
+    assert raw["candidate_id"] == "candidate-9"
+    assert raw["song_version"] == "3"
+    assert loaded["execution"]["command_id"] == "command-9"
+
+
 def test_model3d_strips_absolute_output_folder_path(tmp_path, monkeypatch):
     job_id = "model3d-abs-folder"
     jobs_dir = tmp_path / "model3d-jobs"

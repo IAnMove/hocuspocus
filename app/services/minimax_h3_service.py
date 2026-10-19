@@ -938,7 +938,7 @@ def _comfy_progress_event(raw: object, prompt_id: str) -> tuple[str, int, int, i
 
 
 def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int, int, int], None],
-                   cancelled: Callable[[], bool]) -> list[str]:
+                   cancelled: Callable[[], bool], on_produce: Callable[[], None] | None = None) -> list[str]:
     global _active_prompt
     workflow, pipeline = build_workflow(params, job_id)
     profile = _profile_name(params)
@@ -952,6 +952,10 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
         profile,
         cancelled,
     )
+    if cancelled():
+        raise InterruptedError("MiniMax H3 generation cancelled")
+    if on_produce is not None:
+        on_produce()
     progress("Loading MiniMax H3 and generating native video + stereo audio…", 10, 0, 0)
     client_id = f"maestro-{job_id}"
     response = _local_http_request(
@@ -1049,10 +1053,11 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
 
 
 def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, int, int, int], None],
-             cancelled: Callable[[], bool], *, keep_runtime: bool = False) -> list[str]:
+             cancelled: Callable[[], bool], *, keep_runtime: bool = False,
+             on_produce: Callable[[], None] | None = None) -> list[str]:
     try:
         try:
-            return _generate_impl(params, job_id, out_dir, progress, cancelled)
+            return _generate_impl(params, job_id, out_dir, progress, cancelled, on_produce)
         except RuntimeError as exc:
             message = str(exc).casefold()
             profile = _profile_name(params)
@@ -1078,7 +1083,7 @@ def generate(params: dict, job_id: str, out_dir: str, progress: Callable[[str, i
                 0,
                 0,
             )
-            return _generate_impl(params, job_id, out_dir, progress, cancelled)
+            return _generate_impl(params, job_id, out_dir, progress, cancelled, on_produce)
     finally:
         if INPUT_DIR.is_dir():
             for staged in INPUT_DIR.glob(f"maestro_h3_{job_id}_*"):

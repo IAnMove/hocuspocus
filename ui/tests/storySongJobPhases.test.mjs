@@ -294,7 +294,7 @@ test('remote generate persists the 202 job id before audio is ready', { concurre
   const project = normalizeStoryProject({
     ...base,
     title: 'Job phases',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const savedLibrary = {
     value: { version: 2, revision: 1, activeId: project.id, projects: { [project.id]: project } },
@@ -318,8 +318,10 @@ test('remote generate persists the 202 job id before audio is ready', { concurre
     cueId: cue.id,
     actor: 'user',
     capability: 'generate_story_song',
+    paidMusicConfirmed: true,
   })
   assert.ok(mock.events.indexOf('put') < mock.events.indexOf('post-job'))
+  assert.equal(mock.generationRequest.paid_music_confirmed, true)
   const accepted = mock.putBodies.find(library => {
     const row = library.projects[project.id].music.cues[0].candidates[0]
     return row?.provenance?.jobId === 'job-phases-1' && row.status === 'pending'
@@ -334,6 +336,33 @@ test('remote generate persists the 202 job id before audio is ready', { concurre
   assert.equal(ready.provenance.jobId, 'job-phases-1')
 })
 
+test('a paid song nobody confirmed is refused before a row or a POST', { concurrency: false }, async t => {
+  const workspace = 'story-job-unconfirmed'
+  const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
+  const base = createStoryProject('music_video')
+  const cue = cueFixture(base)
+  const project = normalizeStoryProject({
+    ...base,
+    title: 'Unconfirmed',
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
+  })
+  const savedLibrary = {
+    value: { version: 2, revision: 1, activeId: project.id, projects: { [project.id]: project } },
+  }
+  const mock = mockStoryFetch(t, workspace, savedLibrary)
+  await installStory(workspace, project, 1)
+  const { generateStoryCueSong } = await import('../src/features/stories/storySongGeneration.ts')
+  await assert.rejects(generateStoryCueSong({
+    workspace,
+    projectId: project.id,
+    cueId: cue.id,
+    actor: 'wizard',
+    capability: 'generate_story_song',
+  }), /Paid MiniMax music is disabled \(music-3\.0\)/)
+  assert.deepEqual(mock.events, [])
+  assert.equal(savedLibrary.value.projects[project.id].music.cues[0].candidates.length, 0)
+})
+
 test('double generate on the same cue shares one candidate and one POST', { concurrency: false }, async t => {
   const workspace = 'story-job-double'
   const { createStoryProject, normalizeStoryProject } = await import('../src/features/stories/model.ts')
@@ -342,7 +371,7 @@ test('double generate on the same cue shares one candidate and one POST', { conc
   const project = normalizeStoryProject({
     ...base,
     title: 'Double tab',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const savedLibrary = {
     value: { version: 2, revision: 1, activeId: project.id, projects: { [project.id]: project } },
@@ -356,6 +385,7 @@ test('double generate on the same cue shares one candidate and one POST', { conc
     cueId: cue.id,
     actor: 'user',
     capability: 'generate_story_song',
+    paidMusicConfirmed: true,
   }
   const [first, second] = await Promise.all([
     generateStoryCueSong(input),
@@ -387,7 +417,7 @@ test('late job persist keeps the user-selected song and the other open Story', {
   const project = normalizeStoryProject({
     ...base,
     title: 'Generating',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const other = normalizeStoryProject({
     ...otherBase,
@@ -414,6 +444,7 @@ test('late job persist keeps the user-selected song and the other open Story', {
     cueId: cue.id,
     actor: 'user',
     capability: 'generate_story_song',
+    paidMusicConfirmed: true,
   })
   const savedCue = savedLibrary.value.projects[project.id].music.cues[0]
   assert.equal(savedCue.selectedCandidateId, 'song-keep')
@@ -448,7 +479,7 @@ test('reload reconnects a reserved pending job without posting a new one', { con
   const project = normalizeStoryProject({
     ...base,
     title: 'Reconnect',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const savedLibrary = {
     value: { version: 2, revision: 1, activeId: project.id, projects: { [project.id]: project } },
@@ -488,7 +519,7 @@ test('a failed job persist still watches the accepted MiniMax job', { concurrenc
   const project = normalizeStoryProject({
     ...base,
     title: 'Persist fail',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const savedLibrary = {
     value: { version: 2, revision: 1, activeId: project.id, projects: { [project.id]: project } },
@@ -513,6 +544,7 @@ test('a failed job persist still watches the accepted MiniMax job', { concurrenc
     cueId: cue.id,
     actor: 'user',
     capability: 'generate_story_song',
+    paidMusicConfirmed: true,
   })
   assert.ok(mock.events.includes('put-fail'))
   assert.ok(mock.events.includes('get-job'))
@@ -533,7 +565,7 @@ test('phase persist does not restore other Stories from the persist snapshot', {
   const project = normalizeStoryProject({
     ...base,
     title: 'Generating',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const other = normalizeStoryProject({
     ...otherBase,
@@ -565,6 +597,7 @@ test('phase persist does not restore other Stories from the persist snapshot', {
     cueId: cue.id,
     actor: 'user',
     capability: 'generate_story_song',
+    paidMusicConfirmed: true,
   })
   assert.equal(useStoryStore.getState().projects[other.id].title, 'Edited sibling')
   assert.equal(useStoryStore.getState().dirty, true)
@@ -578,7 +611,7 @@ test('phase persist keeps cue edits typed while the job is running', { concurren
   const project = normalizeStoryProject({
     ...base,
     title: 'Keep edits',
-    music: { ...base.music, model: 'music-3.0', cues: [cue] },
+    music: { ...base.music, model: 'music-3.0', paidModelChosen: true, cues: [cue] },
   })
   const savedLibrary = {
     value: { version: 2, revision: 1, activeId: project.id, projects: { [project.id]: project } },
@@ -611,6 +644,7 @@ test('phase persist keeps cue edits typed while the job is running', { concurren
     cueId: cue.id,
     actor: 'user',
     capability: 'generate_story_song',
+    paidMusicConfirmed: true,
   })
   const kept = useStoryStore.getState().projects[project.id].music.cues[0]
   assert.equal(kept.purpose, 'Edited while generating')

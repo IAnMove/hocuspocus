@@ -68,7 +68,11 @@ export function applyStudioSfxSubmitParams(
   params._mmaudio_variant = sfxModel === 'mmaudio_nsfw' ? 'nsfw' : 'v2'
   params.prompt = typeof params.MMAudio_prompt === 'string' ? params.MMAudio_prompt : ''
   params.sfx_mode = true
-  params.duration_seconds = state.durationSeconds
+  // Text-only SFX is 1-20 s, the range its slider shows. The store can still hold the
+  // previous model's duration (60 s Speech, 0 = auto); a video guide sets its own length.
+  params.duration_seconds = params.video_guide
+    ? state.durationSeconds
+    : Math.min(20, Math.max(1, state.durationSeconds))
   params.video_length = 0
   params.num_inference_steps = 25
   params.image_mode = 0
@@ -85,6 +89,16 @@ export function applyStudioSpeechSubmitParams(
   params.multi_prompts_gen_type = 2
   params._tts_original_prompt = params.prompt
   if (isInstructionSpeechModel(params.model_type)) applyInstructionSpeechParams(params)
+  else if (String(params.model_type).startsWith('drama3_')) {
+    // Drama consumes one literal line and a single reference, without named speaker rewriting.
+    params._tts_voice_count = 0
+    for (let index = 1; index <= 6; index++) {
+      params[`_tts_speaker_name${index}`] = ''
+      if (index > 1) delete params[`audio_guide${index}`]
+    }
+    params.audio_prompt_type = params.model_type === 'drama3_base' ? 'A' : ''
+    if (params.model_type === 'drama3_voicedesign') delete params.audio_guide
+  }
   else applyNamedSpeechSpeakers(params, state)
   applySpeechTiming(params, state)
   return params

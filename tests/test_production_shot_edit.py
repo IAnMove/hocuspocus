@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from services.music_production import Production, segments
-from services.production_shot_edit import ShotEditError, update_shot, use_take
+from services.production_shot_edit import ShotEditError, adopt_take, update_shot, use_take
 from services.production_shot_review import record_decision
 
 
@@ -108,6 +108,36 @@ def test_use_take_replaces_one_montage_clip_and_keeps_the_rest(tmp_path: Path):
     assert by_key["s0"]["clip"] == "take-b.mp4"
 
 
+def test_use_take_refuses_another_productions_montage(tmp_path: Path):
+    production, spec, root, saved, _edits = _build(tmp_path)
+    inner = production.mcp
+
+    def foreign(tool: str, arguments: dict) -> dict:
+        if tool == "montages.get":
+            return {"result": {"revision": 4, "montage": {"revision": 4, "clips": [
+                {"id": "s0", "source": "/api/v1/file/old-s0.mp4?workspace=film",
+                 "origin": {"kind": "scene2d", "productionId": "someone-else", "scene": "old.scene.json"}},
+            ]}}}
+        return inner(tool, arguments)
+
+    production.mcp = foreign
+    with pytest.raises(ShotEditError) as caught:
+        use_take(production, spec, "s0", "take-b.mp4")
+    assert caught.value.code == "montage_foreign"
+    assert saved == []
+    assert production.state["clips"]["s0"]["file"] == "take-a.mp4"
+
+
+def test_an_adopted_take_keeps_the_audio_window_it_was_shot_against(tmp_path: Path):
+    production, _spec, _root, _saved, _edits = _build(tmp_path)
+    production.state["takes"]["s0"][1]["window"] = [1.0, 3.0]
+    production.upload = lambda name: (name, "/u/" + name)
+    adopt_take(production, "s0", "take-b.mp4")
+    assert production.state["clips"]["s0"]["window"] == [1.0, 3.0]
+    adopt_take(production, "s0", "take-a.mp4")
+    assert "window" not in production.state["clips"]["s0"], "a take made before the window was recorded stays unknown"
+
+
 def test_use_take_exports_the_chosen_scene_once(tmp_path: Path):
     production, spec, _root, _saved, _edits = _build(tmp_path)
     calls: list[str] = []
@@ -185,7 +215,7 @@ def test_failed_update_does_not_keep_overrides_or_clear_the_scene(tmp_path: Path
     production.save()
     _fail_scene_export(production)
     with pytest.raises(ShotEditError) as caught:
-        update_shot(production, spec, "s0", camera="camera-orbit", lyric_style={"color": "#ABCDEF"})
+        update_shot(production, spec, "s0", camera="camera-dolly", lyric_style={"color": "#ABCDEF"})
     assert caught.value.code == "scene_export_failed"
     assert "overrides" not in spec["shots"][0]
     assert production.state["scenes"]["s0"]["file"] == "old-s0.mp4"
@@ -227,15 +257,15 @@ def test_update_stores_overrides_and_reexports_only_that_scene(tmp_path: Path):
     result = update_shot(
         production, spec, "s0",
         lyric_style={"color": "#ABCDEF"},
-        camera="camera-orbit",
+        camera="camera-dolly",
         title={"template": "lower-third-date", "fields": {"date": "MAY", "caption": "NIGHT"}},
     )
-    assert result["overrides"]["camera"] == "camera-orbit"
+    assert result["overrides"]["camera"] == "camera-dolly"
     assert spec["shots"][0]["overrides"]["lyric_style"] == {"color": "#ABCDEF"}
     blob = json.dumps(edits)
     assert "#ABCDEF" in blob
     assert "#111111" not in blob
-    assert "camera-orbit" in blob
+    assert "camera-dolly" in blob
     assert calls.count("scenes.video2d.export") == 1
     assert len(saved) == 1
     clips = {clip["id"]: clip for clip in saved[0]["montage"]["clips"]}
@@ -243,6 +273,11 @@ def test_update_stores_overrides_and_reexports_only_that_scene(tmp_path: Path):
     with pytest.raises(ShotEditError) as empty:
         update_shot(production, spec, "s0")
     assert empty.value.code == "empty_update"
+    with pytest.raises(ShotEditError) as unknown:      # refused before the export, the override kept as it was
+        update_shot(production, spec, "s0", camera="camera-orbit")
+    assert unknown.value.code == "unknown_camera"
+    assert spec["shots"][0]["overrides"]["camera"] == "camera-dolly"
+    assert calls.count("scenes.video2d.export") == 1
 
 
 def test_scenes_keep_a_locked_shot_in_the_cut(tmp_path: Path):

@@ -91,6 +91,7 @@ export function InpaintControls() {
         end_time: editEndTime,
         full_video: false,
         invert_mask: useStore.getState().editInvertMask,
+        workspace: activeWorkspace,
       })
       useStore.setState({
         editMaskPreview: result.mask_preview,

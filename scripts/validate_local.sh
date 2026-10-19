@@ -126,6 +126,8 @@ if [[ "$MODE" == "full" ]]; then
   run_step "brand contract" "$PYTHON" "$ROOT/scripts/check_brand_contract.py"
   run_step "python compileall" "$PYTHON" -m compileall -q "$ROOT/app/services" "$ROOT/app/launch.py" "$ROOT/scripts"
   run_step "python suite" "$PYTHON" -m pytest -q "$ROOT/tests"
+  # In the suite above these tests skip: they import the full server, so they run in their own process.
+  run_step "characterization (full server, own process)" "$PYTHON" -m pytest -q -p no:cacheprovider "$ROOT/tests/characterization"
 else
   run_step "python contracts (upscale + architecture)" "$PYTHON" -m pytest -q \
     "$ROOT/tests/test_tools_upscale_contract.py" \

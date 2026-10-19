@@ -1,4 +1,5 @@
 import type { MusicVideoAdaptation } from './adaptations'
+import i18n from '../../i18n'
 import { generatedSongProvenance, musicVideoProductionProvenance, pendingSongProvenance } from './provenance'
 import type {
   StoryMusicCandidate,
@@ -283,10 +284,10 @@ export function validateMusicVideoStaging(
   const directVideo = project.musicVideoGenerationMode === 'direct_video'
   const directReferences = project.musicVideoGenerationMode === 'direct_references'
   if (directReferences && !String(project.videoOverride.model || '').startsWith('minimax_h3')) {
-    throw new Error('Las referencias directas de este videoclip requieren un modelo MiniMax H3 con Ref2VA.')
+    throw new Error(i18n.t('storyLab:errors.directRefsNeedH3'))
   }
   if (directReferences && !adaptation.characterReferences.length && !adaptation.locationReferences.length) {
-    throw new Error('No hay referencias aprobadas para este cue. Aprueba una imagen de mundo, localización o personaje antes de preparar el videoclip.')
+    throw new Error(i18n.t('storyLab:errors.noApprovedCueRefs'))
   }
   return { directVideo, directReferences }
 }

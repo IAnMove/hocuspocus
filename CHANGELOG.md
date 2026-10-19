@@ -6,6 +6,769 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: box rooms are never flat any more: they wear procedural materials, and `scene3d.room.paint` repaints them with the image model.** `scene3d.room.put` now gives the floor, walls, ceiling, door and trim a deterministic, tileable material chosen from the words of the spec (eleven, drawn with numpy: plaster, concrete, boards, parquet, metal and riveted steel, tile, carpet, brick, stone, linoleum), each at its real metres per repeat, and builds skirting, a cornice, door and window frames, raised door panels and a handle, with a small self-lit share so no wall goes black. `scene3d.room.paint` (MCP, `POST /api/v1/scene3d/rooms/commands` and the Wizard action `room_sets`, polled with `scene3d.room.paint.status`) asks the project's Qwen Image 2.1 for a seamless floor, walls, ceiling and trim and a front view of the door in the background, heals each wrap with the `location.set3d` inpaint pass and edge-blends what is left; a surface the model cannot paint keeps its procedural material and the status says so. The same room, words, style and seed ask nothing twice, and a repaint renders again only the Series shots standing in that room (`roomLook` in the render fingerprint). See `docs/3d-video-compositor/HOWUSEIT.md` (Box rooms).
+
+**Changed: ten Series presence effects are drawn with Three.js, not 2D vector paint.** `anime_aura`, `shield`, `fog`, `smoke`, `dust`, `stars`, `aurora`, `bubbles`, `embers` and `meteor_shower` are now noise-shader and instanced-particle passes on an orthographic WebGL stage (volumetric smoke and fog, an aura that wraps its figure, a hex-skinned shield, nebula and glinting stars, soap bubbles, aurora curtains, flaming meteors) with the same ids, parameters, class and default duration, the same frame giving the same pixels, 22-54 ms per 1280x720 frame for two of them on the CPU, and the old 2D painter when WebGL is not there; see `docs/development/SCENE_EFFECTS_AND_MCP.md`.
+
+**Changed: a Series screen effect with no `duration` or `size` now lasts and covers what its kind needs.** An aura that a script wrote without a duration lasted 1 s and drew small (the owner's review of the queued shorts called it "cutre"). `app/shared/scene_effect_classes.json` classifies the 56 effects as `presence` (aura, shield, light, weather, grade: lasts the shot, covers the person it names or the whole screen) or `hit` (impact, burst, flash, beam: 0.25–1 s, sized to the framing). What a script writes is kept as it is, and a layout saved with its `duration` written out compiles as before; only an omitted value changes, so such a shot renders again with the new look. A normalized layout now leaves `duration` out when the script did (it used to store 1). `check` warns `fx_presence_too_short` for a presence effect given under 2 s in a shot over 4 s (it does not block). The guide's «keep effects off faces» is now «put an aura, shield or light on its person; hits stay off faces». See `docs/development/SCENE_EFFECTS_AND_MCP.md`.
+
+**Fixed: screen effects no longer end in a box.** An audit (`node scripts/fx-footprint-audit.mjs`, in CI as `scene-fx-footprint.spec.ts`) paints every catalog effect alone in Chromium with and without WebGL and measures paint that stops flat at its own rectangle. It found `bubbles` and `stars` (a field the shape of a rectangle: now it thins out toward an ellipse), `aurora` (bands cut at both ends: now they fade), the 2D `energy_beam` (flat far end), `fire` and `tornado` (the 3D sheets faded over too little of their card, so the sprite stood on a straight line) and `scanline` (a box of lines inside the picture: it now covers the whole frame like the other grades, `size` the pattern height). Effects that were already clean keep their look. See `docs/development/SCENE_EFFECTS_AND_MCP.md`.
+
+**Added: a voice cleanliness gate, so a hissy or rumbling take is spoken again.** Voices made with Drama `voicedesign` came out with a noise floor of -47 to -55 dBFS and a rumble under 100 Hz ("speaking too close to the microphone"); clones of a clean VoxCPM2 reference measure -93 dBFS. The server render now measures the raw take of every line (`services/voice_cleanliness.py`, numpy only): noise floor (5th percentile of 50 ms frames), SNR and the 40 to 100 Hz share. A take over -60 dBFS, under 45 dB or with 35 % bass is spoken again like an out-of-band take (3 seeds); the cleanest is kept and, if none is clean, the render goes on and the item warns `voice_unclean` with the numbers and the remedy (design the reference with VoxCPM2, clone it with `drama3_base`). A clip under 1.5 s or without a pause is `inconclusive`: never retried, never rejected. `qa.speech` returns the same `cleanliness`. Recordings already made are reused as before. See `docs/character-kits/HOWUSEIT.md` (Voice band).
+
+**Changed: Qwen Image 2.1 Turbo (`qwen_image_21_turbo`) is the default image model of the app and of the internal pipelines.** Productions and their style presets, the Character Creator animation job, game assets, the Lips Creator plan and new production profiles now start on it, with its 8 steps, CFG 1 and no negative prompt (`generation.image` refuses one, so the game, animation and Lips paths send none); the image selector and the character pickers prefer it once installed and keep the base `qwen_image_21` when only that is installed. Cards of 10–16 GiB keep the Q4 GGUF of the base (no quantized Turbo exists). An explicit model or step choice, saved productions and saved profiles are untouched.
+**Fixed: a character-made sheet no longer plays over its own character's voice either.** The guard of the previous fix covered only the `expression` group, so full-body sheets made with `characters.animation.make` (group `custom` or none, e.g. `determined-full`) and gestures still hid the speaker's mouth and left the protagonist mute and staring; now every approved animation but a `cycle` and `walk` is moved before the line, into a silence, or dropped (`allowDuringSpeech: true` opts out), the window is measured as the compiler plays it (one pass; 2.5 s only for an expression), and the `character-reaction` warning uses the same criterion.
+**Fixed: an expression no longer plays over its own character's voice.** Expression sheets have no lip-sync, so a character that spoke while its `animation` expression played kept a still mouth. When the server renders a shot it now moves an expression whose window overlaps a line that same character speaks: right before its first line (0.2 s before), else into its first silence of at least the expression plus 0.4 s, else it drops the expression with a non-blocking `expression_dropped_during_speech` (`expression_moved_for_speech` says from and to). The warnings are on the render job's item. A character that listens, a gesture or cycle, and a shot without recorded lines are untouched; `allowDuringSpeech: true` on the animation opts out; saved scripts are not changed. `series.shot.card.apply` of a `character-reaction` card warns `expression_during_speech` when the character speaks in the shot.
+
+**Added: a metric box room, so a full-body interior shot stands on a floor at real size.** `kind: "room"` with `size: {w, d, h}` in metres and no `mold` builds an open box (the mold rooms are unchanged). The floor is y = 0, the open side faces the camera, a door defaults to 0.9 × 2.0 m and the ceiling to 2.6 m. The wide frame is `app/shared/room_box_camera.json` (eye 1.6 m, field of view 48). A Series `kind: "3d"` shot names `set` and each person `at` (`{x, z}` metres, or `near`, `mid`, `far`); a person outside the floor, on the door or on furniture is an error, and a location that already has a mold room is not merged. `scene3d.room.put` and `scene3d.room.get` (MCP, `POST /api/v1/scene3d/rooms/commands`, and the Wizard action `room_sets`) store and read the room plus a flat-colour placeholder GLB. Painted textures stay on a production `spec.sets` entry. Without the new shape, sets and scenes behave as before. See `docs/3d-video-compositor/HOWUSEIT.md` (Box rooms).
+
+**Fixed: an expression sheet matches the snapped pose, and stays up long enough to read.** In a medium or close shot the sheet was sized from the pose before the edge snap, so it was smaller and lower than the figure (a both-sides bust went from scale 1.22 to 1.855, and the sheet stayed at 1.22). The sheet now uses that final transform, centered on the character, with no extra zoom. A face sheet on a tall pose is the head only. An expression with no duration lasts at least 2.5 s and fades in and out; an explicit duration under 1.5 s warns `expression_too_short` and is still played. Gestures and cycles keep their own timing.
+
+**Added: a voice band, so a screechy take of a typed character is spoken again.** A kit voice may store `voiceType` (`man`, `woman`, `child`, `robot`), `pitchBandHz`, `maxBrightness` and `maxCentroidHz`. With none of them, recording is unchanged (`pitch_out_of_range` still only warns). With any of them, the server render measures each take and retries one outside the band, up to 3 seeds; if none lands inside, it keeps the best take and warns `voice_out_of_band`. A man whose median pitch sits in the woman register is retried even inside a custom band. Defaults are in `app/shared/voice_bands.json`. `POST /api/v1/character-kits/library/kits/{kit_id}/voice-band` is the one operation behind MCP `characters.voice.band` and the Wizard's `set_voice_band`. A bad value is HTTP 400. See `docs/character-kits/HOWUSEIT.md`.
+
+**Fixed: applying a card on a language version no longer rejects a take a person approved in Series Lab.** `series.shot.card.apply` superseded earlier takes of the same scene using only that version's `approvedAttemptIds`. A take made for English and then approved with Series Lab's Approve (which stamps `shot.approvedAttemptId`) was treated as an unapproved candidate on the next English apply: `reject_shot_render_attempt` marked it rejected and cleared the original approval. The new take stayed a candidate, so the episode lost the take the person had kept. Supersede now leaves alone a take approved in any language.
+
+**Added: `series.shot.card.apply`, a whole Video 2D card as a Series shot's take in one call.** Putting a card (`walk-cycle-sheet`, `walk-two-pose`, `walk-toward-camera`, `walk-follow-back`, `walk-behind-foreground`, `character-reaction` or any card of `scenes.templates.catalog`) on a shot took five steps by hand (find, compile, edit, export, import and approve), and an agent never did it. `POST /api/v1/series/{series}/episodes/{episode}/shots/{shot}/card` is the one operation behind the MCP tool and the Wizard's `apply_series_shot_card`: it binds the card's character slots to the shot's people (pose pictures, or for the sheet cards the character's APPROVED animation sheet, with the words of the script check for a pending or rejected one) and its background to the shot's plate, compiles it with the code of `scenes.template.compile` at the series frame and as long as the shot, lays the shot's recorded lines into it as speech and subtitles, saves the scene as `<series>-<episode>-<shot>-card-<card>.scene.json` (opens in Video 2D; a second apply replaces it), exports it with `scenes.video2d.export` and imports it as a new candidate take. The same inputs find the same take; `approve: true` approves it only in «Modo un solo disparo» and never over a take a person approved. An export that is not ready after 60 s answers `exporting` and the same call finishes it. Nothing changes for shots and commands that do not use it. See `docs/character-kits/HOWUSEIT.md` §4.9.
+
+**Added: «Modo un solo disparo», so an agent can approve a character's animation and a whole request can finish without a person.** Settings › Services has a switch (`agent_autonomy`: `review`, the default, or `one_shot`; stored through `PUT /api/v1/services-config`, which now returns it). Off, nothing changes. On, one operation, `review_kit_animation`, lets an agent approve or reject an animation of a saved character from every door: MCP `characters.animation.review`, Ask to the Wizard `review_character_animation` (both through `POST /api/v1/character-kits/animations/review`) and the make job's new `autoApprove`. In `review` mode they answer an error that says to approve it in Characters › Animaciones. The review is stamped on the animation (`reviewedBy` person or agent, `reviewNote`, `reviewedAt`; old data without them stays valid), a rejected animation keeps its poses for a remake, an agent never overturns a decision a person gave, and the card shows «aprobada por el agente» with the note as its tooltip; Aprobar and Rechazar take it back. `characters.animation.make` / `make_character_animation` accept `autoApprove`: after joining the sheet the job reads the PNG back and approves it only if the automatic checks pass (cell count and size, filled cells, clean alpha, silhouette, ground line, scale spread and measure, tolerances in `services/character_animation_checks.py`, measured against 57 real Qwen sheets); otherwise it stays pending and the job reports `autoApproved` and the failed `checks`. The `services config` characterization golden gains the `agent_autonomy` key. See docs/character-kits/HOWUSEIT.md.
+
+**Added: a Series shot can play a kit animation (walk, gestures, anime expressions).** A `layout2d.cast` entry of a script takes `animation`: an id of the character's Character Kit (`wave`, `angry`, `happy`, `walk` or one of the author's own) or `{id, at, duration, loop}` (seconds inside the shot; `duration` defaults to one pass of the sheet, `loop` to the sheet's own). While it plays, the sheet takes the pose's place at the pose's height and ground line, drawn as the Video 2D `walk-cycle-sheet` and `character-reaction` cards draw it, and the pose, its mouths and its eyes are hidden until it ends. `enterGait: "walk"` now uses the kit's approved `walk` sheet for the whole entrance (same slide and pace, no body bob, one cycle per two `enterStep`s so the footfalls still land on the feet, mirrored when the character enters against the way the sheet looks); a kit without an approved `walk` sheet keeps the bob, and the check warns `walk_sheet_not_approved`. Only an approved sheet can be played: the script check (and `series.shot.update`) refuses a pending or rejected one with «approve it in Characters › Animaciones». A Video 2D `sheet` sequence gained two optional fields, `start` (the scene second it plays from) and `mirror`; scenes without them paint as before. Scripts without `animation` and kits without a walk sheet compile to the same scenes.
+
+**Added: a Series shot can play a kit animation (walk, gestures, anime expressions).** A `layout2d.cast` entry of a script takes `animation`: an id of the character's Character Kit (`wave`, `angry`, `happy`, `walk` or one of the author's own) or `{id, at, duration, loop}` (seconds inside the shot; `duration` defaults to one pass of the sheet (an expression holds at least 2.5 s), `loop` to the sheet's own). While it plays, the sheet takes the pose's place at the pose's snapped size and ground line, drawn as the Video 2D `walk-cycle-sheet` and `character-reaction` cards draw it, and the pose, its mouths and its eyes are hidden until it ends. `enterGait: "walk"` now uses the kit's approved `walk` sheet for the whole entrance (same slide and pace, no body bob, one cycle per two `enterStep`s so the footfalls still land on the feet, mirrored when the character enters against the way the sheet looks); a kit without an approved `walk` sheet keeps the bob, and the check warns `walk_sheet_not_approved`. Only an approved sheet can be played: the script check (and `series.shot.update`) refuses a pending or rejected one with «approve it in Characters › Animaciones». A Video 2D `sheet` sequence gained two optional fields, `start` (the scene second it plays from) and `mirror`; scenes without them paint as before. Scripts without `animation` and kits without a walk sheet compile to the same scenes.
+
+**Fixed: a memory shortage kills or slows the FLUX 3 / Drama 3 runtime, not the server.** On 2026-10-16 `systemd-oomd` killed the whole `hocus-latencia-42072` unit because Drama 3 (about 42 GB of RAM, ComfyUI pins up to 57 GB) lived inside the server's cgroup. On Linux with a systemd user manager the runtime now starts as `systemd-run --user --scope --quiet --collect -p MemoryHigh=H -p MemoryMax=M`, in a cgroup of its own: `MemoryMax` is `creation_runtime_memory_percent` of the physical RAM (80 % by default, held between 30 and 95, 0 turns it off; settable through `PUT /api/v1/services-config`) and `MemoryHigh` is 90 % of that, so the kernel throttles and reclaims (slower) before it kills, and a kill lands inside that cgroup. Windows, macOS and Linux without a systemd user manager run the plain command as before, with one log line saying why. The scope lives outside the server's cgroup, so `creation_models/runtime.json` records the runtime and its server and a new server (at import and before it starts a runtime) stops a runtime whose server is gone. A runtime killed with SIGKILL (exit -9/137, or an `oom_kill` in its `memory.events`) now fails the job with an honest out-of-memory message and is never reused. `runtime_status()` also reports `confined` and `memory_max_gb`; the log says `runtime confined: memory.max ...` once the kernel holds the limit, or `NOT confined` if it does not. `MemorySwapMax` and the pinned-memory flags are untouched. The scope also gets `MemorySwapMax=0`: past its limit the runtime is stopped by the kernel instead of thrashing the swap shared with the server and your other programs.
+
+**Fixed: a hung FLUX 3 / Drama 3 runtime no longer holds the GPU for an hour.** The creation runtime now stamps every line it prints. While a prompt is pending and the runtime has printed nothing for 15 minutes (a prompt takes 70-158 s on Drama 3, 323 s at worst), the runtime is stopped and the job fails with "The creation runtime made no progress for 15 minutes and was stopped; try again". Time a warm runtime sat silent before the prompt does not count. The one-hour limit and the cancel path are unchanged.
+
+**Changed: the FLUX 3 / Drama 3 runtime stays warm between jobs.** Every creation job used to start a new ComfyUI process and kill it at the end, so each Drama line paid the process start and rebuilt the 6 GiB GPU expert cache and the ~40 GB of INT8 weights in RAM (226 starts for 226 prompts in one production). Now a successful job leaves the process running for `creation_runtime_idle_seconds` (300 s by default, 0 restores the old stop-at-once; settable through `PUT /api/v1/services-config`) and the next job of the same family (`drama3_*` or `flux3_*`) reuses it. A failure, a cancellation, a dead process, a failed health check or a job of the other family restarts it. Because the warm process holds about 50 GB of RAM and VRAM, every other GPU-lane owner (WanGP models, H3, a local CUDA LLM, GPU audio analysis, UniRig, Hunyuan3D, Video 3D GPU renders) and the manual `release-model` stop it first, and so does starting the SAM service; CPU-lane work such as `qa.speech` does not. `runtime_status()` reports `{warm, family, idle_seconds_left}` and the log says `runtime kept warm for N s` and `released after idle`.
+
+**Fixed: a fade no longer leaves the next shot's picture one frame behind its sound.** The fade trims the outgoing picture to a whole frame, and a clip that lasts an exact number of frames but whose length ffprobe prints with six decimals (26/24 s is `1.083333`) was rounded down to the frame before, so every later shot of the join kept that frame of lag. The rounding now tolerates that print noise (a thousandth of a frame) and still never ends after the sound. Found by Grok's review of the day's merges.
+
+**Fixed: `qa.export` no longer calls a dark picture black.** A black frame is near zero on every channel (the brightest channel at or under 12/255), so a dark-blue or dark-gray card is an informational `dark` note and does not change the verdict. A real black gap is still a `black` warning.
+
+**Fixed: cancelling a job that is still loading its engine returns immediately.** A retake cancelled while Drama 3 (or any queued engine) was still starting stayed `cancelling` until that load finished, so the caller waited through the whole startup (74s on one retake). Cancel now marks the job `cancelled`, drops its queue slot and signals the worker without waiting for the load. The worker does not start sampling. A job that has already started producing still stays `cancelling` until the worker releases it.
+
+**Fixed: `image.remove_background` in auto mode no longer segments a PNG that is already transparent.** When at least 1% of the pixels have alpha below 250, the operation copies that picture to the result (named like a cutout) and records `background_already_removed`. An opaque picture, and an explicit U2Net or screen request, still run as before.
+
+**Fixed: a character kit can store a Drama 3 voice, and Series regenerates a line with it.** `drama3_base` is a clone preference (recording plus its exact transcript, no speaking style). `drama3_voicedesign` is a designed voice (`voiceId: "design"`, optional direction, no recording). Series `produce` and a line retake send the same `generation.speech` command Studio uses, including the `[language: en|es]` hint. The default new voice stays VoxCPM2.
+
+**Fixed: an approved take's `startTimeSeconds`/`endTimeSeconds` is applied when the episode is joined.** The assembler used the whole file, so a trimmed range came out longer than the plan. A range that is present and inside the file is cut first (frame-accurate picture, the sound on the same times, the source frame rate); a take with no range, or a range that is already the whole file, is joined unchanged. A range that runs backwards, or starts past the end of the file, is refused; an end past the file (a new attempt carries the shot's planned length) means "to the end".
+
+**Fixed: a finished Director run with no live job can be edited, and Repeat can answer at once.** `POST .../clips/{n}/rerun-video` waits for the whole clip by default (the Studio review reads the new take from that reply); a client that cannot hold a request open that long sends `"wait": false` and gets 202 with the same `filename` and `clip_index` fields (`filename` is null until the clip exists) while the clip finishes in the background. Before, a client that gave up after a minute left the run saying `completed`, and every later edit answered "Pipeline is still active" with no hint why. A run that is already completed, failed or cancelled blocks a new edit only while a job is actually running, and that 409 names the job and the stage. Two edits at the same time are still refused.
+
+**Fixed (defence): a Video 2D export no longer ships silent black frames.** Exports at `final` could contain 1 to 6 frames of exact black (RGB 0,0,0) at random places (36 of 87 shots of one chapter), and the headless page never reported an error. The cause is inferred, not reproduced: a canvas that is lost reads back as transparent black. The page now reads every frame back, repaints one whose alpha is zero everywhere (on freshly allocated canvases) and stops the export with the frame time if it stays blank; it also reuses its two supersample canvases instead of allocating two new ones per frame. The server checks the rendered PNGs before the encode and fails the task instead of encoding black frames. A fade to opaque black is not affected. The renderer-device policy is unchanged.
+
+**Fixed: assembling a long episode no longer runs out of memory and takes the service down.** One ffmpeg filter graph kept a decoder and its frames for every clip it joined (about 75 MB per 1080p clip, more with transitions), so the 90-shot Profesion episode exhausted a 62 GB machine and the kernel killed the whole service. A join of more than 16 clips is now cut into balanced blocks from one plan and the blocks are joined by the same filter, so the held tails, dissolves, fades, the final length, the frame count and the sound position are the single pass's (the 90-clip join peaks at 2.7 GB instead of 8.8 GB, and 2.9 GB instead of more than 14.5 GB when the episode has transitions). The filter chain no longer re-stamps the picture between two dissolves, which had doubled the frames ffmpeg buffered. ffmpeg children now ask the kernel to stop them before the server, and an ffmpeg stopped for lack of memory fails the job with "Out of memory while assembling..." instead of an opaque error and a harder retry.
+
+**Fixed: a `fade_black` or `dip_white` transition no longer shifts the next shot's sound up to a frame late.** The join that renders a fade took the longer of the picture (whole 24 fps frames) and the sound as the length of everything before it, so the narration after the fade sounded up to 41 ms late (50 ms on Profesion, which the sound check refused). The outgoing picture now ends on a whole frame at or before the planned join, so the sound decides where the next shot starts.
+
+**Fixed: the last burned subtitle of a line is never a lone word or a flash.** The two-line limit left "ellas?" alone at the end of an 85-character line for about 0.4 s. The last cue now has at least 3 words and enough of the line to stay up 0.8 s: words move across from the cue before it, back to the nearest clause end when there is one.
+
+**Added: MCP can create and list workspaces (`workspaces.create`, `workspaces.list`).** An agent could not make the workspace its tools take as an argument and waited about two hours for one to be created by hand. The tools call the same routes the UI calls, with the same name rules; creating an existing name returns it unchanged, so a retry is safe. They are in the series and game profiles.
+
+**Added: optional local FLUX 3 Klein and Drama 3 generation.** FLUX 3 distilled
+INT8 provides text-to-image and editing with up to ten images. Drama 3 INT8
+provides speech generation and single-reference voice cloning, including English
+and Spanish hints. The models use the native generation queue, tasks, cancellation
+and workspace metadata through an isolated, pinned ComfyUI runtime installed from
+Pinokio's Advanced menu. The guide documents account access, memory needs and the
+current feature limits; existing WanGP and MiniMax H3 environments stay separate.
+
+**Fixed: an inpainted picture keeps the transparency of its source.** A PNG with a transparent background that was inpainted with a mask came back with that background as opaque grey: the app flattens a guide with alpha onto grey before the engine, and the engine returns plain RGB. After the job the source's alpha is put back on the same file: exactly the source's outside the mask, opaque inside the edited region, with the grey taken out of soft edges; the sidecar records `alpha_restore`. A JPEG output, an opaque or RGB source, an outpaint, or a picture of another shape are left as the engine wrote them.
+
+**Fixed: `characters.rig.flat` with a `poses` filter that leaves out the base no longer answers `missing_base`.** The blink and the shared mouths come from the base, so an approved base is now rigged together with the poses asked for (the same rig as before, from its recorded original). The error stays for a kit that really has no base.
+
+**Fixed: the blink frame closes the iris of three-quarter faces.** With the eyes looking aside, the iris sits at a corner of the white and a closed lid left it (and its highlight) showing on small faces. The face landmarks' outline of each eye now adds the iris and pupil to the part that is covered; on the real poses of one chapter the cover grew 18-29% where this happened and 0-3% elsewhere.
+
+**Fixed: making a character animation from the Character Creator, the MCP or the Wizard no longer stops after the first pose.** The job keyed the first drawn pose but then said "studio.key returned no file", because it read the tool's reply as a finished generation instead of a keyed picture. It now takes the keyed file from the reply, goes on with the other poses and saves the pending sheet.
+
+**Fixed: inpainting and outpainting accept a source or mask PNG with an alpha channel, and an edit without `model_mode` uses the model's default method.** A PNG made by the app's own Compose tool carries an alpha channel and made the job fail in its first stage; the picture is now flattened before the job is admitted (a mask onto black, a source onto grey; the original file is not changed). Leaving `model_mode` out of an inpaint or outpaint request was refused even though the schema says the default is 0; it now runs the model's default method.
+
+**Fixed: an image-to-video clip no longer loses its last frames when the model's audio is shorter than the picture.** With a start image the final audio step cut the finished video to the generated audio: LTX clips came out 49 -> 45 frames and H3 clips 226 -> 222, so Series and Director shots ran a little short and the Blend assembly drifted. The audio is now padded in both branches and bound to the end of the picture (rounded up to the next millisecond), so the clip keeps every frame the model made; text-to-video was already correct. This patches the vendored `shared/utils/audio_video.py` (one filter option and a `-t` bound).
+
+**Added: Blend "Insert" mode now does what its label says.** Insert adds new footage between the two clips and keeps both whole, so the result is Clip A + the transition + Clip B. Until now the mode was only stored: the server always overlapped the clips (A + B - overlap) and the Transition Duration slider was never sent. The transition now starts on A's last frame, lands on B's first frame and is as long as the slider (the length snaps to the model's frame schedule, 17 frames at least); the motion-prefix, motion-suffix and hint controls do not apply to Insert and are not used. The API takes the length as `transition_sec` (an old caller that only sends `overlap_sec` keeps working). Overlap mode is unchanged.
+
+**Fixed: a scripted Series video is remade when its named end frame is replaced in place.** The clip is interpolated to `video.end`, but only the start frame's pixels were compared, so overwriting the end image kept the old clip. The end file's pixels now count too (carried from Cursor #1119, reworked). Clips made before this, and shots with no named end, are never remade because of it: nothing regenerates after the upgrade.
+
+**Fixed: a Blend now comes out exactly as long as the overlap it announces.** The finished Blend was 0.32 s short (no motion prefix) or 0.44 s long (the default mode) against "A + B - overlap": the engine dropped 8 landing frames off every transition and the motion-prefix frames were counted twice. Blend transitions are no longer trimmed at the tail, and the prefix and the generated length are sized together so the transition has exactly the overlap's frames. When the overlap is too short for the prefix plus the model's 17-frame minimum, the motion prefix is shortened (or dropped in favour of a single start frame) instead of lengthening the clip. Insert mode is unchanged.
+
+**Fixed: Outpaint on the legacy LTX path now fails clearly when its IC-LoRA cannot be downloaded.** Without that LoRA file (offline, a failed download, a full disk) the legacy path only printed a warning and carried on, so the job spent the GPU time and published an unrelated picture as "Done". It now stops with "Legacy Outpaint IC-LoRA ... is unavailable", like the official stack already did.
+
+**Fixed: a finished Director run can be edited and deleted at once, without waiting for the video model to unload.** A run already said `completed` while its worker was still unloading the H3 model, and for 1-6 seconds every edit (prompt, tag, Repeat, rerun, rejoin, repair) answered "Pipeline is still active" and DELETE said "still running, stop it first". The worker now leaves the registry before the unload, which only touches the model under the GPU lock.
+
+**Fixed: the owner's pending pull requests, in one go.** Series: a line's delivery (`emotion`, `delivery`) now
+reaches the voices that take a direction (VoxCPM2 references and Qwen3 presets) and changes the recording only then;
+the library's `natural` placeholders are not a direction. A 2D shot that shows the picture of the shot before it goes on
+from that shot's camera (or frames a `detail` of the plate), a lone close-up shows its side of the room, and
+`from_script` warns about the same picture twice in a row; an episode made before this regenerates nothing, because the
+new neighbour fingerprint (take version 4) only counts for takes made from now on. A screen effect can run slower or
+faster (`speed`), a 3D set can choose its light (a night street), and a sound effect job owns only the file it wrote.
+Characters: a new pose goes on the screen its character was made on, an eyes hint keeps light hair out of the eyes and
+both halves of an eye blink, `blink: false` is a hint per pose (transparent glasses), a kit keeps the whole animation
+catalog (48 per kit; a full kit refuses a new one before any GPU work), the animations panel lists only models that
+accept a picture reference, and a `jobs.wait` HTTP error ends the animation job instead of holding the GPU lock. Scene 3D
+export hides an empty cast mark like an empty cutout, and MCP intent records survive a power cut.
+
+**Fixed: a workspace cannot be deleted while a character animation is being made.** The new
+animation job writes poses, keyed pictures, the sprite sheet and the kit into the workspace
+folder, but it lived only in `.character-animation-jobs-v1` — not in `jobs()` or the busy
+registry. Deleting the folder while a pose was being keyed (or the sheet saved) wiped the
+library; `_workspace_dir()` then recreated an empty folder for the leftover worker. Delete
+now waits for that job, the same way it waits for game produce or a Director plan. A
+checkpoint a restart left as `running` still does not block.
+
+**The Character Creator keeps your work, and its options are easier to judge.**
+Leaving the tab (or the page) used to cancel the three options that were being
+drawn and forget the name and description. The creator's work now belongs to a
+session that goes on while you look at something else, and is saved in the
+browser per workspace: coming back shows the name, the options and the pick, and
+a reloaded page follows the image jobs that were still drawing. *Start over*
+begins a new character. You can ask for 1, 2 or 3 options (3 by default; the
+same count is used for a new pose). All the pictures are drawn first and the
+backgrounds are removed afterwards, one at a time, so the keying no longer
+interrupts the image model between pictures; as soon as you pick one, only that
+one has its background removed (a drawn option you pick later is keyed then).
+The options sit in a full-width row, and each opens large when the mouse rests
+on it, when it is pressed and held on a touch screen, or when it has the
+keyboard focus. Code: `characterCandidates.ts`, `characterCreatorSession.ts`,
+`CandidateGrid.tsx`; the style prompts no longer leave `{screen}` unreplaced
+(`replaceAll`), which made every graphic-novel run fail, and an option whose eye
+white was cut away by its limits no longer makes `/rig-check` answer 500 (it
+lost that option's "Ready for the rig" note).
+
+**Six Video 2D cards for a figure that walks into a shot (candidates, for the
+owner's review).** A cut-out figure that slides in with a bob shows legs that
+never move. These cards hide the legs, or move them, instead of faking them:
+`walk-follow-back` (from behind, waist up: the figure keeps its size and the
+room comes toward it with parallax), `walk-toward-camera` (reverse tracking from
+the front, the camera backs away), `walk-behind-foreground` (a whole figure in
+profile crosses behind a counter or wall that covers its legs), `walk-shadow-first` (a
+huge shadow crosses the wall, then the figure is already on its mark: cut on
+action), `walk-two-pose` (a wide shot where a two-cell sheet of a
+figure in profile, the stride and the legs together, changes cell every half step
+over a contact shadow that beats, paced so the boots do not skate) and `walk-cycle-sheet` (a
+sprite sheet of the gait, four poses by default, plays at the step's pace: with
+`walk-two-pose`, the cards whose legs move). Profile figures walk the way they
+look (`facing`). A figure held on screen takes `parallax: 0` with
+`parallaxZoom`, so the camera move belongs to the room. A walk takes a whole
+number of steps and a longer shot takes more steps, not slower ones. New
+`walk` trait (derived from the card id, as `product` and `documentary` are),
+walking words in the 2D search groups and a built-in `shadow` graphic. The
+cards have no narrative twin, so they sit on the composer shelf; they stay
+`candidate` until their real-asset renders are reviewed. Production shots
+(`scene2d`) still reach only the `music-*` cards: giving Series entrances these
+grammars is a separate decision (docs/development/VIDEO2D_TEMPLATE_MODEL.md).
+
+**Small animations of a character (walk, gestures, anime expressions) and the cards that play them (candidates, for the
+owner's review).** Characters › *Animaciones del personaje* makes, for a saved character, a few poses of the same figure joined
+into a sprite sheet: `walk` and `run` in four poses of the gait (side view), `step` (two poses), `idle` and `jump`, `wave`, `nod`, `shake`, `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm` and `think`, and eighteen anime
+expressions in two poses each (`angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`,
+`tired`, `love`, `disgusted`, `bored`, `worried`, `nervous`, `laughing`, `wink`, `pout`). Each pose is one Qwen picture made with the character's own picture as the identity reference, keyed on its
+screen as it arrives; a failed pose stops the run and the retry keeps the ones already made, and one pose can be made again
+alone. **One server job, three ways in:** the panel, any MCP client (`characters.animation.make`, `.status`, `.cancel`) and Ask to the
+Wizard (`make_character_animation`, with confirmation) start the same job (`POST /character-kits/animations/make`, `GET .../jobs`),
+so what an agent makes is reviewed in the app and a run survives a reload or a restart; nothing approves an animation but a person.
+The sheet is built on the server (the poses cropped and scaled so the figure keeps its size by its height, the width of its legs (a gesture) or the size of its head (a bust, read with the face landmarks), boots on one line, torso centred) and the animation
+joins the kit as `animations.<id>`, pending until a person plays and approves it. The catalog is
+`app/shared/character_animations.json`; HTTP `GET /character-kits/animations/catalog`, `POST .../prompt` and `POST .../sheet`;
+MCP `characters.animations` and `characters.animation.sheet` for an agent that makes the poses itself. New Video 2D card `character-reaction` (a figure on its mark plays
+a sheet once or in a loop and breathes) next to `walk-cycle-sheet`; the walking cards that move the legs are `walk-two-pose`
+(a two-cell sheet, one cell per half step, paced by the step so the boots do not skate) and `walk-cycle-sheet`, and the profile cards walk the
+way they look (`facing`). New `reaction` trait and gesture/expression words in the 2D search groups.
+
+**Fixed: the file link a finished 3D or rig job reports now works when the job ran in another workspace.** The `url` in `GET /api/v1/model3d/status/{id}` and `GET /api/v1/rig/status/{id}` was a bare `/api/v1/file/<name>`, which is looked up in the active workspace only, so a REST client reading a job that ran in a different workspace got a 404 from its own link (the MCP commands already added the workspace themselves). The job now reports `/api/v1/file/<name>?workspace=<workspace>` for local, simulated and Meshy/Hi3D jobs, on the full and the core server.
+
+**Fixed: the NSFW switch now works for a LoRA that comes from a linked model folder.** `/api/v1/loras/nsfw-override` looked only in the primary LoRA folder, so a LoRA shown in the installed list because another install's folder is linked answered "LoRA not found". It now finds linked LoRAs too and keeps the setting in the primary folder (a linked install stays read-only), starting from a copy of the linked LoRA's own information so the row keeps its name, trigger words and preview; clearing the switch goes back to CivitAI's flag.
+
+**Fixed: starting a second HocusPocus no longer kills the first one's rig job.** Several copies of the app (the live one, a worktree, a test or lent instance) can link the same `ckpts` folder, and each one used to end whatever rig worker was listed in the shared `ckpts/rig/jobs` the first time it looked at rigging, so a rigging job running in another copy failed with "exited with code -15" (for UniRig, after minutes of GPU time). Rig job files now live in the copy's own `settings/rig-jobs` folder, like the 3D jobs, and a restart only ends workers that this copy started (it checks the worker's request file, not only its name). The old shared folder is left alone, and the humanoid rig worker an interrupted run left behind is now ended on restart as well.
+
+**Fixed: on the core server, the gallery shows picture previews again.** Core listed every image and video with a preview address that it did not serve, and the gallery tiles asked for a sized preview route that core did not have, so each tile showed a text placeholder after three retries (and the pickers of the Series and Wizard screens showed a broken image). Core now serves `/api/v1/outputs/thumbnail/...` for the outputs and for the Uploads view, with the same code as the full server.
+
+**Fixed: on the core server, a web page from another site can no longer create, switch or delete workspaces.** The full server already refused browser POST, PUT, PATCH and DELETE requests that carry another site's `Origin`, but the core server (Apple Silicon and machines without a local AI recipe) did not. A page could send a plain-text POST to the local port and make a workspace folder. Core now installs the same check, from the same code, so the app, Pinokio's `https://<port>.localhost` address, other local tools and scripts without an `Origin` header work as before.
+
+**Fixed: a song you queue in Story Lab is no longer marked interrupted by the next task screen that opens its workspace.** Queuing a song wrote its task through a private second task registry for the workspace folder. The first time anything else opened the shared registry of that folder, the queued song was treated as a leftover from a crash and flipped to interrupted. Queuing now uses the folder's one shared registry.
+
+**Fixed: on the core server, the first Series plan or canon job of a workspace is no longer cancelled the moment it starts, and a workspace you delete and create again works.** The core server kept two task registries for the same workspace database. The first time the second one was built (for example when the planner made its first model call) it marked every running task of that workspace as interrupted, so the first plan job after each start ended with "was cancelled while waiting for remote". The registries are now one per folder, as on the full server, so the same fix lets a workspace deleted and created again with the same name answer its task routes instead of failing with an internal error.
+
+**Fixed: producing the video shots of a script now starts their clips.** `series.episode.produce` asked the video tool for each scripted H3 clip and then looked for the job in the wrong place of the answer, so every take failed with "generation.video returned no job" and no scripted clip was ever made. It now reads the job from the receipt the tool really returns (`receipt.result.job_id`).
+
+**Fixed: a script with video shots no longer makes the clip before checking the series may use it.** A video shot is an `imported_video` shot, but a new series allows `generated_video` only, so the clip was generated and its take refused afterwards. `from-script` with `check: true` now warns (`imported_video_not_allowed`), writing the script turns the method on for the series, and `produce` refuses before it composes the start frame or asks for the clip.
+
+**Fixed: a finished Series H3 render is registered instead of marked failed.** The clip was named after its prompt, with spaces and brackets, which the Series asset path refuses, so every real shot failed after its GPU time. The render now names its clip `series-<shot>-<job>`, unique for each run.
+
+**Fixed: a silent episode cut no longer stops the Series Lab from loading.** A cut with no sound stored a loudness of minus infinity, which the library saved as `-Infinity`; from then on every Series read of that workspace answered 500. The loudness is now stored as null, a non-finite number is repaired when the library is written, and a library saved by an older version loads again.
+
+**Fixed: a Series render that a restart interrupted is shown as interrupted.** Its checkpoint kept saying running, so the recovery list showed it running and the series and its episode could not be deleted. It is now settled as interrupted (once). It still owns its episode: resume it (each unfinished shot gets a new attempt), or cancel or discard it, before rendering that episode again.
+
+**Fixed: a known-series bible whose ids collide still ends as a draft you can review.** A small model that reuses one id for a character, a location and a fact made the ten-minute job fail while applying its own draft. Repeated ids now get distinct ones, and if the library still refuses the draft the job completes with `autoApplied: false`, the reason in `applyError` and the proposal kept.
+
+**Fixed: a wrongly typed Director v2 plan field is refused with a 422.** `lyrics`, `clips` or `characters` that are not lists of objects used to create a plan job and fail inside it with a Python error (and again on every resume). The answer now names the field and no job is made.
+
+**Fixed: a cancelled Story Lab generation can be resumed.** The resume route answered "Story generation resumed" and reopened the Activity row as queued, but nothing ran, because a cancelled job ignored every update. A cancelled generation now restarts from its last completed stage, like a cancelled Series plan, and its Activity row follows it; the Resume button after Cancel works. A late write from a stopped worker still cannot reopen it. A worker that is still writing `cancelled` keeps its claim until that write lands, and that write is ignored if Resume already left `cancelling`, so Cancel-then-Resume cannot be undone by the dying worker.
+
+**Fixed: a generation in which WanGP skips every task now fails, with WanGP's reason.** When WanGP's validation refused every task of a job (for example a turbo model asked for the wrong number of steps) the job ended "completed", "Done", with no output, and the reason appeared only in the server log. The job now ends failed, and the job status, the Activity row and the failed card show WanGP's own text. A job where only some tasks are skipped, and others finish, is unchanged.
+
+**Fixed: a protected Recast and the finished Outpaint no longer lose their last frames.** The ffmpeg pass that restores the people around a Recast target, and the pass that puts the source audio and pixels back on an Outpaint, ended the file when the audio ended. The video encoder still held the last 1 to 6 frames at that moment, so a protected Recast came out shorter than the clip WanGP made, and an Outpaint whose source audio was shorter than the picture lost more than a third of it in the worst case. Copied audio is now left alone, and re-encoded source audio is padded first, so it can only shorten a longer track, never cut the picture. Film grain and voice clone, which copy the picture and put an audio track back, no longer cut the picture to that track either. Real-ffmpeg tests check 8.1 and 6.1.
+
+**Fixed: a generation asked for as an image now saves an image.** WanGP chooses a picture or a clip from `image_mode`, and a request that only said `generation_mode: "image"` came back as an MP4. The submission door now adds `image_mode=1` and `video_length=1` to such requests (REST and MCP), and the simulation decides picture or clip the same way WanGP does, so it can no longer hide this. Image jobs also stop paying the two-stage VRAM penalty meant for video. Studio's image Outpaint on LTX-2 still saves a one-frame MP4: WanGP drops the outpainting settings of that model unless `image_mode` is 0, so it is left as it was.
+
+**Fixed: a polling client no longer loses a request while a model loads.** During model loads the whole server could stand still for 5 to 30 seconds, longer than Uvicorn's 5-second idle limit, and the expired timer then closed the connection with the client's request unread: polls failed with a connection reset and a scripted or MCP Cancel was lost. Idle connections now stay open for 75 seconds. This is a mitigation: what freezes the server is still unknown and needs a GPU session to find.
+
+**Fixed: Blend, Retake, Edit Anything, Inpaint, frame extraction, segment preview and Recast answer 400 with the field name for a value that is not a number, not 500.** Thirty numeric request fields were cast without a check. The segment preview also turned its own 503 "SAM service not available" into a 500, and Inpaint read its sampling numbers only after SAM had run. All numbers are now read first by one helper, so a bad value is refused before any clip is decoded, SAM starts or a job is registered.
+
+**Fixed: the Outpaint source-lock overlay uses the rectangle the model receives.** Planning resolved the protected rectangle from exact numbers while the job carries the percentages as 8-decimal text, so the two disagreed by one pixel (a 384-pixel source planned as 383).
+
+**Fixed: a shot-aware Recast sidecar no longer keeps the worker's private source path and protection flag.**
+
+**Fixed: the `generation.music` tool text names `yue2` too.** It listed two of the three model types the command accepts.
+
+**Fixed: a generation's sidecar records the size that was produced.** WanGP fits the canvas to the start image (a 640x480 request with a square image gives 480x480); the sidecar now adds `output_resolution` next to the unchanged requested `params.resolution` when they differ.
+
+**Fixed: re-generating or loading the settings of a Speech or Music output works again.** The pencil and the re-generate button on a Speech or Music output used to fail before anything was sent, because restoring the settings left video and H3 values in the form that the Speech and Music commands refuse. Restoring an audio output now clears them.
+
+**Fixed: Edit-tab jobs show up in the Edit tab queue.** The "Submitting…" and queued cards of Retake, Inpaint, Edit Anything, Outpaint, Recast and Repaint were hidden on the Edit tab, and the running card vanished after the first status update or a page reload. The server now reports which edit a job is (`edit_sub_mode`), and the cards carry it from the moment you press Generate.
+
+**Fixed: visiting Tools no longer breaks the saved model choices.** Leaving the Tools area recorded a `tools` model that the server refuses, so every later save of your per-mode model choices failed, and the bad entry came back on every start. Only the five generation modes are saved now, a stored `tools` entry is dropped on load, and a recipe's model is saved the moment you apply it.
+
+**Fixed: the first SFX generation after Speech no longer fails on duration.** The SFX slider showed 20 s while the request carried the Speech model's leftover duration (60 s, or 0 for auto), which the SFX command refuses. A text-only SFX request now sends the 1–20 s the slider shows.
+
+**Changed: Load settings and Re-generate are switched off for Extend and Blend outputs.** Restoring such an output landed on the plain Frames tab with no source video, so re-generating it silently produced a text-to-video instead of an extension (wasted GPU time). The two buttons are disabled for those outputs, with a tooltip, until the Extend and Blend working sets can be restored; use "Extend this video" or start a new Extend or Blend.
+
+**Fixed: an uploaded SFX video clip stays attached when you switch sub-tabs.** Coming back to SFX from Speech, Music or Mixer used to show the raw upload URL instead of the clip you had chosen.
+
+**Fixed: the SFX and Mixer tabs no longer request LoRAs for the virtual MMAudio model.** Each visit produced two 404 errors in the network log.
+
+**Fixed: a Director repair that was running when you reloaded the page shows its progress again** without opening the Productions dashboard.
+
+**Fixed: an LLM provider failure is reported as a bad gateway, not an internal error.** A missing or rejected provider key made `POST /api/v1/llm/generate` answer 500; it now answers 502 with the same readable `detail` and a stable code in the `X-Hocus-Error-Code` header (`provider_auth_failed` for a 401/403, `provider_failed` otherwise). The MCP `analyze` tool still reports the provider's message.
+
+**Fixed: the Wizard keeps snake_case names intact and long tokens wrap.** Names such as `qwen_image_21` or `http_code` used to lose their underscores and turn italic, and a long unbroken token (a provider error, a path) pushed the Wizard bubble wider than the panel.
+
+**Fixed: the SIMULATE pill no longer blocks clicks.** In simulation mode it floated over the header buttons of full-screen panels such as the Director dashboard.
+
+**Fixed: a Story Lab song in Cover mode now goes to MiniMax with the reference you uploaded.** A new project starts on the local ACE-Step model, so switching the Manual song panel to Cover used to make Generate write an original local song and ignore the reference (or fail asking for a story cue). In Cover mode Generate now always asks for MiniMax `music-cover` after the paid confirmation, the button waits for the MiniMax key, and the readiness line says MiniMax instead of "ACE local ready". An old save with an unchosen paid model still reads as the local default, as before.
+
+**Fixed: the LAN, video-command and operator documentation now matches the code.** The README said LAN token protection was optional; on the full server it is on by default whenever the app is shared, and the new LAN authentication page says so, with the token, cookie and MCP exceptions. It also says plainly that the core server has no LAN gate and prints no token, so it should not be shared on an untrusted network. A new page documents the `generation.video` command (Wan 2.1 version 2, H3 and LTX-2.3 version 3, validate-only checks) and who calls it; the Wizard and MCP guide no longer says the command is unpublished. The guides also describe VoxCPM2 as the default voice engine, Qwen 2.1 Turbo, and the ground styles of Video 3D.
+
+**Fixed: producing a game asset no longer moves files that belong to something else.** After a successful produce, the files at the workspace root whose names started with the asset id were moved into the attempt's `raw/` folder, so producing `heroe` also moved a `heroe-portrait.png` made by another job. The tools now record the files they wrote, and only those are moved, together with their `.meta.json` and `.preview.png` sidecars. The leftovers of an attempt that failed stay at the root.
+
+**Fixed: a Production model can no longer point at a file outside its workspace.** `models[].glb` was joined to the workspace folder without a check, so a path such as `../x.glb` or an absolute path (on Windows also a drive path such as `C:/x.glb`) was read, and a cleaned copy was written next to it, outside the workspace. Such a path is now refused when the spec is validated and again when the models are made. A file in a sub-folder (`pack/x.glb`) still works.
+
+**Fixed: a Video 2D (scene2d) scene is exported again when the song's tempo changes.** The card takes the score's tempo, but a re-analysis of the song or a `production.song.use` that kept the shot windows left the old MP4 playing the old tempo. The scene record now keeps the tempo it was exported with, and a shot whose card takes the tempo (and that does not set its own `bpm`) exports again when the tempo, held to the card's range, changes. Scenes exported before this was recorded keep their file and learn the tempo on the next resume.
+
+**Fixed: a Video 2D (scene2d) shot is exported again when a set or a model it names was remade.** A scene2d shot whose background or cast slot names a set (`scene2d.background: "alley"`) or a model that the run made did not notice when that set or model was redrawn, so the old MP4 stayed. The re-export key now includes the named sets and models. A shot that names none keeps the key it had.
+
+**Fixed: re-doing a Video 2D (scene2d) shot no longer trusts a leftover H3 clip.** A scene2d shot that still carried an old H3 take used that take's file name to decide whether its scene was up to date, so a new cut-out or a new background was not exported again on resume. The scene now compares what the card is really made from (its drawn frame and cut-outs).
+
+**Fixed: a resumed production redoes exactly what an edit changed, and nothing else.** Changing a shot's image model or steps, the start-frame size (`resolution.frames`), the video look (`style.video`), the clip size (`resolution.clips`) or the audio window of a shot now draws the frame, shoots the clip and exports the scene that depend on it, each as a new job. Naming the default size is not a change, and small moves of a shot's window add up instead of being forgotten on every resume. A production made before this was recorded keeps all its pictures and clips when you resume it with the same spec: nothing is drawn or shot again until you change something. A `production.song.use` that does not move a shot's window no longer forgets that an edit already asked for a new clip.
+
+**Fixed: editing a cast member's look now redraws it.** Rewriting a character's `sheet_prompt` or `single_prompt`, changing its seed or image model, or editing `style.image` used to keep the old reference sheet and portrait, so every shot built on it kept the old character. A resumed production now draws that character again (a new job, not the old one), redraws a group plate when a member changed, and redraws and re-shoots only the H3 shots that show it. A production made before this was recorded keeps what it has.
+
+**Fixed: a production no longer overwrites another production's montage.** When two productions once shared a title, the second one's saved montage pointer could still name the first one's timeline, and a rerun, a re-package or a shot retake then wrote over it. Now the production keeps the file only if its own clips are in it. Otherwise it writes its own `<id>.montage.json`. A shot edit on such a pointer is refused with `montage_foreign` and asks you to run the montage stage again.
+
+**Fixed: a series made from a template keeps the language you picked.** A Spanish template used to keep an English language contract, so the writing helpers, the comic hand-off and the providers followed English. The contract now matches the labels.
+
+**Fixed: a story you turn into a series keeps its protected quotes.** Lyrics and dialogue the story had locked as written are no longer dropped on the way to the series.
+
+**Fixed: a series that turns portrait renders its 2D shots again.** The 2D take fingerprint did not know the frame, so the cut covered a 1920x1080 take into 1080x1920. A portrait frame, the text a pronunciation dictionary rewrites in a line and a line's cast index (which copy of a kit speaks) now count: changing one renders only the shots it touches. A dictionary entry no line of a shot uses renders nothing again. Takes you already have stay current, so the first produce after the update renders nothing again, unless a line of the take was already rewritten by a dictionary or already named a cast index (that shot renders once). A dictionary entry or a cast index you change later is seen on every take; turning the series portrait is only seen on takes rendered after the update.
+
+**Fixed: a scripted video clip is made again when what it was made from changes.** A series turned portrait, a moved cast member, a character given another kit, a pose image added since or a replaced location plate on a "plan" start, and a start image overwritten in place or a remade pose on a named start now make a new clip; the old one stays as an attempt. Clips you already have keep matching, so the first produce after the update makes no clip again (a legacy clip that was already out of date is not detected; remake it by hand).
+
+**Fixed: producing a scripted video shot points its approval at the clip it asks for.** After a size change away and back, produce used to skip the shot and leave no approved take (the cut stopped at "Approve shot N") or the clip of the other size. It now approves the matching clip, but only when the shot has no approval or is approved on a clip produce made for another request; a clip you imported, an older clip you chose and a clip you (an agent or the Wizard) approved by hand are never replaced, and language versions keep their own approvals.
+
+**Fixed: the Director no longer re-attaches the previous run after Start over.** Pressing Start over (or arriving from Story Lab) cleared the Director editor, but a timer that re-checks live jobs every two seconds saw no run attached and bound the old live run into the cleared editor again, refilling its plans. The editor now remembers it was reset and ignores live jobs until you start or resume a run; they stay listed in the footer and in Dashboard.
+
+**Fixed: Director Generate and Apply to clips no longer turn into an Edit job.** If Studio had been left on Edit (Retake, Inpaint) or on audio, pressing Generate or Apply to clips in the Music Video Director ran that mode instead of a normal clip batch (a retake, a silent no-op, or "audio is not generative"). Both now put Studio on video first.
+
+**Fixed: Repeat on an H3 shot uses the prompt you saved in Workspaces.** Saving a new prompt for a MiniMax H3 shot only changed the shot text; its 5-second segments kept the old prompts, so Repeat regenerated the old shot. Saving now cuts the new text into one slice per segment (each segment performs only its part, as when you regenerate with a new prompt), replaces the old planner windows and segment prompts it came from (so resuming the production renders the new text too), and marks for regeneration the segments whose part changed and the ones after them. Saving the same text again changes nothing.
+
+**Fixed: text you write in Workspaces survives Regenerate and Repeat.** A shot prompt edited in Workspaces (typed by hand, or a rewrite you accepted) was not remembered as yours, so Regenerate and Repeat put the "no visible text" lock back on and stripped any lettering you had added (sung projects only). The edit is now marked as typed, like text typed at the review pause; saving the same wording again changes nothing.
+
+**Fixed: Inpaint and its mask preview find a clip picked from the gallery.** Picking a workspace clip in Inpaint sent its file name and workspace, but both the mask preview and the inpaint job only looked in the uploads folder and answered "Video not found". They now look in the clip's workspace first, like Retake and Edit Anything, and fall back to uploads for a dropped file.
+
+**Fixed: cancelling a generation at the very start no longer leaves it on "Cancelling..." forever.** A cancel that arrived after the job took the GPU slot but before the worker registered its stop handle was never acknowledged, so the job (and its task in Activity) stayed Cancelling. The worker now settles it as Cancelled and releases the slot and the saved request. Outpaint, repaint, revoice and Blend have the same short window and are not changed yet.
+
+**Fixed: an H3 video started by a command no longer holds the GPU queue while its prompts are being planned.** When a video asked for through the Wizard or MCP still had to have its window prompts written by the language model, the job took the head of the GPU queue at once and made every later Studio job wait on an idle GPU. It now stays off the queue while the prompts are planned, like a job started from the Studio, and joins the queue when they are ready.
+
+**Fixed: joining two clips with a generated transition (Blend) works again on ffmpeg 6.x.** The final join used the `-/filter_complex` option, which only exists in ffmpeg 7 and later, so every real join failed on ffmpeg 6.1 (the version Ubuntu 24.04 and the CI image ship). It now uses `-filter_complex_script`, which works on 4.x to 8.x.
+
+**Fixed: Meshy and Hi3D no longer start a paid new model when asked to retexture a GLB.** Those two providers only generate a new mesh, so a "Retexture" request used to ignore the source GLB and quietly queue a generation. The 3D panel now disables the Retexture button for them, and a retexture request sent through the API, the Wizard or MCP is refused with a clear message (retexture a GLB with local Hunyuan3D instead).
+
+**Fixed: the LoRA guide can no longer be written outside the LoRA folder.** Asking for a guide with a file name such as `../../other/real.safetensors` or an absolute path used to write the guide and its CivitAI sidecar next to that path. Generating or reading a guide now answers 400 "Invalid filename" for any name that is not a plain file name, the same rule the LoRA delete already uses.
+
+**Fixed: deleting a workspace while work is still running in it is refused, and only for that workspace.** A video-editor export, a MiniMax Music or comics image request, a rig or 3D job (on the core server too), a Story Lab, Comic, Director or Series plan, a Series render, voice or assembly, a game produce, a music production run or shot edit, a Quick Video batch (also while it waits for another batch) and a World3D or Video 2D export used to let the delete wipe the folder while they were still writing into it; the worker then created an empty one again. The delete now answers 409 with a plain sentence naming each job (for example "video-editor export-1 (running)"), together with `code: "workspace_busy"` and the list in `blocking`. A job in one workspace no longer stops you deleting another (names are compared without case, as Windows and macOS folders are), and a run a crash cut off does not block the delete for ever. Creating a workspace again under the name of one you deleted no longer fails with "no such table: tasks".
+
+**Fixed: on the core server, Cancel and Resume in Activity reach the job.** A video-editor export, a Series plan (Cancel and Resume), a rig or 3D job, MiniMax Music and a Series assembly (Cancel, Resume and Discard) used to answer "Task not found" because only MiniMax images were wired. Each router now registers what its own Cancel and Resume do (`services/task_controls.py`), so only what the core server mounts is wired.
+
+**Fixed: polling or cancelling the audio analysis of a song adopted from another workspace no longer answers 404.** The Director poll and `POST /api/v1/cancel/{job_id}` send no workspace, and the job was compared with the active one, so Whisper kept running after Cancel. An explicit workspace must still match.
+
+**Recast and its preview left the launch module.** POST /api/v1/recast and POST /api/v1/recast/preview still answer the same way. A preview still returns the same picture of the people it found. A recast job still starts in the background, still tracks the person with the same mask, and still hands the same work to the generation worker. A Viggle recast and MCP still call that same recast function.
+
+**Storage duplicate tools, the managed LoRA download, model-file helpers, generation option helpers and the request guards left the main server file.** The duplicate scan, reclaim and linked-install removal still answer the same way. A generation still downloads a managed LoRA that is missing, and still reads the same registry. The model list still reports the same weight groups and the same missing image-model files. Prompt types, SCAIL-2 steps and guidance, the output seed and the MiniMax H3 options are still normalised the same way. A policy refusal is still a 409, a browser mutation from another origin is still refused, and a traced mutation is still recorded. LAN authentication is still the first check. The main server file is about 700 lines shorter.
+
+**Canonical tasks left the main server file (no behaviour change).** The helpers that read a job's id, status, time and progress, the functions that publish a generation, a Series plan or render, an assembly, a Director pipeline and the older job kinds, and the functions that list those tasks, retry or cancel one, and reopen one for resume, moved unchanged. The server hands each module its own objects once, and the old names on the server are those same functions. A Series, Story or comic service still reaches them through a forwarder that looks the name up when it is called.
+
+**Fixed: a generation started by a command (picture, speech, music, sound effect or video, from the Studio, the Wizard or MCP) works again on the full server.** Since the generation job core moved into the kernel, such a job was cancelled and marked interrupted ("dispatch_failed") before its worker started. The job now joins the GPU queue and starts as before.
+
+**Generation job status, cancel and the job list left the main server file.** GET /api/v1/status/{job_id}, POST /api/v1/cancel/{job_id} and GET /api/v1/jobs still answer the same way. The core server keeps its own copies of these routes.
+
+**Generation queue recovery left the main server file.** GET /api/v1/jobs/recovery, POST /api/v1/jobs/recovery/resume and POST /api/v1/jobs/recovery/discard still answer the same way. A recovered job still starts again from the beginning. Leftover files are still prepared, started or discarded the same way, and intermediate files are still released when the server starts.
+
+**Generation preparation and the simulated run left the main server file.** A job still prepares the same way before the worker runs. A simulated job still walks the same steps. The local GPU owner is still prepared the same way. The worker still receives those same functions.
+
+**The H3 idle-release timer and the hardware probe left the main server file.** A native H3 model still stays loaded while another H3 job is waiting and still releases after the same idle wait. The legacy H3 release and the Wan interrupt are the same functions. The hardware probe still runs once and still reports no VRAM when the probe fails. The coefficient pass and the director pipeline still call that same probe.
+
+**Recast shot planning, the shot manifest and shot generation left the launch module.** Finding the camera shots, recovering a person the first pass missed, building each shot's prompt and reference, and joining the generated clips still work the same way. The assembler still calls the same generation worker. A cancel while the clips are joined still drops the unfinished file.
+
+**Blend left the launch module.** Joining two clips with a generated transition still answers the same way. The blend worker still asks the generation worker to render the transition, then finishes the job itself.
+
+**Outpaint left the launch module.** Extending a picture or a clip, including the official LTX-2 path and a clip with several camera shots, still answers the same way. The generation worker still does the outpaint audio and pixel pass itself.
+
+**Repaint planning left the launch module.** Checking region mappings, the edited frame's aspect, the prepared frame, the preview image, and the shot prompt, conditioning and manifest still works the same way. The Repaint routes call those same functions.
+
+**Repaint shot assembly left the launch module.** Writing the shot sidecar and assembling the shot videos still work the same way. The Repaint route calls that same assembly.
+
+**The Repaint routes left the launch module.** Previewing changed regions and starting a Repaint still answer the same way, including a request the server refuses before any model work.
+
+**Recast masks, mattes, and reference pictures left the launch module.** A character mask, a mask-locked video, a cut-out reference, and the prepared reference a replacement uses are still built the same way. The background-removal model still loads once, on CPU, and its cache stays one object. The relighting LoRA is still the same file with the same hash, and a job still waits for that download.
+
+**The generation worker left the main server file, split into small steps (no behaviour change).** One function used to run every picture, video, speech and sound job on the full server, in a single block of about 1,800 lines. It is now a short frame that keeps what must always happen (take the GPU, report an error, clean up, even after a cancel) and hands the job from one step to the next: start, legacy H3 route, preflight, task manifest, queue, tasks, collecting the files, the post-processing passes, and finishing. The steps are the old code moved without edits into `app/services/generation_worker/`, so a job does the same things in the same order and ends the same way on a cancel or an error, and every route that starts a job still calls the same `_run_generation`. The main server file is about 1,800 lines shorter. The server hands the new package its own objects once, at start-up.
+
+**Sound-effect generation left the launch module.** A sound-effect job still prepares MMAudio, writes the clip, and publishes the same sidecar.
+
+**FlashVSR chunked upscaling left the launch module.** A long clip is still upscaled in memory-bounded chunks, and the tools upscale still uses that same function.
+
+**Film grain and spatial upsampling left the launch module.** A finished video is still grained in place, and a spatial upscale still replaces the file and keeps its audio.
+
+**The per-job VRAM coefficient left the launch module.** A job still tightens the safety coefficient for its own weights and puts the saved base value back when the job finishes.
+
+**Hugging Face LoRA import left the launch module.** An empty import, a URL the server does not recognize, and a target directory that leaves the folder still answer the same way. The download registry that import writes is the same object the CivitAI downloads use.
+
+**CivitAI browsing, CivitAI downloads, and checkpoint import left the launch module.** The filter list, the architecture picker, a cached search, a cached model, a refused download, and an empty download list still answer the same way. Installed checkpoints, an update check on an empty folder, and a guide for an unknown checkpoint still answer the same way. The download registry and the CivitAI response cache stay one object each.
+
+**SAM status and segment preview left the launch module.** GET /api/v1/sam/status and POST /api/v1/segment/preview still answer the same way.
+
+**Edit-anything and inpaint left the launch module.** POST /api/v1/edit-anything and POST /api/v1/inpaint still answer the same way.
+
+**Retake and frame extraction left the launch module.** POST /api/v1/retake and POST /api/v1/extract-frames still answer the same way.
+
+**Submitting a generation left the launch module.** POST /api/v1/generate still answers the same way. A Viggle recast, a series shot and MCP still call that same function.
+
+**LoRA guide generation left the launch module.** Asking for a guide, starting a scan, and reading a scan that does not exist still answer the same way. Generating a guide still needs a loaded language model. The scan registry stays one object.
+
+**The LoRA library left the launch module.** The directory list, the installed LoRAs, a model's LoRA list and details, deleting a file, and the NSFW override still answer the same way. The update manifest still answers the same way.
+
+**Model visibility, selections, the production profile, the model catalog and model options left the launch module.** Showing or hiding a model, remembering the model chosen for each mode, and saving the production profile still answer the same way, including a list or a mode the server refuses. The catalog, a model's debug view, its defaults, its options, the resolution list, and the download status still answer the same way. Deleting a model that is not installed, or one that is in use, and downloading a model that does not exist, still answer the same way. The visibility write lock and the download map stay one object each. The core server keeps its own copies of these routes.
+
+**Director v2 plan jobs left the main server file.** Planning a v2 production, listing its saved jobs, reading one job, resuming it, and reading plan progress are the same routes with the same answers. A plan still checkpoints the same batches and still shows up in Activity. The set of public model providers is still the main server's set. The core server does not plan a v2 production.
+
+**Director planner and short-film pipeline routes left the main server file.** Classifying sections, planning prompts and images, planning dialogue scenes, planning a short film's prompts, and planning a short film's script are the same routes with the same answers. Starting, continuing, previewing, updating a preview, stopping, and resuming a pipeline are the same routes with the same answers. Editing a clip's prompt, tag, or chosen video, repairing a pipeline, cancelling that repair, rerunning an image, a video, or a segment, rejoining the clips, and deleting a pipeline are the same routes with the same answers. The pipeline is still prepared once, the first time a route needs it, and music generation, a quick-video batch, and the Activity cancel and resume actions call that same function and those same stop and resume routes. The core server does not start, continue, or rerun a pipeline.
+
+**Alternative songs left the launch module.** Listing the songs on a videoclip, attaching one, deleting one, and refusing a mount that has no song still answer the same way. A remount still uses the video editor's job registry. A real FFmpeg remount was not run here.
+
+**Gallery thumbnails, metadata, extra info, rejoining clips, and moving or deleting an output left the launch module.** A still still gets a preview. A missing file is still not found. Metadata still comes from the sidecar, or from the file, or is empty. Extra info still reads the saved prompt and refuses a language it does not know. A group that is not on disk still has no clips. Rejoin still asks for a group and for two clips before it concatenates. Moving a file still stays inside the workspace, and deleting one still removes the file the gallery was listing.
+
+**Director comic planning left the main server file.** Planning a comic, rewriting or translating one page, and revising the story are the same routes with the same answers. Starting a plan, reading it, resuming it, and recovering the newest completed plan are the same routes with the same answers. The job list, the set of plans that are running, and their lock live in one place, and the main server still uses those same objects. A plan still writes the same checkpoints and still shows up in Activity. The core server does not plan a comic.
+
+**Comic page checks and the comic animatic left the main server file.** A panel's characters, captions and dialogue are normalised the same way. A page is still rejected for the same shape problems, and lettering is still trimmed to the same budget. English that shows up in another language is still detected and repaired. The animatic still finds the same panel images, writes the same sidecar, and renders through the same video-editor job. The comics route that starts an animatic is unchanged. The Story Lab storyboard check now imports the comic page check directly instead of waiting for the main server to hand it over, so it also works outside the main server. The core server does not render an animatic.
+
+**Favorites and scene save left the launch module.** Marking a clip as a favorite, saving a scene, and uploading a scene recording still answer the same way on the main server. The core server uses the same scene and recording routes, so it checks input the way the main server does. Saving a scene on core needs a JSON object sent with the JSON content type: a body that is not an object, a broken body, or JSON sent as plain text or with no content type is now rejected as invalid input (it used to be saved, or to fail with a server error). A core recording sent without a file is rejected as invalid input too, and one whose metadata field is far too large now gets a plain 400 instead of a server error. The web app always sends the right content type and a file, so it is not affected; a script that posts to core by hand must set `Content-Type: application/json`.
+
+**Audio upload, trim, mix, and analysis left the launch module.** Uploading a clip, adopting one the machine already has, trimming it, mixing tracks, and reading an analysis still answer the same way. An unknown analysis job is still not found. Asking for clips or a structure without an analysis is still refused. The analysis jobs stay in the same job registry as every other job.
+
+**Story Lab planning left the main server file.** Checking a story stage, normalising its ids, and the problem checks now live with the Story Lab schema. Analysing uploaded images, generating one stage, translating lyrics, and starting, reading, resuming and cancelling a Story Lab job are the same routes with the same answers. The job list, the set of jobs that are running, and their lock live in one place, and the main server still uses those same objects. A plan still writes the same checkpoints and still shows up in Activity. The comic page check it relies on lives with the comic helpers. The core server does not plan a Story.
+
+**Director music and character-reference description left the launch module.** Asking for a song, or for a description of character reference images, still answers the same way. An empty description still asks for the images. An empty music request still stops before any track is generated.
+
+**Presets, system settings, and service settings left the launch module.** Saving a preset, changing a memory profile, and reading or updating service settings still answer the same way. An empty update is still refused. The core server keeps its own copies of the settings routes it already served.
+
+**Upscale and revoice left the launch module.** Asking the full server to upscale a clip or replace its voice still answers the same way, including a request it refuses before any model work. The core server still blocks those two routes when the local tool is not available.
+
+**System status, hardware detection, and model release left the launch module.** The full server still answers the same system stats, hardware detection and apply, preflight, runtime capabilities, resource lanes, WanGP processor list, debug user-action, and release-model requests. The core server keeps its own torch-free copies of the routes it already served.
+
+**The core server lists the gallery the same way as the full server, and shares the 3D model and rig routes.** On core, the gallery can be searched, ordered oldest first, and filtered by where a clip came from and what kind of result it is. An image row includes its width and height. Saving the core configuration, which holds API keys, now replaces the file atomically and leaves it readable only by its owner. Core can delete a workspace, and creating one creates the folder. A missing output answers "File not found", the same text as the full server. Generating a 3D model or a rig uses the same routes on both servers. A rig keeps the provenance of the submission, accepts a model that was uploaded, and publishes an Activity task. A finished remote model job writes an asset manifest and an Activity task. A Hi3D prompt with no photo draws a still through MiniMax when that image provider is configured, and a request the execution mode refuses answers 409. The full server's answers for these routes do not change. Choosing which files a model download needs now lives in one helper; the full server still downloads the same files.
+
+**The core server uses the full server's Series library.** Deleting a series or an episode answers 409 while one of its jobs is still active, and the series stays. The episode list includes an episode that no season lists. Approving canon checks the world summary, the cast and the locations as three separate answers, and a stale canon revision names the current revision. An imported asset has to be a real file under the uploads folder, given by the full path the upload route returns; a bare file name no longer works. An unknown kind is stored as other, a missing character, location, prop, episode or shot answers 404, a metadata key is kept to 100 characters, and metadata cannot replace the reference role or the import time. The core server also answers canon commit, reference routing, shot duration preview, and attempt approve, bulk approve and reject. Those are the routes the Series UI already calls.
+
+**Series render jobs left the main server file.** Starting a Series render, reading it, cancelling it, resuming it, discarding it, and listing renders that can be recovered are the same routes with the same answers. The job list, the set of renders that are running, and their lock live in one place, and the main server still uses those same objects. A render still takes the GPU slot the same way, writes status in the same order, and recovers the same checkpoints. The render still shows up in Activity. The core server does not render a Series.
+
+**The core server plans a Series with the same jobs as the full server.** A stage that breaks a production rule is sent back to the model, up to two extra tries, and a broken JSON answer is repaired before that. Resuming a plan re-checks stages that already finished. A later episode is planned with a summary of the earlier ones. Cancelling a running plan stays cancelled, and a second worker cannot pick up a job that already has one. An edited proposal cannot change internal ids. Applying a plan keeps the canon snapshot and writes the reference manifest for each shot. Starting a plan checks the series again under the library lock, so a delete that wins answers 404. The job shows up in Activity. The core server answers the recovery list and can discard a plan job. Preparing canon answers 400 when the title, the premise or the visual style is missing, where it used to start a job that failed. Plan apply uses the same library lock as a series edit, so one cannot drop the other.
+
+**Generation, the job queue, and Director pipeline reconnect left the main Studio store.** Starting a picture, a video, speech, music, a sound effect, or an avatar edit still uses the same Generate button, including a prompt split across several lines. Stopping a job, dismissing one, and picking the queue back up after a reload still work the same way. A Director pipeline still checks its own progress and reconnects on its own. Director post-processing, the storage manager, the LoRA list sort, the streaming text from the language model, and the Viggle restore message now sit with the code that uses them. The screen still reads and writes all of it through the same `useStore` hook. The main store file only wires the slices together.
+
+**Loading a finished clip's settings, and the Studio form, left the main Studio store.** Opening an output still fills in the same mode, model, prompt, and edit settings. Switching mode, changing a setting, picking a model, and resetting Image Studio still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The full server's shared state now lives in a kernel package (no behaviour change).** The workspace helpers, the generation job registry with its GPU queue, abort states and durable queue, the atomic save of the server configuration, the path and upload rules and the canonical task accessor moved out of `app/_launch_runtime.py` into `app/services/kernel/`. The full server builds one runtime context right after it binds WanGP and keeps its old names as aliases to the same objects, so every route and worker still shares one job dictionary, one GPU lock and one durable queue. `tests/test_import_layers.py` now enforces the import rules: a service does not import a router, nothing but the two servers imports a server file, and the kernel imports only its allowed neighbours. The Director pipeline no longer imports the server file: it is handed the server's cached hardware probe, and when that probe failed it measures the hardware again itself, as it did before.
+
+**Music-video Director actions, and five Studio edit submissions, left the main Studio store.** Blend, outpaint, restyle, recast, and retake, inpaint, or edit-anything still start from the same Generate button. Adopting or uploading a track, writing a song, planning a music video, generating start images, and generating the video still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The core server shares five more paths with the full server.** Saving a production profile still uses each server's own checker and default model. The shared model loader reloads the client when a DeepSeek URL changes, and the Director sends the DeepSeek key and reloads when the local device changes. Core keeps its local-LLM gate and its MiniMax-M3 default. A scene recording on core now transcodes off the request thread, two jobs at a time, refuses an oversized upload before reading it, and drops that folder from the output scan cache. Returned scene URLs on the full server still have no workspace query. A Series asset path that points at a missing file fails closed on both servers. Director plan prompts, angle prompts, and the pipeline list, active, get, and status routes are one router. On core, a stale running checkpoint is listed as crashed and the status carries the same summary and preview fields as the full server; starting, continuing, or rerunning a pipeline stays blocked. Story music jobs use one store and one router. Core still answers 409 when local music is unavailable. It now reserves a music attempt, replays a repeated idempotency key without a second worker, reloads an interrupted job from its checkpoint, and publishes the job and its candidates to Activity. Candidates are generated one at a time.
+
+**The Director dashboard, short-film planning, the Director pipeline, and Studio video editing left the main Studio store.** Opening the pipeline dashboard, planning a short film, and starting or continuing a Director pipeline still work the same way. Studio edit, continue, blend, and outpaint, including sending a frame to Image mode and applying it back as an anchor, still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The model catalog, which models are shown, and the selected model's options left the main Studio store.** Loading the catalog, showing or hiding a model, and filling in that model's settings still work the same way. The screen still reads and writes them through the same `useStore` hook.
+
+**The core server edits video, keeps Wizard work, and reports the same machine identity as the full server.** On a Mac, or any machine without a local AI recipe, the core server now mounts the same video editor as the full server. A timeline can use Video 2D layers, an export stays inside the workspace, a clip with an invalid trim is rejected, and an export can be cancelled. The core MCP endpoint uses the same router as the full server. A non-ASCII authorization header is refused instead of failing the request, a call is attributed to the external agent, tool answers can include structured content, and status reports a real remote job. Wizard conversations and workflows are saved by the same router on both servers. A workspace name that is not allowed still answers 400. Saving a conversation as a JSON array, which the core server used to reject as 400, now answers 422, the same as the full server. System stats on core include the runtime identity, so an open tab can tell that the server restarted, and they include the GPU compute percent. Memory figures use the same two-decimal rounding as the full server, and a machine with an NVIDIA GPU reports that GPU instead of a blank reading. Starting the core server binds its port before it prints the address, moves to the next free port when that port is taken, writes `settings/server-endpoint.json`, and prints the same address banner as the full server. A task update on core can complete a task the ordinary status rules would refuse, and it keeps that task's reserved title and workflow. A finished 3D model job records the same lineage references, and a provider default, as a Studio job.
+
+**Tools, recipes, services, and LoRAs left the main Studio store.** Those controls still show up in the same places, and the screen still reads and writes them through the same `useStore` hook. Saving a mode's settings, including the chosen model and the LoRAs that were on, works the same way as before.
+
+**The Studio store is starting to split.** System settings, generation presets, foreground activity, and the CivitAI browser now live in their own slices. The screen still reads and writes them through the same `useStore` hook.
+
+**Security fix: the macOS "core" server no longer serves uploaded pages and
+scripts as pages of the app.** On the core server, `POST /api/v1/upload` kept
+any extension, so an uploaded `x.html`, `x.svg` or `x.js` was stored under that
+name and `GET /api/v1/uploads/...` sent it to the browser as a page on the
+app's own address (stored cross-site scripting). Both servers now use one
+uploads router, `app/routers/uploads.py`: only the known media, model, text and
+archive extensions are kept, every other name is stored as `.bin`, and every
+file it serves back carries `X-Content-Type-Options: nosniff`. The full server already did
+this, so its answers do not change. The core server also gets what the full
+server had: files are streamed to disk instead of held in memory (500 MB cap),
+a name that is not an upload falls back to the workspace outputs, MP3, M4A and
+AAC files become WAV (with the ffmpeg program when the install has no
+ffmpeg-python package, as the core install does), and a video upload reports its `fps`, `frame_count`,
+`duration_seconds` and `has_audio`. The core server's old raw-body upload
+(`?filename=`) and a multipart upload without a `file` part now answer `422`,
+as on the full server, and `GET /api/v1/uploads/` no longer accepts a name with
+slashes in it. Core also had four wrong or hidden routes, now fixed: `POST
+/api/v1/llm/load` ignored the stored provider key and the LLM routing and loaded
+with an empty key; `GET /api/v1/series/{id}` and `POST /api/v1/llm/plan-h3-windows`
+were each defined twice, so one copy never ran; and `GET /api/v1/jobs/recovery`
+offered the jobs that were running as leftovers of a crash, which the recovery
+dialog would have offered to resume. It now answers an empty list.
+
+**The Wizard says which defaults it chose, and no longer invents a "cinematic" style.** When the Wizard creates a Story or a Series from a short request, it still does not stop to ask about style, model, duration or format, but it now says so: if the style or the tone was left unset, its reply ends with one line ("Choices I made: style not set (the model decides), tone not set. Tell me if you want something else.") and lists only what really stayed empty. Before, it filled the style with a generic sentence ("Coherent cinematic direction..."), the tone with "Cinematic" and a Series camera with a television camera language. Story Lab then turned that sentence into a "VISUAL STYLE LOCK" prefix on every image and video prompt, so every Wizard story looked like the same "cinematic TV". Now a Story or Series made by the Wizard with no style has an empty style (no lock), an empty tone and an empty camera language; new projects made by hand also start with an empty tone, and a style or tone you write is kept exactly. The Story Lab writer and the Comic planner leave the "Tone:" line out of their prompt when there is no tone. Projects already saved keep what they have. Risk: a Wizard story with no style gets no style lock from Story Lab, so its look can drift between shots until you write one; the reply line tells you. The same holds when such a story is staged for the Director: with no style of its own it is staged with no style (before, the Director's own sentence "Match the approved Story reference artwork exactly... keep it illustrated..." took its place and became a lock that forced an illustrated look), so the Director adds no style lock. A story that has a style it does not enforce keeps that sentence.
+
+**A safety net for the coming split of the two largest files (no behaviour
+change).** Tests can now import the full server with a fake WanGP engine, with
+no GPU. `tests/characterization` records what read-only routes answer
+(workspaces, Series, jobs and tasks, the model catalog, the gallery, the video
+editor probes and settings) and which routes the server serves, so each PR that
+moves code out of `_launch_runtime.py` or `useStore.ts` can prove it changed
+nothing. CI runs these tests in their own step. The static route table now
+follows routers that include other routers and requires literal route paths;
+the four Series shot routes written as f-strings are now literals with the same
+paths. `scripts/size_ceilings.json` caps the line count of `_launch_runtime.py`,
+`core_runtime.py` and `useStore.ts`, and the caps can only go down.
+`scripts/boot_smoke.sh` boots a worktree on a free port with its own folders and
+no model, checks its routes and stops it by its process id; it puts the
+worktree back even when it is interrupted, also by Ctrl+C in the middle of a
+rename or of the cleanup. It refuses a worktree whose full or core server
+already runs, and `--cpu` without `--core` (the full server needs a GPU).
+Neither the boot smoke nor the test harness touches the live install's temp
+folder (the server sweeps old `hocuspocus-*` folders out of it at start) or its
+Numba cache. A test checks the fake engine's names and parameters against the
+real WanGP source, also for a function WanGP imports from another module, so
+the fake cannot drift unnoticed.
+
+**New stories, series, songs, and comics follow the interface language.** A new project uses the language selected in the UI, which is English on a fresh install. The server uses English when a request does not name a language. A project that already has a language keeps it. A saved project without a language label takes it from its saved language intent, then English; the UI language is never used for saved work. Wizard replies, progress text, errors, and the remaining Spanish labels in Studio, Story Lab, Series Lab, Comics, the video editor, Video 3D templates, and Settings now come from the English and Spanish catalogs. The game asset list also accepts English option words (`player`, `enemy`, `boss`, `effect`, `layers 3`, `variants 3`, `loop 60 s`, `size 64`, `method strip`, `anim spin`), so the English example list in the paste dialog parses.
+
+**Director's hidden house rules are now visible.** With no reference image,
+Director still draws one shared picture from shot 1 and draws every shot from
+it, but the Dashboard now shows that picture, its prompt and the run's options
+above the shots, and can replace it with another image of the run or stop
+using it for repairs and reruns. Settings › Services › *Director shared
+reference* chooses Always (default), Only when there are no character
+references, or Off (each shot from its own prompt); a run can override it with
+`reference_anchor`, and the step-by-step Director chat follows it too. The
+shared picture's prompt no longer says "cinematic".
+"Use lighting and color temp from reference image" is gone from the guide used
+when no reference exists, and elsewhere it follows *Light from the reference*
+(default: only with your own reference image, so a story with character
+portraits alone no longer copies the anchor's light). *Keep clothes from
+references* (on by default) can be turned off to describe clothes per shot;
+the clothing words then also survive the optional third-pass polish.
+*Raw prompts* now also skips the planner's cleanup of image prompts, as its
+description promised; otherwise Extra info says how many clothing words,
+motion sentences and filler phrases that cleanup removed. The music-video
+treatment shows its coverage cycle and what choruses do (return to the first
+set by default, rotate through the sets, or the planner chooses), and the
+Dashboard shows each shot's planned set and coverage. When the planner returns
+no shots and Director builds a simple plan itself, the Dashboard says so and
+that plan no longer says "cinematic" either.
+
+**The code-health check now recognizes moved code and no longer misses new
+folders.** It checks every pull request against its base, and the coming
+refactor moves functions out of `_launch_runtime.py` and `useStore.ts`. Before,
+moving a complex function word for word into a new file failed as a "new
+complexity hotspot", and nothing could waive that. Now the check records a
+fingerprint of each complex function. A Python function that moves with the
+same name and the same code is reported as `moved: X from A to B` and passes.
+Comments, docstrings and the route decorator may differ. A UI function passes
+when it keeps its name and its complexity does not rise. A changed body, a
+rise in complexity or a copy left behind still counts as new code. The limit of
+five new complex functions per pull request no longer counts pieces split out
+of an existing function, as long as that function gets simpler by at least as
+much and the pull request adds no logic overall. The development → main
+release check gives the same split credit at each merge. A new file over 1,200
+lines still fails, moved or not. The check also fails when Python code is added
+under `app/` in a folder it does not measure (for example a new
+`app/features/`). Vendored engine folders and the eleven files that are already
+outside the measured folders are exempt, but those eleven files can no longer
+grow by more than 75 lines (in a pull request, or over a development → main
+release) or gain a complex function, and new vendored files are listed for
+reviewers. A waiver now covers only its own rule and exactly its file, and its
+expiry must be a real date. No limit changed.
+
+**Music videos show their defaults, and the agent can change them.** Auto-planned
+music videos no longer turn the brief's call to action into every chorus's sung
+action, or its theme into every verse's: the theme is now only where the shots take
+place (`section_actions.scene`) and the call to action stays on the end cards. Content
+shots no longer share one "Wide cinematic shot… slow camera" text: they rotate four
+framings, each with its own camera move in words (H3 makes the move), and a trailer
+beat opens on a framing of its own scale. `dry_run` shows what the planner filled in
+(`auto_plan`), which windows are sung, and each trailer beat's action.
+`spec.video` picks the H3 model and steps (Fused Turbo at 4 steps stays the
+default; base, full and legacy H3 can be chosen; steps must be in the model's range,
+4-8 for Fused Turbo); `dry_run` and `production.status` show it as `video_model`, and
+a change shoots the kept clips of unlocked shots again instead of mixing models, while
+going back to the earlier model keeps the clips it shot. Painted sets keep the
+empty-floor recipe by default and can ask for a `backdrop` or no staging
+(`sets.<name>.staging`); `dry_run` shows each set's prompt and the look sentences it
+leaves out, and a look that names its medium or material ("figurine look",
+"doll-like", "cast iron") keeps it. Productions that already ran resume unchanged:
+the same spec, seeds and jobs, and no set or clip is made again. A new set, or a model
+drawn from a prompt, whose look names a figurine or doll medium now keeps that
+sentence, and a sentence about a crowd is now left out. A scene2d shot that draws its
+own background from such a look draws it again on its next run (lock the shot to
+keep it).
+
+**Music never uses paid MiniMax by default.** Every music default is now the local,
+free ACE-Step 1.5 XL model, the one Studio and `production.*` already use. The paid
+MiniMax API models (`music-3.0`, `music-2.6` and covers) run only when you pick one
+in Story Lab, where they are labelled "MiniMax API (paid)", and confirm the cost
+before each request. The Wizard, MCP tools, `production.*` specs and the core
+profile no longer offer them and refuse an explicit request with the local model
+IDs to use instead. Stories saved with `music-3.0` as their old default now read as
+the local model and Story Lab tells you so; the file on disk is not rewritten.
+`media.options` lists the installed local music models.
+
+**Honest defaults.** Regenerate makes something new: a Director image, clip or
+H3 segment rerun draws a fresh seed and records it, so the seed shown is the one
+that made the result (comic films keep the seed their approved PRE pinned). Every
+new `production.*` run draws its own seed base, kept in its record, so two
+productions no longer start from the same noise and a resume asks for the same
+jobs; Hunyuan3D and the external 3D engines draw a seed when none is set (-1),
+and a game asset's Regenerate gets its own. Auto-planned music videos give each
+sung shot its own framing and seed, and a style with no named look keeps the
+brief's own words instead of falling back to anime. Published pages no longer
+carry another production's tagline or Nintendo disclaimer.
+
+**Prompts reach the model as written.** Director prompt polish is off by
+default (opt-in in Settings › Services); the 1,450-character cut is gone (only
+MiniMax Image-01 needs one, and its own `prepare_prompt` keeps it); a prompt the
+user types for a rerun, changes at the review pause or approves in the
+direct-video review screen keeps the lettering it asks for. *Raw prompts* in
+Settings › Services sends every Director prompt exactly as planned: no
+art-style prefix, locks, motion-word removal or polish, in planning (the plan
+endpoint, the orchestrator and the legacy planner), after the review pause, in
+the H3 validation pass and on every rerun; the planner's own words are not
+compressed either. Continuity anchors of bounded shots, the spoken-language
+line and H3's own contracts still apply. When a model handler rewrites a
+prompt (H3 window timing, outpainting), Extra info shows *What the model
+received* for each window. Until a production profile is saved, a dismissible
+notice says which providers text and pictures use; a saved profile that cannot
+be read is reported instead of silently replaced.
+
+**Narrower Director layers.** The no-visible-text lock now goes only on music
+videos, where planners used to put the song's lyrics on screen, and only on the
+prompts the LLM wrote. Stories, audio short films and comic movies send their
+prompts without it. A direct-video H3 segment the user types keeps its
+lettering too, and so does a regenerated H3 segment of a shot the user typed at
+the review pause. The project's *allow text* switch still turns the lock off. The
+"Maintain the same … art style." prefix, and the vision call that names the
+reference's style for it, are used only with Flux.2 Klein models, the only ones
+it was tested with, and the call is skipped with *Raw prompts*. Other image
+models get the prompt as planned.
+
+The Video Editor routes now come from one place. The main server mounts the
+extracted Video Editor router and the second copy inside the launch runtime is
+gone, with the same paths, answers and job list as before. Saved montages and
+the agent that asked still reach the export's metadata. A new CI test fails when
+a router is not mounted and not listed with a reason, when a server defines the
+same method and path twice, or when a route of the core server or the route table
+is missing from the main server. A new UI check (`npm run unreachable:check`, in
+CI) fails when a file in `ui/src` cannot be reached from an entry point and is not
+listed with a reason; 11 files that nothing used are deleted.
+
+**A hard rule about minors is now in every LLM system prompt, with NSFW mode on or
+off.** It forbids sexual or sexualized content with minors or with characters who
+look like or are described as minors, whatever the fiction, claimed age or art
+style, and asks for clearly adult characters in any sexual content. The LLM service
+adds it to every request to every provider, so Director, Story, Series, Wizard,
+comics, songs, production commands and the prompts the UI sends all carry it; the
+WanGP prompt enhancer adds it too. The PG-13 rules that NSFW-off mode used to add
+are gone (`nsfw_off_safety_rules.md`, the inline PG-13 enhance text,
+`get_safe_content_guidance` and the unused `PUBLIC_PROVIDERS`). The NSFW toggle
+itself does not change: it still filters models and LoRAs and still adds the
+mature-content guides. The Director shot-length examples about sex scenes and
+the undressing examples in the Qwen image-edit guide now appear only with NSFW on.
+
+**A quality-gate refusal now says what to fix, and there is an explicit way past
+it.** When `production.run` refuses a plan before any GPU work (`quality_gate`),
+the message no longer just says "the plan would look thin". It names the shots,
+the picture, model or camera involved and the limit, and says how to fix each
+problem. The three checks that only make a video look static still refuse by
+default: one still picture in three or more shots, too much of the song on still
+pictures, and a full-frame title over a moving shot. Send `allow_thin: true` to
+run such a plan anyway; those problems come back as warnings, and
+`production.status` lists them as `allow_thin` while that spec runs. A clip a
+model will not have, or a camera that does not exist, is always refused. The dry
+run takes the same flag and reports the same warnings, each problem once. The MCP
+schema now declares `allow_thin`, and it accepts `allow: ["title_card"]`, which
+the gate already honoured. A dry run names a shot with no key by its place
+(`shots[2]`).
+
+**Series video resolution can be chosen, 480p by default.** The H3 clips that a
+Series script asks for were always 480p. Series setup now has a *Script video clip
+resolution* (480p, 540p, 720p or 768p), and each video shot can pick its own size in
+its editor, with `series.shot.update`, or in the script (`resolution`). The
+backend's own default for the Series Lab render is now 480p too, as the setup screen
+already showed (a series that follows the global production profile still takes the
+profile's size), and H3 now keeps a 540p or 768p choice instead of rendering it at
+720p. Shots and takes made before this change keep their digests, so nothing already
+made is generated again. A series on H3 (not H3 Legacy) saved at 540p or 768p now
+renders its new takes at that size; its earlier takes stay 1280x704, and the cut
+scales every clip to the episode frame. Choose 720p to keep the old size.
+
+**Series camera, finish and episode format are now visible choices.** A 2D Series
+shot could only hold still or push in, every 2D shot got the same paper finish, and
+agents were told one fixed episode shape. The camera can now also pull out, pan left,
+pan right or drift (in the shot's *Framing and timing*, `series.shot.update` and the
+script's `camera`); a pan or drift frames the plate a little closer so its edge never
+shows. The finish is chosen for the series in Setup (`look.finish`: paper, none, any
+Video 2D finish such as film or noir, without its letterbox bars, or an agent's own
+amounts) and for one shot.
+Setup also has an *Episode format*: the episode planner and agents follow it, and
+when it is empty agents keep the default sitcom format, which Setup now shows.
+Nothing changes for a series that chooses nothing: paper stays the default, only a
+camera's own name (`pan-left`) moves it, so words such as "slow pan" stored in old
+shots still render static, and every stored shot keeps its digests, takes and
+approvals.
+
+**VoxCPM2 is the default voice engine.** Once its weights are installed, Studio
+speech, the Wizard, scene recipes, lip previews and game voices use *VoxCPM2 Voice
+Design*, and the Character Creator voice designer and new reference voices start on
+VoxCPM2. Installs without it keep KugelAudio in Studio; Qwen3 stays available
+everywhere, and saved character voices keep their engine.
+
+**VoxCPM2** joins the local speech engines next to Qwen3 TTS: OpenBMB's 2B model
+speaks 30 languages at 48 kHz. *VoxCPM2 Voice Design* makes a voice from a written
+description and *VoxCPM2 Voice Clone* clones a recording (with its transcript for
+the closest match), with two-voice dialogue and an optional speaking style. The
+Character Creator voice designer and reference voices can pick it as their engine,
+and series lines, auditions, Studio, Wizard and MCP `generation.speech` use it like
+Qwen3. Weights (~5 GB) download on first use. See [VoxCPM2](docs/development/VOXCPM2.md).
+
+Story Lab and Series Lab add optional **Help me write** panels with essential
+questions, examples, missing-answer suggestions, section development and editorial
+review. Answers share existing story fields; editable proposals persist until
+reviewed, apply by field and support guarded undo. Episode advice respects frozen
+canon. See the [writing guide](docs/story-lab/WRITING_GUIDE.md).
+
+Every Video 3D shot card now tells an agent what the built shot does, read from
+the document itself: `shot` (close, medium, wide, far, plate) with the camera
+distance, `moves` (push, pull, slide, rise, descend, arc, orbit, zoom, roll,
+ride, track, shake), `moving` (what the template animates on its own), `still`,
+`subjects`, `props`, `screens`, `authoredFor`, `floor`, `uses` (dialogue, talk,
+reaction, figure, establishing, action, reveal, product, music, drive,
+transition, title, look, plate) and the authored requirement notes of the
+action, campaign and anime shots. `world3d.templates.list`, `catalog` and
+`apply_query` understand intent words in Spanish or English («diálogo», «plano
+general», «persecución», «girar alrededor») through one shared vocabulary, ignore
+the words that name the search itself, rank a literal word over its synonyms,
+match plurals, take the filters `shot`, `use`, `move`, `subjects` and `format`,
+accept a tag as `category`, and return the best cards marked `partial` when no
+card has every word (never applied, never planned). Lines are no longer cut at
+180 characters, three pairs of shots no longer share a title, the editor's
+gallery search finds shots by the same traits, and a production dry run warns
+`template_still` when a shot uses a template that animates nothing without a
+clip, a motion, a camera or a world. See
+[Video 3D templates for agents](docs/development/WORLD3D_TEMPLATES_AGENTS.md).
+
+The Video 3D library is chosen on axes instead of a flat list. Every card now
+carries `kind` (scene, stage, camera, look, transition, title), `place` (a
+dressing, world or mold id), `travel` (a subject crosses the set), a `reference`
+film still of the real technique and, on stages, `cameras`; `uses` gains `speed`
+and `impact`, and `dialogue` and `reaction` follow stricter rules. The search
+reads both languages through one vocabulary whose place words are split the way
+a director tells places apart (kitchen, bedroom, office, classroom, bar, church,
+hospital, court, TV studio, street, rooftop, forest, sea, space...), plus
+emotions, walking, sitting, entering and crowds; every reply lists
+`unknown_words`, which never count against the match, and returns the best cards
+with at least half of the known words as `partial` when none has them all. New
+filters `kind`, `place` and `travel` on `world3d.templates.list`, `catalog` and
+`apply_query`, and a read-only `world3d.templates.suggest` that takes a shot as a
+writer phrases it (`line`, `speakers`, `place`, `mood`, `beat`, `format`, `kind`)
+and returns up to three cards with a `reason` in plain words, reachable from
+MCP, the Series profile and the Wizard.
+
+Room molds become shots. Thirteen shape molds (`sala`, `sala_ventana`,
+`mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`,
+`vehiculo` and the exteriors `calle`, `plaza`, `orilla`, `azotea`, with no
+ceiling and a sun preset) join the fifteen named interiors, and every mold is a
+`stage-<mold>` card (`kind: stage`) with its cameras, speaking marks and a
+measured shot, accepted by `world3d.templates.get`, `world3d.scene.instantiate`,
+`apply_query`, a production `scene3d.template` and a Series `kind: "3d"` shot
+(`roomCamera` picks the camera; the location's set brings the skin). Every
+staged room carries dust motes and a key light that breathes, so no stage is
+still.
+
+Six packs of short cards by intent, 32 in all: `transition-*` (whip pan, iris
+in, flash white, wipe by a prop, match on shape, eyecatch, smash in, rise off;
+0.6–2.5 s), `speed-*` (run toward camera, foot chase, fly-by, rush lines, side
+dash), `dialogue-*` (over-the-shoulder A and B with matched eyelines, table,
+triangle, embrace, phone split), `reaction-*` (push, orbit, turn to camera, look
+up, impact), `group-*` (arc of five, line of four, performer with audience,
+circle) and `title-*` (lower third, kinetic title, chapter card, end card). Their
+traits are read from the built documents like every other card's; the catalog
+holds 801 cards plus the 28 stages.
+
+Named modifiers on any Video 3D shot, shared by the production compiler and
+`world3d.scene.patch` through `app/shared/world3d_modifiers.json`: `light` (21
+names from `noon` to `dawn`, or a directional light object), `grade` (`natural`,
+`teal_orange`, `bleach`, `noir`, `sepia`, `flashback`, `dream`, `giallo`, `cold`,
+`warm`, `vhs`, `film`: exposure and tone mapping, a gel over the lamp and
+existing screen effects), `lens` (`14mm` to `200mm`: the camera fov, with a
+framing's fov move scaled) and `camera_template` (a `kind: camera` card whose
+camera and framing any shot takes while keeping its duration, cast and place).
+The honest effect cards (`cine-film-grain`, `cine-vignette`, `cine-lens-flare`)
+now carry the screen effect that does the thing.
+
+Production dry runs warn `stage_unskinned` when a stage or room shows only its
+mold colours and `looks_samey` when the same template and background run for
+more than four shots in a row, next to `template_still` and `template_reused`.
+The contract behind all of it is
+[TEMPLATE_LIBRARY_MODEL.md](docs/development/TEMPLATE_LIBRARY_MODEL.md).
+
+Every shipped and stage card's `preview` is now the URL of our own picture of
+the shot, `GET /api/v1/world3d/templates/{id}/thumbnail`: the built template at
+mid-shot, 640×360 (portrait 360×640) WebP, painted by the same headless renderer
+as the 3D export with empty slots drawn as the editor's placeholders, and cached
+in the outputs' `.world3d-thumbs` once per template version (the compiled
+document and `RENDER_RECIPE`). One picture renders at a time; when it cannot be
+painted now the route answers 503 `thumbnail_unavailable` with `retryable: true`,
+never a broken image. `world3d.templates.get` returns `previewUrl`; `reference`
+stays a film still for inspiration. `scripts/render_template_thumbnails.py`
+pre-warms the cache of a running instance and reports times and failures.
+A card that shows optional example media this installation has not downloaded
+(122 of 829 cards use the creative, dark-fantasy and other collections) answers
+409 `examples_not_installed` with the `collections` to download, at once and
+without a render; the pre-warm reports it as skipped. Before, each one held the
+render lane for minutes. The shipped scene `stage-crane` compiles again: only an
+existing mold makes a `stage-<mold>` id.
+
+A picture bound where a model stood through `world3d.scene.patch` (Series and
+MCP) now turns toward the camera as a production cast does: at most 60° from
+facing it along the shot, unless the binding gives `rotationY`. The editor's
+«All» shelf ends with the stages that match the search, and the Stages shelf
+reads every page of stages instead of the first 50. The humanoid auto-rig no
+longer takes a dress's waist for the neck when long hair half hides the neck: a
+neck that would leave more than a third of the figure above it gives way to a
+notch higher up. The pilot doll's Head bone moves from 66 % to 87 % of its
+height and its shoulders become level. `RIG_VERSION` 5, so a production rigs
+its GLB humanoids again on the next run.
+
 Video 3D adds eight complete procedural motion sets: beat landings, a contact
 music machine, sunset flight, a seasonal carriage, data assembly, a lighthouse
 journey, volumetric poster lettering and particle morph typography. Editor, MCP

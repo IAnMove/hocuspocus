@@ -1,12 +1,16 @@
 import rawCatalog from './cinematicTechniques.json' with { type: 'json' }
 import { createDefaultScene3DDocument } from './document'
 import { toPortraitCamera } from './frameFormat'
+import { CAMERA_FAMILIES } from './modifiers'
 import { TECHNIQUE_TEMPLATE_IDS, type TechniqueTemplateId } from './techniqueTemplateIds'
 import type { Scene3DDocument, Scene3DDressing, Scene3DFraming, Scene3DSlot, Scene3DSlotId, Vec3 } from './types'
+import { parseSceneFx } from '../sceneFx/types'
 import { parseWorldSfx, type WorldSfxKind } from '../sceneFx/world'
+import type { MotionStep } from '../stopMotion'
 
 type TechniqueEntry = {
   id: TechniqueTemplateId
+  category: string
   fov: number
   duration: number
   anchor: Scene3DFraming['anchor']
@@ -26,6 +30,10 @@ type TechniqueEntry = {
   yaw?: Partial<Record<Scene3DSlotId, number>>
   motion?: { to: Vec3; faceTravel: boolean }
   world?: { kind: WorldSfxKind; color: string; scale: number; intensity: number }
+  /** Screen effects over the whole shot: the grain, flare or glitch the card is named after. */
+  sfx?: { kind: string; intensity?: number }[]
+  /** The picture holds this many frames (stop motion). */
+  motionStep?: MotionStep
   playbackSpeed?: number
   portrait?: boolean
   n64?: boolean
@@ -39,6 +47,17 @@ function entryOf(id: TechniqueTemplateId): TechniqueEntry {
   const entry = BY_ID.get(id)
   if (!entry) throw new Error(`missing technique ${id}`)
   return entry
+}
+
+/** The technique family (`camera-movement`, `lighting`...) of a `cine-*` id; undefined for any other template. */
+export function techniqueCategory(id: string): string | undefined {
+  return BY_ID.get(id as TechniqueTemplateId)?.category
+}
+
+/** A `kind: camera` card: its camera and framing can be copied onto another shot (`camera_template`). */
+export function isCameraTechnique(id: string): boolean {
+  const category = techniqueCategory(id)
+  return category !== undefined && CAMERA_FAMILIES.has(category)
 }
 
 export const TECHNIQUE_TEMPLATES = TECHNIQUE_TEMPLATE_IDS.map(id => {
@@ -122,6 +141,10 @@ function applyExtras(doc: Scene3DDocument, entry: TechniqueEntry) {
   if (entry.playbackSpeed != null) doc.playbackSpeed = entry.playbackSpeed
   if (entry.n64) doc.renderLook = 'n64'
   if (entry.mirror) doc.environment = { reflectiveFloor: true, platform: false, bloom: 0.48, floorStyle: 'mirror' }
+  if (entry.motionStep) doc.motionStep = entry.motionStep
+  if (entry.sfx?.length) {
+    doc.sfx = parseSceneFx(entry.sfx.map((cue, index) => ({ id: `${entry.id}-fx-${index}`, kind: cue.kind, start: 0, end: entry.duration, intensity: cue.intensity ?? 1 })))
+  }
   if (entry.portrait) {
     doc.width = 720
     doc.height = 1280

@@ -23,9 +23,10 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from services.asset_manifest import publish_generation_sidecar
 from services.episode_finishing import finish_episode, finishing_note, remove_episode_subtitles
-from services import series_hearing
+from services import series_hearing, task_controls, workspace_busy
 from services.series_ambience import clip_ambience
 from services.series_assembly import episode_assembly_plan
+from services.series_take_range import apply_take_ranges
 from services.series_language_versions import localized_view
 from services.series_review_gate import assembly_blockers, blocker_message
 from services.series_jobs import SeriesJobStore
@@ -208,6 +209,13 @@ def create_series_assembly_router(
     jobs: dict[str, dict[str, Any]] = {}
     active_job_ids: set[str] = set()
     jobs_lock = threading.RLock()
+
+    def busy_jobs(_workspace: str, _folder: str) -> list[dict[str, Any]]:
+        """The assemblies running now: the claim set is the proof of life, the cached job names the workspace."""
+        with jobs_lock:
+            return workspace_busy.claimed(active_job_ids, jobs)
+
+    workspace_busy.register("series-assembly", busy_jobs)
 
     def canonical_task_id(job_id: str) -> str:
         return f"task-series-assembly-{job_id}"
@@ -398,6 +406,8 @@ def create_series_assembly_router(
             output_directory = workspace_dir(str(job["workspace"]))
             # Generated and imported takes get their shot's sound, and every clip the episode's frame (series_take_sound).
             prepared_dir = tempfile.mkdtemp(prefix="hocuspocus-assembly-")
+            # A take that names a range is cut first; a take without one stays the original file.
+            clip_paths = apply_take_ranges(clip_paths, list(job.get("clips") or []), prepared_dir)
             clip_paths, prepared = prepare_clips(clip_paths, job.get("clips", []), job.get("frame"), output_directory,
                                                  prepared_dir, cancelled=token.is_cancelled)
             timestamp = time.strftime("%Y-%m-%d-%Hh%Mm%Ss")
@@ -772,6 +782,10 @@ def create_series_assembly_router(
         except (OSError, ValueError, json.JSONDecodeError):
             continue
 
+    for action in ("cancel", "resume", "discard"):
+        task_controls.register("series-assembly", action, lambda task, action=action: control_series_assembly_job(
+            workspace_dir(str(task.get("workspace") or "default")), task_controls.job_id(task), action,
+        ))
     return router
 
 

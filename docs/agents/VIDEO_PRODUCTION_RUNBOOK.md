@@ -44,7 +44,7 @@ The agent makes these calls for a finished video:
 
 Two other `production.run` forms are optional and still the same command. They are not extra tools, and they do not replace steps 2–4 once a full video exists:
 
-- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Without `image_model` they use the run's default (Qwen Image 2.1, at its own steps). Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
+- `{workspace, production_id, preview:{prompts:[p1,p2,p3], image_model:"qwen_image_21"}}` generates three look tests and no song. Without `image_model` they use the run's default (Qwen Image 2.1 Turbo, at its own 8 steps). Poll `production.status` until `preview_completed` or `failed`. The three URLs are `preview_frames` on that status. There is no contact sheet yet, so do not call `production.review`.
 - `{workspace, production_id, spec, through:"frames"}` stops after cast and frames (`status` `frames_ready`). Restart the isolated runtime if a large image model would slow H3, then resume with `production.run` `{workspace, production_id}` and continue at step 2.
 - `{workspace, production_id, spec, through:"animatic"}` builds a CPU preview after those frames: the start frames play as stills with the lyrics, titles and the song (`status` `animatic_ready`). `production.status` reports the preview as `animatic` (not `video`) plus `contact_sheet` and `animatic_warnings` (a title card covering the picture, the same image used twice, a still stretch over 10 seconds, or an unreadable caption). A restart does not treat `animatic_ready` as `running`, so it does not start a GPU run by itself. Resume with `production.run` `{workspace, production_id}` and the run continues at the clips, reuses the frames, and re-exports a scene once its clip is different from the still it previewed.
 
@@ -56,7 +56,7 @@ face-embedding model is already loaded; do not invent that answer.
 
 A later `production.run` with the same id and no `retake` resumes from the last finished step.
 
-`production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check. Each window includes `hold_after_clip`: how many seconds that H3 shot would sit still after its clip (the longest H3 bucket is 345 frames, 14.375 s), or 0 when the shot is not H3 or a moving fill (`h3`, `clip`, `scene3d`, `screen`) covers the tail. A hand-written `title-card` on an `h3` or `still` shot is `title_card_on_image` and still validates; the planner rewrites that template to `lower-third-date` on those kinds. The same check compiles every scene document in-process, so a style the editor would reject (`scene_invalid`, for example a text field out of range) shows up here. Before the scenes stage the run measures the busiest caption against its start frame and stops with `caption_unreadable` (the scene and the ratio) when contrast is under 3:1. An opaque caption box is measured against the box; text with no box is measured against the picture.
+`production.run` with `dry_run: true` checks the spec before any GPU work. It also reports `motion` (`static_s`, `static_ratio`, `longest_shot_s`, `avg_shot_s`) and warns about a static video (`too_static`, over 35 % of the runtime on still images: the 160 s videos with 9 clips were 43–56 %), a hold over 10 s (`long_shot`), a still used three times (`still_reused`), `max_takes` 1 (`single_take`) and fewer than three song seeds (`few_song_seeds`). It lists each shot window, the H3 frame count, lyric lines with no shot, gaps with no fill, titles over 12 characters, captions over 32, and estimated minutes. `shots: "auto"` is expanded in that check. With `song.file` the run plays the whole file, so the dry run reads its length for the windows, `gaps` and `motion`, warns `song_duration_mismatch` when it differs from `song.duration` by more than 1 s, and `held_tail` when the last shot ends more than 2 s before the song (an H3 tail is `gap_without_fill`). Each window includes `hold_after_clip`: how many seconds that H3 shot would sit still after its clip (the longest H3 bucket is 345 frames, 14.375 s), or 0 when the shot is not H3 or a moving fill (`h3`, `clip`, `scene3d`, `screen`) covers the tail. A hand-written `title-card` on an `h3` or `still` shot is `title_card_on_image` and still validates; the planner rewrites that template to `lower-third-date` on those kinds. The same check compiles every scene document in-process, so a style the editor would reject (`scene_invalid`, for example a text field out of range) shows up here. Before the scenes stage the run measures the busiest caption against its start frame and stops with `caption_unreadable` (the scene and the ratio) when contrast is under 3:1. An opaque caption box is measured against the box; text with no box is measured against the picture.
 
 **One at a time.** Productions on one instance take the GPU in the order they
 were sent: a `production.run` sent while another production runs answers
@@ -65,17 +65,41 @@ a cancel still stops it). Plan and dry-run every piece of a batch first, then
 send them all: the GPU works through them without gaps, and no two pieces
 interleave their jobs (that made each job reload a model and one piece take 7 h).
 
-**Quality gate.** `production.run` refuses a new or changed spec with HTTP 422
-`quality_gate` (and `problems`) when one still picture fills three or more shots
-that are not marked deliberate (`allow: ["still"]`), when still pictures take
-more of the runtime than the `quality` bar, or when a `title-card` or
-`trailer-slam` title sits on a moving shot (`h3`, `clip`, `scene3d`, `screen`):
-both paint an opaque plate over the whole frame and the clip under it is never
-seen (`title_card_hides_shot`; `allow: ["title_card"]` keeps a deliberate card),
-or when a 3D shot asks a `spec.models` model for a clip its rig will not bake
-(`clip_not_baked`: add it to the model's `animations`; a humanoid with a
-`fallback` is exempt, its clips stand in).
-A resume of an unchanged spec is never refused. `dry_run` lists the same items under `blocking`, and warns about shot
+**Quality gate.** `production.run` checks a new or changed spec before any GPU
+work and refuses it with HTTP 422 `quality_gate`. Its `message` says in plain
+words what is wrong, in which shots, with which picture, model or camera, and
+what the limit is. `problems` has one item per check, each with its own
+`message`. A resume of an unchanged spec is never checked. The five checks:
+
+1. `still_reused`: one still picture fills three or more shots that are not
+   marked deliberate (`allow: ["still"]`).
+2. `too_static`: still pictures take more of the runtime than the `quality` bar
+   (35 % for `standard`, the default). Shots with `allow: ["still"]` do not count.
+3. `title_card_hides_shot`: a `title-card` or `trailer-slam` title sits on a
+   moving shot (`h3`, `clip`, `scene3d`, `scene2d`, `screen`). Both paint an
+   opaque plate over the whole frame, so the clip under it is never seen.
+   `allow: ["title_card"]` keeps a deliberate card.
+4. `clip_not_baked`: a 3D shot asks a `spec.models` model for a clip its rig will
+   not bake. Add the clip to the model's `animations` (a humanoid with a
+   `fallback` also bakes only its `animations`), or ask for a clip it has.
+5. `unknown_camera`: a shot, a fill or a shot override names a `camera` that is
+   not a camera preset.
+
+Checks 1–3 only make the video look static. They refuse by default, because a
+piece that moves is the point. To make such a plan anyway, send
+`allow_thin: true` next to the spec (not inside it): the run starts and returns
+those problems as `warnings`, each marked `allowed_by: "allow_thin"`.
+`production.status` then lists them as `allow_thin` (each check with its shots)
+for as long as that spec runs; a resume keeps the record, and a new spec
+replaces it. The flag applies to the spec sent with it: a later changed spec
+needs it again. Checks 4–5 would fail after the GPU work, so `allow_thin` never
+skips them. Fix the plan first; use `allow_thin` only when the person asked for
+that look.
+
+`dry_run` lists the same items under `blocking`. With `allow_thin: true` it lists
+checks 1–3 under `warnings` instead, as the run would return them, and they take
+the place of its own `still_reused` and `too_static` warnings for the same
+picture or runtime. It also warns about shot
 fields the runner ignores (`ignored_shot_field`: a field like `plannedAction`
 puts nothing on screen), one H3 clip replayed in several shots (`clip_replayed`),
 H3 shots without the cast (`h3_without_cast`), 3D models built from boxes
@@ -89,7 +113,7 @@ another production in the workspace (`same_shot_pattern`, `same_lyric_look`).
 A finished production is not a black box. At the end of every run the studio packages it (`package` in the log):
 
 - one durable `<production_id>-<shot>-<hash>.scene.json` per shot (the clip layer, the lyric captions, the title, the finish), which opens in Video 2D;
-- the montage (`production.status` → `editable.montage`, a `*.montage.json` that opens in the Video Editor) with each clip named after its shot, carrying its lyric and an origin (`scene2d`, the scene document, the production and the shot). The shot board (Video Editor → Shots) shows them and has an **Open scene** button;
+- the montage (`production.status` → `editable.montage`, `<production_id>.montage.json`, which opens in the Video Editor; the title stays its name, so two productions with one title both finish, a rerun updates its own file, and a file another production made moves the name on to `-2`) with each clip named after its shot, carrying its lyric and an origin (`scene2d`, the scene document, the production and the shot). The shot board (Video Editor → Shots) shows them and has an **Open scene** button;
 - `<production_id>.shots.json` (`editable.manifest`): for every shot its time span, lyric, prompts, seed, start frame, every take with its lip-sync number, scene document and scene video;
 - every take of every clip stays on disk (only the audio slices and the takes nobody recorded are cleaned up), so swapping one in is possible.
 
@@ -110,7 +134,9 @@ Agents use the same actions as commands:
 
 ## Quality: what the run spends
 
-`quality` in the spec is `draft`, `standard` or `max` (a brief may say `calidad`). It fills only what the spec left out (song seeds: 1 / 3 / 4, `max_takes`: 1 / 2 / 3) and sets the bar `dry_run` measures the plan against: the share of the runtime that may be a still image (60 % / 35 % / 15 %) and the clips a minute (2 / 5 / 7); missing the bar is a `too_static` or `few_clips` warning before any GPU work. No `quality` keeps the spec as written and the `standard` bar. What made the long videos thin was the plan, not a bug: 160 s with 9 clips and `max_takes` 1 is 45 % still pictures and no quality gate. Give a long song more shots, not a slower zoom.
+`quality` in the spec is `draft`, `standard` or `max` (a brief may say `calidad`). It fills only what the spec left out (song candidates: 1 / 3 / 4, `max_takes`: 1 / 2 / 3) and sets the bar `dry_run` measures the plan against: the share of the runtime that may be a still image (60 % / 35 % / 15 %) and the clips a minute (2 / 5 / 7); missing the bar is a `too_static` or `few_clips` warning before any GPU work. No `quality` keeps the spec as written and the `standard` bar. What made the long videos thin was the plan, not a bug: 160 s with 9 clips and `max_takes` 1 is 45 % still pictures and no quality gate. Give a long song more shots, not a slower zoom.
+
+Seeds: leave them out. Each production draws its own random `seed_base` the first time it runs and keeps it in `<production_id>.production.json`; every stage without a `seed` (song candidates, cast, portraits, start frames, sets, model pictures, clips) uses that base plus a fixed offset, so a resume asks for the same jobs and two productions never start from the same noise. A `seed` written in the spec is used exactly as written, for a deliberate repeat. Productions that ran before the base existed keep base 0.
 
 While it runs:
 
@@ -142,7 +168,9 @@ reveal, a riser climbs through it and ends on the hit, the reveal lands on an im
 to the montage as `audioCues` and the soundtrack is the processed file (`<id>-trailer-soundtrack.wav`); anchors are the planned shots'
 `t0`. A trailer may be instrumental (`song.lyrics: ""`: the music model gets `[Instrumental]`, nothing is transcribed), and then
 `song.late_entry` (seconds) delays the music; a song with lyrics is never shifted because its captions are timed to it.
-Use `treatment.moments[].at` with a beat name to say what the reveal or the tension is.
+Use `treatment.moments[].at` with a beat name to say what the reveal or the tension is. Each beat's generated shot
+carries the beat's own prose ("Slow establishing shot of the world…", "…the camera pulls back"), with the moment's event
+in place of the scene phrase; `dry_run.windows` shows every trailer window's `beat` and that `action`.
 
 ## What the run does
 
@@ -150,9 +178,9 @@ Use `treatment.moments[].at` with a beat name to say what the reveal or the tens
 |---|---|---|
 | song | `generation.music` × `song.seeds` (ACE-Step 1.5 XL, or `song.model`) in `song.language` | keeps the candidate with the best lyric recall whose last 2 s are not cut; every candidate stays in `song_candidates` |
 | analyze | `audio.analyze` | tempo by period × phase search, vocals, word-timed lines |
-| cast | `generation.image` (`style.image_model`, Qwen Image 2.1 by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
+| cast | `generation.image` (`style.image_model`, Qwen Image 2.1 Turbo by default) | one reference sheet per cast member, then a plain full-body portrait of that one person |
 | frames | `generation.image` with that portrait as the reference (the sheet if the portrait failed) | one start frame per `h3` shot |
-| clips | `generate` MiniMax H3 with the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
+| clips | `generate` with the H3 model in `spec.video` (default MiniMax H3 Fused Turbo, 4 steps) and the exact song slice as driving audio | `qa.lipsync` on `sing` shots. A shot that is not sung is judged on the picture instead (frozen, blinking, color drift, or a center that no longer matches the first frame) and retakes with a new seed on the same rule: until ok, the score stops rising, `max_takes`, or 4 recorded takes. For those shots `r` is that visual score, not a lip-sync correlation. A file that cannot be opened is unreliable and does not spend another take. The thresholds are provisional until they are measured on the Gremlins v2 clips. Naming the shot in `retake` may shoot it past 4. `clip_seconds` stores each shot's generation seconds (not the backoff, and not in `production.status`). A failed take is logged with its reason (`failures` in `production.status`, e.g. out of GPU memory); when a whole round fails the runner waits 60 s before the next. A resume retries clips that are still missing and still under the cap |
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
@@ -183,7 +211,7 @@ The four checks are code. They are not a language model looking at the contact s
 
 `review` is `{execution, technical, artistic}`. `execution` is `ok` when the named final file opens, `fail` when that name is missing or unreadable, and `unreliable` when the run never claimed a final. `technical` is `ok`, `watch`, `fail`, or `unreliable`. Its `failures` are `[{key, question}]`. A smoothness `watch` or `fail` is on `technical` and does not by itself fill `retake_keys`. `artistic` is always `pending`: it lists the contact sheet, the animatic, and up to eight start frames, and it is never an automatic `ok`. `retake_keys` is the shot keys from the technical failures, in scene order, and is passed unchanged as `production.run` `retake`.
 
-A shot may set `allow` to `still`, `dark`, or `secondary`. `still` is not `frozen_shot`. `dark` is not `black_bars`. `secondary` is not `duplicate_people` or `appearance_changed`.
+A shot may set `allow` to `still`, `dark`, `secondary` or `title_card`. `still` is not `frozen_shot` (nor counted by the quality gate's still checks). `dark` is not `black_bars`. `secondary` is not `duplicate_people` or `appearance_changed`. `title_card` keeps a full-frame title over a moving shot (quality gate).
 
 The four code questions:
 
@@ -229,7 +257,7 @@ The four code questions:
   "song": {
     "lyrics": "[Verse]\nI had a story stuck inside my head\n...\n[Chorus]\nHocus pocus, make it move\n...",
     "caption": "Upbeat cinematic synth-pop, 112 BPM, bright female pop vocal, big catchy chorus",
-    "duration": 62, "bpm": 112, "key": "A minor", "seeds": [11, 22, 33]
+    "duration": 62, "bpm": 112, "key": "A minor"
   },
   "style": {
     "image": "Cinematic anime key frame, rich painterly lighting, clean lineart, 16:9.",
@@ -237,7 +265,7 @@ The four code questions:
     "lyric_template": "social-caption",
     "finish": {"finish": {"grade": {"contrast": 0.12, "saturation": 0.1, "temperature": 0.2}, "vignette": {"amount": 0.3, "softness": 0.6}}}
   },
-  "cast": [{"id": "sorceress", "seed": 5, "sheet_prompt": "Character design turnaround sheet ... full body front, three-quarter and back views, two head close-ups"}],
+  "cast": [{"id": "sorceress", "sheet_prompt": "Character design turnaround sheet ... full body front, three-quarter and back views, two head close-ups"}],
   "stills": {"story": "/api/v1/uploads/<screenshot>.png", "keyart": "/api/v1/uploads/<keyart>.png"},
   "max_takes": 3,
   "shots": [
@@ -280,8 +308,8 @@ An unknown id fails with code `unknown_style_preset`. The full style block in th
 
 Style fields beyond the example:
 
-- `image_model` (default `qwen_image_21`, or `qwen_image_21_gguf_q4_k` on a 10–16 GB card) and `image_params`: model for
-  cast sheets and frames. Qwen takes 40 steps from `app/defaults`. `flux2_klein_9b` stays selectable (4 steps, fast; it does not
+- `image_model` (default `qwen_image_21_turbo`, or `qwen_image_21_gguf_q4_k` on a 10–16 GB card) and `image_params`: model for
+  cast sheets and frames. The Turbo takes 8 steps and no negative prompt, the base Qwen 40 steps, both from `app/defaults`. `flux2_klein_9b` stays selectable (4 steps, fast; it does not
   recognise public figures). A model chosen without `image_steps` runs at its own steps from `app/defaults`, never at the
   steps a preset set for another model. Do not run Qwen next to H3 on one GPU: `production.run` already makes every cast
   sheet, portrait and start frame before it submits the first H3 clip. `finish` takes any `set_finish` body, e.g. `{"preset": "risoPress"}`.
@@ -294,13 +322,46 @@ Style fields beyond the example:
   from the lyric tags) to looks, so a chorus can land big while verses stay quiet:
   `{"verse": "quiet-left", "chorus": "big-word"}`. Word, letter and typewriter entrances last until the line's
   last sung word. `lyric_style` still overrides single fields. With no lyric template, style, theme or look, a
-  finish preset picks its look (warmCinema cinema, oldDoc typewriter, nightNeon neon, paperComic comic-caption,
-  risoPress riso-offset). Give each piece its own treatment (`same_lyric_look` warns).
+  finish preset picks its look (`finish` in `lyric_looks.json`: warmCinema, teal_orange, warm and film cinema;
+  oldDoc, sepia and flashback typewriter; nightNeon and giallo neon; natural, bleach and cold quiet-left; noir
+  engraved; dream storybook; vhs arcade; paperComic comic-caption; risoPress riso-offset). Give each piece its own
+  treatment (`same_lyric_look` warns).
 - `theme`: an Omarchy colour theme (`tokyo-night`, `catppuccin`, `gruvbox`, `nord`, `rose-pine`, `kanagawa`): lyrics become
   a square mono plate in the theme colours and `screen` shots use it. `lyric_style` is an `update_text` patch applied to
   every lyric cue (`color`, `font`, `weight`, `size`, `box`, `enter`) and wins over the theme.
 
-`shots` may be `"auto"`. The agent then writes lyrics and an optional action phrase per section (`section_actions`, keys `verse` and `chorus`). A verse alternates a sung H3 shot with a still or screen, a chorus is one H3 spanning two lines, the intro and outro are end cards, and fill shots cover any gap longer than two bars.
+`shots` may be `"auto"`. The agent then writes lyrics and, optionally, `section_actions`: `scene` is where every planned
+shot takes place (default: the `verse` phrase, else the title), and `verse`, `pre-chorus` and `chorus` replace the sung
+action of those sections (default: "(S1) The singer sings the verse to the camera, swaying gently." and its chorus twin).
+A verse alternates a sung H3 shot with a content shot (a still, a screen or a short H3 clip of the protagonist), a chorus is
+sung two lines per shot, the intro and outro are end cards, and fill shots cover any gap longer than two bars. That skeleton
+is what `"auto"` means; write `shots` yourself for another one. Sung shots and H3 content shots each take the next of four
+framings in turn (content: wide establishing, medium in the action, a detail insert, over the shoulder), each "in the scene:"
+the scene phrase. The content action is "The protagonist acts out the scene: <scene>. Clear movement." plus the camera move
+of its framing (glides forward, tracks sideways, pushes in, drifts to one side). Those words are the move: H3 makes it,
+and the scene keeps the clip still (`camera-locked`) because the planner gives no shot a `camera`; give a shot `camera` to
+add a 2D move over the clip. In a trailer each beat opens on its own framing (wide for the presentation and the reveal,
+closer ones for the tension, over the shoulder for the close) and keeps the beat's own camera words. `dry_run` shows what
+was filled in under `auto_plan` (`scene` and `scene_from`, `content_framings`, `content_actions`, `sung_framings`, and
+`sung_actions` with `from`: `section_actions` or `default`), and marks sung windows `sing`. `production.plan` puts the brief's `tema` in `section_actions.scene` only; its `cta` goes on the
+end cards, never into a sung action. A spec that has already run is stored expanded, so its shots keep their texts.
+
+`video` picks the model that shoots the H3 clips, for example `{"model": "minimax_h3"}`. Without it the clips are shot as
+they always were: `minimax_h3_fused_turbo` at 4 steps, the audio-driven lip-sync model the pipeline and its lip-sync
+thresholds were tuned on. `model` is one of `minimax_h3` (base: slower, finer detail), `minimax_h3_full`,
+`minimax_h3_fused_turbo` and `minimax_h3_legacy`: the first frame + audio H3 models with a definition in `app/defaults`,
+which take the same request and the same 124 + 17k frame lattice. `steps` defaults to that definition (4 for Fused
+Turbo, 20 for the others) and must be in the model's range: 4-8 for Fused Turbo, 1-50 for the others (the generate call
+refuses other values, so `invalid_spec` says so before any GPU work). LTX-2 and the Ref2VA models are refused with
+`invalid_spec` and the list. `dry_run` and `production.status` show the choice as `video_model` (`model`, `steps`,
+`source`: `spec` or `default`; in `dry_run`, `error` when the run would refuse it); `video` on the status stays the
+finished video's URL. Each kept clip and each take records the model and steps it was shot with. A run whose spec asks
+for another model or other steps shoots the kept clips of unlocked shots again and logs which; the new take replaces the
+old one whatever its score. A locked shot keeps its take, so its clip may come from another model. Nothing is marked on
+the kept clip: a spec that goes back to the model that shot it keeps it. A clip from before this field counts as Fused
+Turbo at 4 steps, so an existing production shoots nothing again. `dry_run.minutes` keeps clip minutes per model: until this workspace has
+finished a run with the chosen model, a take is the Fused Turbo default scaled by steps (`estimate_source`
+`defaults+model_steps`).
 
 Shot fields:
 
@@ -311,7 +372,7 @@ Shot fields:
 - Timing: `line` (index of a lyric line; the shot starts 0.25 s before it and spans `span` lines), `t0` (seconds) or `after` (starts 0.3 s after that line ends). Shots are cut at the next shot's start. A cut shorter than one beat (at least 0.5 s) would flash: that shot is left out, the shot before it holds, and the log says so. Put an `after` shot only where the song leaves an instrumental gap.
 - Changing an H3 shot's `frame` redraws its start frame and reshoots its clip on the next `production.run`; changing only `action`, `camera` or `sing` reshoots the clip. Shots made before this release keep what they have until `production.shot.redo`.
 - `h3`: `frame` (start-frame prompt), `action` (what moves; use `(S1)` for the singer), `sing: true` for lip-sync, `cast` ids used as image references.
-- `still`: `focus` {x, y} (percent of the image kept centred while zooming), `zoom` [start, end], `camera` preset.
+- `still`: `focus` {x, y} (percent of the image kept centred while zooming), `zoom` [start, end], `camera` preset. `camera` plays that preset over the whole shot on a camera layer (pans, cranes, rolls and shakes as named), its scale times `zoom`, and the picture is enlarged just enough to hide its edge; without `camera` the zoom alone is the move.
 - `title`: a text template (`lower-third-date`, `end-card`, `title-card`, …) with its fields. Lyric captions are added automatically.
 - `title.style` overrides `style.title_style` for that shot; `title.cues` maps a template cue id (for example `title`, `sub`, `date`, `caption`) to an additional patch. Set the title-card cue's `box.color` to the video's own palette instead of accepting the template's black plate.
 - H3 and reused clip layers default to a locked camera so a second zoom does not fight the generated camera motion. Set `camera` explicitly on a shot when a deliberate Video 2D camera move is wanted.
@@ -319,8 +380,8 @@ Shot fields:
 
 Style fields for native Video 2D finishing:
 
-- `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21`; `flux2_klein_9b` is the fast alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
-- `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate.
+- `image_model` chooses the Studio image model for cast and frames (default `qwen_image_21_turbo`; `qwen_image_21` is the 40-step base and `flux2_klein_9b` the 4-step alternative). `image_steps` sets its step count; individual cast members or H3 shots may override either field. A cast member or shot that names another model without `image_steps` gets that model's own steps.
+- `finish` accepts the same `set_finish` values as Video 2D, including `{"preset":"risoPress"}`. Riso automatically traps text on the black plate. The 3D grade names are 2D finishes too, with the same intention: `natural`, `teal_orange`, `bleach`, `noir`, `sepia`, `flashback`, `dream`, `giallo`, `cold`, `warm`, `vhs`, `film` (next to warmCinema, oldDoc, nightNeon, paperComic and risoPress).
 - `lyric_template` may be `ransom` or `dymo` as well as `social-caption`. `title_style` and `lyric_style` are Video 2D text patches, for example `{"font":"mono","color":"#A9B1D6"}`.
 - `footer` adds a persistent small-print line to every scene. `footer_style` can set its color, font and background through the Video 2D text patch fields.
 
@@ -386,15 +447,35 @@ GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
 turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
-**Template + cast + painted set.** Prefer this over writing a `document`: pick a
-template whose roles fit (`world3d.templates.list` with `roles: ["subject_1", "background"]`
-and a `setting` such as `sea` or `city`) and assign only what changes.
+**Template + cast + painted set.** Prefer this over writing a `document`: ask
+`world3d.templates.suggest` for the shot as the brief phrases it (line, speakers,
+place, mood, beat), or pick a template whose roles fit (`world3d.templates.list`
+with `roles: ["subject_1", "background"]`, a `setting` such as `sea` or `city`,
+or the filters `kind`, `place` and `travel`) and assign only what changes. Every
+card says what the built shot does: `shot` (close, medium, wide, far, plate),
+`moves` (the camera), `moving` (what the template itself animates), `still`
+(nothing moves unless the cast brings a clip), `subjects`, `authoredFor`,
+`floor`, `kind`, `place` and `uses` (dialogue, talk, reaction, figure,
+establishing, action, speed, impact, reveal...). Ask for them as filters
+(`{"use": "dialogue", "subjects": 2}`, `{"shot": "close", "move": "push"}`,
+`{"kind": "stage", "place": "bar"}`) or in words in either language («plano
+general», «persecución», «girar alrededor»). Every reply lists `unknown_words`
+(the query words no card knows; they never count against the match) and, when no
+card has every known word, returns the best cards with at least half of them as
+`match: partial`, which are never applied. A `still` card needs a `clip`, a
+`motion`, a `camera` or a `world`, or the dry run warns `template_still`. See
+[Video 3D templates for agents](../development/WORLD3D_TEMPLATES_AGENTS.md):
+the [search](../development/WORLD3D_TEMPLATES_AGENTS.md#search), the
+[stages](../development/WORLD3D_TEMPLATES_AGENTS.md#stages), the
+[packs](../development/WORLD3D_TEMPLATES_AGENTS.md#packs-by-intent), the
+[modifiers](../development/WORLD3D_TEMPLATES_AGENTS.md#modifiers) and the
+[starter deck](../development/WORLD3D_TEMPLATES_AGENTS.md#starter-deck).
 `cast` maps a role (`subject_1`, `subject_2`, `prop`) or an object id to a GLB or
 picture; `background` puts a picture in the template's background slot. The
 template keeps its camera, props, lights and moves. With a painted background on
 a plane, the floor becomes `backdrop`: the picture is projected onto a real floor,
 so models stand on the painted ground and the camera gets parallax. `floor`
-(`backdrop`, `none`, `tiles`, `mirror`, `road`) overrides it. Sources may be URLs,
+(`backdrop`, `none`, `tiles`, `mirror`, `road`, or a ground style below) overrides it. Sources may be URLs,
 workspace file names or `stills` names. A cast clip may be given by its GLB
 animation name.
 
@@ -447,9 +528,12 @@ body (legs together, arms down, a tail) `fallback` rigs it with that procedural
 profile instead, and a shot that asks that model for a humanoid clip gets the
 profile's nearest one (a dance wobbles or bounces, a still pose hovers). A GLB
 whose vertex colours are really normals (game rips: rainbow tints that follow
-the surface), or whose textures were decoded into confetti (every texel a random
-vivid colour), is rigged from a `.clean-<hash>.glb` copy without them (named by the
-original's content and the clean-up, so a changed clean-up remakes its rig and clips); real vertex colours
+the surface), whose textures were decoded into confetti (every texel a random
+vivid colour), or whose skinned parts are stored apart (each in its bone's space,
+so only the skeleton assembles the body: N64 rips), is rigged from a `.clean-<hash>.glb`
+copy without them, assembled in its rest pose and rebound so its own clips still play (named by the
+original's content and the clean-up, so a changed clean-up remakes its rig and clips; a new
+version of the humanoid rig remakes the rigs too); real vertex colours
 and textures are kept. A `humanoid` model that came with a held thing hung under
 its feet instead of in its hand (a wooden gun that reads as a column between the
 legs and stands the body on its end) loses that part: a part reaching a fifth of
@@ -461,10 +545,23 @@ entry's own `scale` wins, and a new height does not remake the model.
 and a resume retries it with a new picture.
 
 **Sets.** `spec.sets` paints the backgrounds for those templates in the same image
-batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. Each
-is drawn eye-level, with an open floor across the lower third, a clear horizon and
-nobody in it, so the projected floor has ground for the cast to stand on. A shot
-names it as its `background`: `{"template": "dance-stage", "background": "harbour",
+batch: `{"sets": {"harbour": {"prompt": "a night harbour with a stone pier"}}}`. By
+default (`staging: "floor"`) each is drawn eye-level, with an open empty floor across
+the lower third, a clear horizon and nobody in it, so the projected floor has ground
+for the cast to stand on, and the sentences of `style.image` that put people in the
+picture are left out (a sentence naming people, characters, a crowd, figures, figurines
+or dolls, the whole sentence; words that name a medium or a material, such as
+"figurine look", "doll-like", "cast shadows", "cast iron" or "crowd-pleasing", stay). `staging: "backdrop"` asks only for a far view with a clear horizon and
+nobody in it, without the floor: give the shot a `floor` other than `backdrop` (a ground
+style, `tiles`, `none`) so the picture is not projected as ground. `staging: "none"`
+sends the prompt and the whole look as written, so people may appear in the plate.
+`dry_run` lists each set under `sets` with its `staging`, the `prompt_sent` and the
+`look_sentences_dropped` (or an `error` for a staging the run would refuse). A set painted
+before `staging` existed is not painted again.
+On the projected floor the renderer holds a template's orbit to 0.06 turn
+(`SET_MAX_TURNS` in `ui/scripts/production-scene3d.mjs`), because a wider arc swings
+past the edge of a flat picture: an orbit template on a painted set is a short arc, and a
+diorama or parallax set is the way to orbit wide. A shot names it as its `background`: `{"template": "dance-stage", "background": "harbour",
 "cast": {"subject_1": {"source": "hero", "clip": "dance_side"}}}`.
 
 **Worlds.** `world` plays the shot's template (its camera, cast, props and moves)
@@ -478,18 +575,101 @@ waterfall, crystal cave, reef, volcano, sky islands, beach, snow, neon rain,
 synthwave grid, retro room...), the `pixel-*` places and the action sets. Vary
 them: one place for a whole video reads as one set.
 
-**Composition.** Three controls work on any template, with or without a `world`:
+**Parallax sets.** A painted place in depth without building it: `{"kind": "parallax"}`
+draws a far view, one or two cutout layers and a ground in the same batch:
+
+```json
+{"sets": {"temple": {"kind": "parallax", "prompt": "the ruins of a forest temple at dusk",
+  "far": "mountains and a castle silhouette under a violet sunset sky",
+  "mid": "broken stone arches and tall pines", "near": "ferns and a mossy branch",
+  "ground": "mossy flagstones"}}}
+```
+
+`far` wraps the scene as the sky, `ground` is a seamless slab under the cast, and
+`mid` and `near` are drawn on a flat chroma-key magenta (a colour foliage, sky, rock and
+water never have), keyed out in the renderer
+and stood as cutouts across the camera's line of sight: `mid` some metres
+behind the cast and `near` (optional) a short way in front of the camera, both
+standing on the ground (the empty key under their pieces is measured when the
+set is built, and each layer sinks 5 % of its height into the ground so its
+pieces stand on it rather than float), so a dolly, an arc or a crane slides the
+layers at different speeds. A layer is tiled with mirrored copies of itself
+until it covers everything the camera sweeps over during the shot, so an arc or
+an orbit never shows its edge. A shot whose camera would cross the near layer
+(an orbit, a crash zoom) leaves it out. Name the set as the shot's
+`background`, like a diorama. Ask the layers for pieces that stand on their own
+(arches, trees, rocks, posts); the far view and the ground get neither the
+place nor the production's look. Where a piece's painted foot ends a little
+above the others (a house whose grass stops above a fence post), the renderer
+brings the floor up to it: a band in the floor's colour (and a ground style's
+grain) with the piece's shadow on it, bridging the sky between two houses and
+sloping down at its ends. A piece far above the floor (an arch's lintel, a
+tree's crown) keeps its opening, and the key colour is taken out of each
+piece's rim where it meets the band.
+
+<a id="ground-styles"></a>
+**Ground styles.** A floor the scene draws itself, in the look of a Nintendo 64 /
+GameCube field: `grass`, `meadow` (with flowers), `sand`, `asphalt`, `dirt`,
+`snow`, `cobble`. Each is a seamless painted tile with its large patches inside
+it, plus small 3D pieces scattered round the cast (grass tufts, flowers,
+pebbles, snow lumps) that shrink away where a character stands. Ask for one on
+any shot with `"floor": "grass"`; on a parallax or diorama set it replaces the
+set's ground slab, and a `scroll` slides it (and its pieces) with the layers.
+A set can name one as its ground (`"ground": "meadow"`): nothing is drawn for
+the ground and every shot on that set gets the style.
+
+**Running through a place.** A character playing `walk` or `run` on the spot
+reads as running when the place moves: `"scroll": 2.5` on a shot with a
+parallax `background` slides its layers and its ground past the cast at that
+many metres per second (to the camera's left; negative to the right), with the
+nearer layers crossing the frame faster, and the cast plays its clips on the
+spot (`inPlace`: a dash or a walk brought with a model loses its travel across
+the floor and keeps its bob). Use the `tracking` template: a side camera that
+follows a runner facing right; a framing camera (`cine-two-shot`) turns with the
+runner and sees it from the front. For a closed corridor use the `run-loop`
+template (an endless treadmill set) instead. The near layer of any parallax set
+reaches only the lower part of the frame (its pieces stay under the line of
+sight), so it frames the cast without hiding it.
+
+**Composition.** These controls work on any template, with or without a `world`:
 
 - `frame` moves the template's camera nearer or farther, keeping its angle and
   its move: `close` (0.6 of the template's distance), `medium` (0.8), `wide`
   (1.35), `far` (1.8), or a number 0.25–4. A `dance-orbit` over the sky islands
   with `"frame": "close"` fills the frame with the dancer; a two-shot with
-  `"frame": "wide"` shows the place.
+  `"frame": "wide"` shows the place. The camera frames the cast member at rest:
+  it follows where the slot places and turns the model, not the pose of the
+  clip, so raised arms or a nod never move the shot. A document may set
+  `camera.framing.track: "pose"` to stay on a moving face.
+- `camera_template` is the symmetric of `world`: the camera and framing of a
+  camera card (`cine-dolly-in`, `cine-low-angle`, `cine-orbit-360`, any card of
+  the camera-movement, framing, camera-angles, composition, editing,
+  time-and-motion or effects families) copied onto the shot, which keeps its
+  own duration, cast and place. A `dance-orbit` over the sky islands with
+  `"camera_template": "cine-crane-up"` plays the crane there. A card of another
+  kind (a lighting or colour look) fails with `invalid_camera_template`. A
+  `frame` or `lens` given with it applies after.
+- `lens` is a full-frame lens: `14mm`, `24mm`, `35mm`, `50mm`, `85mm`, `135mm`
+  or `200mm`. It sets the camera's field of view (the same numbers as the
+  `cine-*mm` cards) and scales a framing's zoom (`fovFrom`/`fovTo`) by the same
+  ratio, so a slow zoom on a `135mm` still zooms.
+- `scroll` (−10..10 m/s) slides a parallax set past the cast, for a run (above).
 - `light` may be a named light instead of a light object: `noon`, `golden`
   (low warm sun), `overcast` (soft, grey), `night` (dim blue), `neon` (magenta
   from the side), `stage` (hard white from the front), `campfire` (warm from
-  low). It replaces the template's or the world's sun and sets the ambient
-  share; the rest of the lighting stays.
+  low), and the lamps of the lighting and colour cards: `rembrandt`, `butterfly`,
+  `split`, `low_key`, `high_key`, `candle`, `backlight`, `window`, `moonlight`,
+  `under`, `hard`, `soft`, `dusk` (cool, after sunset) and `dawn` (pale, rosy,
+  from the other side). It replaces the template's or the world's sun and sets
+  the ambient share; the rest of the lighting stays.
+- `grade` is a colour grade: `natural`, `teal_orange`, `bleach`, `noir`,
+  `sepia`, `flashback`, `dream`, `giallo`, `cold`, `warm`, `vhs` or `film`. A
+  grade sets the document's tone mapping and exposure, puts a gel over the
+  lamp (`cold` turns the key blue, `sepia` brown-gold) and adds the screen
+  effects that do the rest: `noir` a vignette, `flashback` a vignette and grain
+  over a faded warm lamp, `dream` light rays over a bright soft frame, `vhs`
+  the tape look and scanlines, `film` grain. Those effects carry ids `grade-*`,
+  so the template's own effects stay. The grade is applied after `light`.
 - A cast **group** stands several models in a formation with one entry:
   `{"crowd": {"sources": ["klump", "kasplat", "kremling"], "clip": "dance_side",
   "formation": "arc", "spacing": 1.4}}`. Every member is added as a prop at its
@@ -500,6 +680,11 @@ them: one place for a whole video reads as one set.
   and `scatter` (a line with a fixed jitter). Members are named `crowd_1`,
   `crowd_2`... in the resolved cast; a shot holds at most 16 models and
   pictures, groups counted by member.
+
+A shot whose `width` and `height` are portrait (1080×1920) gets the template's
+landscape camera adapted to the tall frame (a wider lens, the eye nearer, the
+lateral moves narrowed), the same adaptation the editor applies when a scene
+is switched to portrait; `camera_template` and `lens` are applied before it.
 
 **Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
 sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
@@ -696,7 +881,7 @@ published files are served; directory listing and symlink escapes are blocked.
 
 ```json
 {"version":1,"input":{"workspace":"movie","production_id":"music-video",
-  "slug":"my-homage","extras":["hero.glb","spec.json"]}}
+  "slug":"my-video","extras":["hero.glb","spec.json"]}}
 ```
 
 Call the MCP tool `production.publish` with that body. Its result contains
@@ -1011,3 +1196,88 @@ another output (`song.wav` beside `song.png`) returns `sidecar_conflict` and
 nothing is written when that sidecar holds the other output's metadata or the
 copy would create it; choose another name. This is a CPU
 operation and downloads no models.
+
+## Room sets
+
+An interior is a mold (metres, furniture blocks, holes, marks, cameras and anchors), a skin and approved library props.
+Read `scene3d.sets.catalog` first. The background wall is painted straight-on; side walls and floors may use tiled
+textures, and screens accept video assets. The skin uses `style.image`, caches the complete recipe and submits its
+initial images together. `production.run` with `dry_run: true` reports `room_skin_images` and `room_sets` before GPU work.
+A texture whose seam stays over `seamMax` after its heal passes (one more pass while the seam still improves) is painted
+once over its surface as an `image` instead of failing the run: the log and `production.status` → `set_warnings` say
+`seam_fallback` with the surface and its `seam_error`. A skin or prop picture whose job died with a server restart is
+asked for once more under a new intent; a second loss is `job_lost`.
+
+Create a lamp with `props.create {workspace: "movie", name: "lamp", description: "small desk lamp", heightM: 0.4,
+style: "layered paper cutouts"}`; poll `props.status`, inspect the PNG and approve its id with `props.approve`.
+Import your approved character PNGs into the same workspace. Replace the lamp id and character filenames below with
+those actual results, then pass the whole spec to `production.run` in its normal version 1 mutation envelope:
+
+```json
+{
+  "title": "The office meeting",
+  "quality": "draft",
+  "song": {"lyrics": "", "caption": "gentle instrumental piano", "duration": 12, "bpm": 100},
+  "style": {"image": "layered paper cutouts, matte card, simple geometric shapes"},
+  "sets": {
+    "office": {"kind": "room", "mold": "despacho", "size": "medium",
+      "skin": {"wall_back": {"image": "office shelves with folders, no people"},
+        "floor": {"texture": "warm oak parquet", "tile_m": 1}, "wall_left": {"color": "#d8cbb5"}},
+      "props": [{"prop": "<approved-lamp-id>", "anchor": "desk_left"}]}
+  },
+  "shots": [
+    {"key": "meeting", "kind": "scene3d", "t0": 0,
+      "scene3d": {"template": "two-shot", "background": "office", "roomCamera": "two_shot",
+        "cast": {"subject_1": {"source": "person-a.png", "position": [0, 0, -1.4], "scale": 0.85, "grounded": true},
+          "subject_2": {"source": "person-b.png", "position": [0.4, 0, 0.6], "scale": 0.85, "grounded": true}}}},
+    {"key": "reply", "kind": "scene3d", "t0": 6,
+      "scene3d": {"template": "two-shot", "background": "office", "roomCamera": "ots_a",
+        "cast": {"subject_1": {"source": "person-a.png", "position": [0, 0, -1.4], "scale": 0.85, "grounded": true},
+          "subject_2": {"source": "person-b.png", "position": [0.4, 0, 0.6], "scale": 0.85, "grounded": true}}}}
+  ]
+}
+```
+
+The same set props appear in both shots. Choose positions from the catalog's resolved marks and use real prop heights;
+`scene3d.item.add/update/remove/list` also edits an existing Series shot or working Video 3D scene.
+
+Molds come in two kinds, and the catalog lists each one's `kind` and `title`. The fifteen named interiors (`cocina`,
+`aula`, `bar`…) are recipes with furniture. The shape molds are places without a name: `sala`, `sala_ventana`,
+`mostrador`, `filas`, `pasillo`, `umbral`, `escalera`, `escenario_publico`, `vehiculo`, and the exteriors `calle`,
+`plaza`, `orilla` and `azotea`. An exterior has no ceiling, may list fewer walls, holds its view on `wall_back` (give it
+an `image` skin: the horizon, the sea, the skyline) and is lit by a sun preset (`daylight`, `dusk`, `night_sky`).
+Every mold is also a Video 3D card `stage-<mold>`: `scene3d: {template: "stage-sala", roomCamera: "ots_a", size: "large"}`
+stages the mold on `two-shot` in its default colours, so a shot needs no `sets` entry to stand in a place; name a
+`sets` room as `background` and the shot takes its painted skin instead. A staged room always moves a little (low
+dust motes and a key light that breathes), so it never trips `template_still`. The dry run warns `stage_unskinned` when a
+stage or room shows only its mold colours and `looks_samey` when the same template and background run for more than four
+shots in a row.
+Series uses `series.location.set3d`, inherits the series style and additionally accepts `{image: "location"}` for the
+approved location image; poll `.status` before rendering. See the `series.guide` section “3D sets: molds, skins and props”.
+
+A metric box room is `kind: "room"` with `size: {w, d, h}` and no `mold`. `scene3d.room.put` stores it already textured (default procedural materials, skirting, door frame and panels) and `scene3d.room.get` reads it; `scene3d.room.paint` repaints it with the image model in the background (poll `scene3d.room.paint.status`). A `kind: "3d"` shot names `set: "<room>"` and each person `at: {x, z}` in metres or `near`, `mid` or `far`, so the feet stand on the floor. Use it for a wide interior full-body shot. A mold `location.set3d` is not merged with it. Detail is in `docs/3d-video-compositor/HOWUSEIT.md` (Box rooms).
+
+## Video 2D music cards (`scene2d`)
+
+A `scene2d` shot plays one Video 2D music card: a cutout choreography (a figure that bounces, orbits, falls, swaps or
+dances on the beat) or a music original, compiled into the shot's scene by the 2D template compiler. Choose it over
+`scene3d` for flat cutouts that move on the beat over a painted or filmed background; choose `scene3d` for bodies with
+depth, rigged clips and rooms, and for cinema or space shots. Only `music-*` cards play here; another family fails with
+`scene2d_family_not_allowed`. Find a card with `scenes.templates.suggest` (line, speakers, mood, beat, format) or
+`scenes.catalog` (`kind: "templates"`; an `id` returns its slots and controls).
+
+```json
+{"key": "ch2", "kind": "scene2d", "line": 6, "frame": "a neon rooftop at night, wet floor",
+ "scene2d": {"template": "music-pinball", "cast": {"subject_1": "sorceress"}, "controls": {"intensity": 0.8}}}
+```
+
+- `cast` maps the card's slots (`subject_1`, `subject_2`, `prop_1`…) to a URL, a workspace file, a `stills`, `sets` or
+  `models` name, or a cast id: the run cuts that member out of its portrait once and plays the cutout.
+- `background` is a picture or a seamless video loop. Without it the shot's `still` is the background, or the frames
+  stage draws an empty set from the shot's `frame` prompt.
+- `controls` are the card's own; `bpm` defaults to the song's tempo and the cut sets the duration. The card moves its
+  own camera, so a `scene2d` shot takes no `camera`.
+- Title, lyric, footer and finish are added as on any shot, and the scene document stays editable in Video 2D.
+- The dry run shows each `scene2d` window's card (an alias resolved) and where each picture comes from, and warns
+  `cutout_without_alpha` (a subject picture with no transparent pixel) and `scene2d_holds` (the cut outlasts the card's
+  longest move). `template_still` flags a card whose derived traits hold the picture.

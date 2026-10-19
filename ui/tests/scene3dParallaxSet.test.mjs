@@ -1,0 +1,106 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { MirroredRepeatWrapping, Texture } from 'three'
+import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
+import { stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
+import { cameraPath } from '../src/features/scene3d/dioramaSet.ts'
+import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
+import { imageCutoutMesh } from '../src/features/scene3d/imageCutout.ts'
+
+const SET = { layers: [{ source: '/mid.png', depth: 'mid', foot: 0.1 }, { source: '/near.png', depth: 'near', foot: 0.2 }],
+  ground: { source: '/ground.glb', height: 0.2, size: 80 }, key: '#ff00ff' }
+
+const layer = (slots, depth) => slots.find(slot => slot.id === `set-layer-${depth}`)
+
+test('a camera that turns gets a layer tiled wide enough to never show its edge; a still one gets fewer tiles', () => {
+  const orbit = applyScene3DTemplate('dance-orbit'); orbit.duration = 6
+  const turning = layer(stageParallaxSet(orbit, SET), 'mid')
+  assert.ok(turning.imageLook.tiles >= 3, `tiles ${turning.imageLook.tiles}`)
+  const still = layer(stageParallaxSet(applyScene3DTemplate('cine-two-shot'), SET), 'mid')
+  assert.ok((still.imageLook.tiles ?? 1) < turning.imageLook.tiles)
+})
+
+test('layers sink a little into the ground under their painted feet, and the near layer stands on the floor', () => {
+  const slots = stageParallaxSet(applyScene3DTemplate('cine-two-shot'), SET)
+  const mid = layer(slots, 'mid'), near = layer(slots, 'near')
+  const height = slot => slot.scale * 2
+  assert.ok(mid.position[1] <= -(0.1 + 0.05) * height(mid) + 1e-9, 'the mid layer is lowered by its foot and sunk')
+  assert.ok(near, 'a static medium shot keeps its near layer')
+  assert.ok(near.position[1] <= -(0.2 + 0.05) * height(near) + 1e-9 && near.position[1] > -height(near), 'the near layer stands on the floor, not under the line of sight')
+  assert.equal(mid.drift, undefined)
+})
+
+test('the near layer stands on the floor and its picture reaches only the lower part of the frame', () => {
+  const doc = applyScene3DTemplate('cine-two-shot')
+  const near = layer(stageParallaxSet(doc, SET), 'near')
+  const mid = layer(stageParallaxSet(doc, SET), 'mid')
+  const top = near.position[1] + near.scale * 2
+  assert.ok(top > 0 && near.scale < mid.scale, 'a short layer near the camera')
+  assert.ok(near.position[1] < 0, 'standing on the floor, sunk under its painted feet')
+  const pose = cameraPath(doc)[Math.floor(cameraPath(doc).length / 2)]
+  const sight = pose.eye[1] + (pose.look[1] - pose.eye[1]) * 0.3
+  assert.ok(top * (1 - 0.1 - 0.05) < sight, 'its painted pieces stay under the line of sight: the cast is never hidden')
+})
+
+test('scroll slides the mid layer and the ground past the cast, turning the ground to the view, and parsing keeps it', () => {
+  const doc = applyScene3DTemplate('cine-two-shot')
+  const slots = stageParallaxSet(doc, SET, { scroll: 2 })
+  for (const slot of slots) assert.ok(typeof slot.drift === 'number' && slot.drift > 0, slot.id)
+  const ground = slots.find(slot => slot.id === 'set-ground'), mid = layer(slots, 'mid')
+  assert.equal(layer(slots, 'near'), undefined, 'no near layer on a scrolled shot: a picture that close would flicker past')
+  const metres = (slot, width) => slot.drift * width
+  assert.ok(Math.abs(metres(ground, 3 * Math.max(1, 80 / 80) * (ground.scale * 1.7 / 0.2)) - 2) < 1e-3, 'the ground moves 2 m/s: its picture repeats every 3 m, stretched with the slab')
+  assert.ok(Math.abs(metres(mid, mid.scale * 2 * 1664 / 928) - 2) < 1e-3, 'the layer moves at the ground\'s speed in metres')
+  assert.ok(Math.abs(ground.rotationY - mid.rotationY) < 1e-9, 'the slab faces the camera so its texture runs along the view')
+  assert.ok(stageParallaxSet(doc, SET, { scroll: -2 }).find(slot => slot.id === 'set-ground').drift < 0)
+  doc.slots = [...doc.slots, ...slots]
+  const parsed = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))
+  assert.equal(layer(parsed.slots, 'mid').drift, mid.drift)
+  assert.equal(layer(parsed.slots, 'mid').imageLook.tiles, mid.imageLook.tiles)
+  assert.equal(parsed.slots.find(slot => slot.id === 'set-ground').drift, ground.drift)
+})
+
+test('a scrolled cutout that is not tiled still repeats its picture mirrored', () => {
+  const texture = new Texture(); texture.image = { width: 1664, height: 928 }
+  imageCutoutMesh({ id: 'x', slot: 'prop', media: 'image', surface: 'cutout', sourceUrl: '/layer.png', clip: null, position: [0, 0, 0], rotationY: 0, scale: 1,
+    imageLook: { unlit: true }, drift: 0.1 }, texture)
+  assert.equal(texture.wrapS, MirroredRepeatWrapping)
+})
+
+test('a tiled cutout is as wide as its tiles, keeps the original copy in the middle and wraps its texture mirrored', () => {
+  const texture = new Texture(); texture.image = { width: 1664, height: 928 }
+  const slot = { id: 'x', slot: 'prop', media: 'image', surface: 'cutout', sourceUrl: '/layer.png', clip: null, position: [0, 0, 0], rotationY: 0, scale: 1,
+    imageLook: { unlit: true, tiles: 3 } }
+  const mesh = imageCutoutMesh(slot, texture)
+  mesh.geometry.computeBoundingBox()
+  const width = mesh.geometry.boundingBox.max.x - mesh.geometry.boundingBox.min.x
+  assert.ok(Math.abs(width - 2 * (1664 / 928) * 3) < 1e-6)
+  assert.equal(texture.wrapS, MirroredRepeatWrapping)
+  const uv = mesh.geometry.getAttribute('uv')
+  let low = Infinity, high = -Infinity
+  for (let i = 0; i < uv.count; i++) { low = Math.min(low, uv.getX(i)); high = Math.max(high, uv.getX(i)) }
+  assert.ok(Math.abs(low + 1) < 1e-9 && Math.abs(high - 2) < 1e-9, 'uv runs -1..2: the middle tile is the picture itself')
+  const plain = imageCutoutMesh({ ...slot, imageLook: { unlit: true } }, new Texture())
+  plain.geometry.computeBoundingBox()
+  assert.ok(Math.abs(plain.geometry.boundingBox.max.x - plain.geometry.boundingBox.min.x - 2) < 1e-6)
+})
+
+test('the near layer never rises above the cast\'s feet as the camera sees them, and is left out when the feet are out of frame', () => {
+  for (const id of ['tracking', 'cine-two-shot', 'crane-reveal', 'cine-medium-close-up']) {
+    const doc = applyScene3DTemplate(id)
+    const near = layer(stageParallaxSet(doc, SET), 'near')
+    if (!near) continue
+    const pose = cameraPath(doc)[Math.floor(cameraPath(doc).length / 2)]
+    const ahead = [pose.look[0] - pose.eye[0], 0, pose.look[2] - pose.eye[2]]
+    const length = Math.hypot(ahead[0], ahead[2]); ahead[0] /= length; ahead[2] /= length
+    const along = point => (point[0] - pose.eye[0]) * ahead[0] + (point[2] - pose.eye[2]) * ahead[2]
+    const distance = along(near.position)
+    const top = near.position[1] + near.scale * 2                      // its painted pieces reach the picture's top edge
+    for (const slot of doc.slots.filter(slot => slot.slot !== 'background' && slot.media === 'model3d')) {
+      const away = along(slot.position)
+      if (away <= distance) continue
+      const feet = pose.eye[1] + (slot.position[1] - pose.eye[1]) * (distance / away)
+      assert.ok(top <= feet + 1e-6, `${id}: near pieces reach ${top.toFixed(3)} over feet seen at ${feet.toFixed(3)}`)
+    }
+  }
+})

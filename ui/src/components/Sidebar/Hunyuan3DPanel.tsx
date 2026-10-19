@@ -89,7 +89,7 @@ export function Hunyuan3DPanel() {
   const [guidance, setGuidance] = useState(5)
   const [octree, setOctree] = useState(256)
   const [chunks, setChunks] = useState(12000)
-  const [seed, setSeed] = useState(1234)
+  const [seed, setSeed] = useState(-1)
   const [outputFormat, setOutputFormat] = useState('glb')
   const [textureResolution, setTextureResolution] = useState(512)
   const [cpuOffload, setCpuOffload] = useState(true)
@@ -115,7 +115,7 @@ export function Hunyuan3DPanel() {
 
   const selectedModel = useMemo(() => capabilities?.models.find(model => model.id === modelId), [capabilities, modelId])
   const isRunning = !!job && ACTIVE_3D_JOB_STATUSES.has(job.status)
-  const { external3d, isMultiview, remote3d, installed, canRun } = model3dInputState({
+  const { external3d, isMultiview, remote3d, supportsRetexture, installed, canRun } = model3dInputState({
     model: selectedModel, provider: model3dProvider, operation,
     runtimeInstalled: capabilities?.runtime.installed,
     hasSource: !!sourceModel, hasFront: !!views.front, hasPrompt: !!prompt.trim(), textureMode,
@@ -181,10 +181,9 @@ export function Hunyuan3DPanel() {
   }, [activeWorkspace])
 
   useEffect(() => {
-    if (!external3d) return
-    setOperation('generate')
-    if (!selectedModel?.resolutions?.includes(resolution)) setResolution(1024)
-  }, [external3d, selectedModel, resolution])
+    if (!supportsRetexture) setOperation('generate')
+    if (external3d && !selectedModel?.resolutions?.includes(resolution)) setResolution(1024)
+  }, [supportsRetexture, external3d, selectedModel, resolution])
 
   useEffect(() => {
     if (operation === 'retexture') void loadRetextureSources()
@@ -332,7 +331,7 @@ export function Hunyuan3DPanel() {
       </div>
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-primary p-1">
         <button type="button" disabled={isRunning} onClick={() => setOperation('generate')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'generate' ? 'bg-accent-blue/15 text-accent-blue' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Box size={11} /> {t('hunyuan.generateModel')}</span></button>
-        <button type="button" disabled={isRunning || external3d} title={external3d ? t('engines.nativePbr') : undefined} onClick={() => setOperation('retexture')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'retexture' ? 'bg-purple-500/15 text-purple-300' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Palette size={11} /> {t('hunyuan.retextureGlb')}</span></button>
+        <button type="button" disabled={isRunning || !supportsRetexture} title={!supportsRetexture ? (remote3d ? t('engines.remoteNoRetexture') : t('engines.nativePbr')) : undefined} onClick={() => setOperation('retexture')} className={`rounded-md px-2 py-1.5 text-[10px] transition-colors disabled:opacity-50 ${operation === 'retexture' ? 'bg-purple-500/15 text-purple-300' : 'text-text-muted hover:text-text-primary'}`}><span className="flex items-center justify-center gap-1"><Palette size={11} /> {t('hunyuan.retextureGlb')}</span></button>
       </div>
 
       {!remote3d && <ModelSelector />}
@@ -340,7 +339,7 @@ export function Hunyuan3DPanel() {
       {external3d && selectedModel && <>
         <p className="text-xs text-text-muted">✕ {t('engines.imageOnly')} {t('engines.hunyuanOnly')}</p>
         <Model3DEngineInputs model={selectedModel} resolution={resolution} onResolution={setResolution} lowVram={lowVram} onLowVram={setLowVram} fov={cameraFov} onFov={setCameraFov} />
-        <label className="text-xs">{t('hunyuan.seed')}<input type="number" min={0} max={4294967295} value={seed} onChange={event => setSeed(Number(event.target.value))} className="ml-2 w-28 bg-bg-primary" /></label>
+        <label className="text-xs">{t('hunyuan.seed')}<input type="number" min={-1} max={4294967295} value={seed} title={t('hunyuan.seedRandom')} onChange={event => setSeed(Number(event.target.value))} className="ml-2 w-28 bg-bg-primary" /></label>
       </>}
       {!remote3d && !capabilities ? (
         <div className="flex items-center justify-center py-8 text-xs text-text-muted"><Loader2 size={15} className="animate-spin mr-2" /> {t('hunyuan.loadingModels')}</div>

@@ -10,13 +10,15 @@ from __future__ import annotations
 import copy
 from datetime import datetime, timezone
 import json
+import math
 import os
 import re
 import uuid
 from typing import Any
 
+from .character_speech_definition import PLACEHOLDER_DELIVERY, PLACEHOLDER_EMOTION
 from .document_origin import created_by, keep_record_author, restore_created_by
-from .language_intent import normalize_language_intent
+from .language_intent import labels_for_request_language, normalize_language_intent, saved_language_labels
 from .series_episode_numbers import EpisodeNumberTaken, assign_episode_number, guard_episode_number  # noqa: F401 (re-exported)
 
 
@@ -40,7 +42,7 @@ SHOT_EDITOR_FIELDS = frozenset({
     "wardrobeByCharacterId", "propIds", "emotionalStateByCharacterId",
     "continuityFromShotId", "renderStrategy", "productionMethod", "referencePolicy", "prompt",
     "negativePrompt", "audioDirection", "sourceDialogueIds", "dialogueOrigin", "layout2d", "scene3d", "foley", "video",
-    "transitionIn",
+    "transitionIn", "resolution",
 })
 SHOT_SERVER_FIELDS = frozenset({"attempts", "approvedAttemptId", "referenceManifest"})
 # A take is a render of what the audience sees and hears; when these change under a shot id, its takes are stale.
@@ -145,6 +147,9 @@ def _canon_input(series: dict, key: str) -> Any:
 
 def series_canon_inputs_changed(current: dict, updated: dict) -> bool:
     """Compare durable production inputs without coupling canon to chat language."""
+    from services.writing_guide import canon_guidance
+    if canon_guidance(current) != canon_guidance(updated):
+        return True
     current_canon = copy.deepcopy(current.get("canon") or {})
     updated_canon = copy.deepcopy(updated.get("canon") or {})
     for value in (current_canon, updated_canon):
@@ -175,21 +180,23 @@ def create_series_project(
     workspace_id: str = "default",
     *,
     title: str = "Untitled series",
+    language: str | None = None,
 ) -> dict:
     workspace_id = validate_workspace_id(workspace_id)
     now = _now()
     suffix = uuid.uuid4().hex
     series_id = f"series_{suffix}"
+    content_language, spoken_language = labels_for_request_language(language)
     value = {
         "version": 1, "id": series_id, "revision": 1,
         "title": title.strip() or "Untitled series", "logline": "", "premise": "",
         "format": "episodic", "defaultEpisodeDurationSeconds": 75,
-        "language": "Español", "spokenLanguage": "Español de España",
+        "language": content_language, "spokenLanguage": spoken_language,
         "languageIntent": normalize_language_intent(
-            None, content_language="Español", spoken_language="Español de España"
+            None, content_language=content_language, spoken_language=spoken_language
         ),
         "protagonistConsistency": False, "protagonistCharacterId": "",
-        "genre": "", "tone": "Cinematic", "audience": "General",
+        "genre": "", "tone": "", "audience": "General",
         "visualStyle": "", "characterVisualStyle": "", "cameraLanguage": "",
         "allowClipText": False, "sourceMode": "original", "masterUniversePrompt": "",
         "rightsNote": "", "bestEffortLipSyncAcknowledged": False,
@@ -216,7 +223,7 @@ def create_series_project(
             "writingProvider": "maestro", "writingModel": "", "writingBaseUrl": "",
             "imageProvider": "maestro", "imageModel": "", "videoModel": "minimax_h3_legacy",
             "videoSettings": {
-                "renderStrategy": "auto", "resolution": "540p",
+                "renderStrategy": "auto", "resolution": "480p",
                 "orientation": "landscape", "numInferenceSteps": 20,
                 "flowShift": 12, "audioShift": 3, "modelProfile": "quality",
             },
@@ -303,8 +310,8 @@ def _normalize_dialogue_beat(value: dict, fallback_id: str) -> dict:
         "id": _id(beat.get("id"), fallback_id),
         "characterId": _id(beat.get("characterId"), "character_unknown"),
         "text": _text(beat.get("text")),
-        "emotion": _text(beat.get("emotion"), "natural"),
-        "delivery": _text(beat.get("delivery"), "natural delivery"),
+        "emotion": _text(beat.get("emotion"), PLACEHOLDER_EMOTION),
+        "delivery": _text(beat.get("delivery"), PLACEHOLDER_DELIVERY),
     })
     # The room this one line is heard in (series_voice_rooms.line_rooms); null clears it, an unknown one is refused.
     if beat.get("voiceRoom") is None:
@@ -349,6 +356,43 @@ def _normalize_attempt(value: dict, shot_id: str, index: int) -> dict:
     if attempt.get("reviewStage") not in {"preview", "final"}:
         attempt.pop("reviewStage", None)
     return attempt
+
+
+def _store_resolution(record: dict, key: str, label: str) -> None:
+    """Keep a Series tier under ``key`` by its name (``720`` and ``1280x704`` are ``720p``). An empty value is removed,
+    so a record that never chose one stays as it was; anything else is refused."""
+    from .series_render import SERIES_RESOLUTIONS, series_resolution_preset
+    raw = record.get(key)
+    if raw is None or raw == "":
+        record.pop(key, None)
+        return
+    preset = series_resolution_preset(raw)
+    if preset is None:
+        raise ValueError(f"{label} must be one of {', '.join(SERIES_RESOLUTIONS)}")
+    record[key] = preset
+
+
+def _store_shot_resolution(shot: dict) -> None:
+    """A video shot's own H3 tier. Other shots make no H3 clip, so theirs is dropped, as ``store_video`` drops ``video``."""
+    _store_resolution(shot, "resolution", "Shot resolution")
+    if shot.get("productionMethod") not in {"generated_video", "imported_video"}:
+        shot.pop("resolution", None)
+
+
+EPISODE_FORMAT_LIMIT = 2000
+
+
+def _store_episode_format(project: dict) -> None:
+    """``episodeFormat``: how the series builds each episode (parts, lengths, number of shots), in words. Empty is
+    removed, so a series that never wrote one stays as it was; agents then follow the guide's default shape."""
+    raw = project.get("episodeFormat")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        project.pop("episodeFormat", None)
+        return
+    if not isinstance(raw, str):
+        raise ValueError("episodeFormat must be text")
+    if len(raw) > EPISODE_FORMAT_LIMIT:
+        raise ValueError(f"episodeFormat is at most {EPISODE_FORMAT_LIMIT} characters")
 
 
 def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -> dict:
@@ -400,6 +444,7 @@ def _normalize_shot(value: dict, index: int, allowed: list[str] | None = None) -
     # A scripted H3 request is checked the same way from the script and from the editor.
     from .series_video_shots import store_video
     store_video(shot)
+    _store_shot_resolution(shot)
     from .series_shot_plan import normalize_layout2d
     layout = normalize_layout2d(shot.get("layout2d"))
     if layout:
@@ -833,6 +878,7 @@ def series_put_payload(current: dict, sent: dict) -> dict:
 
 def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     from services.series_ambience import check_sound_design
+    from services.series_finish import store_look
     from services.series_layers import normalize_location
     from services.series_production import normalize_production_methods
     from services.series_voice_rooms import check_voice_rooms
@@ -917,7 +963,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     provider = copy.deepcopy(project.get("provider")) if isinstance(project.get("provider"), dict) else {}
     video_settings = copy.deepcopy(provider.get("videoSettings")) \
         if isinstance(provider.get("videoSettings"), dict) else {}
-    raw_resolution = str(video_settings.get("resolution") or "540p").strip().lower()
+    raw_resolution = str(video_settings.get("resolution") or "480p").strip().lower()
     provider_was_present = isinstance(project.get("provider"), dict)
     video_settings.update({
         "renderStrategy": video_settings.get("renderStrategy")
@@ -958,6 +1004,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "historicalProductionIds": _unique_ids(import_source.get("historicalProductionIds")),
         "migrationNotes": _text(import_source.get("migrationNotes")),
     })
+    saved_language, saved_spoken_language = saved_language_labels(project)
     project.update({
         "version": 1,
         "id": series_id,
@@ -970,16 +1017,12 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "defaultEpisodeDurationSeconds": max(15, min(3600, _integer(
             project.get("defaultEpisodeDurationSeconds"), 75, 15
         ))),
-        "language": _text(project.get("language"), "Español"),
-        "spokenLanguage": _text(
-            project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
-        ),
+        "language": saved_language,
+        "spokenLanguage": saved_spoken_language,
         "languageIntent": normalize_language_intent(
             project.get("languageIntent"),
-            content_language=_text(project.get("language"), "Español"),
-            spoken_language=_text(
-                project.get("spokenLanguage"), _text(project.get("language"), "Español de España")
-            ),
+            content_language=saved_language,
+            spoken_language=saved_spoken_language,
         ),
         "protagonistConsistency": project.get("protagonistConsistency") is True,
         "protagonistCharacterId": (
@@ -1013,6 +1056,11 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         "createdAt": _text(project.get("createdAt"), now),
         "updatedAt": _text(project.get("updatedAt"), now),
     })
+    # The H3 tier of the script's video shots (series_video_shots); absent is 480p.
+    _store_resolution(project, "videoShotResolution", "videoShotResolution")
+    # The finish over its 2D shots (series_finish; absent is paper) and its own episode shape (absent: the guide's).
+    store_look(project)
+    _store_episode_format(project)
     synchronize_series_project_durations(project)
     _validate_project_graph_ids(project)
     keep_record_author(project)
@@ -1079,17 +1127,35 @@ def series_library_path(workspace_dir: str) -> str:
     return os.path.join(workspace_dir, SERIES_LIBRARY_FILENAME)
 
 
+def without_non_finite(value: Any) -> Any:
+    """``value`` with every ``inf`` / ``nan`` replaced by None. JSON cannot carry them, and Starlette answers 500 for
+    a response that holds one, so a single ``-Infinity`` in the library file broke every Series read of the workspace."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {key: without_non_finite(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [without_non_finite(item) for item in value]
+    return value
+
+
 def read_series_library(workspace_dir: str, workspace_id: str = "default") -> dict[str, Any]:
     path = series_library_path(workspace_dir)
     if not os.path.isfile(path):
         return empty_series_library(workspace_id)
     with open(path, "r", encoding="utf-8") as handle:
-        return normalize_series_library(json.load(handle), workspace_id)
+        # A file written before non-finite numbers were repaired may hold -Infinity / Infinity / NaN: read them as null.
+        return normalize_series_library(json.load(handle, parse_constant=lambda _name: None), workspace_id)
 
 
 def write_series_library(workspace_dir: str, value: Any, workspace_id: str = "default") -> dict[str, Any]:
     library = normalize_series_library(value, workspace_id)
-    encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"))
+    try:
+        encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
+    except ValueError:
+        # Repair rather than refuse: the work a caller is saving (a finished cut) is worth more than a metadata number.
+        library = without_non_finite(library)
+        encoded = json.dumps(library, ensure_ascii=False, separators=(",", ":"), allow_nan=False)
     if len(encoded.encode("utf-8")) > MAX_SERIES_LIBRARY_BYTES:
         raise ValueError("Series library is too large to save")
     os.makedirs(workspace_dir, exist_ok=True)
@@ -1163,6 +1229,7 @@ def create_series_episode(series: dict, season_id: str | None = None, **override
 
 def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     """Create a new draft series without mutating its Story Lab source."""
+    from services.writing_guide import import_guidance
     if not isinstance(story, dict):
         raise ValueError("Story import requires one Story Lab project")
     now = _now()
@@ -1236,6 +1303,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
     ]
     series = {
         "version": 1, "id": series_id, "revision": 1,
+        "writingGuide": import_guidance(story),
         "title": _text(story.get("title"), "Imported series"),
         "logline": _text(story.get("logline")), "premise": _text(story.get("premise")),
         "format": "episodic",
@@ -1243,7 +1311,12 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             (story.get("creativeBrief") or {}).get("durationSeconds")
             if isinstance(story.get("creativeBrief"), dict) else None, 75
         ))),
-        "language": _text(story.get("language"), "Español"),
+        # A story that kept its language only in languageIntent keeps it here too. The labels and the whole
+        # contract travel together: labels alone dropped ``verbatimSegments``, so quoted lyrics or dialogue
+        # the story had locked were no longer protected.
+        "language": saved_language_labels(story)[0],
+        "spokenLanguage": saved_language_labels(story)[1],
+        "languageIntent": story.get("languageIntent"),
         "genre": _text(story.get("genre")), "tone": _text(story.get("tone")),
         "audience": _text(story.get("audience"), "General"),
         "visualStyle": _text(story.get("visualStyle")),
@@ -1288,7 +1361,7 @@ def import_story_project(story: dict, workspace_id: str = "default") -> dict:
             "imageModel": _text((story.get("provider") or {}).get("imageModel"))
             if isinstance(story.get("provider"), dict) else "",
             "videoModel": "minimax_h3_legacy", "videoSettings": {
-                "renderStrategy": "auto", "resolution": "540p",
+                "renderStrategy": "auto", "resolution": "480p",
                 "orientation": "landscape", "numInferenceSteps": 20,
                 "flowShift": 12, "audioShift": 3, "modelProfile": "quality",
             },

@@ -26,7 +26,7 @@ clear message instead of halfway through a render::
                           {"file": "prop-robot-key.png", "x": 80, "scale": 0.5, "ground": true}], "timing": {"intro": 1.0},
                 "layers": [{"file": "fg-pillar.png", "depth": 0.9, "front": true, "x": 8},
                            {"file": "bg-crowd.mp4", "depth": 0.2, "start": 2.5, "loop": "pingpong", "speed": 0.5}], "castDepth": 0.6,
-                "voiceRoom": "cathedral", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
+                "voiceRoom": "cathedral", "finish": "none", "duration": 7, "kind": "3d", "scene3d": {"template": "...", "cast": [...]},
                 "transitionIn": {"kind": "dissolve", "seconds": 0.6},
                 "foley": {"prompt": "wooden airship creaking, wind", "volume": 0.5}}]}
 """
@@ -34,7 +34,9 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from services import series_cast_animation
 from services.series_entrances import GAITS
+from services.series_finish import check_finish
 from services.series_library import assign_episode_number
 from services.series_layers import layout_layers
 from services.series_look_room import apply as keep_look_room
@@ -46,9 +48,14 @@ from services.series_shot_foley import normalize_foley
 from services import series_hearing
 from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
+from services.series_continuity import same_picture_warnings
+from services import series_fx_warnings
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
-from services.series_video_shots import budget_warning, parse_budget, reference_problems, store_video
+from services.series_render import SERIES_RESOLUTIONS, series_resolution_preset
+from services.series_video_shots import (
+    budget_warning, method_warning, methods_to_allow, parse_budget, reference_problems, store_video,
+)
 from services.series_voice_rooms import PRESETS
 
 CODES = {key: code for code, key in LANGUAGE_KEYS.items()}
@@ -58,6 +65,8 @@ CARD_KINDS = ("title", "disclaimer", "end", "document")
 # "generated" is a MiniMax H3 take made outside. Both get the shot's sfx and music at the cut
 # (services/series_take_sound.py).
 METHODS = {"3d": "animation_3d", "video": "imported_video", "generated": "generated_video"}
+# The kinds whose take an H3 clip can be: ``resolution`` (480p, 540p, 720p, 768p) picks its size.
+VIDEO_KINDS = ("video", "generated")
 
 
 class ScriptError(ValueError):
@@ -97,7 +106,7 @@ def _cast_entry(raw: Any) -> dict[str, Any]:
     if isinstance(raw, str):
         return {"characterId": raw}
     if isinstance(raw, (list, tuple)) and raw:
-        entry = {"characterId": raw[0], "poseId": raw[1] if len(raw) > 1 else "base", "x": raw[2] if len(raw) > 2 else None}
+        entry = {"characterId": raw[0], "poseId": raw[1] if len(raw) > 1 else "base", ("mark" if len(raw) > 2 and isinstance(raw[2], str) else "x"): raw[2] if len(raw) > 2 else None}
         if len(raw) > 3 and isinstance(raw[3], dict):
             entry.update(raw[3])
     else:
@@ -176,6 +185,7 @@ class EpisodeScript:
         for index, shot in enumerate(self.script.get("shots") or []):
             self._check_shot(index, shot if isinstance(shot, dict) else {})
         self._note_budget()
+        self._note_method()
         finish_check(self)
 
     def _note_budget(self) -> None:
@@ -187,6 +197,12 @@ class EpisodeScript:
             self.checker.problems.append(str(error))
             return
         warning = budget_warning(self.script, self.video_budget, self.shot_id)
+        if warning:
+            self.warnings.append(warning)
+
+    def _note_method(self) -> None:
+        """Video shots are ``imported_video``: a series that does not allow it is told so here, and a write enables it."""
+        warning = method_warning(self.series, self.script, self.shot_id)
         if warning:
             self.warnings.append(warning)
 
@@ -203,17 +219,27 @@ class EpisodeScript:
         if shot.get("kind") not in (None, "2d", *METHODS):
             check.problems.append(f"{where}: kind must be 2d, {', '.join(METHODS)}")
         self._check_cast(shot, where)
+        self._check_animations(index, shot, where)
         self._check_lines(shot, where)
         self._check_files(shot, where)
         self._check_effects(shot, where)
+        series_fx_warnings.check_shot(self, shot, self.shot_id(index))
         self._check_document(index, shot, where)
         series_hearing.check_shot(shot, where, check.problems)
         self._check_layers(shot, where)
         self._check_transition(shot, where)
+        self._check_resolution(shot, where)
+        self._check_finish(shot, where)
         series_stop_motion.check_shot(shot, where, check.problems)
         reference_problems(shot, check, where)
 
+    def _room_location(self, shot):
+        from services.series_sets import location_for
+        return location_for(self.series, {"locationId": shot.get("location") or self.scenes.get(shot.get("scene"), {}).get("location")})
+
     def _check_cast(self, shot: dict[str, Any], where: str) -> None:
+        from services.series_sets import mark_warnings
+        self.warnings.extend({**w, "shot": where} for w in mark_warnings(shot, self._room_location(shot)))
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         for entry in cast:
             self.checker.character(str(entry.get("characterId")), str(entry.get("poseId") or "base"), where)
@@ -225,6 +251,11 @@ class EpisodeScript:
             for index, cue in enumerate(shot.get(kind) or []):
                 if isinstance(cue, dict) and cue.get("anchor") == "enter":
                     self._check_entrance_cue(cue, cast, f"{where} {kind} {index}")
+
+    def _check_animations(self, index: int, shot: dict[str, Any], where: str) -> None:
+        """A cast entry's kit ``animation`` must be one the character's kit has and a person approved (``series_cast_animation``)."""
+        cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
+        series_cast_animation.check_cast(self.checker, cast, shot, where, self.shot_id(index), self.warnings)
 
     def _check_entrance_cue(self, cue: dict[str, Any], cast: list[dict[str, Any]], where: str) -> None:
         """A cue on an entrance names a cast member of the shot (by index or id) who walks in."""
@@ -270,8 +301,15 @@ class EpisodeScript:
         except ValueError as error:
             problems.append(f"{where}: {error}")
         if shot.get("kind") != "3d":
+            from services.series_room_box import foreign_room
+            foreign = foreign_room(shot)
+            if foreign:
+                problems.append(f"{where}: {foreign}")
             return
-        config = normalize_scene3d(shot.get("scene3d"))
+        from services.series_room_box import shot_problems
+        from services.series_sets import script_scene3d
+        problems += [f"{where}: {item}" for item in shot_problems(shot, self.series, self.checker.root, self._room_location(shot))]
+        config = normalize_scene3d(script_scene3d(shot, self._room_location(shot), series=self.series, root=self.checker.root))
         if not config:
             problems.append(f"{where}: a 3d shot needs scene3d with a template or a saved scene and its cast")
         elif config.get("scene"):
@@ -284,6 +322,28 @@ class EpisodeScript:
             return
         try:
             normalize_transition(raw)
+        except ValueError as error:
+            self.checker.problems.append(f"{where}: {error}")
+
+    def _check_resolution(self, shot: dict[str, Any], where: str) -> None:
+        """``resolution`` is the size of a video shot's H3 clip; a 2D or 3D shot makes none."""
+        raw = shot.get("resolution")
+        if raw is None:
+            return
+        if shot.get("kind") not in VIDEO_KINDS:
+            self.checker.problems.append(f"{where}: resolution is only for kind video or generated")
+        elif series_resolution_preset(raw) is None:
+            self.checker.problems.append(f"{where}: resolution must be one of {', '.join(SERIES_RESOLUTIONS)}")
+
+    def _check_finish(self, shot: dict[str, Any], where: str) -> None:
+        """``finish`` is the look over a 2D shot's picture (``series_finish``); a 3D or video shot has none."""
+        if shot.get("finish") is None:
+            return
+        if shot.get("kind") not in (None, "2d"):
+            self.checker.problems.append(f"{where}: finish is only for 2d shots")
+            return
+        try:
+            check_finish(shot["finish"])
         except ValueError as error:
             self.checker.problems.append(f"{where}: {error}")
 
@@ -334,7 +394,8 @@ class EpisodeScript:
         cast = [_cast_entry(raw) for raw in shot.get("cast") or []]
         if cast:
             layout["cast"] = cast
-        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom"):
+        for key in ("props", "sfx", "fx", "timing", "voiceRoom", "clipAudio", "clipVolume", "clipFit", "lookRoom", "finish",
+                    "detail"):
             if shot.get(key) is not None and shot.get(key) != []:
                 layout[key] = shot[key]
         layout.update(series_hearing.layout_hearing(shot))
@@ -371,11 +432,15 @@ class EpisodeScript:
         if not lines:
             body["durationSeconds"] = float(shot.get("duration") or 5)
         if shot.get("kind") == "3d":
-            body["scene3d"] = shot["scene3d"]
+            from services.series_sets import script_scene3d
+            body["scene3d"] = script_scene3d(shot, self._room_location(shot), series=self.series, root=self.checker.root)
         if shot.get("foley") is not None:
             body["foley"] = normalize_foley(shot["foley"])
         # Always present, so a rewritten script clears a transition the new script omits.
         body["transitionIn"] = normalize_transition(shot.get("transitionIn"))
+        if shot.get("kind") in VIDEO_KINDS:
+            # Present on a video shot for the same reason; None (480p from the series) is not stored.
+            body["resolution"] = series_resolution_preset(shot.get("resolution"))
         self._attach_video(shot, body)
         return body
 
@@ -431,7 +496,8 @@ def _tool_caller(call: Callable[[str, dict], dict], workspace: str, series_id: s
 
 def _summary(built: EpisodeScript, shots: list[dict[str, Any]], series: dict[str, Any], kits: dict[str, Any], root: str | None) -> dict[str, Any]:
     return {"number": built.number, "shots": [shot["id"] for shot in shots], "original": built.original,
-            "languages": built.languages, "warnings": built.warnings, "estimate": estimate_episode(series, shots),
+            "languages": built.languages, "warnings": [*built.warnings, *same_picture_warnings(series, shots)],
+            "estimate": estimate_episode(series, shots),
             **keep_look_room(series, kits, shots, root)}
 
 
@@ -440,6 +506,15 @@ def _episode_patch(built: EpisodeScript, title: str, premise: str, shots: list[d
     if built.video_budget is not None:
         episode["videoBudget"] = built.video_budget
     return episode
+
+
+def _enable_video_method(tool: Callable[..., dict], series: dict[str, Any], script: dict[str, Any]) -> list[str]:
+    """Add ``imported_video`` to a series whose script has video shots (the check warned). Before anything is written."""
+    methods = methods_to_allow(series, script)
+    if methods is None:
+        return []
+    tool("series.update", {"series": {"allowedProductionMethods": methods}, "base_revision": series["revision"]})
+    return ["imported_video"]
 
 
 def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], dict], kits: dict[str, Any], files: set[str],
@@ -461,6 +536,7 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
     if check_only:
         return {"checked": True, **summary}
     tool = _tool_caller(call, workspace, series["id"])
+    enabled = _enable_video_method(tool, series, script)
     title = str(_pick(_texts(script.get("title")), built.original) or f"Episode {number}")
     premise = str(_pick(_texts(script.get("premise")), built.original) or "")
     if not episode_id:
@@ -475,4 +551,5 @@ def apply_script(call: Callable[[str, dict], dict], read_series: Callable[[], di
         "episode_id": episode_id, "language": language, **built.version(language)}).get("missingLines") or []
         for language in built.languages[1:]}
     removed = [shot["id"] for shot in (current["episodesById"][episode_id].get("shots") or []) if shot["id"] not in summary["shots"]]
-    return {"episodeId": episode_id, **summary, "missingLines": missing, **({"removedShots": removed} if removed else {})}
+    return {"episodeId": episode_id, **summary, "missingLines": missing, **({"removedShots": removed} if removed else {}),
+            **({"enabledProductionMethods": enabled} if enabled else {})}

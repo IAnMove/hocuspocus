@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import type { CharacterKit } from '../../lib/characterKit'
-import type { CharacterVoice, CharacterVoicesByLanguage } from '../../lib/characterVoice'
+import { DEFAULT_REFERENCE_VOICE_MODEL, type CharacterVoice, type CharacterVoicesByLanguage } from '../../lib/characterVoice'
 import { SPOKEN_LANGUAGES, type SpokenLanguage } from '../../lib/speechLanguage'
 import { CharacterVoiceFields } from './CharacterVoiceFields'
 import { CharacterVoiceDesigner } from './CharacterVoiceDesigner'
 
 const newReference = (language: SpokenLanguage): CharacterVoice =>
-  ({ provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language })
+  ({ provider: 'local', model: DEFAULT_REFERENCE_VOICE_MODEL, voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language })
 
 /** Optional dedicated voices per spoken language. The default voice keeps speaking every other language. */
 export function CharacterLanguageVoices({ workspace, value, onChange, savedKits, disabled, onBusyChange, characterName = '' }: {

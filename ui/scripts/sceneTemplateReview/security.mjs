@@ -57,7 +57,7 @@ export function validateReviewSnapshot(scene, isIndexedSource = () => false) {
   if (!Number.isFinite(scene.width) || scene.width <= 0 || scene.width > 1920
     || !Number.isFinite(scene.height) || scene.height <= 0 || scene.height > 1080
     || !Number.isFinite(scene.duration) || scene.duration <= 0 || scene.duration > 30
-    || ![30, 60].includes(scene.fps) || scene.layers.length > 24) throw new Error('Review scene exceeds its geometry/time/layer budget.')
+    || ![24, 30, 60].includes(scene.fps) || scene.layers.length > 24) throw new Error('Review scene exceeds its geometry/time/layer budget.')
   if (!/^[a-z0-9][a-z0-9-]*$/.test(scene.narrative?.templateId || '')) throw new Error('Review scene needs a safe template ID.')
   if (scene.audioTracks?.length) throw new Error('This reference sandbox accepts silent scenes only.')
   for (const layer of scene.layers) {

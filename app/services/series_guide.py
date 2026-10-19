@@ -2,9 +2,10 @@
 
 ``series.guide`` returns ``shared/series_agent_guide.md`` (how to work with the
 tools, the shot format, the house conventions, the pitfalls) and a bible built
-from the live data: characters with their kits, poses and voices, locations
-with variants, anchors, set layers and plates, the music and sound files in the
-workspace, and the episodes so far. ``compact_episode`` gives one episode
+from the live data: the series with its own episode format and finish,
+characters with their kits, poses and voices, locations with variants,
+anchors, set layers and plates, the music and sound files in the workspace,
+and the episodes so far. ``compact_episode`` gives one episode
 without the render history noise, for copying an earlier episode's style.
 """
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import Any, Callable
 
 from services.pose_facing import kit_facings
 from services.series_duration_estimate import estimate_episode
+from services.series_finish import series_choice
 
 GUIDE_PATH = Path(__file__).resolve().parents[1] / "shared" / "series_agent_guide.md"
 AUDIO = (".wav", ".mp3", ".flac", ".ogg", ".m4a")
@@ -59,6 +61,9 @@ def _location(location: dict[str, Any]) -> dict[str, Any]:
     for key in ("homes", "anchors", "layers", "castDepth"):
         if layout.get(key):
             entry[key] = layout[key]
+    if location.get("set3d"):
+        entry["set3d"] = location["set3d"]
+        entry["set3dStatus"] = location.get("set3dStatus", {})
     if layout.get("plateAssetId"):
         entry["plate3d"] = True
     return entry
@@ -89,10 +94,13 @@ def audio_files(names: list[str]) -> dict[str, list[str]]:
 
 
 def _series_summary(series: dict[str, Any]) -> dict[str, Any]:
+    """Who the series is, with its own episode shape (``episodeFormat``, None: the guide's default) and the finish its
+    2D shots get (``series_finish``: ``paper`` unless it chose another)."""
     canon = series.get("canon") or {}
-    keys = ("logline", "premise", "tone", "visualStyle", "characterVisualStyle", "cameraLanguage")
+    keys = ("logline", "premise", "tone", "visualStyle", "characterVisualStyle", "cameraLanguage", "episodeFormat")
     return {"id": series["id"], "title": series.get("title"), "language": series.get("spokenLanguage") or series.get("language"),
-            **{key: series.get(key) for key in keys}, "canonApproved": canon.get("approval") == "approved",
+            **{key: series.get(key) for key in keys}, "finish": series_choice(series),
+            "canonApproved": canon.get("approval") == "approved",
             "world": canon.get("worldSummary"), "rules": [rule.get("description") for rule in canon.get("immutableRules") or []],
             "themes": canon.get("themes") or []}
 

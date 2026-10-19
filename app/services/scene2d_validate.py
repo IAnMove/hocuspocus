@@ -215,11 +215,14 @@ def _normalize_finish(document: dict) -> None:
         "exposure": (-1, 1), "contrast": (-1, 1), "saturation": (-1, 1), "temperature": (-1, 1),
         "tint": (-1, 1), "fade": (0, 1), "beatFlash": (0, 1),
     })
+    _clamp_into(finish.get("gel"), {"amount": (0, 1)})
     _clamp_into(finish.get("bloom"), {"amount": (0, 1), "threshold": (0, 1), "radius": (0, 1), "beat": (0, 1)})
     _clamp_into(finish.get("rays"), {"amount": (0, 1), "x": (0, 100), "y": (0, 100), "length": (0, 1), "threshold": (0, 1)})
     _clamp_into(finish.get("vignette"), {"amount": (0, 1), "softness": (0, 1)})
     _clamp_into(finish.get("grain"), {"amount": (0, 1), "size": (0.5, 4)})
     _clamp_into(finish.get("texture"), {"amount": (0, 1)})
+    _clamp_into(finish.get("vhs"), {"amount": (0, 1)})
+    _clamp_into(finish.get("scanlines"), {"amount": (0, 1)})
     _clamp_into(finish.get("riso"), {
         "misreg": (0, 8), "cutKick": (0, 48), "beatKick": (0, 24), "gamma": (0.2, 3), "gain": (0, 2),
         "kLo": (0, 1), "kHi": (0, 1), "lift": (-0.2, 0.2), "grain": (0, 0.2), "fibre": (0, 2),
@@ -243,7 +246,7 @@ def _normalize_sfx(document: dict) -> None:
         return
     ranges = {
         "start": (0, 600), "end": (0, 600), "x": (0, 100), "y": (0, 100), "size": (1, 200),
-        "intensity": (0.1, 2), "rotation": (-180, 180), "volume": (0, 1),
+        "intensity": (0.1, 2), "rotation": (-180, 180), "volume": (0, 1), "speed": (0.02, 4),
     }
     for cue in cues:
         if not isinstance(cue, dict):
@@ -272,7 +275,7 @@ def _normalize_atmosphere(atmosphere: Any) -> None:
 def _normalize_sequence(sequence: Any) -> None:
     if not isinstance(sequence, dict):
         return
-    _clamp_into(sequence, {"fps": (1, 60)})
+    _clamp_into(sequence, {"fps": (1, 60), "start": (0, 3600)})
     _round_into(sequence, "columns", 1, 32)
     _round_into(sequence, "rows", 1, 32)
     _round_into(sequence, "count", 1, 120)

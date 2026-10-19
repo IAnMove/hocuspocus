@@ -5,12 +5,13 @@
 // (series_layers.py) gives the background and each layer its share of the camera push by depth.
 // A pose cut by its image border is moved so the cut stays out of the frame (snapToEdges), a
 // grounded prop stands on the floor (groundedY) and a video layer can play on its own clock.
-import { mountCharacterKitLayers, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit.ts'
+import { characterKitLayerId, mountCharacterKitLayers, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit.ts'
 import { rebuildCutoutDialogueLayers } from '../src/lib/cutoutDialogue.ts'
 import { parseMouthCues } from '../src/features/scene3d/speech/track.ts'
 import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
 import { holdFields } from '../src/features/stopMotion.ts'
+import { gateSheets, sheetLayer, sheetPlacement, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
@@ -24,7 +25,12 @@ export type CastSpec = {
   perch?: { source: string; width: number; height: number; top?: number; widthRatio?: number }
   /** Slides in from fromX (series_entrances.py). A `walk` takes a whole number of `step`-second steps: down on every
    * footfall (its start, each step, its end), up mid-step, leaning `sway` degrees to alternate sides; else it hops. */
-  enter?: { fromX: number; start: number; end: number; gait?: 'hop' | 'walk'; step?: number; sway?: number }
+  enter?: { fromX: number; start: number; end: number; gait?: 'hop' | 'walk'; step?: number; sway?: number
+    /** Share of the body bob a walk keeps (default 1); the walk of a sheet keeps none: its drawings step. Set by the compiler, not the plan. */
+    bob?: number }
+  /** A sheet of the character's kit that plays in place of its pose (series_cast_animation.py); an entrance that walks plays the kit's
+   * approved `walk` sheet. See seriesSheet.ts. */
+  animation?: SheetRequest
   exit?: { toX: number; start: number; end: number }
   /** false: a pose cut by its image border stays where ``x`` puts it, cut and all (snapToEdges). */
   edgeSnap?: boolean
@@ -58,14 +64,18 @@ export type SetLayerSpec = {
 /** A screen effect as planned (``series_shot_extras.fx_cues``). A beam's ``from`` is a point in % of the frame, or with
  * ``cast`` (an index in the shot's cast or a character id) in % of that cast member's pose image. */
 export type ShotFxSpec = Omit<SceneFx, 'from'> & { from?: { cast?: number | string; point: [number, number] } }
+/** A point of the plate (x, y in % of it) framed at ``zoom``: the same picture closer (series_shot_plan.background_view). */
+export type PlateDetail = { x: number; y: number; zoom: number }
 export type ShotSpec = {
   name: string; workspace: string; width: number; height: number; fps: 24 | 30 | 60; duration: number
-  framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number }
+  framing: Framing; background?: { source: string; kind: 'image' | 'video'; focusX?: number; detail?: PlateDetail }
   cast: CastSpec[]; lines: LineSpec[]; props?: PropSpec[]
   /** Set layers; with any, the background and the layers respond to the camera by depth, the cast standing at castDepth. */
   layers?: SetLayerSpec[]; castDepth?: number
   audioTracks?: NonNullable<Scene['audioTracks']>; texts?: Scene['texts']; sfx?: ShotFxSpec[]; finish?: Scene['finish']
-  camera?: 'static' | 'push'; narrative?: Scene['narrative']
+  camera?: CameraMove; narrative?: Scene['narrative']
+  /** Where a static or push camera starts when the shot goes on from the previous one (the same picture); absent, at rest. */
+  cameraStart?: { x?: number; y: number; scale: number }
   /** Picture holds every 2, 3 or 4 frames. Absent, the scene clock is unchanged. */
   motionStep?: 2 | 3 | 4
   /** Deterministic shake of one hold, in pixels, from 0 to 2. */
@@ -247,14 +257,14 @@ export function perchTransforms(size: { width: number; height: number }, framing
     prop: { x, y: round(propY), scale: round(propScale) } }
 }
 
-/** The full-frame background, zoomed and panned by the framing. In a layered set it is the far plane (depth 0) and
- * takes only its parallax share of the camera zoom. */
+/** The full-frame background, zoomed and panned by the framing, or framed on a ``detail`` of the plate. In a layered
+ * set it is the far plane (depth 0) and takes only its parallax share of the camera zoom. */
 export function backgroundLayer(background: NonNullable<ShotSpec['background']>, framing: Framing, duration: number, layered = false): SceneLayer {
-  const zoom = BACKGROUND_ZOOM[framing]
-  const focus = background.focusX ?? 50
+  const detail = background.detail
+  const zoom = detail?.zoom ?? BACKGROUND_ZOOM[framing]
   const span = 50 * (zoom - 1)
-  const x = Math.max(50 - span, Math.min(50 + span, 50 - (focus / 100 - 0.5) * 100 * zoom))
-  const transform = { x: round(x), y: 50, scale: zoom, opacity: 1, rotation: 0 }
+  const pan = (point: number) => Math.max(50 - span, Math.min(50 + span, 50 - (point / 100 - 0.5) * 100 * zoom))
+  const transform = { x: round(pan(detail?.x ?? background.focusX ?? 50)), y: detail ? round(pan(detail.y)) : 50, scale: zoom, opacity: 1, rotation: 0 }
   return {
     id: 'background', name: 'Background', type: background.kind, source: background.source, visible: true, locked: false, z: 0,
     fill: true, parallax: FAR_PARALLAX, transform,
@@ -311,7 +321,7 @@ export function walkKeyframes(id: string, rest: Pose, enter: NonNullable<CastSpe
     const lift = Math.sin(Math.PI * (quarter % 4) / 4)
     const side = Math.floor(quarter / 4) % 2 ? -1 : 1
     frames.push(key(id, enter.start + span * progress, {
-      x: enter.fromX + (rest.x - enter.fromX) * progress, y: rest.y - lift * WALK_BOB * rest.scale, scale: rest.scale,
+      x: enter.fromX + (rest.x - enter.fromX) * progress, y: rest.y - lift * WALK_BOB * (enter.bob ?? 1) * rest.scale, scale: rest.scale,
       rotation: lift ? side * sway * lift : 0 }))
   }
   return frames
@@ -415,8 +425,31 @@ function speechTrack(line: LineSpec): NonNullable<Scene['audioTracks']>[number] 
     volume: line.volume ?? 1, prompt: line.text }
 }
 
-function cameraLayer(duration: number): SceneLayer {
-  const from = { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 }, to = { x: 50, y: 48.5, scale: 1.07, opacity: 1, rotation: 0 }
+/** The 2D camera moves (series_shot_plan.CAMERAS); ``static`` adds no camera layer. */
+export type CameraMove = 'static' | 'push' | 'pull' | 'pan-left' | 'pan-right' | 'drift'
+type CameraPose = { x: number; y: number; scale: number }
+/** Where each move starts and ends. A push grows the view by 0.07 and lifts it 1.5 %, a pull is the same in reverse.
+ * A pan holds the view 8 % closer and crosses 7 % of the frame, a drift 3 % closer and 2 %, so the plate's edge, which
+ * the closer view keeps outside the frame, never shows. */
+export const CAMERA_MOVES: Record<Exclude<CameraMove, 'static'>, readonly [CameraPose, CameraPose]> = {
+  push: [{ x: 50, y: 50, scale: 1 }, { x: 50, y: 48.5, scale: 1.07 }],
+  pull: [{ x: 50, y: 48.5, scale: 1.07 }, { x: 50, y: 50, scale: 1 }],
+  'pan-left': [{ x: 53.5, y: 50, scale: 1.08 }, { x: 46.5, y: 50, scale: 1.08 }],
+  'pan-right': [{ x: 46.5, y: 50, scale: 1.08 }, { x: 53.5, y: 50, scale: 1.08 }],
+  drift: [{ x: 49, y: 50, scale: 1.03 }, { x: 51, y: 50, scale: 1.03 }],
+}
+
+/** A move's poses. A static or push shot with a ``start`` goes on from the previous shot's camera (the same picture,
+ * series_continuity): a push grows by 0.07 and lifts 1.5 % from there, a static holds there. Other moves ignore it. */
+function cameraPoses(move: CameraMove, start?: ShotSpec['cameraStart']): readonly [CameraPose, CameraPose] {
+  if (move !== 'push' && Object.hasOwn(CAMERA_MOVES, move)) return CAMERA_MOVES[move as Exclude<CameraMove, 'static'>]
+  const from = start ? { x: start.x ?? 50, y: start.y, scale: start.scale } : CAMERA_MOVES.push[0]
+  return [from, move === 'push' ? { ...from, y: round(from.y - 1.5), scale: round(from.scale + 0.07) } : from]
+}
+
+function cameraLayer(duration: number, move: CameraMove, start?: ShotSpec['cameraStart']): SceneLayer {
+  const [first, last] = cameraPoses(move, start)
+  const from = { ...first, opacity: 1, rotation: 0 }, to = { ...last, opacity: 1, rotation: 0 }
   return { id: 'camera', name: 'Camera', type: 'camera', source: '', visible: true, locked: false, z: 1000, transform: { ...from },
     animation: { start: from, end: to, duration, curve: 'ease', keyframes: [key('camera', 0, from, 'ease'), key('camera', duration, to, 'ease')] } } as SceneLayer
 }
@@ -468,6 +501,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
   for (const cast of shot.cast) counts.set(cast.kitId, (counts.get(cast.kitId) ?? 0) + 1)
   const mouths: string[][] = []
   const poseLayerIds: string[] = []
+  const gates: SheetGate[] = []
   shot.cast.forEach((cast, index) => {
     const kit = kits[cast.kitId]
     if (!kit) throw new Error(`Missing Character Kit ${cast.kitId}`)
@@ -482,19 +516,35 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
     const base = cast.transform ?? seat?.character ?? castTransform(kit, cast, shot.framing, aspect, (single ? 1.25 : 1) * (cast.boost ?? 1))
     const talking = shot.lines.filter(line => lineOwnsAppearance(shot.cast, line, index))
       .map(line => [line.start, line.end] as [number, number])
-    const mounted = mountCast(kit, { ...cast, z }, base, shot.duration, viewport, shot.workspace, talking, instanceKey)
+    const windows = sheetWindows(kit, cast, shot.duration)
+    // A walk of drawings steps on its own: the body neither bobs nor sways under it.
+    const entered = cast.enter && windows.some(window => window.part === 'walk-in') ? { ...cast.enter, sway: 0, bob: 0 } : cast.enter
+    const mounted = mountCast(kit, { ...cast, z, enter: entered }, base, shot.duration, viewport, shot.workspace, talking, instanceKey)
     mouths[index] = mounted.mouthIds
     poseLayerIds.push(mounted.layers[0].id)
     layers.push(...mounted.layers)
+    if (windows.length) {
+      const size = poseAsset(kit, cast.poseId ?? 'base')
+      const poseHeight = drawnHeight(size, base.scale, aspect)
+      const pose = mounted.layers[0]
+      layers.push(...windows.map(window => {
+        const placed = sheetPlacement(window.animation, window.part === 'walk-in' ? 'walk' : window.part, size, base.y, poseHeight)
+        return sheetLayer(kit, window, { layerId: characterKitLayerId(kit.id, `sheet-${window.part}`, instanceKey), z: pose.z,
+          workspace: shot.workspace, body: pose.animation.keyframes!, restY: base.y, ground: placed.ground, poseHeight: placed.figure, aspect, duration: shot.duration })
+      }))
+      gates.push({ poseId: pose.id, windows: windows.map(window => [window.start, window.end, window.fade]) })
+    }
   })
   if (layered) layers.push(...setLayers(shot, true, Math.max(0, ...layers.map(layer => layer.z)) + 1, 1))
-  if (shot.camera === 'push') layers.push(cameraLayer(shot.duration))
+  if ((shot.camera && shot.camera !== 'static' && Object.hasOwn(CAMERA_MOVES, shot.camera)) || shot.cameraStart) {
+    layers.push(cameraLayer(shot.duration, shot.camera ?? 'static', shot.cameraStart))
+  }
   const dialogueBeats = shot.lines.map(line => lineBeat(line, mouthsForLine(shot.cast, line, mouths)))
   const sfx = shotEffects(shot.sfx, shot.cast, poseLayerIds)
   return {
     version: 1, name: shot.name, width: shot.width, height: shot.height, fps: shot.fps, duration: round(shot.duration),
     generationPolicy: 'provided_only',
-    layers: rebuildCutoutDialogueLayers(layers, dialogueBeats, shot.fps, shot.duration),
+    layers: gateSheets(rebuildCutoutDialogueLayers(layers, dialogueBeats, shot.fps, shot.duration), gates, shot.duration),
     audioTracks: [...shot.lines.map(speechTrack), ...(shot.audioTracks ?? [])], dialogueBeats,
     // Music and effects dip while someone speaks, as in Video 3D.
     ...(shot.lines.length ? { audioMix: { duckDb: DIALOGUE_DUCK_DB } } : {}),

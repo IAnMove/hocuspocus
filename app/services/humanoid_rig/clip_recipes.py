@@ -303,12 +303,15 @@ def bow(pose: Pose, u: np.ndarray) -> None:
 
 
 def point(pose: Pose, u: np.ndarray) -> None:
+    """Points ahead and a little aside with the right hand below the shoulder, the elbow soft and the hand on its edge.
+    The rigs have no fingers: a straight arm raised to shoulder height with the palm down reads as a salute."""
     aim = keys(u, [(0.0, 0.0), (0.2, 1.0), (0.75, 1.0), (1.0, 0.0)])
     pose.move_root(up=-0.015)
-    pose.spine(yaw=-8.0 * aim)
-    pose.head(yaw=-6.0 * aim, pitch=-3.0 * aim)
-    pose.arm("Right", lift=-pose.rig.limits["arm_down"] * (1.0 - aim) + 5.0 * aim, swing=6.0 * (1.0 - aim), sweep=75.0 * aim)
-    pose.elbow("Right", 14.0 * (1.0 - aim) + 4.0 * aim)
+    pose.spine(yaw=-10.0 * aim)
+    pose.head(yaw=-8.0 * aim, pitch=-6.0 * aim)
+    pose.arm("Right", lift=-pose.rig.limits["arm_down"] * (1.0 - aim) - 28.0 * aim, swing=6.0 * (1.0 - aim), sweep=58.0 * aim)
+    pose.elbow("Right", 14.0 * (1.0 - aim) + 24.0 * aim)
+    pose.palm("Right", 90.0 * aim)  # the hand on its edge, thumb up
     _plant_both(pose)
 
 

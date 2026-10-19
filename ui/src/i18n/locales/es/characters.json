@@ -1,7 +1,7 @@
 {
   "sheet": {
     "stillAlt": "Identidad de biblioteca de {{name}}",
-    "ttsVoice": "TTS · Qwen3 {{voiceId}}",
+    "ttsVoice": "TTS · {{engine}} {{voiceId}}",
     "ttsNone": "Este personaje aún no tiene voz TTS",
     "linkedHint": "El aspecto y el TTS salen del personaje de la biblioteca. Las notas de actuación se quedan en esta historia o serie.",
     "languageVoices": "Voces por idioma: {{voices}}",
@@ -613,9 +613,15 @@
   "styleCreator": {
     "style": "Estilo",
     "free": "Libre (lo describes todo)",
-    "hint": "Describe el personaje. Se crean tres opciones sobre fondo liso, se quita el fondo y la que elijas se guarda lista para hablar.",
+    "hint": "Describe el personaje. Se dibujan hasta tres opciones sobre fondo liso; al elegir una se le quita el fondo y se guarda lista para hablar.",
     "placeholder": "Kevin, fundador nervioso de 24 años, pelo rojo despeinado, pecas, sudadera naranja…",
-    "createOptions": "Crear 3 opciones",
+    "createOptions_one": "Crear 1 opción",
+    "createOptions_other": "Crear {{count}} opciones",
+    "count": "Opciones",
+    "drawn": "Dibujada · fondo sin quitar",
+    "cancelledOption": "cancelada",
+    "startOver": "Empezar de nuevo",
+    "peekHint": "Pasa el ratón por una opción (o mantenla pulsada) para verla en grande.",
     "generating": "Creando…",
     "keying": "Quitando el fondo…",
     "option": "Opción {{number}}",
@@ -634,7 +640,7 @@
     "haze": "Queda un velo en el {{percent}} % de la imagen: el fondo no se quitó limpio. Elige otra opción o genérala de nuevo.",
     "pick": "Elige la opción que más te guste.",
     "noneReady": "Ninguna opción terminó. Vuelve a intentarlo o cambia la descripción.",
-    "empty": "Aquí aparecerán las tres opciones.",
+    "empty": "Aquí aparecerán las opciones.",
     "saveAndRig": "Guardar y hacer que hable",
     "ready": "Listo para hablar. Revisa las bocas y el parpadeo abajo.",
     "reviewAlt": "Revisión de bocas y parpadeo",
@@ -649,14 +655,21 @@
     "addPose": "Añadir esta pose",
     "poseAdded": "Pose añadida y lista para hablar.",
     "busy": {
-      "options": "Creando tres opciones sobre fondo liso…",
+      "options": "Dibujando las opciones sobre fondo liso…",
+      "keying": "Quitando el fondo…",
       "rig": "Dibujando las bocas y el parpadeo…",
-      "pose": "Creando tres opciones de pose…",
+      "pose": "Dibujando las opciones de pose…",
       "addPose": "Añadiendo la pose y sus bocas…"
     }
   },
   "voiceDesigner": {
     "hint": "Describe la voz por sus rasgos. Empieza con «Male voice.» o «Female voice.» y sigue con edad, tono, ritmo y carácter. Una frase de muestra tranquila da una voz más estable. La comprobación de tono sigue a la primera palabra que nombra a un hombre, una mujer o un niño: 75–175 Hz para un hombre, 150–320 para una mujer y 220–400 para un niño.",
+    "engine": "Motor",
+    "engines": {
+      "qwen3": "Qwen3 VoiceDesign",
+      "voxcpm2": "VoxCPM2 (48 kHz, 30 idiomas)",
+      "drama3": "Drama 3"
+    },
     "missing": "El diseño de voz necesita estos modelos: {{models}}.",
     "download": "Descargar",
     "downloading": "Descarga iniciada. Vuelve a intentarlo cuando termine.",
@@ -734,5 +747,90 @@
     "unsure": "Los puntos de la cara no eran seguros aquí (bigote, barba, cara vista desde abajo): comprueba que la línea esté entre los labios.",
     "smallFace": "Cara pequeña (cabeza de {{head}} px): las bocas se deforman sobre la cara ampliada {{times}}×, se devuelven a la pose y se abren un poco más, para que se lean cuando la figura sale pequeña.",
     "headPass": "Sus puntos de la cara se leyeron sobre la cabeza sola."
+  },
+  "actionErrors": {
+    "kitMissing": "No existe el Character Kit “{{name}}”.",
+    "noOpenKit": "No hay un Character Kit abierto.",
+    "singleReference": "Character Kit admite una única referencia de identidad. Indica exactamente un output.",
+    "imageMissing": "No existe el output de imagen “{{name}}” en este workspace.",
+    "noIdentity": "El kit no tiene una referencia de identidad para construir la pose base.",
+    "visemePacks": "No pude cargar los packs de visemas.",
+    "presetMissing": "No existe el preset de animación “{{name}}”."
+  },
+  "animations": {
+    "title": "Animaciones del personaje",
+    "loading": "Cargando animaciones…",
+    "intro": "Pequeñas animaciones de un personaje guardado: andar, gestos y las expresiones de anime más habituales. Cada una son unas pocas poses del mismo personaje, hechas con Qwen a partir de su propia imagen, recortadas y juntadas en una hoja de sprites que las plantillas de Video 2D reproducen. Revisa cada animación antes de aprobarla.",
+    "noKits": "Primero crea y guarda un personaje: las animaciones se hacen a partir de su imagen.",
+    "kit": "Personaje",
+    "state": {
+      "none": "Sin hacer",
+      "pending": "Por revisar",
+      "approved": "Aprobada",
+      "rejected": "Rechazada"
+    },
+    "agent": {
+      "approved": "aprobada por el agente",
+      "rejected": "rechazada por el agente"
+    },
+    "make": "Crear",
+    "makeAgain": "Rehacer todo",
+    "tryAgain": "Reintentar",
+    "working": "Creando…",
+    "cancel": "Cancelar",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "delete": "Borrar",
+    "remake": "Rehacer",
+    "remakePose": "Rehacer la pose {{pose}}",
+    "posesCount_one": "{{count}} pose",
+    "posesCount_other": "{{count}} poses",
+    "job": {
+      "queued": "En cola: se hace cuando la GPU quede libre.",
+      "running": "Creando…",
+      "cancelling": "Cancelando…",
+      "completed": "Terminada.",
+      "failed": "Se detuvo. Las poses que ya estaban hechas se conservan: al reintentar solo se hacen las que faltan.",
+      "cancelled": "Cancelada. Las poses que ya estaban hechas se conservan.",
+      "interrupted": "El servidor se reinició mientras se hacía. Las poses que ya estaban hechas se conservan."
+    },
+    "stage": {
+      "poses": "Haciendo las poses, una tras otra…",
+      "sheet": "Juntando las poses en la hoja…"
+    },
+    "pose": {
+      "waiting": "en espera",
+      "reused": "se conserva",
+      "generating": "generando",
+      "keying": "recortando",
+      "ready": "lista",
+      "failed": "falló"
+    },
+    "plays": "Se reproduce con la plantilla {{template}} ({{controls}}).",
+    "saved": "Animación guardada en el personaje. Revísala y apruébala.",
+    "play": "Reproducir",
+    "pause": "Pausa",
+    "nextFrame": "Siguiente",
+    "frameOf": "Pose {{frame}} de {{count}}",
+    "view": {
+      "bust": "Busto (cabeza y hombros)",
+      "front": "Figura entera de frente",
+      "side": "Figura entera de perfil"
+    },
+    "custom": {
+      "title": "Crear una a medida",
+      "hint": "Inventa tu propia animación: ponle nombre, elige el encuadre y escribe una pose por línea (hasta {{max}}). El personaje es la referencia de cada pose, igual que en las demás. Podrás revisarla y rehacer una pose suelta.",
+      "name": "Nombre",
+      "view": "Encuadre",
+      "poses": "Poses, una por línea",
+      "placeholder": "Expresión de anime: una sonrisa torcida con una ceja levantada\nExpresión de anime: la misma sonrisa, ahora con un guiño",
+      "create_one": "Crear con {{count}} pose",
+      "create_other": "Crear con {{count}} poses",
+      "summary": "A medida · {{count}} poses · {{view}}",
+      "tooMany": "Máximo {{max}} poses por animación.",
+      "tooLong": "Cada pose admite hasta {{max}} caracteres.",
+      "full": "Este personaje ya tiene el máximo de animaciones; borra alguna para crear otra."
+    },
+    "groupCount": "{{done}} de {{total}} hechas"
   }
 }

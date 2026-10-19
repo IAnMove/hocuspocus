@@ -48,6 +48,11 @@ def test_retry_reuses_the_story_and_production_and_ignores_the_active_story(tmp_
     assert first["project"]["id"] != "story-open"
     assert read_story_library(str(root))["activeId"] == "story-open"
     assert _story_count(root) == 2
+    library = read_story_library(str(root))
+    created_story = library["projects"][first["project"]["id"]]
+    assert created_story["language"] == "English"
+    assert created_story["spokenLanguage"] == "English"
+    assert library["projects"]["story-open"]["language"] == "Español"
     project = read_story_library(str(root))["projects"][first["project"]["id"]]
     assert project["projectType"] == "music_video"
     assert project["productions"][0]["id"] == first["production_id"]

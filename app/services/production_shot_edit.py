@@ -13,8 +13,10 @@ from typing import Any
 
 from services.production_control import sleep_until
 from services.production_package import (
-    clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows, workspace_url, write_manifest,
+    clip_replacements, contrast_warnings, doc_digest, durable_document, lyric_for, manifest_rows,
+    montage_owned_by_other, workspace_url, write_manifest,
 )
+from services.production_scene2d import note_tempo, resume_clip
 from services.production_scene_retry import finish_scene_exports
 
 
@@ -136,6 +138,9 @@ def replace_montage_clip(production: Any, key: str, video_file: str, expected_re
         raise ShotEditError("montage_missing", "this production has no montage yet")
     current = (production.mcp("montages.get", {"version": 1, "input": {"workspace": production.ws, "file": montage_file}}).get("result") or {})
     montage = current.get("montage") or current
+    if montage_owned_by_other(montage, production.id):
+        raise ShotEditError("montage_foreign", "this production's montage_file points at another production's timeline: "
+                                               "run the montage stage again to create its own")
     found = False
     for clip in montage.get("clips") or []:
         if clip.get("id") == key:
@@ -214,7 +219,9 @@ def _publish(production: Any, spec: dict, key: str, expected_revision: int | Non
     fingerprint = scene_fingerprint(shot, style, stills, score, start, end)
     lyric = lyric_for(score.get("lines") or [], start, end)
     scene = save_scene_revision(production, key, document, lyric, _note(shot))
-    video = export_scene(production, key, document, dur, clip_file, fingerprint)
+    # The same record export_scenes writes, so a resume does not export this scene again.
+    video = export_scene(production, key, document, dur, resume_clip(production.state, shot), fingerprint)
+    note_tempo((production.state.get("scenes") or {}).get(key) or {}, shot, score.get("bpm"))
     replace_montage_clip(production, key, video, expected_revision)
     rewrite_manifest(production, spec)
     production.save()
@@ -248,7 +255,8 @@ def adopt_take(production: Any, key: str, take_file: str) -> None:
     if not (production.root / take_file).is_file():
         raise ShotEditError("take_not_found", f"take {take_file} is not in the workspace")
     _path, url = production.upload(take_file)
-    production.state.setdefault("clips", {})[key] = {"file": take_file, "qa": _qa(take), "url": url}
+    shot_with = {name: take[name] for name in ("model", "steps", "window") if name in take}      # what spec.video and the audio window compare on the next run
+    production.state.setdefault("clips", {})[key] = {"file": take_file, "qa": _qa(take), "url": url, **shot_with}
 
 
 def reexport_shot(production: Any, spec: dict, key: str) -> dict[str, Any]:
@@ -270,6 +278,9 @@ def _assign_override(overrides: dict, name: str, value: Any) -> None:
     if name == "camera":
         if not isinstance(value, str) or not value:
             raise ShotEditError("invalid_update", "camera must be a preset name")
+        from services.production_camera import is_camera
+        if not is_camera(value):
+            raise ShotEditError("unknown_camera", f"camera {value} is not a kind: camera preset of motion_presets.json")
     elif not isinstance(value, dict):
         raise ShotEditError("invalid_update", f"{name} must be an object")
     overrides[name] = value
@@ -281,6 +292,8 @@ def update_shot(production: Any, spec: dict, key: str, *, lyric_style: Any = Non
     changes = {"lyric_style": lyric_style, "title": title, "camera": camera}
     if all(value is None for value in changes.values()):
         raise ShotEditError("empty_update", "pass lyric_style, title or camera")
+    if camera is not None and shot.get("kind") == "scene2d":
+        raise ShotEditError("invalid_update", "a scene2d shot plays its card's own camera: change scene2d.controls")
     checkpoint = _checkpoint(production, spec, key)
     try:
         overrides = shot.setdefault("overrides", {})

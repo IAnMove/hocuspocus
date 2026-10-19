@@ -31,6 +31,10 @@ export type LlmSlice = {
   h3WindowPlan: H3WindowPlan | null
   updateH3WindowPrompt: (index: number, prompt: string) => void
   clearH3WindowPlan: () => void
+
+  // LLM streaming
+  llmStreamText: string
+  llmStreamDone: boolean
 }
 
 /** Host fields the LLM drawer reads or writes without owning generate. */
@@ -230,6 +234,10 @@ function timedModeFields(state: LlmSliceHost, windowCount: number) {
 }
 
 export const createLlmSlice: SliceCreator<LlmSlice, LlmSliceHost> = (set, get) => ({
+  // LLM streaming
+  llmStreamText: '',
+  llmStreamDone: true,
+
   llmStatus: null,
   llmLoading: false,
   llmModels: [],

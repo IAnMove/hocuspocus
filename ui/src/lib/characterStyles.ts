@@ -34,7 +34,8 @@ export function screenFor(description: string): ChromaScreen {
 
 export function characterStylePrompt(style: CharacterStyle, kind: CharacterStyleKind, description: string,
   screen: ChromaScreen = screenFor(description)): { prompt: string; negative: string; screen: ChromaScreen } {
-  const background = style.background.replace('{screen}', catalog.screens[screen])
-  const prompt = style[kind].replace('{description}', description.split(/\s+/).filter(Boolean).join(' ')).trim()
+  // Every placeholder, not the first: the background names the screen twice, and a `{screen}` left in the prompt makes the server skip the job.
+  const background = style.background.replaceAll('{screen}', () => catalog.screens[screen])
+  const prompt = style[kind].replaceAll('{description}', () => description.split(/\s+/).filter(Boolean).join(' ')).trim()
   return { prompt: `${prompt} ${background}`, negative: style.negative, screen }
 }

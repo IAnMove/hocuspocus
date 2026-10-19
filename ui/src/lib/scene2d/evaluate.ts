@@ -154,7 +154,7 @@ export function createSceneEvaluator(scene: AnimatorScene) {
         orbitState = { ...orbitState, modelYaw: localSeconds * (layer.animation.rotationSpeed ?? 35) }
       }
       for (const offset of offsets) {
-        let state = { ...orbitState, x: orbitState.x + offset.x, y: orbitState.y + offset.y }
+        let state: LayerState = { ...orbitState, x: orbitState.x + offset.x, y: orbitState.y + offset.y, ...(offset.flip ? { flip: offset.flip } : {}) }
         if (orbit && orbit.facing && orbit.facing !== 'fixed') {
           const target = scene.layers.find(item => item.id === orbit.targetLayerId)
           if (target && isVisualLayer(target)) {

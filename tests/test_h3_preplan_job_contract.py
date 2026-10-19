@@ -20,9 +20,21 @@ import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
+from services.kernel import jobs as kernel_jobs
+from services.kernel.config import ConfigStore
+from services.kernel.jobs import GenerationQueue
+
+# generate() imports this lazily, after the fakes below replace parts of services.*; load it first so
+# the file passes on its own, not only after another test has imported it.
+import services.generation_output_name  # noqa: E402,F401
+
 
 ROOT = Path(__file__).parents[1]
 LAUNCH = ROOT / "app" / "_launch_runtime.py"
+GENERATE = ROOT / "app" / "services" / "studio_generate.py"
+JOBS = ROOT / "app" / "services" / "generation_jobs.py"
+RECOVERY = ROOT / "app" / "services" / "generation_recovery.py"
+PREPARATION = ROOT / "app" / "services" / "generation_preparation.py"
 
 
 class _HTTPException(Exception):
@@ -61,23 +73,23 @@ class _DeferredThread:
         self.target(*self.args, **self.kwargs)
 
 
-def _tree() -> ast.Module:
-    return ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
+def _tree(path: Path = LAUNCH) -> ast.Module:
+    return ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
 
 
-def _function(name: str) -> ast.FunctionDef | ast.AsyncFunctionDef:
-    for node in _tree().body:
+def _function(name: str, path: Path = LAUNCH) -> ast.FunctionDef | ast.AsyncFunctionDef:
+    for node in _tree(path).body:
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
             selected = copy.deepcopy(node)
             selected.decorator_list = []
             return selected
-    raise AssertionError(f"Function {name!r} not found in app/_launch_runtime.py")
+    raise AssertionError(f"Function {name!r} not found in {path}")
 
 
-def _load(*names: str, namespace: dict) -> dict:
-    module = ast.Module(body=[_function(name) for name in names], type_ignores=[])
+def _load(*names: str, namespace: dict, path: Path = LAUNCH) -> dict:
+    module = ast.Module(body=[_function(name, path) for name in names], type_ignores=[])
     ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
+    exec(compile(module, str(path), "exec"), namespace)
     return namespace
 
 
@@ -326,12 +338,19 @@ def _harness(
         "_run_generation": lambda job_id, **_kwargs: gpu_calls.append(job_id),
         "_image_generation_commands": SimpleNamespace(native_worker=lambda _job: None),
     }
-    _load(
-        "_new_generation_job",
-        "_run_generation_with_preparation",
-        "generate",
-        namespace=namespace,
-    )
+    # The job factory is the kernel's; it takes the same fakes through its constructor and its module.
+    monkeypatch.setattr(kernel_jobs, "execution_mode", namespace["execution_mode"])
+    monkeypatch.setattr(kernel_jobs, "register_generation_job", namespace["register_generation_job"])
+    namespace["_new_generation_job"] = GenerationQueue(
+        ConfigStore(lambda: namespace["wgp"]),
+        SimpleNamespace(workspace_dir=namespace["_workspace_dir"], active=namespace["_get_active_workspace"]),
+        is_legacy_h3_model=namespace["_is_legacy_h3_model"],
+        is_minimax_h3_model=namespace["_is_minimax_h3_model"],
+        cancel_legacy_h3=lambda: None,
+        task_publisher=lambda: namespace["_publish_generation_task"],
+    ).new_job
+    _load("_run_generation_with_preparation", namespace=namespace, path=PREPARATION)
+    _load("generate", namespace=namespace, path=GENERATE)
 
     before = time.monotonic()
     result = asyncio.run(namespace["generate"](_Request(_base_body())))
@@ -436,8 +455,8 @@ def test_preplanner_exception_fails_without_leaking_a_fifo_ticket(
 
 
 def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
-    resume = _function("resume_generation_queue")
-    helper = _function("_queue_recovered_generation")
+    resume = _function("resume_generation_queue", RECOVERY)
+    helper = _function("_queue_recovered_generation", RECOVERY)
     targets = [
         keyword.value.id
         for call in ast.walk(resume)
@@ -466,5 +485,5 @@ def test_recovery_routes_persisted_preplans_through_the_preparation_worker():
     }
     assert "_reset_canonical_task_for_resume" in calls
     assert calls["_reset_canonical_task_for_resume"] < calls["_new_generation_job"]
-    assert "duplicate_for_submit" in ast.unparse(_function("generate"))
-    assert "status_for" in ast.unparse(_function("get_status"))
+    assert "duplicate_for_submit" in ast.unparse(_function("generate", GENERATE))
+    assert "status_for" in ast.unparse(_function("get_status", JOBS))

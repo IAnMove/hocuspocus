@@ -16,3 +16,6 @@ Operator guides for HocusPocus subsystems. Prefer these over inventing a second 
 - [In-app Help tutorial (maintainer guide)](help/HELP_OVERLAY.md)
 - [Tijeral cut-paper example and optional downloads](cut-paper/HOWUSEIT.md)
 - [Experimental H3 30-second clips](development/H3_EXTENDED_DURATION.md)
+- [Studio video command (`generation.video` v2/v3)](development/VIDEO_COMMANDS.md)
+- [LAN authentication when sharing (full server; core has no gate)](development/LAN_AUTH.md)
+- [VoxCPM2 default speech](development/VOXCPM2.md)

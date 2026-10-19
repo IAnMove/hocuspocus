@@ -1,3 +1,4 @@
+import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { button, panel, Field } from './storyLabChrome'
@@ -53,6 +54,7 @@ export function CharacterEditor({
           })}><Trash2 size={14} /></button>
         </div>
       </div>
+      <StoryWritingGuide projectId={project.id} scope="character" targetId={character.id} />
       <div className="grid md:grid-cols-3 gap-3">
         <Field label={t('characters.fields.name')} value={character.name} onChange={name => set({ name })} />
         <Field label={t('characters.fields.role')} value={character.role} onChange={role => set({ role })} />

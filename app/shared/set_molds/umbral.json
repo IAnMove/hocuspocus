@@ -1,0 +1,319 @@
+{
+  "id": "umbral",
+  "title": {
+    "es": "Umbral",
+    "en": "Threshold"
+  },
+  "kind": "interior",
+  "sizes": {
+    "small": [
+      4.8,
+      4.8,
+      2.7
+    ],
+    "medium": [
+      6.0,
+      6.0,
+      3.0
+    ],
+    "large": [
+      7.5,
+      7.5,
+      3.36
+    ]
+  },
+  "walls": [
+    "back",
+    "left",
+    "right",
+    "front"
+  ],
+  "openings": [
+    {
+      "wall": "back",
+      "kind": "door",
+      "x": 0.5,
+      "width": 1.6,
+      "height": 2.2,
+      "surface": "doorway"
+    },
+    {
+      "wall": "right",
+      "kind": "door",
+      "x": 0.75,
+      "width": 0.9,
+      "height": 2.1
+    }
+  ],
+  "blocks": [
+    {
+      "id": "jamb_left",
+      "kind": "jamb",
+      "box": [
+        -1.0,
+        0.0,
+        -2.85,
+        0.2,
+        2.3,
+        0.3
+      ],
+      "surfaces": [
+        "jamb_left_front",
+        "jamb_left_top"
+      ]
+    },
+    {
+      "id": "jamb_right",
+      "kind": "jamb",
+      "box": [
+        1.0,
+        0.0,
+        -2.85,
+        0.2,
+        2.3,
+        0.3
+      ],
+      "surfaces": [
+        "jamb_right_front",
+        "jamb_right_top"
+      ]
+    }
+  ],
+  "surfaces": [
+    "floor",
+    "ceiling",
+    "wall_back",
+    "wall_left",
+    "wall_right",
+    "wall_front",
+    "doorway",
+    "door",
+    "jamb_left_front",
+    "jamb_left_top",
+    "jamb_right_front",
+    "jamb_right_top"
+  ],
+  "marks": [
+    {
+      "id": "speaker_a",
+      "pose": "stand",
+      "position": [
+        -0.6,
+        0.0,
+        -0.8
+      ],
+      "facing": 0
+    },
+    {
+      "id": "speaker_b",
+      "pose": "stand",
+      "position": [
+        0.4,
+        0.0,
+        -2.2
+      ],
+      "facing": 180
+    },
+    {
+      "id": "third",
+      "pose": "stand",
+      "position": [
+        -2.0,
+        0.0,
+        0.8
+      ],
+      "facing": 0
+    },
+    {
+      "id": "entrance",
+      "pose": "stand",
+      "position": [
+        2.4,
+        0.0,
+        2.1
+      ],
+      "facing": 180
+    }
+  ],
+  "cameras": [
+    {
+      "id": "two_shot",
+      "position": [
+        0.0,
+        1.7,
+        2.8
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.8
+      ],
+      "fov": 65
+    },
+    {
+      "id": "ots_a",
+      "position": [
+        -2.1,
+        1.6,
+        -1.7
+      ],
+      "lookAt": [
+        0.4,
+        1.1,
+        -2.2
+      ],
+      "fov": 50
+    },
+    {
+      "id": "ots_b",
+      "position": [
+        1.9,
+        1.6,
+        -1.3
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.8
+      ],
+      "fov": 50
+    },
+    {
+      "id": "wide",
+      "position": [
+        0.0,
+        2.75,
+        2.85
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.8
+      ],
+      "fov": 65
+    },
+    {
+      "id": "close_1",
+      "position": [
+        -0.9,
+        1.6,
+        1.12
+      ],
+      "lookAt": [
+        -0.6,
+        1.1,
+        -0.8
+      ],
+      "fov": 50
+    },
+    {
+      "id": "close_2",
+      "position": [
+        0.9,
+        1.6,
+        -0.4
+      ],
+      "lookAt": [
+        0.4,
+        1.1,
+        -2.2
+      ],
+      "fov": 50
+    },
+    {
+      "id": "entrance",
+      "position": [
+        -2.4,
+        1.7,
+        1.8
+      ],
+      "lookAt": [
+        2.4,
+        1.1,
+        2.1
+      ],
+      "fov": 50
+    }
+  ],
+  "lights": "office_day",
+  "propAnchors": [
+    {
+      "id": "floor_left",
+      "on": "floor",
+      "position": [
+        -2.4,
+        0.0,
+        0.5
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "floor_right",
+      "on": "floor",
+      "position": [
+        2.4,
+        0.0,
+        -1.5
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "floor_corner",
+      "on": "floor",
+      "position": [
+        -2.4,
+        0.0,
+        2.3
+      ],
+      "maxHeight": 2
+    },
+    {
+      "id": "wall_picture",
+      "on": "wall_left",
+      "position": [
+        -2.98,
+        1.2,
+        1.0
+      ],
+      "maxHeight": 0.8
+    }
+  ],
+  "defaultSkin": {
+    "floor": {
+      "color": "#85715b"
+    },
+    "ceiling": {
+      "color": "#eee9df"
+    },
+    "wall_back": {
+      "color": "#d8d2c4"
+    },
+    "wall_left": {
+      "color": "#d8d2c4"
+    },
+    "wall_right": {
+      "color": "#d8d2c4"
+    },
+    "wall_front": {
+      "color": "#d8d2c4"
+    },
+    "doorway": {
+      "color": "#385872"
+    },
+    "door": {
+      "color": "#b89f80"
+    },
+    "jamb_left_front": {
+      "color": "#b89f80"
+    },
+    "jamb_left_top": {
+      "color": "#b89f80"
+    },
+    "jamb_right_front": {
+      "color": "#b89f80"
+    },
+    "jamb_right_top": {
+      "color": "#b89f80"
+    }
+  }
+}

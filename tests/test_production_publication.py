@@ -49,7 +49,7 @@ def test_publish_copies_only_selected_assets_and_preserves_existing_page(publica
     assert not (directory / "index.html").exists()
     page = (directory / "homage.html").read_text()
     assert "<script>" not in page and "&lt;script&gt;" in page
-    assert "Fan-made homage, not affiliated with Nintendo" in page
+    assert "Nintendo" not in page and "tribute" not in page      # no other production's disclaimer or tagline
     assert result["page"].endswith("/homage.html")
     first_mtime = (directory / "video.mp4").stat().st_mtime_ns
     assert call(handler, arguments) == result

@@ -1,4 +1,5 @@
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, type Scene3DTemplateId } from './templates'
+import type { Scene3DDocument } from './types.ts'
 
 /** Reviewed example families only: the first member represents the composition.
  * Keep every other template by default, including all Pixel worlds, PSX editions,
@@ -120,7 +121,11 @@ export function isBuiltinScene3DTemplate(id: string): boolean {
 
 /** Preview the composition without loading portal media, face packs or decals. */
 export function previewTemplateDocument(id: Scene3DTemplateId) {
-  const doc = applyScene3DTemplate(id)
+  return previewSceneDocument(applyScene3DTemplate(id))
+}
+
+/** The same schematic view of any document, such as a stage the server built. */
+export function previewSceneDocument(doc: Scene3DDocument): Scene3DDocument {
   return { ...doc,
     slots: doc.slots.map(slot => ({ ...slot, speech: undefined, appearance: undefined, screen: undefined })),
     worldSfx: doc.worldSfx?.map(effect => ({ ...effect, sourceUrl: undefined })),

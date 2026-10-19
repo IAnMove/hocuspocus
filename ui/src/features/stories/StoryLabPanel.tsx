@@ -5,6 +5,7 @@ import * as api from '../../api/client'
 import { revealDirectorWorkspace } from '../../lib/navigationCategories'
 import { getModelMode, resolveResolution, useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { scaffoldLanguage } from '../../lib/contentLanguage'
 import { StoryReferencePicker } from './StoryReferencePicker'
 import { useWorkspaceImageOutputs } from '../../lib/labsImagePick'
 import type { ApiOutput } from '../../api/outputs'
@@ -90,7 +91,11 @@ import type {
   StoryProductionRecipe, StoryWritingProvider,
 } from './types'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
-import { clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget } from './musicModel'
+import {
+  clampStoryMusicDuration, isAceStepMusicModel, isLocalMusicModel, songWriteTarget,
+  storyPaidMusicModel, storyUsesLocalMusicGeneration,
+} from './musicModel'
+import { confirmPaidStoryMusic } from './paidMusicConfirm'
 import {
   commitStoryAudioChoice,
   coverPatchFromOutput,
@@ -1479,7 +1484,7 @@ export function StoryLabPanel() {
   useEffect(() => listenForAgentStoryVisualGeneration(async request => {
     const current = useStoryStore.getState().project
     if (current.id !== request.projectId) {
-      throw new Error('La historia cambió mientras se preparaba la generación visual; no he generado imágenes en otro proyecto.')
+      throw new Error(t('errors.storyChangedDuringVisuals'))
     }
     const requestedNames = new Set(request.targetNames.map(storyLookupName).filter(Boolean))
     const includeCharacters = request.scope === 'characters' || request.scope === 'all'
@@ -1494,23 +1499,23 @@ export function StoryLabPanel() {
       characters.filter(character => storyLookupName(character.name) === name).length
       + locations.filter(location => storyLookupName(location.name) === name).length
     ) > 1)
-    if (ambiguous.length) throw new Error(`Estos destinos visuales no son inequívocos: ${ambiguous.join(', ')}.`)
+    if (ambiguous.length) throw new Error(t('errors.ambiguousVisualTargets', { names: ambiguous.join(', ') }))
     const matchedNames = new Set([
       ...characters.map(character => storyLookupName(character.name)),
       ...locations.map(location => storyLookupName(location.name)),
     ])
     const unknown = [...requestedNames].filter(name => !matchedNames.has(name))
-    if (unknown.length) throw new Error(`No existen estos destinos visuales en “${current.title}”: ${unknown.join(', ')}.`)
+    if (unknown.length) throw new Error(t('errors.unknownVisualTargets', { title: current.title, names: unknown.join(', ') }))
 
     const targets: Array<{ target: { kind: 'world' | 'character' | 'location'; id?: string }; label: string; prompt: string }> = []
     if (request.scope === 'world' || (request.scope === 'all' && !requestedNames.size)) {
-      targets.push({ target: { kind: 'world' }, label: 'mundo', prompt: current.world.visualPrompt })
+      targets.push({ target: { kind: 'world' }, label: t('replies.worldLabel'), prompt: current.world.visualPrompt })
     }
     characters.forEach(character => targets.push({ target: { kind: 'character', id: character.id }, label: character.name, prompt: character.visualPrompt }))
     locations.forEach(location => targets.push({ target: { kind: 'location', id: location.id }, label: location.name, prompt: location.visualPrompt }))
-    if (!targets.length) throw new Error('La selección no contiene mundos, personajes ni localizaciones que puedan generarse.')
+    if (!targets.length) throw new Error(t('errors.selectionNotGeneratable'))
     const missingPrompts = targets.filter(target => !target.prompt.trim()).map(target => target.label)
-    if (missingPrompts.length) throw new Error(`Falta visualPrompt para: ${missingPrompts.join(', ')}.`)
+    if (missingPrompts.length) throw new Error(t('errors.missingVisualPrompt', { names: missingPrompts.join(', ') }))
 
     const assetIdsBefore = new Set(Object.keys(current.assets))
     let completed = 0
@@ -1521,15 +1526,23 @@ export function StoryLabPanel() {
         projectId: request.projectId,
         onError: message => { failure = message },
       })
-      if (!ok) throw new Error(`${completed}/${targets.length} referencias terminadas. Falló “${item.label}”: ${failure || 'error de generación desconocido'}.`)
+      if (!ok) {
+        const reason = failure || t('errors.unknownGenerationError')
+        throw new Error(t('errors.visualGenerationPartial', {
+          completed,
+          total: targets.length,
+          label: item.label,
+          failure: reason,
+        }))
+      }
       completed += 1
     }
     const assetsNav = resolveStoryLabNavigation('assets', current.projectType)
     if (assetsNav.ok) setTab(assetsNav.tab)
-    const message = `He generado y adjuntado ${completed} referencia${completed === 1 ? '' : 's'} visual${completed === 1 ? '' : 'es'} en “${current.title}”. Quedan en Draft dentro de Story Lab → Assets para que las revises y apruebes.`
+    const message = t('replies.visualReferencesAttached', { count: completed, title: current.title })
     const latest = useStoryStore.getState().projects[request.projectId]
     const assetIds = latest ? Object.keys(latest.assets).filter(id => !assetIdsBefore.has(id)) : []
-    if (assetIds.length !== completed) throw new Error('Las referencias visuales terminaron sin poder correlacionar todos sus IDs de asset.')
+    if (assetIds.length !== completed) throw new Error(t('errors.visualIdsUncorrelated'))
     setNotice({ kind: 'ok', text: t('notice.visualReferencesAttached', { count: completed, title: current.title }) })
     return { message, assetIds }
   }), [t])
@@ -2499,7 +2512,7 @@ export function StoryLabPanel() {
 
   const generateMinimaxSongs = async () => {
     const sourceProjectId = project.id
-    const usingLocalMusic = isLocalMusicModel(project.music.model)
+    const usingLocalMusic = storyUsesLocalMusicGeneration(project.music)
     if (usingLocalMusic) {
       const cue = project.music.cues.find(item => item.kind === 'story')
       if (!cue) {
@@ -2532,6 +2545,8 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.uploadCoverFirst') })
       return
     }
+    const paidModel = storyPaidMusicModel(project.music)
+    if (!confirmPaidStoryMusic(paidModel, project.music.candidateCount)) return
     const activity = beginStoryActivity(
       'generating_music',
       `Preparing ${project.music.candidateCount} MiniMax Music candidates…`,
@@ -2570,7 +2585,8 @@ export function StoryLabPanel() {
         prompt: style,
         lyrics,
         count: project.music.candidateCount,
-        model: project.music.mode === 'cover' ? 'music-cover' : project.music.model,
+        model: paidModel,
+        paid_music_confirmed: true,
         reference_audio_filename: project.music.mode === 'cover'
           ? project.music.coverReferenceFilename : undefined,
         workspace: activeWorkspace,
@@ -2771,12 +2787,17 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyBeforeNewSong') })
       return
     }
+    // Ask about the MiniMax API cost before the prompts are rewritten: declining changes nothing.
+    const paidConfirmed = generateAudio && !isLocalMusicModel(current.music.model)
+    if (paidConfirmed && !confirmPaidStoryMusic(current.music.model)) return
     const existingCue = current.music.cues.find(cue => cue.kind === 'story') || current.music.cues[0]
     const cue: StoryMusicCue = existingCue || {
       id: storyId('music-cue'),
       kind: 'story',
       targetId: current.id,
-      title: current.title.trim() ? `${current.title} · canción` : 'Nueva canción',
+      title: current.title.trim()
+        ? `${current.title} · ${t('scaffold.songSuffix', { lng: scaffoldLanguage(current.language) })}`
+        : t('scaffold.newSong', { lng: scaffoldLanguage(current.language) }),
       purpose: current.creativeBrief.songStory || current.music.brief || 'Tell this Story as a memorable song.',
       referenceSong: '',
       brief: current.music.brief || storySongBrief(current, current.music.targetDurationSeconds),
@@ -2821,7 +2842,7 @@ export function StoryLabPanel() {
       if (generateAudio) {
         const ready = await generateMusicCueAudio(cue.id, true, jobId => activity.handoff(
           `Continuing as recoverable MiniMax Music job ${jobId}`,
-        ))
+        ), paidConfirmed)
         if (!ready) {
           activity.fail(new Error('MiniMax Music did not complete the new song.'), 'generating_music')
           return
@@ -3085,6 +3106,7 @@ export function StoryLabPanel() {
     cueId: string,
     queued = false,
     onJobSubmitted?: (jobId: string) => void,
+    paidConfirmed = false,
   ): Promise<boolean> => {
     const selectedModel = useStoryStore.getState().projects[project.id]?.music.model
     if (!isLocalMusicModel(selectedModel) && !servicesConfig?.minimax_api_key_set) {
@@ -3101,6 +3123,7 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t(blocked.key, blocked.params) })
       return false
     }
+    if (!paidConfirmed && !confirmPaidStoryMusic(current.music.model)) return false
     const usingAceStep = isAceStepMusicModel(current.music.model)
     const usingLocalMusic = isLocalMusicModel(current.music.model)
     const activity = queued
@@ -3115,6 +3138,7 @@ export function StoryLabPanel() {
         cueId,
         actor: 'user',
         capability: 'generate_story_song',
+        paidMusicConfirmed: !usingLocalMusic,
         onJobSubmitted: job => {
           activeMusicJobId.current = job.jobId
           activity?.handoff(`Continuing as recoverable MiniMax Music job ${job.jobId}`)
@@ -3157,13 +3181,16 @@ export function StoryLabPanel() {
       setNotice({ kind: 'error', text: t('notice.reviewIncompleteProposals', { count: incomplete.length }) })
       return
     }
-    if (!servicesConfig?.minimax_api_key_set) {
+    const queueModel = useStoryStore.getState().project.music.model
+    if (!isLocalMusicModel(queueModel) && !servicesConfig?.minimax_api_key_set) {
       setNotice({ kind: 'error', text: t('notice.minimaxKeyFirst') })
       return
     }
-    if (!window.confirm(
-      t('notice.generateTracksConfirm', { count: cues.length }),
-    )) return
+    // A paid model gets the MiniMax API cost question instead of the generic one.
+    const confirmed = isLocalMusicModel(queueModel)
+      ? window.confirm(t('notice.generateTracksConfirm', { count: cues.length }))
+      : confirmPaidStoryMusic(queueModel, cues.length)
+    if (!confirmed) return
     const ids = cues.map(cue => cue.id)
     const activity = beginStoryActivity(
       'music_queue',
@@ -3186,7 +3213,7 @@ export function StoryLabPanel() {
         )
         const ready = await generateMusicCueAudio(ids[index], true, jobId => activity.handoff(
           `Continuing as recoverable MiniMax Music job ${jobId}`,
-        ))
+        ), !isLocalMusicModel(queueModel))
         if (!ready) break
         completed += 1
         activity.update(

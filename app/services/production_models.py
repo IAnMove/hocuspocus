@@ -7,16 +7,20 @@
 - A character (``rig: "humanoid"``, the default for a cast id) is first redrawn in a T-pose from its portrait,
   because the humanoid rig needs one; a rigged model's clips follow the song's tempo.
 - ``rig`` is ``humanoid``, a procedural profile (prop, vehicle, quadruped, flying, serpentine) or ``none``.
-- ``glb`` is a model already in the workspace (a file name): it skips the picture and the mesh and is only rigged.
+- ``glb`` is a model already in the workspace (``ape.glb`` or ``pack/ape.glb``): it skips the picture and the
+  mesh and is only rigged. A path that climbs out of the workspace is refused.
   ``fallback`` is the procedural profile a humanoid rig falls back to when the body is not one it can rig
   (legs together, arms down, a tail).
 
 ``height`` (metres) is the model's real size in a scene; without it every model stands 1.7 m tall. It does not
 remake the model.
 
-``spec.sets`` maps a name to ``{prompt, seed}``: a painted set for a scene3d ``background``, drawn with a fixed
-recipe (eye-level, an open floor across the lower third, a clear horizon, nobody in it) so the projected floor
-has ground to stand on. ``{kind: "diorama", ...}`` is a set built in 3D instead (``production_diorama``).
+``spec.sets`` maps a name to ``{prompt, seed, staging}``: a painted set for a scene3d ``background``. ``staging``
+``floor`` (the default) draws it with a fixed recipe (eye-level, an open floor across the lower third, a clear
+horizon, nobody in it) so the projected floor has ground to stand on; ``backdrop`` asks only for a far view with a
+clear horizon and nobody in it; ``none`` sends the prompt and the look as written. ``floor`` and ``backdrop`` leave
+out the look's sentences that put people in the picture; dry_run lists them (``set_report``).
+``{kind: "diorama", ...}`` is a set built in 3D instead (``production_diorama``).
 
 Every picture (sets included), then every Hunyuan3D mesh, then every rig is submitted together, so each model
 loads once. A scene3d ``cast`` entry names a model, and a ``background`` a set, by its name
@@ -30,11 +34,22 @@ import re
 import time
 from typing import Any, Callable
 
+from services import production_rooms as rooms
 from services.glb_cleanup import CLEANUP as GLB_CLEANUP
+from services.humanoid_rig.rig import RIG_VERSION
 from services.production_control import sleep_until
+from services.production_seeds import default_seed
 from services.production_diorama import (
-    build as build_diorama, check_diorama, is_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
+    build as build_diorama, check_diorama, is_built as diorama_built, is_diorama, picture_jobs as diorama_jobs, recipe as diorama_recipe,
 )
+from services.production_parallax import (
+    build as build_parallax, check_parallax, is_built as parallax_built, is_parallax, picture_jobs as parallax_jobs,
+    recipe as parallax_recipe,
+)
+from services.production_room_box import (
+    build as build_room_box, check_room_box, is_built as box_built, picture_jobs as box_jobs, recipe as box_recipe,
+)
+from services.room_box import is_box_room
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
 FIELDS = {"from", "prompt", "glb", "rig", "fallback", "animations", "seed", "height"}
@@ -61,8 +76,19 @@ PICTURE_SIZE = "1024x1024"
 SET_LEAD = "An EMPTY set with nobody in it, ready for actors to step in:"
 SET_STAGING = ("wide eye-level view, a large open EMPTY floor across the foreground and lower third where actors can stand, "
                "the scenery behind it, clear horizon, no people, no figurines, no dolls, no characters, no animals, no text")
+# A far plate (sets.<name>.staging "backdrop"): no floor for the cast is asked for, still nobody in it.
+BACKDROP_STAGING = "wide view of the scenery, clear horizon, nobody in it, no text"
+STAGINGS = ("floor", "backdrop", "none")
 RECIPE = 2                      # the picture recipes above; a change remakes pictures, meshes and sets
-_PEOPLE = re.compile(r"\b(characters?|figurines?|figures?|people|persons?|actors?|dolls?|toys? figures?|cast)\b", re.IGNORECASE)
+# A sentence that puts people in the picture. The same words naming a medium or a material ("a figurine look",
+# "doll-like faces", "toy-like", "cast shadows", "cast iron", "crowd-pleasing") are masked first, so the look keeps them.
+# A medium is a hyphenated word or a singular noun before the word: "the dolls look out" and "characters feel" are
+# people doing something, and "character style" names no medium, so those sentences still go.
+_PEOPLE = re.compile(r"\b(characters?|figurines?|figures?|people|persons?|actors?|dolls?|toys? figures?|cast|crowds?)\b", re.IGNORECASE)
+_MEDIUM = re.compile(r"\b(?:figurine|figure|doll|toy|puppet)s?-(?:like|look|style|aesthetic|textures?|finish|feel)\b"
+                     r"|\b(?:figurine|figure|doll|toy|puppet) (?:look|style|aesthetic|textures?|finish|feel)\b"
+                     r"|\bcasts?[- ](?:shadows?|light|glow|reflections?|iron|bronze|steel|metal|concrete|stone|resin|plaster)\b"
+                     r"|\bcrowd[- ]pleas\w*", re.IGNORECASE)
 SET_SIZE = "1664x928"         # 16:9 on the 32-pixel grid the image models need
 MESH_PRESET = "balanced"        # Hunyuan3D 2 Turbo geometry with Paint 2.0 Turbo texture
 WAVE = 4                        # model3d_service._MAX_ACTIVE_JOBS
@@ -81,13 +107,22 @@ def check_sets(spec: dict) -> None:
     if not isinstance(sets, dict) or len(sets) > 12:
         raise ModelError("spec.sets maps up to 12 names to {prompt, seed}")
     for name, entry in sets.items():
-        if is_diorama(entry) and isinstance(name, str) and _NAME.match(name):
-            why = check_diorama(name, entry, _text)
+        built = is_diorama(entry) or is_parallax(entry) or is_box_room(entry) or rooms.is_room(entry)
+        if built and isinstance(name, str) and _NAME.match(name):
+            if is_box_room(entry):
+                why = check_room_box(name, entry, _text)
+            elif rooms.is_room(entry):
+                why = rooms.check_room(name, entry, _text)
+            else:
+                why = (check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
             if why:
                 raise ModelError(why)
         elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
-                or set(entry) - {"prompt", "seed"} or not _text(entry.get("prompt")):
-            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed}}, or a diorama {{kind: \"diorama\", ...}}")
+                or set(entry) - {"prompt", "seed", "staging"} or not _text(entry.get("prompt")):
+            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed, staging}}, a diorama {{kind: \"diorama\", ...}} "
+                             f"or a parallax set {{kind: \"parallax\", ...}}")
+        elif entry.get("staging", "floor") not in STAGINGS:
+            raise ModelError(f"sets.{name}.staging must be one of {', '.join(STAGINGS)}")
 
 
 def check_models(spec: dict) -> None:
@@ -120,6 +155,8 @@ def _check_origin_and_rig(name: str, entry: dict, cast: set) -> None:
     origins = [field for field in ("from", "prompt", "glb") if _text(entry.get(field))]
     if not origins or ("glb" in origins and len(origins) > 1):
         raise ModelError(f"models.{name}: give from (a cast id, stills name or picture URL), a prompt, or a glb in the workspace")
+    if "glb" in origins and workspace_rel(entry["glb"]) is None:
+        raise ModelError(f"models.{name}.glb is a file inside the workspace, not a path that climbs out")
     rig = rig_of(entry, cast)
     if rig not in RIGS:
         raise ModelError(f"models.{name}.rig must be one of {', '.join(RIGS)}")
@@ -133,6 +170,31 @@ def rig_of(entry: dict, cast: set) -> str:
 
 def _text(value: Any) -> bool:
     return isinstance(value, str) and 0 < len(value.strip()) <= 2000
+
+
+def workspace_rel(path: str) -> str | None:
+    """A relative file path inside the workspace (``pack/ape.glb``), or None if it climbs out or is absolute (a
+    Windows drive such as ``C:/x.glb`` or ``c:x.glb`` is absolute there: ``root / "C:/x.glb"`` is ``C:/x.glb``)."""
+    import ntpath
+    text = str(path).replace("\\", "/").split("?", 1)[0]
+    if not text or text.startswith("/") or "\x00" in text or ntpath.splitdrive(text)[0]:
+        return None
+    parts = [part for part in text.split("/") if part]
+    if not parts or any(part in (".", "..") for part in parts):
+        return None
+    return "/".join(parts)
+
+
+def _glb_file(root: Any, glb: str, name: str):
+    """The relative path and the file ``glb`` names, or ModelError if it is missing or climbs out."""
+    from pathlib import Path
+    relative = workspace_rel(glb)
+    if relative is None:
+        raise ModelError(f"models.{name}.glb is a file inside the workspace, not a path that climbs out")
+    path = Path(root) / relative
+    if not path.is_file():
+        raise ModelError(f"models.{name}.glb: no file {path.name} in the workspace")
+    return relative, path
 
 
 def _cast_ids(spec: dict) -> set:
@@ -159,10 +221,52 @@ def _fingerprint(entry: dict, source: str | None, spec: dict) -> str:
     return hashlib.sha256(json.dumps([made_from, source, look, bpm, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
 
 
-def scenery_look(look: str) -> str:
-    """The style without its sentences about people, which make an image model populate an empty picture."""
+def scenery_parts(look: str) -> tuple[str, list[str]]:
+    """(the style without its sentences that put people in the picture, those sentences). People named in a set's
+    look make an image model populate an empty picture; a word naming the medium does not count."""
     sentences = re.split(r"(?<=[.;:])\s+", look or "")
-    return " ".join(sentence for sentence in sentences if not _PEOPLE.search(sentence)).strip()
+    dropped = [sentence for sentence in sentences if _PEOPLE.search(_MEDIUM.sub(" ", sentence))]
+    return " ".join(sentence for sentence in sentences if sentence not in dropped).strip(), dropped
+
+
+def scenery_look(look: str) -> str:
+    return scenery_parts(look)[0]
+
+
+def set_prompt(entry: dict, look: str) -> str:
+    """The picture prompt of a painted set for its ``staging``. ``floor`` is the recipe every set had before staging."""
+    staging = entry.get("staging", "floor")
+    if staging == "none":
+        return " ".join(part for part in (f"{entry['prompt']}.", (look or "").strip()) if part)
+    if staging == "backdrop":
+        return " ".join(part for part in (f"{entry['prompt']}.", scenery_look(look), BACKDROP_STAGING) if part)
+    return f"{SET_LEAD} {entry['prompt']}. {scenery_look(look)} {SET_STAGING}"
+
+
+def set_report(spec: dict) -> dict[str, dict]:
+    """dry_run's ``sets``: per set its staging, the prompt a painted set sends, and the look sentences left out."""
+    style = spec.get("style") if isinstance(spec.get("style"), dict) else {}
+    look = style.get("image") or ""
+    dropped = scenery_parts(look)[1]
+    sets = spec.get("sets") if isinstance(spec.get("sets"), dict) else {}
+    report = {}
+    for name, entry in sets.items():
+        kind = _set_kind(entry)
+        if kind or not isinstance(entry, dict) or not _text(entry.get("prompt")):
+            report[name] = {"staging": kind["name"] if kind else None, "look_sentences_dropped": dropped}
+            continue
+        staging = entry.get("staging", "floor")
+        if staging not in STAGINGS:         # dry_run does not validate: say so instead of showing the floor prompt
+            report[name] = {"staging": staging, "error": f"sets.{name}.staging must be one of {', '.join(STAGINGS)}"}
+            continue
+        report[name] = {"staging": staging, "prompt_sent": set_prompt(entry, look),
+                        "look_sentences_dropped": [] if staging == "none" else dropped}
+    return report
+
+
+def _painted(entry: dict) -> dict:
+    """What a painted set's fingerprint covers: ``staging`` only when it is not the default, so sets made before it keep theirs."""
+    return {key: value for key, value in entry.items() if not (key == "staging" and value == "floor")}
 
 
 def _digest(value: str) -> str:
@@ -211,6 +315,19 @@ def _await(production: Any, operation: str, jobs: dict[str, tuple[str | None, st
     return done
 
 
+# The set kinds built from several pictures, each with its recipe, its picture jobs and what a built record holds.
+SET_KINDS = (
+    {"name": "room_box", "is": is_box_room, "recipe": box_recipe, "jobs": box_jobs, "built": box_built},
+    {"name": "room", "is": rooms.is_room, "recipe": rooms.recipe, "jobs": rooms.picture_jobs, "built": rooms.is_built},
+    {"name": "diorama", "is": is_diorama, "recipe": diorama_recipe, "jobs": diorama_jobs, "built": diorama_built},
+    {"name": "parallax", "is": is_parallax, "recipe": parallax_recipe, "jobs": parallax_jobs, "built": parallax_built},
+)
+
+
+def _set_kind(entry: Any) -> dict | None:
+    return next((kind for kind in SET_KINDS if kind["is"](entry)), None)
+
+
 def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     """Image jobs for the sets that are missing or changed, keyed ``set:<name>``."""
     from services.production_image_defaults import image_choice
@@ -218,17 +335,19 @@ def _set_jobs(production: Any, spec: dict) -> dict[str, str | None]:
     made = production.state.setdefault("sets", {})
     jobs = {}
     for name, entry in (spec.get("sets") or {}).items():
-        fingerprint = _fingerprint(diorama_recipe(entry) if is_diorama(entry) else entry, None, spec)
+        kind = _set_kind(entry)
+        fingerprint = _fingerprint(kind["recipe"](entry) if kind else _painted(entry), None, spec)
         kept = made.get(name) or {}
-        if kept.get("fingerprint") == fingerprint and (kept.get("url") or is_built(kept)):
+        if kept.get("fingerprint") == fingerprint and (kept.get("url") or (kind and kind["built"](kept))):
             continue
         made[name] = {"fingerprint": fingerprint}
-        if is_diorama(entry):
-            made[name]["kind"] = "diorama"
-            jobs.update(diorama_jobs(production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
+        if kind:
+            made[name]["kind"] = kind["name"]
+            jobs.update(kind["jobs"](production, name, entry, scenery_look(style.get("image", "")), image_choice(entry, style)))
             continue
-        prompt = f"{SET_LEAD} {entry['prompt']}. {scenery_look(style.get('image', ''))} {SET_STAGING}"
-        jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", 11),
+        made[name]["staging"] = entry.get("staging", "floor")
+        prompt = set_prompt(entry, style.get("image", ""))
+        jobs[f"set:{name}"] = production.image(f"set-{name}", prompt, None, SET_SIZE, entry.get("seed", default_seed(production, 11)),
                                                *image_choice(entry, style), production._attempt("set_attempts", name))
     return jobs
 
@@ -241,7 +360,9 @@ def _models_to_make(production: Any, spec: dict, made: dict) -> dict[str, tuple[
         # A model meshed straight from its picture before REFERENCE_STAGING is made again.
         restaged = {**entry, "staging": "isolated-2"} if source and rig != "humanoid" else entry
         if entry.get("glb"):
-            restaged = {**entry, "glb_bytes": _size(production.root / entry["glb"], name), "cleanup": GLB_CLEANUP}
+            _relative, path = _glb_file(production.root, entry["glb"], name)
+            restaged = {**entry, "glb_bytes": _size(path, name), "cleanup": GLB_CLEANUP,
+                        **({"rig_version": RIG_VERSION} if rig == "humanoid" else {})}   # a new rig redoes the rig, not a profile
         fingerprint = _fingerprint(restaged, source, spec)
         kept = made.get(name) or {}
         if kept.get("fingerprint") == fingerprint and kept.get("file") and not kept.get("rig_error"):
@@ -272,7 +393,7 @@ def _picture_jobs(production: Any, todo: dict, style: dict) -> tuple[dict[str, s
         else:
             staged = f"{entry['prompt']}. Style: {look} {OBJECT_STAGING}".replace("Style:  ", "")
         jobs[name] = production.image(f"model-{name}", staged, [source] if source else None, PICTURE_SIZE,
-                                      entry.get("seed", 7), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
+                                      entry.get("seed", default_seed(production, 7)), *image_choice(entry, style), production._attempt("model_picture_attempts", name))
     return pictures, jobs
 
 
@@ -291,7 +412,7 @@ def _collect_pictures(production: Any, jobs: dict, made: dict, sets: dict, pictu
             pictures[name] = production.upload(file)[1]
     for set_name, record in sets.items():
         if record.get("pictures") and not record.get("error"):
-            build_diorama(production, set_name, record)
+            (build_room_box if record.get("kind") == "room_box" else rooms.build if record.get("kind") == "room" else build_parallax if record.get("kind") == "parallax" else build_diorama)(production, set_name, record)
     production.save()
 
 
@@ -359,13 +480,13 @@ def _cleaned(production: Any, name: str, glb: str, *, standing: bool) -> str:
     changes the file name, so rigs and clips made from an earlier copy are not taken for this one."""
     from pathlib import PurePosixPath
     from services.glb_cleanup import clean_glb
-    source = production.root / glb
+    relative, source = _glb_file(production.root, glb, name)
     digest = _digest(f"{hashlib.sha256(source.read_bytes()).hexdigest()}:{GLB_CLEANUP}:{standing}")
-    target = str(PurePosixPath(glb).with_name(f"{PurePosixPath(glb).stem}.clean-{digest}.glb"))
+    target = str(PurePosixPath(relative).with_name(f"{PurePosixPath(relative).stem}.clean-{digest}.glb"))
     if fixes := clean_glb(source, production.root / target, standing=standing):
         production.log(f"model {name}: {'; '.join(fixes)}; rigging {target}")
         return target
-    return glb
+    return relative
 
 
 def _fall_back(production: Any, todo: dict, made: dict, failed: list[str], bpm: int, sleep) -> None:

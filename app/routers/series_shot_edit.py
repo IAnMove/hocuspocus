@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
@@ -14,7 +14,9 @@ from pydantic import BaseModel, ConfigDict, Field
 from starlette.concurrency import run_in_threadpool
 
 from routers.series_produce import workspace_files
+from routers.series_shot_card import create_series_shot_card_router
 from services.series_look_room import warnings as look_room_warnings
+from services.series_shot_card import CardDeps, SeriesShotCard
 from services.series_shot_edit import (
     ShotEditError, apply_edit, build_patch, find_shot, merge_changes, take_still_fits, to_script,
 )
@@ -60,8 +62,10 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
                                    read_library: Callable[[str], dict], read_kits: Callable[[str], dict],
                                    workspace_dir: Callable[[str], str], call: Callable[[str, dict], dict],
                                    bind_loop: Callable[[asyncio.AbstractEventLoop], None],
-                                   plan_changes: Callable[[str, str, dict], dict] | None = None) -> APIRouter:
-    """``plan_changes(prompt, system, schema)`` is the configured LLM that turns an ``instruction`` into the edit."""
+                                   plan_changes: Callable[[str, str, dict], dict] | None = None,
+                                   services: Callable[[], Mapping[str, Any]] | None = None) -> APIRouter:
+    """``plan_changes(prompt, system, schema)`` is the configured LLM that turns an ``instruction`` into the edit. ``services`` reads the
+    services config («Modo un solo disparo», ``agent_autonomy``) for the card route that sits beside the edit (series.shot.card.apply)."""
     router = APIRouter()
 
     def episode_of(workspace: str, series_id: str, episode_id: str) -> tuple[dict, dict]:
@@ -195,6 +199,10 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
             raise fail(error) from error
         return shot_view(series, episode, found, number)
 
+    if services is not None:
+        router.include_router(create_series_shot_card_router(SeriesShotCard(CardDeps(
+            read_library=read_library, read_kits=read_kits, workspace_dir=workspace_dir, call=call, change_series=change_series,
+            services=services)), bind_loop))
     return router
 
 

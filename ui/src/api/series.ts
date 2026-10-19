@@ -60,10 +60,11 @@ export async function fetchSeriesProject(
 export async function createSeriesProject(
   workspace: string,
   title = 'Untitled series',
+  language?: string,
 ): Promise<import('../features/series/types').SeriesProject> {
   return seriesResponse(fetch(`${BASE}/api/v1/series`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, title }),
+    body: JSON.stringify({ workspace, title, ...(language ? { language } : {}) }),
   }), 'Could not create Series Lab project')
 }
 

@@ -30,14 +30,14 @@ def _known_tools() -> set[str]:
     from services.scene_commands import command_catalog as effects
     from services.scene_documents import command_catalog as documents
     from services.video2d_catalogs import command_catalog as catalogs
-    from services.video2d_catalogs import query_operation
+    from services.video2d_catalogs import query_operations
     from services.video2d_compile import command_catalog as compile_catalog
     from services.video2d_edit import command_catalog as edit_catalog
     from services.video2d_preview import command_catalog as preview_catalog
 
     names: set[str] = set()
     groups = (
-        effects(), catalogs(), [query_operation()], compile_catalog(), edit_catalog(),
+        effects(), catalogs(), query_operations(), compile_catalog(), edit_catalog(),
         preview_catalog(), validate_catalog(), documents(), export_catalog(), montages(), montage_preview(), assets(),
     )
     for group in groups:

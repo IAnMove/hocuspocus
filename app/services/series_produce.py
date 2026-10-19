@@ -30,7 +30,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from services.series_jobs import SeriesJobStore
+from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_language_versions import LANGUAGES
 from services.series_shot_plan import language_key
 
@@ -128,6 +128,10 @@ class SeriesProduce:
     def jobs(self, workspace: str) -> list[dict[str, Any]]:
         return [self._reconcile(workspace, job) for job in self._store(workspace).list()]
 
+    def live_jobs(self, workspace_dir: str) -> list[dict[str, Any]]:
+        """The productions in this folder a thread of this service is running (``services.workspace_busy`` probe)."""
+        return live_checkpoints(workspace_dir, KIND, ACTIVE, lambda job_id: worker_alive(self._threads.get(job_id)))
+
     def status(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self._store(workspace).load(job_id)
         if not job:
@@ -154,20 +158,21 @@ class SeriesProduce:
         return job
 
     def cancel(self, workspace: str, job_id: str) -> dict[str, Any]:
-        job = self.status(workspace, job_id)
         with self._lock:
+            job = self.status(workspace, job_id)
+            step = None
+            if job["status"] in ACTIVE:
+                step = next((item for item in job["steps"] if item["status"] == "running" and item.get("jobId")), None)
+                job.update(status="cancelling", message="Stopping after the current step")
+                self._store(workspace).save(job)
+            # The worker must see this flag only after the cancelling checkpoint exists.
             self._cancel.add(job_id)
-        if job["status"] in ACTIVE:
-            step = next((item for item in job["steps"] if item["status"] == "running" and item.get("jobId")), None)
-            if step and step["kind"] == "render":
-                self.deps.call("series.episode.render_native.cancel", self._args(job, job_id=step["jobId"]))
-            elif step and step["kind"] == "video":
-                # The clip already sent would keep the GPU until it ends.
-                from services.series_video_shots import cancel_generation
-                cancel_generation(self.deps, step["jobId"])
-            job.update(status="cancelling", message="Stopping after the current step")
-            self._store(workspace).save(job)
-        return job
+        if step and step["kind"] == "render":
+            self.deps.call("series.episode.render_native.cancel", self._args(job, job_id=step["jobId"]))
+        elif step and step["kind"] == "video":
+            from services.series_video_shots import cancel_generation
+            cancel_generation(self.deps, step["jobId"])
+        return self.status(workspace, job_id)
 
     def resume(self, workspace: str, job_id: str) -> dict[str, Any]:
         job = self.status(workspace, job_id)
@@ -202,8 +207,9 @@ class SeriesProduce:
     # Worker --------------------------------------------------------------
 
     def _save(self, job: dict, **patch: Any) -> None:
-        job.update(patch)
-        self._store(job["workspace"]).save(job)
+        with self._lock:
+            job.update(patch)
+            self._store(job["workspace"]).save(job)
 
     def _cancelled(self, job_id: str) -> bool:
         with self._lock:

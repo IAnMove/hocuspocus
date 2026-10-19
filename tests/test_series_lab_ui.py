@@ -46,7 +46,8 @@ def test_setup_has_required_aura_explicit_models_and_canvas_choices():
     assert "minimax_h3_legacy" in catalog_ts
     assert "minimax_h3_full" in catalog_ts
     assert "minimax_h3_fused_turbo" in catalog_ts
-    assert "480p" in video_fields and "720p" in video_fields
+    assert "SERIES_VIDEO_RESOLUTIONS" in video_fields and "SeriesVideoShotResolutionField" in setup
+    assert "['480p', '540p', '720p', '768p']" in source("videoResolution.ts")
     assert "t('providers.landscape')" in video_fields and "t('providers.portrait')" in video_fields
     assert catalog["providers"]["landscape"].startswith("Landscape")
     assert catalog["providers"]["portrait"].startswith("Portrait")

@@ -51,6 +51,8 @@ export interface StoryMusicCandidateRequest {
   lyrics: string
   count: 1 | 2 | 3
   model?: 'music-3.0' | 'music-2.6' | 'music-cover' | 'minimax_music3' | 'ace_step_v1_5_xl_sft_lm_4b'
+  /** The person confirmed the MiniMax API cost in Story Lab; the server refuses paid music without it. */
+  paid_music_confirmed?: true
   reference_audio_filename?: string
   instrumental?: boolean
   workspace?: string

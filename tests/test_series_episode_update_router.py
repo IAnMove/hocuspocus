@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 
-from routers.series_episode import apply_series_episode_update
+from services.series_episode import apply_series_episode_update
 from services.series_library import normalize_series_library
 
 

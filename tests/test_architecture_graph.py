@@ -102,6 +102,43 @@ def test_backend_graph_preserves_static_multiplicity_and_evidence(tmp_path: Path
     assert any(node["id"] == "svc.resolve_permitted_path" for node in graph["nodes"])
 
 
+def test_backend_graph_follows_the_media_resolver_into_the_kernel(tmp_path: Path) -> None:
+    source = _backend_source().replace(
+        "def _resolve_request_media_path(value):\n    return resolve_permitted_media_path(value)\n",
+        "_resolve_request_media_path = ctx.paths.resolve_request_media_path\n",
+    )
+    _write_backend_fixture(tmp_path, source)
+    kernel = tmp_path / "app/services/kernel"
+    kernel.mkdir(parents=True)
+    (kernel / "paths.py").write_text(
+        "class PathPolicy:\n"
+        "    def resolve_request_media_path(self, value):\n"
+        "        return resolve_permitted_media_path(value)\n",
+        encoding="utf-8",
+    )
+
+    graph = extract_backend_graph(tmp_path)
+    edge = next(
+        edge
+        for edge in graph["edges"]
+        if edge["source"] == "svc.resolve_request_path"
+        and edge["target"] == "svc.resolve_permitted_path"
+    )
+
+    assert [item["file"] for item in edge["evidence"]] == ["app/services/kernel/paths.py"]
+    assert "app/services/kernel/paths.py" in graph["source_files"]
+
+
+def test_backend_graph_of_the_real_tree_reaches_the_permitted_path_check() -> None:
+    graph = build_graph(Path(__file__).resolve().parents[1], backend_only=True)
+
+    assert any(node["id"] == "svc.resolve_permitted_path" for node in graph["nodes"])
+    assert any(
+        edge["source"] == "svc.resolve_request_path" and edge["target"] == "svc.resolve_permitted_path"
+        for edge in graph["edges"]
+    )
+
+
 def test_backend_graph_fails_closed_when_a_required_route_is_missing(tmp_path: Path) -> None:
     _write_backend_fixture(tmp_path, _backend_source(), routes=list(BACKEND_ROUTE_FUNCS[:-1]))
 

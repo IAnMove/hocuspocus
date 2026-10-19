@@ -43,6 +43,9 @@ function readStoredGalleryView(): GalleryView {
 export type GallerySlice = {
   workspaces: Array<{ name: string; path: string; file_count?: number }>
   activeWorkspace: string
+  /** Gallery is showing the virtual "Uploads" view (browse-only — the
+   *  server-side active workspace, and where generations save, is
+   *  untouched). Entered via switchWorkspace('__uploads__'). */
   browsingUploads: boolean
   loadWorkspaces: () => Promise<void>
   switchWorkspace: (name: string) => Promise<void>
@@ -84,6 +87,7 @@ export type GallerySlice = {
   toggleFavorite: (name: string) => Promise<void>
   /** Fold late sizes and colours into listed outputs. Returns how many changed. */
   mergeOutputFacts: (facts: api.OutputFacts) => number
+  // Output metadata (lazy-loaded for selected output)
   selectedOutputMeta: OutputMetadata | null
   metadataLoading: boolean
   loadOutputMetadata: (name: string) => Promise<void>

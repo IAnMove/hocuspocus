@@ -94,7 +94,8 @@ function validProduction(p: Scene3DDocument['production']) {
 }
 function knownTemplateId(value: unknown): Scene3DTemplateId {
   if (typeof value === 'string' && (SCENE3D_TEMPLATE_IDS as readonly string[]).includes(value)) return value as Scene3DTemplateId
-  if (typeof value === 'string' && value.match(/^user-[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/)) return value as Scene3DTemplateId
+  // A stage-* id is a mold staged on two-shot by the library (services/world3d_stage_documents.py).
+  if (typeof value === 'string' && value.match(/^(user|stage)-[A-Za-z0-9][A-Za-z0-9._-]{0,80}$/)) return value as Scene3DTemplateId
   return 'two-shot'
 }
 

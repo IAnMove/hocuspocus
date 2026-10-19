@@ -513,3 +513,23 @@ H3 clips.
 | `ui/src/features/characters/orbitPrompt.ts` | Orbit A/B prompts and still-frame indices |
 
 When in doubt: **one identity per mesh, one path per compositor shot, H3 never draws that mesh.**
+
+## Box rooms
+
+A metric interior is `kind: "room"` with `size: {w, d, h}` in metres and no `mold`. The open side faces the camera. The floor is y = 0. A door defaults to 0.9 × 2.0 m on the back wall and the ceiling defaults to 2.6 m. `scene3d.room.put` stores the room and its GLB; `scene3d.room.get` reads it (the spec, what each surface wears and the paint state).
+
+**A room is never flat.** `put` gives floor, walls, ceiling (when the room has one), door and trim a procedural material chosen from the words of `floor`, `walls` and `ceiling` (`oak parquet`, `paneles metálicos remachados color crema`, `linóleo gastado verde`: English or Spanish; a colour word tints it, `dark` and `light` shade it; the room's `prompt` decides only when a surface's words name nothing). The eleven materials (`plaster`, `concrete`, `wood_planks`, `parquet`, `metal_panels`, `riveted_steel`, `tile`, `carpet`, `brick`, `stone`, `linoleum`) are drawn by `app/services/room_materials.py` with numpy: deterministic, free, no GPU, and tileable by construction. Each repeats at its real scale (`tile_m` metres: 1.2 m for boards, 2.4 m for steel plates). The geometry has skirting, a cornice, a door frame, raised door panels (two columns by two rows) and a handle, and a frame and sill for every window. A metal room gets a steel door and trim, any other a wooden door and white trim. Walls, floor and trim carry a small self-lit share (`emissive` 0.16), so a wall the key light misses is still a wall.
+
+**`scene3d.room.paint` repaints it with the image model.** Input `{workspace, name, style?, floor?, walls?, ceiling?, door?, trim?, tile_m?, seed?, engine?}`, with a new `intent_id`. Each surface takes your words (the spec's own words when you give none); `style` is a short look for all of them, appended as `Material look: …` (a whole scene in the style makes the model draw perspective, so keep it to a material). `tile_m` is `{floor, walls, ceiling, trim}` in metres one repeat covers (defaults 1, 1.5, 1.5 and 0.8) and is told to the model. The model is the fastest installed Qwen Image 2.1 (turbo by default), asked through the same admission as sets and props. It is a background job: poll `scene3d.room.paint.status` until `completed`. Each surface is its own job, so one failing does not stop the others.
+
+- A tiling picture that does not repeat is healed at its wrap by the same inpaint pass `location.set3d` uses; if the seam is still over the limit its edges are blended; if it still does not repeat, that surface keeps its procedural material and the status carries `seam_fallback`.
+- A surface the model cannot make keeps its procedural material (`paint_failed` in `warnings`); if nothing could be painted the status is `failed` and the room, its GLB and its look are untouched.
+- The pictures are `rooms/<name>/<surface>.png` (the door is a front view at 0.9:2, with no raised panels of its own geometry because its picture has them); the GLB is rebuilt at the same path. Everything is recoverable from the workspace and from `scene3d.room.get`.
+- Same room, words, style, `tile_m` and seed give the same request: a second call answers `cached: true` and asks nothing. A different seed paints again. `engine: "procedural"` needs no model: it re-chooses the procedural materials from the words you give and undoes any painted surface.
+- A Series shot standing in the room counts the room's look in its render fingerprint (`roomLook`), so a repaint renders only the shots in that room again. A room stored before looks existed keeps the digests its shots had until it is put again.
+
+Painted textures also remain a production `spec.sets` entry of the same shape. There is no room editor panel: the doors are MCP, `POST /api/v1/scene3d/rooms/commands` and the Wizard action `room_sets` (operations `scene3d.room.put`, `get`, `paint`, `paint.status`).
+
+A `kind: "3d"` Series shot names `set: "<room>"`. Each person carries `at: {x, z}` in metres or `near`, `mid` or `far`. Feet stand on the floor at that height (`heightM`, default 1.7). Use it for a wide interior full-body shot. A person outside the floor, on the door or on furniture is an error. A mold room (`location.set3d`) stays the other path and is not merged with a named box room.
+
+The wide frame is the shared camera in `app/shared/room_box_camera.json`: eye height 1.6 m, just outside the open side, field of view 48. Flat props can look like cardboard when the camera moves.

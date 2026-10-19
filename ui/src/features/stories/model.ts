@@ -6,8 +6,13 @@ import {
   DEFAULT_DIRECT_VIDEO_MASTER_PROMPT,
   LEGACY_HEAVY_METAL_DIRECT_VIDEO_MASTER_PROMPT,
 } from '../../types/index.ts'
-import { normalizeStoryMusicModel } from './musicModel'
-import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import { normalizeStoryMusicChoice } from './musicModel'
+import { contentLanguageForUi } from '../../lib/contentLanguage'
+// The i18next instance src/i18n initializes at app start. E2E specs load this module in Node,
+// where src/i18n's locale JSON cannot load, so it is not imported here.
+import i18n from 'i18next'
+import { normalizeLanguageIntent, savedProjectLanguage } from '../../lib/languageIntent'
+import { extraDecisions, normalizeGuide } from '../writing-guide/model'
 import { defaultStoryProductionRecipe, normalizeStoryProductionRecipe } from './storyProductionRecipe'
 
 export type StorySection = 'overview' | 'world' | 'characters' | 'relationships' | 'structure'
@@ -130,19 +135,19 @@ export function analyzeStoryPromptHealth(project: StoryProject): string[] {
     'bedroom', 'dormitorio', 'kitchen', 'cocina', 'sitting', 'sentado', 'typing', 'tecleando',
   ].filter(term => style.includes(term))
   if (sceneTerms.length >= 2) {
-    warnings.push(`El estilo/prompt maestro contiene escena o acción (${sceneTerms.slice(0, 4).join(', ')}). Muévela al argumento o a un plano concreto para que no se repita en todos los clips.`)
+    warnings.push(i18n.t('storyLab:promptHealth.sceneInStyle', { terms: sceneTerms.slice(0, 4).join(', ') }))
   }
   if (project.directVideoMasterPromptMode === 'custom' && project.directVideoMasterPrompt.length > 1200) {
-    warnings.push('El prompt maestro personalizado es muy largo; deja aquí sólo medio visual, paleta, iluminación y reglas de diseño.')
+    warnings.push(i18n.t('storyLab:promptHealth.customTooLong'))
   }
   const beatTexts = project.beats.map(beat => `${beat.summary} ${beat.conflict} ${beat.turn}`.toLocaleLowerCase())
   const repeated = ['cafetería', 'cafe', 'café', 'ordenador', 'computer', 'laptop', 'pantalla', 'screen']
     .filter(term => beatTexts.length >= 3 && beatTexts.filter(textValue => textValue.includes(term)).length / beatTexts.length >= 0.6)
   if (repeated.length) {
-    warnings.push(`La mayoría de momentos repite ${repeated.join(', ')}. Reserva ese motivo para uno o dos bloques y añade localizaciones/acciones de contraste.`)
+    warnings.push(i18n.t('storyLab:promptHealth.repeatedMotif', { terms: repeated.join(', ') }))
   }
   if (project.locationVariety === 'balanced' && project.projectType === 'music_video' && project.creativeBrief.setting.trim() && !project.world.locations.length) {
-    warnings.push('Sólo hay una localización concreta. Con “variedad equilibrada”, añade al menos dos entornos de contraste o deja el lugar como referencia no obligatoria.')
+    warnings.push(i18n.t('storyLab:promptHealth.singleLocation'))
   }
   return warnings
 }
@@ -382,6 +387,7 @@ function normalizeAsset(value: unknown, id: string): StoryVisualAsset | null {
 
 export function createStoryProject(projectType: StoryProject['projectType'] = 'full_story'): StoryProject {
   const now = new Date().toISOString()
+  const contentLanguage = contentLanguageForUi()
   return {
     version: 1,
     id: storyId('story'),
@@ -403,18 +409,18 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
       quickFormat: 'dialogue',
       durationSeconds: projectType === 'quick_video' ? 15 : projectType === 'trailer' ? 60 : 90,
     },
-    language: 'Español',
-    spokenLanguage: 'Español de España',
+    language: contentLanguage.language,
+    spokenLanguage: contentLanguage.spokenLanguage,
     languageIntent: normalizeLanguageIntent(null, {
-      contentLanguage: 'Español',
-      spokenLanguage: 'Español de España',
+      contentLanguage: contentLanguage.language,
+      spokenLanguage: contentLanguage.spokenLanguage,
       technicalPromptLanguage: 'en',
     }),
     locationVariety: 'balanced',
     protagonistConsistency: false,
     protagonistCharacterId: '',
     genre: 'Adventure',
-    tone: 'Cinematic',
+    tone: '',
     audience: 'General',
     visualStyle: '',
     characterVisualStyle: '',
@@ -476,6 +482,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
   const fallback = createStoryProject()
   if (!value || typeof value !== 'object') return fallback
   const project = value as Partial<StoryProject>
+  const savedLanguage = savedProjectLanguage(project)
   const creativeBrief = project.creativeBrief && typeof project.creativeBrief === 'object'
     ? project.creativeBrief : fallback.creativeBrief
   const world: Partial<StoryProject['world']> =
@@ -562,6 +569,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
     id: text(project.id) || fallback.id,
     revision: Math.max(1, Number(project.revision) || 1),
     sectionVersions,
+    ...(project.writingGuide ? { writingGuide: normalizeGuide(project.writingGuide) } : {}),
     title: text(project.title, fallback.title),
     projectType: project.projectType === 'music_video'
       ? 'music_video'
@@ -584,11 +592,11 @@ export function normalizeStoryProject(value: unknown): StoryProject {
         Number(creativeBrief.durationSeconds)
         || (project.projectType === 'quick_video' ? 15 : project.projectType === 'trailer' ? 60 : 90))),
     },
-    language: text(project.language, fallback.language),
-    spokenLanguage: text(project.spokenLanguage, text(project.language, fallback.spokenLanguage)),
+    language: savedLanguage.language,
+    spokenLanguage: savedLanguage.spokenLanguage,
     languageIntent: normalizeLanguageIntent(project.languageIntent, {
-      contentLanguage: text(project.language, fallback.language),
-      spokenLanguage: text(project.spokenLanguage, text(project.language, fallback.spokenLanguage)),
+      contentLanguage: savedLanguage.language,
+      spokenLanguage: savedLanguage.spokenLanguage,
       technicalPromptLanguage: 'en',
     }),
     locationVariety: project.locationVariety === 'single_location' ? 'single_location' : 'balanced',
@@ -672,7 +680,7 @@ export function normalizeStoryProject(value: unknown): StoryProject {
       : {},
     music: {
       mode: project.music?.mode === 'cover' ? 'cover' : 'original',
-      model: normalizeStoryMusicModel(project.music?.model),
+      ...normalizeStoryMusicChoice(project.music),
       brief: text(project.music?.brief),
       style: text(project.music?.style),
       sourceLyrics: text(project.music?.sourceLyrics),
@@ -721,13 +729,13 @@ export function changedSections(before: StoryProject, after: StoryProject): Stor
     before.title, before.projectType, before.creativeBrief, before.language, before.spokenLanguage, before.languageIntent, before.locationVariety, before.protagonistConsistency, before.protagonistCharacterId, before.genre, before.tone, before.audience,
     before.visualStyle, before.characterVisualStyle, before.enforceVisualStyle, before.allowClipText,
     before.musicVideoGenerationMode, before.directVideoMasterPromptMode, before.directVideoMasterPrompt,
-    before.premise, before.logline, before.synopsis, before.theme, before.ending,
+    before.premise, before.logline, before.synopsis, before.theme, before.ending, extraDecisions(before.writingGuide),
   ]
   const overviewAfter = [
     after.title, after.projectType, after.creativeBrief, after.language, after.spokenLanguage, after.languageIntent, after.locationVariety, after.protagonistConsistency, after.protagonistCharacterId, after.genre, after.tone, after.audience,
     after.visualStyle, after.characterVisualStyle, after.enforceVisualStyle, after.allowClipText,
     after.musicVideoGenerationMode, after.directVideoMasterPromptMode, after.directVideoMasterPrompt,
-    after.premise, after.logline, after.synopsis, after.theme, after.ending,
+    after.premise, after.logline, after.synopsis, after.theme, after.ending, extraDecisions(after.writingGuide),
   ]
   const changed: StorySection[] = []
   if (JSON.stringify(overviewBefore) !== JSON.stringify(overviewAfter)) changed.push('overview')

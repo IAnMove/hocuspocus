@@ -7,6 +7,7 @@ import math
 import mimetypes
 import os
 import tempfile
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -610,6 +611,64 @@ def publish_generation_sidecar_best_effort(
         return None
 
 
+def publish_generation_job_sidecar(
+    job: Mapping[str, Any],
+    output_path: str | os.PathLike[str],
+    sidecar: Mapping[str, Any],
+    *,
+    job_id_key: str,
+    output_folder: Any,
+    tool: str = "studio",
+) -> None:
+    """Publish one Studio result with its initiating command and real location."""
+    provenance = job.get("provenance") if isinstance(job.get("provenance"), dict) else {}
+    command = provenance.get("command") if isinstance(provenance.get("command"), dict) else {}
+    payload = dict(sidecar)
+    params = dict(payload.get("params") or {})
+    model_type = str(params.get("model_type") or "")
+    params.setdefault("provider", "minimax" if model_type.startswith("minimax:") else "local")
+    payload["params"] = params
+    if not payload.get("job_id"):
+        payload["job_id"] = job.get(job_id_key)
+    if not payload.get("task_id"):
+        payload["task_id"] = job.get("task_id")
+    if not payload.get("root_task_id"):
+        payload["root_task_id"] = job.get("root_task_id") or job.get("task_id")
+    payload["created_at"] = job.get("created_at") or payload.get("created_at") or time.time()
+    payload["queued_at"] = job.get("created_at") or payload.get("queued_at")
+    payload["started_at"] = job.get("started_at") or payload.get("started_at")
+    payload["completed_at"] = job.get("finished_at") or time.time()
+    for key in ("command_id", "workflow_id", "run_id"):
+        if command.get(key):
+            payload.setdefault(key, command[key])
+    for key in ("project_id", "production_id", "cue_id", "candidate_id", "song_version"):
+        if provenance.get(key):
+            payload.setdefault(key, provenance[key])
+    project_ref = (
+        {"kind": "story", "id": str(provenance["project_id"])}
+        if provenance.get("project_id") else None
+    )
+    production_ref = (
+        {"kind": "director_production", "id": str(provenance["production_id"])}
+        if provenance.get("production_id") else None
+    )
+    manifest_refs = {}
+    if project_ref:
+        manifest_refs["project"] = project_ref
+    if production_ref:
+        manifest_refs["production"] = production_ref
+    publish_generation_sidecar_best_effort(
+        output_path,
+        payload,
+        workspace_id=provenance.get("workspace_id"),
+        output_folder=output_folder,
+        tool=provenance.get("tool") or tool,
+        actor=provenance.get("actor"),
+        capability=provenance.get("capability"),
+        **manifest_refs,
+    )
+
+
 def write_asset_manifest(
     output_path: str | os.PathLike[str],
     manifest: Mapping[str, Any],
@@ -660,6 +719,7 @@ __all__ = [
     "ASSET_KINDS", "AssetManifestError", "SCHEMA_NAME", "SCHEMA_VERSION",
     "adapt_legacy_sidecar", "build_asset_manifest", "infer_asset_kind",
     "publish_generation_sidecar", "publish_generation_sidecar_best_effort",
+    "publish_generation_job_sidecar",
     "read_asset_manifest", "sidecar_path",
     "validate_asset_manifest", "write_asset_manifest",
 ]

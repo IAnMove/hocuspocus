@@ -120,6 +120,7 @@ def _sequence() -> dict:
         "sources": _array(_string(), max_items=120), "source": _string(),
         "columns": _number(1, 32), "rows": _number(1, 32), "count": _number(1, 120),
         "fps": _number(1, 60), "loop": LOOP,
+        "start": _number(0, 3600), "mirror": {"type": "boolean"},
     }, ["kind"])
 
 
@@ -265,8 +266,9 @@ def _finish() -> dict:
     return _object({
         "grade": _object({
             "exposure": unit, "contrast": unit, "saturation": unit, "temperature": unit, "tint": unit,
-            "fade": _number(0, 1), "beatFlash": _number(0, 1),
+            "fade": _number(0, 1), "beatFlash": _number(0, 1), "curve": _enum(["aces", "agx", "neutral"]),
         }, ["exposure", "contrast", "saturation", "temperature", "tint", "fade"]),
+        "gel": _object({"color": HEX, "amount": _number(0, 1), "shadows": HEX}, ["color", "amount"]),
         "bloom": _object({
             "amount": _number(0, 1), "threshold": _number(0, 1), "radius": _number(0, 1), "beat": _number(0, 1),
         }, ["amount", "threshold", "radius"]),
@@ -278,6 +280,8 @@ def _finish() -> dict:
         "grain": _object({"amount": _number(0, 1), "size": _number(0.5, 4)}, ["amount", "size"]),
         "texture": _object({"kind": _enum(["none", "paper", "film-dust", "scratches"]), "amount": _number(0, 1)}, ["kind", "amount"]),
         "letterbox": _object({"ratio": _enum([1.85, 2, 2.39]), "color": HEX}, ["ratio", "color"]),
+        "vhs": _object({"amount": _number(0, 1)}, ["amount"]),
+        "scanlines": _object({"amount": _number(0, 1)}, ["amount"]),
         "applyToTexts": {"type": "boolean"},
         "riso": _object({
             "paper": HEX, "sepPaper": HEX,
@@ -308,6 +312,8 @@ def _sfx() -> dict:
         "size": _number(1, 200), "intensity": _number(0.1, 2), "color": HEX,
         "rotation": _number(-180, 180), "seed": {"type": "integer", "minimum": 1, "maximum": 1000000},
         "sound": {"type": "boolean"}, "volume": _number(0, 1),
+        # How fast the effect's own time runs: 0.05 keeps rain hanging in the air.
+        "speed": _number(0.02, 4),
         # A laser or lightning from this point to x/y: % of the frame, or of the picture of the layer it names.
         "from": _object({"x": _number(-50, 150), "y": _number(-50, 150), "layerId": _string(160)}, ["x", "y"]),
     }, ["id", "kind", "start", "end"]), max_items=64)

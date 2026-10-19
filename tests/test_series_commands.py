@@ -145,7 +145,7 @@ def test_rigging_passes_ink_mouths_and_placement_hints_to_the_kit(tmp_path):
     assert calls[0][2] == {"workspace": "series", "baseRevision": 1, "style": {"mouthStyle": "ink"}, "hints": hints}
     schema = OPERATIONS["characters.rig.flat"][0]
     assert schema["style"]["properties"]["mouthStyle"] == {"enum": ["paper", "ink", "warp"]} and "hints" in schema
-    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth", "exact"}
+    assert set(schema["hints"]["additionalProperties"]["anyOf"][1]["properties"]) == {"mouth", "eyes", "mouthWidth", "exact", "blink"}
 
 
 def test_previewing_warp_mouths_posts_the_line_and_asks_for_a_sheet(tmp_path):
@@ -194,10 +194,64 @@ def test_character_styles_list_presets_and_build_a_prompt_without_the_server(tmp
     built = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "character",
                                                  "description": "Ana, green jacket"})["result"]["prompt"]
     assert built["screen"] == "magenta" and "Ana, green jacket" in built["prompt"]
+    pose = call(handlers, "characters.styles", {"style": "paper-cutout", "kind": "pose", "description": "waving",
+                                                "screen": "magenta"})["result"]["prompt"]
+    assert pose["screen"] == "magenta" and "magenta" in pose["prompt"], "a pose keeps its character's screen"
     assert calls == []
     with pytest.raises(HTTPException) as error:
         call(handlers, "characters.styles", {"style": "oil-painting", "kind": "character"})
     assert error.value.status_code == 404
+
+
+def test_character_animations_and_their_sheet_go_through_the_http_contract(tmp_path):
+    handlers, calls, _, _ = harness(tmp_path, [{"animations": [{"id": "walk"}], "sheet": {"feet": 0.96}},
+                                               {"animations": [{"id": "walk"}], "sheet": {"feet": 0.96}}, {"prompt": "p", "screen": "green"},
+                                               {"source": "/api/v1/file/walk-sheet-1.png?workspace=w", "count": 4}])
+    listed = call(handlers, "characters.animations", {})["result"]
+    assert listed["animations"][0]["id"] == "walk" and "prompt" not in listed
+    built = call(handlers, "characters.animations", {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"})["result"]
+    assert built["prompt"] == {"prompt": "p", "screen": "green"}
+    sheet = call(handlers, "characters.animation.sheet", {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"})["result"]
+    assert sheet["count"] == 4
+    assert [(method, url.split("9", 1)[1]) for method, url, _ in calls] == [
+        ("GET", "/api/v1/character-kits/animations/catalog"), ("GET", "/api/v1/character-kits/animations/catalog"),
+        ("POST", "/api/v1/character-kits/animations/prompt"), ("POST", "/api/v1/character-kits/animations/sheet")]
+    assert calls[2][2] == {"animation": "walk", "pose": "contact", "description": "Ana", "style": "paper-cutout"}
+    assert "custom" in OPERATIONS["characters.animations"][0] and "scaleBy" in OPERATIONS["characters.animation.sheet"][0]
+    assert calls[3][2] == {"workspace": "w", "sources": ["a.png", "b.png"], "name": "walk"}
+    from services.series_commands import _operation_schema
+    assert _operation_schema("characters.animations", *OPERATIONS["characters.animations"])["mutation"] is False
+    assert _operation_schema("characters.animation.sheet", *OPERATIONS["characters.animation.sheet"])["mutation"] is True
+
+
+def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_the_same_routes_as_the_wizard(tmp_path):
+    from services.series_commands import _operation_schema
+    handlers, calls, _, _ = harness(tmp_path, [{"review": {"reviewState": "approved", "reviewedBy": "agent"}}, {"job": {"jobId": "anim-1", "autoApprove": True}},
+                                               {"job": {"jobId": "anim-2"}}])
+    reviewed = call(handlers, "characters.animation.review", {"workspace": "w", "character_id": "ana", "animation": "walk", "decision": "approve", "note": "ok"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/review",
+                        {"workspace": "w", "kitId": "ana", "animation": "walk", "decision": "approve", "note": "ok"}), "the Wizard posts the same body to this route"
+    assert reviewed["result"]["review"]["reviewedBy"] == "agent"
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "walk", "autoApprove": True})
+    assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make", {"workspace": "w", "kitId": "ana", "animation": "walk", "autoApprove": True})
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "wave"})
+    assert "autoApprove" not in calls[2][2], "approval is asked for, never assumed"
+    review = _operation_schema("characters.animation.review", *OPERATIONS["characters.animation.review"])
+    assert review["mutation"] is True and review["inputSchema"]["properties"]["input"]["required"] == ["workspace", "character_id", "animation", "decision"]
+    assert review["inputSchema"]["properties"]["input"]["properties"]["decision"] == {"enum": ["approve", "reject"]}
+    make = OPERATIONS["characters.animation.make"]
+    assert "autoApprove" in make[0] and "Never approve it yourself" not in make[3] and "characters.animation.review" in make[3] and "one_shot" in make[3]
+    from services.mcp_profiles import SERIES_TOOLS
+    assert "characters.animation.review" in SERIES_TOOLS
+
+
+def test_a_voice_band_is_set_over_mcp_through_the_same_route_as_the_wizard(tmp_path):
+    from services.mcp_profiles import SERIES_TOOLS
+    handlers, calls, _, _ = harness(tmp_path, [{"kits": {"gary": {"id": "gary"}}}])
+    call(handlers, "characters.voice.band", {"workspace": "w", "character_id": "gary", "voiceType": "man"})
+    assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/library/kits/gary/voice-band",
+                        {"workspace": "w", "voiceType": "man"})
+    assert "characters.voice.band" in OPERATIONS and "characters.voice.band" in SERIES_TOOLS
 
 
 def test_the_server_episode_render_is_reachable_over_mcp(tmp_path):

@@ -24,6 +24,17 @@ Install with [Pinokio](https://pinokio.computer) from [`https://github.com/IAnMo
 
 ## What you can do
 
+### Generate with FLUX 3 Klein and Drama 3
+
+Optional local **FLUX 3 Image Klein INT8** creates pictures and edits with up to
+ten images, including the source. **Drama 3 INT8** generates expressive speech
+or clones one reference recording, with English and Spanish language hints.
+Install **Advanced → Install FLUX 3 / Drama 3 Support** in Pinokio, then download
+the models in Settings. FLUX needs Hugging Face access on the configured account;
+Drama streams experts from system RAM (64 GB system RAM recommended).
+See the [generation guide](docs/generation/FLUX3_DRAMA3.md) for references,
+voice settings, requirements, API and the integration's current limits.
+
 ### Edit images in batches
 
 Clicking **Direct generation** opens the currently selected generation mode immediately; use its tabs to switch modes.
@@ -188,9 +199,41 @@ The gallery loads bounded 320/640 px previews; opening the details dialog loads 
 |---|---|
 | Video | MiniMax H3 (picture + stereo audio), Wan 2.1 / 2.2, Hunyuan Video, LTX-2.3 |
 | Image | Flux 2 Klein, Qwen Image 2.1, Qwen Image Edit |
-| Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS, MMAudio SFX |
+| Audio | ACE-Step 1.5 XL (default new songs), MiniMax Music, Kugelaudio / Qwen3 TTS / VoxCPM2, MMAudio SFX |
 
 **Qwen Image 2.1 Viggle Turbo v0.2.1** is available in the image model selector for text-to-image and instruction editing with up to three input images (including the source). It reuses the Qwen 2.1 INT8 base files and downloads the pinned rank-256 adapter automatically on first use. Its six-step schedule and CFG 1 are fixed; start at 1024×1024. The LoRA runs without merging into the quantized base. This is a preview: complex edits can be less faithful, and 2K/RGBA/masked editing are not validated by its authors. [Model card and Qwen Research License](https://huggingface.co/Viggle/Qwen-Image-2.1-viggle-turbo).
+
+**Qwen Image 2.1 Official Turbo INT8 · 8 Steps** (`qwen_image_21_turbo`) is the separate official October 9 checkpoint. Choose it in the image model selector for creation or editing. Its first generation downloads a pinned ~7.3 GB Comfy-Org INT8 ConvRot transformer; it shares the base Qwen3-VL encoder and RGBA VAE. Eight steps and CFG 1 are fixed, using the official sampling sigmas without additional resolution shifting. Native 2K and up to ten input images are supported. Start at 1K on a 24 GB GPU. It is the default image model of the internal pipelines (productions, Character Creator animations, game assets, new production profiles) and of the image selector once installed; an installation that has only the base keeps the base. Quality varies with the prompt; the 40-step base remains selectable and always wins when you choose it. [Official model card and license](https://huggingface.co/Qwen/Qwen-Image-2.1-Turbo).
+
+API callers should load the model defaults before submitting a job, then poll `GET /api/v1/status/{job_id}` until completion:
+
+```javascript
+const model = 'qwen_image_21_turbo';
+const defaults = await fetch(`${baseUrl}/api/v1/defaults/${model}`).then(r => r.json());
+const job = await fetch(`${baseUrl}/api/v1/generate`, {
+  method: 'POST', headers: {'Content-Type': 'application/json'},
+  body: JSON.stringify({...defaults, model_type: model, image_mode: 1, prompt: 'A ceramic robot watering a fern', seed: 42, workspace: 'default'})
+}).then(r => r.json());
+```
+
+```python
+model = 'qwen_image_21_turbo'
+defaults = requests.get(f'{base_url}/api/v1/defaults/{model}').json()
+job = requests.post(f'{base_url}/api/v1/generate', json={
+    **defaults, 'model_type': model, 'image_mode': 1, 'prompt': 'A ceramic robot watering a fern',
+    'seed': 42, 'workspace': 'default',
+}).json()
+```
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/generate" \
+  -H 'Content-Type: application/json' \
+  -d '{"model_type":"qwen_image_21_turbo","image_mode":1,"prompt":"A ceramic robot watering a fern","resolution":"1024x1024","num_inference_steps":8,"guidance_scale":1,"batch_size":1,"seed":42,"workspace":"default"}'
+```
+
+To reproduce the base/Turbo comparison against a freshly started backend, run `python scripts/benchmark_qwen21_turbo.py --base-url http://127.0.0.1:PORT --output-dir ../logs/qwen21-turbo-benchmark` from the activated `app` environment. It saves requests, phase timings and PNGs in the specified directory, generates into a separate benchmark workspace, and compares identical seeds/prompts for portrait, typography, objects, editing from the same source and native 2K transparency. Warmups are excluded from scored results. It preserves saved model preferences.
+
+For native 2K on a 24 GB GPU, use **Auto** VAE tiling and keep the GPU free of other generation servers. A temporary test backend can use `python launch.py --vae-config 0` without saving that override. Reference edits run after both models' text-to-image comparisons because reference encoding can trigger the INT8 engine's slower session-wide kernel fallback. See the [local comparison notes](docs/development/QWEN21_TURBO.md).
 
 **Example — MiniMax H3.** Prompt a wide night sea and add `Audio: surf, wind, a low cello`. Use **FL2VA** when you have an exact first/last frame from Story. Use **Ref2VA** when you pass up to 9 images, 3 videos and 3 audio clips as identity/mood references (`<Picture 1>`, `<Video 1>`, `<Audio 1>`).
 
@@ -252,9 +295,9 @@ You can also enable production methods directly in **Series Lab → Shots**. For
 
 Location image prompts describe empty environments. Series Lab separates the physical setting and rendering style from character design and narrative occupants before generating. Use **Prepare environment prompt** in the location card to review the exact prompt first.
 
-Character Creator identifies each Qwen3 preset by its original language/profile and timbre. The nine presets can speak several languages, but none is natively Spanish. Use **Generate voice sample** with a Spanish or English sentence to hear the selected voice before saving or preparing mouths. Changing the voice cancels only that audition and stops the previous sample.
+Character Creator voice design and new reference voices default to **VoxCPM2** (`voxcpm2_voicedesign` / `voxcpm2_base`; its weights download on first use): 48 kHz, 30 languages including Spanish, no `model_mode`. Drama 3 can also be saved on a kit (`drama3_base` with the recording and its transcript, or `drama3_voicedesign` with an optional direction and no recording); the default stays VoxCPM2. The nine Qwen3 presets remain available; they can speak several languages, but none is natively Spanish. Use **Generate voice sample** with a Spanish or English sentence to hear the selected voice before saving or preparing mouths. Changing the voice cancels only that audition and stops the previous sample. Engine notes: [VoxCPM2](docs/development/VOXCPM2.md).
 
-Choose **Add your own voice: import or record** to use **Qwen3 Base** with a clean 3–30 second recording (up to 20 MB). Import an audio file or record with the microphone, name the voice, enter the exact recording transcript, and choose the language for new dialogue. Audition it, then **Save everything** on the character. Saved custom voices appear in the voice selector for other characters; new or regenerated native 2D/3D dialogue uses the stored recording and transcript. Existing takes remain available. Recording requires a browser with microphone support on HTTPS or localhost; importing also works over LAN HTTP. Audio samples are stored as persistent local uploads, and character metadata stores public references rather than machine-specific paths. No new model or recording is generated merely by selecting or saving a voice.
+Choose **Add your own voice: import or record** to clone from a clean 3–30 second recording (up to 20 MB). The default engine is VoxCPM2; Qwen3 Base is still a selector option. Import an audio file or record with the microphone, name the voice, enter the exact recording transcript, and choose the language for new dialogue. A VoxCPM2 clone may add a speaking style (up to 300 characters); with a style the model clones from the sample alone so the parenthesised lead is not read aloud. Audition it, then **Save everything** on the character. Saved custom voices appear in the voice selector for other characters; new or regenerated native 2D/3D dialogue uses the stored recording and transcript. Existing takes remain available. Recording requires a browser with microphone support on HTTPS or localhost; importing also works over LAN HTTP. Audio samples are stored as persistent local uploads, and character metadata stores public references rather than machine-specific paths. No new model or recording is generated merely by selecting or saving a voice.
 
 Each **Canon → Characters** card also shows voice, 2D lip-sync and 3D lip-sync readiness. **Configure in Character Creator** opens a dedicated view for that exact character, carries over its reference image, and links the saved configuration by ID. The Series card keeps its library selector. **Save everything and return to Series Lab** saves voice, mouth images and placement together, then returns to the source character. A failed save retains the draft and keeps the editor open; a fully saved session can yield to the next character even after switching tabs. A voice can be saved without a 3D model. Save the character before opening its 2D mouth workshop or 3D face calibration. The mouth workshop has a rectangle whose width and height can be adjusted independently, a visible mouth-pack catalog with previews, explicit AI generation buttons, and a one-click prerecorded English voice sample for previewing mouth movement without generating speech. **Apply placement to all mouths** copies the current position, scale and rotation to all nine mouth shapes. **Try with their voice** previews the full isolated recording with the same phonetic analyzer as native shots, including pauses and resting-mouth closure; the separate quick text preview is approximate. Eyes and blinking are optional: keep the original drawing unless you want to add overlays. Review the cleaned base and mouth variants, then save the speech character. Dialogue shots open Character Creator directly; the advanced voice table links to the character card. AI video with native audio continues to use its generator's voice; the reusable TTS preset is used in the speech editor.
 
@@ -273,7 +316,7 @@ Each **Canon → Characters** card also shows voice, 2D lip-sync and 3D lip-sync
 - **CivitAI LoRA browser** with one-click install, update badges, and auto-written prompting guides from CivitAI / Hugging Face cards.
 - **Local LLM** (Gemma 4 / Qwen GGUF via llama.cpp) or external OpenAI / Anthropic / compatible endpoints. Unloads after idle so VRAM goes back to generation.
 - **Themes:** 17 families (HocusPocus Blue, Classic, Onyx, Everforest, Gruvbox, Nord, Tokyo Night, Catppuccin, Rosé Pine, Studio, Phosphor, Amiga Workbench, Solarized, One, Ayu, Dracula, Kanagawa), each with a dark and a light variant, plus an automatic mode that follows the OS.
-- **LAN:** optional share on the local network; optional token auth (`LOREFRAME_LAN_AUTH`). Creating series drafts, characters and speech clips also works from plain HTTP network URLs. After updating, reload the browser; Wizard can continue an empty series draft with the same title after a failed creation attempt.
+- **LAN:** optional share on the local network. When the **full server** is reachable beyond loopback, token auth is **on by default** (`LOREFRAME_LAN_AUTH=0` opts out). Enter the startup session token (or `LOREFRAME_LAN_TOKEN`) once; the cookie lasts 30 days. MCP uses its own bearer and is not wrapped by this gate. The **core server has no LAN gate** and prints no token, so do not share it on a network you do not trust. Creating series drafts, characters and speech clips also works from plain HTTP network URLs. After updating, reload the browser; Wizard can continue an empty series draft with the same title after a failed creation attempt. Runbook: [LAN authentication](docs/development/LAN_AUTH.md).
 - **NSFW** and experimental gates are opt-in.
 
 Operator index: [docs/HOWUSEIT.md](docs/HOWUSEIT.md).
@@ -411,7 +454,7 @@ The dataset card does not name a license. We keep author, repo and revision on e
 | **MMAudio** | Ambient audio | [MMAudio](https://github.com/hkchengrex/MMAudio) |
 | **seed-vc** (Plachta) | Voice conversion, GPL-3.0, cloned at install from [maestro-seedvc](https://github.com/Blizaine/maestro-seedvc) | [seed-vc](https://github.com/Plachta/seed-vc) |
 
-Other vendored pieces keep their own licenses, including BigVGAN (MIT), FlashVSR sparse-sage (Apache-2.0), IndexTTS2, Rhubarb lip-sync, BS-RoFormer / audio-separator, Three.js, UniRig (optional), and Tencent’s Hunyuan checkouts. Read those `LICENSE` files before you redistribute.
+Other vendored pieces keep their own licenses, including BigVGAN (MIT), FlashVSR sparse-sage (Apache-2.0), VoxCPM2 (Apache-2.0), IndexTTS2, Rhubarb lip-sync, BS-RoFormer / audio-separator, Three.js, UniRig (optional), and Tencent’s Hunyuan checkouts. Read those `LICENSE` files before you redistribute.
 
 If we missed a name you shipped into this tree, open an issue — we want the list complete.
 

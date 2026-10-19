@@ -758,7 +758,8 @@ Semantic mapping hints:
 - Requested screen effects go in scene.sfx. kind must be a screen-effect id. They are not atmosphere layers and not generated image or video assets. Atmosphere ids stay on effect layers.
 - rise/take off -> liftoff or diagonal-rise; descend/land -> landing; cross frame/fly past -> space-cruise, glide or pass-camera.
 - reveal/appear -> fade-reveal, portal-arrival or center-reveal; approach -> cinematic-push or zoom-in; depart -> exit-frame or zoom-out.
-- calm observational shot -> camera-locked or camera-dolly; follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
+- calm observational shot -> camera-pan-right or camera-pan-left (a slow slide) or camera-crane-up (rises and widens a little); camera-locked only when the subject itself moves. follow horizontal action -> camera-pan-right/left; urgency -> camera-handheld or camera-whip-pan.
+- camera-dolly is a big diagonal opening with a roll (scale 1.5 to 0.92): use it to open a dramatic reveal, never for a calm shot.
 - walking/running/attacking requires a matching rig_profile, animations list and layer clip; rigid vehicles normally use compositor motion without a skeletal clip.
 - For model3d layers, start/end rotation is a 2D screen-space roll. Use it only for an explicit barrel roll or tumble. A normal 3D turn/spin uses animation.spin plus rotationSpeed and keeps start/end rotation at 0.
 

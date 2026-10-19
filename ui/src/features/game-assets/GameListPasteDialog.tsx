@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { gameText } from './gameErrors'
 import { ErrorNotice, EstimateSummary, ProblemList } from './gameUi'
-import { EXAMPLE_LIST, LIST_FORMATS, listBody, readEstimate, removedByReplace, type ListFormat } from './listModel'
+import { LIST_FORMATS, listBody, readEstimate, removedByReplace, type ListFormat } from './listModel'
 import { useGameAssetsStore, type ListBodyInput, type ListOutcome } from './store'
 import { buttonClass, fieldClass, panelClass } from './styles'
 import type { GameAsset, GameProblem, ListReport } from './types'
@@ -73,7 +73,7 @@ export function GameListPasteDialog({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true" aria-label={t('paste')}>
       <div className={`${panelClass} max-h-[90vh] w-full max-w-2xl space-y-3 overflow-y-auto`}>
-        <textarea aria-label={t('listText')} placeholder={EXAMPLE_LIST} className={`${fieldClass} min-h-40 font-mono`} value={text}
+        <textarea aria-label={t('listText')} placeholder={t('exampleList')} className={`${fieldClass} min-h-40 font-mono`} value={text}
           onChange={event => { setText(event.target.value); reset() }} />
         <div className="flex flex-wrap items-center gap-2">
           <label className="text-sm">

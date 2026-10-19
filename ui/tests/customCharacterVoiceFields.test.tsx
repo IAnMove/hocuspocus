@@ -53,7 +53,7 @@ test('imported recording becomes a reusable voice only with name and transcript;
   assert.equal(view.queryByRole('button', { name: 'Generate voice sample' }), null)
   fireEvent.change(view.getByLabelText('Exact sample transcript'), { target: { value: 'These are the words I recorded.' } })
   assert.ok(view.getByRole('button', { name: 'Generate voice sample' }))
-  assert.equal(current?.model, 'qwen3_tts_base')
+  assert.equal(current?.model, 'voxcpm2_base', 'new reference voices start on VoxCPM2')
   assert.equal((current as CustomCharacterVoice).referenceAudio, '/api/v1/uploads/recording.wav')
   assert.ok(!JSON.stringify(current).includes('/server/private'))
   fireEvent.change(view.getByTestId('character-voice'), { target: { value: 'saved:other' } })
@@ -145,4 +145,23 @@ test('a microphone take that overruns its timer retains the first 30 seconds ins
   assert.equal(await uploadVoiceReference(blob, signal, 'microphone'), '/api/v1/uploads/capped.wav')
   await assert.rejects(uploadVoiceReference(blob, signal, 'import'), /voiceFileDuration/)
   assert.equal(uploads, 1, 'imported recordings are never silently cropped')
+})
+
+test('choosing VoxCPM2 for a reference voice offers a speaking style; going back to Qwen3 drops it', async () => {
+  const { render, fireEvent, cleanup } = await import('@testing-library/react')
+  const { CustomCharacterVoiceFields } = await import('../src/features/characters/CustomCharacterVoiceFields')
+  function Harness() {
+    const [voice, setVoice] = useState<CustomCharacterVoice>(saved)
+    return <><CustomCharacterVoiceFields value={voice} onChange={setVoice} /><output data-testid="voice">{JSON.stringify(voice)}</output></>
+  }
+  const view = render(<Harness />)
+  const current = () => JSON.parse(view.getByTestId('voice').textContent || '{}') as CustomCharacterVoice
+  assert.equal(view.queryByTestId('custom-voice-style'), null)
+  fireEvent.change(view.getByTestId('custom-voice-engine'), { target: { value: 'voxcpm2_base' } })
+  fireEvent.change(view.getByTestId('custom-voice-style'), { target: { value: 'susurrando' } })
+  assert.deepEqual(current(), { ...saved, model: 'voxcpm2_base', instructions: 'susurrando' })
+  fireEvent.change(view.getByTestId('custom-voice-engine'), { target: { value: 'qwen3_tts_base' } })
+  assert.deepEqual(current(), saved)
+  assert.equal(view.queryByTestId('custom-voice-style'), null)
+  cleanup()
 })

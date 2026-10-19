@@ -45,6 +45,7 @@ TIMEOUT_SECONDS = 120
 # Native fields that hold a speaker's reference voice, per architecture.
 CLONE_REFERENCE_FIELDS: dict[str, tuple[str, ...]] = {
     "qwen3_tts_base": ("audio_guide", "audio_guide2"),
+    "voxcpm2_base": ("audio_guide", "audio_guide2"),
 }
 
 _SETTINGS = {

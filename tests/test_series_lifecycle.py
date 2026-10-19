@@ -1,7 +1,5 @@
-import ast
 import copy
 import threading
-from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -15,8 +13,23 @@ from services.series_lifecycle import (
 )
 
 
-ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
+@pytest.fixture
+def series_library(monkeypatch):
+    """The Series library router module with its launch names set for this test only.
+
+    ``routers.series_library`` declares ``_series_library_workspace``, ``_series_library_lock`` and
+    friends by annotation only; a server binds them at boot. A test that patches them must not
+    depend on another test (or an imported server) having bound them first, so they are set with
+    ``raising=False``: monkeypatch restores a bound value and deletes an absent one.
+    """
+    import routers.series_library as module
+
+    def bind(**names):
+        for name, value in names.items():
+            monkeypatch.setattr(module, name, value, raising=False)
+        return module
+
+    return bind
 
 
 def _save_job(tmp_path, kind: str, status: str, *, job_id: str | None = None, episode_id: str = "episode-1"):
@@ -94,42 +107,30 @@ def test_series_scope_includes_canon_and_all_episodes_while_episode_scope_is_exa
     )] == ["episode-2"]
 
 
-def _load_launch_function(name: str, namespace: dict):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    function = next(
-        node for node in tree.body
-        if isinstance(node, ast.FunctionDef) and node.name == name
-    )
-    function = copy.deepcopy(function)
-    function.decorator_list = []
-    module = ast.Module(body=[function], type_ignores=[])
-    ast.fix_missing_locations(module)
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
-    return namespace[name]
-
-
-def test_series_delete_checks_central_lifecycle_before_mutating_library():
+def test_series_delete_checks_central_lifecycle_before_mutating_library(monkeypatch, series_library):
     library = {"seriesById": {"series-1": {"id": "series-1"}}, "seriesOrder": ["series-1"]}
     writes = []
     checked = []
-    namespace = {
-        "_series_library_workspace": lambda value: value or "default",
-        "_series_library_lock": threading.RLock(),
-        "_read_series_workspace": lambda _workspace: copy.deepcopy(library),
-        "_series_project_or_404": lambda current, series_id: current["seriesById"][series_id],
-        "_require_series_deletion_ready": lambda workspace, series_id: checked.append((workspace, series_id)),
-        "_write_series_workspace": lambda _workspace, value: writes.append(copy.deepcopy(value)),
-    }
-    delete_series = _load_launch_function("delete_series_project_endpoint", namespace)
+    series_library = series_library(
+        _series_library_workspace=lambda value: value or "default",
+        _series_library_lock=threading.RLock(),
+        _read_series_workspace=lambda _workspace: copy.deepcopy(library),
+        _series_project_or_404=lambda current, series_id: current["seriesById"][series_id],
+        _write_series_workspace=lambda _workspace, value: writes.append(copy.deepcopy(value)),
+    )
+    monkeypatch.setattr(
+        series_library, "_require_series_deletion_ready",
+        lambda workspace, series_id: checked.append((workspace, series_id)),
+    )
 
-    result = delete_series("series-1", "default")
+    result = series_library.delete_series_project_endpoint("series-1", "default")
 
     assert checked == [("default", "series-1")]
     assert writes[0]["seriesById"] == {}
     assert result["outputsPreserved"] is True
 
 
-def test_episode_delete_propagates_structured_active_job_conflict_without_writing():
+def test_episode_delete_propagates_structured_active_job_conflict_without_writing(monkeypatch, series_library):
     library = {
         "seriesById": {"series-1": {
             "id": "series-1",
@@ -146,21 +147,18 @@ def test_episode_delete_propagates_structured_active_job_conflict_without_writin
             "activeJobs": [{"jobId": "assembly-1", "kind": "assembly"}],
         })
 
-    namespace = {
-        "copy": copy,
-        "_series_library_workspace": lambda value: value or "default",
-        "_series_library_lock": threading.RLock(),
-        "_read_series_workspace": lambda _workspace: copy.deepcopy(library),
-        "_series_project_or_404": lambda current, series_id: current["seriesById"][series_id],
-        "_require_series_deletion_ready": blocked,
-        "_write_series_workspace": lambda _workspace, value: writes.append(value),
-        "HTTPException": HTTPException,
-        "_series_iso_now": lambda: "2026-08-16T00:00:00Z",
-    }
-    delete_episode = _load_launch_function("delete_series_episode_endpoint", namespace)
+    series_library = series_library(
+        _series_library_workspace=lambda value: value or "default",
+        _series_library_lock=threading.RLock(),
+        _read_series_workspace=lambda _workspace: copy.deepcopy(library),
+        _series_project_or_404=lambda current, series_id: current["seriesById"][series_id],
+        _write_series_workspace=lambda _workspace, value: writes.append(value),
+    )
+    monkeypatch.setattr(series_library, "_require_series_deletion_ready", blocked)
+    monkeypatch.setattr(series_library, "_series_iso_now", lambda: "2026-08-16T00:00:00Z")
 
     with pytest.raises(HTTPException) as captured:
-        delete_episode("series-1", "episode-1", "default")
+        series_library.delete_series_episode_endpoint("series-1", "episode-1", "default")
 
     assert captured.value.status_code == 409
     assert captured.value.detail["activeJobs"][0]["jobId"] == "assembly-1"

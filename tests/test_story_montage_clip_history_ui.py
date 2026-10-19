@@ -10,7 +10,7 @@ HANDOFF = ROOT / "ui" / "src" / "features" / "stories" / "directorClipHandoff.ts
 MEDIA = ROOT / "ui" / "src" / "components" / "MainContent" / "OutputActionBar.tsx"
 MAIN = ROOT / "ui" / "src" / "components" / "MainContent" / "MainContent.tsx"
 
-STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
+OUTPUT_RESTORE = ROOT / "ui" / "src" / "features" / "studio" / "store" / "outputRestoreSlice.ts"
 
 
 def test_story_montage_exposes_slot_history_and_explicit_remake_action():
@@ -28,7 +28,7 @@ def test_story_montage_exposes_slot_history_and_explicit_remake_action():
 
 def test_creator_handoff_reduces_multiclip_metadata_to_one_exact_slot():
     handoff = HANDOFF.read_text(encoding="utf-8")
-    store = STORE.read_text(encoding="utf-8")
+    store = OUTPUT_RESTORE.read_text(encoding="utf-8")
 
     assert "perClipFrames[clip.index]" in handoff
     assert "source.per_clip_minimax_h3_references" in handoff

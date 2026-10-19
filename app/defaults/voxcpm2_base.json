@@ -1,0 +1,15 @@
+{
+    "model": {
+        "name": "TTS VoxCPM2 Voice Clone 2B",
+        "architecture": "voxcpm2_base",
+        "description": "OpenBMB VoxCPM2 voice cloning from a reference recording, in 30 languages at 48 kHz. Add the reference transcript for the closest match; for two-speaker dialogue, use 'Speaker 1:' and 'Speaker 2:' lines. An optional style direction (whispering, excited...) shapes how the voice speaks. Shares its ~5 GB download with VoxCPM2 Voice Design.",
+        "URLs": []
+    },
+    "prompt": "Revisé el horario dos veces y todo cuadra.",
+    "alt_prompt": "",
+    "audio_prompt_type": "A",
+    "num_inference_steps": 10,
+    "guidance_scale": 2.0,
+    "multi_prompts_gen_type": 2,
+    "duration_seconds": 60
+}

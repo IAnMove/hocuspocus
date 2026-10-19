@@ -5,7 +5,7 @@ import struct
 import pytest
 
 from services.production_models import ModelError, check_models, make_models
-from services.production_scene3d import resolve_media
+from services.production_scene3d import resolve_media, validate_scene3d_shot
 
 SPEC = {"song": {"bpm": 96}, "style": {"image": "felt puppets"},
         "cast": [{"id": "hero", "sheet_prompt": "a felt hero"}],
@@ -328,9 +328,47 @@ def test_a_glb_in_the_workspace_is_only_rigged_and_a_refused_humanoid_falls_back
     calls = len(production.calls)
     make_models(production, spec, sleep=lambda _: None)
     assert len(production.calls) == calls, "an unchanged GLB is not rigged again"
+    import services.production_models as module
+    module.RIG_VERSION += 1
+    try:
+        make_models(production, spec, sleep=lambda _: None)
+    finally:
+        module.RIG_VERSION -= 1
+    assert [rig["source"] for rig in submitted(production, "model3d.rig")[3:]] == ["pack/ape.glb", "pack/ape.glb"], \
+        "a new rig version rigs the humanoid again (and it falls back again); the profile rig is kept"
     for bad in ({"glb": "pack/none.glb"}, {"glb": "pack/ape.glb", "prompt": "an ape"}, {"glb": "pack/ape.glb", "rig": "prop", "fallback": "prop"}):
         with pytest.raises(ModelError):
             check_models({"models": {"x": bad}}) if "none" not in bad.get("glb", "") else make_models(Production(tmp_path), {"style": {}, "models": {"x": bad}}, sleep=lambda _: None)
+
+
+def test_a_glb_that_climbs_out_of_the_workspace_is_refused(tmp_path):
+    import services.production_models as production_models
+    outside = tmp_path.parent / f"{tmp_path.name}-outside.glb"
+    outside.write_bytes(b"glb outside")
+    (tmp_path / "secret.glb").write_bytes(b"glb secret")
+    try:
+        for glb in (f"../{outside.name}", "/tmp/outside.glb", "pack/../secret.glb", r"..\secret.glb"):
+            with pytest.raises(ModelError, match="climbs out"):
+                check_models({"models": {"x": {"glb": glb}}})
+        with pytest.raises(ModelError, match="climbs out"):
+            make_models(Production(tmp_path), {"style": {}, "models": {"x": {"glb": f"../{outside.name}"}}},
+                        sleep=lambda _: None)
+        with pytest.raises(ModelError, match="climbs out"):
+            production_models._cleaned(Production(tmp_path), "x", f"../{outside.name}", standing=False)
+        assert list(tmp_path.parent.glob(f"{tmp_path.name}-outside.clean-*.glb")) == []
+    finally:
+        outside.unlink(missing_ok=True)
+
+
+def test_a_glb_on_a_windows_drive_is_refused_and_a_nested_pack_path_is_kept():
+    """On Windows ``root / "C:/x.glb"`` is ``C:/x.glb``: a drive (or drive-relative) path leaves the workspace too."""
+    from services.production_models import workspace_rel
+    for glb in ("C:/Windows/x.glb", r"C:\Windows\x.glb", "c:x.glb", r"D:pack\x.glb"):
+        assert workspace_rel(glb) is None, glb
+        with pytest.raises(ModelError, match="climbs out"):
+            check_models({"models": {"x": {"glb": glb}}})
+    assert workspace_rel(r"pack\ape.glb") == "pack/ape.glb" and workspace_rel("pack//ape.glb?v=2") == "pack/ape.glb"
+    assert workspace_rel("%2e%2e/ape.glb") == "%2e%2e/ape.glb", "not decoded: a folder named %2e%2e, inside the workspace"
 
 
 def test_up_to_twelve_models_are_made_and_up_to_forty_counting_glbs(tmp_path):
@@ -404,3 +442,129 @@ def test_a_humanoid_rig_that_was_lost_falls_back_for_now_and_is_asked_for_again_
     engines = [rig["engine"] for rig in submitted(production, "model3d.rig")]
     assert engines == ["humanoid", "procedural", "humanoid"], "the next run asks for the humanoid rig again"
     assert "rig_error" not in production.state["models"]["ape"] and "rigged_as" not in production.state["models"]["ape"]
+
+
+PARALLAX = {"kind": "parallax", "prompt": "the ruins of a forest temple at dusk", "seed": 3,
+            "far": "mountains and a castle silhouette under a violet sunset sky", "mid": "broken stone arches and tall pines",
+            "near": "ferns and a mossy branch", "ground": "mossy flagstones"}
+
+
+def test_a_parallax_set_draws_its_far_view_layers_and_ground_and_keys_the_layers(tmp_path):
+    production = Production(tmp_path)
+    painting(production)
+    spec = {"style": {"image": "Painted fantasy world; characters are tiny felt heroes with button eyes; soft light."}, "sets": {"temple": PARALLAX}}
+    check_models(spec)
+    make_models(production, spec, sleep=lambda _: None)
+    drawn = {image["key"]: image for image in production.images}
+    assert sorted(drawn) == ["set-temple-far", "set-temple-ground", "set-temple-mid", "set-temple-near"]
+    assert "chroma-key magenta" in drawn["set-temple-mid"]["prompt"] and "middle third of the picture empty" in drawn["set-temple-mid"]["prompt"]
+    assert "chroma-key magenta" in drawn["set-temple-near"]["prompt"] and "left and right thirds" in drawn["set-temple-near"]["prompt"]
+    assert "chroma-key" not in drawn["set-temple-far"]["prompt"] and "forest temple" in drawn["set-temple-far"]["prompt"]
+    assert "Painted fantasy world" in drawn["set-temple-mid"]["prompt"] and "heroes" not in drawn["set-temple-mid"]["prompt"], "the look, not the cast"
+    assert "seamless tileable" in drawn["set-temple-ground"]["prompt"] and drawn["set-temple-mid"]["res"] == "1664x928"
+    made = production.state["sets"]["temple"]
+    assert made["kind"] == "parallax" and made["key"] == "#ff00ff" and made["sky"].endswith("far.png")
+    assert [layer["depth"] for layer in made["layers"]] == ["mid", "near"] and made["layers"][0]["source"].endswith("mid.png")
+    assert [layer["foot"] for layer in made["layers"]] == [0.0, 0.0], "painted to the bottom edge: nothing to lift"
+    assert (tmp_path / "set-piece-temple-ground.glb").is_file() and made["ground"]["size"] == 80.0
+    resolved = resolve_media({"template": "dance-stage", "background": "temple"}, stills={}, root=tmp_path, workspace="w", sets=production.state["sets"])
+    assert resolved["background"] == {"source": made["sky"], "layers": made["layers"], "key": "#ff00ff", "ground": made["ground"]}
+    calls = len(production.images)
+    make_models(production, spec, sleep=lambda _: None)
+    assert len(production.images) == calls, "a built set is not drawn again"
+    for bad in ({**PARALLAX, "mid": ""}, {k: v for k, v in PARALLAX.items() if k != "ground"}, {**PARALLAX, "roof": "tiles"}):
+        with pytest.raises(ModelError, match="sets.temple"):
+            check_models({"style": {}, "sets": {"temple": bad}})
+
+
+def test_a_set_whose_ground_names_a_ground_style_draws_no_ground_and_passes_the_style_on(tmp_path):
+    production = Production(tmp_path)
+    painting(production)
+    spec = {"style": {"image": "Painted fantasy world."}, "sets": {"temple": {**PARALLAX, "ground": "Meadow"}}}
+    check_models(spec)
+    make_models(production, spec, sleep=lambda _: None)
+    assert sorted(image["key"] for image in production.images) == ["set-temple-far", "set-temple-mid", "set-temple-near"]
+    made = production.state["sets"]["temple"]
+    assert made["ground"] == {"style": "meadow"} and made["layers"] and made["sky"]
+    assert not (tmp_path / "set-piece-temple-ground.glb").exists()
+    resolved = resolve_media({"template": "dance-stage", "background": "temple"}, stills={}, root=tmp_path, workspace="w", sets=production.state["sets"])
+    assert resolved["background"]["ground"] == {"style": "meadow"}
+    validate_scene3d_shot({"kind": "scene3d", "scene3d": {**resolved, "cast": {"subject_1": "hero.glb"}}})
+
+
+def test_a_parallax_layers_foot_is_the_empty_key_under_its_lowest_piece(tmp_path):
+    from PIL import Image
+    from services.production_parallax import foot
+
+    picture = Image.new("RGB", (64, 40), (255, 0, 255))
+    for x in range(10, 30):
+        for y in range(8, 30):
+            picture.putpixel((x, y), (120, 80, 40))
+    picture.save(tmp_path / "mid.png")
+    assert foot(tmp_path / "mid.png") == 0.25, "ten empty rows under the piece, of forty"
+    Image.new("RGB", (64, 40), (255, 0, 255)).save(tmp_path / "empty.png")
+    assert foot(tmp_path / "empty.png") == 0.0
+
+
+FLOOR_PROMPT = ("An EMPTY set with nobody in it, ready for actors to step in: a night harbour with a stone pier. felt puppets "
+                "wide eye-level view, a large open EMPTY floor across the foreground and lower third where actors can stand, "
+                "the scenery behind it, clear horizon, no people, no figurines, no dolls, no characters, no animals, no text")
+
+
+def _painted_prompt(tmp_path, entry, look="felt puppets"):
+    production = Production(tmp_path)
+    make_models(production, {"style": {"image": look}, "sets": {"harbour": entry}}, sleep=lambda _: None)
+    return production, next(image["prompt"] for image in production.images if image["key"] == "set-harbour")
+
+
+def test_the_default_set_prompt_is_the_floor_recipe_byte_for_byte(tmp_path):
+    entry = {"prompt": "a night harbour with a stone pier"}
+    _production, prompt = _painted_prompt(tmp_path, entry)
+    assert prompt == FLOOR_PROMPT
+    assert _painted_prompt(tmp_path, {**entry, "staging": "floor"})[1] == FLOOR_PROMPT
+
+
+def test_a_set_can_be_a_backdrop_or_left_unstaged(tmp_path):
+    look = "Stop-motion figurine look with plasticine textures. People crowd the quay. Warm evening light."
+    _production, backdrop = _painted_prompt(tmp_path, {"prompt": "a night harbour", "staging": "backdrop"}, look)
+    assert backdrop == ("a night harbour. Stop-motion figurine look with plasticine textures. Warm evening light. "
+                        "wide view of the scenery, clear horizon, nobody in it, no text")
+    production, plain = _painted_prompt(tmp_path, {"prompt": "a night harbour", "staging": "none"}, look)
+    assert plain == f"a night harbour. {look}"
+    assert production.state["sets"]["harbour"]["staging"] == "none"
+    for bad in ({"prompt": "x", "staging": "wall"}, {"prompt": "x", "staging": None}):
+        with pytest.raises(ModelError, match="staging must be one of floor, backdrop, none"):
+            check_models({"sets": {"roof": bad}})
+    with pytest.raises(ModelError):
+        check_models({"sets": {"roof": {**DIORAMA, "staging": "none"}}})
+
+
+def test_a_set_made_before_staging_is_not_painted_again(tmp_path):
+    """The fingerprint names staging only when it is not the default floor."""
+    import hashlib
+    from services.production_models import RECIPE
+    entry = {"prompt": "a night harbour with a stone pier", "seed": 4}
+    spec = {"song": {"bpm": 96}, "style": {"image": "felt puppets"}, "sets": {"harbour": entry}}
+    legacy = hashlib.sha256(json.dumps([entry, None, "felt puppets", 96, RECIPE], sort_keys=True).encode()).hexdigest()[:16]
+    production = Production(tmp_path)
+    production.state["sets"] = {"harbour": {"fingerprint": legacy, "url": "/api/v1/uploads/old.png"}}
+    for same in (entry, {**entry, "staging": "floor"}):
+        make_models(production, {**spec, "sets": {"harbour": same}}, sleep=lambda _: None)
+        assert production.images == [] and production.state["sets"]["harbour"]["url"] == "/api/v1/uploads/old.png"
+    make_models(production, {**spec, "sets": {"harbour": {**entry, "staging": "backdrop"}}}, sleep=lambda _: None)
+    assert [image["key"] for image in production.images] == ["set-harbour"], "another staging is another picture"
+
+
+def test_the_look_keeps_its_medium_and_reports_what_it_leaves_out():
+    from services.production_models import scenery_parts
+    assert scenery_parts("Stop-motion figurine look with plasticine textures. Warm evening light.") == (
+        "Stop-motion figurine look with plasticine textures. Warm evening light.", [])
+    assert scenery_parts("Doll-like style, soft felt. A busy crowd fills the square. Strong cast shadows.") == (
+        "Doll-like style, soft felt. Strong cast shadows.", ["A busy crowd fills the square."])
+    assert scenery_parts("Characters have a figurine look. Matte paint.") == ("Matte paint.", ["Characters have a figurine look."])
+    for scenery in ("A crowd-pleasing summer blockbuster look, saturated colours.", "Cast iron lamps and brick arches, London fog."):
+        assert scenery_parts(scenery) == (scenery, []), "a word that names a material or a tone is not a person"
+    assert scenery_parts("Neon city, bustling crowds. Rain.") == ("Rain.", ["Neon city, bustling crowds."])
+    for people in ("Characters look at the camera.", "The dolls look out the window.", "Figures like ghosts drift by."):
+        assert scenery_parts(f"{people} Rain.") == ("Rain.", [people]), "a verb after people is not a medium"
+    assert scenery_parts("") == ("", [])

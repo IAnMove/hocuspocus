@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import ast
 import os
+import re
 import unittest
 
 from tests.api_client_source import api_client_source
@@ -10,8 +11,14 @@ from tests.api_client_source import api_client_source
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 LAUNCH_PATH = os.path.join(ROOT, "app", "_launch_runtime.py")
+VISIBILITY_PATH = os.path.join(ROOT, "app", "services", "model_visibility.py")
+PREFERENCES_PATH = os.path.join(ROOT, "app", "routers", "model_preferences.py")
+DIRECTOR_PATH = os.path.join(ROOT, "app", "routers", "llm_director.py")
 
 STORE_PATH = os.path.join(ROOT, "ui", "src", "stores", "useStore.ts")
+MODELS_PATH = os.path.join(ROOT, "ui", "src", "stores", "modelsSlice.ts")
+SERVICES_PATH = os.path.join(ROOT, "ui", "src", "stores", "servicesSlice.ts")
+PERSISTENCE_PATH = os.path.join(ROOT, "ui", "src", "stores", "modeSettingsPersistence.ts")
 STORY_PATH = os.path.join(
     ROOT, "ui", "src", "features", "stories", "StoryLabPanel.tsx",
 )
@@ -51,22 +58,25 @@ def _story_ui() -> str:
 class TestModelSelectionPersistence(unittest.TestCase):
     def test_global_production_profile_is_the_generic_llm_source(self):
         launch = _source(LAUNCH_PATH)
-        store = _source(STORE_PATH)
+        service = _source(VISIBILITY_PATH)
+        router = _source(PREFERENCES_PATH)
 
-        self.assertIn('@api.get("/api/v1/production-profile")', launch)
-        self.assertIn('@api.put("/api/v1/production-profile")', launch)
-        self.assertIn('"provider": "minimax", "model": "MiniMax-M3"', launch)
-        self.assertIn('"model": "minimax_h3_legacy"', launch)
+        self.assertIn('@router.get("/api/v1/production-profile")', router)
+        self.assertIn('@router.put("/api/v1/production-profile")', router)
+        self.assertIn('"provider": "minimax", "model": "MiniMax-M3"', service)
+        self.assertIn('"model": "minimax_h3_legacy"', service)
         self.assertIn("def _effective_llm_routing", launch)
-        ensure = launch[launch.index("def _ensure_llm_loaded():"):]
-        ensure = ensure[:ensure.index("@api.post", 1)]
+        director = _source(DIRECTOR_PATH)
+        ensure = director[director.index("def _ensure_llm_loaded():"):]
+        ensure = ensure[:ensure.index("\ndef ", 1)]
         self.assertIn("_effective_llm_routing(services)", ensure)
-        self.assertIn("loadProductionProfile", store)
-        self.assertIn("updateProductionProfile", store)
+        services = _source(SERVICES_PATH)
+        self.assertIn("loadProductionProfile", services)
+        self.assertIn("updateProductionProfile", services)
 
     def test_backend_normalizes_per_mode_preferences(self):
-        source = _source(LAUNCH_PATH)
-        tree = ast.parse(source, filename=LAUNCH_PATH)
+        source = _source(VISIBILITY_PATH)
+        tree = ast.parse(source, filename=VISIBILITY_PATH)
         function = next(
             node for node in tree.body
             if isinstance(node, ast.FunctionDef)
@@ -79,7 +89,7 @@ class TestModelSelectionPersistence(unittest.TestCase):
                 {"image", "video", "audio", "model3d", "avatar"},
             ),
         }
-        exec(compile(module, LAUNCH_PATH, "exec"), namespace)
+        exec(compile(module, VISIBILITY_PATH, "exec"), namespace)
         normalize = namespace["_normalize_model_selections"]
 
         self.assertEqual(
@@ -92,17 +102,33 @@ class TestModelSelectionPersistence(unittest.TestCase):
             normalize({"video": 123})
 
     def test_client_and_boot_hydration_use_server_preferences(self):
-        launch = _source(LAUNCH_PATH)
+        router = _source(PREFERENCES_PATH)
         client = api_client_source()
-        store = _source(STORE_PATH)
+        models = _source(MODELS_PATH)
 
-        self.assertIn('@api.get("/api/v1/model-selections")', launch)
-        self.assertIn('@api.put("/api/v1/model-selections")', launch)
+        self.assertIn('@router.get("/api/v1/model-selections")', router)
+        self.assertIn('@router.put("/api/v1/model-selections")', router)
         self.assertIn("fetchModelSelections", client)
         self.assertIn("updateModelSelections", client)
-        self.assertIn("api.fetchModelSelections()", store)
-        self.assertIn("api.updateModelSelections(payload)", store)
-        self.assertIn("durableSelections?.selected_models || {}", store)
+        self.assertIn("api.fetchModelSelections()", models)
+        self.assertIn("api.updateModelSelections(payload)", _source(PERSISTENCE_PATH))
+        self.assertIn("durableSelections?.selected_models || {}", models)
+
+    def test_client_sends_exactly_the_modes_the_server_accepts(self):
+        """The server refuses the whole PUT when one mode is unknown, so the UI's hand-kept
+        allow-list must name the same modes as the server's (a new mode needs both)."""
+        server = None
+        for node in ast.walk(ast.parse(_source(VISIBILITY_PATH))):
+            if isinstance(node, ast.Assign) and any(
+                isinstance(target, ast.Name) and target.id == "_MODEL_SELECTION_MODES" for target in node.targets
+            ):
+                server = {element.value for element in node.value.args[0].elts}
+        persistence = _source(PERSISTENCE_PATH)
+        declaration = persistence[persistence.index("const MODEL_SELECTION_MODES"):]
+        declaration = declaration[:declaration.index("\n")]
+        client = set(re.findall(r"'([a-z0-9]+)'", declaration[declaration.index("new Set("):]))
+        self.assertTrue(server)
+        self.assertEqual(client, server)
 
     def test_story_lab_explains_the_ltx_gemma_dependency(self):
         story = _story_ui()
@@ -149,11 +175,10 @@ class TestModelSelectionPersistence(unittest.TestCase):
 
     def test_global_video_format_hydration_is_race_safe_and_override_aware(self):
         store = _source(STORE_PATH)
-        helper = store[store.index(
+        services = _source(SERVICES_PATH)
+        helper = services[services.index(
             "async function _syncGlobalProductionVideoFormat",
-        ):store.index("export const useStore", store.index(
-            "async function _syncGlobalProductionVideoFormat",
-        ))]
+        ):services.index("export const createServicesSlice")]
 
         self.assertIn("_globalModelSelectionModes.has('video')", helper)
         self.assertIn("before.selectedModelPerMode.video !== modelType", helper)
@@ -163,7 +188,9 @@ class TestModelSelectionPersistence(unittest.TestCase):
         self.assertIn("directorResolution: format.resolution", helper)
         self.assertIn("directorAspectRatio: format.aspectRatio", helper)
         self.assertGreaterEqual(
-            store.count("_syncGlobalProductionVideoFormat("),
+            store.count("_syncGlobalProductionVideoFormat(")
+            + services.count("_syncGlobalProductionVideoFormat(")
+            + _source(MODELS_PATH).count("_syncGlobalProductionVideoFormat("),
             4,
         )
 

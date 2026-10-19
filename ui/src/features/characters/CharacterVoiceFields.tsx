@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
-import { CHARACTER_VOICES, isCharacterVoiceReady, type CharacterVoice, type CustomCharacterVoice } from '../../lib/characterVoice'
+import { CHARACTER_VOICES, DEFAULT_REFERENCE_VOICE_MODEL, isCharacterVoiceReady, isReferenceVoice, type CharacterVoice, type CustomCharacterVoice } from '../../lib/characterVoice'
 import type { SpokenLanguage } from '../../lib/speechLanguage'
 import type { CharacterKit } from '../../lib/characterKit'
 import { CHARACTER_VOICE_PROFILES } from '../../lib/characterVoiceCatalog'
@@ -12,8 +12,8 @@ type SavedReference = { key: string; kit: CharacterKit; voice: CustomCharacterVo
 /** Reference recordings already saved on characters: each default voice, then each language voice. */
 function savedReferences(kits: CharacterKit[], language?: SpokenLanguage): SavedReference[] {
   return kits.flatMap(kit => [
-    ...(kit.voice?.model === 'qwen3_tts_base' ? [{ key: `saved:${kit.id}`, kit, voice: kit.voice }] : []),
-    ...Object.entries(kit.voicesByLanguage ?? {}).flatMap(([spoken, voice]) => voice?.model === 'qwen3_tts_base'
+    ...(isReferenceVoice(kit.voice) ? [{ key: `saved:${kit.id}`, kit, voice: kit.voice }] : []),
+    ...Object.entries(kit.voicesByLanguage ?? {}).flatMap(([spoken, voice]) => isReferenceVoice(voice)
       ? [{ key: `saved:${kit.id}:${spoken}`, kit, voice }] : []),
   ]).filter(item => !language || item.voice.language === language || item.voice.language === 'auto')
 }
@@ -28,7 +28,7 @@ export function CharacterVoiceFields({ workspace, value, onChange, disabled, sav
   const captureBusy = useCallback((busy: boolean) => { setCapturing(busy); onBusyChange?.(busy) }, [onBusyChange])
   const voiceId = CHARACTER_VOICES.find(id => id === value?.voiceId)
   const profile = voiceId ? CHARACTER_VOICE_PROFILES[voiceId] : undefined
-  const custom = value?.model === 'qwen3_tts_base' ? value : undefined
+  const custom = isReferenceVoice(value) ? value : undefined
   const saved = savedReferences(savedKits, language)
   const select = (id: string) => {
     if (id.startsWith('saved:')) {
@@ -37,7 +37,7 @@ export function CharacterVoiceFields({ workspace, value, onChange, disabled, sav
       return
     }
     if (id === 'new-reference') {
-      onChange({ provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language: language ?? 'auto' }); return
+      onChange({ provider: 'local', model: DEFAULT_REFERENCE_VOICE_MODEL, voiceId: 'reference', name: '', referenceAudio: '', transcript: '', language: language ?? 'auto' }); return
     }
     onChange(id ? { provider: 'local', model: 'qwen3_tts_customvoice', voiceId: id,
       instructions: value?.model === 'qwen3_tts_customvoice' ? value.instructions : undefined } : undefined)

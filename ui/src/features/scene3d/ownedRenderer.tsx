@@ -16,8 +16,9 @@ import { heldFrameTime, holdBlock, motionStepOf, shiftHeldFrame, stopMotionJitte
 import { checkGeometry, geometrySampleTimes, type GeometryReport, type GeometrySample } from './geometryChecks'
 import type { Scene3DDocument } from './types'
 
-/** The export plan: output size, plus the supersampling and MSAA of the quality level. */
-type Size = { width: number; height: number; fps?: number; supersample?: number; samples?: number; subframes?: number; shutter?: number }
+/** The export plan: output size, plus the supersampling and MSAA of the quality level. A template
+ * thumbnail plan adds `placeholders` (empty slots drawn as in the editor). */
+type Size = { width: number; height: number; fps?: number; supersample?: number; samples?: number; subframes?: number; shutter?: number; placeholders?: boolean }
 type Renderer = {
   load: (raw: unknown, size: Size) => Promise<void>
   frame: (seconds: number) => Promise<string>

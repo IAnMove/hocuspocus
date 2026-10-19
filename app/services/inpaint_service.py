@@ -56,6 +56,11 @@ def ensure_sam_running() -> bool:
         print("[SAM] Service not installed — cannot start on demand")
         return False
 
+    # SAM loads its model on the GPU without taking the GPU lane, so a warm
+    # FLUX 3 / Drama 3 runtime has to go first (a running creation job stays).
+    from services import creation_model_service
+    creation_model_service.evict_if_idle()
+
     import subprocess
     import socket
 

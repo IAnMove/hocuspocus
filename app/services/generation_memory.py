@@ -136,6 +136,8 @@ _TTS_ARCHITECTURES = frozenset({
     "qwen3_tts_customvoice",
     "qwen3_tts_voicedesign",
     "scenema_audio",
+    "voxcpm2_base",
+    "voxcpm2_voicedesign",
 })
 
 # Music handlers under app/models/TTS. They share WGP family "tts" with

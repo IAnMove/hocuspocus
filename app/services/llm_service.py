@@ -19,6 +19,7 @@ from functools import wraps
 from typing import Optional
 from . import debug_trace
 from .debug_trace import trace_llm_call
+from .minors_rule import with_minors_rule
 
 logger = logging.getLogger(__name__)
 
@@ -1961,6 +1962,22 @@ def _post_with_backoff(url: str, *, provider: str, cancellation_token=None, atte
     raise RuntimeError(f"{provider}: no attempts left")
 
 
+class LLMProviderError(RuntimeError):
+    """A provider call failed: it answered with an error (``status`` is its HTTP status) or not at all.
+
+    A ``RuntimeError`` subclass, so callers that already catch ``RuntimeError`` keep working;
+    the HTTP routes use ``code`` to tell a rejected key from any other provider failure.
+    """
+
+    def __init__(self, message: str, *, status: Optional[int] = None) -> None:
+        super().__init__(message)
+        self.status = status
+
+    @property
+    def code(self) -> str:
+        return "provider_auth_failed" if self.status in (401, 403) else "provider_failed"
+
+
 class LLMRequestCancelled(InterruptedError):
     """Raised when one job's active provider request is cancelled."""
 
@@ -2180,6 +2197,9 @@ def generate(
     """
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
+
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
 
     # Routing is locked by _scheduled_llm_request here, after acquiring its lane.
     if require_vision and not supports_vision():
@@ -2481,6 +2501,8 @@ def generate_openai_compatible(
     application's normal internal LLM active.
     """
     cancellation_token = _resolve_cancellation_token(cancellation_token)
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
     model_id = (model_id or "").strip()
     base_url = (base_url or "").strip().rstrip("/")
     if not model_id:
@@ -2739,11 +2761,13 @@ def generate_openai_compatible(
                     abort_supported=abort_supported,
                 ) from exc
             detail = ""
+            status = None
             if getattr(exc, "response", None) is not None:
                 detail = str(exc.response.text or "")[:500]
+                status = exc.response.status_code
             suffix = f": {detail}" if detail else ""
             finish_operation("failed", "Provider request failed", error=f"OpenAI-compatible request failed{suffix}")
-            raise RuntimeError(f"OpenAI-compatible request failed{suffix}") from exc
+            raise LLMProviderError(f"OpenAI-compatible request failed{suffix}", status=status) from exc
 
         try:
             _raise_if_token_cancelled(
@@ -2851,6 +2875,9 @@ def generate_streaming(
 
     if not is_loaded():
         raise RuntimeError("LLM not loaded. Call load_model() first.")
+
+    # Every request carries the hard rule about minors, in every mode.
+    system_prompt = with_minors_rule(system_prompt)
 
     # MiniMax/Grok streaming used the generic max_tokens payload and could
     # return empty content. Reuse the hardened non-streaming path and publish
@@ -6334,8 +6361,12 @@ def plan_short_film_from_story(
     preserve_visual_style: bool = False,
     character_visual_style: str = "",
     allow_clip_text: bool = False,
+    raw_prompts: bool = False,
 ) -> dict:
     """Plan a short film scene structure from a story description.
+
+    ``raw_prompts`` (Settings › Services › Raw prompts) returns the prompts as
+    the LLM wrote them, with no style, character-style or no-text lock.
 
     Unlike ``plan_dialogue_scenes`` which analyses uploaded audio, this uses
     the LLM to create scenes from scratch — deciding how many scenes there
@@ -6375,6 +6406,7 @@ def plan_short_film_from_story(
         build_visible_text_contract,
         build_visual_style_contract,
         enforce_visual_style_on_clip_plans,
+        no_visible_text_lock_applies,
     )
     style_contract = build_visual_style_contract(
         visual_style,
@@ -6816,12 +6848,18 @@ def plan_short_film_from_story(
 
         current_time += scene_dur
 
+    if raw_prompts:
+        return {"clips": clips, "clip_plans": clip_plans}
+    # The planner above follows the story's Allow-text switch. The final
+    # no-visible-text lock is for sung projects only, and a story is not sung.
     clip_plans = enforce_visual_style_on_clip_plans(
         clip_plans,
         visual_style,
         preserve=preserve_visual_style,
         has_reference=has_image,
         character_visual_style=character_visual_style,
-        allow_clip_text=allow_clip_text,
+        allow_clip_text=not no_visible_text_lock_applies(
+            {"pipeline_type": "short_film_story", "allow_clip_text": allow_clip_text},
+        ),
     )
     return {"clips": clips, "clip_plans": clip_plans}

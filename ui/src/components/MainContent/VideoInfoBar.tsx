@@ -7,6 +7,7 @@ import { modelDisplayName } from '../../lib/modelDisplay'
 import { formatGenerationBreakdown, formatGenerationDuration } from '../../lib/generationTiming'
 import { VideoExtraInfoDialog } from './VideoExtraInfoDialog'
 import { AlternativeSongsDialog, canRemountVideoclip } from './AlternativeSongsDialog'
+import { isExtendOrBlendOutput } from '../../features/studio/studioRestore'
 
 export function VideoInfoBar() {
   const { t } = useUiTranslation('activity')
@@ -45,6 +46,9 @@ export function VideoInfoBar() {
   }
 
   const params = meta?.params as Record<string, unknown> | null
+  // Extend/Blend sidecars cannot be restored yet (see isExtendOrBlendOutput).
+  const restoreBlocked = isExtendOrBlendOutput(params)
+  const restoreBlockedTitle = t('extendBlendRestoreUnavailable')
   const uploadFilenames = meta?.upload_filenames as Record<string, string> | undefined
 
   // Extract display values
@@ -172,15 +176,17 @@ export function VideoInfoBar() {
           <>
             <button
               onClick={() => void loadSettingsFromOutput()}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Load settings"
+              disabled={restoreBlocked}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+              title={restoreBlocked ? restoreBlockedTitle : 'Load settings'}
             >
               <Pencil size={14} />
             </button>
             <button
               onClick={() => void rerollGeneration()}
-              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Re-generate with same settings"
+              disabled={restoreBlocked}
+              className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
+              title={restoreBlocked ? restoreBlockedTitle : 'Re-generate with same settings'}
             >
               <RefreshCw size={14} />
             </button>

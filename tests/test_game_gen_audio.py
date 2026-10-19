@@ -319,7 +319,7 @@ def test_voice_without_a_kit_uses_voice_design(tmp_path):
     result = VoiceGenerator().run(_ctx(tmp_path, game, asset, fake))
     params = fake.params("generation.speech")
     assert [item["prompt"] for item in params] == ["vamos", "otra"]
-    assert params[0]["model_type"] == "qwen3_tts_voicedesign"
+    assert params[0]["model_type"] == "voxcpm2_voicedesign"
     assert params[0]["alt_prompt"] == "young scout"
     assert (tmp_path / "ws" / result.files["1"]).name == "voz-1.wav"
     assert (tmp_path / "ws" / result.files["2"]).name == "voz-2.wav"

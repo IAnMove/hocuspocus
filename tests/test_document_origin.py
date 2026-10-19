@@ -1,11 +1,10 @@
 """Who saved a scene or a comic, and who created a series record."""
-import ast
 import base64
 import copy
 import json
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from services.agent_activity import SERVER_CALLER, ActorHeaderMiddleware, caller_scope, external_caller
@@ -15,8 +14,6 @@ from services.scene_documents import save_document
 from services.scene_library import save_world3d
 from tests.test_output_completion_time import list_test_outputs
 
-ROOT = Path(__file__).parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
 TINY_PNG = "data:image/png;base64," + base64.b64encode(b"\x89PNG\r\n\x1a\npreview").decode()
 SCENE_2D = {
     "version": 1, "name": "Plaza", "width": 64, "height": 36, "fps": 24, "duration": 0.25,
@@ -40,19 +37,6 @@ def _workspace(tmp_path):
 
 def _sidecar(folder: Path, name: str) -> dict:
     return json.loads((folder / name).with_suffix(".meta.json").read_text(encoding="utf-8"))
-
-
-def _save_scene_output(tmp_path):
-    tree = ast.parse(LAUNCH.read_text(encoding="utf-8"), filename=str(LAUNCH))
-    node = copy.deepcopy(next(item for item in tree.body if isinstance(item, ast.FunctionDef) and item.name == "save_scene_output"))
-    node.decorator_list = []
-    module = ast.Module(body=[node], type_ignores=[])
-    ast.fix_missing_locations(module)
-    namespace = {"HTTPException": HTTPException, "base64": base64, "json": json, "os": __import__("os"),
-                 "time": __import__("time"), "uuid": __import__("uuid"),
-                 "_workspace_dir": lambda workspace=None: str(tmp_path)}
-    exec(compile(module, str(LAUNCH), "exec"), namespace)
-    return namespace["save_scene_output"]
 
 
 def test_agent_and_wizard_documents_join_made_by_agents_and_a_person_does_not(tmp_path):
@@ -127,8 +111,11 @@ def test_a_wizard_http_save_is_listed_and_a_person_keeps_an_existing_origin(tmp_
     assert name in {item["name"] for item in list_test_outputs(tmp_path, origin="agent")}
 
 
-def test_a_layer_scene_save_uses_the_same_origin(tmp_path):
-    save = _save_scene_output(tmp_path)
+def test_a_layer_scene_save_uses_the_same_origin(tmp_path, monkeypatch):
+    import routers.scenes_favorites as scenes_favorites
+
+    monkeypatch.setattr(scenes_favorites, "_workspace_dir", lambda workspace=None: str(tmp_path))
+    save = scenes_favorites.save_scene_output
     body = {"scene": {"version": 1, "name": "Plaza", "layers": []}, "preview": TINY_PNG}
     with caller_scope({"surface": "loopback", "internal": "loopback", "actor": "wizard"}):
         saved = save(body)

@@ -146,10 +146,13 @@ def _eye_components(rgb: np.ndarray, alpha: np.ndarray, top_fraction: float):
 
 
 def _hinted_pair(parts, near) -> tuple[dict[str, int], dict[str, int]] | None:
-    """The largest pair of similar light blobs side by side whose box, grown by a quarter of its width, holds ``near``.
-    The largest, not the nearest: a pupil's two highlights are a smaller pair at the same place."""
+    """The pair of similar light blobs side by side that lines up with ``near``: its box, grown by a quarter of its
+    width, holds it, and its middle row is about as close to it as the closest pair's (a tenth of the pair's width).
+    Light hair either side of a face is a bigger pair whose grown box reaches down to the eyes, but its middle is
+    above them. Of the pairs left, the largest, not the nearest: a pupil's two highlights are a smaller pair at the
+    same place."""
     hx, hy = near
-    best = None
+    found = []
     for i, a in enumerate(parts):
         for b in parts[i + 1:]:
             tall = max(a["y1"] - a["y0"], b["y1"] - b["y0"])
@@ -159,17 +162,25 @@ def _hinted_pair(parts, near) -> tuple[dict[str, int], dict[str, int]] | None:
             x0, y0 = min(a["x0"], b["x0"]), min(a["y0"], b["y0"])
             x1, y1 = max(a["x1"], b["x1"]), max(a["y1"], b["y1"])
             grow = (x1 - x0) * 0.25
-            if x0 - grow <= hx <= x1 + grow and y0 - grow <= hy <= y1 + grow and (not best or a["size"] + b["size"] > best[0]):
-                best = (a["size"] + b["size"], a, b)
-    return (best[1], best[2]) if best else None
+            if x0 - grow <= hx <= x1 + grow and y0 - grow <= hy <= y1 + grow:
+                off = abs((_centre(a)[1] + _centre(b)[1]) / 2 - hy) / max(x1 - x0, 1)
+                found.append((off, a["size"] + b["size"], a, b))
+    if not found:
+        return None
+    closest = min(item[0] for item in found)
+    _, _, a, b = max((item for item in found if item[0] <= closest + 0.1), key=lambda item: item[1])
+    return a, b
 
 
 def _with_fragments(labels: np.ndarray, eye: dict[str, int], parts, other: dict[str, int]) -> dict[str, int]:
-    """One eye's white and the pieces of it a pupil cut off: blobs beside it, within its height, on its rows."""
+    """One eye's white and the pieces of it a pupil cut off: blobs beside it, within its height, on its rows.
+    Within its height means inside its rows (half an eye of slack): light hair round the face crosses the eye's rows
+    too, and taking it made the eye the whole head."""
     eye = dict(eye)
     height = eye["y1"] - eye["y0"]
     for part in parts:
         if (part["label"] in (eye["label"], other["label"]) or part["y1"] <= eye["y0"] or part["y0"] >= eye["y1"]
+                or part["y0"] < eye["y0"] - height / 2 or part["y1"] > eye["y1"] + height / 2
                 or max(part["x0"] - eye["x1"], eye["x0"] - part["x1"]) > height
                 or other["x0"] < _centre(part)[0] < other["x1"]):
             continue
@@ -274,6 +285,8 @@ def _eye_opening(rgb: np.ndarray, alpha: np.ndarray, sclera: np.ndarray, skin: n
     and lash lines) up to the skin, within the white's rows and ``x_limits``; then a dark upper lid resting on it,
     a little way up; then the holes. Brows and bangs above, and hair beside, stay outside."""
     ys, xs = np.nonzero(sclera)
+    if not ys.size:  # a white the eye's limits cut away has no opening (it used to fail the whole rig check with a 500)
+        return np.zeros(sclera.shape, dtype=bool)
     y0, y1, h = int(ys.min()), int(ys.max()) + 1, int(ys.max()) + 1 - int(ys.min())
     side, x0, x1 = int(h * 0.75), int(xs.min()), int(xs.max()) + 1
     wx0, wx1 = min(x0, max(x_limits[0], x0 - side)), max(x1, min(x_limits[1], x1 + side))
@@ -329,25 +342,61 @@ def _whole_white(rgb: np.ndarray, alpha: np.ndarray, white: np.ndarray, pair_wid
     return whole
 
 
+def _two_eyes(parts):
+    """The whites' pieces as two eyes, left then right. An eye a pupil cut in two comes as two pieces (an eyes hint
+    joins them, ``_with_fragments``), so the eyes part at the widest gap between neighbouring pieces; specks under a
+    tenth of the largest piece are left out."""
+    largest = max(part["size"] for part in parts)
+    parts = sorted((part for part in parts if part["size"] >= largest * 0.1), key=lambda part: part["x0"] + part["x1"])
+    if len(parts) <= 2:
+        return [[part] for part in parts]
+    gaps = [parts[i + 1]["x0"] - parts[i]["x1"] for i in range(len(parts) - 1)]
+    cut = gaps.index(max(gaps)) + 1
+    return [parts[:cut], parts[cut:]]
+
+
 def eye_openings(rgb: np.ndarray, alpha: np.ndarray, eyes: np.ndarray, skin, screen: bool = False) -> np.ndarray:
     """Each eye's whole opening, labelled 1 (left) and 2 (right), grown from the whites ``find_eyes`` returns."""
     labels, parts = _components(eyes)
     if len(parts) == 1:
         # Two eyes drawn touching were found as two halves of one blob (find_eyes): cut it the same way again.
         parts = _split_touching(labels, parts)
-    parts = sorted(sorted(parts, key=lambda part: -part["size"])[:2], key=lambda part: part["x0"])
+    eyes_found = _two_eyes(parts)
+    parts = [{"x0": min(p["x0"] for p in eye), "x1": max(p["x1"] for p in eye), "labels": [p["label"] for p in eye]}
+             for eye in eyes_found]
     skin = np.asarray(skin, dtype=float)
     found = np.zeros(eyes.shape, np.uint8)
     for index, part in enumerate(parts):
         # Each eye may reach up to the other one's white, not a fixed middle: eyes looking aside have both irises on
         # the same side of their whites, one of them well past the middle between the whites.
         limits = (parts[0]["x1"] if index else 0, parts[1]["x0"] if index == 0 and len(parts) == 2 else eyes.shape[1])
-        white = labels == part["label"]
+        white = np.isin(labels, part["labels"])
         if not screen:
             white = _whole_white(rgb, alpha, white, max(p["x1"] for p in parts) - min(p["x0"] for p in parts))
             white[:, :limits[0]] = white[:, limits[1]:] = False
         found[_eye_opening(rgb, alpha, white, skin, limits, screen) & (found == 0)] = index + 1
     return found
+
+
+def add_outlined_irises(openings: np.ndarray, rgb: np.ndarray, alpha: np.ndarray, outlines, skin, screen: bool = False) -> np.ndarray:
+    """The iris and pupil an eye's white leaves out. Eyes looking aside (a three-quarter face) have the iris at a corner of the
+    white, past the reach ``_eye_opening`` allows round it on a small face, and a closed lid left it showing. The landmarks'
+    outline of each eye (the whole eye, iris included) adds what is not face colour inside it to that eye's opening. An outline
+    that touches none of the openings found (landmarks on other eyes) adds nothing."""
+    if not outlines:
+        return openings
+    result = openings.copy()
+    other = _not_skin(rgb, np.asarray(skin, dtype=float), screen) & (alpha > 200)
+    for outline in outlines:
+        points = np.asarray(outline, dtype=float)
+        shape = np.zeros(alpha.shape, np.uint8)
+        cv2.fillPoly(shape, [np.round(points).astype(np.int32)], 1)
+        shape = _dilate(shape > 0, max(1, int(np.ptp(points[:, 0]) * 0.06)))
+        found = openings[shape]
+        if not (found > 0).any():
+            continue
+        result[shape & other & (result == 0)] = np.bincount(found[found > 0]).argmax()
+    return result
 
 
 def _lid_colour(rgb: np.ndarray, alpha: np.ndarray, cover: np.ndarray, skin: np.ndarray) -> tuple[int, ...]:

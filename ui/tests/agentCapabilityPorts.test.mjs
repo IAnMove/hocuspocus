@@ -31,6 +31,10 @@ const LEGACY_EXECUTE_ALLOWLIST = [
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
+  // Translation catalogs for Wizard replies and errors; no store, transport or execution port.
+  '../../i18n',
+  // Pure helper: the content language of new work follows the UI language.
+  '../../lib/contentLanguage',
   '../../stores/useStore',
   '../../types',
   '../comics/generateArtwork',
@@ -43,12 +47,18 @@ const AGENT_ACTIONS_IMPORTS = [
   './applicationAdapters',
   './capabilityRegistry',
   './capabilityRunner',
+  // Action type only. Execution stays on the characterAnimations adapter.
+  './characterAnimationCapabilities',
   './characterKitActions',
   './commandContract',
   // Action type only. Execution stays on the mediaTools adapter.
   './mediaToolCapabilities',
   // Action type only. Execution stays on the productionWorks adapter.
   './productionWorkCapabilities',
+  // Action type only. Execution stays on the roomSets adapter.
+  './roomSetsCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesShotCardCapabilities',
   // Action types only. Execution stays on the seriesShots adapter.
   './seriesShotEditCapabilities',
   './sfxPack',
@@ -56,13 +66,19 @@ const AGENT_ACTIONS_IMPORTS = [
   './storyVisualRequest',
   './storyWorkflowIdentity',
   './toolCapabilities',
+  // Action type only. Execution stays on the video2dTemplates adapter.
+  './video2dTemplateCapabilities',
   './videoEditorActions',
+  // Action type only. Execution stays on the characterKit adapter.
+  './voiceBandCapabilities',
   './wizardContext',
   './wizardIntent',
   // Pure validation/result formatting; no store, transport or execution port.
   './wizardTurnReport',
   // Action type only. Execution stays on the world3dTemplates adapter.
   './world3dTemplateCapabilities',
+  // Type only (ParseKeys for catalog progress keys).
+  'i18next',
 ]
 
 const LAB_ACTIONS_IMPORTS = [
@@ -209,7 +225,8 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 89) // speech_analysis_engine uses the Video3D adapter and shared native installer.
+  assert.equal(registered.length, 95) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band uses the Character Kit adapter.
+  assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })
 

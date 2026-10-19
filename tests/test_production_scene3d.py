@@ -6,6 +6,7 @@ import math
 import pytest
 
 from services.production_scene3d import compile_document, export_scene3d_clips, validate_scene3d_shot
+from services.world3d_modifiers import GROUND_STYLES
 
 
 def shot(**config):
@@ -694,7 +695,9 @@ def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
     hero = {"subject_1": "/api/v1/file/a.glb?workspace=t"}
     plain = compile_document(cast_shot(template="cine-dolly-in", cast=hero), 4)["camera"]["framing"]
     close = compile_document(cast_shot(template="cine-dolly-in", cast=hero, frame="close"), 4)["camera"]["framing"]
-    assert close["from"] == [plain["from"][0] * 0.6, plain["from"][1], plain["from"][2] * 0.6] and close["to"][2] == plain["to"][2] * 0.6
+    lift = close["lookFrom"][1]
+    assert close["from"] == [plain["from"][0] * 0.6, plain["from"][1] + lift, plain["from"][2] * 0.6] and close["to"][2] == plain["to"][2] * 0.6
+    assert 0 < lift <= 0.6 and close["lookFrom"] == [0, lift, 0], "nearer to the figure's middle, eye and aim rise together so the head stays in"
     orbit = compile_document(cast_shot(template="dance-orbit", cast=hero, frame="wide"), 4)["camera"]
     assert abs(orbit["orbitRadius"] - 5.4 * 1.35) < 1e-9
     crane = compile_document(cast_shot(template="crane-reveal", cast=hero, frame=0.5), 4)["camera"]
@@ -708,3 +711,78 @@ def test_real_compiler_reframes_every_camera_family_and_lights_by_name():
     assert night["light"]["color"] == "#9fb6ff" and night["dressing"] == "atmos-beach", "a named light wins over the world's"
     with pytest.raises(ValueError, match="scene3d.light"):
         compile_document(cast_shot(template="cine-dolly-in", cast=hero, light="disco"), 4)
+
+
+PARALLAX = {"source": "/api/v1/uploads/far.png", "key": "#00ff00",
+            "layers": [{"source": "/api/v1/uploads/mid.png", "depth": "mid", "foot": 0.25}, {"source": "/api/v1/uploads/near.png", "depth": "near"}],
+            "ground": {"source": "/api/v1/file/ground.glb?workspace=t", "height": 0.2, "size": 80}}
+
+
+def test_a_ground_style_is_a_floor_and_a_set_ground():
+    for style in GROUND_STYLES:
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, floor=style))
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background={**PARALLAX, "ground": {"style": style}}))
+    assert GROUND_STYLES == ("grass", "meadow", "sand", "asphalt", "dirt", "snow", "cobble")
+    with pytest.raises(ValueError, match="scene3d.floor"):
+        validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, floor="lava"))
+    for bad in ({"style": "lava"}, {"style": "grass", "size": 80}):
+        with pytest.raises(ValueError, match="background.ground"):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background={**PARALLAX, "ground": bad}))
+
+
+def test_a_parallax_background_is_checked():
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX))
+    validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX, scroll=-3))
+    for bad_scroll in (11, "fast", True):
+        with pytest.raises(ValueError, match="scene3d.scroll"):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=PARALLAX, scroll=bad_scroll))
+    for bad in ({**PARALLAX, "layers": []}, {**PARALLAX, "layers": [{"source": "m.png", "depth": "far"}]}, {**PARALLAX, "key": "green"},
+                {**PARALLAX, "layers": [{"source": "m.png", "depth": "mid", "foot": 2}]},
+                {**PARALLAX, "houses": [{"source": "h.glb", "width": 5, "height": 6}]}):
+        with pytest.raises(ValueError):
+            validate_scene3d_shot(cast_shot(cast={"subject_1": "h.glb"}, background=bad))
+
+
+@NODE
+def test_real_compiler_stands_parallax_layers_across_the_line_of_sight_and_skips_a_near_layer_an_orbit_would_cross():
+    hero = {"subject_1": "/api/v1/file/a.glb?workspace=t"}
+    doc = compile_document(cast_shot(template="cine-two-shot", background=PARALLAX, cast={**hero, "subject_2": "/api/v1/file/b.glb?workspace=t"}), 4)
+    sky = next(slot for slot in doc["slots"] if slot["slot"] == "background")
+    assert sky["surface"] == "environment" and sky["sourceUrl"] == "/api/v1/uploads/far.png" and doc["environment"]["floorStyle"] == "none"
+    layers = {slot["id"]: slot for slot in doc["slots"] if slot["id"].startswith("set-layer-")}
+    assert set(layers) == {"set-layer-mid", "set-layer-near"} and all(slot["surface"] == "cutout" and slot["media"] == "image" for slot in layers.values())
+    assert all(slot["imageLook"]["colorKey"]["color"] == "#00ff00" and slot["imageLook"]["unlit"] for slot in layers.values())
+    camera_z = doc["camera"]["eye"][2]
+    assert layers["set-layer-mid"]["position"][2] <= -9, "the mid layer stands well behind the cast, away from the camera"
+    assert layers["set-layer-mid"]["position"][1] == pytest.approx(-(0.25 + 0.05) * 2 * layers["set-layer-mid"]["scale"]), "lowered by the empty key under its pieces and sunk 5 %"
+    assert layers["set-layer-near"]["position"][1] < 0, "the near layer stands on the floor, sunk like the others"
+    assert "drift" not in layers["set-layer-mid"] and "tiles" not in layers["set-layer-mid"]["imageLook"], "a still two-shot needs no tiles and nothing scrolls"
+    assert 0 < layers["set-layer-near"]["position"][2] < camera_z, "the near layer stands between the camera and the cast"
+    assert layers["set-layer-mid"]["scale"] > layers["set-layer-near"]["scale"] > 0, "each layer covers the view at its distance"
+    assert next(slot for slot in doc["slots"] if slot["id"] == "set-ground")["position"][1] == 0
+    orbit = compile_document(cast_shot(template="dance-orbit", background=PARALLAX, cast=hero), 4)
+    ids = {slot["id"] for slot in orbit["slots"]}
+    assert "set-layer-mid" in ids and "set-layer-near" not in ids, "an orbit would cross the near layer"
+    turning = next(slot for slot in orbit["slots"] if slot["id"] == "set-layer-mid")
+    assert turning["imageLook"]["tiles"] >= 3, "an orbit sweeps past a single picture: mirrored tiles cover the turn"
+    run = compile_document(cast_shot(template="cine-two-shot", background=PARALLAX, cast={**hero, "subject_2": "/api/v1/file/b.glb?workspace=t"}, scroll=2.5), 4)
+    moving = {slot["id"]: slot for slot in run["slots"] if slot["id"].startswith("set-")}
+    assert all(slot["drift"] > 0 for slot in moving.values()), "scroll slides the layers and the ground"
+    cast = [slot for slot in run["slots"] if slot["media"] == "model3d" and not slot["id"].startswith("set-")]
+    assert cast and all(slot.get("inPlace") for slot in cast), "on a scrolled set the cast runs on the spot"
+    assert not any(slot.get("inPlace") for slot in doc["slots"]), "without scroll a clip keeps its travel"
+    stretch = moving["set-ground"]["scale"] * 1.7 / 0.2
+    assert moving["set-ground"]["drift"] * 3 * stretch == pytest.approx(2.5, rel=1e-3), "the ground moves at the scroll speed: its picture repeats every 3 m"
+
+
+def test_a_renderer_recipe_change_exports_every_clip_again(tmp_path, monkeypatch):
+    from services import production_scene3d
+
+    production = Production(tmp_path)
+    render(production)
+    before = production.state["clips"]["hero"]
+    monkeypatch.setattr(production_scene3d, "RENDER_RECIPE", production_scene3d.RENDER_RECIPE + 1)
+    render(production)
+    after = production.state["clips"]["hero"]
+    assert after["fingerprint"] != before["fingerprint"] and after["file"] != before["file"]
+    assert len(production.calls) == 4

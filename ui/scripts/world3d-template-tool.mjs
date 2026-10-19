@@ -1,15 +1,17 @@
-// Compile one Video 3D template, or paint cheap software frames of a document.
+// Compile one Video 3D template, paint cheap software frames of a document, or turn the pictures standing in for models.
 import { readFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { createHash } from 'node:crypto'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { renderScene3DSoftware } from '../src/features/scene3d/softwareRender.ts'
+import { turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
 
 const command = process.argv[2]
 if (command === 'document') write(compileDocument(process.argv[3]))
 else if (command === 'preview') write(preview(JSON.parse(readFileSync(0, 'utf8'))))
-else throw new Error('use document <id> or preview')
+else if (command === 'turn-pictures') write(turnPictures(JSON.parse(readFileSync(0, 'utf8'))))
+else throw new Error('use document <id>, preview or turn-pictures')
 
 function compileDocument(id) {
   let document
@@ -34,6 +36,15 @@ function preview(body) {
     pending: document.slots.filter(slot => !slot.sourceUrl).map(slot => ({ id: slot.id, role: slot.slot, media: slot.media })),
     loadErrors: [],
   }
+}
+
+/** The turn of each picture in `ids` once turnPicturesToCamera has turned it toward the camera along the shot. */
+function turnPictures(body) {
+  const document = parseScene3DDocument(body.document)
+  if (!document) throw new Error('invalid_world3d_document')
+  const ids = new Set(body.ids)
+  turnPicturesToCamera(document, ids)
+  return { rotations: Object.fromEntries(document.slots.filter(slot => ids.has(slot.id)).map(slot => [slot.id, slot.rotationY])) }
 }
 
 function frame(document, time) {

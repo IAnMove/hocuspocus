@@ -6,8 +6,10 @@ from tests.api_client_source import api_client_source
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCH = ROOT / "app" / "_launch_runtime.py"
-STORE = ROOT / "ui" / "src" / "stores" / "useStore.ts"
+DIRECTOR = ROOT / "app" / "routers" / "llm_director.py"
+JOBS = ROOT / "app" / "services" / "kernel" / "jobs.py"
+STORE = ROOT / "ui" / "src" / "stores" / "jobsSlice.ts"
+TOOLS = ROOT / "ui" / "src" / "features" / "studio" / "store" / "toolsSlice.ts"
 ACTIVITY = ROOT / "ui" / "src" / "components" / "ActivityFooter.tsx"
 ACTIVITY_FEATURE = ROOT / "ui" / "src" / "features" / "activity"
 ACTIVITY_EN = ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "activity.json"
@@ -22,18 +24,19 @@ def activity_ui() -> str:
 
 
 def test_backend_status_and_reconnect_publish_frozen_generation_details():
-    launch = LAUNCH.read_text(encoding="utf-8")
+    jobs = JOBS.read_text(encoding="utf-8")
+    status = (ROOT / "app" / "services" / "generation_jobs.py").read_text(encoding="utf-8")
     client = api_client_source()
     store = STORE.read_text(encoding="utf-8")
 
-    assert "def _public_generation_details" in launch
-    assert launch.count('"generation_details": _public_generation_details') >= 2
+    assert "def _public_generation_details" in jobs
+    assert status.count('"generation_details": _public_generation_details') >= 2
     assert "generation_details?: GenerationDetails" in client
     assert "generationDetails: j.generation_details" in store
-    assert "patch.generationDetails = status.generation_details" in store
-    assert 'details["prompt"]' in launch
-    assert 'details["initiator"]' in launch
-    assert 'gen_params["_initiator"]' in launch
+    assert "patch.generationDetails = status.generation_details" in TOOLS.read_text(encoding="utf-8")
+    assert 'details["prompt"]' in jobs
+    assert 'details["initiator"]' in jobs
+    assert 'gen_params["_initiator"]' in DIRECTOR.read_text(encoding="utf-8")
 
 
 def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():
@@ -124,3 +127,14 @@ def test_activity_reference_images_reject_foreign_urls_paths_and_traversal(tmp_p
         str(workspace / 'video.mp4'), None, {'path': 'image.png'},
     ]
     assert activity_reference_images({'image_refs': values}, 'art', uploads_dir=uploads, workspace_dir=workspace) == []
+
+
+def test_public_generation_details_publish_the_edit_sub_mode():
+    """The Edit tab's queue filter reads `edit_sub_mode`; every edit job reports generation_mode 'video'."""
+    from services.kernel.jobs import _public_generation_details
+
+    edit = _public_generation_details({'model_type': 'ltxv_13B', 'generation_mode': 'video', 'edit_sub_mode': 'retake'})
+    assert edit['edit_sub_mode'] == 'retake'
+    assert edit['generation_mode'] == 'video'
+    assert 'edit_sub_mode' not in _public_generation_details({'model_type': 'ltxv_13B', 'generation_mode': 'video'})
+    assert 'edit_sub_mode' not in _public_generation_details({'model_type': 'ltxv_13B', 'edit_sub_mode': ''})

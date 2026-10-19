@@ -142,6 +142,18 @@ def test_the_bible_lists_what_an_agent_may_use():
     assert audio_files(["mus-a.wav", "x.mp3"])["other"] == ["x.mp3"]
 
 
+def test_the_bible_shows_the_series_episode_format_and_finish_and_the_guide_their_defaults():
+    plain = build_bible(series(), {}, [])["series"]
+    assert plain["episodeFormat"] is None and plain["finish"] == "paper", "a series that chose nothing gets the defaults"
+    own = build_bible({**series(), "episodeFormat": "Two acts, 2 minutes, 14 shots.", "look": {"finish": "film"}}, {}, [])["series"]
+    assert own["episodeFormat"] == "Two acts, 2 minutes, 14 shots." and own["finish"] == "film"
+    guide = guide_text()
+    for phrase in ("`pan-left`", "`drift`", "are `static` (push-in words `push`)", "`look.finish`", "`none`",
+                   "Follow the series' `episodeFormat`, else this sitcom format", "45–55 shots", "else push on punchlines"):
+        assert phrase in guide, phrase
+    assert "`static` or `push`" not in guide, "the camera is not only static or push any more"
+
+
 def test_a_compact_episode_keeps_layout_lines_and_takes():
     ep = episode()
     ep["shots"][0]["transitionIn"] = {"kind": "fade_black", "seconds": 0.8}
@@ -155,9 +167,11 @@ def test_a_compact_episode_keeps_layout_lines_and_takes():
 
 
 def test_the_guide_names_the_production_lessons():
-    """Lessons that cost hours, and the real series.update merge. Growth stays within 15% of 40364 bytes."""
+    """Lessons that cost hours, and the real series.update merge. Growth stays within 30% of 40364 bytes
+    (25% until the box room and the voice band each added a line: 50622 bytes together; 15% until the owner PRs #1003, #1004, #1006, #1007 and #1015 each added a few lines to the guide: 47626 bytes together;
+    20% until the kit animations of a Series cast entry added 1.5 KB: 49374 bytes)."""
     guide = guide_text()
-    assert len(guide.encode()) <= int(40364 * 1.15)
+    assert len(guide.encode()) <= int(40364 * 1.3)
     for phrase in (
         "keeps every top-level field you omit",
         "ambienceByLocation",
@@ -203,9 +217,13 @@ def test_the_guide_routes(tmp_path):
 def test_the_series_profile_names_real_series_tools():
     from services.mcp_profiles import PROFILES
     from services.series_commands import command_catalog
-    names = {item["name"] for item in command_catalog()}
+    from services.series_sets import command_catalog as room_catalog
+    operations = [*command_catalog(), *room_catalog()]
+    names = {item["name"] for item in operations}
     series_tools = {name for name in PROFILES["series"]["tools"] if name.startswith(("series.", "characters."))}
     assert series_tools <= names, series_tools - names
     assert {"series.guide", "series.episode.get"} <= names
-    readonly = {item["name"]: item["mutation"] for item in command_catalog()}
+    readonly = {item["name"]: item["mutation"] for item in operations}
     assert readonly["series.guide"] is False and readonly["series.episode.get"] is False
+    assert readonly["series.location.set3d"] is True
+    assert readonly["series.location.set3d.status"] is False

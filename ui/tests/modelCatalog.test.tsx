@@ -25,6 +25,9 @@ const {
   catalogRequirementKey,
 } = await import('../src/lib/modelCatalog.ts')
 const { ModelCatalogInfo } = await import('../src/components/Sidebar/ModelCatalogInfo.tsx')
+const { DramaSpeechControls } = await import('../src/components/Sidebar/DramaSpeechControls.tsx')
+const { useStore } = await import('../src/stores/useStore.ts')
+const { getFamilyMode, getModelsForFamily } = await import('../src/stores/modelCatalog.ts')
 
 test('classifies distilled, quantized, compact and edit variants from the model id', () => {
   assert.equal(detectVariant({ model_type: 'ltx2_22B_distilled_1_1', architecture: 'ltx2_22B', name: 'LTX-2.3 Distilled' }), 'distilled')
@@ -70,6 +73,41 @@ test('explains what each model does instead of listing only the name', () => {
   assert.equal(detectCapability({
     model_type: 'vace_14B', architecture: 'vace_14B', is_i2v: true, is_t2v: true,
   }), 'videoControl')
+})
+
+test('FLUX 3 and Drama 3 appear in their image and speech categories with explicit memory guidance', () => {
+  assert.equal(getFamilyMode('flux3'), 'image')
+  const speechModel = { model_type: 'drama3_base', family: 'tts', architecture: 'drama3_base', name: 'Drama', is_i2v: false, is_t2v: false, guidance_max_phases: 1, fps: 0 }
+  assert.equal(getModelsForFamily('tts_speech', [speechModel], 'audio').length, 1)
+  assert.equal(detectCapability({ model_type: 'flux3_klein', architecture: 'flux3_klein' }), 'image')
+  assert.equal(detectCapability({ model_type: 'flux3_klein_edit', architecture: 'flux3_klein_edit' }), 'imageEdit')
+  for (const model_type of ['drama3_base', 'drama3_voicedesign']) {
+    const model = { model_type, architecture: model_type }
+    assert.equal(detectCapability(model), 'speech')
+    assert.equal(resolveModelCatalog(model).requirements.ram_gb, 48)
+  }
+})
+
+test('Drama shows a required transcript for cloning and optional direction for a generated voice', () => {
+  const original = useStore.getState()
+  const originalFetch = globalThis.fetch
+  globalThis.fetch = async () => new Response(JSON.stringify({ assets: [] }), { headers: { 'Content-Type': 'application/json' } })
+  try {
+    useStore.setState({ params: { ...original.params, model_type: 'drama3_base', alt_prompt: 'Reference words.' } })
+    const clone = render(<DramaSpeechControls />)
+    const transcript = clone.getByLabelText('Exact words in the reference recording (required)') as HTMLTextAreaElement
+    assert.equal(transcript.required, true)
+    assert.equal(transcript.value, 'Reference words.')
+    cleanup()
+    useStore.setState({ params: { ...original.params, model_type: 'drama3_voicedesign', alt_prompt: 'Warm voice.' } })
+    const design = render(<DramaSpeechControls />)
+    assert.equal((design.getByLabelText('Voice direction (optional)') as HTMLTextAreaElement).required, false)
+    assert.equal(design.queryByText('Reference recording'), null)
+  } finally {
+    cleanup()
+    useStore.setState(original)
+    globalThis.fetch = originalFetch
+  }
 })
 
 test('typical minima prefer API numbers and stay conservative for GGUF', () => {
@@ -171,4 +209,12 @@ test('H3 catalog presentation is unchanged when rendered through ModelCatalogInf
     assert.match(text, /Memory measured|Memoria medida/)
     assert.doesNotMatch(text, /Minimum requirements|Requisitos mínimos/)
   } finally { cleanup() }
+})
+
+test('speech defaults to VoxCPM2 once installed and keeps KugelAudio on installs without it', async () => {
+  const { defaultSpeechModel, installedPreferredModel } = await import('../src/lib/preferredModels')
+  const installed = [{ model_type: 'voxcpm2_voicedesign', is_downloaded: true }, { model_type: 'kugelaudio_0_open', is_downloaded: true }]
+  assert.equal(defaultSpeechModel(installed), 'voxcpm2_voicedesign')
+  assert.equal(installedPreferredModel('audio', installed), 'voxcpm2_voicedesign')
+  assert.equal(defaultSpeechModel([{ model_type: 'voxcpm2_voicedesign', is_downloaded: false }]), 'kugelaudio_0_open')
 })

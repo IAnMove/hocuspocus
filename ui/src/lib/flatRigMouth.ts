@@ -109,17 +109,19 @@ export function zoomImageStyle(zoom: MouthZoom) {
 }
 
 /** The re-rig that saves a pose's mouth line: warp mouths in the kit's last look and the pose's hint with this line
- * (its eyes hint kept). A warp kit re-rigs that pose and the base (the rig always takes it: the blink comes from
+ * (its eyes hint and a `blink: false` kept). A warp kit re-rigs that pose and the base (the rig always takes it: the blink comes from
  * it); a kit switching to warp mouths re-rigs every pose, since in a warp kit a pose without mouths of its own shows
  * none. */
 export function mouthLineRigRequest(kit: CharacterKit, poseId: string, draft: MouthLineDraft) {
   const rig = lastRig(kit)
   const clean = cleanMouthLine(draft)
-  const eyes = rig?.hints?.[poseId]?.eyes
+  const saved = rig?.hints?.[poseId]
+  const eyes = saved?.eyes
   return {
     ...(isWarpRigged(kit) ? { poses: [...new Set(['base', poseId])] } : {}),
     style: { ...(rig?.style ?? {}), mouthStyle: 'warp' },
     // Placed by a person on the image: the rig keeps it there (exact) instead of snapping it or trusting the landmarks.
-    hints: { [poseId]: { ...(eyes ? { eyes } : {}), mouth: clean.mouth, mouthWidth: clean.mouthWidth, exact: true } } as Record<string, FlatRigHint>,
+    hints: { [poseId]: { ...(eyes ? { eyes } : {}), ...(saved?.blink === false ? { blink: false } : {}), mouth: clean.mouth,
+      mouthWidth: clean.mouthWidth, exact: true } } as Record<string, FlatRigHint>,
   }
 }

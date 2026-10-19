@@ -166,6 +166,15 @@ def alias_model3d_provider(provider: str) -> str:
     return value
 
 
+def refuse_remote_retexture(body: dict[str, Any] | None) -> None:
+    """Meshy and Hi3D only generate a new mesh. They must not silently drop a source GLB."""
+    operation = str((body or {}).get("operation") or "generate").strip().lower()
+    if operation != "generate":
+        raise ValueError(
+            "Meshy and Hi3D generate a new model. Retexture a GLB with local Hunyuan3D."
+        )
+
+
 def resolve_writing_override(
     *,
     provider: str,

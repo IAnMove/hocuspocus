@@ -1,7 +1,8 @@
 """Conservative image defaults; explicit production choices always win.
 
-Prefer Qwen Image 2.1 INT8 on >=16 GiB NVIDIA cards, its Q4 variant on
-10--16 GiB cards. Unknown hardware retains the requested Qwen default.
+Qwen Image 2.1 Turbo (eight steps, CFG 1, no negative prompt) is the default image model of every internal pipeline.
+Cards of 10--16 GiB keep the Q4 variant of the base model: no quantized Turbo exists (its INT8 transformer is the same
+size as the base INT8 one, which is what those cards could not hold). Unknown hardware retains the Turbo default.
 This is a capacity policy, not a measured ranking of artistic quality.
 """
 from __future__ import annotations
@@ -11,20 +12,32 @@ import json
 from pathlib import Path
 import subprocess
 
-DEFAULT_IMAGE_MODEL = "qwen_image_21"
+DEFAULT_IMAGE_MODEL = "qwen_image_21_turbo"
 _DEFAULTS = Path(__file__).resolve().parents[1] / "defaults"
 
 
 @lru_cache(maxsize=64)
-def model_image_steps(model: str) -> int | None:
-    """``num_inference_steps`` from ``app/defaults/<model>.json`` (Qwen 40, its Turbo 6, Flux 2 Klein 4); None if unknown."""
+def _definition(model: str) -> dict:
+    """``app/defaults/<model>.json`` as a dict; {} when the model has no definition."""
     if not isinstance(model, str) or not model or Path(model).name != model:
-        return None
+        return {}
     try:
-        steps = json.loads((_DEFAULTS / f"{model}.json").read_text(encoding="utf-8")).get("num_inference_steps")
-    except (OSError, ValueError, AttributeError):
-        return None
+        loaded = json.loads((_DEFAULTS / f"{model}.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
+def model_image_steps(model: str) -> int | None:
+    """``num_inference_steps`` from ``app/defaults/<model>.json`` (Qwen 40, its Turbo 8, Viggle Turbo 6, Flux 2 Klein 4); None if unknown."""
+    steps = _definition(model).get("num_inference_steps")
     return steps if isinstance(steps, int) and not isinstance(steps, bool) and steps > 0 else None
+
+
+def model_takes_negative_prompt(model: str) -> bool:
+    """False for a model whose definition says ``no_negative_prompt`` (the Turbo): ``generation.image`` refuses one for it."""
+    meta = _definition(model).get("model")
+    return not (isinstance(meta, dict) and meta.get("no_negative_prompt", False))
 
 
 def default_image_steps(model: str) -> int:

@@ -5,7 +5,7 @@ import { JSDOM } from 'jsdom'
 import { characterStyle, characterStyleLabel, characterStylePrompt, screenFor } from '../src/lib/characterStyles'
 import { flaggedRigPoses } from '../src/lib/flatRigMouth'
 import { generateKeyedCandidates, type KeyedCandidate } from '../src/features/characters/characterCandidates'
-import { designVoiceCandidates, expectedPitch, referenceVoice, VOICE_DESIGN_MODEL } from '../src/features/characters/voiceDesign'
+import { designVoiceCandidates, expectedPitch, referenceVoice, VOICE_DESIGN_MODEL, VOICE_ENGINES } from '../src/features/characters/voiceDesign'
 
 const dom = new JSDOM('<!doctype html><html><body /></html>', { url: 'http://localhost/' })
 Object.assign(globalThis, { window: dom.window, document: dom.window.document, localStorage: dom.window.localStorage,
@@ -85,7 +85,7 @@ test('a keyed candidate records a rig check that says the eyes are small, and a 
   assert.ok(failed.every(item => item.status === 'ready' && item.rig === undefined))
 })
 
-test('voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
+test('Qwen3 voice design asks VoiceDesign three times, measures each take and keeps one as the reference', async () => {
   assert.deepEqual(expectedPitch('Male voice. Calm.'), [75, 175])
   assert.deepEqual(expectedPitch('Voz de mujer joven'), [150, 320])
   assert.deepEqual(expectedPitch('A small boy'), [220, 400])
@@ -99,7 +99,7 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   let seed = 1
   const voices = await designVoiceCandidates({
     workspace: 'cast', description: 'Male voice. Low and slow.', text: 'Hola. Esta es mi voz.', language: 'spanish',
-    signal: new AbortController().signal, onUpdate: () => {},
+    engine: 'qwen3', signal: new AbortController().signal, onUpdate: () => {},
   }, {
     seed: () => seed++,
     submitGeneration: async params => { submitted.push(params); return { job_id: `job-${params.seed}` } as never },
@@ -109,13 +109,50 @@ test('voice design asks VoiceDesign three times, measures each take and keeps on
   })
   assert.equal(submitted.length, 3)
   assert.deepEqual(submitted.map(params => params.seed), [1, 2, 3])
-  assert.ok(submitted.every(params => params.model_type === VOICE_DESIGN_MODEL && params.alt_prompt === 'Male voice. Low and slow.'
+  assert.ok(submitted.every(params => params.model_type === VOICE_ENGINES.qwen3.design && params.alt_prompt === 'Male voice. Low and slow.'
     && params.model_mode === 'spanish' && params.prompt === 'Hola. Esta es mi voz.'))
   assert.deepEqual((checked[0] as { pitchRange: number[] }).pitchRange, [75, 175])
   assert.ok(voices.every(voice => voice.status === 'ready'))
-  assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }), {
+  assert.deepEqual(referenceVoice(voices[0], { name: 'Kevin (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }, 'qwen3'), {
     provider: 'local', model: 'qwen3_tts_base', voiceId: 'reference', name: 'Kevin (spanish)',
     referenceAudio: '/api/v1/file/job-1.wav?workspace=cast', transcript: 'Hola. Esta es mi voz.', language: 'spanish' })
+})
+
+test('the default engine, VoxCPM2, designs from the description alone and the chosen take becomes a VoxCPM2 reference', async () => {
+  const submitted: Record<string, unknown>[] = []
+  const voices = await designVoiceCandidates({
+    workspace: 'cast', description: 'Female voice. Young reporter.', text: 'Hola. Esta es mi voz.', language: 'spanish',
+    signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 7,
+    submitGeneration: async params => { submitted.push(params); return { job_id: `job-${submitted.length}` } as never },
+    fetchJobStatus: async jobId => ({ status: 'completed', output_files: [`${jobId}.wav`] }) as never,
+    checkSpeech: async () => ({ transcript: 'Hola. Esta es mi voz.', wer: 0, medianPitchHz: 210, wordsPerSecond: 2.4, duration: 3, warnings: [] }),
+    fileUrl: (name, workspace) => `/api/v1/file/${name}?workspace=${workspace}`,
+  })
+  assert.equal(VOICE_DESIGN_MODEL, 'voxcpm2_voicedesign')
+  assert.ok(submitted.every(params => params.model_type === VOICE_ENGINES.voxcpm2.design && !('model_mode' in params)
+    && params.alt_prompt === 'Female voice. Young reporter.'))
+  assert.equal(referenceVoice(voices[0], { name: 'Zilia (spanish)', text: 'Hola. Esta es mi voz.', language: 'spanish' }).model,
+    'voxcpm2_base')
+})
+
+test('Drama 3 designs without a language mode and the chosen take is a Drama 3 clone', async () => {
+  const submitted: Record<string, unknown>[] = []
+  const voices = await designVoiceCandidates({
+    workspace: 'cast', description: 'Female voice. Warm and clear.', text: 'Hola. Esta es mi voz.', language: 'spanish',
+    engine: 'drama3', signal: new AbortController().signal, onUpdate: () => {},
+  }, {
+    seed: () => 4,
+    submitGeneration: async params => { submitted.push(params); return { job_id: 'drama-design' } as never },
+    fetchJobStatus: async () => ({ status: 'completed', output_files: ['drama.wav'] }) as never,
+    checkSpeech: async () => ({ transcript: 'Hola. Esta es mi voz.', wer: 0, medianPitchHz: 210, wordsPerSecond: 2.4, duration: 3, warnings: [] }),
+    fileUrl: (name, workspace) => `/api/v1/file/${name}?workspace=${workspace}`,
+  })
+  assert.equal(VOICE_ENGINES.drama3.design, 'drama3_voicedesign')
+  assert.ok(submitted.every(params => params.model_type === 'drama3_voicedesign' && !('model_mode' in params) && !('audio_guide' in params)
+    && params.alt_prompt === 'Female voice. Warm and clear.'))
+  assert.equal(referenceVoice(voices[0], { name: 'Sol', text: 'Hola. Esta es mi voz.', language: 'spanish' }, 'drama3').model, 'drama3_base')
 })
 
 type CreatorRequest = { method: string; url: string; body?: Record<string, unknown> }
@@ -154,12 +191,14 @@ function creatorServer(t: TestContext, rig: (kit: Record<string, unknown>) => Re
 }
 
 /** Name and describe a character, create three options, pick the second and save it: the rig's review appears. */
-async function createAndRig(creatorStyle: typeof style) {
+async function createAndRig(creatorStyle: typeof style, description = 'Nervous founder, red hair') {
   const { render, fireEvent, waitFor, screen } = await import('@testing-library/react')
+  const { forgetCreatorSessions } = await import('../src/features/characters/characterCreatorSession')
+  forgetCreatorSessions(); localStorage.clear() // the creator keeps its draft between visits: each test starts from a new one
   const { CharacterStyleCreator } = await import('../src/features/characters/CharacterStyleCreator')
   const view = render(<CharacterStyleCreator workspace="cast" style={creatorStyle} model="qwen_image_21" />)
   fireEvent.change(view.getByLabelText('Character name'), { target: { value: 'Kevin' } })
-  fireEvent.change(view.getByLabelText('Character description'), { target: { value: 'Nervous founder, red hair' } })
+  fireEvent.change(view.getByLabelText('Character description'), { target: { value: description } })
   fireEvent.click(view.getByRole('button', { name: 'Create 3 options' }))
   const second = await waitFor(() => {
     const option = view.getByRole('button', { name: 'Option 2' }) as HTMLButtonElement
@@ -189,6 +228,21 @@ test('description to a saved, rigged kit in the Character Creator', async t => {
   assert.deepEqual(rig, { workspace: 'cast', baseRevision: 5, style: style.rig })
   assert.equal(requests.filter(item => item.url.endsWith('/api/v1/studio/key')).length, 3)
   assert.ok(view.getByTestId('character-new-pose'))
+})
+
+test('a new pose of a character in green goes on the magenta screen its character was made on', async t => {
+  const { cleanup, fireEvent, waitFor } = await import('@testing-library/react')
+  t.after(cleanup)
+  const requests = creatorServer(t)
+  const view = await createAndRig(style, 'Nurse in dark green scrubs')
+  fireEvent.change(view.getByLabelText('New pose'), { target: { value: 'waving hello' } })
+  fireEvent.click(view.getByRole('button', { name: 'Create 3 pose options' }))
+  const keys = () => requests.filter(item => item.url.endsWith('/api/v1/studio/key'))
+  await waitFor(() => assert.equal(keys().length, 6), { timeout: 8000 })
+  const poses = requests.filter(item => item.url.endsWith('/api/v1/generate')).slice(3)
+  assert.equal(poses.length, 3)
+  assert.ok(poses.every(item => /waving hello.*magenta/s.test(JSON.stringify(item.body))), 'the pose text alone would pick green')
+  assert.ok(keys().slice(3).every(item => item.body?.mode === 'magenta'))
 })
 
 test('the graphic novel style is generated for the warp rig and rigged with warp mouths', () => {
