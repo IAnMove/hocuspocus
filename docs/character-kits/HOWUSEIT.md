@@ -431,10 +431,10 @@ import and approve the take).
   seconds; longer shots are refused) and the shot takes the take's length, as the server render does.
 - **Lines:** a shot with spoken lines needs them recorded (`series.shot.voice`, or one render): the speech and the subtitles are laid
   into the scene (`audioTracks`, `dialogueBeats`), timed as the render times them. A card has no mouths.
-- **What it leaves:** the scene `<series>-<episode>-<shot>-card-<card>.scene.json` in the workspace (a second apply replaces it)
+- **What it leaves:** the scene `<series>-<episode>-<shot>-card-<card>.scene.json` in the workspace
   opens in Video 2D, and the take (`productionMethod: animation_2d`, `sceneFilename`, `cardId`, `cardBindings`, the shot's
-  `renderInputs`) is a candidate in Series Lab. The same inputs again find the same take; other inputs reject the earlier
-  unapproved take of the scene as superseded and attach a new one.
+  `renderInputs`) is a candidate in Series Lab. The same inputs again find the same take and leave that scene file alone
+  (a person may have edited it); other inputs replace the scene, reject the earlier unapproved take as superseded and attach a new one.
 - **Approval:** `approve: true` approves the take only in «Modo un solo disparo» (`agent_autonomy` = `one_shot`); in `review` mode it
   is refused (403 `agent_review_off`) and the person approves in Series Lab. A take a person approved is never replaced: the new one stays a
   candidate and the reply says so (`approvalNote`).

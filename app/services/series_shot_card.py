@@ -12,7 +12,8 @@ A person did it in five steps (find the card, compile it, edit it, export it, im
    shot needs (or ``controls.duration``). The shot's recorded lines are laid in as speech and subtitles
    (``series_shot_card_lines``).
 3. **Save.** The scene document is written to the workspace under a stable name, ``<series>-<episode>-<shot>-card-<card>.scene.json``
-   (a second apply replaces it), so the person opens and edits it in Video 2D; the take's ``sceneFilename`` points at it.
+   (other inputs replace it; the same inputs leave a file that already exists), so the person opens and edits it in Video 2D;
+   the take's ``sceneFilename`` points at it.
 4. **Export and attach.** The scene is exported by ``scenes.video2d.export`` (the exporter the server render uses) and imported with
    ``series.asset.import`` as a new take of the shot (``productionMethod`` ``animation_2d``, the shot's ``renderInputs``). The
    episode render builds every scene from the script, so it cannot export a card scene; this operation does. An export that is not
@@ -22,8 +23,8 @@ A person did it in five steps (find the card, compile it, edit it, export it, im
    (``agent_autonomy`` = ``one_shot``, ``services/agent_autonomy.py``), stamped ``approvedBy`` agent or wizard; a take a person
    approved (in this language or in Series Lab for the original) is never replaced.
 
-Applying the same card with the same inputs again finds its take and does nothing twice; other inputs make a new take and reject
-the earlier unapproved take of the same scene as superseded. A take approved in any language (the original's ``approvedAttemptId``
+Applying the same card with the same inputs again finds its take and does nothing twice — it does not rewrite the scene a person
+may have edited in Video 2D. Other inputs make a new take and reject the earlier unapproved take of the same scene as superseded. A take approved in any language (the original's ``approvedAttemptId``
 or a version's) is left alone: rejecting it would undo that language's decision.
 """
 from __future__ import annotations
@@ -155,10 +156,10 @@ class SeriesShotCard:
             raise CardApplyError("agent_review_off", APPROVE_OFF, 403)
         ctx = self._context(workspace, series_id, episode_id, shot, language)
         scene = self._scene(ctx, card, controls or {}, cast, assets)
-        saved = self._save_scene(ctx, scene["card"], scene["document"])
+        take = self._existing(ctx, scene["digest"])
+        saved = self._scene_file(ctx, scene, take)
         base = {"shotId": ctx.shot["id"], "number": ctx.number, "card": scene["card"], "scene": saved["name"], "sceneUrl": saved["url"],
                 "bindings": scene["bindings"], "controls": scene["controls"], "duration": scene["document"]["duration"], "warnings": scene["warnings"]}
-        take = self._existing(ctx, scene["digest"])
         if take is None:
             video, intent = self._export(ctx, scene["document"], scene["digest"])
             if video is None:
@@ -248,8 +249,16 @@ class SeriesShotCard:
                    "input": {"templateId": card, "assets": assets, "controls": controls, "width": width, "height": height, "fps": FPS, "full": True}}
         return self.deps.compile(command, workspace_dir=lambda _name: ctx.root)["result"]
 
+    def _scene_file(self, ctx: Context, scene: dict[str, Any], take: dict[str, Any] | None) -> dict[str, Any]:
+        """The saved scene. A take that already owns it keeps a file a person may have edited in Video 2D; a missing file is written again."""
+        name = f"{_stem(ctx, scene['card'])}.scene.json"
+        if take is not None and (Path(ctx.root) / name).is_file():
+            from urllib.parse import quote
+            return {"name": name, "url": "/api/v1/file/" + quote(name) + "?workspace=" + quote(ctx.workspace, safe="")}
+        return self._save_scene(ctx, scene["card"], scene["document"])
+
     def _save_scene(self, ctx: Context, card: str, document: dict[str, Any]) -> dict[str, Any]:
-        """The scene document under its stable name; a second apply replaces it. Opens in Video 2D like any saved scene."""
+        """The scene document under its stable name. A new take replaces it; a reused take does not. Opens in Video 2D like any saved scene."""
         from services.scene_commands import DocumentInput, command_error
         from services.scene_save import publish_layer_scene
         try:
