@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from services.game_generators.base import GenContext
 from services.lyrics_language import detect_language
+from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
 
 
 class GameToolError(Exception):
@@ -275,17 +276,19 @@ def image(ctx, step, *, prompt, negative, resolution, refs=(), seed, batch=1, gu
     snapped = _resolution(resolution)
     _check(ctx)
     prepared = _api_refs(ctx, refs)
+    model, steps = DEFAULT_IMAGE_MODEL, default_image_steps(DEFAULT_IMAGE_MODEL)
     params = {
         "prompt": prompt,
-        "negative_prompt": negative,
-        "model_type": "qwen_image_21",
+        "model_type": model,
         "resolution": snapped,
         "seed": int(seed),
         "guidance_scale": 1,
-        "num_inference_steps": 40,
+        "num_inference_steps": steps,
         "priority": int(priority),
         "batch_size": max(1, int(batch)),
     }
+    if model_takes_negative_prompt(model):   # the Turbo refuses a negative prompt
+        params["negative_prompt"] = negative
     if guide and mask:
         params["image_guide"] = guide if str(guide).startswith("/") else file_ref(ctx, guide)
         params["image_mask"] = mask if str(mask).startswith("/") else file_ref(ctx, mask)
@@ -305,8 +308,8 @@ def image(ctx, step, *, prompt, negative, resolution, refs=(), seed, batch=1, gu
     payload = _wait_job(ctx, job_id, _intent(ctx, step))
     files = _require_files(payload)
     _finish(
-        ctx, tool="generation.image", model="qwen_image_21", seed=int(seed), prompt=prompt, refs=prepared,
-        job_id=job_id, started=started, payload=payload, steps=40, resolution=snapped,
+        ctx, tool="generation.image", model=model, seed=int(seed), prompt=prompt, refs=prepared,
+        job_id=job_id, started=started, payload=payload, steps=steps, resolution=snapped,
     )
     return files
 

@@ -20,6 +20,7 @@ from services.character_kit_library import (
     read_character_kit_library, patch_character_kit, delete_character_kit,
 )
 from services.mcp_intent import check_intent_id, intent_digest, load_intent, store_intent, IntentConflict
+from services.production_image_defaults import DEFAULT_IMAGE_MODEL, model_takes_negative_prompt
 
 _LOCK = threading.RLock()
 _OPTIONS = {"library_filename": LIPS_CREATOR_LIBRARY_FILENAME}
@@ -30,6 +31,7 @@ _STATES = {
     "pucker": "small tightly pursed round lips for U", "bite": "upper teeth touching the lower lip for F",
     "tongue": "slightly open lips with the tongue touching the upper teeth for L",
 }
+_NEGATIVE = "face, head, eyes, body, multiple mouths, sprite sheet, text, watermark, checkerboard, background, skin rectangle"
 _SOUNDS = {"rest": "closed", "M": "pressed", "A": "wide", "E": "medium", "I": "small", "O": "round", "U": "pucker", "F": "bite", "L": "tongue"}
 _STRING = {"type": "string", "minLength": 1, "maxLength": 240}
 _ID = {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$"}
@@ -145,10 +147,11 @@ def _plan(data, pack, library):
 
 
 def _plan_requests(pack, states, reference):
-    hint = "qwen_image_edit" if reference else "qwen_image_21"
+    hint = "qwen_image_edit" if reference else DEFAULT_IMAGE_MODEL
+    # The Turbo refuses a negative prompt; the mouth prompt already says what to leave out.
+    extra = {"negative_prompt": _NEGATIVE} if model_takes_negative_prompt(hint) else {}
     return [{"state": state, "prompt": _prompt(pack, state, bool(reference)), "reference": reference,
-             "resolution": "1024x1024", "model_hint": hint,
-             "negative_prompt": "face, head, eyes, body, multiple mouths, sprite sheet, text, watermark, checkerboard, background, skin rectangle"}
+             "resolution": "1024x1024", "model_hint": hint, **extra}
             for state in states]
 
 
