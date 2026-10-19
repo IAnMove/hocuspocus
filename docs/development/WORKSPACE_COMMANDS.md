@@ -3,6 +3,15 @@
 Workspace collections are logical groups of canonical project, asset and
 Production IDs. They do not select an output folder or move source files.
 
+Do not confuse this catalog with the **output-folder** tools
+`workspaces.list` and `workspaces.create` (`app/services/workspace_folder_commands.py`).
+Those call `GET`/`POST /api/v1/workspaces` (name, path, file count, active
+folder). A name is `[A-Za-z0-9][A-Za-z0-9_-]*`; creating an existing name
+returns it unchanged, so a retry is the receipt (`workspaces.list`). They
+live in the series and game MCP profiles. See
+[WIZARD_MCP_USAGE](WIZARD_MCP_USAGE.md#before-you-start). This file is only
+the five `collections.*` operations.
+
 The collection command circuit uses the existing `WorkspaceRegistry` as its
 only data authority. The web editor, Wizard and MCP call the same versioned
 operations. No worker, generation queue or second collection registry is added.

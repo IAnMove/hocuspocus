@@ -37,7 +37,7 @@ from services.production_structure import require_direction
 from services.production_quality import expand_quality
 from services.production_review import review_for_status
 from services.production_scene3d import export_scene3d_clips, validate_scene3d_shot
-from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps
+from services.production_image_defaults import DEFAULT_IMAGE_MODEL, legal_image_steps
 from services.production_style_presets import expand_style_preset
 from services.production_video_model import DEFAULT_MODEL as DEFAULT_VIDEO_MODEL, VIDEO_MODELS, check_video
 from services.production_commands import extra_catalog, extra_handlers
@@ -433,7 +433,7 @@ class Production:
     def image(self, key: str, prompt: str, refs: list[str] | None, res: str, seed: int,
               model: str = DEFAULT_IMAGE_MODEL, steps: int | None = None, attempt: int = 0) -> str | None:
         params = {"prompt": prompt, "model_type": model, "resolution": res, "seed": seed, "guidance_scale": 1,
-                  "num_inference_steps": steps or default_image_steps(model)}
+                  "num_inference_steps": legal_image_steps(model, steps)}
         if refs:
             params.update(image_refs=refs, video_prompt_type="I")
         r = self.mcp("generation.image", {"version": 2, "intent_id": f"{self.id}-{key}-{seed}" + (f"-r{attempt}" if attempt else ""),

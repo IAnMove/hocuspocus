@@ -59,7 +59,8 @@ export function stageRoomBox(document: Scene3DDocument, spec: RoomBoxSpec): Scen
   spec.characters?.forEach((person, index) => {
     if (person.source) document.slots = [...document.slots, characterSlot(person, index)]
   })
-  if (document.environment) document.environment = { ...document.environment, reflectiveFloor: false, floorStyle: 'none' }
+  // The room is its own floor: a cinema template with no environment must not fall back to the studio/backdrop floor.
+  document.environment = { platform: false, bloom: 0, ...document.environment, reflectiveFloor: false, floorStyle: 'none' }
   return document
 }
 
