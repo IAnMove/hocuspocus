@@ -524,6 +524,17 @@ def test_an_expression_never_moves_back_into_the_walk_in_of_its_sheet():
     assert [w["code"] for w in warnings] == ["expression_dropped_during_speech"]
 
 
+def test_the_twelve_pose_walk_in_keeps_an_expression_out_of_the_entrance_like_the_four_pose_one():
+    from services.series_expression_silence import quiet_expressions
+    walking = _kevin(ANGRY, enterFrom="left", enterAt=0.5, enterDuration=2.5, enterGait="walk")
+    spec = _expression_spec(walking, [{"who": "kevin", "seconds": 1.0, "pauseBefore": 4.0}])
+    twelve = {"kit-kevin": {"animations": {"angry": _approved(), "walk-12": _approved(loop="loop", sheet={"count": 12, "columns": 6, "rows": 2})}}}
+    quiet, warnings = quiet_expressions(spec, twelve, "s1")
+    assert "animation" not in quiet["cast"][0] and [w["code"] for w in warnings] == ["expression_dropped_during_speech"]
+    bob = {"kit-kevin": {"animations": {"angry": _approved(), "walk-12": _approved(loop="loop", reviewState="pending")}}}
+    assert quiet_expressions(spec, bob, "s1")[0]["cast"][0]["animation"], "a pending walk-12 is not played: the expression has the whole entrance"
+
+
 def test_a_render_item_keeps_one_copy_of_each_expression_warning_across_retries():
     from services.series_expression_silence import note
     voice = {"id": "b1", "warning": "voice_out_of_band"}

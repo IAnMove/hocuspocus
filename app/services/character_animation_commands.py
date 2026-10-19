@@ -1,7 +1,9 @@
 """MCP tools for the small animations of a character (walk, wave, anime expressions, the author's own).
 
 ``characters.animation.make`` is the way in: it starts the same server job the Character Creator and the Wizard start
-(services/character_animation_job.py), so a person reviews in the app what an agent made, and the other way round. The catalog and
+(services/character_animation_job.py), so a person reviews in the app what an agent made, and the other way round.
+``characters.animation.make_set`` makes several in turn as one job (the full walks of the five directions,
+services/character_animation_set_job.py); ``.status`` and ``.cancel`` follow either kind of job. The catalog and
 the single-pose prompt (``characters.animations``) and the sheet joiner (``characters.animation.sheet``) stay for an agent that
 wants to make the poses itself. ``characters.animation.review`` approves or rejects one for a person, but only in «Modo un solo
 disparo» (``agent_autonomy`` = ``one_shot``, services/agent_autonomy.py). Each tool is a thin projection of an HTTP route
@@ -13,10 +15,14 @@ from __future__ import annotations
 from typing import Any, Callable
 from urllib.parse import quote
 
+from services.character_animations import CUSTOM_VIEWS, MAX_CUSTOM_POSES, catalog
+
 _WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 _ID = {"type": "string", "minLength": 1, "maxLength": 160}
-_CUSTOM_VIEW = {"enum": ["bust", "front", "side"]}
+_CUSTOM_VIEW = {"enum": list(CUSTOM_VIEWS)}
+_SET = {"enum": list(catalog()["sets"])}
 _BASE = "/api/v1/character-kits/animations"
+SET_JOB_PREFIX = "animset-"
 
 # name: (properties, required, mutation, description)
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
@@ -36,20 +42,25 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "poses with characters.animation.sheet. For one the catalog does not list pass custom {view: bust | front | side, text: the "
         "words for that pose} with any animation and pose ids of your own (a slug each). Store it on the kit with characters.save as "
         "animations.<id> = {sheet, frames, fps, loop, facing, reviewState: pending}. The Video 2D cards walk-cycle-sheet, "
-        "walk-two-pose and character-reaction play the sheet.",
+        "walk-two-pose and character-reaction play the sheet. A character that moves in a 3D set has five directions "
+        "(side, front, front34, back34, back; the ones that look left are these mirrored when rendered, never generated) and each "
+        "animation of a kit carries motion (walk | idle) and dir; the catalog's walk-12 (side), walk-front, walk-front34, "
+        "walk-back34 and walk-back are twelve-pose walks at 12 fps, idle-side, idle (front), idle-front34, idle-back34 and "
+        "idle-back two-pose breaths. Make them one by one with characters.animation.make or all together with "
+        "characters.animation.make_set.",
     ),
     "characters.animation.make": (
         {"workspace": _WORKSPACE, "character_id": _ID, "animation": {"type": "string", "minLength": 1, "maxLength": 64},
          "custom": {"type": "object", "additionalProperties": False, "required": ["title", "view", "poses"], "properties": {
              "title": {"type": "string", "maxLength": 80}, "view": _CUSTOM_VIEW,
-             "poses": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "string", "maxLength": 600}}}},
+             "poses": {"type": "array", "minItems": 1, "maxItems": MAX_CUSTOM_POSES, "items": {"type": "string", "maxLength": 600}}}},
          "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
         "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo), "
         "keyed on its screen, joined into one sprite sheet that keeps the figure one size, and saved on the kit as animations.<id> "
         "with reviewState pending. animation is an id from characters.animations (walk, wave, angry, cheer...); for one of your own "
-        "pass a new slug and custom {title, view bust|front|side, poses: one text per pose, up to 6}. pose makes that one pose of an "
+        "pass a new slug and custom {title, view bust|front|side|front34|back34|back, poses: one text per pose, up to 12}. pose makes that one pose of an "
         "animation already made again and keeps the others. Returns a job: follow it with characters.animation.status (poses, "
         "stage, result); a failure keeps the poses already made, so make it again to continue. One animation is made at a time. "
         "It is saved pending: a person plays it in Characters › Animaciones and approves or rejects it. Approve it yourself only with "
@@ -57,6 +68,23 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "refuses. In that mode autoApprove: true makes the job approve it for you when the sheet passes the automatic checks (cell count "
         "and size, figures filled with clean alpha and not a keyed rectangle, feet on one ground line, figures of one size); a sheet that "
         "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review.",
+    ),
+    "characters.animation.make_set": (
+        {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
+        ["workspace", "character_id", "set"], True,
+        "Make several animations of a saved character in turn as ONE server job, for a character that moves in a 3D set: set walk-directions "
+        "makes the twelve-pose walks of the five directions (walk-12 side, then walk-front34, walk-front, walk-back34, walk-back; the "
+        "directions that look left are these mirrored when rendered, never generated), walk-12 only the profile walk, idle-directions the "
+        "two-pose breaths. Only the sheets the character does not have yet are made, one after another (the GPU makes one at a time), each "
+        "as the job of characters.animation.make with the character's own picture and the first pose of the neighbouring direction as "
+        "identity references (default model qwen_image_21_turbo). Every sheet is saved pending with motion and dir and the same automatic "
+        "checks (and, for a direction, that it is not the copy or the mirror of another direction of the kit); a person plays and approves "
+        "them in Characters › Animaciones, or with autoApprove: true and the owner's one-shot mode (agent_autonomy = one_shot) each sheet "
+        "that passes the checks is approved for you (ignored with a note in review mode, like characters.animation.make). Returns a set "
+        "job (id animset-...): follow it with characters.animation.status (status, done/total, sheets: one entry per sheet with its status "
+        "waiting | running | completed | skipped | failed | cancelled, its jobId, reviewState and failed checks) and stop it with "
+        "characters.animation.cancel. It is resumable: a failure, a cancel or a restart keeps every sheet and pose made, and calling "
+        "make_set again skips the sheets the character has and continues.",
     ),
     "characters.animation.review": (
         {"workspace": _WORKSPACE, "character_id": _ID, "animation": {"type": "string", "minLength": 1, "maxLength": 64},
@@ -71,14 +99,16 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "characters.animation.status": (
         {"workspace": _WORKSPACE, "job_id": _ID}, ["workspace", "job_id"], False,
-        "Read an animation job of characters.animation.make: queued, running (stage poses | sheet, each pose waiting | generating | "
+        "Read an animation job of characters.animation.make, or a set job of characters.animation.make_set (id animset-...: its sheets and "
+        "done/total): queued, running (stage poses | sheet, each pose waiting | generating | "
         "keying | ready | failed), completed (result: animation, sheet, count, reviewState; with autoApprove also autoApproved and checks), "
         "failed (error), cancelling, cancelled or interrupted "
         "(a restart). Poses already made are kept for the next try.",
     ),
     "characters.animation.cancel": (
         {"workspace": _WORKSPACE, "job_id": _ID}, ["workspace", "job_id"], True,
-        "Stop an animation job of characters.animation.make; the poses already made stay for the next try.",
+        "Stop an animation job of characters.animation.make, or a set job of characters.animation.make_set (id animset-...); the sheets and "
+        "poses already made stay for the next try.",
     ),
     "characters.animation.sheet": (
         {"workspace": _WORKSPACE, "sources": {"type": "array", "items": {"type": "string", "maxLength": 1200}, "minItems": 1, "maxItems": 12},
@@ -122,17 +152,29 @@ def _review(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) ->
     return request("POST", f"{_BASE}/review", body=body)
 
 
+def _make_set(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
+    body = {"workspace": data["workspace"], "kitId": data["character_id"], "set": data["set"], **{key: data[key] for key in ("model", "autoApprove") if key in data}}
+    return request("POST", f"{_BASE}/make-set", body=body)
+
+
+def _job_path(job_id: Any) -> str:
+    """A set job (id animset-...) lives under /sets, an animation job under /jobs."""
+    kind = "sets" if str(job_id).startswith(SET_JOB_PREFIX) else "jobs"
+    return f"{_BASE}/{kind}/{quote(str(job_id), safe='')}"
+
+
 def _status(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    return request("GET", f"{_BASE}/jobs/{quote(str(data['job_id']), safe='')}", query={"workspace": data["workspace"]})
+    return request("GET", _job_path(data["job_id"]), query={"workspace": data["workspace"]})
 
 
 def _cancel(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    return request("POST", f"{_BASE}/jobs/{quote(str(data['job_id']), safe='')}/cancel", body={"workspace": data["workspace"]})
+    return request("POST", f"{_job_path(data['job_id'])}/cancel", body={"workspace": data["workspace"]})
 
 
 RUNNERS: dict[str, Callable[..., Any]] = {
     "characters.animations": _catalog,
     "characters.animation.make": _make,
+    "characters.animation.make_set": _make_set,
     "characters.animation.review": _review,
     "characters.animation.status": _status,
     "characters.animation.cancel": _cancel,

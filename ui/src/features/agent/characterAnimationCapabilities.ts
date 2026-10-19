@@ -2,7 +2,8 @@ import type { defineCapability } from './capabilityRegistry'
 import i18n from '../../i18n'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { reviewAnimation, startAnimationJob, type CustomAnimationRequest } from '../../api/characterAnimationJobs'
-import { animationDef, customViews, MAX_CUSTOM_POSES, MAX_CUSTOM_TEXT } from '../../lib/characterAnimations'
+import { startAnimationSet } from '../../api/characterAnimationSets'
+import { animationDef, animationSets, customViews, localized, MAX_CUSTOM_POSES, MAX_CUSTOM_TEXT, type AnimationSetName } from '../../lib/characterAnimations'
 import type { CharacterKit } from '../../lib/characterKit'
 
 /**
@@ -22,6 +23,17 @@ export interface AgentMakeCharacterAnimationAction {
   custom?: CustomAnimationRequest
   pose?: string
   /** Ask the job to approve what it made when the sheet passes the automatic checks. The server ignores it (and says so) in review mode. */
+  autoApprove?: boolean
+  confirm: true
+}
+
+/** "Haz los andares completos de Heroína": the twelve-pose walks of the five directions as ONE server job (the panel's «Crear andares completos»
+ * and the characters.animation.make_set MCP tool start the same one, POST /api/v1/character-kits/animations/make-set). It makes the sheets the
+ * character lacks one after another and is resumable; `autoApprove` is the same one-shot-mode request as for a single animation. */
+export interface AgentMakeCharacterAnimationSetAction {
+  type: 'make_character_animation_set'
+  kitName: string
+  set: AnimationSetName
   autoApprove?: boolean
   confirm: true
 }
@@ -76,6 +88,22 @@ export async function executeMakeCharacterAnimation(action: AgentMakeCharacterAn
   }
 }
 
+export async function executeMakeCharacterAnimationSet(action: AgentMakeCharacterAnimationSetAction, workspace?: string) {
+  const space = workspace || 'default'
+  const library = await fetchCharacterKitLibrary(space)
+  const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
+  const job = await startAnimationSet({ workspace: space, kitId: kit.id, set: action.set, ...(action.autoApprove ? { autoApprove: true } : {}) })
+  const nothing = job.status === 'completed' && job.sheets.every(sheet => sheet.status === 'skipped')
+  const key = nothing ? 'wizard:replies.characterAnimationSetNothing' : job.status === 'queued' ? 'wizard:replies.characterAnimationSetQueued' : 'wizard:replies.characterAnimationSetStarted'
+  const said = i18n.t(key, { name: kit.name, set: localized(animationSets[action.set].title, i18n.language), sheets: job.sheets.filter(sheet => sheet.status !== 'skipped').length, jobId: job.jobId })
+  return {
+    // autoApprove asked for in review mode: the server ignores it and says why, so the person knows they approve the sheets themselves.
+    message: job.autoApproveNote ? `${said}\n${job.autoApproveNote}` : said,
+    metadata: job as unknown as Record<string, unknown>, jobId: job.jobId,
+    target: { kind: 'character_kit', id: kit.id, title: kit.name },
+  }
+}
+
 export async function executeReviewCharacterAnimation(action: AgentReviewCharacterAnimationAction, workspace?: string) {
   const space = workspace || 'default'
   const library = await fetchCharacterKitLibrary(space)
@@ -122,6 +150,32 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
     },
     async prepare(action) { return action },
     async execute(action, context) { return context.adapters.characterAnimations.make(action, context.workspace) },
+    correlate(_action, outcome) { return outcome.target },
+    async track(_action, outcome) { return outcome },
+    report: { targetKind: 'character_kit', successState: 'queued' },
+    summarize(_action, outcome) { return outcome.message },
+    presentation: { destination: 'character_creator', anchors: ['animations'], replay: 'atomic' },
+  })
+  register<AgentMakeCharacterAnimationSetAction>({
+    name: 'make_character_animation_set',
+    title: 'Make the full walks of a saved character in five directions',
+    description: 'Make several animations of a saved Character Kit in turn as ONE server job, for a character that moves in a 3D set: set walk-directions makes the twelve-pose walks of the five directions (side, front three-quarter, front, back three-quarter, back; the ones that look left are the same sheets mirrored when rendered), walk-12 only the side walk, idle-directions the breaths. Only the sheets the character does not have are made, one after another with Qwen, taking the neighbouring direction as a second identity reference; each one is saved as pending review with the same automatic checks (including that it is not a copy or the mirror of another direction). It takes many minutes and is resumable: if it stops, asking again continues. It is the job the «Crear andares completos» button of Character Creator › Animaciones starts. You approve the sheets only when the owner turned on one-shot mode (Settings › Services): then auto_approve=true makes each sheet that passes the checks approved by the agent; otherwise the person approves them in the panel.',
+    useWhen: 'The user asks for the full walk of a character, its walk in all directions, for the character to be able to move in a 3D set or room, or for the five directions ("haz los andares completos de Heroína", "quiero que camine en todas direcciones").',
+    parameters: ['kit_name', 'set', 'auto_approve', 'confirm'],
+    inputSchema: {
+      type: 'object', additionalProperties: false,
+      properties: { type: { const: 'make_character_animation_set' }, kit_name: { type: 'string', maxLength: 160 }, set: { enum: Object.keys(animationSets) }, auto_approve: { type: 'boolean' }, confirm: { const: true } },
+      required: ['type', 'set', 'confirm'],
+    },
+    risk: 'compute', confirmation: 'required', progress: 'wizard:progress.makingCharacterAnimationSet',
+    resolve(raw) {
+      const set = text(raw.set, 40).toLowerCase()
+      if (raw.confirm !== true || !Object.hasOwn(animationSets, set)) return null
+      return { type: 'make_character_animation_set', kitName: text(raw.kit_name, 160), set: set as AnimationSetName, confirm: true, ...(raw.auto_approve === true ? { autoApprove: true } : {}) }
+    },
+    validate(action) { return action.confirm === true ? [] : ['confirmation is required'] },
+    async prepare(action) { return action },
+    async execute(action, context) { return context.adapters.characterAnimations.makeSet(action, context.workspace) },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
     report: { targetKind: 'character_kit', successState: 'queued' },

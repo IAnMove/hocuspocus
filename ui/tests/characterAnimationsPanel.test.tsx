@@ -15,14 +15,34 @@ const walk = {
   frames: [{ id: 'contact', source: '/api/v1/file/c.png' }, { id: 'passing', source: '/api/v1/file/p.png' }], fps: 4, loop: 'loop' as const, facing: 'right' as const, reviewState: 'pending' as const,
 }
 
+const SET_SHEETS: Record<string, string[]> = { 'walk-directions': ['walk-12', 'walk-front34', 'walk-front', 'walk-back34', 'walk-back'], 'walk-12': ['walk-12'], 'idle-directions': ['idle-side', 'idle', 'idle-front34', 'idle-back34', 'idle-back'] }
+/** A set job as the server lists it: its sheets, the first one going and the rest waiting. */
+const setJob = (id: string, set: string, status: string, createdAt: number, sheets?: Array<Record<string, unknown>>) => {
+  const listed = sheets ?? SET_SHEETS[set].map((animationId, index) => ({ animationId, status: index === 0 ? 'running' : 'waiting' }))
+  return { jobId: id, kind: 'set', workspace: 'w', kitId: 'ana', set, title: set, model: 'qwen_image_21', status, createdAt, updatedAt: createdAt,
+    sheets: listed, done: listed.filter(sheet => sheet.status === 'completed' || sheet.status === 'skipped').length, total: listed.length }
+}
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
 /** The server the panel talks to: the kit library, and the animation jobs (a request to make one adds a job that the test moves along). */
-function server(state: { library: unknown; jobs?: Array<Record<string, unknown>>; posts?: Array<{ url: string; body: Record<string, unknown> }> }) {
+function server(state: { library: unknown; jobs?: Array<Record<string, unknown>>; posts?: Array<{ url: string; body: Record<string, unknown> }>; sets?: Array<Record<string, unknown>> }) {
   state.jobs ??= []
   state.posts ??= []
+  state.sets ??= []
   const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input)
+    if (url.includes('/animations/make-set')) {
+      const body = JSON.parse(String(init?.body))
+      state.posts!.push({ url, body })
+      const job = setJob(`animset-${state.posts!.length}`, body.set, 'running', 200 + state.posts!.length)
+      state.sets!.unshift(job)
+      return json({ job })
+    }
+    if (url.includes('/animations/sets')) {
+      if (url.endsWith('/cancel')) { const job = { ...state.sets![0], status: 'cancelling' }; state.sets![0] = job; state.posts!.push({ url, body: JSON.parse(String(init?.body)) }); return json({ job }) }
+      return json({ jobs: state.sets })
+    }
     if (url.includes('/animations/make')) {
       const body = JSON.parse(String(init?.body))
       state.posts!.push({ url, body })
@@ -60,6 +80,8 @@ test('the Characters tab lists the animations of a saved character, plays a made
     assert.ok(screen.getByTestId('animation-angry') && screen.getByTestId('animation-wave'), 'gestures and anime expressions are listed')
     const card = screen.getByTestId('animation-walk')
     assert.match(card.textContent!, /Por revisar|To review/)
+    assert.match(card.querySelector('[data-testid="animation-contract"]')!.textContent!, /walk · side|andar · perfil/, 'a cycle says what it is for a 3D set: its motion and direction')
+    assert.equal(screen.getByTestId('animation-angry').querySelector('[data-testid="animation-contract"]'), null, 'an expression is no motion')
     assert.ok(card.querySelector('[data-testid="animation-player"]'), 'a made animation is played from its sheet')
     assert.match(card.textContent!, /walk-cycle-sheet/)
     assert.match(card.textContent!, /frames 4, columns 4, facing right, step 0\.5/)
@@ -77,7 +99,9 @@ test('the Characters tab lists the animations of a saved character, plays a made
     assert.equal(create.disabled, false)
     assert.match(create.textContent!, /2 poses/)
     fireEvent.change(form.querySelector('textarea') as HTMLTextAreaElement, { target: { value: Array.from({ length: 7 }, (_, index) => `pose ${index}`).join('\n') } })
-    assert.equal(create.disabled, true, 'seven poses are too many')
+    assert.equal(create.disabled, false, 'twelve poses are what a full walk takes: seven are fine')
+    fireEvent.change(form.querySelector('textarea') as HTMLTextAreaElement, { target: { value: Array.from({ length: 13 }, (_, index) => `pose ${index}`).join('\n') } })
+    assert.equal(create.disabled, true, 'thirteen poses are too many')
   } finally {
     globalThis.fetch = original
     cleanup()
@@ -247,6 +271,63 @@ test('an animation the agent reviewed says so with its note, and Approve and Rej
     assert.deepEqual(saved[0].kit.animations.run, byPerson, 'the other animations are saved as they were')
     await waitFor(() => assert.equal(Boolean(screen.getByTestId('animation-walk').querySelector('[data-testid="animation-agent-badge"]')), false)) // not the element itself: a failed assertion would print the whole DOM node
     assert.match(screen.getByTestId('animation-walk').textContent!, /Rechazada|Rejected/)
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})
+
+
+test('Crear andares completos starts one server set job, shows its sheets as they are made and can be cancelled and continued', async () => {
+  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const api = server({ library: kitOf({ walk: { ...walk, reviewState: 'approved' as const } }) })
+  const original = globalThis.fetch
+  globalThis.fetch = api.fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.ok(screen.getByTestId('animation-sets')))
+    const directions = screen.getByTestId('make-set-walk-directions') as HTMLButtonElement
+    assert.match(directions.textContent!, /Crear andares completos|Create full walks/)
+    assert.equal(directions.disabled, false)
+    fireEvent.click(directions)
+    await waitFor(() => assert.ok(screen.getByTestId('animation-set-progress')))
+    assert.deepEqual(api.state.posts![0].body, { workspace: 'w', kitId: 'ana', set: 'walk-directions', model: 'qwen_image_21' }, 'the panel only asks: the server makes the sheets')
+    const progress = screen.getByTestId('animation-set-progress')
+    assert.match(progress.textContent!, /0 de 5 hojas|0 of 5 sheets/)
+    assert.match(progress.textContent!, /(Andar completo|Full walk): (haciéndose|making)/)
+    assert.equal((screen.getByTestId('make-set-walk-12') as HTMLButtonElement).disabled, true, 'one set at a time: the others wait')
+    fireEvent.click([...progress.querySelectorAll('button')].find(button => /Cancelar|Cancel/.test(button.textContent ?? ''))!)
+    await waitFor(() => assert.match(screen.getByTestId('animation-set-progress').textContent!, /Cancelando|Cancelling/))
+    assert.ok(api.state.posts!.some(post => post.url.endsWith('/animations/sets/animset-1/cancel') && post.body.workspace === 'w'))
+    // The server stops it, keeping the first sheet: the button now continues instead of starting over.
+    api.state.sets![0] = setJob('animset-1', 'walk-directions', 'cancelled', 201, [{ animationId: 'walk-12', status: 'completed', reviewState: 'pending' }, { animationId: 'walk-front34', status: 'cancelled' },
+      { animationId: 'walk-front', status: 'waiting' }, { animationId: 'walk-back34', status: 'waiting' }, { animationId: 'walk-back', status: 'waiting' }])
+    await waitFor(() => assert.match(screen.getByTestId('make-set-walk-directions').textContent!, /Continuar|Continue/), { timeout: 6000 })
+    assert.equal((screen.getByTestId('make-set-walk-directions') as HTMLButtonElement).disabled, false)
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})
+
+test('the set buttons are off when the character has every sheet, and a set an agent started shows up while the panel is idle', async () => {
+  const { render, screen, cleanup, waitFor } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const made = { ...walk, reviewState: 'pending' as const }
+  const everything = Object.fromEntries(['walk-12', 'walk-front34', 'walk-front', 'walk-back34', 'walk-back'].map(id => [id, made]))
+  const api = server({ library: kitOf(everything), sets: [setJob('animset-9', 'walk-directions', 'completed', 90, SET_SHEETS['walk-directions'].map(animationId => ({ animationId, status: 'skipped', reason: 'already made' })))] })
+  const original = globalThis.fetch
+  globalThis.fetch = api.fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.ok(screen.getByTestId('animation-set-progress')))
+    assert.equal((screen.getByTestId('make-set-walk-directions') as HTMLButtonElement).disabled, true)
+    assert.equal((screen.getByTestId('make-set-walk-12') as HTMLButtonElement).disabled, true)
+    assert.equal((screen.getByTestId('make-set-idle-directions') as HTMLButtonElement).disabled, false, 'the breaths are still missing')
+    assert.match(screen.getByTestId('animation-set-progress').textContent!, /5 de 5 hojas|5 of 5 sheets/)
   } finally {
     globalThis.fetch = original
     cleanup()

@@ -28,7 +28,7 @@ test('"hazle una cara de enfado a Heroína" is the same server job the Character
     custom_animation: { title: 'Sonrisa pícara', view: 'bust', poses: ['una sonrisa torcida', ' ', 'la misma con un guiño'] } }),
     { type: 'make_character_animation', kitName: '', animation: 'sonrisa-picara', confirm: true, custom: { title: 'Sonrisa pícara', view: 'bust', poses: ['una sonrisa torcida', 'la misma con un guiño'] } })
   assert.equal(capability.resolve({ type: 'make_character_animation', animation_id: 'x', confirm: true, custom_animation: { title: 'T', view: 'wide', poses: ['a'] } }), null, 'a view the server does not know')
-  assert.equal(capability.resolve({ type: 'make_character_animation', animation_id: 'x', confirm: true, custom_animation: { title: 'T', view: 'bust', poses: Array(7).fill('a') } }), null, 'more poses than a sheet takes')
+  assert.equal(capability.resolve({ type: 'make_character_animation', animation_id: 'x', confirm: true, custom_animation: { title: 'T', view: 'bust', poses: Array(13).fill('a') } }), null, 'more poses than a sheet takes')
   assert.deepEqual(capability.validate({ type: 'make_character_animation', kitName: '', animation: 'wave', confirm: true, custom: { title: 'T', view: 'bust', poses: ['a'] } }),
     ['wave is in the catalog: leave custom out'])
   const parsed = parseAgentTurn(JSON.stringify({ reply: 'Empiezo.', actions: [{ type: 'make_character_animation', kit_name: 'Heroína', animation_id: 'wave', confirm: true }] }))
@@ -119,6 +119,52 @@ test('the Wizard reviews an animation through the same route as characters.anima
     await assert.rejects(review.execute(action, context), /Agent review is off.*Personajes › Animaciones/s, 'review mode: the person reads what to do instead')
     const ignored = await make.execute(asked, context)
     assert.match(ignored.message, /autoApprove was ignored: agent_autonomy is review/, 'the person is told the approval stays theirs')
+  } finally {
+    globalThis.fetch = previousFetch
+  }
+})
+
+test('the Wizard makes the full walks as one server job through the route of the panel and characters.animation.make_set', async () => {
+  assert.equal(AGENT_ACTION_TYPES.includes('make_character_animation_set'), true)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /make_character_animation_set/)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /walk-directions/)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /view bust\|front\|side\|front34\|back34\|back, poses: one description per pose, up to 12/, 'a custom animation takes twelve poses in any direction now')
+  const properties = (HOCUSPOCUS_AGENT_RESPONSE_SCHEMA as { properties: { actions: { items: { properties: Record<string, unknown> } } } }).properties.actions.items.properties
+  assert.ok(properties.set)
+  const make = getCapability('make_character_animation_set')!
+  assert.equal(make.risk, 'compute')
+  assert.equal(make.confirmation, 'required', 'a job of many minutes of GPU')
+  assert.equal(make.resolve({ type: 'make_character_animation_set', set: 'walk-directions' }), null, 'no confirmation')
+  assert.equal(make.resolve({ type: 'make_character_animation_set', set: 'dance-all', confirm: true }), null)
+  assert.deepEqual(make.resolve({ type: 'make_character_animation_set', kit_name: 'heroína', set: 'Walk-Directions', auto_approve: true, confirm: true }),
+    { type: 'make_character_animation_set', kitName: 'heroína', set: 'walk-directions', confirm: true, autoApprove: true })
+  assert.deepEqual(make.resolve({ type: 'make_character_animation_set', set: 'walk-12', auto_approve: false, confirm: true }),
+    { type: 'make_character_animation_set', kitName: '', set: 'walk-12', confirm: true }, 'approval is asked for, never assumed')
+
+  const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
+  let reply: Record<string, unknown> = { jobId: 'animset-1', status: 'running', sheets: [{ animationId: 'walk-12', status: 'running' }, { animationId: 'walk-front34', status: 'waiting' }, { animationId: 'walk-front', status: 'skipped' }] }
+  const previousFetch = globalThis.fetch
+  Object.assign(globalThis, { fetch: async (url: string, init?: { body?: string }) => {
+    calls.push({ url, ...(init?.body ? { body: JSON.parse(init.body) } : {}) })
+    if (url.includes('/animations/make-set')) return { ok: true, json: async () => ({ job: reply }) }
+    return { ok: true, json: async () => ({ ...emptyCharacterKitLibrary(), revision: 2, activeId: 'ines', kits }) }
+  } })
+  try {
+    const { createDefaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+    const context = { adapters: createDefaultApplicationAdapters(), workspace: 'show' }
+    const action = make.resolve({ type: 'make_character_animation_set', kit_name: 'heroína', set: 'walk-directions', auto_approve: true, confirm: true })!
+    const outcome = await make.execute(action, context)
+    assert.equal(calls[0].url, '/api/v1/character-kits/library?workspace=show')
+    assert.equal(calls[1].url, '/api/v1/character-kits/animations/make-set')
+    assert.deepEqual(calls[1].body, { workspace: 'show', kitId: 'hero', set: 'walk-directions', autoApprove: true }, 'the same request the panel and characters.animation.make_set send')
+    assert.match(outcome.message, /Heroína/)
+    assert.match(outcome.message, /2 hojas|2 sheets/, 'the sheets still to make, not the ones the character has')
+    assert.equal(outcome.jobId, 'animset-1')
+    assert.deepEqual(outcome.target, { kind: 'character_kit', id: 'hero', title: 'Heroína' })
+    reply = { jobId: 'animset-2', status: 'completed', sheets: [{ animationId: 'walk-12', status: 'skipped' }] }
+    assert.match((await make.execute(make.resolve({ type: 'make_character_animation_set', kit_name: 'heroína', set: 'walk-12', confirm: true })!, context)).message, /ya tiene|already has/)
+    reply = { jobId: 'animset-3', status: 'running', autoApprove: false, autoApproveNote: 'autoApprove was ignored: agent_autonomy is review', sheets: [{ animationId: 'walk-12', status: 'running' }] }
+    assert.match((await make.execute(action, context)).message, /autoApprove was ignored: agent_autonomy is review/)
   } finally {
     globalThis.fetch = previousFetch
   }

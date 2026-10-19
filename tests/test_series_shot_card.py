@@ -151,6 +151,18 @@ def test_without_a_cast_the_shots_own_people_fill_the_slots_and_a_walk_card_walk
     assert world.compiled[0]["input"]["assets"]["subject_1"] == SHEET and reply["bindings"][0]["animation"] == "walk"
 
 
+def test_a_walk_card_with_no_animation_named_plays_the_twelve_pose_walk_when_it_is_approved(tmp_path):
+    world = World(tmp_path)
+    twelve = {**animation(count=12, fps=12), "sheet": {**animation(count=12)["sheet"], "source": "/api/v1/file/walk-12-sheet.png?workspace=cast", "columns": 6, "rows": 2}}
+    world.kits["kit-gloria"]["animations"]["walk-12"] = twelve
+    reply = world.apply()
+    assert reply["bindings"][0]["animation"] == "walk-12" and world.compiled[0]["input"]["assets"]["subject_1"].endswith("walk-12-sheet.png?workspace=cast")
+    named = world.apply(cast=[{"slot": "subject_1", "characterId": "gloria", "animation": "walk"}])
+    assert named["bindings"][0]["animation"] == "walk", "an animation the caller names is the one played"
+    world.kits["kit-gloria"]["animations"]["walk-12"]["reviewState"] = "pending"
+    assert world.apply()["bindings"][0]["animation"] == "walk", "a pending walk-12 is never played: the approved walk is"
+
+
 def test_a_card_that_draws_a_pose_gets_the_shots_pose_of_that_character_or_the_one_asked(tmp_path):
     world = World(tmp_path)
     list(record(world))

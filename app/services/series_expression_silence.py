@@ -29,6 +29,7 @@ from __future__ import annotations
 from typing import Any
 
 from services import series_cast_animation as animations
+from services.character_animation_directions import walk_sheet
 from services.character_animations import catalog
 
 MOVED = "expression_moved_for_speech"
@@ -65,8 +66,7 @@ def speech_of(spec: dict[str, Any], index: int) -> list[tuple[float, float]]:
 def _floor(item: dict[str, Any], kit_animations: dict[str, Any]) -> float:
     """The second before which the compiler cannot start the animation: it waits for the walk sheet of the entrance."""
     enter = item.get("enter") or {}
-    walk = kit_animations.get(animations.WALK)
-    if enter.get("gait") == "walk" and isinstance(walk, dict) and walk.get("reviewState") == "approved":
+    if enter.get("gait") == "walk" and walk_sheet(kit_animations) is not None:
         return float(enter["end"])
     return 0.0
 
