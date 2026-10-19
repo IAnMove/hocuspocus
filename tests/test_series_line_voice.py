@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from routers.series_shot_inspector import create_series_shot_inspector_router
 from services.series_line_voice import LineVoiceError, SeriesLineVoice, find_line
 from services.series_native_render import NativeRenderError
-from tests.test_series_native_render import Tools, _takes, finished, library, service
+from tests.test_series_native_render import DIRTY, Tools, _takes, finished, library, service
 
 
 def setup(tmp_path, tools=None, take_at=None, **deps):
@@ -57,6 +57,14 @@ def test_one_line_is_recorded_where_the_next_render_of_its_shot_reuses_it(tmp_pa
     rendered = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s01"])["jobId"], tmp_path)
     assert rendered["status"] == "completed"
     assert len(speech_calls(tools)) == 2 and rendered["items"][0]["lines"]["s01_d1"]["reused"] is True
+
+
+def test_a_dirty_line_reports_its_cleanliness_and_warning_in_the_job_result(tmp_path):
+    _tools, _render, voices = setup(tmp_path, cleanliness=lambda _path: DIRTY)
+    done = wait(voices, voices.start("cast", "uv", "ep1", "s03", "s03_d0")["jobId"])
+    assert done["status"] == "completed", done
+    assert done["result"]["warning"] == "voice_unclean" and done["result"]["warnings"] == ["voice_unclean"]
+    assert done["result"]["cleanliness"]["reasons"] == ["noise_floor", "snr"]
 
 
 def test_a_recorded_line_is_kept_and_a_retake_replaces_it_only_once_it_is_good(tmp_path):

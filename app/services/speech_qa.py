@@ -24,6 +24,7 @@ import numpy as np
 
 from services.speech_language import spoken_language_code
 from services.speech_text_es import merge_names, token_error_rate, wer_threshold
+from services.voice_cleanliness import describe, measure_cleanliness
 from services.voice_pitch import pitch_notice
 
 OPERATION = "qa.speech"
@@ -138,6 +139,8 @@ def _warnings(result: dict[str, Any], pitch_range: list[float] | None) -> list[s
         found.append(f"Pace {result['wordsPerSecond']:.1f} words/s is outside {PACE_RANGE[0]}–{PACE_RANGE[1]}")
     if max(result["leadSilence"], result["trailSilence"]) > MAX_EDGE_SILENCE:
         found.append("More than 0.6 s of silence at the start or end")
+    if (result.get("cleanliness") or {}).get("verdict") == "unclean":
+        found.append(describe(result["cleanliness"]))
     return found
 
 
@@ -155,8 +158,9 @@ def _compared(text: str, transcript: str, code: str, names: list[str] | None) ->
 
 def measure_speech(path: str, text: str, language: str = "", *, pitch_range: list[float] | None = None,
                    names: list[str] | None = None, load: Callable = _load, transcribe: Callable = _transcribe,
-                   pitch: Callable = _median_pitch, brightness: Callable = _spectrum) -> dict[str, Any]:
-    """Transcript, word error rate, median pitch, brightness, pace and edge silence for one take."""
+                   pitch: Callable = _median_pitch, brightness: Callable = _spectrum,
+                   cleanliness: Callable = measure_cleanliness) -> dict[str, Any]:
+    """Transcript, word error rate, median pitch, brightness, pace, edge silence and cleanliness for one take."""
     # No language: the expected text tells es/en, so numbers are spelled and heard in that language.
     code = str(spoken_language_code(language or "", text) or "").split("-")[0].lower()
     audio, rate = load(path)
@@ -172,7 +176,7 @@ def measure_speech(path: str, text: str, language: str = "", *, pitch_range: lis
         "medianPitchHz": pitch(audio, rate), "centroidHz": centroid, "brightness": high_ratio,
         "duration": round(duration, 2),
         "wordsPerSecond": round(len(words(text, code or "en")) / spoken, 2),
-        "leadSilence": lead, "trailSilence": trail,
+        "leadSilence": lead, "trailSilence": trail, "cleanliness": cleanliness(audio, rate),
     }
     result["warnings"] = _warnings(result, pitch_range)
     notice = pitch_notice(result["medianPitchHz"], pitch_range)
@@ -187,7 +191,10 @@ def command_catalog() -> list[dict[str, Any]]:
         "mutation": False,
         "description": ("Check a spoken take against its text without listening: Whisper transcript, word error rate "
                         "(numbers and percentages compared spelled out), median pitch in Hz, words per second and silence "
-                        "at both ends, plus warnings. Spanish equates b/v, seseo and close proper names and raises "
+                        "at both ends, plus warnings. cleanliness reports the noise floor in dBFS, the SNR in dB, the share "
+                        "of energy under 100 Hz (lowEndPct) and between 40 and 100 Hz (bassPct), clipping and a verdict "
+                        "(clean, unclean or inconclusive for a short clip or one without pauses); a clean voice has a noise "
+                        "floor at or under -60 dBFS, SNR of 45 dB or more and under 35% bass. Spanish equates b/v, seseo and close proper names and raises "
                         "wer_threshold for up to four words; wer_raw keeps the older count. names lists people, places "
                         "and pronunciation keys. file is a workspace audio file; language a code or label "
                         "(es, English, Español). pitch_range [min, max] Hz warns when the median falls outside, for "

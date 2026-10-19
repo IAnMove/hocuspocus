@@ -843,6 +843,129 @@ def test_a_voice_without_a_band_reuses_its_recording_without_another_pitch_check
     assert _speeches(tools) == spoken and [name for name, _args in tools.calls].count("qa.speech") == checked
 
 
+def _metrics(floor, snr, bass=2.0, conclusive=True):
+    """The cleanliness of one take as ``voice_cleanliness`` reports it, for a simulated synthesizer."""
+    reasons = [name for name, bad in (("noise_floor", conclusive and floor > -60), ("snr", conclusive and snr < 45), ("bass", bass >= 35)) if bad]
+    return {"noiseFloorDb": floor, "snrDb": snr, "speechDb": -16.0, "lowEndPct": bass, "bassPct": bass, "clippedPct": 0.0, "seconds": 3.0,
+            "floorConclusive": conclusive, "reasons": reasons, "verdict": "unclean" if reasons else ("clean" if conclusive else "inconclusive")}
+
+
+CLEAN, GRIMY, DIRTY, FILTHY = _metrics(-92, 75), _metrics(-52, 34), _metrics(-45, 27), _metrics(-40, 22)
+
+
+def _clean_shot(tmp_path, takes, voice=None, **fields):
+    """One line spoken by a simulated synthesizer whose raw takes measure ``takes`` (one cleanliness per take)."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    tools, compiled, measured = Tools(tmp_path), [], iter(takes)
+    for key, value in fields.items():
+        setattr(tools, key, value)
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25, cleanliness=lambda _path: next(measured, None))
+    if voice:
+        render.deps.read_kits("cast")["kit-gary"]["voice"] = voice
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    return done, tools
+
+
+def test_a_dirty_take_is_spoken_again_and_the_clean_one_is_kept(tmp_path):
+    done, tools = _clean_shot(tmp_path, [DIRTY, CLEAN])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert done["status"] == "completed" and line["attempt"] == 1 and _speeches(tools) == 2
+    assert "warning" not in line and "voiceClean" not in line and line["cleanliness"] == CLEAN
+    assert "warnings" not in done["items"][0]
+
+
+def test_a_voice_that_is_always_dirty_keeps_its_cleanest_take_and_warns_with_the_numbers(tmp_path):
+    done, tools = _clean_shot(tmp_path, [DIRTY, GRIMY, FILTHY])
+    line, item = done["items"][0]["lines"]["s03_d0"], done["items"][0]
+    assert done["status"] == "completed", "a dirty voice never stops the production"
+    assert _speeches(tools) == 3 and line["attempt"] == 1 and line["cleanliness"] == GRIMY
+    assert line["warning"] == "voice_unclean" and line["voiceClean"] == "noise_floor" and "voiceBand" not in line
+    (entry,) = item["warnings"]
+    assert entry["id"] == "s03_d0" and entry["warning"] == "voice_unclean" and entry["cleanliness"] == GRIMY
+    assert "VoxCPM2" in entry["remedy"] and "drama3_base" in entry["remedy"] and "drama3_voicedesign" in entry["remedy"]
+
+
+def test_a_take_whose_floor_cannot_be_judged_is_never_retried(tmp_path):
+    for takes in ([_metrics(-45, 27, conclusive=False)], [None]):
+        done, tools = _clean_shot(tmp_path / str(len(takes)) / str(takes[0] is None), takes)
+        line = done["items"][0]["lines"]["s03_d0"]
+        assert line["attempt"] == 0 and _speeches(tools) == 1 and "warning" not in line
+        assert "warnings" not in done["items"][0]
+
+
+def test_the_cleanliness_gate_does_not_need_a_pitch_band(tmp_path):
+    done, tools = _clean_shot(tmp_path, [DIRTY, CLEAN], voice=GARY)
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 1 and _speeches(tools) == 2
+    done, tools = _clean_shot(tmp_path / "hum", [_metrics(-92, 75, bass=60), CLEAN])
+    assert done["items"][0]["lines"]["s03_d0"]["attempt"] == 1, "a hum alone makes a take unclean"
+
+
+def test_an_in_band_dirty_take_beats_a_clean_take_that_is_outside_the_band(tmp_path):
+    voice = {**GARY, "voiceType": "man"}
+    inside = {"wer": 0.0, "medianPitchHz": 100.0, "brightness": 0.01, "centroidHz": 250.0}
+    outside = {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.01, "centroidHz": 400.0}
+    done, tools = _clean_shot(tmp_path, [DIRTY, CLEAN, CLEAN], voice=voice, by_take=[inside, outside, outside])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and line["warning"] == "voice_unclean" and "voiceBand" not in line and _speeches(tools) == 3
+
+
+def test_a_take_that_is_out_of_band_and_dirty_warns_both_ways(tmp_path):
+    voice = {**GARY, "voiceType": "man"}
+    off = {"wer": 0.0, "medianPitchHz": 321.0, "brightness": 0.0135, "centroidHz": 906.8}
+    done, _tools = _clean_shot(tmp_path, [DIRTY, DIRTY, DIRTY], voice=voice, by_take=[off])
+    line, item = done["items"][0]["lines"]["s03_d0"], done["items"][0]
+    assert line["warning"] == "voice_out_of_band" and line["warnings"] == ["voice_out_of_band", "voice_unclean"]
+    assert [entry["warning"] for entry in item["warnings"]] == ["voice_out_of_band", "voice_unclean"]
+    assert item["warnings"][0] == {"id": "s03_d0", "warning": "voice_out_of_band"}
+
+
+def test_a_clean_take_with_wrong_words_does_not_replace_a_dirty_one_with_the_right_words(tmp_path):
+    right = {"wer": 0.0}
+    wrong = {"wer": 0.9, "wer_threshold": 0.34}
+    done, _tools = _clean_shot(tmp_path, [DIRTY, CLEAN, CLEAN], by_take=[right, wrong, wrong])
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 0 and line["wer"] == 0.0 and line["warning"] == "voice_unclean"
+
+
+def test_a_recording_that_is_already_there_is_not_recorded_again_for_being_dirty(tmp_path):
+    _clean_shot(tmp_path, [DIRTY, DIRTY, DIRTY])
+    again, tools = _clean_shot(tmp_path, [CLEAN])
+    assert again["items"][0]["lines"]["s03_d0"]["reused"] is True and _speeches(tools) == 0
+    assert "cleanliness" not in again["items"][0]["lines"]["s03_d0"]
+
+
+def _words(floor_db, seconds=3.0, rate=16000):
+    import numpy as np
+    time = np.arange(int(seconds * rate)) / rate
+    gate = np.convolve(((time % 0.6) < 0.35).astype(float), np.ones(200) / 200, mode="same")
+    tone = sum(np.sin(2 * np.pi * 120 * k * time) / k for k in range(1, 12)) * gate
+    tone *= 0.126 / np.sqrt(np.mean(tone[gate > 0.9] ** 2))  # about -18 dBFS
+    return (tone + np.random.default_rng(1).standard_normal(len(time)) * 10 ** (floor_db / 20)).astype(np.float32)
+
+
+class _AudioTools(Tools):
+    """A synthesizer that writes real audio: each take is the same words over the next noise floor of ``floors``."""
+    def __init__(self, tmp_path, floors):
+        super().__init__(tmp_path)
+        self.floors = list(floors)
+
+    def __call__(self, tool, arguments):
+        result = super().__call__(tool, arguments)
+        if tool == "generation.speech":
+            import soundfile as sf
+            sf.write(self.root / result["_name"], _words(self.floors[min(self.jobs - 1, len(self.floors) - 1)]), 16000)
+        return result
+
+
+def test_the_real_measure_retries_a_take_over_a_noise_floor_of_minus_45_db(tmp_path):
+    tools, compiled = _AudioTools(tmp_path, [-45, -90]), []
+    render = service(tmp_path, tools, compiled, probe=lambda _path: 1.25)
+    done = finished(render, render.start("cast", "uv", "ep1", shot_ids=["s03"])["jobId"], tmp_path)
+    line = done["items"][0]["lines"]["s03_d0"]
+    assert line["attempt"] == 1 and _speeches(tools) == 2 and line["cleanliness"]["verdict"] == "clean"
+    assert "warning" not in line
+
+
 def _castilian_render(tmp_path, monkeypatch, wav2vec2):
     """A Castilian line rendered with the real ``qa.accent`` on a 44.1 kHz stereo take; ``wav2vec2`` stands in
     for the phoneme model's process, the only part replaced."""
