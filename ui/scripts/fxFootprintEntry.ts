@@ -21,13 +21,14 @@ function hasWebgl() {
 
 /** A picture for the effects that work on what is under them: two greys in a coarse check, so a grade, a displacement or a
  * grain shows as a change from it. */
-function backdrop(): HTMLCanvasElement {
+function backdrop(width = WIDTH, height = HEIGHT): HTMLCanvasElement {
   const canvas = document.createElement('canvas')
-  canvas.width = WIDTH; canvas.height = HEIGHT
+  canvas.width = width; canvas.height = height
   const ctx = canvas.getContext('2d')!
-  for (let y = 0; y < HEIGHT; y += 30) for (let x = 0; x < WIDTH; x += 30) {
-    ctx.fillStyle = ((x + y) / 30) % 2 ? '#707888' : '#5a6272'
-    ctx.fillRect(x, y, 30, 30)
+  const cell = Math.max(8, Math.round(height / 12))
+  for (let y = 0; y < height; y += cell) for (let x = 0; x < width; x += cell) {
+    ctx.fillStyle = ((x + y) / cell) % 2 ? '#707888' : '#5a6272'
+    ctx.fillRect(x, y, cell, cell)
   }
   return canvas
 }
@@ -82,6 +83,26 @@ async function sheet(size: number, at: number, seed: number, only?: string[]): P
   return out.toDataURL('image/png')
 }
 
+/** One frame of a shot's screen effects as a Series render paints them, over a backdrop: the picture (PNG data URL),
+ * the share of the frame the effects change and the box they change. */
+function frame(cues: unknown, seconds: number, width: number, height: number) {
+  const canvas = document.createElement('canvas')
+  canvas.width = width; canvas.height = height
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+  const source = backdrop(width, height)
+  ctx.drawImage(source, 0, 0)
+  paintSceneFx(ctx, width, height, seconds, parseSceneFx(cues), source)
+  const rgba = ctx.getImageData(0, 0, width, height).data
+  const base = source.getContext('2d')!.getImageData(0, 0, width, height).data
+  const change = new Uint8Array(width * height)
+  for (let i = 0; i < change.length; i++) {
+    const delta = Math.max(Math.abs(rgba[i * 4] - base[i * 4]), Math.abs(rgba[i * 4 + 1] - base[i * 4 + 1]), Math.abs(rgba[i * 4 + 2] - base[i * 4 + 2]))
+    change[i] = Math.min(255, delta * 3)
+  }
+  const measure = measureAlpha(change, width, height, { cx: width / 2, cy: height / 2, side: Math.min(width, height) })
+  return { png: canvas.toDataURL('image/png'), coverage: measure.coverage, box: measure.box }
+}
+
 function run(sample: AuditSample): AuditResult {
   const { kind, size } = sample
   const webgl = hasWebgl()
@@ -105,4 +126,4 @@ function run(sample: AuditSample): AuditResult {
   return { ...sample, painted, screen: false, cut: isBoxCut(worst, fill) || run >= CUT_RUN, run, fill, worst, webgl }
 }
 
-;(window as unknown as { fxAudit: unknown }).fxAudit = { kinds: FX_CATALOG.map(item => item.id), run, sheet }
+;(window as unknown as { fxAudit: unknown }).fxAudit = { kinds: FX_CATALOG.map(item => item.id), run, sheet, frame }

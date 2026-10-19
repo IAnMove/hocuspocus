@@ -37,7 +37,7 @@ def test_a_pause_before_a_line_and_cues_at_lines_or_seconds():
     layout = {"sfx": [{"file": "pen.wav", "line": 0, "volume": 0.5}], "fx": [{"kind": "confetti", "line": 1, "duration": 3, "x": 30}]}
     assert sfx_tracks(layout, timing, duration) == [
         {"id": "sfx-0", "filename": "pen.wav", "name": "Sound effect", "kind": "sfx", "startTime": 1.0, "volume": 0.5}]
-    assert fx_cues(layout, timing, duration) == [{"id": "fx-0", "kind": "confetti", "start": 3.7, "end": 5.198, "x": 30}]
+    assert fx_cues(layout, timing, duration) == [{"id": "fx-0", "kind": "confetti", "start": 3.7, "end": 5.198, "x": 30, "size": 104.0}]
 
 
 def test_a_full_spec_carries_the_rhythm_the_effects_and_the_seat():
@@ -277,7 +277,7 @@ def test_a_beam_can_start_on_a_cast_member_or_at_a_point_of_the_frame():
     assert [cue.get("from") for cue in layout["fx"]] == [
         {"cast": 0, "point": [95.0, 46.0]}, {"cast": "blas", "point": [10.0, -20.0]}, {"point": [70.0, 40.0]}, None, None, None, None, None]
     cues = fx_cues(layout, [(0.4, 1.4)], 3.0)
-    assert cues[0] == {"id": "fx-0", "kind": "laser", "start": 0.6, "end": 0.9, "x": 90.0, "y": 20.0, "color": "#ffd56a",
+    assert cues[0] == {"id": "fx-0", "kind": "laser", "start": 0.6, "end": 0.9, "x": 90.0, "y": 20.0, "color": "#ffd56a", "size": 80.0,
                        "from": {"cast": 0, "point": [95.0, 46.0]}}
     assert "from" not in cues[3]
 
@@ -387,12 +387,13 @@ def test_a_screen_effect_longer_than_the_maximum_is_clamped_not_reset_to_one_sec
     assert _durations(0.1) == [0.1] and _durations(30) == [30.0] and _durations(2) == [2.0]
 
 
-def test_a_missing_or_non_numeric_effect_duration_takes_the_default_and_shot_is_kept():
+def test_a_missing_or_non_numeric_effect_duration_is_left_out_so_the_class_default_applies_and_shot_is_kept():
     for value in (None, "soon", "", True, [3], {"s": 3}, float("nan")):
-        assert _durations(value) == [1.0], value
+        layout = normalize_layout2d({"fx": [{"kind": "vignette", "at": 0, "duration": value}]})
+        assert "duration" not in layout["fx"][0], value
     layout = normalize_layout2d({"fx": [{"kind": "impact_flash", "line": 0}, {"kind": "vignette", "at": 0, "duration": "shot"},
                                         {"kind": "film_grain", "at": 0, "duration": " Shot "}]})
-    assert [cue["duration"] for cue in layout["fx"]] == [1.0, "shot", "shot"]
+    assert ["duration" in cue and cue["duration"] for cue in layout["fx"]] == [False, "shot", "shot"]
 
 
 def test_a_shot_duration_lasts_to_the_end_of_the_shot_and_a_clamped_one_keeps_its_seconds():
@@ -407,10 +408,10 @@ def test_a_shot_duration_lasts_to_the_end_of_the_shot_and_a_clamped_one_keeps_it
     assert ends["vignette"] == (0.0, last) and last == 3.698, "until the end of the shot"
     assert ends["candlelight"] == (2.2, last)
     assert ends["film_grain"] == (0.5, last), "99 is clamped to 30 s and the shot ends first"
-    assert ends["confetti"] == (1.0, 3.0) and ends["glitch"] == (1.0, 2.0), "seconds and the default are unchanged"
+    assert ends["confetti"] == (1.0, 3.0) and ends["glitch"] == (1.0, last), "seconds are unchanged; glitch is a presence effect, so it lasts the shot"
     long_shot = fx_cues(layout, [(0.0, 1.0)], 45.0)
     assert {cue["kind"]: cue["end"] for cue in long_shot} == {
-        "vignette": 44.99, "candlelight": 44.99, "film_grain": 30.5, "confetti": 3.0, "glitch": 2.0}, "30 s is the clamp, shot is not"
+        "vignette": 44.99, "candlelight": 44.99, "film_grain": 30.5, "confetti": 3.0, "glitch": 44.99}, "30 s is the clamp, shot is not"
 
 
 def test_a_shot_with_valid_screen_effect_durations_keeps_its_take_digest():
@@ -418,8 +419,10 @@ def test_a_shot_with_valid_screen_effect_durations_keeps_its_take_digest():
                                      {"kind": "film_grain", "at": 1, "duration": 0.1}, {"kind": "impact_flash", "line": 0},
                                      {"kind": "confetti", "line": 0, "duration": "x"}],
            "sfx": [{"file": "pen.wav", "line": 0}]}
-    layout = normalize_layout2d(raw)
-    assert [cue["duration"] for cue in layout["fx"]] == [1.5, 30.0, 0.1, 1.0, 1.0], "valid, missing and bad ones read as before"
+    fresh = normalize_layout2d(raw)
+    assert [cue.get("duration") for cue in fresh["fx"]] == [1.5, 30.0, 0.1, None, None], "a missing or bad duration is left to the effect's class"
+    # A layout saved before presence and hit has the 1 s written out: it stays what it was.
+    layout = {**fresh, "fx": [{**cue, "duration": cue.get("duration", 1.0)} for cue in fresh["fx"]]}
     series = {"id": "show", "spokenLanguage": "English", "locations": [{"id": "sky", "name": "Sky"}],
               "characters": [{"id": "ana", "voiceProfile": {"characterKitRef": {"id": "kit-ana", "workspace": "ws"}}}]}
     kits = {"kit-ana": {"id": "kit-ana", "voice": {"model": "qwen3_tts_customvoice", "voiceId": "ryan"}}}
@@ -548,3 +551,140 @@ def test_an_effect_speed_reaches_the_shot_cues_and_a_3d_scene():
     document = {"version": 1, "sfx": [{"id": "a", "kind": "rain", "start": 0, "end": 2, "speed": 0.001}]}
     _normalize_sfx(document)
     assert document["sfx"][0]["speed"] == 0.02
+
+
+# Presence and hit: what an effect lasts and how big it is when the script says nothing -----------------------------------
+
+PRESENCE = {
+    "rain", "snow", "embers", "smoke", "fog", "bubbles", "stars", "portal", "scanline", "etching", "aurora", "magic_circle",
+    "summoning_gate", "black_hole", "meteor_shower", "lightning_storm", "anime_aura", "energy_orb", "fire", "shield", "tornado",
+    "dust", "media_portal", "code_rain", "psx", "n64", "nes", "snes", "gameboy", "gameboy_color", "genesis", "vhs", "crt", "c64",
+    "candlelight", "vignette", "film_grain", "light_rays", "glitch", "canvas"}
+HIT = {"sparks", "explosion", "fireworks", "confetti", "shockwave", "lightning", "speedlines", "laser", "arcane_missiles", "ice_burst",
+       "energy_beam", "sword_slash", "manga_impact", "impact_flash", "impact_invert", "splash"}
+
+
+def test_every_effect_of_the_catalog_is_classified_as_presence_or_hit_and_the_owner_reviews_the_list_here():
+    import json
+    from pathlib import Path
+
+    from services.series_fx_classes import EFFECT_CLASSES, effect_class
+    shared = Path(__file__).resolve().parents[1] / "app" / "shared"
+    catalog = {item["id"] for item in json.loads((shared / "scene_effects.json").read_text(encoding="utf-8"))}
+    classes = json.loads((shared / "scene_effect_classes.json").read_text(encoding="utf-8"))
+    assert set(classes["effects"]) == catalog and set(EFFECT_CLASSES) == catalog, "an effect without a class, or a class without an effect"
+    assert {kind for kind in catalog if effect_class(kind) == "presence"} == PRESENCE
+    assert {kind for kind in catalog if effect_class(kind) == "hit"} == HIT
+    assert PRESENCE | HIT == catalog and not PRESENCE & HIT and len(catalog) == 56
+    for kind, entry in classes["effects"].items():
+        assert entry["size"] in ("cover", "framing", "own"), kind
+        if entry["class"] == "hit":
+            assert 0.25 <= entry["duration"] <= 1, f"a hit is brief: {kind}"
+        else:
+            assert "duration" not in entry, f"a presence effect lasts the shot: {kind}"
+        assert entry.get("scale", 1) <= 2, kind
+
+
+def _cue(effect, framing=None, duration=6.0, **fields):
+    layout = normalize_layout2d({"fx": [{"kind": effect, "at": 0, **fields}]})
+    return fx_cues(layout, [], duration, framing=framing)[0]
+
+
+def test_a_presence_effect_with_no_duration_lasts_the_shot():
+    for kind in ("anime_aura", "shield", "candlelight", "rain", "crt", "fog"):
+        cue = _cue(kind)
+        assert (cue["start"], cue["end"]) == (0.0, 5.99), kind
+    late = fx_cues(normalize_layout2d({"fx": [{"kind": "anime_aura", "at": 2}]}), [], 6.0)[0]
+    assert (late["start"], late["end"]) == (2.0, 5.99), "from its start to the end of the shot"
+
+
+def test_a_presence_effect_covers_the_screen_or_the_subject_it_names():
+    assert _cue("anime_aura")["size"] == 178, "nobody named: the whole screen (16:9 needs 178 % of the height)"
+    assert _cue("anime_aura", framing="close")["size"] == 178
+    assert [_cue("anime_aura", framing=framing, x=40)["size"] for framing in ("wide", "two", "medium", "close", None)] == [80, 125, 190, 200, 125]
+    assert _cue("shield", framing="two", y=60)["size"] == 125, "a y alone names a place too"
+    entering = normalize_layout2d({"fx": [{"kind": "anime_aura", "anchor": "enter", "cast": 0}]})
+    assert fx_cues(entering, [], 6.0, framing="medium")[0]["size"] == 190, "a cast member is a subject"
+
+
+def test_a_hit_is_brief_and_sized_to_the_framing_and_a_few_small_painters_are_scaled_up():
+    assert [_cue("explosion", framing=framing)["size"] for framing in ("wide", "two", "medium", "close", None)] == [65, 80, 100, 120, 80]
+    assert _cue("sparks", framing="two")["size"] == 120 and _cue("fireworks", framing="close")["size"] == 168
+    assert _cue("confetti", framing="close")["size"] == 156 and _cue("energy_orb", framing="close")["size"] == 156
+    assert _cue("sparks", framing="close")["size"] == 180
+    assert _cue("laser", framing="close", x=30)["size"] == 120, "naming a place does not change a hit's size"
+    spans = {kind: round(cue["end"] - cue["start"], 3) for kind in ("sparks", "explosion", "lightning", "sword_slash", "impact_flash", "arcane_missiles")
+             for cue in [_cue(kind)]}
+    assert spans == {"sparks": 0.8, "explosion": 1.0, "lightning": 0.5, "sword_slash": 0.5, "impact_flash": 0.25, "arcane_missiles": 1.0}
+    assert all(0.25 <= _cue(kind)["end"] - _cue(kind)["start"] <= 1 for kind in HIT)
+
+
+def test_an_effect_whose_size_means_something_else_keeps_its_own_default():
+    for kind in ("rain", "snow", "fog", "code_rain", "vignette", "candlelight", "film_grain", "light_rays", "glitch", "canvas",
+                 "scanline", "vhs", "impact_flash", "impact_invert"):
+        for framing in (None, "close"):
+            assert "size" not in _cue(kind, framing=framing, x=30), kind
+
+
+def test_a_script_that_gives_a_duration_or_a_size_gets_exactly_that_and_the_other_comes_from_its_class():
+    script = [
+        {"kind": "anime_aura", "at": 1, "duration": 0.7, "x": 30, "y": 40, "size": 20, "color": "#ff0000", "intensity": 1.5},
+        {"kind": "explosion", "at": 2, "duration": 4, "size": 150},
+        {"kind": "shield", "at": 0, "duration": "shot", "size": 90},
+        {"kind": "anime_aura", "at": 0, "size": 33},
+        {"kind": "explosion", "at": 0, "duration": 3},
+    ]
+    cues = fx_cues(normalize_layout2d({"fx": script}), [], 6.0, framing="two")
+    assert cues == [
+        {"id": "fx-0", "kind": "anime_aura", "start": 1.0, "end": 1.7, "x": 30.0, "y": 40.0, "size": 20.0, "intensity": 1.5, "color": "#ff0000"},
+        {"id": "fx-1", "kind": "explosion", "start": 2.0, "end": 5.99, "size": 150.0},
+        {"id": "fx-2", "kind": "shield", "start": 0.0, "end": 5.99, "size": 90.0},
+        {"id": "fx-3", "kind": "anime_aura", "start": 0.0, "end": 5.99, "size": 33.0},
+        {"id": "fx-4", "kind": "explosion", "start": 0.0, "end": 3.0, "size": 80.0},
+    ]
+
+
+def test_a_layout_saved_with_its_duration_written_out_compiles_as_it_did():
+    saved = {"fx": [{"kind": "anime_aura", "line": 0, "anchor": "start", "duration": 1.0}, {"kind": "fog", "at": 0.5, "duration": "shot"}]}
+    cues = fx_cues(saved, [(0.4, 1.4)], 5.0, framing="two")
+    assert [(cue["start"], cue["end"]) for cue in cues] == [(0.4, 1.4), (0.5, 4.99)]
+
+
+def test_the_shot_plan_sizes_the_effects_to_its_framing():
+    shot = {"id": "s1", "sceneId": "a", "locationId": "garage", "durationSeconds": 6, "layout2d": {
+        "framing": "medium", "cast": [{"characterId": "kevin"}], "fx": [{"kind": "anime_aura", "at": 0, "x": 50}, {"kind": "explosion", "at": 1}]}}
+    shot["layout2d"] = normalize_layout2d(shot["layout2d"])
+    spec = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded={})
+    assert [(cue["kind"], cue["size"], cue["end"]) for cue in spec["sfx"]] == [("anime_aura", 190, spec["duration"] - 0.01), ("explosion", 100, 2.0)]
+
+
+def test_the_full_shot_halo_fixture_is_what_the_planner_compiles():
+    """The cue ui/e2e/specs/scene-fx-presence.spec.ts paints at the start, the middle and the end of the shot."""
+    import json
+    from pathlib import Path
+    fixture = json.loads((Path(__file__).parent / "fixtures" / "series_fx_presence_shot.json").read_text(encoding="utf-8"))
+    shot = {"id": "s1", "sceneId": "a", "locationId": "garage", "durationSeconds": fixture["duration"],
+            "layout2d": normalize_layout2d(fixture["shot"])}
+    spec = build_shot_spec(series(), {"id": "ep1"}, shot, workspace="cast", recorded={})
+    assert (spec["width"], spec["height"], spec["duration"]) == (fixture["width"], fixture["height"], fixture["duration"])
+    assert spec["sfx"] == [fixture["cue"]]
+    assert fixture["cue"]["end"] > fixture["frames"][-1] > fixture["frames"][1] > fixture["frames"][0] >= fixture["cue"]["start"], "active at all three"
+
+
+def test_a_3d_shot_takes_the_same_defaults_and_its_scene_accepts_every_one():
+    from services.series_fx_classes import EFFECT_CLASSES
+    from services.world3d_scenes import _screen_fx_entry, _screen_fx_kinds
+    kinds = _screen_fx_kinds()
+    checked = 0
+    for kind in sorted(set(EFFECT_CLASSES) & kinds):
+        for framing in (None, "wide", "two", "medium", "close"):
+            for named in ({}, {"x": 40}):
+                cue = _cue(kind, framing=framing, **named)
+                effect = series_shot3d.shot_effects([cue])[0]
+                assert effect["end"] == cue["end"] and effect.get("size") == cue.get("size"), "the shot's cues reach the 3D document as they are"
+                entry = _screen_fx_entry(0, effect, kinds)
+                assert entry["end"] > entry["start"] and entry.get("size", 65) <= 200, (kind, framing, named)
+                checked += 1
+    assert checked >= 200
+    shot = series_shot3d.shot_effects([_cue("anime_aura")])[0]
+    assert (shot["id"], shot["size"], shot["end"]) == ("shot-fx-0", 178, 5.99), "the default halo covers a 3D frame too"

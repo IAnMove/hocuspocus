@@ -9,9 +9,9 @@ a measured pace, ``default_rate`` when none did, and ``mixed`` when both.
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Callable
 
-from services.series_shot_extras import pauses, timing_args
+from services.series_shot_extras import normalize_timing, pauses, timing_args
 from services.series_shot_plan import language_key, plan_timing
 
 DEFAULT_WORDS_PER_SECOND = {"spanish": 2.6, "english": 2.8}
@@ -106,3 +106,13 @@ def _shot_seconds(shot: dict[str, Any], rates: dict[str, float], language: str) 
         durations.append(max(0.2, _words(beat.get("text")) / rate))
     _, duration = plan_timing(durations, **timing_args(layout), pauses=pauses(beats))
     return duration, "default_rate" if used_default else "approved_takes"
+
+
+def script_shot_seconds(shot: dict[str, Any], language: str, line_text: Callable[[dict[str, Any], str], str]) -> float:
+    """How long a script's shot will run, before it is written: the seconds it asks for, or its lines paced as in the estimate."""
+    lines = [line for line in shot.get("lines") or [] if isinstance(line, dict)]
+    if not lines:
+        return _number(shot.get("duration")) or 5.0
+    beats = [{"characterId": line.get("who"), "text": line_text(line, language),
+              **({"pauseBefore": line["pauseBefore"]} if isinstance(line.get("pauseBefore"), (int, float)) else {})} for line in lines]
+    return _shot_seconds({"dialogueBeats": beats, "layout2d": normalize_timing(shot)}, {}, language)[0]

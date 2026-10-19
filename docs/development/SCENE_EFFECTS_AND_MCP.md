@@ -107,6 +107,22 @@ field was a rectangle: it now thins out toward an ellipse), `aurora` (its bands 
 little of their card), and `scanline`, which is now a whole-frame scanner like the grades above:
 hairlines edge to edge, `size` the pattern height, `x`, `y` and `rotation` not used.
 
+### Presence and hit: what a Series effect lasts and covers by default
+
+A Series shot's `fx` cue that gives no `duration` or `size` takes them from its class
+(`app/shared/scene_effect_classes.json`, read by `services/series_fx_classes.py`; every effect of the
+catalog is classified, a test lists them). A value the script gives always wins, and a layout saved with its
+`duration` written out compiles as it did.
+
+| Class | Effects | Default `duration` | Default `size` |
+| --- | --- | --- | --- |
+| `presence` | aura, shield, light, smoke, fire, weather, fog, portals and circles, the retro looks and the cinematic grades | `"shot"`: from its start to the end of the shot | `cover` effects (`anime_aura`, `shield`, `dust`, `embers`, `bubbles`, `stars`, `aurora`, `meteor_shower`, `lightning_storm`): 178 % of the shorter side (the whole 16:9 screen) when the cue names no one, or the person it names (`cast`, `x`/`y`) by framing: 80 wide, 125 two, 190 medium, 200 close. Objects (`smoke`, `fire`, `portal`...) are sized to the framing like a hit; the rest keep their own `size` (drop size, glyph height, pattern height) |
+| `hit` | impacts, flashes, bursts, waves, beams | 0.25 to 1 s by effect (`impact_flash` 0.25, `lightning` 0.5, `explosion` 1) | to the framing: 65 wide, 80 two, 100 medium, 120 close (80 in a 3D shot), times 1.3 to 1.5 for the painters that draw small in their box (`sparks`, `fireworks`, `confetti`) |
+
+`check` warns `fx_presence_too_short` (it does not stop the script) when a script gives a presence effect under two
+seconds in a shot of more than four: that is almost always a halo someone shortened. The numbers live in the
+JSON so they can be tuned without touching code.
+
 ### Beams from a point: `from`
 
 A `laser` or `lightning` cue (catalog entries with `"aim": true`) can start at `from` and

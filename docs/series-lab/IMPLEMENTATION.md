@@ -88,7 +88,7 @@ section with **Edit** (`inspector/*Part.tsx`):
 | Characters | `cast` (character, pose, x, scale, motion, entrance); a 3D shot's `scene3d.cast` poses | Open the character's kit on that pose; it returns to the shot. |
 | Dialogue | `lines` (speaker, text in every language, emotion, delivery, pause, room) | Play each line (and its room copy); record it or a new take alone (`.../voices`). |
 | Location and set | `location`, `variant`, `layers` (own list, `[]` turns the location's off), `castDepth` | Pick the location's background among its images or generate one (location-wide). |
-| Props, screen effects, sound effects | `props`, `fx`, `sfx` (at a second, on a line's start or end, on an entrance; `in`/`length`) | Sound effects play here. |
+| Props, screen effects, sound effects | `props`, `fx`, `sfx` (at a second, on a line's start or end, on an entrance; `in`/`length`) | Sound effects play here. An `fx` with no `duration` or `size` takes its class defaults: a presence effect lasts the shot and covers the person or the screen, a hit lasts 0.25–1 s sized to the framing (`SCENE_EFFECTS_AND_MCP.md`). |
 | Music and foley | `music`, `foley`, `voiceRoom` | The episode score cue and the location ambience it plays under. |
 | Framing and timing, card | `framing`, `camera`, `timing`, `duration`; `card` | |
 | 3D scene | `scene3d` quality, look, objects (position, rotation, scale, clips, hold, motion, appearance) | **Edit in Video 3D**: see below. |

@@ -193,7 +193,7 @@ def test_the_full_spec_lines_the_steps_up_with_the_walk_and_the_screen_effects_t
     titled = build_shot_spec(series(), {"id": "ep1"}, {**value, "layout2d": {**value["layout2d"], "framing": "title"}},
                              workspace="cast", recorded=RECORDED)
     assert titled["cast"] == [] and [track["id"] for track in titled["audioTracks"]] == ["sfx-0"], "nobody walks in a title shot"
-    assert fx_cues(value["layout2d"], [], 5.0) == [{"id": "fx-0", "kind": "confetti", "start": 3.0, "end": 3.5}]
+    assert fx_cues(value["layout2d"], [], 5.0) == [{"id": "fx-0", "kind": "confetti", "start": 3.0, "end": 3.5, "size": 104.0}]
 
 
 # The script ---------------------------------------------------------------------------
