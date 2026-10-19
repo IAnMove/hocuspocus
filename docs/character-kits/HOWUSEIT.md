@@ -516,6 +516,47 @@ request.add_header("Content-Type", "application/json")
 urllib.request.urlopen(request)
 ```
 
+### 4.11 How big a character is on a plate (stage)
+
+A painted plate has no scale of its own: the compositor used to size a 2D person by the framing alone (a `wide` figure about 58 % of the frame, feet at 94 %), so next to a 2 m door an adult could come out smaller than the door. A location can now carry `layout2d.stage` `{horizon, ref: {baseY, heightPct, heightM}, floorTop?}`, measured once, and a `wide` or `two` cast entry then takes `depth` (0 far to 1 near, default near; also `far`, `mid`, `near`) and `heightM` (default the character's `layout2d.heightM`, else 1.75 times its `layout2d.scale`). The figure is drawn `h / ref.heightM * ref.heightPct * (feet - horizon) / (ref.baseY - horizon)` of the plate's height (`services/series_stage.py`), so Bigman (1.4 m) is 0.78 of Lucky (1.8 m) at the same depth and a shorter person placed further back stays in proportion. `medium` and `close` keep their eye-line framing; a bust, a manual `transform` and a perched character keep theirs; a location with no `stage` is sized as before.
+
+Measure it by looking, not by guessing. All numbers are fractions of the plate's height from the top:
+
+1. `series.location.stage.check` (Series Lab: the location's stage panel, «Mirar rejilla») draws a line every 10 % over the plate and saves it as a workspace image; open `grid.url` and read `baseY` (the foot of one object of known height, a door), `heightPct` (its top to its foot) and the `horizon` (the camera's eye line: an interior has none visible, it is about 1.6 m up any wall, so a 2 m door is 1.25 times as tall as its foot is below the horizon). The reply also gives a horizon guess with its confidence (a guess: it finds converging floor lines in a corridor, and in a room a horizontal edge is the wall-floor junction, not the horizon) and, for a proposal, `eyeHeightM`, the camera height the numbers imply (about 1.6 m; a `warning` appears outside 1.0 to 2.4 m: re-read the horizon or the reference).
+2. Send `horizon` and `ref` to the same call to see them drawn over the plate (the horizon, the reference and three 1.75 m bars at depth 0, 0.5 and 1) before saving.
+3. `series.location.stage.set` (Series Lab: Save; Wizard: `set_series_location_stage`) stores it; the reply lists the 2D shots it resizes, which render again on the next production.
+
+The script check and `series.shot.update check: true` warn `figure_scale_off` (a figure under 0.75 or over 1.35 times what the perspective gives, by a `transform` or a `scale`) and `stage_missing` (a plate with people in wide shots and no stage). Both are suggestions. Limits: the camera is taken at eye height looking level, the plate as covering the frame's height, and a camera push grows the cast a little faster than the plate (up to about 6 % off at the end of a push).
+
+```bash
+curl -X POST "$HOCUSPOCUS_URL/api/v1/series/lucky/locations/office/stage/check" \
+  -H "Content-Type: application/json" -d '{"workspace":"lucky-starr"}'
+curl -X POST "$HOCUSPOCUS_URL/api/v1/series/lucky/locations/office/stage" \
+  -H "Content-Type: application/json" \
+  -d '{"workspace":"lucky-starr","horizon":0.22,"ref":{"baseY":0.72,"heightPct":0.62,"heightM":2}}'
+```
+
+```javascript
+const url = `${base}/api/v1/series/lucky/locations/office/stage`
+await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'lucky-starr', horizon: 0.22, ref: { baseY: 0.72, heightPct: 0.62, heightM: 2 } }) })
+const grid = await (await fetch(`${url}/check`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ workspace: 'lucky-starr' }) })).json()   // grid.grid.url is the image to look at
+```
+
+```python
+import json, urllib.request
+def post(path, body):
+    request = urllib.request.Request(base + path, data=json.dumps(body).encode(), method="POST")
+    request.add_header("Content-Type", "application/json")
+    return json.load(urllib.request.urlopen(request))
+grid = post("/api/v1/series/lucky/locations/office/stage/check", {"workspace": "lucky-starr"})   # look at grid["grid"]["url"]
+post("/api/v1/series/lucky/locations/office/stage",
+     {"workspace": "lucky-starr", "horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62, "heightM": 2}})
+```
+
+In a script shot: `{"characterId": "bigman", "x": 66, "depth": 0.3, "heightM": 1.4}`.
+
 ---
 
 ## 5. Cutout dialogue in a scene

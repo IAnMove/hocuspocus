@@ -140,12 +140,15 @@ def layer_kind(file: str) -> str:
 
 def digest_location(location: dict[str, Any] | None, shot: dict[str, Any]) -> dict[str, Any] | None:
     """The location as a shot's render sees it: its layers matter only to a 2D shot that does not bring its own, so
-    changing them leaves 3D shots and overriding shots up to date. A location without layers is returned as it is."""
+    changing them leaves 3D shots and overriding shots up to date; its ``stage`` only to a 2D shot. A location with neither
+    is returned as it is."""
     layout = _layout(location)
-    if not any(key in layout for key in KEYS):
+    if not any(key in layout for key in (*KEYS, "stage")):
         return location
     own, flat = _layout(shot), shot.get("productionMethod") == "animation_2d"
     unseen = {key for key in KEYS if not flat or own.get(key) is not None}
+    if not flat:
+        unseen.add("stage")  # the plate's perspective (series_stage) sizes the cast of a 2D shot only
     if not unseen:
         return location
     rest = {key: value for key, value in layout.items() if key not in unseen}

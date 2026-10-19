@@ -20,6 +20,7 @@ SERIES_TOOLS = frozenset({
     "series.episode.render_native", "series.episode.render_native.status", "series.episode.render_native.cancel",
     "series.episode.render_native.resume", "series.asset.import", "series.take.approve",
     "series.assembly.start", "series.assembly.status", "series.location.plate3d", "series.location.plate3d.status",
+    "series.location.stage.set", "series.location.stage.check",
     # The user's staged review: production mode, plan/preview approvals and notes per shot.
     "series.episode.review.get", "series.episode.review.set", "series.shot.review.set",
     "series.episode.kits.pin", "series.episode.kits.update",

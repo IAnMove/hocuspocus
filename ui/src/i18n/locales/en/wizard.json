@@ -305,7 +305,14 @@
     "shotCardReused": "{{shot}}: the card {{card}} was already the shot's take{{approved}}. Its scene is {{scene}}.",
     "shotCardApproved": " and I approved it (one-shot mode)",
     "shotCardWaits": ", waiting for your approval in Series Lab",
-    "shotCardExporting": "{{shot}}: the scene of {{card}} ({{scene}}) is still being exported; ask me again in a moment and I will attach the take."
+    "shotCardExporting": "{{shot}}: the scene of {{card}} ({{scene}}) is still being exported; ask me again in a moment and I will attach the take.",
+    "stageSet": "The stage of {{location}} is saved: 2D wide and two-shots there are sized by it, and {{count}} shots render again on the next production. The numbers put the camera {{eye}} m high.",
+    "stageCleared": "The stage of {{location}} is removed: its shots are sized by their framing again.",
+    "stageGrid": "I drew a grid over the plate of {{location}}: {{file}} (open {{url}}).",
+    "stageGuess": "A horizon guess, only a guess: {{horizon}} (confidence {{confidence}}).",
+    "stageNoGuess": "I found no horizon guess for this picture.",
+    "stageEye": "The numbers put the camera {{eye}} m high.",
+    "stageLook": "I cannot see the image: look at it and read the horizon, the reference foot and its height off the grid (fractions of the plate height from the top), and I will save them."
   },
   "progress": {
     "addingAlternateSong": "Adding the alternative song to the music video…",
@@ -384,6 +391,8 @@
     "generatingLipsMouths": "Generating Lips Creator mouths…",
     "searchingWork": "Searching the work…",
     "preparingFile": "Preparing the file…",
-    "applyingShotCard": "Putting the card on the shot…"
+    "applyingShotCard": "Putting the card on the shot…",
+    "settingLocationStage": "Saving the plate's perspective…",
+    "checkingLocationStage": "Drawing the grid over the plate…"
   }
 }

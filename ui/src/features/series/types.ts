@@ -118,7 +118,9 @@ export interface SeriesLocation {
   /** 2D series layout: a background or 3D plate asset, character homes (x %), the plate render state, and set layers
    * with the depth the cast stands at among them (default 0.6). */
   layout2d?: { plateAssetId?: string; backgroundAssetId?: string; homes?: Record<string, number>; plate3d?: Record<string, unknown>
-    layers?: SeriesSetLayer[]; castDepth?: number }
+    layers?: SeriesSetLayer[]; castDepth?: number
+    /** The plate's perspective (series_stage.py): wide and two-shots there size each person by heightM and depth. */
+    stage?: { horizon: number; ref: { baseY: number; heightPct: number; heightM: number }; floorTop?: number } }
 }
 
 export interface SeriesProp {

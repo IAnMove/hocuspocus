@@ -193,32 +193,32 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   shot or frame a detail, `"detail": {"x": 56, "y": 18, "zoom": 1.8}` (% of plate, zoom 1.1–4). Never paint a
   place twice or reuse a plate elsewhere. A lone `medium`/`close` pans to its side of the room.
 - **cast:** `x` is the horizontal position in % of the frame. Keep each character on the same side within a scene,
-  as in the bible's `homes`. One kit per character, with every pose it uses. The line belongs to the character whose
-  kit is on screen; anyone else is voice-over and the mouth does not move. `motion`: `idle` (default bob), `still`,
+  as in the bible's `homes`. On a plate with a `stage` (measure it from `series.location.stage.check`'s grid, then
+  `.set`) a `wide`/`two` entry takes `depth` (0 far … 1 near, default near) and `heightM`: size follows the
+  perspective, so never fake it with `scale`/`transform` (`figure_scale_off`). One kit per character, with every pose it uses. A line belongs to the character whose
+  kit is on screen; anyone else is voice-over (no mouth). `motion`: `idle` (default bob), `still`,
   `shake` (panic). `enterFrom`: `left`/`right`
   walks in, from 0.2 s to 1.4 s unless `enterAt` (s, when it starts) and `enterDuration` (s, how long it takes; a
-  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default, a quick hop) or
-  `walk`: the body bobs once per step, down on every footfall and up mid-step, and sways `enterSway`
-  degrees (default 1.5, 0 for none). `enterStep` is the step in seconds (default 0.5; a slow monk 0.6–0.7): the walk
-  takes a whole number of steps (stretched a little to fit), so its feet land on its start, every step and its end. `poseId` must be one of the kit's poses.
+  slow walk-in is 2–4 s) say otherwise; both stay inside the shot. `enterGait`: `hop` (default) or `walk` (bobs once per step: down on
+  each footfall, up mid-step; sways `enterSway` degrees, default 1.5, 0 none). `enterStep` is the step in seconds (default 0.5; a slow
+  monk 0.6–0.7): a whole number of steps (stretched), so feet land on the start, each step and the end. `poseId` must be one of the kit's poses.
   With an approved `walk` sheet the entrance is walked by its drawings: same slide, feet on the ground, no bob, one
   cycle per `2 × enterStep` (steps and sounds still land on the feet), mirrored against the way the sheet looks.
 - **animation:** `"wave"` or `{"id": "wave", "at": 2.5, "duration": 1.2, "loop": "once"}` plays an approved kit animation
   in the pose's place, at its snapped size and ground line; the pose, mouth and eyes are hidden meanwhile, so only a cycle or
   `walk` plays over its character's voice; others move before the line or to a silence (`allowDuringSpeech: true` opts
-  out). `at`: seconds inside the shot (0); `duration`: one pass, or 2.5 s for an expression; `loop`: `loop`, `pingpong` or
-  `once` (the sheet's). Whole-figure poses take gestures and `walk`, busts take expressions (`angry`, `happy`) in
-  `medium`/`close`. It cannot start inside a walk-in sheet: start it after.
+  out). `at`: seconds into the shot (0); `duration`: one pass, 2.5 s for an expression; `loop`: `loop`, `pingpong` or
+  `once` (the sheet's). Whole-figure poses take gestures and `walk`, busts expressions (`angry`, `happy`) in
+  `medium`/`close`. Not inside a walk-in sheet: start it after.
 - **look room:** stand a character on the side away from where they look (the bible's `facing` per pose): facing
   `left` right of centre, facing `right` left of it; two people face each other. `from_script` moves a 2D cast member
   who looks out of the frame (`lookRoom` in the reply); `"lookRoom": false` on a cast entry or a shot keeps your `x`.
 - **cut poses (edge snap):** a pose cut by its image border (a bust cut at the chest and one side) never shows the
   cut. A cut is a run of opaque pixels on the left or right border at least 8 % of the image height, or on the bottom
-  at least 15 % of its width (a stray pixel, hair or feet on the border are not cuts; the top is not read). A side cut
+  at least 15 % of its width (a stray pixel, hair or feet on the border are no cut; the top is not read). A side cut
   slides the cutout, same size, until the cut is just past the frame edge; a bottom cut goes below the frame (slid
   down in a wide shot, else enlarged with the eyes on the framing's eye line); cut on both sides, it is enlarged until
-  both cuts are out (at most 2.5×). A cut already out of the frame moves nothing; a mirrored pose is cut on the other
-  side. Give a bust cut on its left an `x` on the left (it lands there anyway) and keep two cut busts on their cut
+  both cuts are out (at most 2.5×). A cut already out of the frame moves nothing; a mirrored pose is cut on the other side. Give a bust cut on its left an `x` on the left and keep two cut busts on their cut
   sides in a two-shot. `"edgeSnap": false` on a cast entry keeps its `x`, cut and all; an entry with a `transform`, or
   a perched character, is never moved.
 - **perched characters:** a bible entry with `layout2d.perch` (a laptop on a desk) is placed on that prop in every
@@ -238,11 +238,9 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   framing); `scale` is a fraction of the frame height (1: a frame-sized image fills the frame). A `push` moves every
   plane by its depth: the far wall grows less than the cast, the pillar in front more. `drift` (frame px/s, negative
   to the left) slides a layer on its own, also in a static shot: fog or smoke, `scale` 1.2 or more so its edge stays
-  out of the frame. A video layer loops from its first frame in every shot unless it has any of `start` (the clip second shown
-  at the shot's first frame, 0–3600), `speed` (0.1–4) and `loop`: `"loop"` (start again, the default), `"hold"`
-  (keep the last frame) or `"pingpong"` (play back and forth). A 5 s clip behind many shots: give it `"loop":
-  "pingpong"` and `"speed": 0.5` so it never visibly restarts, and a different `start` in each shot (its own
-  `layers`) so they show different seconds. A shot's `layers` replace its location's (in a script, `"layers"` and
+  out of the frame. A video layer loops from its first frame unless it has `start` (the clip second at the shot's first frame,
+  0–3600), `speed` (0.1–4) or `loop` (`"loop"` default, `"hold"` keeps the last frame, `"pingpong"`). A 5 s clip behind
+  many shots: `"loop": "pingpong"`, `"speed": 0.5` and a different `start` in each shot (its own `layers`), so it never visibly restarts. A shot's `layers` replace its location's (in a script, `"layers"` and
   `"castDepth"` on the shot) and `[]` turns them off. A bad layer is refused. Changing a location's layers renders again only its 2D shots that draw them.
 - **music:** one music track per shot (a bumper at the start of a scene, a theme); a language can have its own file.
 - **sfx:** sound effects at a line's `start`/`end` (`line`, `anchor`, `offset` s) or at a second (`at`), `volume`
@@ -251,7 +249,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   walk; for one who does not enter, at the start of the shot. A cue plays its whole file unless it has `in` (the
   file second it starts at) and/or `length` (seconds): `{"file":
   "sfx-steps.wav", "in": 2.4, "length": 0.35, "anchor": "enter", "cast": 1, "repeat": "steps"}` plays one footstep
-  of an 8 s walk on every footfall. The part is written once as `<file>-cut-<hash>.wav` (with its provenance), the
+  of an 8 s walk on every footfall. The part is saved once as `<file>-cut-<hash>.wav`, the
   file the take's scene names. Footsteps lasting exactly the entrance: one footstep and `"repeat": "steps"`, or a
   loop cut to `enterDuration`. `fx` take the same `anchor`/`cast`.
 - **video takes (`kind: "video"` in the script = `imported_video`, `"generated"` = a MiniMax H3 `generated_video`

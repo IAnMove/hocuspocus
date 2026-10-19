@@ -1381,6 +1381,15 @@ for the sheet cards), compiles it, saves the scene so it opens in Video 2D, expo
 `approve_take` approves it only in «Modo un solo disparo» and never over a take a person approved. A scene still being exported
 answers `exporting` and the Wizard sends the same request again for a few minutes. Coverage is in
 `ui/tests/seriesShotCardWizard.test.ts` and `tests/test_series_shot_card.py`.
+`series.locations.stage_set` (`set_series_location_stage`) and `series.locations.stage_check` (`check_series_location_stage`) calibrate a location
+plate's perspective through `seriesShots.setStage` and `seriesShots.checkStage`, registered by `registerSeriesStageCapabilities` in
+`ui/src/features/agent/seriesStageCapabilities.ts`. They post to `POST /api/v1/series/{series}/locations/{location}/stage` and `.../stage/check`, the
+routes behind the MCP tools `series.location.stage.set` and `series.location.stage.check` (`app/services/series_stage_ops.py`), with the same bodies
+(`horizon`, `ref {baseY, heightPct, heightM?}`, `floorTop`, `clear`; `step` and an optional proposal for the check); Series Lab's location panel
+(`SeriesLocationStage`) calls the same two. `check` only draws a grid over the plate into the workspace: the Wizard cannot see it, gives its address
+and the horizon guess and asks the person to read the numbers; it never invents them. Both replies carry `eyeHeightM` (the camera height the numbers
+imply) and a `warning` outside 1 to 2.4 m, which the Wizard repeats. Coverage is in `ui/tests/seriesStageWizard.test.ts`,
+`ui/tests/seriesLocationStage.test.tsx` and `tests/test_series_stage.py`.
 `characters.voice.band` (`set_voice_band`) stores a pitch band on a saved character's voice through `characterKit.setVoiceBand`,
 registered by `registerVoiceBandCapabilities` in `ui/src/features/agent/voiceBandCapabilities.ts`. It posts to
 `POST /api/v1/character-kits/library/kits/{kit_id}/voice-band`, the route behind the MCP tool `characters.voice.band`

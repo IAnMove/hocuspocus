@@ -170,7 +170,7 @@ def test_a_shot_edit_that_leaves_someone_looking_out_is_kept_and_warned(tmp_path
     store = Store()
     router = create_series_shot_edit_router(change_series=store.change, read_library=store.read, read_kits=lambda _ws: KITS,
                                             workspace_dir=lambda _ws: str(tmp_path), call=lambda *_: {}, bind_loop=lambda _loop: None)
-    post = next(route.endpoint for route in router.routes if route.path.endswith("/shots/edit"))
+    post = next(route.endpoint for route in router.routes if hasattr(route, "path") and route.path.endswith("/shots/edit"))
     moved = [{"characterId": "ines", "poseId": "ordena", "x": 25}]
     checked = asyncio.run(post("pu", "ep1", ShotEdit(workspace="pu", shot=1, changes={"cast": moved}, check=True)))
     assert "x 75 gives look room" in checked["warnings"][0]
