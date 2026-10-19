@@ -3924,6 +3924,7 @@
         },
         {
           "architecture": "hunyuan3d",
+          "description": "Single-image geometry and native PBR materials; isolated Linux/CUDA runtime.",
           "family": "hunyuan3d",
           "fps": 0,
           "guidance_max_phases": 1,
@@ -3931,8 +3932,29 @@
           "is_i2v": true,
           "is_t2v": false,
           "model_type": "trellis2",
-          "name": "TRELLIS.2",
+          "name": "TRELLIS.2 · Official Microsoft 4B",
           "nsfw_only": false,
+          "official": true,
+          "optional": true,
+          "resource_requirements": {
+            "backend": "CUDA 12.4",
+            "note": "Optional; 32–64GB RAM recommended. Auxiliary model access terms apply.",
+            "platform": "Linux x64",
+            "ram_gb": 32,
+            "storage_gb": 40,
+            "vram_gb": 24
+          },
+          "runtime": {
+            "compatibility_reason": "TRELLIS.2 is optional and supports Linux x64 with NVIDIA 24GB only.",
+            "compatible": false,
+            "install_hint": "TRELLIS.2 is optional and supports Linux x64 with NVIDIA 24GB only.",
+            "installed": false,
+            "isolated_runtime": true,
+            "releases_vram_after_job": true,
+            "validation": "not_configured",
+            "weights_downloaded": false
+          },
+          "selector_help": "Optional official image-to-3D. Install TRELLIS.2 from Advanced, download its weights explicitly, then select it. Requires Linux x64 / NVIDIA 24GB Ampere, Ada or Hopper.",
           "shared_cache_group": [],
           "supports_audio": false,
           "supports_end_frame": false,
@@ -4097,11 +4119,12 @@
         },
         {
           "counts": {
+            "requirements": 6,
             "sharedCache": 0
           },
-          "description": "",
+          "description": "Single-image geometry and native PBR materials; isolated Linux/CUDA runtime.",
           "id": "trellis2",
-          "name": "TRELLIS.2"
+          "name": "TRELLIS.2 · Official Microsoft 4B"
         },
         {
           "counts": {

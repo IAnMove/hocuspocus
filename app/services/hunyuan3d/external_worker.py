@@ -20,9 +20,11 @@ def run_trellis(request: dict, output: Path) -> None:
     from PIL import Image
     from trellis2.pipelines import Trellis2ImageTo3DPipeline
     import o_voxel
+    sys.path.append(str(Path(__file__).resolve().parents[2]))
+    from services.trellis2.assets import BUNDLE
 
     settings = request["settings"]
-    pipeline = Trellis2ImageTo3DPipeline.from_pretrained(request["model"]["repo"])
+    pipeline = Trellis2ImageTo3DPipeline.from_pretrained(str(BUNDLE))
     pipeline.cuda()
     resolution = settings["resolution"]
     pipeline_type = "512" if resolution == 512 else f"{resolution}_cascade"
@@ -61,9 +63,17 @@ def main() -> None:
     root = Path(args.root).resolve()
     sys.path.insert(0, str(root))
     os.environ.setdefault("OPENCV_IO_ENABLE_OPENEXR", "1")
+    os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
     request = json.loads(Path(args.request).read_text(encoding="utf-8"))
     output = Path(args.output).resolve()
     engine = request["model"]["engine"]
+    if engine == "trellis2":
+        import torch
+        if not torch.cuda.is_available():
+            raise RuntimeError("TRELLIS.2 requires an NVIDIA CUDA GPU")
+        props = torch.cuda.get_device_properties(0)
+        if props.total_memory < 24064 * 1024**2 or not 8 <= props.major < 10:
+            raise RuntimeError("TRELLIS.2 requires NVIDIA 24GB and Ampere/Ada/Hopper for this optional runtime")
     # Upstream preprocessing files never appear as final Library assets.
     with tempfile.TemporaryDirectory(prefix="hocus-3d-") as temporary:
         staged = Path(temporary) / "asset.glb"
