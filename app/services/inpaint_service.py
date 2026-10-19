@@ -46,20 +46,22 @@ def ensure_sam_running() -> bool:
 
     # Check if already running
     status = check_sam_status()
-    if status.get("status") in ("available", "ready"):
-        return True
-
-    # Try to start it
-    python_path = _find_sam_env()
-    script_path = _find_sam_service_script()
-    if not python_path or not script_path:
-        print("[SAM] Service not installed — cannot start on demand")
-        return False
+    already_up = status.get("status") in ("available", "ready")
+    if not already_up:
+        python_path = _find_sam_env()
+        script_path = _find_sam_service_script()
+        if not python_path or not script_path:
+            print("[SAM] Service not installed — cannot start on demand")
+            return False
 
     # SAM loads its model on the GPU without taking the GPU lane, so a warm
     # FLUX 3 / Drama 3 runtime has to go first (a running creation job stays).
+    # Evict before returning a live service too: /health stays "available"
+    # after the model unloads, and a mask preview never shuts SAM down.
     from services import creation_model_service
     creation_model_service.evict_if_idle()
+    if already_up:
+        return True
 
     import subprocess
     import socket

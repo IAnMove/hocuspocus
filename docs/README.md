@@ -19,7 +19,7 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 
 ## Guías de operador (por subsistema)
 
-- [generation/FLUX3_DRAMA3.md](generation/FLUX3_DRAMA3.md) — guía · FLUX 3 Klein con referencias y Drama 3 con voz en español/inglés y clonación.
+- [generation/FLUX3_DRAMA3.md](generation/FLUX3_DRAMA3.md) — guía · FLUX 3 Klein con referencias y Drama 3 con voz en español/inglés y clonación; runtime caliente, cgroup de memoria y cuelgues.
 
 - [3d-video-compositor/HOWUSEIT.md](3d-video-compositor/HOWUSEIT.md) — guía · compositor 3D programático (Scene Animator).
 - [character-kits/HOWUSEIT.md](character-kits/HOWUSEIT.md) — guía · kits de personaje 2D y Face Rig.
