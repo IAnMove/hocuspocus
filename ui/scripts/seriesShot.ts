@@ -528,7 +528,7 @@ export function compileSeriesShot(kits: Record<string, CharacterKit>, shot: Shot
       const poseHeight = drawnHeight(size, base.scale, aspect)
       const pose = mounted.layers[0]
       layers.push(...windows.map(window => {
-        const placed = sheetPlacement(window.animation, window.part === 'walk-in' ? 'walk' : window.part, size, base.y, poseHeight)
+        const placed = sheetPlacement(window.animation, window.id, size, base.y, poseHeight)
         return sheetLayer(kit, window, { layerId: characterKitLayerId(kit.id, `sheet-${window.part}`, instanceKey), z: pose.z,
           workspace: shot.workspace, body: pose.animation.keyframes!, restY: base.y, ground: placed.ground, poseHeight: placed.figure, aspect, duration: shot.duration })
       }))

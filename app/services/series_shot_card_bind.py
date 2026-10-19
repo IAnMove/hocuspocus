@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services import series_cast_animation as cast_animation
+from services.character_animation_directions import walk_sheet
 from services.series_shot_plan import background_for, kit_ref
 from services.video2d_compile import canonical_slot
 
@@ -130,6 +131,8 @@ def _animation_id(raw: Any, card: str, who: str) -> str:
 def _sheet_of(kit: dict[str, Any], who: str, card: str, slot: str, raw: Any) -> tuple[str, str, dict[str, Any]]:
     animation_id = _animation_id(raw, card, who)
     animations = kit.get("animations") if isinstance(kit.get("animations"), dict) else {}
+    if raw is None and card.startswith("walk") and walk_sheet(animations):
+        animation_id = walk_sheet(animations)[0]  # a walk card with no animation named plays the best approved walk: walk-12, else walk
     problem = cast_animation.playable_problem(animations, who, animation_id, f"cast {slot}")
     if problem:
         raise CardBindError("animation_not_approved" if animations.get(animation_id) else "animation_not_found", problem, 409)

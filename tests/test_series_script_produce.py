@@ -854,6 +854,23 @@ def test_a_walk_in_whose_sheet_is_not_approved_keeps_the_bob_and_says_so():
     assert not any(item["code"] == "walk_sheet_not_approved" for item in animation_check(KITS, walking)["warnings"])
 
 
+def test_a_walk_in_walks_with_the_approved_twelve_pose_sheet_before_the_four_pose_one():
+    walking = {"characterId": "kevin", "x": 60, "enterFrom": "left", "enterAt": 0.5, "enterDuration": 3, "enterGait": "walk"}
+    twelve = {**sheet(), "sheet": {**sheet()["sheet"], "count": 12}, "fps": 12}
+    clash = {**walking, "animation": {"id": "wave", "at": 2}}
+    for kits in (with_animations(wave=sheet(), **{"walk-12": twelve}), with_animations(wave=sheet(), walk=sheet(), **{"walk-12": twelve})):
+        assert "overlaps its walk-in (0.5-3.5 s)" in animation_problems(kits, clash)[0], "the twelve-pose walk owns the entrance, with or without the old one"
+        assert animation_check(kits, {**walking, "animation": {"id": "wave", "at": 3.5}})["warnings"] == []
+    pending = {**twelve, "reviewState": "pending"}
+    old_one = with_animations(wave=sheet(), walk=sheet(), **{"walk-12": pending})
+    assert "overlaps its walk-in" in animation_problems(old_one, clash)[0], "a pending walk-12 is never played: the approved walk still is"
+    assert not any(item["code"] == "walk_sheet_not_approved" for item in animation_check(old_one, walking)["warnings"])
+    bob = [item for item in animation_check(with_animations(**{"walk-12": pending}), walking)["warnings"] if item["code"] == "walk_sheet_not_approved"]
+    assert len(bob) == 1 and "walk-12 sheet that is not approved" in bob[0]["message"] and "bob" in bob[0]["message"]
+    rejected = [item for item in animation_check(with_animations(walk=sheet("rejected")), walking)["warnings"] if item["code"] == "walk_sheet_not_approved"]
+    assert "has a walk sheet that is not approved" in rejected[0]["message"], "a kit with only the four-pose walk is told as before"
+
+
 def test_a_short_expression_warns_and_a_short_gesture_does_not():
     """An explicit expression under 1.5 s is a check warning. The duration is still accepted. A gesture of 1 s is not an expression."""
     kits = with_animations(angry=sheet(), wave=sheet(), **{"my-bust": sheet()})

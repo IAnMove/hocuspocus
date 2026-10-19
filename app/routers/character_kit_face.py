@@ -14,7 +14,9 @@ from routers.lips_creator import create_lips_creator_router
 
 from routers.character_animation_jobs import create_character_animation_jobs_router
 from routers.character_animation_review import create_character_animation_review_router
+from routers.character_animation_sets import create_character_animation_sets_router
 from services.character_animation_job import AnimationJobDeps, CharacterAnimationJobs
+from services.character_animation_set_job import CharacterAnimationSets
 from services.character_animations import CharacterAnimationError, build_sheet, catalog as animation_catalog, pose_prompt
 from services.character_kit_face_cleanup import (
     CharacterKitFaceCleanupError,
@@ -62,11 +64,12 @@ def create_character_kit_face_router(
         router.include_router(create_character_animation_review_router(workspace_dir=workspace_dir, services=services))
     if local_mcp is not None:
         # Making an animation chains the server's own generation tools, as an MCP client would (services/character_animation_job.py).
-        router.include_router(create_character_animation_jobs_router(
-            CharacterAnimationJobs(AnimationJobDeps(call=lambda tool, arguments: local_mcp().call(tool, arguments), workspace_dir=workspace_dir,
-                                                    uploads_root=uploads_root, model_defaults=model_defaults,
-                                                    services=services)),
-            bind_loop=lambda loop: local_mcp().bind_loop(loop)))
+        # The set job (several sheets in turn: the full walks of the five directions) makes them through the same service.
+        animation_jobs = CharacterAnimationJobs(AnimationJobDeps(call=lambda tool, arguments: local_mcp().call(tool, arguments), workspace_dir=workspace_dir,
+                                                                 uploads_root=uploads_root, model_defaults=model_defaults, services=services))
+        bind_loop = lambda loop: local_mcp().bind_loop(loop)  # noqa: E731
+        router.include_router(create_character_animation_jobs_router(animation_jobs, bind_loop=bind_loop))
+        router.include_router(create_character_animation_sets_router(CharacterAnimationSets(animation_jobs), bind_loop=bind_loop))
 
     @router.post("/face-rig/cleanup")
     def cleanup_face_rig_overlay(payload: FaceRigCleanupRequest):

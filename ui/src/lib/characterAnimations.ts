@@ -11,11 +11,14 @@ export type AnimationPoseDef = { id: string; label: Localized; prompt: string }
 /** What keeps the figure one size from pose to pose: its height (cycles), the width of its legs (a standing gesture) or the size of its
  * head (a bust, read with the face landmarks; the server falls back to the height when it finds no face). */
 export type AnimationScaleBy = 'height' | 'base' | 'face'
+export type AnimationView = 'side' | 'front' | 'front34' | 'back34' | 'back' | 'bust'
 export type AnimationDef = {
-  id: string; group: AnimationGroupId; view: 'side' | 'front' | 'bust'; scaleBy: AnimationScaleBy; facing: AnimationFacing; loop: AnimationLoop
+  id: string; group: AnimationGroupId; view: AnimationView; scaleBy: AnimationScaleBy; facing: AnimationFacing; loop: AnimationLoop
   fps: number; template: string; resolution: string; title: Localized; summary: Localized; poses: AnimationPoseDef[]
   /** An animation the author described, not one the catalog lists: its poses are made from the words in `poses[].prompt`. */
   custom?: boolean
+  /** The data contract with the 3D engine (lib/characterAnimationDirections.ts), the sheet's columns and the checks the animation asks for. */
+  motion?: 'walk' | 'idle'; dir?: 'side' | 'front' | 'front34' | 'back34' | 'back'; columns?: number; checks?: string[]
 }
 
 /** The sheet's contract with the Video 2D cards: boots (or the bottom of a bust) on the line `feet` of a cell, the figure
@@ -38,6 +41,8 @@ export type KitAnimation = {
   frames: Array<{ id: string; source: string; prompt?: string; label?: string }>
   fps: number; loop: AnimationLoop; facing: AnimationFacing; reviewState: CharacterKitReviewState
   view?: string; title?: string; scaleBy?: AnimationScaleBy; group?: AnimationGroupId; prompt?: string; model?: string; createdAt?: string
+  /** What the sheet does and which way the character faces in it (the data contract; missing on older data: `contractOf` deduces it). */
+  motion?: 'walk' | 'idle'; dir?: 'side' | 'front' | 'front34' | 'back34' | 'back'
   /** Who gave the review: a person (the panel's buttons) or an agent in «Modo un solo disparo» (services/agent_autonomy.py), with its note
    * and when. Animations saved before this have none, and read as a person's. */
   reviewedBy?: AnimationReviewer; reviewNote?: string; reviewedAt?: string

@@ -16,9 +16,10 @@ author made) or a window of it:
 * While the sheet plays it takes the pose's place: the pose picture and its mouth and eyes are hidden and come back when it
   ends. The compiler (``ui/scripts/seriesShot.ts`` and ``seriesSheet.ts``) draws it; this module only says what is asked.
 
-``enterGait: "walk"`` uses the kit's approved ``walk`` sheet for the whole entrance (``walk_window`` is its interval): the
-entrance, its steps and its footfalls are planned as ever (``series_entrances``) and the compiler decides, from the kit, whether
-a sheet or the body bob walks. A cast member whose ``walk`` sheet is not approved keeps the bob, and the check warns.
+``enterGait: "walk"`` uses the kit's approved ``walk-12`` sheet (twelve poses), else its approved ``walk`` sheet (four), for the whole
+entrance (``walk_window`` is its interval; ``walk_sheet`` of ``character_animation_directions`` picks the sheet): the entrance, its
+steps and its footfalls are planned as ever (``series_entrances``) and the compiler decides, from the kit, whether a sheet or the body
+bob walks. A cast member whose walk sheets are not approved keeps the bob, and the check warns.
 """
 from __future__ import annotations
 
@@ -26,6 +27,7 @@ import re
 from typing import Any
 
 from services import series_entrances as entrances
+from services.character_animation_directions import WALK_SHEETS, walk_sheet
 from services.character_animations import animation as catalog_animation, catalog
 
 LOOPS = ("loop", "pingpong", "once")
@@ -152,8 +154,8 @@ def playable_problem(animations: dict[str, Any], who: str, name: str, where: str
 
 
 def _walk_in(entry: dict[str, Any], animations: dict[str, Any]) -> tuple[float, float] | None:
-    """The interval a cast entry's approved ``walk`` sheet plays on its entrance, None when the entrance walks with the bob."""
-    if (animations.get(WALK) or {}).get("reviewState") != "approved":
+    """The interval a cast entry's approved walk sheet (``walk-12``, else ``walk``) plays on its entrance, None when the entrance walks with the bob."""
+    if walk_sheet(animations) is None:
         return None
     return walk_window(entrances.entrance(entry, 600.0))
 
@@ -230,7 +232,7 @@ def check_cast(checker: Any, entries: list[dict[str, Any]], shot: dict[str, Any]
             checker.problems.extend(_check_entry(entry, animations, shot, where))
             _warn_short_expression(entry, animations, who, shot_id, warnings)
         walking = entry.get("enterFrom") in entrances.SIDES and entry.get("enterGait") == "walk"
-        walk = animations.get(WALK)
-        if walking and isinstance(walk, dict) and walk.get("reviewState") != "approved":
+        unapproved = next((name for name in WALK_SHEETS if isinstance(animations.get(name), dict)), None)
+        if walking and unapproved and walk_sheet(animations) is None:
             group_warning(warnings, "walk_sheet_not_approved", who, shot_id,
-                          f"has a {WALK} sheet that is not approved, so its walk-in keeps the body bob: approve it in Characters › Animaciones")
+                          f"has a {unapproved} sheet that is not approved, so its walk-in keeps the body bob: approve it in Characters › Animaciones")
