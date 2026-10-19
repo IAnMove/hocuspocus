@@ -12,11 +12,15 @@ export const hasSheets = (slot: Pick<Scene3DSlot, 'screen'>): boolean => Boolean
 /** The first pass of a frame has no camera yet, so it leaves a directional figure for the camera pass. */
 export const awaitsView = (slot: Pick<Scene3DSlot, 'screen'>): boolean => Boolean(slot.screen?.directional && !slot.screen.directional.view)
 
-/** The slot where its walk has put it at `t`; any other slot as it came. */
+/** The slot where its walk has put it at `t`, and as big as its sheets' plane needs: `scale` is the half height of the figure, as for any
+ * cutout (`heightM / 2`), and the plane of the sheets is the cell, so it is that much taller than the figure inside it. Done in the first
+ * pass, so a camera that frames the figure measures the plane it will be painted on. Any other slot as it came. */
 export function walkedSlot(posed: Scene3DSlot, placed: Vec3, t: number): Scene3DSlot {
   const directional = isDirectional(posed) ? posed.screen?.directional : undefined
-  if (!directional?.walk) return posed
-  return { ...posed, position: [...directionalPosition(directional, placed, t)] as unknown as Vec3 }
+  if (!directional) return posed
+  const cell = directional.sheets.length ? spriteFrame(directional).figure : 1
+  const position = directional.walk ? [...directionalPosition(directional, placed, t)] as unknown as Vec3 : posed.position
+  return cell === 1 && !directional.walk ? posed : { ...posed, position, scale: posed.scale / cell }
 }
 
 export type DirectionalFrame = { memory: DirectionMemory; eye: Vec3; eye0: V2; t: number }
@@ -28,13 +32,11 @@ export function referenceEye(document: Scene3DDocument): V2 {
 }
 
 /** The slot to paint once the camera is known: turned toward it, with the drawing its angle asks for in
- * `screen.directional.view` (a copy: the document is never written to). Its `scale` is the half height of the figure, as for any
- * cutout (`heightM / 2`); the plane of the sheets is the cell, so it is that much taller than the figure inside it. */
+ * `screen.directional.view` (a copy: the document is never written to). */
 export function facingSlot(posed: Scene3DSlot, placed: Vec3, frame: DirectionalFrame): Scene3DSlot {
   const screen = posed.screen!, directional = screen.directional!
   const { view } = directionalView(directional, { start: [placed[0], placed[2]], eye0: frame.eye0, eye: [frame.eye[0], frame.eye[2]], t: frame.t, memory: frame.memory, id: posed.id })
-  const cell = directional.sheets.length ? spriteFrame(directional).figure : 1
-  return { ...posed, scale: posed.scale / cell, rotationY: Math.atan2(frame.eye[0] - posed.position[0], frame.eye[2] - posed.position[2]), screen: { ...screen, directional: { ...directional, view } } }
+  return { ...posed, rotationY: Math.atan2(frame.eye[0] - posed.position[0], frame.eye[2] - posed.position[2]), screen: { ...screen, directional: { ...directional, view } } }
 }
 
 /** What a sprite is multiplied by to sit in the key light of the scene. */

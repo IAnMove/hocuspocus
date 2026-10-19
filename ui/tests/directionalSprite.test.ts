@@ -265,9 +265,9 @@ test('the painter pass turns the figure to the camera and hands the painter the 
   const slot = slotOf({ heading: 0 })
   assert.equal(isDirectional(slot), true)
   assert.equal(isDirectional({ ...slot, screen: undefined }), false)
-  const painted = facingSlot(slot, slot.position, { memory: new DirectionMemory(), eye: [4, 1.6, 2], eye0: [1, 8], t: 0 })
+  const painted = facingSlot(walkedSlot(slot, slot.position, 0), slot.position, { memory: new DirectionMemory(), eye: [4, 1.6, 2], eye0: [1, 8], t: 0 })
   assert.ok(Math.abs(painted.rotationY - Math.PI / 2) < 1e-9)
-  assert.ok(Math.abs(painted.scale - 1 / 0.86) < 1e-9, 'the plane is the cell: taller than the figure by the share it fills')
+  assert.ok(Math.abs(painted.scale - 1 / 0.86) < 1e-9)
   assert.equal(painted.screen?.directional?.view?.kind, 'sheet')
   assert.equal(slot.screen?.directional?.view, undefined)
 })
@@ -277,7 +277,12 @@ test('a walking figure is placed along its path by the time, and every other slo
   assert.deepEqual(walkedSlot(walker, walker.position, 2).position, [1, 0, 4])
   assert.deepEqual(walkedSlot(walker, walker.position, 0).position, [1, 0, 2])
   const still = slotOf({ heading: 0 })
-  assert.equal(walkedSlot(still, still.position, 5), still)
+  assert.deepEqual(walkedSlot(still, still.position, 5).position, still.position)
+  assert.ok(Math.abs(walkedSlot(still, still.position, 5).scale - 1 / 0.86) < 1e-9, 'the plane of the sheets is the cell: taller than the figure by the share it fills')
+  const bare = slotOf({ sheets: [], heading: 0 })
+  assert.equal(walkedSlot(bare, bare.position, 5), bare, 'no sheet, no cell: the pose keeps its own size')
+  const model = { ...still, media: 'model3d', screen: undefined } as unknown as Scene3DSlot
+  assert.equal(walkedSlot(model, model.position, 5), model)
 })
 
 test('the plane of a figure is as wide as its widest cell and its feet stand on the line of the catalog', () => {
@@ -296,7 +301,7 @@ test('a figure whose kit has no sheet still turns and walks in its pose', () => 
   assert.equal(talking.talk?.base, '/pose.png'); assert.equal(talking.directional?.heading, 0)
   assert.equal(parseMediaScreen({ directional: { sheets: [] } })!.directional, undefined)
   const slot = { id: 'a', slot: 'prop', position: [0, 0, 0], rotationY: 0, scale: 1, sourceUrl: '/pose.png', media: 'image', clip: null, screen } as unknown as Scene3DSlot
-  const painted = facingSlot(slot, [0, 0, 0], { memory: new DirectionMemory(), eye: [0, 1.6, 5], eye0: [0, 5], t: 0 })
+  const painted = facingSlot(walkedSlot(slot, [0, 0, 0], 0), [0, 0, 0], { memory: new DirectionMemory(), eye: [0, 1.6, 5], eye0: [0, 5], t: 0 })
   assert.deepEqual(painted.screen?.directional?.view, { kind: 'pose', talking: false })
   assert.equal(painted.scale, 1, 'no sheet, no cell: the pose keeps its own size')
   const moved = walkedSlot(slot, [0, 0, 0], 2).position, length = Math.hypot(2, 3)
