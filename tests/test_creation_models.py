@@ -442,6 +442,30 @@ def test_the_sam_service_start_evicts_an_idle_warm_runtime(comfy, monkeypatch):
     assert comfy.processes[0].stopped.is_set()
 
 
+def test_an_already_running_sam_service_still_evicts_an_idle_warm_runtime(comfy, monkeypatch):
+    """A mask preview leaves SAM up; /health stays available after the model unloads."""
+    from services import inpaint_service
+    comfy.job(name="one")
+    monkeypatch.setattr(inpaint_service, "check_sam_status", lambda: {"status": "available", "model_loaded": False})
+
+    def refuse(*args, **kwargs):
+        raise OSError("SAM was already up; starting it again is the bug")
+
+    monkeypatch.setattr(subprocess, "Popen", refuse)
+    assert inpaint_service.ensure_sam_running() is True
+    assert comfy.processes[0].stopped.is_set()
+
+
+def test_a_missing_sam_install_does_not_evict_the_warm_runtime(comfy, monkeypatch):
+    from services import inpaint_service
+    comfy.job(name="one")
+    monkeypatch.setattr(inpaint_service, "check_sam_status", lambda: {"status": "not_installed"})
+    monkeypatch.setattr(inpaint_service, "_find_sam_env", lambda: None)
+    monkeypatch.setattr(inpaint_service, "_find_sam_service_script", lambda: None)
+    assert inpaint_service.ensure_sam_running() is False
+    assert not comfy.processes[0].stopped.is_set()
+
+
 def test_a_lane_less_eviction_never_waits_for_a_running_job(comfy, monkeypatch):
     started, release = threading.Event(), threading.Event()
     original = comfy.service._request
@@ -592,6 +616,7 @@ def confined(comfy, monkeypatch):
 
 
 def test_ensure_runtime_wraps_the_command_with_systemd_run_and_the_limits(confined, monkeypatch):
+    from services import creation_runtime_confinement as confinement
     monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
     monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1234/bus")
     confined.job(name="one")
@@ -599,9 +624,10 @@ def test_ensure_runtime_wraps_the_command_with_systemd_run_and_the_limits(confin
     memory_high = memory_max * 90 // 100
     assert (memory_max, memory_high) == (54975581388, 49478023249)
     command = confined.processes[0].command
-    assert command[:12] == [SYSTEMD_RUN, "--user", "--scope", "--quiet", "--collect", "-p", f"MemoryHigh={memory_high}",
-                            "-p", f"MemoryMax={memory_max}", "-p", "MemorySwapMax=0", "--"]
-    assert command[12:14] == ["python", "main.py"] and "--listen" in command
+    assert command[:13] == [SYSTEMD_RUN, "--user", "--scope", "--quiet", "--collect", confinement.SCOPE_DESCRIPTION,
+                            "-p", f"MemoryHigh={memory_high}", "-p", f"MemoryMax={memory_max}", "-p", "MemorySwapMax=0", "--"]
+    assert command[13:16] == ["/usr/bin/env", "-i", "--"]
+    assert command[16:18] == ["python", "main.py"] and "--listen" in command
     assert confined.processes[0].kwargs["env"]["XDG_RUNTIME_DIR"] == "/run/user/1234"
     assert confined.processes[0].kwargs["env"]["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/1234/bus"
     status = confined.service.runtime_status()
@@ -680,6 +706,53 @@ def test_the_child_environment_keeps_what_systemd_run_needs():
     # Whatever an environment lost is copied back from the server's own, never overwritten.
     assert session_environment({"A": "1"}, inherited)["XDG_RUNTIME_DIR"] == "/run/user/1000"
     assert session_environment({"XDG_RUNTIME_DIR": "/mine"}, inherited)["XDG_RUNTIME_DIR"] == "/mine"
+
+
+def test_confine_gives_systemd_run_the_server_libraries_and_comfy_the_engine_env(monkeypatch):
+    """The probe uses the server env; systemd-run must too, or conda libcrypto shadows libsystemd."""
+    from services import creation_runtime_confinement as confinement
+    monkeypatch.setattr(confinement, "_support", SYSTEMD_RUN)
+    monkeypatch.setattr(confinement, "_on_linux", lambda: True)
+    monkeypatch.setattr(confinement, "physical_memory_bytes", lambda: 64 * GIB)
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/server/lib")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
+    monkeypatch.setenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/run/user/1234/bus")
+    engine = {"LD_LIBRARY_PATH": "/engine/lib", "PATH": "/engine/bin", "PYTHONNOUSERSITE": "1"}
+    wrapped, runner_env, limits = confinement.confine(["/engine/bin/python", "main.py"], engine, 80)
+    assert limits is not None
+    assert wrapped[0] == SYSTEMD_RUN and wrapped[wrapped.index("--") + 1:wrapped.index("--") + 4] == ["/usr/bin/env", "-i", "--"]
+    assert "LD_LIBRARY_PATH=/engine/lib" in wrapped and wrapped[-2:] == ["/engine/bin/python", "main.py"]
+    assert runner_env["LD_LIBRARY_PATH"] == "/server/lib"
+    assert runner_env["XDG_RUNTIME_DIR"] == "/run/user/1234"
+    assert "LD_LIBRARY_PATH=/server/lib" not in wrapped
+
+
+def test_the_scope_is_named_so_systemd_does_not_log_the_engine_environment(monkeypatch):
+    """systemd-run describes a scope by its command line unless told otherwise. The command carries the engine
+    environment (API keys among it), and ``systemctl --user show`` and the user journal would keep it."""
+    from services import creation_runtime_confinement as confinement
+    monkeypatch.setattr(confinement, "_support", SYSTEMD_RUN)
+    monkeypatch.setattr(confinement, "_on_linux", lambda: True)
+    monkeypatch.setattr(confinement, "physical_memory_bytes", lambda: 64 * GIB)
+    engine = {"HF_TOKEN": "hf_secret_value", "PATH": "/engine/bin"}
+    wrapped, _env, _limits = confinement.confine(["/engine/bin/python", "main.py"], engine, 80)
+    before_command = wrapped[:wrapped.index("--")]
+    descriptions = [part for part in before_command if part.startswith("--description=")]
+    assert len(descriptions) == 1 and "hf_secret_value" not in descriptions[0]
+    assert "hf_secret_value" not in " ".join(before_command)
+
+
+def test_systemd_run_does_not_inherit_the_engine_ld_library_path(confined, monkeypatch):
+    monkeypatch.setattr(confined.service, "isolated_environment",
+                        lambda python: {"LD_LIBRARY_PATH": "/engine/lib", "PATH": "/engine/bin"})
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/server/lib")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", "/run/user/1234")
+    confined.job(name="one")
+    command, popen_env = confined.processes[0].command, confined.processes[0].kwargs["env"]
+    assert popen_env["LD_LIBRARY_PATH"] == "/server/lib"
+    assert "LD_LIBRARY_PATH=/engine/lib" in command
+    assert command[command.index("--") + 1:command.index("--") + 4] == ["/usr/bin/env", "-i", "--"]
+    assert "python" in command and "main.py" in command
 
 
 def test_the_runtime_record_is_written_on_start_and_removed_on_stop(confined):

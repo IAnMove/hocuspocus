@@ -471,10 +471,10 @@ import and approve the take).
   seconds; longer shots are refused) and the shot takes the take's length, as the server render does.
 - **Lines:** a shot with spoken lines needs them recorded (`series.shot.voice`, or one render): the speech and the subtitles are laid
   into the scene (`audioTracks`, `dialogueBeats`), timed as the render times them. A card has no mouths.
-- **What it leaves:** the scene `<series>-<episode>-<shot>-card-<card>.scene.json` in the workspace (a second apply replaces it)
+- **What it leaves:** the scene `<series>-<episode>-<shot>-card-<card>.scene.json` in the workspace
   opens in Video 2D, and the take (`productionMethod: animation_2d`, `sceneFilename`, `cardId`, `cardBindings`, the shot's
-  `renderInputs`) is a candidate in Series Lab. The same inputs again find the same take; other inputs reject the earlier
-  unapproved take of the scene as superseded and attach a new one.
+  `renderInputs`) is a candidate in Series Lab. The same inputs again find the same take and leave that scene file alone
+  (a person may have edited it); other inputs replace the scene, reject the earlier unapproved take as superseded and attach a new one.
 - **Approval:** `approve: true` approves the take only in «Modo un solo disparo» (`agent_autonomy` = `one_shot`); in `review` mode it
   is refused (403 `agent_review_off`) and the person approves in Series Lab. A take a person approved is never replaced: the new one stays a
   candidate and the reply says so (`approvalNote`).
@@ -487,7 +487,7 @@ A kit voice may carry `voiceType` (`man`, `woman`, `child`, `robot`), `pitchBand
 
 The default numbers are in `app/shared/voice_bands.json`, measured from real lines, not guessed: man 80–136 Hz, woman 108–249 Hz, child 180–230 Hz with centroid at most 510 Hz, robot 90–145 Hz. A stored field overrides its default. The type is never inferred from the character's description.
 
-**Cleanliness.** Every take is also measured for noise, whatever the voice (`services/voice_cleanliness.py`, the raw take before the trim): the noise floor (5th percentile of 50 ms frames, dBFS), the SNR (90th percentile minus the floor) and the share of energy between 40 and 100 Hz. A take with a floor above -60 dBFS, an SNR under 45 dB or 35 % or more of its energy in the bass is "unclean" and is spoken again, up to the same 3 seeds as the band; the cleanest take is kept and, if none is clean, the render does not stop: the item warns `voice_unclean` with the numbers (`cleanliness`) and the remedy. A clip under 1.5 s, or one with almost no pause, cannot show its floor: it is `inconclusive` and is never retried or warned (only the bass check applies). Reused recordings are not measured again. `qa.speech` returns the same `cleanliness` object for any workspace file. Voices made with Drama `voicedesign` measured a floor of -47 to -55 dBFS and 26 to 36 dB of SNR; a clone of a clean VoxCPM2 reference measured -93 dBFS and 76 dB. For final lines, design the reference with VoxCPM2 and clone it with Drama `drama3_base`; do not use `drama3_voicedesign`.
+**Cleanliness.** Every take is also measured for noise, whatever the voice (`services/voice_cleanliness.py`, the raw take before the trim): the noise floor (5th percentile of 50 ms frames, dBFS), the SNR (90th percentile minus the floor) and the share of energy between 40 and 100 Hz. A take with a floor above -60 dBFS, an SNR under 45 dB or 35 % or more of its energy in the bass is "unclean" and is spoken again, up to the same 3 seeds as the band; the cleanest take is kept and, if none is clean, the render does not stop: the item warns `voice_unclean` with the numbers (`cleanliness`) and the remedy. A clip under 1.5 s, or one with almost no pause, cannot show its floor: it is `inconclusive` and is never retried or warned (only the bass check applies). Reused recordings are not measured again. `qa.speech` and a completed `series.shot.voice` job (`result.cleanliness`, `result.warnings`) return the same object for any workspace file. Voices made with Drama `voicedesign` measured a floor of -47 to -55 dBFS and 26 to 36 dB of SNR; a clone of a clean VoxCPM2 reference measured -93 dBFS and 76 dB. For final lines, design the reference with VoxCPM2 and clone it with Drama `drama3_base`; do not use `drama3_voicedesign`.
 
 Three doors, one function (`services/voice_band.py` `set_voice_band`):
 
