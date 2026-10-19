@@ -166,9 +166,13 @@ def test_unset_image_model_draws_with_qwen_turbo_at_eight_steps(tmp_path):
     production.image("k", "a prompt", None, "1280x704", 1)
     production.image("f", "a prompt", None, "1280x704", 1, "flux2_klein_9b")
     production.image("b", "a prompt", None, "1280x704", 1, "qwen_image_21")
+    production.image("t", "a prompt", None, "1280x704", 1, "qwen_image_21_turbo", 28)
+    production.image("q", "a prompt", None, "1280x704", 1, "qwen_image_21", 28)
     assert (sent[0]["model_type"], sent[0]["num_inference_steps"]) == ("qwen_image_21_turbo", 8)
     assert (sent[1]["model_type"], sent[1]["num_inference_steps"]) == ("flux2_klein_9b", 4)
     assert (sent[2]["model_type"], sent[2]["num_inference_steps"]) == ("qwen_image_21", 40)   # an explicit choice runs as before
+    assert (sent[3]["model_type"], sent[3]["num_inference_steps"]) == ("qwen_image_21_turbo", 8)  # 28 is outside Turbo's 8..8
+    assert (sent[4]["model_type"], sent[4]["num_inference_steps"]) == ("qwen_image_21", 28)
     assert all("negative_prompt" not in params and params["guidance_scale"] == 1 for params in sent)
 
 
