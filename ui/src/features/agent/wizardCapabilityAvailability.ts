@@ -59,6 +59,11 @@ const SERIES_NEEDS_EPISODE = new Set([
   'stage_series_comic',
 ])
 
+const SERIES_NEEDS_SERIES = new Set([
+  'set_series_location_stage',
+  'check_series_location_stage',
+])
+
 function uniqueNames(names: string[]): string[] {
   return [...new Set(names)]
 }
@@ -80,6 +85,7 @@ function missingDataReason(name: string, context: WizardAvailabilityContext): st
       ? 'No hay un episodio abierto; nombra el episodio exacto o créalo con create_series_episode.'
       : 'No hay una serie abierta. create_series_episode con create_if_missing=true puede crearla.'
   }
+  if (SERIES_NEEDS_SERIES.has(name) && !series.series_id) return 'No hay una serie abierta en Series Lab; ábrela o nómbrala antes de esta acción.'
   return ''
 }
 

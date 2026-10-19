@@ -49,6 +49,7 @@ import { registerLipsCreatorCapabilities } from './lipsCreatorCapabilities'
 import { registerProductionWorkCapabilities } from './productionWorkCapabilities'
 import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities'
 import { registerSeriesShotCardCapabilities } from './seriesShotCardCapabilities'
+import { registerSeriesStageCapabilities } from './seriesStageCapabilities'
 import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
 import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
@@ -1217,6 +1218,7 @@ registerVideo2DTemplateCapabilities(defineCapability)
 registerProductionWorkCapabilities(defineCapability)
 registerSeriesShotEditCapabilities(defineCapability)
 registerSeriesShotCardCapabilities(defineCapability)
+registerSeriesStageCapabilities(defineCapability)
 registerCharacterAnimationCapabilities(defineCapability)
 registerVoiceBandCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)

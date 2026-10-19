@@ -15,13 +15,20 @@ from starlette.concurrency import run_in_threadpool
 
 from routers.series_produce import workspace_files
 from routers.series_shot_card import create_series_shot_card_router
+from routers.series_stage import create_series_stage_router
 from services.series_look_room import warnings as look_room_warnings
+from services.series_stage_checks import shot_warnings as stage_shot_warnings
 from services.series_shot_card import CardDeps, SeriesShotCard
+from services.series_stage_ops import SeriesStage
 from services.series_shot_edit import (
     ShotEditError, apply_edit, build_patch, find_shot, merge_changes, take_still_fits, to_script,
 )
 from services.series_shot_instruction import context, plan_edit
 from services.series_video_foley import VIDEO_METHODS, wants_video_foley
+
+
+# An edit of one of these moves where people stand on the plate: the stage's findings are told with its reply.
+PICTURE_KEYS = frozenset({"cast", "framing", "detail", "location", "variant", "scene", "kind"})
 
 
 class ShotEdit(BaseModel):
@@ -124,8 +131,11 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
         told = {"instruction": planned} if planned else {}
 
         def look(series: dict, shot: dict) -> dict[str, Any]:
-            """Who the edited cast leaves looking out of the frame: a warning only, the user's x is kept."""
+            """Who the edited cast leaves looking out of the frame, and what the plate's stage says of the picture an edit moved
+            (``series_stage_checks``): warnings only, the user's x and size are kept."""
             found = look_room_warnings(series, kits, shot, root) if "cast" in outcome["changed"] else []
+            if set(outcome["changed"]) & PICTURE_KEYS:
+                found = [*found, *stage_shot_warnings(series, kits, shot)]
             return {"warnings": found} if found else {}
 
         def change(series: dict) -> None:
@@ -199,6 +209,9 @@ def create_series_shot_edit_router(*, change_series: Callable[[str, str, Callabl
             raise fail(error) from error
         return shot_view(series, episode, found, number)
 
+    # The plate's perspective (series_stage) sits beside the shot edit it informs: it needs the same series and workspace access.
+    router.include_router(create_series_stage_router(SeriesStage(
+        read_library=read_library, change_series=change_series, workspace_dir=workspace_dir), bind_loop))
     if services is not None:
         router.include_router(create_series_shot_card_router(SeriesShotCard(CardDeps(
             read_library=read_library, read_kits=read_kits, workspace_dir=workspace_dir, call=call, change_series=change_series,

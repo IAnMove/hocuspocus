@@ -61,6 +61,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './seriesShotCardCapabilities',
   // Action types only. Execution stays on the seriesShots adapter.
   './seriesShotEditCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesStageCapabilities',
   './sfxPack',
   // Pure request filtering; no new UI/API/store-writing port is authorized.
   './storyVisualRequest',
@@ -225,7 +227,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 95) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band uses the Character Kit adapter.
+  assert.equal(registered.length, 97) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band uses the Character Kit adapter.
   assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })
