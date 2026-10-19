@@ -4,6 +4,7 @@ import { applyImageColorKey } from './imageColorKey'
 import { imageWindowGeometry } from './imageWindows'
 import { imageContactShadow, textureFootprint } from './imageGrounding'
 import { settledTexture } from './imageSettle'
+import { spriteFoot, spriteFrame } from './directionalSprite'
 import type { Scene3DSlot } from './types'
 
 function cutoutAspect(texture: Texture | null) {
@@ -26,7 +27,7 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
     const settled = settledTexture(texture, slot.imageLook.colorKey, slot.imageLook.settle)
     if (settled !== texture) { texture.dispose(); texture = settled }
   }
-  const aspect = cutoutAspect(texture)
+  const aspect = slot.screen?.directional ? spriteFrame(slot.screen.directional).aspect : cutoutAspect(texture)
   const tiles = slot.imageLook?.tiles ?? 1
   const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
   if (texture && slot.drift) {         // a scrolled picture repeats mirrored instead of smearing its last column
@@ -53,10 +54,11 @@ function tiledGeometry(aspect: number, tiles: number, texture: Texture | null) {
 
 function groundImageCutout(mesh: Mesh, slot: Scene3DSlot, texture: Texture | null, aspect: number) {
   if (slot.imageLook?.grounded) {
-    const foot = textureFootprint(texture)
+    // A directional figure stands on the line of its sheets' boots, whatever the picture its mesh was mounted with.
+    const foot = slot.screen?.directional ? spriteFoot(slot.screen.directional) : textureFootprint(texture)
     if (foot) {
       // Trim only the empty rows below the feet and retain original pixel scale.
-      if (slot.screen?.sourceUrl && !slot.screen.poseSequence) {
+      if (slot.screen?.directional || (slot.screen?.sourceUrl && !slot.screen.poseSequence)) {
         // A moving matte needs the complete video canvas. Keep its UVs and
         // scale, translating the reference footline onto the ground instead.
         mesh.geometry.translate(0, -2 * foot.bottom, 0)

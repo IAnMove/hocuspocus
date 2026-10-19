@@ -3,6 +3,7 @@ import type { Scene3DSourceRef } from './types.ts'
 import { parseImagePoses, type ImagePose } from './imagePoseSequence'
 import { loopedMediaTime, parseMediaLoop, type MediaLoop } from './mediaLoop'
 import { parseTalkingCutout, type TalkingCutout } from './talkingCutout'
+import { parseDirectional, type DirectionalSprite } from './directionalSprite.ts'
 
 export type MediaScreen = MediaLoop & {
   sourceUrl: string
@@ -29,6 +30,8 @@ export type MediaScreen = MediaLoop & {
   poseSequence?: ImagePose[]
   /** A Character Kit cutout that talks: pose, mouths by cue and blink. */
   talk?: TalkingCutout
+  /** A 2D figure that shows the sheet facing the camera and walks (directionalSprite.ts); with `talk`, it talks in its pose. */
+  directional?: DirectionalSprite
 }
 
 export const defaultMediaScreen = (): MediaScreen => ({
@@ -94,9 +97,14 @@ function parseHue(value: unknown): { hue?: number } {
   return typeof value === 'number' && Number.isFinite(value) && value ? { hue: Math.max(-180, Math.min(180, value)) } : {}
 }
 
-/** An image screen paints a pose sequence or a talking cutout instead of one picture; both are see-through. */
+/** An image screen paints a pose sequence, a talking cutout or a directional figure instead of one picture; all are see-through. */
 function parseScreenArt(value: Partial<MediaScreen>) {
   if (value.media === 'video') return { sourceUrl: durableScene3DSourceUrl(value.sourceUrl ?? ''), transparent: Boolean(value.transparent) }
+  const directional = parseDirectional(value.directional)
+  if (directional) {
+    const talk = parseTalkingCutout(value.talk)
+    return { sourceUrl: durableScene3DSourceUrl(value.sourceUrl ?? '') || talk?.base || directional.sheets[0].source, transparent: true, directional, ...(talk ? { talk } : {}) }
+  }
   const poseSequence = parseImagePoses(value.poseSequence)
   if (poseSequence) return { sourceUrl: poseSequence[0].sourceUrl, transparent: true, poseSequence }
   const talk = parseTalkingCutout(value.talk)
@@ -142,5 +150,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
     screen.offset, screen.pitch, screen.yaw, screen.roll, screen.width, screen.height, screen.style, screen.fit, screen.flipY,
     Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl), screen.hue ?? 0,
     screen.talk ? [screen.talk.base, screen.talk.mouths, screen.talk.blink?.source] : null,
+    screen.directional ? screen.directional.sheets.map(sheet => sheet.source) : null,
   ])
 }

@@ -1,5 +1,9 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { parseMediaScreen, mediaScreenMountKey } from '../src/features/scene3d/mediaScreen.ts'
+import { facingSlot, isDirectional, walkedSlot } from '../src/features/scene3d/directionalPaint.ts'
+import { spriteFoot, spriteFrame } from '../src/features/scene3d/directionalSprite.ts'
+import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 import {
   DirectionMemory, directionalPosition, directionalView, faceAngle, headingDegrees, headingFacing, normalizeDegrees, parseDirectional,
   pickSheet, sectorOf, strideFrame, travelFacing, walkState, type DirectionalSheet, type DirectionalSprite, type V2,
@@ -226,4 +230,51 @@ test('a directional block is read strictly and everything else is dropped', () =
   assert.equal(parseDirectional({ sheets: [sheet('walk', 'side')], walk: { to: [1, 'x'], speed: 1, start: 0 } })!.walk, undefined)
   assert.equal(parseDirectional({ sheets: [sheet('walk', 'side')], walk: { to: [1, 2], speed: 0, start: 0 } })!.walk!.speed, 0.05)
   assert.deepEqual(parseDirectional(JSON.parse(JSON.stringify(parsed))), parsed)
+})
+
+const slotOf = (directional: Partial<DirectionalSprite>, extra: Record<string, unknown> = {}): Scene3DSlot => ({
+  id: 'ana', slot: 'subject_1', position: [1, 0, 2], rotationY: 0, scale: 1, sourceUrl: '/pose.png', media: 'image', surface: 'cutout', clip: null,
+  screen: parseMediaScreen({ media: 'image', sourceUrl: '/pose.png', directional: { sheets: ALL, ...directional }, ...extra }),
+} as unknown as Scene3DSlot)
+
+test('a screen with a directional block keeps it, with the talk block beside it, and a screen without one is read as before', () => {
+  const screen = parseMediaScreen({ media: 'image', sourceUrl: '/pose.png', directional: { sheets: ALL, heading: 90 }, talk: { base: '/pose.png', mouths: { closed: '/m.png' }, mouth: { offsetX: 0, offsetY: -18, scale: 0.05, rotation: 0 }, rest: 'closed', cues: [] } })!
+  assert.equal(screen.directional?.heading, 90)
+  assert.equal(screen.talk?.base, '/pose.png')
+  assert.equal(screen.transparent, true)
+  assert.equal(screen.sourceUrl, '/pose.png')
+  const plain = parseMediaScreen({ media: 'image', sourceUrl: '/a.png' })!
+  assert.equal('directional' in plain, false)
+  assert.equal(mediaScreenMountKey(plain), mediaScreenMountKey(parseMediaScreen({ media: 'image', sourceUrl: '/a.png', directional: { sheets: [] } })))
+  // The sheets mount with it, the heading and the walk do not: editing them repaints without loading again.
+  const key = mediaScreenMountKey(screen)
+  assert.notEqual(key, mediaScreenMountKey(parseMediaScreen({ media: 'image', sourceUrl: '/pose.png', directional: { sheets: ALL.slice(1) } })))
+  const moved = parseMediaScreen({ media: 'image', sourceUrl: '/pose.png', directional: { sheets: ALL, heading: 0, walk: { to: [1, 1], speed: 1, start: 0 } }, talk: screen.talk })!
+  assert.equal(mediaScreenMountKey(moved), key)
+})
+
+test('the painter pass turns the figure to the camera and hands the painter the drawing, without touching the document', () => {
+  const slot = slotOf({ heading: 0 })
+  assert.equal(isDirectional(slot), true)
+  assert.equal(isDirectional({ ...slot, screen: undefined }), false)
+  const painted = facingSlot(slot, slot.position, { memory: new DirectionMemory(), eye: [4, 1.6, 2], eye0: [1, 8], t: 0 })
+  assert.ok(Math.abs(painted.rotationY - Math.PI / 2) < 1e-9)
+  assert.equal(painted.screen?.directional?.view?.kind, 'sheet')
+  assert.equal(slot.screen?.directional?.view, undefined)
+})
+
+test('a walking figure is placed along its path by the time, and every other slot is returned as it came', () => {
+  const walker = slotOf({ walk: { to: [1, 8], speed: 2, start: 1 } })
+  assert.deepEqual(walkedSlot(walker, walker.position, 2).position, [1, 0, 4])
+  assert.deepEqual(walkedSlot(walker, walker.position, 0).position, [1, 0, 2])
+  const still = slotOf({ heading: 0 })
+  assert.equal(walkedSlot(still, still.position, 5), still)
+})
+
+test('the plane of a figure is as wide as its widest cell and its feet stand on the line of the catalog', () => {
+  const frame = spriteFrame({ sheets: [sheet('walk', 'side', 12, { cell: { width: 300, height: 600 } }), sheet('idle', 'front', 2, { cell: { width: 420, height: 600 } })] })
+  assert.ok(Math.abs(frame.aspect - 0.7) < 1e-9)
+  assert.equal(frame.feet, 0.96); assert.equal(frame.figure, 0.86)
+  const foot = spriteFoot({ sheets: ALL })
+  assert.ok(Math.abs(foot.bottom - 0.04) < 1e-9 && foot.center === 0.5)
 })

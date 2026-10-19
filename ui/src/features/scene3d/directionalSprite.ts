@@ -32,6 +32,8 @@ const SECONDS = 3600
 const REACH = 1000
 const MIN_ASPECT = 0.1
 const MAX_ASPECT = 4
+/** The width of a figure's feet in plane units (the plane is two units high): the contact shadow under it. */
+const FOOT_METERS = 0.3
 
 export type DirectionalSheet = {
   /** The kit animation it came from. */
@@ -262,6 +264,12 @@ export function spriteFrame(sprite: Pick<DirectionalSprite, 'sheets'>): { aspect
   const first = sprite.sheets[0]
   const aspect = Math.max(...sprite.sheets.map(sheet => sheet.cell.width / sheet.cell.height))
   return { aspect: clamp(aspect, MIN_ASPECT, MAX_ASPECT), feet: first?.feet ?? animationCatalog.sheet.feet, figure: first?.figure ?? animationCatalog.sheet.figure }
+}
+
+/** Where its boots stand in the plane, as an image footprint: the contact shadow and the grounding read it. */
+export function spriteFoot(sprite: Pick<DirectionalSprite, 'sheets'>): { bottom: number; center: number; width: number } {
+  const { aspect, feet } = spriteFrame(sprite)
+  return { bottom: 1 - feet, center: 0.5, width: Math.min(1, FOOT_METERS / aspect) }
 }
 
 // Reading a stored block --------------------------------------------------------------------------------------------

@@ -67,6 +67,8 @@ import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
 import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
 import { findHandBone, followHand, parseHold } from './handHold'
+import { DirectionMemory } from './directionalSprite.ts'
+import { facingSlot, isDirectional, referenceEye, walkedSlot } from './directionalPaint.ts'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -130,6 +132,8 @@ export type GpuWorld = {
   lighting?: EnvironmentLighting
   /** Cel shading and ink of model slots (`renderLook: 'toon'`), created on the first scene that asks for it. */
   toon?: ToonLook
+  /** The sector each directional figure holds from frame to frame (directionalSprite.ts). */
+  directions?: DirectionMemory
 }
 
 export function clipKeyOf(clip: Scene3DSlot['clip']): string {
@@ -542,7 +546,8 @@ function singleClip(gpu: SlotGpu, slot: Scene3DSlot) {
 function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number, shotDuration: number) {
   const gpu = world.slots.get(slot.id)
   if (!gpu) return
-  if (gpu.screen && slot.screen) void gpu.screen.seek(sceneSeconds, slot.screen).catch(() => {})
+  // A directional figure is painted once, in the camera pass, with the drawing its angle asks for.
+  if (gpu.screen && slot.screen && !(slot.screen.directional && !slot.screen.directional.view)) void gpu.screen.seek(sceneSeconds, slot.screen).catch(() => {})
   poseLoadedSlot(gpu, slot)
   resetTypingPose(gpu.root)
   paintSlotSequence(gpu, slot, sceneSeconds, shotDuration)
@@ -588,7 +593,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
     void world.room.seek(sceneSeconds).catch(() => {})
   }
   syncEnvironmentLighting(world, document)
-  const posedSlots = document.slots.map(slot => ({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }))
+  const posedSlots = document.slots.map(slot => walkedSlot({ ...slot, ...rhythmicSlotPose(slot, slotPoseAtTime(slot, sceneSeconds, document.duration), sceneSeconds, document.rhythm) }, slot.position, sceneSeconds))
   applyLoopOffset(world, sceneSeconds)
   paintCitadel(world.dressing, sceneSeconds)
   paintWorkshop(world.dressing, sceneSeconds, document.workshopScreen)
@@ -613,9 +618,12 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   world.camera.position.set(...shaken.eye)
   world.camera.lookAt(...shaken.look)
   world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
-  for (const slot of posedSlots) {
-    if (slot.billboard && slot.media === 'image') paintActor(world, { ...slot, rotationY: Math.atan2(shaken.eye[0]-slot.position[0], shaken.eye[2]-slot.position[2]) }, sceneSeconds, document.duration)
-  }
+  const directions = world.directions ??= new DirectionMemory()
+  const eye0 = posedSlots.some(isDirectional) ? referenceEye(document) : [0, 0] as const
+  posedSlots.forEach((slot, index) => {
+    if (isDirectional(slot)) paintActor(world, facingSlot(slot, document.slots[index].position, { memory: directions, eye: shaken.eye, eye0, t: sceneSeconds }), sceneSeconds, document.duration)
+    else if (slot.billboard && slot.media === 'image') paintActor(world, { ...slot, rotationY: Math.atan2(shaken.eye[0]-slot.position[0], shaken.eye[2]-slot.position[2]) }, sceneSeconds, document.duration)
+  })
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
