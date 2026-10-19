@@ -123,6 +123,22 @@ catalog is classified, a test lists them). A value the script gives always wins,
 seconds in a shot of more than four: that is almost always a halo someone shortened. The numbers live in the
 JSON so they can be tuned without touching code.
 
+### Presence effects drawn with Three.js
+
+Ten presence effects are not painted with 2D vector strokes: `anime_aura`, `shield`, `fog`, `smoke`, `dust`, `stars`,
+`aurora`, `bubbles`, `embers` and `meteor_shower` are WebGL passes on an orthographic camera
+(`ui/src/features/sceneFx/presence/`): noise shaders for smoke, fog, haze, nebula and aura; instanced quads for
+sparks, stars, bubbles, motes and meteors; soft edges by construction. Their ids, parameters (`x`, `y`, `size`,
+`rotation`, `intensity`, `color`, `seed`, `speed`), class and default duration are the ones above: a saved script
+paints the same cue, only better. A layer is a pure function of the cue's seed and clock (a Series render paints frame by
+frame), painted at the frame's own resolution up to a pixel budget, and falls back to the 2D painter that was the
+effect before when WebGL is not there (`paintSceneFx` needs no change). Check them with
+`node scripts/fx-presence-sheets.mjs --out DIR --compare` (before and after contact sheets),
+`--time` (ms per frame) and `npm run test:e2e:fx` (`scene-fx-presence-three.spec.ts`: no cut at the box, same frame
+same pixels, the 2D fallback, a halo and a shield on a full frame, a frame-time bound). Not yet drawn this way:
+`light_rays`, `energy_orb`, `black_hole`, `portal`, `magic_circle`, `fire`, `tornado`, the rain and snow weather and
+the grades.
+
 ### Beams from a point: `from`
 
 A `laser` or `lightning` cue (catalog entries with `"aim": true`) can start at `from` and
