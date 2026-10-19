@@ -203,8 +203,8 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   With an approved `walk` sheet the entrance is walked by its drawings: same slide, feet on the ground, no bob, one
   cycle per `2 × enterStep` (steps and sounds still land on the feet), mirrored against the way the sheet looks.
 - **animation:** `"wave"` or `{"id": "wave", "at": 2.5, "duration": 1.2, "loop": "once"}` plays an approved kit animation
-  in the pose's place, at its snapped size and ground line; the pose, mouth and eyes are hidden meanwhile, so an expression
-  never plays during its own character's voice: before the line or in a silence ≥ 2.5 s (`allowDuringSpeech: true` opts
+  in the pose's place, at its snapped size and ground line; the pose, mouth and eyes are hidden meanwhile, so only a cycle or
+  `walk` plays over its character's voice; others move before the line or to a silence (`allowDuringSpeech: true` opts
   out). `at`: seconds inside the shot (0); `duration`: one pass, or 2.5 s for an expression; `loop`: `loop`, `pingpong` or
   `once` (the sheet's). Whole-figure poses take gestures and `walk`, busts take expressions (`angry`, `happy`) in
   `medium`/`close`. It cannot start inside a walk-in sheet: start it after.

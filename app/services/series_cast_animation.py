@@ -9,8 +9,8 @@ author made) or a window of it:
 
 * ``at``: when it starts, in seconds inside the shot (default 0). ``duration``: how long it plays (default one pass of the
   sheet: its cells over its fps, back and forth for a ``pingpong``). ``loop``: ``loop``, ``pingpong`` or ``once`` (the sheet's own
-  by default; ``true`` is ``loop`` and ``false`` is ``once``). ``allowDuringSpeech: true`` keeps an expression where it was asked even
-  while its own character speaks (see ``series_expression_silence``).
+  by default; ``true`` is ``loop`` and ``false`` is ``once``). ``allowDuringSpeech: true`` keeps a sheet where it was asked even
+  while its own character speaks (every sheet but a cycle and ``walk`` is kept clear of it: see ``series_expression_silence``).
 * Only an ``approved`` animation can be played: a sheet that is still pending, or was rejected, is refused by the script check
   with the way out (approve it in Characters > Animaciones).
 * While the sheet plays it takes the pose's place: the pose picture and its mouth and eyes are hidden and come back when it

@@ -196,7 +196,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "enterStep seconds (it walks with the kit's approved walk sheet when it has one, else a body bob); animation: "
         "a kit animation id (wave, angry, happy...) or {id, at, duration, loop, allowDuringSpeech} seconds inside the shot, only an "
         "approved one (a pending sheet is refused: a person approves it in Characters > Animaciones), it takes the pose's place and "
-        "hides its mouth while it plays, so an expression is moved before its character's line or into its silence, or dropped "
+        "hides its mouth while it plays, so a sheet (not a cycle or walk) is moved before its character's line or into its silence, or dropped "
         "with a warning, unless allowDuringSpeech is true; look room: a 2D cast member looking out of the frame is moved, one facing left stands right of "
         "centre and one facing right left of it (x becomes 100 - x), two who look away from each other swap x, three or "
         "more are only reported; the reply's lookRoom lists each move, lookRoomKept who still looks out and why; lookRoom "

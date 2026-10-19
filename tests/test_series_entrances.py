@@ -248,8 +248,8 @@ def test_the_compiled_walk_puts_the_feet_down_on_the_footsteps(tmp_path):
 
 
 def test_the_compiler_plays_the_expression_where_series_expression_silence_left_it(tmp_path):
-    """The real tsx compile of the spec the render hands over: a moved expression starts at its new second, an opted-out one
-    stays at its own, a dropped one is not drawn, and the compiler accepts the allowDuringSpeech key."""
+    """The real tsx compile of the spec the render hands over: a moved expression (or any other sheet of the kit) starts at its new
+    second, an opted-out one stays at its own, a dropped one is not drawn, and the compiler accepts the allowDuringSpeech key."""
     from services.series_expression_silence import quiet_expressions
     from services.series_shot_bridge import run_series_shot
     from services.video2d_compile import TSX
@@ -257,6 +257,8 @@ def test_the_compiler_plays_the_expression_where_series_expression_silence_left_
         pytest.skip("ui/node_modules/tsx is not installed")
     kevin, monk = _kit("kit-kevin", [[(220, 40, 40)], [(40, 180, 60)]]), _kit("kit-monk", [[(50, 80, 220)]])
     kevin["animations"]["angry"] = kevin["animations"]["blocks"]
+    kevin["animations"]["determined-full"] = kevin["animations"]["blocks"]  # a made-up id with no group, like characters.animation.make's
+    kevin["animations"]["walk"] = kevin["animations"]["blocks"]
     kits = {"kit-kevin": kevin, "kit-monk": monk}
 
     def starts(animation, seconds):
@@ -272,6 +274,10 @@ def test_the_compiler_plays_the_expression_where_series_expression_silence_left_
     assert starts({"id": "angry", "at": 0, "allowDuringSpeech": True}, 4.0) == [0.0], "the opt-out is the author's call"
     assert starts({"id": "angry", "at": 3.0}, 4.0) == [3.0], "already in kevin's silence: as written"
     assert starts({"id": "angry", "at": 0}, 0.2) == [], "no silence long enough: the figure keeps its pose"
+    assert starts({"id": "determined-full", "at": 0}, 4.0) == [1.55], "a sheet with no group hides the mouth too: it comes after the line"
+    assert starts({"id": "determined-full", "at": 0, "allowDuringSpeech": True}, 4.0) == [0.0]
+    assert starts({"id": "determined-full", "at": 0}, 0.2) == [], "and it is dropped when there is no silence for it"
+    assert starts({"id": "walk", "at": 0}, 4.0) == [0.0], "the walk is a cycle with its own treatment: left where it was asked"
 
 
 # A real render (CPU) --------------------------------------------------------------------
