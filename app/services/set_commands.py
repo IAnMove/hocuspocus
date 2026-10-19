@@ -13,10 +13,10 @@ def command_catalog():
                                  "properties": {"workspace": {"type": "string"}}}}}}, *rooms()]
 
 
-def command_handlers():
+def command_handlers(call=None):
     from services.room_box_commands import command_handlers as rooms
     async def run(arguments):
         return {"version": 1, "operation": OPERATION, "status": "completed", "result": {"molds": catalog()}}
-    return {OPERATION: run, **rooms()}
+    return {OPERATION: run, **rooms(call)}
 
 

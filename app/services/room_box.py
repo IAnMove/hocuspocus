@@ -39,11 +39,16 @@ TILE = float(_FRAME["floorTile"])
 WALLS = ("back", "left", "right")
 _NAME = __import__("re").compile(r"^[a-z0-9][a-z0-9_-]{0,63}$")
 _FIELDS = {"kind", "prompt", "size", "floor", "walls", "ceiling", "door", "windows", "props", "seed", "tile"}
+_EMPTY = (np.zeros((0, 3), np.float32), np.zeros((0, 3), np.float32), np.zeros((0, 2), np.float32), np.zeros(0, np.uint16))
 _SIZE = {"w", "d", "h"}
 _DOOR = {"wall", "x", "w", "h"}
 _WINDOW = {"wall", "x", "y", "w", "h"}
 _PROP = {"prompt", "on", "wall", "floor", "x", "z", "height_m"}
-_TONES = {"floor": (186, 154, 104), "walls": (214, 208, 196), "ceiling": (232, 232, 228), "door": (128, 74, 38), "prop": (86, 138, 156)}
+_TONES = {"floor": (186, 154, 104), "walls": (214, 208, 196), "ceiling": (232, 232, 228), "door": (128, 74, 38), "prop": (86, 138, 156),
+          "trim": (232, 228, 218), "handle": (196, 160, 84)}
+# The surfaces that get a self-lit share, so a wall the lights miss never goes black (see ``_write``).
+_GLOW = 0.16
+_RECESS = 0.74
 
 
 def is_box_room(entry) -> bool:
@@ -122,17 +127,26 @@ def door_point(size: dict, door: dict) -> tuple[float, float, float]:
     return prop_point(size, {"on": "wall", "wall": door["wall"], "x": door["x"], "z": 0.0})
 
 
-def build_room(target: str | Path, spec: dict, textures: dict | None = None) -> dict:
-    """Write the room GLB. ``textures`` maps floor/walls/ceiling/door and ``props`` (a list of images) to pictures."""
+def build_room(target: str | Path, spec: dict, textures: dict | None = None, *, procedural: bool = True) -> dict:
+    """Write the room GLB.
+
+    ``textures`` maps floor, walls, ceiling, door and trim to a picture (a path or a PIL image) and ``props`` to a list of
+    pictures; ``tile_m`` maps a surface to the metres one repeat covers (3 when absent). A surface with no picture wears a
+    procedural material chosen from the words of the spec (``room_surfaces``), so no room is flat; ``procedural=False``
+    keeps flat colours (``placeholder_room``)."""
     spec = spec if _is_canonical(spec) else normalize(spec)
-    _write(target, _parts(spec, textures or {}))
+    textures = dict(textures or {})
+    if procedural:
+        from services.room_surfaces import complete_textures
+        textures = complete_textures(spec, textures)
+    _write(target, _parts(spec, textures))
     size = spec["size"]
     return {"width": size["w"], "depth": size["d"], "height": size["h"]}
 
 
 def placeholder_room(target: str | Path, spec: dict) -> dict:
     """The same geometry with flat colours, so a room can be placed before any texture exists."""
-    return build_room(target, spec, {})
+    return build_room(target, spec, {}, procedural=False)
 
 
 def _is_canonical(spec: dict) -> bool:
@@ -304,25 +318,40 @@ def _measure(value, low, high, what: str) -> float:
 
 
 def _parts(spec: dict, textures: dict) -> list[dict]:
-    size = spec["size"]
-    parts = [_part("floor", _floor(size), _picture(textures.get("floor"), _TONES["floor"]), repeat=True),
-             _part("walls", _walls(spec), _picture(textures.get("walls"), _TONES["walls"]), repeat=True),
-             _part("door", _door_slab(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False)]
+    from services import room_box_trim
+
+    size, tiles = spec["size"], textures.get("tile_m") or {}
+
+    def tile(surface: str) -> float:
+        return float(tiles.get(surface) or TILE)
+
+    panels = bool(textures.get("door_panels", True))
+    parts = [_part("floor", _floor(size, tile("floor")), _picture(textures.get("floor"), _TONES["floor"]), repeat=True, glow=True),
+             _part("walls", _walls(spec, tile("walls")), _picture(textures.get("walls"), _TONES["walls"]), repeat=True, glow=True),
+             # With raised panels the leaf is the recess and the rails: darker than the panels that stand out of it.
+             _part("door", _door_slab(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False, tint=_RECESS if panels else 1.0),
+             _part("trim", room_box_trim.frames(spec, tile("trim")), _picture(textures.get("trim"), _TONES["trim"]), repeat=True, glow=True),
+             _part("handle", room_box_trim.handle(spec), _picture(None, _TONES["handle"]), repeat=False)]
+    if panels:
+        parts.insert(3, _part("door-panels", room_box_trim.door_panels(spec), _picture(textures.get("door"), _TONES["door"]), repeat=False))
     if spec.get("ceiling"):
-        parts.append(_part("ceiling", _ceiling_quad(size), _picture(textures.get("ceiling"), _TONES["ceiling"]), repeat=True))
+        parts.append(_part("ceiling", _ceiling_quad(size, tile("ceiling")), _picture(textures.get("ceiling"), _TONES["ceiling"]), repeat=True, glow=True))
     pictures = list(textures.get("props") or [])
     for index, prop in enumerate(spec["props"]):
         parts.append(_part(f"prop-{index + 1}", _prop_quad(spec, prop),
                            _picture(pictures[index] if index < len(pictures) else None, _TONES["prop"], alpha=255), repeat=False, alpha=True))
-    return parts
+    return [part for part in parts if part["arrays"][0].size]
 
 
-def _part(name, quads, png, *, repeat: bool, alpha: bool = False) -> dict:
-    return {"name": name, "arrays": _arrays(quads), "png": png, "repeat": repeat, "alpha": alpha}
+def _part(name, quads, png, *, repeat: bool, alpha: bool = False, glow: bool = False, tint: float = 1.0) -> dict:
+    return {"name": name, "arrays": _arrays(quads) if quads else _EMPTY, "png": png, "repeat": repeat, "alpha": alpha, "glow": glow,
+            "tint": tint}
 
 
 def _picture(source, tone, alpha=None) -> bytes:
-    if source:
+    if isinstance(source, Image.Image):
+        image = source.convert("RGBA" if alpha is not None else "RGB")
+    elif source:
         with Image.open(source) as picture:
             image = picture.convert("RGBA" if alpha is not None else "RGB")
     else:
@@ -332,34 +361,34 @@ def _picture(source, tone, alpha=None) -> bytes:
     return out.getvalue()
 
 
-def _floor(size: dict) -> list:
-    width, depth, tile = size["w"], size["d"], TILE
+def _floor(size: dict, tile: float = TILE) -> list:
+    width, depth = size["w"], size["d"]
     x, z = width / 2, depth / 2
     u, v = width / tile, depth / tile
     return [_quad([(-x, 0, z), (x, 0, z), (x, 0, -z), (-x, 0, -z)], [(0, v), (u, v), (u, 0), (0, 0)])]
 
 
-def _ceiling_quad(size: dict) -> list:
+def _ceiling_quad(size: dict, tile: float = TILE) -> list:
     """Inward normal is -y: counter-clockwise as seen from inside the room looking up."""
-    width, depth, height, tile = size["w"], size["d"], size["h"], TILE
+    width, depth, height = size["w"], size["d"], size["h"]
     x, z = width / 2, depth / 2
     u, v = width / tile, depth / tile
     return [_quad([(-x, height, -z), (x, height, -z), (x, height, z), (-x, height, z)], [(0, 0), (u, 0), (u, v), (0, v)])]
 
 
-def _walls(spec: dict) -> list:
+def _walls(spec: dict, tile: float = TILE) -> list:
     quads = []
     for wall in WALLS:
-        quads.extend(_wall_quads(spec, wall))
+        quads.extend(_wall_quads(spec, wall, tile))
     return quads
 
 
-def _wall_quads(spec: dict, wall: str) -> list:
+def _wall_quads(spec: dict, wall: str, tile: float = TILE) -> list:
     size = spec["size"]
     length = _length(size, wall)
     quads = []
     for along0, along1, up0, up1 in _cells(length, size["h"], _holes(spec, wall)):
-        quads.append(_quad(_corners(wall, size, along0, along1, up0, up1), _uv(along0, along1, up0, up1)))
+        quads.append(_quad(_corners(wall, size, along0, along1, up0, up1), _uv(along0, along1, up0, up1, tile)))
     return quads
 
 
@@ -408,8 +437,7 @@ def _corners(wall: str, size: dict, a0: float, a1: float, y0: float, y1: float):
     return [(x, y0, z0), (x, y0, z1), (x, y1, z1), (x, y1, z0)]
 
 
-def _uv(a0, a1, y0, y1):
-    tile = TILE
+def _uv(a0, a1, y0, y1, tile: float = TILE):
     return [(a1 / tile, y0 / tile), (a0 / tile, y0 / tile), (a0 / tile, y1 / tile), (a1 / tile, y1 / tile)]
 
 
@@ -479,12 +507,17 @@ def _write(target: str | Path, parts: list[dict]) -> None:
         image = len(gltf.images)
         gltf.images.append(pygltflib.Image(bufferView=view(part["png"]), mimeType="image/png", name=part["name"]))
         gltf.textures.append(pygltflib.Texture(source=image, sampler=0 if part["repeat"] else 1))
+        texture_at = len(gltf.textures) - 1
         material = pygltflib.Material(
             name=part["name"], doubleSided=True,
             alphaMode=pygltflib.BLEND if part["alpha"] else pygltflib.OPAQUE,
             pbrMetallicRoughness=pygltflib.PbrMetallicRoughness(
-                baseColorTexture=pygltflib.TextureInfo(index=len(gltf.textures) - 1),
-                baseColorFactor=[1, 1, 1, 1], metallicFactor=0.0, roughnessFactor=0.9))
+                baseColorTexture=pygltflib.TextureInfo(index=texture_at),
+                baseColorFactor=[part["tint"], part["tint"], part["tint"], 1], metallicFactor=0.0, roughnessFactor=0.9))
+        if part["glow"]:
+            # A share of the picture lights itself: a wall the key light misses stays a wall, not a black slab.
+            material.emissiveTexture = pygltflib.TextureInfo(index=texture_at)
+            material.emissiveFactor = [_GLOW, _GLOW, _GLOW]
         gltf.materials.append(material)
         attributes = pygltflib.Attributes(
             POSITION=accessor(positions, "VEC3", pygltflib.FLOAT, pygltflib.ARRAY_BUFFER),
