@@ -868,6 +868,42 @@
     "done": "Fondo 3D listo: los planos 2D de esta localización lo usan.",
     "failed": "El fondo 3D ha fallado: {{error}}"
   },
+  "stage": {
+    "title": "Perspectiva de la lámina (escenario)",
+    "hint": "Mide la lámina una vez para que cada persona tenga el tamaño que le toca por dónde está y lo alta que es, no solo por el encuadre. Los números son fracciones del alto de la lámina, desde arriba.",
+    "active": "Los planos generales y a dos de aquí dimensionan a cada persona con este escenario. Cambia los números y guarda para modificarlo.",
+    "depthHint": "En el reparto de un plano da a cada persona heightM (metros) y depth: 1 cerca de la cámara (por defecto) a 0 lejos, junto a la pared del fondo. Los planos medios y primeros planos conservan su encuadre.",
+    "horizon": "Horizonte (línea de ojos)",
+    "refBase": "Pie de la referencia (y)",
+    "refHeight": "Alto de la referencia (fracción)",
+    "refMeters": "Alto de la referencia (m)",
+    "floorTop": "Suelo lejano (y, opcional)",
+    "previewAlt": "Lámina del lugar con las líneas del escenario",
+    "noPlate": "Este lugar aún no tiene una imagen fija que calibrar: añade antes una imagen de referencia.",
+    "look": "Mirar la rejilla",
+    "save": "Guardar escenario",
+    "clear": "Quitar calibración",
+    "gridAlt": "La lámina con una rejilla cada 10 %",
+    "guess": "Horizonte sugerido {{horizon}} (fiabilidad {{confidence}}).",
+    "guessUse": "Usar como horizonte",
+    "guessNone": "No hay sugerencia de horizonte para esta imagen: léelo en la rejilla.",
+    "guessNote": "Es solo una pista: una habitación no tiene horizonte visible (es la altura de los ojos de la cámara, unos 1,6 m en cualquier pared). Lee los números en la rejilla y comprueba las líneas antes de guardar.",
+    "confidence": {
+      "low": "baja",
+      "medium": "media",
+      "high": "alta"
+    },
+    "saved": "Escenario guardado. {{count}} planos 2D de este lugar se renderizarán de nuevo.",
+    "cleared": "Escenario quitado: los planos vuelven a dimensionarse por su encuadre.",
+    "failed": "No se pudo guardar o dibujar el escenario: {{error}}",
+    "errors": {
+      "number": "Falta {{field}} o está fuera de rango.",
+      "belowHorizon": "El pie de la referencia debe estar por debajo del horizonte.",
+      "floorTop": "El suelo lejano debe estar por debajo del horizonte (0 a 1)."
+    },
+    "eye": "Con estos números la cámara queda a {{height}} m (unos 1,6 m es la altura de los ojos).",
+    "eyeOdd": "Con estos números la cámara queda a {{height}} m; la altura de los ojos es de unos 1,6 m. Vuelve a leer el horizonte y la referencia en la rejilla, salvo que la lámina sea de verdad un picado o un contrapicado."
+  },
   "templates": {
     "title": "Empezar con una plantilla",
     "language": "Idioma",

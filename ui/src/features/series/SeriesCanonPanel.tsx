@@ -15,6 +15,7 @@ import { SeriesCharacterSpeech } from './SeriesCharacterSpeech'
 import { SeriesReferenceGenerator } from './SeriesReferenceGenerator'
 import { SeriesCharacterCutout } from './SeriesCharacterCutout'
 import { SeriesLocationPlate } from './SeriesLocationPlate'
+import { SeriesLocationStage } from './SeriesLocationStage'
 import { seriesAssetUrl, type SeriesReferenceImport } from './referenceImages'
 
 function SeriesReferenceField({
@@ -212,6 +213,7 @@ export function SeriesCanonPanel({
           <SeriesReferenceGenerator key={`${workspace}/${series.id}/${location.id}`} workspace={workspace} series={series} target={{ kind: 'location', id: location.id }} saveNow={saveNow} onImported={acceptAssetImport} />
           <SeriesReferenceField label={t('canon.addReference')} items={imageItems} disabled={Boolean(uploading)} onPick={item => void uploadReference(item, 'location', location.id)} />
           <SeriesLocationPlate workspace={workspace} series={series} location={location} />
+          <SeriesLocationStage workspace={workspace} series={series} location={location} />
           <button className={secondaryButton} onClick={() => update(current => ({ ...current, locations: current.locations.map((item, i) => i === index ? { ...item, approval: item.approval === 'approved' ? 'draft' : 'approved' } : item) }))}>{t('canon.toggleApproval')}</button>
         </div>
       </div>)}</div>

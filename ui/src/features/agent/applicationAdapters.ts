@@ -49,6 +49,7 @@ import { announceWizardNavigation } from '../../lib/navigationCategories'
 import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
+import { executeCheckSeriesLocationStage, executeSetSeriesLocationStage } from './seriesStageCapabilities'
 import { executeMakeCharacterAnimation, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
@@ -205,6 +206,8 @@ export interface WizardApplicationAdapters {
     rerender(action: import('./seriesShotEditCapabilities').AgentRerenderSeriesShotAction, workspace?: string): Promise<AdapterOutcome>
     voice(action: import('./seriesShotEditCapabilities').AgentRecordSeriesLineAction, workspace?: string): Promise<AdapterOutcome>
     applyCard(action: import('./seriesShotCardCapabilities').AgentApplySeriesShotCardAction, workspace?: string): Promise<AdapterOutcome>
+    setStage(action: import('./seriesStageCapabilities').AgentSetSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
+    checkStage(action: import('./seriesStageCapabilities').AgentCheckSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
   }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
@@ -798,6 +801,8 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async rerender(action, workspace) { return executeSeriesShotEdit(action, workspace) },
     async voice(action, workspace) { return executeSeriesLineVoice(action, workspace) },
     async applyCard(action, workspace) { return executeApplySeriesShotCard(action, workspace) },
+    async setStage(action, workspace) { return executeSetSeriesLocationStage(action, workspace) },
+    async checkStage(action, workspace) { return executeCheckSeriesLocationStage(action, workspace) },
   }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },
