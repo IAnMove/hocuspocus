@@ -373,8 +373,11 @@ def _approved(**more):
     return {"reviewState": "approved", "sheet": {"count": 4, "columns": 4, "rows": 1}, "fps": 4, "loop": "once", **more}
 
 
-# angry is an expression of the catalog (held 2.5 s: one pass is 1 s), wave a gesture and walk a cycle.
-EXPRESSION_KITS = {"kit-kevin": {"animations": {"angry": _approved(), "wave": _approved(), "walk": _approved(loop="loop")}},
+# angry is an expression of the catalog (held 2.5 s: one pass is 1 s), wave a gesture (one pass is 1 s), walk and run cycles; the
+# made-up ids are the sheets an agent makes with characters.animation.make: "determined-full" has no group, "worried-full" is custom.
+EXPRESSION_KITS = {"kit-kevin": {"animations": {"angry": _approved(), "wave": _approved(), "walk": _approved(loop="loop"), "run": _approved(loop="loop"),
+                                                "determined-full": _approved(), "worried-full": _approved(group="custom"),
+                                                "dance": _approved(group="cycle"), "walk-fast": _approved(group="gesture")}},
                    "kit-gary": {"animations": {"angry": _approved()}}}
 
 
@@ -453,10 +456,46 @@ def test_a_shot_without_audio_is_not_touched():
     assert deaf["lines"] == [] and quiet_expressions(deaf, EXPRESSION_KITS, "s1") == (deaf, [])
 
 
-def test_a_gesture_and_a_cycle_may_play_over_the_voice():
-    for animation in ({"id": "wave", "at": 0}, {"id": "walk", "at": 0}):
-        spec, quiet, warnings = _quiet(_kevin(animation), KEVIN_THEN_GARY)
-        assert quiet == spec and warnings == [], animation
+@pytest.mark.parametrize("animation", ["determined-full", "worried-full", "wave", "walk-fast"])
+def test_a_sheet_of_any_other_group_is_kept_clear_of_its_voice_too(animation):
+    """A custom sheet with no group, a custom one and a gesture hide the mouth like an expression: they move to the silence, one pass long
+    (the compiler holds only an expression 2.5 s), and say so as an animation."""
+    spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 0}), KEVIN_THEN_GARY)
+    assert quiet["cast"][0]["animation"] == {"id": animation, "at": 1.55, "duration": 1.0}, "0.2 s after the line, one pass (4 cells at 4 fps)"
+    assert quiet["cast"][1] == spec["cast"][1] and quiet["lines"] == spec["lines"]
+    assert [(w["code"], w["subject"], w["shots"]) for w in warnings] == [("expression_moved_for_speech", "kevin", ["s1"])]
+    assert f"animation '{animation}' moved from 0 s to 1.55 s" in warnings[0]["message"]
+
+
+def test_a_sheet_with_no_group_that_fits_nowhere_is_dropped_and_the_opt_out_keeps_it():
+    spec, quiet, warnings = _quiet(_kevin({"id": "determined-full", "at": 0}), [{"who": "kevin", "seconds": 4.0}])
+    assert "animation" not in quiet["cast"][0] and quiet["cast"][0]["characterId"] == "kevin"
+    assert [w["code"] for w in warnings] == ["expression_dropped_during_speech"]
+    assert "no silence of 1.4 s" in warnings[0]["message"] and "allowDuringSpeech" in warnings[0]["message"]
+    kept, same, silent = _quiet(_kevin({"id": "determined-full", "at": 0, "allowDuringSpeech": True}), [{"who": "kevin", "seconds": 4.0}])
+    assert same == kept and silent == []
+
+
+def test_a_listener_and_a_sheet_clear_of_the_voice_keep_any_sheet():
+    for animation in ("determined-full", "wave"):
+        spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 0}), [{"who": "gary", "seconds": 4.0}])
+        assert quiet == spec and warnings == [], f"{animation}: kevin listens"
+        spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 1.55, "duration": 1.0}), KEVIN_THEN_GARY)
+        assert quiet is spec and warnings == [], f"{animation}: already in kevin's silence"
+
+
+@pytest.mark.parametrize("animation", ["walk", "run", "dance"])
+def test_a_cycle_and_the_walk_may_play_over_the_voice(animation):
+    """The group cycle (a catalog one or a made-up one) and the id walk are continuous body motion with their own treatment: never moved."""
+    spec, quiet, warnings = _quiet(_kevin({"id": animation, "at": 0}), KEVIN_THEN_GARY)
+    assert quiet == spec and warnings == []
+
+
+def test_the_walk_id_is_a_cycle_even_when_the_kit_copy_has_another_group():
+    from services.series_expression_silence import quiet_expressions
+    kits = {"kit-kevin": {"animations": {"walk": _approved(group="custom", loop="loop")}}}
+    spec = _expression_spec(_kevin({"id": "walk", "at": 0}), KEVIN_THEN_GARY)
+    assert quiet_expressions(spec, kits, "s1") == (spec, [])
 
 
 def test_an_expression_clear_of_its_voice_compiles_exactly_as_before():

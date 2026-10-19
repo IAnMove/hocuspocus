@@ -351,6 +351,34 @@ test('an animation swaps the pose for the sheet inside its window and hides the 
   assert.equal(face.filter(layer => opacityAt(scene, layer.id, 0.2) > 0).length, 1, 'only the rest mouth before it')
 })
 
+test('every sheet, of any group, hides the pose and the mouth of the character that plays it (series_expression_silence.py relies on it)', () => {
+  // expression (catalog), gesture (catalog), custom, no group at all (a made-up id), cycle (catalog) and the walk played as a cast animation
+  const kitWith = animated({ angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front' }), run: sheetOf('run', 4), 'worried-full': sheetOf('worried-full', 4, { group: 'custom' }),
+    'determined-full': sheetOf('determined-full', 4) })
+  const line = { id: 'l1', kitId: 'kevin', text: 'Hello Gary.', start: 0.35, end: 1.55, filename: 'l1.wav', cues }
+  for (const id of ['angry', 'wave', 'worried-full', 'determined-full', 'run', 'walk']) {
+    const scene = compileSeriesShot({ ...kits, kevin: kitWith }, alone([{ kitId: 'kevin', x: 50, animation: { id, at: 0, duration: 2 } }], { lines: [line] }))
+    const pose = poseLayer(scene)
+    const face = scene.layers.filter(layer => layer.faceBinding?.poseLayerId === pose.id)
+    assert.ok(face.length > 5, `${id}: mouths and blink are bound to the pose`)
+    for (const time of [0.4, 1.0, 1.5]) {
+      assert.equal(opacityAt(scene, pose.id, time), 0, `${id}: no pose at ${time}`)
+      assert.deepEqual(face.filter(layer => opacityAt(scene, layer.id, time) > 0).map(layer => layer.id), [], `${id}: no mouth at ${time}`)
+    }
+    assert.equal(face.filter(layer => opacityAt(scene, layer.id, 3) > 0).length, 1, `${id}: only the rest mouth once it ends`)
+  }
+})
+
+test('only an expression is held 2.5 s when it has no duration: any other sheet plays one pass (the length series_expression_silence.py assumes)', () => {
+  const kitWith = animated({ angry: sheetOf('angry', 2, { fps: 3, loop: 'once', facing: 'front' }), 'determined-full': sheetOf('determined-full', 2, { fps: 3, loop: 'once' }),
+    'worried-full': sheetOf('worried-full', 2, { fps: 3, loop: 'once', group: 'custom' }), wave: sheetOf('wave', 2, { fps: 3, loop: 'once' }) })
+  for (const [id, held] of [['angry', 1], ['determined-full', 0], ['worried-full', 0], ['wave', 0]] as const) {
+    const scene = compileSeriesShot({ ...kits, kevin: kitWith }, alone([{ kitId: 'kevin', x: 50, animation: { id } }]))
+    assert.equal(opacityAt(scene, `kit-kevin-sheet-${id}`, 0.5), 1, `${id}: inside its pass (2 cells at 3 fps = 0.667 s)`)
+    assert.equal(opacityAt(scene, `kit-kevin-sheet-${id}`, 1.5), held, `${id}: ${held ? 'held up to 2.5 s' : 'gone after one pass'}`)
+  }
+})
+
 test('the sheet stands on the pose\'s ground line at the pose\'s height, in a flat or a vertical frame', () => {
   const spoken = alone([{ kitId: 'kevin', x: 50, animation: { id: 'wave', at: 1, duration: 2 } }])
   const scene = compileSeriesShot(withSheets, spoken)

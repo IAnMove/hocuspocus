@@ -387,15 +387,18 @@ A Series script plays an **approved** animation of the kit (`app/services/series
 - **What is drawn:** during the window the sheet uses the pose's final transform, after the edge snap, centered on the character's `x`, at that size and that base, with no extra zoom. It is drawn as the `walk-cycle-sheet` and `character-reaction`
   cards draw it (equal cells, the figure 86 % of a cell high, the boots on the line at 96 %). A body sheet is as tall as the pose and stands on the pose's feet. A face sheet (`scaleBy: face` on a pose taller than it is wide) is the head only: the figure is `pose height × 0.18 / 0.5` and hangs from the crown. An expression fades in and out over about 0.25 s; a gesture or a cycle does not. The pose picture, its mouths and
   its eyes are hidden meanwhile and come back when the window ends, so a character who speaks over a body sheet does not move its lips.
-- **An expression never plays while its own character speaks.** An expression sheet has no lip-sync, so the server render
-  (`app/services/series_expression_silence.py`) keeps every expression clear of the lines of the character that plays it, using the
-  real length of the recorded takes. If the window `[at, at + duration]` overlaps one of that character's lines, it is moved:
-  first to end 0.2 s before the character's first line (when that fits inside the shot, and after the walk-in sheet), else to the first
-  silence of that character that holds it plus 0.2 s on each side, else dropped and the character keeps its pose. The render job's item
-  lists `expression_moved_for_speech` (from → to) or `expression_dropped_during_speech`; the script is not changed. A character who
-  *listens* while another speaks keeps its expression; a gesture or a cycle (`wave`, `walk`) is never moved; a shot with no recorded
-  lines is not touched. `{"id": "angry", "allowDuringSpeech": true}` opts one animation out. A `character-reaction` card plays its
-  sheet from the first second and cannot be moved: `series.shot.card.apply` warns `expression_during_speech` when the character speaks in the shot.
+- **A sheet never plays while its own character speaks.** A sheet has no lip-sync and hides the pose with its mouth, whatever its
+  group, so the server render (`app/services/series_expression_silence.py`) keeps every approved animation clear of the lines of the
+  character that plays it, using the real length of the recorded takes. It covers an `expression`, a `gesture`, a `custom` sheet (the
+  ones `characters.animation.make` creates) and one with no group; only a `cycle` and `walk` (continuous body motion) are left alone.
+  If the window `[at, at + duration]` overlaps one of that character's lines, it is moved: first to end 0.2 s before the character's
+  first line (when that fits inside the shot, and after the walk-in sheet), else to the first silence of that character that holds
+  it plus 0.2 s on each side, else dropped and the character keeps its pose. A window with no `duration` lasts one pass (an
+  expression at least 2.5 s), as the compiler plays it. The render job's item lists `expression_moved_for_speech` (from → to) or
+  `expression_dropped_during_speech`; the script is not changed. A character who *listens* while another speaks keeps its sheet; a
+  shot with no recorded lines is not touched. `{"id": "angry", "allowDuringSpeech": true}` opts one animation out. A `character-reaction`
+  card plays its sheet from the first second and cannot be moved: `series.shot.card.apply` warns `expression_during_speech` (same
+  criterion) when the character speaks in the shot.
   The sheet is its own layer (`kit-<kit>-sheet-<id>`, a `sheet` sequence with `start` = the window's start second); stop-motion
   holds (`motionStep`) apply to it like to every picture.
 - **`enterGait: "walk"` with the kit's approved `walk` sheet:** the sheet plays on loop for the whole entrance, on the same slide

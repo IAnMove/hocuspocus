@@ -577,7 +577,8 @@ def test_a_card_scene_renders_its_walker_in_a_real_cpu_export(tmp_path, monkeypa
 def test_a_reaction_card_over_its_own_voice_warns_and_a_listeners_does_not(tmp_path):
     """A card plays its sheet from the first second and cannot be moved, so the card says the character speaks over its own face."""
     world = World(tmp_path)
-    world.kits["kit-kevin"]["animations"] = {"angry": animation(count=4, loop="once")}
+    world.kits["kit-kevin"]["animations"] = {"angry": animation(count=4, loop="once"), "determined-full": animation(count=4, loop="once"),
+                                             "wave": animation(count=4, loop="once"), "dance": {**animation(count=4, loop="once"), "group": "cycle"}}
     world.kits["kit-gloria"]["animations"]["angry"] = animation(count=4, loop="once")
     list(record(world))
     own = world.apply(shot="s02", card="character-reaction", cast=[{"characterId": "kevin", "animation": "angry"}])
@@ -588,3 +589,21 @@ def test_a_reaction_card_over_its_own_voice_warns_and_a_listeners_does_not(tmp_p
     assert not any(text.startswith("expression_during_speech") for text in listening["warnings"])
     cycle = world.apply(shot="s02", card="walk-cycle-sheet", cast=[{"characterId": "gloria", "animation": "walk"}])
     assert not any(text.startswith("expression_during_speech") for text in cycle["warnings"]), "a cycle is not an expression"
+    for name, said in (("determined-full", True), ("wave", True), ("dance", False)):  # a made-up sheet with no group, a gesture, a cycle
+        reply = world.apply(shot="s02", card="character-reaction", cast=[{"characterId": "kevin", "animation": name}])
+        assert any(text.startswith(f"expression_during_speech: kevin speaks while its '{name}' animation plays") for text in reply["warnings"]) is said, name
+
+
+def test_a_card_warns_for_any_sheet_that_hides_the_mouth_except_a_cycle_and_the_walk(tmp_path):
+    """The same criterion as series_expression_silence.quiet_expressions: every approved sheet but a cycle or the walk, whatever its group."""
+    from services.series_expression_silence import card_warnings
+    kit = {"angry": {}, "determined-full": {}, "worried-full": {"group": "custom"}, "wave": {}, "dance": {"group": "cycle"}, "walk": {"group": "custom"}, "run": {}}
+    lines = [{"name": "kevin"}]
+    found = lambda name: card_warnings([{"characterId": "kevin", "animation": name}], lines, lambda _who: kit)
+    for name in ("angry", "determined-full", "worried-full", "wave"):
+        assert len(found(name)) == 1 and found(name)[0].startswith("expression_during_speech: kevin speaks while its '" + name + "'"), name
+    assert "'determined-full' animation plays" in found("determined-full")[0] and "'angry' expression plays" in found("angry")[0]
+    for name in ("dance", "walk", "run"):
+        assert found(name) == [], name
+    assert card_warnings([{"characterId": "kevin", "animation": "determined-full"}], [{"name": "gary"}], lambda _who: kit) == [], "a listener"
+    assert card_warnings([{"characterId": "kevin"}], lines, lambda _who: kit) == [], "a binding with no animation"
