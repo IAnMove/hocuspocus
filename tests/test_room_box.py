@@ -571,3 +571,53 @@ def test_the_rest_door_paints_through_the_same_operation(tmp_path, monkeypatch):
     while time.time() < stop and room_paint.status(root, "kitchen")["status"] in ("queued", "running"):
         time.sleep(0.05)
     assert room_paint.status(root, "kitchen")["status"] == "completed" and len(model.admitted) >= 4
+
+
+def test_a_superseded_paint_does_not_overwrite_the_newer_look(tmp_path, monkeypatch):
+    """A second paint of the same room must keep its PNGs when the first job wakes up and writes."""
+    import threading
+    from services import room_store
+    from services.room_paint import paint
+
+    root = _stored(tmp_path, monkeypatch)
+    started, release = threading.Event(), threading.Event()
+
+    class Slow(_Model):
+        def __call__(self, name, args):
+            if name == "generation.image":
+                started.set()
+                assert release.wait(15)
+            return super().__call__(name, args)
+
+        def _draw(self, params):
+            # The older request draws other pictures, so a write of its files over the newer look shows in the bytes.
+            from PIL import ImageOps
+            return ImageOps.invert(super()._draw(params))
+
+    first_done = []
+
+    def run_first():
+        first_done.append(paint(Slow(root), "default", root, "kitchen", {"style": "tin hangar"}, inline=True))
+
+    worker = threading.Thread(target=run_first)
+    worker.start()
+    assert started.wait(5), "the first paint never reached the model"
+    later = paint(_Model(root), "default", root, "kitchen", {"style": "oak parlour"}, inline=True)
+    assert later["status"] == "completed" and later["style"] == "oak parlour"
+    oak = {surface: (root / f"rooms/kitchen/{surface}.png").read_bytes()
+           for surface in ("floor", "walls", "door", "trim")}
+    oak_look = later["look"]
+    release.set()
+    worker.join(20)
+    assert not worker.is_alive()
+    record = room_store.record_of(root, "kitchen")
+    assert record["paint"]["look"] == oak_look and record["paint"]["style"] == "oak parlour"
+    assert {surface: (root / f"rooms/kitchen/{surface}.png").read_bytes()
+            for surface in oak} == oak, "the superseded job must not replace the published pictures"
+    assert first_done and first_done[0]["look"] == oak_look
+    from services.room_surfaces import file_sha
+    for surface, entry in room_store.surfaces_of(record).items():
+        if entry.get("source") == "ai":
+            assert entry["sha"] == file_sha(root / entry["file"]), f"{surface}: the record names a picture that is no longer on disk"
+    leftover = list((root / "rooms" / "kitchen").glob(".paint-*"))
+    assert leftover == []

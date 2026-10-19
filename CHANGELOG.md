@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a superseded `scene3d.room.paint` can no longer overwrite the pictures of the newer one.** Two overlapping paints of the same room wrote the same `rooms/<name>/<surface>.png`, so the older job woke up after the newer had published and left its own pictures under the newer look's fingerprint (a later rebuild then baked the wrong look). Each request now writes to `rooms/<name>/.paint-<fp>/`, skips processing once it is no longer the room's current paint, and moves its pictures onto the canonical names only under the store lock while it still owns the room (Cursor PR #1164).
+
 **Fixed: a production GPU render of a metric box room no longer paints the studio floor over it.** `stageRoomBox` wrote `floorStyle: 'none'` only when the document already had an `environment`; cinema templates such as `two-shot` have none, so the compiler treated the shot as a painted set (a `backdrop` floor plus a giant background plane). It now always sets the environment, as a mold room does (Cursor PR #1155).
 
 **Fixed: a production GPU render of a metric box room now mounts the room.** `resolve_media` keeps the built GLB on `background.file` beside `background.roomBox`, but the Video 3D production compiler passed only the spec to `stageRoomBox`, so no `room-box` slot was created and the camera looked into an empty interior (the CPU preview still painted a checkered floor, so it failed silently). The compiler now joins `file` to the spec (Cursor PR #1154).
