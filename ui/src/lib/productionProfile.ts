@@ -3,7 +3,7 @@ import type { AspectRatio, ModelOptions, ProductionProfile, ResolutionPreset } f
 export const DEFAULT_PRODUCTION_PROFILE: ProductionProfile = {
   version: 1,
   text: { provider: 'minimax', model: 'MiniMax-M3', base_url: 'https://api.minimax.io' },
-  image: { provider: 'local', model: 'qwen_image_21' },
+  image: { provider: 'local', model: 'qwen_image_21_turbo' },
   music: { provider: 'local', model: 'ace_step_v1_5_xl_sft_lm_4b' },
   model3d: { provider: 'local', model: 'hunyuan3d-2mini-turbo' },
   video: {

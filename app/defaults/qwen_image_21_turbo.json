@@ -3,7 +3,7 @@
         "name": "Qwen Image 2.1 Official Turbo INT8 \u00b7 8 Steps",
         "architecture": "qwen_image_21",
         "description": "Official Qwen 2.1 Turbo checkpoint, released October 9, 2026. Unified text-to-image and editing, native 2K, RGBA and up to 10 references. Comfy-Org INT8 ConvRot weights with the official fixed eight-step schedule and CFG 1. Quality depends on the prompt; compare with the 40-step base.",
-        "selector_help": "Official Qwen Turbo, separate from Viggle six-step LoRA. Reuses the Qwen3-VL encoder and Qwen 2.1 VAE; downloads a separate ~7.3 GB INT8 transformer on first use. Uses the saved eight-step sigmas without resolution shifting. Do not stack acceleration LoRAs. Optional fast alternative; the 40-step base remains the default. Use Auto VAE tiling for native 2K on a 24 GB GPU.",
+        "selector_help": "Official Qwen Turbo, separate from Viggle six-step LoRA. Reuses the Qwen3-VL encoder and Qwen 2.1 VAE; downloads a separate ~7.3 GB INT8 transformer on first use. Uses the saved eight-step sigmas without resolution shifting. Do not stack acceleration LoRAs. This is the default image model: eight steps, CFG 1, no negative prompt. The 40-step base stays selectable. Use Auto VAE tiling for native 2K on a 24 GB GPU.",
         "URLs": [
             "https://huggingface.co/Comfy-Org/Qwen-Image-2.1/resolve/df94239739eef7205973a145ffa6f441f7b64e84/diffusion_models/qwen_image_2.1_turbo_int8_convrot.safetensors"
         ],

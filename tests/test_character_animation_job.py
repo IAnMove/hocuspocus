@@ -105,14 +105,16 @@ def test_an_animation_is_made_from_the_characters_picture_and_saved_pending_for_
     assert job["status"] == "completed" and job["result"]["reviewState"] == "pending" and job["result"]["count"] == 4
     made = _kit(root)["animations"]["wave"]
     assert made["reviewState"] == "pending" and [frame["id"] for frame in made["frames"]] == [take["id"] for take in job["takes"]]
-    assert made["sheet"]["count"] == 4 and made["model"] == "qwen_image_21" and made["scaleBy"] == "base" and made["facing"] == "front"
+    assert made["sheet"]["count"] == 4 and made["model"] == "qwen_image_21_turbo" and made["scaleBy"] == "base" and made["facing"] == "front"
     assert (root / Path(made["sheet"]["source"].split("/")[-1].split("?")[0])).is_file()
     provenance = _kit(root)["provenance"][-1]
     assert provenance["method"] == "character-animation-make" and provenance["animation"] == "wave"
     images = server.of("generation.image")
     assert len(images) == 4 and all(item["params"]["image_refs"] == [f"/api/v1/file/hero-key.png?workspace={WS}"] for item in images)
-    assert all(item["params"]["video_prompt_type"] == "I" and item["params"]["model_type"] == "qwen_image_21" for item in images)
-    assert "a detective in a mustard coat" in images[0]["params"]["prompt"] and images[0]["params"]["negative_prompt"]
+    assert all(item["params"]["video_prompt_type"] == "I" and item["params"]["model_type"] == "qwen_image_21_turbo" for item in images)
+    # The default is Qwen Image 2.1 Turbo: its own eight steps and CFG 1, and no negative prompt (the command refuses one).
+    assert all(item["params"]["num_inference_steps"] == 8 and item["params"]["guidance_scale"] == 1 for item in images)
+    assert "a detective in a mustard coat" in images[0]["params"]["prompt"] and all("negative_prompt" not in item["params"] for item in images)
     intents = [arguments["intent_id"] for name, arguments in server.calls if name in ("generation.image", "studio.key")]
     assert len(intents) == len(set(intents)) == 8, "every picture and every key has an intent of its own"
     assert "approved" not in str(made["reviewState"])
@@ -308,6 +310,23 @@ def test_a_distilled_model_runs_its_few_steps_without_a_negative_prompt(world):
     params = server.of("generation.image")[0]["params"]
     assert params["model_type"] == "qwen_image_21_turbo" and params["num_inference_steps"] == 8 and "negative_prompt" not in params
     assert _kit(root)["animations"]["nod"]["model"] == "qwen_image_21_turbo"
+
+
+def test_the_default_turbo_runs_its_steps_even_when_the_server_gives_no_model_defaults(world):
+    root, server, _ = world
+    jobs = CharacterAnimationJobs(AnimationJobDeps(call=server.call, workspace_dir=lambda workspace: str(root),
+                                                   uploads_root=lambda: str(root / "uploads"), inline=True))
+    assert jobs.start(WS, "hero", "nod")["status"] == "completed"
+    params = server.of("generation.image")[0]["params"]
+    assert params["model_type"] == "qwen_image_21_turbo" and params["num_inference_steps"] == 8 and "negative_prompt" not in params
+
+
+def test_an_explicit_base_qwen_keeps_its_forty_steps_and_its_negative_prompt(world):
+    root, server, jobs = world
+    assert jobs.start(WS, "hero", "nod", model="qwen_image_21")["status"] == "completed"
+    params = server.of("generation.image")[0]["params"]
+    assert params["model_type"] == "qwen_image_21" and params["num_inference_steps"] == 40 and params["negative_prompt"]
+    assert _kit(root)["animations"]["nod"]["model"] == "qwen_image_21"
 
 
 def test_a_character_edited_while_its_animation_was_made_keeps_the_edit(world):

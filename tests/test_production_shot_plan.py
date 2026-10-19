@@ -89,7 +89,7 @@ def test_listed_shots_stay_the_same_object():
     validated = validate_spec(spec)
     assert validated["shots"] is spec["shots"]
     assert validated["song"] is spec["song"]
-    assert validated["style"]["image_model"] == "qwen_image_21"
+    assert validated["style"]["image_model"] == "qwen_image_21_turbo"
     assert spec["style"] == {}
 
 
