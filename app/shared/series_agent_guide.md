@@ -356,10 +356,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    `clinical`; exteriors `daylight`, `dusk`, `night_sky` (a night street gets a night key light and a dark sky).
    `wall_back: {image: "location"}` reuses the approved location picture. Asset skins: `{image: {asset: "wall.png"}}`,
    `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`. Poll `series.location.set3d.status` until
-   completed (a failed status carries its error). A `texture` that will not tile is painted once over its surface
+   completed. A `texture` that will not tile is painted once over its surface
    instead (`metrics.fallback: "image"`): the set is still built.
 3. The location's 3D shots inherit its set; `scene3d.roomCamera` selects `two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2` or `entrance`.
-   In `series.episode.from_script`, use `kind: "3d", cast: [["pedro", "base", "behind_desk"]]`; unknown marks warn and use a valid fallback.
+   In `series.episode.from_script`, use `kind: "3d", cast: [["pedro", "base", "behind_desk"]]`.
 4. Create a prop with `props.create`: `input: {workspace, name: "lamp", description: "small brass desk lamp", heightM: 0.4, style: "layered paper cutouts"}`.
    Poll `props.status` with `job_id`, look at the candidate PNGs, then `props.approve` the chosen `id`.
    `props.list` filters by `style` and `query`; `props.import` accepts an existing PNG and `heightM`.
@@ -374,11 +374,11 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
    The back wall's straight-on painting, in the series style, carries the detail. Real heights on the mold's anchors
    rest objects on their surfaces (a tall object at a low anchor warns `item_too_tall`). At most 12 objects per shot,
    inherited set props included; look at the previews before approving.
-7. Molds carry a `kind` and `title`. Shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`,
+7. Shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`,
    `escenario_publico`, `vehiculo`) and exteriors (`calle`, `plaza`, `orilla`, `azotea`: no ceiling, the view on `wall_back`, a sun
    preset) sit beside the named interiors. A `kind: "3d"` shot may name a stage card, `scene3d: {template: "stage-sala",
    roomCamera: "ots_a"}`: the mold in its own colours, with dust and a breathing key light; a location set still brings the skin.
-8. A metric box room is `kind: "room"` with `size: {w, d, h}` and no `mold`. Wide interior, full body. A `kind: "3d"` shot names `set` and `at` (`{x, z}` or `near`, `mid`, `far`). See HOWUSEIT (Box rooms).
+8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide interior, full body. `scene3d.room.put` creates it already textured (default materials); `scene3d.room.paint` repaints it with AI. A `kind: "3d"` shot names `set` and `at` (`{x, z}`, `near`, `mid`, `far`). See HOWUSEIT (Box rooms).
 
 ## How to choose a 3D shot
 

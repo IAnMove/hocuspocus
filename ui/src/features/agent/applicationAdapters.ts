@@ -55,6 +55,7 @@ import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
 import { executeVideo2DTemplates } from './video2dTemplateCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
+import { roomSetMessage } from './roomSetsCapabilities'
 import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
@@ -752,14 +753,14 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
         method: 'POST', headers: { 'content-type': 'application/json', 'X-Hocus-UI-Surface': 'wizard' },
         body: JSON.stringify({ operation: action.operation, version: 1, input: { workspace: active, ...input }, ...(intent ? { intent_id: intent } : {}) }),
       })
-      const body = await response.json() as { result?: { name?: string; file?: string }; detail?: { message?: string } | string }
+      const body = await response.json() as { result?: { name?: string; file?: string; status?: string; paint?: { status?: string }; warnings?: unknown[] }; detail?: { message?: string } | string }
       if (!response.ok) {
         const detail = body.detail
         const message = typeof detail === 'string' ? detail : detail?.message
         throw new Error(message || 'Room command failed')
       }
       const name = body.result?.name || 'room'
-      return { message: body.result?.file ? `Stored room ${name} at ${body.result.file}.` : `Room ${name}.`, metadata: body as Record<string, unknown>, target: { kind: 'video_3d_scene', id: name, title: name } }
+      return { message: roomSetMessage(body, action.operation), metadata: body as Record<string, unknown>, target: { kind: 'video_3d_scene', id: name, title: name } }
     },
   }
   adapters.world3dTemplates = {

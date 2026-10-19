@@ -23,7 +23,8 @@ so a take saved before they counted keeps its digest while its lines have none a
 line already had one renders once. The portrait frame is different: every take of a vertical series has it, so it
 counts only for takes saved at version 3 or later (``renderInputsVersion``); an older take is compared with the digest
 of the version it was saved at and never sees the frame.
-Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes.
+Mutable 3D scenes and personal templates are read from the workspace, so editing the source invalidates its takes. A shot in a
+stored box room counts the room's look (``roomLook``, from ``scene3d.room.paint``), so repainting renders only the shots in it.
 Given the ``episode``, a 2D shot also depends on what it takes from its neighbours (``series_continuity.inputs``: a
 lone character's place in the room, a camera that goes on from the previous shot) from version 4 on; a shot that takes
 nothing keeps its digest, and a take saved at an older version never sees it (``_legacy_inputs``).
@@ -137,6 +138,11 @@ def _extra_inputs(series: dict, shot: dict, root: str | None, version: int = INP
     source = scene_source_digest(config, root) if config else None
     if source is not None:
         payload["sceneSource"] = source
+    if config:
+        from services.series_room_box import look_digest
+        look = look_digest(shot, root)
+        if look is not None:
+            payload["roomLook"] = look
     return payload
 
 

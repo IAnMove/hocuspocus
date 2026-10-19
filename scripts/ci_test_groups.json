@@ -669,6 +669,36 @@
       ]
     },
     {
+      "prefix": "app/services/room_box_trim.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/room_materials.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/room_paint.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/room_store.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
+      "prefix": "app/services/room_surfaces.py",
+      "paths": [
+        "tests/test_room_box.py"
+      ]
+    },
+    {
       "prefix": "app/services/gpu_machine_lock.py",
       "paths": [
         "tests/test_job_lifecycle.py",

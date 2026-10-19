@@ -74,6 +74,25 @@ def dress_shot(shot: dict, series: dict | None, root: str | None, location: dict
     return config
 
 
+def look_digest(shot: dict, root: str | None) -> str | None:
+    """How the stored room this shot stands in looks now: a changed look renders the shot again, a changed other room does not.
+
+    None for a shot that is in no stored room, and for a room put before looks were kept, so their takes keep the digest
+    they had. The room is read from the shot's ``room-box`` object, whose file is ``rooms/<name>.glb``."""
+    scene = shot.get("scene3d") if isinstance(shot.get("scene3d"), dict) else {}
+    item = next((row for row in scene.get("objects") or [] if isinstance(row, dict) and row.get("objectId") == "room-box"), None)
+    if not root or not item or not isinstance(item.get("file"), str):
+        return None
+    from services import room_store
+    try:
+        record = room_store.record_of(Path(root), Path(item["file"]).stem)
+    except (OSError, ValueError):
+        return None
+    paint = record.get("paint") if record else None
+    look = paint.get("look") if isinstance(paint, dict) else None
+    return look if isinstance(look, str) else None
+
+
 def cutout_scale(entry: dict) -> dict:
     """The image binding that makes a cutout ``heightM`` tall. Empty when the shot did not name a height."""
     height = entry.get("heightM")
