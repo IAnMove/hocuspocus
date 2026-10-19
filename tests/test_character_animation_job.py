@@ -640,3 +640,241 @@ def test_the_make_route_passes_auto_approve_and_the_review_route_and_the_job_sha
     reply = TestClient(app).post("/api/v1/character-kits/animations/make", json={"workspace": WS, "kitId": "hero", "animation": "walk", "autoApprove": True})
     assert reply.json()["job"]["autoApproved"] is True
     assert len(calls) == 1 and calls[0][0][3:6] == ("approve", calls[0][0][4], "agent"), "the job's approval is the agent's review, through the shared function"
+
+
+# ----- the twelve-pose walk, the five directions and the set job (services/character_animation_set_job.py) -----
+
+def _varied(path: Path, number: int, *, flip: bool = False) -> None:
+    """A keyed figure of its own: legs, arm and colours come from ``number``, so two sheets never draw the same cell by chance."""
+    rng = np.random.default_rng(number)
+    pixels = np.zeros((200, 150, 4), dtype=np.uint8)
+    pixels[10:40, 55:85] = (*rng.integers(60, 240, 3), 255)
+    pixels[40:110, 48:92] = (*rng.integers(20, 240, 3), 255)
+    for centre in (int(rng.integers(34, 56)), int(rng.integers(84, 106))):
+        pixels[110:200, centre - 6:centre + 6] = (*rng.integers(20, 240, 3), 255)
+    pixels[45:50 + int(rng.integers(10, 60)), 94:104] = (*rng.integers(60, 240, 3), 255)
+    image = Image.fromarray(pixels)
+    (image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if flip else image).save(path)
+
+
+class VariedServer(FakeServer):
+    """Every keyed pose is a different figure. ``mirror_sheet``: the n-th sheet (12 poses each) is the mirror of the first one."""
+
+    def __init__(self, root: Path) -> None:
+        super().__init__(root)
+        self.mirror_sheet = 0
+        self.refs_limit = None  # the most image_refs a request may carry before the server refuses it
+
+    def call(self, tool: str, arguments: dict) -> dict:
+        if tool == "generation.image" and self.refs_limit is not None and len(arguments["input"]["params"].get("image_refs") or []) > self.refs_limit:
+            self.calls.append((tool, arguments))
+            return {"_is_error": True, "error": {"code": "invalid_request", "message": f"input.params.image_refs: at most {self.refs_limit} input images are supported"}}
+        reply = super().call(tool, arguments)
+        if tool == "studio.key":
+            index = len(self.of("studio.key")) - 1
+            sheet, cell = divmod(index, 12)
+            mirrored = bool(self.mirror_sheet) and sheet + 1 == self.mirror_sheet
+            _varied(self.root / reply["result"]["file"], cell + 1 if mirrored else index + 1, flip=mirrored)
+        return reply
+
+
+@pytest.fixture
+def directions(tmp_path):
+    from services.character_animation_set_job import CharacterAnimationSets
+    (tmp_path / "uploads").mkdir()
+    _picture(tmp_path / "hero-key.png", keyed=True)
+    base = {"id": "hero-base", "name": "Hero", "source": f"/api/v1/file/hero-key.png?workspace={WS}", "kind": "image",
+            "alphaStatus": "transparent", "reviewState": "approved", "workspace": WS}
+    write_character_kit_library(str(tmp_path), {"kits": {"hero": {"id": "hero", "name": "Hero", "style": "cutout", "base": base, "identityReference": base,
+                                                                  "poses": {}, "mouth": {}, "eyes": {}, "anchors": {}, "provenance": [], "lookNotes": "a detective"}},
+                                                "activeId": "hero"}, base_revision=0)
+    server = VariedServer(tmp_path)
+    jobs = CharacterAnimationJobs(AnimationJobDeps(call=server.call, workspace_dir=lambda workspace: str(tmp_path), uploads_root=lambda: str(tmp_path / "uploads"),
+                                                   inline=True, model_defaults=lambda model: {"num_inference_steps": 8, "guidance_scale": 1}))
+    return tmp_path, server, jobs, CharacterAnimationSets(jobs)
+
+
+def _refs(server: VariedServer) -> list[list[str]]:
+    return [item["params"]["image_refs"] for item in server.of("generation.image")]
+
+
+def test_the_twelve_pose_walk_is_made_at_twelve_frames_a_second_with_its_contract_and_passes_the_checks(directions):
+    root, server, jobs, _sets = directions
+    _mode(jobs, ONE_SHOT)
+    job = jobs.start(WS, "hero", "walk-12", auto_approve=True)
+    assert job["status"] == "completed" and job["result"]["count"] == 12 and job["autoApproved"] is True, job.get("checks")
+    made = _kit(root)["animations"]["walk-12"]
+    assert (made["motion"], made["dir"], made["facing"], made["fps"], made["loop"], made["view"]) == ("walk", "side", "right", 12, "loop", "side")
+    assert (made["sheet"]["count"], made["sheet"]["columns"], made["sheet"]["rows"]) == (12, 6, 2) and made["reviewState"] == "approved"
+    assert {"figure_height", "repeated_poses", "direction_mirror", "ground_line"} <= {check["id"] for check in job["checks"]}
+    assert len(server.of("generation.image")) == 12 and all(len(refs) == 1 for refs in _refs(server)), "the first direction has only the character's own picture"
+    # An old four-pose walk is made exactly as before: no new checks, no new fields beyond the contract.
+    old = jobs.start(WS, "hero", "walk")
+    assert old["status"] == "completed" and _kit(root)["animations"]["walk"]["sheet"]["columns"] == 4 and _kit(root)["animations"]["walk"]["motion"] == "walk"
+
+
+def test_a_direction_takes_the_extra_pictures_it_is_given_as_references_after_the_characters_own(directions):
+    root, server, jobs, _sets = directions
+    assert jobs.start(WS, "hero", "idle-back", references=["/api/v1/file/other.png?workspace=demo"])["status"] == "completed"
+    assert all(refs == [f"/api/v1/file/hero-key.png?workspace={WS}", "/api/v1/file/other.png?workspace=demo"] for refs in _refs(server))
+    assert "references" not in jobs.jobs(WS)[0] and "extraRefs" not in jobs.jobs(WS)[0], "the job lists no pictures of its own"
+    with pytest.raises(AnimationJobError) as error:
+        jobs.start(WS, "hero", "idle-front34", references=["blob:http://x/1"])
+    assert error.value.code == "invalid_reference"
+
+
+def test_a_model_that_takes_one_reference_still_makes_the_direction_from_the_characters_picture(directions):
+    root, server, jobs, _sets = directions
+    server.refs_limit = 1
+    job = jobs.start(WS, "hero", "idle-back34", references=["/api/v1/file/other.png?workspace=demo"])
+    assert job["status"] == "completed"
+    sent = _refs(server)
+    assert len(sent) == 3 and len(sent[0]) == 2 and all(len(refs) == 1 for refs in sent[1:]), "one refusal, then the character's picture alone for the rest"
+    assert job["refsDropped"] is True
+
+
+def test_the_set_makes_each_missing_sheet_in_turn_chaining_the_previous_direction_as_a_reference(directions):
+    root, server, jobs, sets = directions
+    done = sets.start(WS, "hero", "walk-directions")
+    assert done["status"] == "completed" and done["kitId"] == "hero" and done["set"] == "walk-directions"
+    assert [sheet["animationId"] for sheet in done["sheets"]] == ["walk-12", "walk-front34", "walk-front", "walk-back34", "walk-back"]
+    assert [sheet["status"] for sheet in done["sheets"]] == ["completed"] * 5 and done["done"] == 5 and done["total"] == 5
+    kit = _kit(root)["animations"]
+    assert {name: (kit[name]["dir"], kit[name]["motion"], kit[name]["sheet"]["count"], kit[name]["reviewState"]) for name in kit} == {
+        "walk-12": ("side", "walk", 12, "pending"), "walk-front34": ("front34", "walk", 12, "pending"), "walk-front": ("front", "walk", 12, "pending"),
+        "walk-back34": ("back34", "walk", 12, "pending"), "walk-back": ("back", "walk", 12, "pending")}, "the job never approves"
+    refs, base = _refs(server), f"/api/v1/file/hero-key.png?workspace={WS}"
+    first = {name: kit[name]["frames"][0]["source"] for name in kit}
+    assert len(refs) == 60 and all(item == [base] for item in refs[:12])
+    assert all(item == [base, first["walk-12"]] for item in refs[12:24]), "the three-quarter front follows the profile"
+    assert all(item == [base, first["walk-front34"]] for item in refs[24:36]), "the front follows the three-quarter front"
+    assert all(item == [base, first["walk-12"]] for item in refs[36:48]), "the three-quarter back follows the profile"
+    assert all(item == [base, first["walk-back34"]] for item in refs[48:60])
+    children = [sheet["jobId"] for sheet in done["sheets"]]
+    assert len(set(children)) == 5 and all(jobs.status(WS, child)["status"] == "completed" for child in children), "each sheet is a job of its own"
+    assert sets.status(WS, done["jobId"])["status"] == "completed" and [item["jobId"] for item in sets.jobs(WS, "hero")] == [done["jobId"]]
+    assert "definition" not in done and jobs.jobs(WS, "hero")[0].get("animationId"), "the animation jobs list stays what it was"
+
+
+def test_a_set_skips_the_sheets_the_character_has_and_continues_where_a_failure_stopped_it(directions):
+    root, server, jobs, sets = directions
+    assert jobs.start(WS, "hero", "walk-12")["status"] == "completed"
+    server.calls = []
+    server.refuse = {"passing-a"}
+    failed = sets.start(WS, "hero", "walk-directions")
+    assert failed["status"] == "failed" and "insufficient VRAM" in failed["error"]
+    assert [sheet["status"] for sheet in failed["sheets"]] == ["skipped", "failed", "waiting", "waiting", "waiting"]
+    assert failed["sheets"][0]["reason"] == "already made" and "walk-front34" not in _kit(root)["animations"]
+    made_before = len(server.of("generation.image"))
+    assert made_before == 4, "contact, down and lift were made and the fourth pose failed"
+    server.refuse, server.calls = set(), []
+    again = sets.start(WS, "hero", "walk-directions")
+    assert again["status"] == "completed" and again["jobId"] != failed["jobId"]
+    assert [sheet["status"] for sheet in again["sheets"]] == ["skipped", "completed", "completed", "completed", "completed"]
+    assert len(server.of("generation.image")) == 12 - 3 + 36, "the three poses made before the failure are not made again"
+    assert set(_kit(root)["animations"]) == {"walk-12", "walk-front34", "walk-front", "walk-back34", "walk-back"}
+    nothing = sets.start(WS, "hero", "walk-directions")
+    assert nothing["status"] == "completed" and {sheet["status"] for sheet in nothing["sheets"]} == {"skipped"} and len(server.of("generation.image")) == 12 - 3 + 36
+
+
+def test_the_set_asks_for_the_agents_approval_only_in_one_shot_and_leaves_a_copied_direction_for_a_person(directions):
+    root, server, jobs, sets = directions
+    plain = sets.start(WS, "hero", "walk-12", auto_approve=True)
+    assert plain["autoApprove"] is False and "agent_autonomy is review" in plain["autoApproveNote"] and _kit(root)["animations"]["walk-12"]["reviewState"] == "pending"
+    _mode(jobs, ONE_SHOT)
+    server.mirror_sheet = 3  # the third sheet of the run (walk-front) is the mirror of the first one made
+    done = sets.start(WS, "hero", "walk-directions", auto_approve=True)
+    assert done["status"] == "completed" and done["autoApprove"] is True
+    by_name = {sheet["animationId"]: sheet for sheet in done["sheets"]}
+    assert by_name["walk-12"]["status"] == "skipped", "the first sheet was made by the run before"
+    kit = _kit(root)["animations"]
+    assert kit["walk-front34"]["reviewState"] == "approved" and by_name["walk-front34"]["autoApproved"] is True
+    copied = by_name["walk-front"]
+    assert copied["autoApproved"] is False and copied["failed"] == ["direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
+    assert jobs.status(WS, copied["jobId"])["reviewNote"].startswith("Automatic checks failed: direction_mirror")
+    assert kit["walk-back34"]["reviewState"] == "approved", "a sheet that fails the checks does not stop the next one"
+
+
+def test_a_set_that_cannot_fit_on_the_character_or_does_not_exist_is_refused_before_any_picture(directions, monkeypatch):
+    root, server, jobs, sets = directions
+    full = {**_kit(root), "animations": {f"a{index}": {} for index in range(MAX_ANIMATIONS - 3)}}
+    monkeypatch.setattr(jobs, "_kit", lambda workspace, kit_id: full)
+    for args, code in ((("hero", "walk-directions"), "animation_limit"), (("hero", "dance-all"), "invalid_set"), (("ghost", "walk-12"), "kit_not_found")):
+        if code == "kit_not_found":
+            monkeypatch.undo()
+        with pytest.raises(AnimationJobError) as error:
+            sets.start(WS, *args)
+        assert error.value.code == code
+    with pytest.raises(AnimationJobError) as error:
+        sets.start(WS, "hero", "walk-12", model="../etc")
+    assert error.value.code == "invalid_model" and not server.calls
+
+
+def test_a_set_is_cancelled_between_its_pictures_and_keeps_what_was_made(directions):
+    root, server, jobs, sets = directions
+
+    def cancel_on_the_second_sheet():
+        if len(server.of("generation.image")) == 14:
+            sets.cancel(WS, sets.jobs(WS)[0]["jobId"])
+    server.during = cancel_on_the_second_sheet
+    stopped = sets.start(WS, "hero", "walk-directions")
+    assert stopped["status"] == "cancelled" and [sheet["status"] for sheet in stopped["sheets"]] == ["completed", "cancelled", "waiting", "waiting", "waiting"]
+    assert set(_kit(root)["animations"]) == {"walk-12"}
+    server.during, server.calls = None, []
+    resumed = sets.start(WS, "hero", "walk-directions")
+    assert resumed["status"] == "completed" and [sheet["status"] for sheet in resumed["sheets"]] == ["skipped"] + ["completed"] * 4
+    assert len(server.of("generation.image")) == (12 - 1) + 36, "the pose keyed before the cancel is kept, the one drawn but not keyed is made again"
+
+
+def test_a_set_cut_by_a_restart_is_interrupted_and_a_running_one_is_returned_not_started_twice(directions):
+    root, server, jobs, sets = directions
+    record = {"jobId": "animset-stale", "kind": "set", "workspace": WS, "kitId": "hero", "set": "walk-12", "title": "x", "model": "m", "status": "running", "createdAt": 1.0,
+              "updatedAt": 1.0, "sheets": [{"animationId": "walk-12", "status": "running", "jobId": "anim-x"}], "done": 0, "total": 1}
+    sets._store(WS).save(record)
+    seen = sets.status(WS, "animset-stale")
+    assert seen["status"] == "interrupted" and "restart" in seen["error"] and seen["sheets"][0]["status"] == "waiting"
+    assert sets.live_jobs(str(root)) == [], "a record with no worker is not busy"
+    sets._store(WS).save({**record, "jobId": "animset-live", "status": "running", "updatedAt": 2.0})
+    import threading
+    sets._threads["animset-live"] = threading.Thread(target=lambda: None)
+    assert sets.start(WS, "hero", "walk-12")["jobId"] == "animset-live", "one set at a time for a character"
+    with pytest.raises(AnimationJobError):
+        sets.status(WS, "animset-none")
+
+
+def test_the_http_routes_start_follow_and_cancel_a_set_and_the_jobs_routes_still_list_animation_jobs_only(directions):
+    from routers.character_animation_sets import create_character_animation_sets_router
+    root, server, jobs, sets = directions
+    app = FastAPI()
+    app.include_router(create_character_animation_sets_router(sets), prefix="/api/v1/character-kits")
+    app.include_router(create_character_animation_jobs_router(jobs), prefix="/api/v1/character-kits")
+    client = TestClient(app)
+    base = "/api/v1/character-kits/animations"
+    reply = client.post(f"{base}/make-set", json={"workspace": WS, "kitId": "hero", "set": "walk-12"})
+    assert reply.status_code == 200 and reply.json()["job"]["status"] == "completed" and reply.json()["job"]["sheets"][0]["animationId"] == "walk-12"
+    set_id = reply.json()["job"]["jobId"]
+    assert set_id.startswith("animset-")
+    assert client.get(f"{base}/sets/{set_id}", params={"workspace": WS}).json()["job"]["done"] == 1
+    assert [item["jobId"] for item in client.get(f"{base}/sets", params={"workspace": WS, "kitId": "hero"}).json()["jobs"]] == [set_id]
+    assert all(not item["jobId"].startswith("animset-") for item in client.get(f"{base}/jobs", params={"workspace": WS}).json()["jobs"])
+    assert client.post(f"{base}/sets/{set_id}/cancel", json={"workspace": WS}).json()["job"]["status"] == "completed"
+    assert client.post(f"{base}/make-set", json={"workspace": WS, "kitId": "hero", "set": "nope"}).status_code == 400
+    assert client.post(f"{base}/make-set", json={"workspace": WS, "kitId": "ghost", "set": "walk-12"}).status_code == 404
+    assert client.get(f"{base}/sets/animset-none", params={"workspace": WS}).status_code == 404
+    assert client.post(f"{base}/make-set", json={"workspace": WS, "kitId": "hero", "set": "walk-12", "extra": 1}).status_code == 422
+
+
+def test_the_make_route_takes_a_custom_animation_of_twelve_poses_in_any_direction_and_refuses_a_view_it_does_not_know(directions):
+    root, server, jobs, _sets = directions
+    app = FastAPI()
+    app.include_router(create_character_animation_jobs_router(jobs), prefix="/api/v1/character-kits")
+    client = TestClient(app)
+    url = "/api/v1/character-kits/animations/make"
+    turn = lambda view, count: {"workspace": WS, "kitId": "hero", "animation": f"giro-{view}", "custom": {"title": "Giro", "view": view, "poses": [f"turning, step {number}" for number in range(count)]}}
+    made = client.post(url, json=turn("back34", 12))
+    assert made.status_code == 200 and made.json()["job"]["status"] == "completed" and made.json()["job"]["result"]["count"] == 12
+    entry = _kit(root)["animations"]["giro-back34"]
+    assert (entry["view"], entry["dir"], entry["facing"], entry["scaleBy"]) == ("back34", "back34", "right", "height") and "motion" not in entry
+    assert "Three-quarter back view" in server.of("generation.image")[0]["params"]["prompt"]
+    assert client.post(url, json=turn("top", 2)).status_code == 422, "a view the catalog does not list"
+    assert client.post(url, json=turn("back", 13)).status_code == 422, "thirteen poses are too many"

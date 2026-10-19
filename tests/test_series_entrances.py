@@ -465,3 +465,147 @@ def test_an_expression_sheet_covers_the_same_pixels_as_the_snapped_pose(tmp_path
     for index, (pose_edge, sheet_edge) in enumerate(zip(pose_box[:4], sheet_box[:4])):
         limit = max(2, round(0.01 * (width if index % 2 == 0 else height)))
         assert abs(pose_edge - sheet_edge) <= limit, f"edge {index}: pose {pose_box[:4]} sheet {sheet_box[:4]} limit {limit}"
+
+
+# The twelve-pose walk (walk-12) in an entrance ----------------------------------------------
+
+def _twelve_walkers(tmp_path):
+    """Twelve keyed figures whose head's red says which pose they are, joined by the sheet builder into a 6 x 2 contact sheet."""
+    import numpy as np
+    from PIL import Image
+    from services.character_animations import build_sheet
+    (tmp_path / "uploads").mkdir(exist_ok=True)
+    names = []
+    for index in range(12):
+        pixels = np.zeros((200, 150, 4), dtype=np.uint8)
+        pixels[10:40, 55:85] = (20 + 18 * index, 160, 120, 255)
+        pixels[40:110, 48:92] = (230, 180, 30, 255)
+        pixels[110:200, 64 + 3 * index - 18:76 + 3 * index - 18] = (60, 60, 70, 255)
+        Image.fromarray(pixels).save(tmp_path / f"p{index}.png")
+        names.append(f"p{index}.png")
+    return build_sheet(names, uploads_root=str(tmp_path / "uploads"), workspace_root=str(tmp_path), workspace="cast", name="walk-12", columns=6, output_dir=str(tmp_path))
+
+
+def _walk_kit(tmp_path, built, state="approved"):
+    from PIL import Image
+    Image.new("RGBA", (300, 600), (255, 0, 0, 255)).save(tmp_path / "k.png")
+    asset = {"id": "base", "name": "base", "kind": "image", "alphaStatus": "transparent", "reviewState": "approved", "source": "/api/v1/file/k.png?workspace=cast"}
+    twelve = {"sheet": {key: built[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")}, "frames": [], "fps": 12, "loop": "loop",
+              "facing": "right", "reviewState": state, "motion": "walk", "dir": "side"}
+    four = {"sheet": {"source": "/api/v1/file/walk4.png?workspace=cast", "width": 1200, "height": 640, "count": 4, "columns": 4, "rows": 1, "cell": {"width": 300, "height": 640}},
+            "frames": [], "fps": 4, "loop": "loop", "facing": "right", "reviewState": "approved"}
+    return {"version": 1, "id": "kit-monk", "name": "Monk", "style": "cutout", "base": asset, "poses": {}, "mouth": {}, "eyes": {}, "provenance": [],
+            "mouthMapping": {}, "anchors": {}, "animations": {"walk": four, "walk-12": twelve}}
+
+
+def _compile_walk_in(tmp_path, kit):
+    from services.series_shot_bridge import run_series_shot, with_pose_sizes
+    value = shot({**WALK, "motion": "still"})
+    value["layout2d"] = normalize_layout2d(value["layout2d"])
+    spec = build_shot_spec(series(), {"id": "ep1"}, value, workspace="cast", recorded=RECORDED)
+    document = run_series_shot({"mode": "shot", "kits": {"kit-monk": with_pose_sizes(kit, str(tmp_path))}, "shot": spec})
+    return document, [layer for layer in document["layers"] if layer["id"].endswith("sheet-walk-in")]
+
+
+def test_a_walk_in_plays_the_twelve_pose_sheet_whose_cells_the_compiled_sequence_reads_in_order(tmp_path):
+    import math
+    from PIL import Image
+    from services.video2d_compile import TSX
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    built = _twelve_walkers(tmp_path)
+    assert (built["count"], built["columns"], built["rows"]) == (12, 6, 2)
+    document, found = _compile_walk_in(tmp_path, _walk_kit(tmp_path, built))
+    assert len(found) == 1 and found[0]["sequence"]["source"] == built["source"], "the twelve-pose sheet, not the four-pose one"
+    sequence = found[0]["sequence"]
+    assert (sequence["kind"], sequence["count"], sequence["columns"], sequence["rows"], sequence["loop"]) == ("sheet", 12, 6, 2, "loop")
+    assert sequence["fps"] == 10.0, "a cycle is two steps of 0.6 s: twelve cells in 1.2 s"
+    assert not sequence.get("mirror"), "it enters from the left and the sheet looks right"
+    # The painter's rule (sequenceFrame and sheetCrop of ui/src/lib/scene2d/motion.ts) applied to the real PNG: at each moment the cell it
+    # draws is the pose that moment is, and after twelve cells the cycle starts again.
+    import numpy as np
+    sheet = np.asarray(Image.open(built["path"]).convert("RGBA"))
+    cell_width, cell_height = sheet.shape[1] // sequence["columns"], sheet.shape[0] // sequence["rows"]
+    reds = []
+    for step in range(24):
+        seconds = sequence["start"] + (step + 0.5) / sequence["fps"] if "start" in sequence else (step + 0.5) / sequence["fps"]
+        frame = math.floor((seconds - sequence.get("start", 0)) * sequence["fps"]) % sequence["count"]
+        column, row = frame % sequence["columns"], (frame // sequence["columns"]) % sequence["rows"]
+        cell = sheet[row * cell_height:(row + 1) * cell_height, column * cell_width:(column + 1) * cell_width]
+        solid = cell[..., 3] > 200
+        assert solid.any(), f"cell {frame} holds a figure"
+        top = int(np.nonzero(solid.any(axis=1))[0][0])
+        band = cell[top + 6:top + 10][solid[top + 6:top + 10]]
+        reds.append(int(band[:, 0].mean()))
+    assert all(abs(got - (20 + 18 * (step % 12))) <= 3 for step, got in enumerate(reds)), f"twelve cells in order, then the cycle again: {reds}"
+
+
+def test_a_walk_in_falls_back_to_the_four_pose_sheet_when_the_twelve_pose_one_is_not_approved_and_to_the_bob_without_any(tmp_path):
+    from services.video2d_compile import TSX
+    if not TSX.is_file():
+        pytest.skip("ui/node_modules/tsx is not installed")
+    built = _twelve_walkers(tmp_path)
+    _doc, pending = _compile_walk_in(tmp_path, _walk_kit(tmp_path, built, "pending"))
+    assert [layer["sequence"]["count"] for layer in pending] == [4], "a pending walk-12 is never played: the approved four-pose walk is"
+    bare = _walk_kit(tmp_path, built, "pending")
+    bare["animations"]["walk"]["reviewState"] = "pending"
+    assert _compile_walk_in(tmp_path, bare)[1] == [], "no approved sheet: the body bob it always was"
+    kit = _walk_kit(tmp_path, built)
+    del kit["animations"]["walk-12"]
+    assert [layer["sequence"]["count"] for layer in _compile_walk_in(tmp_path, kit)[1]] == [4], "a kit with only the old walk compiles as it did"
+
+
+@pytest.mark.skipif(os.environ.get("RUN_SERIES_SHEET_RENDER_SMOKE") != "1", reason="explicit built-UI Chromium smoke (ui/dist, Node, Playwright Chromium)")
+def test_a_twelve_cell_contact_sheet_plays_cell_by_cell_in_a_real_cpu_render(tmp_path, monkeypatch):
+    """RUN_SERIES_SHEET_RENDER_SMOKE=1 [HOCUS_SMOKE_DIST=<a built ui/dist>] pytest -q tests/test_series_entrances.py -k twelve_cell.
+
+    A synthetic contact sheet of twelve colour blocks (six columns, two rows) plays at twelve cells a second for one second. The frames
+    the real painter draws on the CPU (Chromium) show one block per cell, in order."""
+    from PIL import Image
+    from services.scene2d_export import validated_document
+    from services.series_shot_bridge import run_series_shot
+    from services.world3d_export import export_plan, playwright_module, run_owned_browser
+    monkeypatch.setenv("HOCUS_SCENE_RENDER_DEVICE", "cpu")
+    dist = Path(os.environ.get("HOCUS_SMOKE_DIST") or Path(__file__).resolve().parents[1] / "ui" / "dist")
+    assert (dist / "scene2d-render.html").is_file(), "Build the UI first (cd ui && npx vite build)"
+    import colorsys
+    palette = {f"c{index}": tuple(round(255 * part) for part in colorsys.hsv_to_rgb(index / 12, 0.9, 0.95)) for index in range(12)}
+    pose = _png(lambda image: image.paste((128, 128, 128, 255), (0, 0, 100, 200)), (100, 200))
+
+    def draw(image):
+        from PIL import ImageDraw
+        pen = ImageDraw.Draw(image)
+        for index, colour in enumerate(palette.values()):
+            left, top = (index % 6) * 100, (index // 6) * 200
+            pen.rectangle((left + 5, top + 20, left + 94, top + 191), fill=colour + (255,))
+    sheet = _png(draw, (600, 400))
+    base = {"id": "hero-base", "name": "base", "source": pose, "kind": "image", "alphaStatus": "transparent", "reviewState": "approved", "width": 100, "height": 200}
+    twelve = {"sheet": {"source": sheet, "width": 600, "height": 400, "count": 12, "columns": 6, "rows": 2, "cell": {"width": 100, "height": 200}}, "frames": [], "fps": 12,
+              "loop": "loop", "facing": "right", "reviewState": "approved", "motion": "walk", "dir": "side"}
+    kit = {"version": 1, "id": "hero", "name": "Hero", "style": {}, "base": base, "poses": {}, "mouth": {}, "eyes": {}, "anchors": {}, "provenance": [], "animations": {"walk-12": twelve}}
+    shot = {"name": "smoke", "workspace": "cast", "width": 320, "height": 180, "fps": 24, "duration": 2.0, "framing": "wide", "camera": "static",
+            "cast": [{"kitId": "hero", "x": 50, "motion": "still", "animation": {"id": "walk-12", "at": 0, "duration": 1.0, "loop": "loop"}}], "lines": []}
+    scene = run_series_shot({"mode": "shot", "kits": {"hero": kit}, "shot": shot})
+    layer = next(item for item in scene["layers"] if item["id"] == "kit-hero-sheet-walk-12")
+    assert (layer["sequence"]["count"], layer["sequence"]["columns"], layer["sequence"]["rows"], layer["sequence"]["fps"]) == (12, 6, 2, 12)
+    document = validated_document(scene)
+    times = [round((index + 0.5) / 12, 4) for index in range(12)]
+    plan = {**export_plan(document), "times": times}
+    handler = functools.partial(type("Quiet", (SimpleHTTPRequestHandler,), {"log_message": lambda *_args: None}), directory=str(dist))
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    worker = threading.Thread(target=server.serve_forever, daemon=True)
+    worker.start()
+    try:
+        module = playwright_module()
+        assert module is not None, "Playwright is not installed"
+        snapshot = {"document": document, "plan": plan, "workspace": "cast", "refs": []}
+        (tmp_path / "snapshot.json").write_text(json.dumps(snapshot), encoding="utf-8")
+        frames = run_owned_browser(snapshot, tmp_path, lambda: False,
+                                   app_url=f"http://127.0.0.1:{server.server_port}", module=module, page="/scene2d-render.html", bridge="__scene2dExport")
+    finally:
+        server.shutdown(); server.server_close(); worker.join(timeout=2)
+    assert len(frames) == 12
+    x, y = round(0.50 * 320), round((layer["transform"]["y"] - 25) / 100 * 180)
+    seen = [_nearest(Image.open(path).convert("RGB").getpixel((x, y)), palette) for path in frames]
+    assert seen == list(palette), f"twelve blocks in the order of the cells: {seen}"
+    assert len({frame.read_bytes() for frame in frames}) == 12, "every sampled frame is a different picture"

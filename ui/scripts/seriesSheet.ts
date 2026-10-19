@@ -6,14 +6,15 @@
 import type { SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { CharacterKit } from '../src/lib/characterKit.ts'
 import { ANIMATION_SHEET, animationDef, type AnimationLoop, type KitAnimation } from '../src/lib/characterAnimations.ts'
+import { walkSheet } from '../src/lib/characterAnimationDirections.ts'
 import { evaluateSceneLayer, getSceneKeyframes, withSceneKeyframes } from '../src/lib/sceneTimeline.ts'
 
 export type SheetRequest = { id: string; at?: number; duration?: number; loop?: AnimationLoop }
 /** The parts of a cast member the sheets read (the CastSpec of seriesShot.ts). */
 export type SheetCast = { animation?: SheetRequest; enter?: { fromX: number; start: number; end: number; gait?: 'hop' | 'walk'; step?: number } }
 export type SheetWindow = {
-  /** `walk-in` for the walk sheet of an entrance, else the animation's id. */
-  part: string; animation: KitAnimation; start: number; end: number; loop: AnimationLoop; fps: number; mirror: boolean
+  /** `walk-in` for the walk sheet of an entrance, else the animation's id. `id` is always the id of the kit animation that plays. */
+  part: string; id: string; animation: KitAnimation; start: number; end: number; loop: AnimationLoop; fps: number; mirror: boolean
   /** Seconds of opacity ramp at each end. 0 keeps the hard cut gestures and walks already use. */
   fade: number
 }
@@ -27,7 +28,6 @@ const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 
 const EDGE = 0.001
 /** The shortest window worth drawing (s). */
 const SHORTEST = 0.05
-const WALK = 'walk'
 const rounded = (point: Pick<SceneKeyframe, 'x' | 'y' | 'scale' | 'opacity' | 'rotation'>) => ({
   x: round(point.x), y: round(point.y), scale: round(point.scale, 5), opacity: round(point.opacity), rotation: round(point.rotation) })
 
@@ -86,26 +86,26 @@ export function sheetPlacement(animation: KitAnimation, id: string, pose: { widt
 
 /** The walk of an entrance: a cycle is two steps, so the sheet plays at count / (2 steps) cells a second (3 to 24, as the card
  * does) and the feet land on the steps `enterStep` times. It walks the way it is drawn: against that, it is mirrored. */
-function walkIn(animation: KitAnimation, enter: NonNullable<SheetCast['enter']>): SheetWindow {
+function walkIn(id: string, animation: KitAnimation, enter: NonNullable<SheetCast['enter']>): SheetWindow {
   const step = enter.step && enter.step > 0 ? enter.step : 0.5
   const fps = round(Math.min(24, Math.max(3, animation.sheet.count / (2 * step))))
   const comes = enter.fromX < 50 ? 'right' : 'left'
-  return { part: 'walk-in', animation, start: enter.start, end: enter.end, loop: 'loop', fps, mirror: animation.facing === 'left' ? comes === 'right' : animation.facing === 'right' && comes === 'left', fade: 0 }
+  return { part: 'walk-in', id, animation, start: enter.start, end: enter.end, loop: 'loop', fps, mirror: animation.facing === 'left' ? comes === 'right' : animation.facing === 'right' && comes === 'left', fade: 0 }
 }
 
 /** The intervals of the shot in which this cast member's pose gives way to a sheet: the walk-in, when the kit has an approved
- * `walk` sheet and the entrance walks, and the cast entry's `animation`, which never starts before the walk has ended. */
+ * `walk-12` (else `walk`) sheet and the entrance walks, and the cast entry's `animation`, which never starts before the walk has ended. */
 export function sheetWindows(kit: CharacterKit, cast: SheetCast, duration: number): SheetWindow[] {
   const windows: SheetWindow[] = []
-  const walk = cast.enter?.gait === 'walk' ? kit.animations?.[WALK] : undefined
-  if (walk?.reviewState === 'approved' && cast.enter) windows.push(walkIn(walk, cast.enter))
+  const walk = cast.enter?.gait === 'walk' ? walkSheet(kit.animations) : undefined
+  if (walk && cast.enter) windows.push(walkIn(walk.id, walk.animation, cast.enter))
   const wanted = cast.animation
   if (!wanted) return windows
   const animation = playable(kit, wanted.id)
   const loop = wanted.loop ?? animation.loop
   const start = Math.max(wanted.at ?? 0, windows[0]?.end ?? 0)
   const end = Math.min(duration, start + windowLength(animation, wanted.id, loop, wanted.duration))
-  if (end - start >= SHORTEST) windows.push({ part: wanted.id, animation, start, end, loop, fps: animation.fps, mirror: false, fade: expressionFade(animation, wanted.id, start, end) })
+  if (end - start >= SHORTEST) windows.push({ part: wanted.id, id: wanted.id, animation, start, end, loop, fps: animation.fps, mirror: false, fade: expressionFade(animation, wanted.id, start, end) })
   return windows
 }
 

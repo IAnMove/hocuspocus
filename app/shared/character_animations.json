@@ -1,21 +1,49 @@
 {
   "version": 1,
   "note": "Small animations of one character: a few poses of the same figure joined into an equal-cell sprite sheet (services/character_animations.py, ui/src/lib/characterAnimations.ts). Each pose is one Qwen picture made from the character's own picture as an identity reference, on a plain screen, keyed and cropped. `view` picks the framing sentence, `loop` how the sheet plays (loop | pingpong | once), `template` the Video 2D card that plays it.",
-  "sheet": {"feet": 0.96, "figure": 0.86, "cellHeight": 640, "maxPoses": 12, "alphaFloor": 8, "torsoShare": 0.55, "head": 0.18, "faceShare": 0.5, "expressionHold": 2.5, "expressionFade": 0.25, "expressionShort": 1.5},
+  "sheet": {"feet": 0.96, "figure": 0.86, "cellHeight": 640, "maxPoses": 12, "alphaFloor": 8, "torsoShare": 0.55, "head": 0.18, "faceShare": 0.5, "expressionHold": 2.5, "expressionFade": 0.25, "expressionShort": 1.5,
+    "checks": {"height": 0.03, "repeatRun": 2, "samePoseBits": 4, "mirrorShare": 0.75}},
   "identity": "The same character as the reference image: same face, proportions, colours, outfit and art style. {description}",
   "negative": "photo, photorealistic, 3D render, blurry, text, watermark, speech bubble, panel border, frame, multiple characters, background scenery, floor, cast shadow, turnaround sheet, collage of views",
-  "viewNegatives": {"bust": "full body, whole body, standing figure, waist, hands, legs, feet, boots"},
+  "viewNegatives": {
+    "bust": "full body, whole body, standing figure, waist, hands, legs, feet, boots",
+    "front34": "exact side profile, back view, seen from behind",
+    "back34": "front view, facing the viewer, visible face, eyes looking at the viewer",
+    "back": "front view, facing the viewer, visible face, eyes, mouth, nose, looking at the viewer"
+  },
   "views": {
     "side": "Exact side view of the whole body, facing right, seen from head to boots, centred, the same size as in the reference picture.",
     "front": "Front view of the whole body, seen from head to boots, centred, the same size as in the reference picture.",
+    "front34": "Three-quarter front view of the whole body, the body turned about forty-five degrees so it faces toward the viewer and to the viewer's right, the face and the chest visible, seen from head to boots, centred, the same size as in the reference picture.",
+    "back34": "Three-quarter back view of the whole body, the body turned about forty-five degrees away from the viewer toward the viewer's right, the back and one side visible, the face hidden or only a sliver of the cheek, seen from head to boots, centred, the same size as in the reference picture.",
+    "back": "Back view of the whole body, seen from behind, the character facing directly away from the viewer, the back of the head and the back of the outfit visible, no face visible, seen from head to boots, centred, the same size as in the reference picture.",
     "bust": "Close-up portrait: only the head, neck and shoulders of the character, the picture cropped at the chest so no waist, hands, legs or feet are in it, facing the viewer, centred, the face large and filling the upper half of the picture."
   },
   "custom": {
-    "maxPoses": 6, "maxText": 600, "maxAnimations": 48, "fps": 3, "loop": "once", "template": "character-reaction",
+    "maxPoses": 12, "maxText": 600, "maxAnimations": 48, "fps": 3, "loop": "once", "template": "character-reaction",
     "views": {
       "bust": {"resolution": "1024x1024", "scaleBy": "face", "facing": "front"},
       "front": {"resolution": "896x1152", "scaleBy": "base", "facing": "front"},
-      "side": {"resolution": "896x1152", "scaleBy": "height", "facing": "right"}
+      "side": {"resolution": "896x1152", "scaleBy": "height", "facing": "right"},
+      "front34": {"resolution": "896x1152", "scaleBy": "height", "facing": "right"},
+      "back34": {"resolution": "896x1152", "scaleBy": "height", "facing": "right"},
+      "back": {"resolution": "896x1152", "scaleBy": "height", "facing": "front"}
+    }
+  },
+  "sets": {
+    "walk-12": {
+      "title": {"es": "Andar de doce poses", "en": "Twelve-pose walk"},
+      "sheets": [{"animation": "walk-12"}]
+    },
+    "walk-directions": {
+      "title": {"es": "Andares completos de las cinco direcciones", "en": "Full walks in the five directions"},
+      "sheets": [{"animation": "walk-12"}, {"animation": "walk-front34", "reference": "walk-12"}, {"animation": "walk-front", "reference": "walk-front34"},
+                 {"animation": "walk-back34", "reference": "walk-12"}, {"animation": "walk-back", "reference": "walk-back34"}]
+    },
+    "idle-directions": {
+      "title": {"es": "Respirar en las cinco direcciones", "en": "Breathing in the five directions"},
+      "sheets": [{"animation": "idle-side"}, {"animation": "idle", "reference": "idle-side"}, {"animation": "idle-front34", "reference": "idle"},
+                 {"animation": "idle-back34", "reference": "idle-side"}, {"animation": "idle-back", "reference": "idle-back34"}]
     }
   },
   "groups": [
@@ -26,7 +54,7 @@
   ],
   "animations": [
     {
-      "id": "walk", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152",
+      "id": "walk", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side",
       "title": {"es": "Andar", "en": "Walk"},
       "summary": {"es": "Ciclo de paso de perfil en cuatro poses: contacto, paso, contacto, paso. Mira a la derecha.", "en": "Side-view gait in four poses: contact, passing, contact, passing. Looks right."},
       "poses": [
@@ -197,7 +225,7 @@
       ]
     },
     {
-      "id": "idle", "group": "cycle", "view": "front", "scaleBy": "base", "facing": "front", "loop": "pingpong", "fps": 2, "template": "character-reaction", "resolution": "896x1152",
+      "id": "idle", "group": "cycle", "view": "front", "scaleBy": "base", "facing": "front", "loop": "pingpong", "fps": 2, "template": "character-reaction", "resolution": "896x1152", "motion": "idle", "dir": "front",
       "title": {"es": "Respirar", "en": "Breathe"},
       "summary": {"es": "El personaje quieto respira: los hombros suben y bajan un poco. Dos poses de frente.", "en": "The character stands still and breathes: the shoulders rise and fall a little. Two front poses."},
       "poses": [
@@ -343,6 +371,137 @@
       "poses": [
         {"id": "sulking", "label": {"es": "Enfurruñado", "en": "Sulking"}, "prompt": "Anime expression: sulking, the eyebrows low, the mouth pushed to one side, the eyes looking away."},
         {"id": "pouting", "label": {"es": "Puchero", "en": "Pouting"}, "prompt": "Anime expression: pouting, both cheeks puffed out round, the lips pursed, a faint blush, the eyes glaring sideways."}
+      ]
+    },
+    {
+      "id": "walk-12", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "title": {"es": "Andar completo", "en": "Full walk"},
+      "summary": {"es": "Ciclo de andar de doce poses de perfil, mirando a la derecha: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle in side view, looking right: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
+      "poses": [
+        {"id": "contact-a", "label": {"es": "Contacto (un pie)", "en": "Contact (first foot)"}, "prompt": "Walking: the contact pose of a walk cycle, the leg nearest the viewer stretched forward with the heel of the boot just touching the ground, the far leg stretched behind the body pushing off on the toes of the boot, the arm nearest the viewer swinging back and the far arm forward, the body at its middle height."},
+        {"id": "down-a", "label": {"es": "Descenso (un pie)", "en": "Down (first foot)"}, "prompt": "Walking: the down pose of a walk cycle, the weight dropping onto the leg nearest the viewer with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the far leg behind with only the toes of the boot still on the ground, the arm nearest the viewer still back and the far arm still forward."},
+        {"id": "lift-a", "label": {"es": "Despegue (un pie)", "en": "Lift (first foot)"}, "prompt": "Walking: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg nearest the viewer, the knee of the far leg bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-a", "label": {"es": "Paso (un pie)", "en": "Passing (first foot)"}, "prompt": "Walking: the passing pose of a walk cycle, balancing on the one straight leg nearest the viewer while the far leg is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-a", "label": {"es": "Ascenso (un pie)", "en": "Up (first foot)"}, "prompt": "Walking: the up pose of a walk cycle, the body at its highest point over the straight leg nearest the viewer on the ball of the boot, the far leg swinging forward with the knee bent and raised, the arm nearest the viewer swinging forward and the far arm back."},
+        {"id": "reach-a", "label": {"es": "Alcance (un pie)", "en": "Reach (first foot)"}, "prompt": "Walking: the reach pose just before contact in a walk cycle, the far leg stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg nearest the viewer behind the body on its toes, the arm nearest the viewer forward and the far arm back."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Walking: the contact pose of a walk cycle, the far leg stretched forward with the heel of the boot just touching the ground, the leg nearest the viewer stretched behind the body pushing off on the toes of the boot, the far arm swinging back and the arm nearest the viewer forward, the body at its middle height."},
+        {"id": "down-b", "label": {"es": "Descenso (otro pie)", "en": "Down (other foot)"}, "prompt": "Walking: the down pose of a walk cycle, the weight dropping onto the far leg with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg nearest the viewer behind with only the toes of the boot still on the ground, the far arm still back and the arm nearest the viewer still forward."},
+        {"id": "lift-b", "label": {"es": "Despegue (otro pie)", "en": "Lift (other foot)"}, "prompt": "Walking: the pose after the down pose of a walk cycle, the body starting to rise over the straight far leg, the knee of the leg nearest the viewer bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-b", "label": {"es": "Paso (otro pie)", "en": "Passing (other foot)"}, "prompt": "Walking: the passing pose of a walk cycle, balancing on the one straight far leg while the leg nearest the viewer is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-b", "label": {"es": "Ascenso (otro pie)", "en": "Up (other foot)"}, "prompt": "Walking: the up pose of a walk cycle, the body at its highest point over the straight far leg on the ball of the boot, the leg nearest the viewer swinging forward with the knee bent and raised, the far arm swinging forward and the arm nearest the viewer back."},
+        {"id": "reach-b", "label": {"es": "Alcance (otro pie)", "en": "Reach (other foot)"}, "prompt": "Walking: the reach pose just before contact in a walk cycle, the leg nearest the viewer stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the far leg behind the body on its toes, the far arm forward and the arm nearest the viewer back."}
+      ]
+    },
+    {
+      "id": "walk-front", "group": "cycle", "view": "front", "scaleBy": "height", "facing": "front", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "front", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "title": {"es": "Andar de frente", "en": "Walk, front"},
+      "summary": {"es": "Ciclo de andar de doce poses de frente, hacia la cámara: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle from the front, toward the camera: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
+      "poses": [
+        {"id": "contact-a", "label": {"es": "Contacto (un pie)", "en": "Contact (first foot)"}, "prompt": "Walking toward the viewer: the contact pose of a walk cycle, the leg on the viewer's left stepping toward the viewer, the boot looking larger and lower in the picture with the heel of the boot just touching the ground, the leg on the viewer's right behind the body, partly hidden by it pushing off on the toes of the boot, the arm on the viewer's left swinging back and the arm on the viewer's right forward, the body at its middle height."},
+        {"id": "down-a", "label": {"es": "Descenso (un pie)", "en": "Down (first foot)"}, "prompt": "Walking toward the viewer: the down pose of a walk cycle, the weight dropping onto the leg on the viewer's left with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg on the viewer's right behind with only the toes of the boot still on the ground, the arm on the viewer's left still back and the arm on the viewer's right still forward."},
+        {"id": "lift-a", "label": {"es": "Despegue (un pie)", "en": "Lift (first foot)"}, "prompt": "Walking toward the viewer: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg on the viewer's left, the knee of the leg on the viewer's right bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-a", "label": {"es": "Paso (un pie)", "en": "Passing (first foot)"}, "prompt": "Walking toward the viewer: the passing pose of a walk cycle, balancing on the one straight leg on the viewer's left while the leg on the viewer's right is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-a", "label": {"es": "Ascenso (un pie)", "en": "Up (first foot)"}, "prompt": "Walking toward the viewer: the up pose of a walk cycle, the body at its highest point over the straight leg on the viewer's left on the ball of the boot, the leg on the viewer's right swinging forward with the knee bent and raised, the arm on the viewer's left swinging forward and the arm on the viewer's right back."},
+        {"id": "reach-a", "label": {"es": "Alcance (un pie)", "en": "Reach (first foot)"}, "prompt": "Walking toward the viewer: the reach pose just before contact in a walk cycle, the leg on the viewer's right stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg on the viewer's left behind the body on its toes, the arm on the viewer's left forward and the arm on the viewer's right back."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Walking toward the viewer: the contact pose of a walk cycle, the leg on the viewer's right stepping toward the viewer, the boot looking larger and lower in the picture with the heel of the boot just touching the ground, the leg on the viewer's left behind the body, partly hidden by it pushing off on the toes of the boot, the arm on the viewer's right swinging back and the arm on the viewer's left forward, the body at its middle height."},
+        {"id": "down-b", "label": {"es": "Descenso (otro pie)", "en": "Down (other foot)"}, "prompt": "Walking toward the viewer: the down pose of a walk cycle, the weight dropping onto the leg on the viewer's right with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg on the viewer's left behind with only the toes of the boot still on the ground, the arm on the viewer's right still back and the arm on the viewer's left still forward."},
+        {"id": "lift-b", "label": {"es": "Despegue (otro pie)", "en": "Lift (other foot)"}, "prompt": "Walking toward the viewer: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg on the viewer's right, the knee of the leg on the viewer's left bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-b", "label": {"es": "Paso (otro pie)", "en": "Passing (other foot)"}, "prompt": "Walking toward the viewer: the passing pose of a walk cycle, balancing on the one straight leg on the viewer's right while the leg on the viewer's left is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-b", "label": {"es": "Ascenso (otro pie)", "en": "Up (other foot)"}, "prompt": "Walking toward the viewer: the up pose of a walk cycle, the body at its highest point over the straight leg on the viewer's right on the ball of the boot, the leg on the viewer's left swinging forward with the knee bent and raised, the arm on the viewer's right swinging forward and the arm on the viewer's left back."},
+        {"id": "reach-b", "label": {"es": "Alcance (otro pie)", "en": "Reach (other foot)"}, "prompt": "Walking toward the viewer: the reach pose just before contact in a walk cycle, the leg on the viewer's left stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg on the viewer's right behind the body on its toes, the arm on the viewer's right forward and the arm on the viewer's left back."}
+      ]
+    },
+    {
+      "id": "walk-front34", "group": "cycle", "view": "front34", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "front34", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "title": {"es": "Andar de tres cuartos de frente", "en": "Walk, front three-quarter"},
+      "summary": {"es": "Ciclo de andar de doce poses de tres cuartos de frente, hacia la cámara y a la derecha: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle in front three-quarter view, toward the camera and to the right: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
+      "poses": [
+        {"id": "contact-a", "label": {"es": "Contacto (un pie)", "en": "Contact (first foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the contact pose of a walk cycle, the leg nearest the viewer stretched forward toward the viewer with the heel of the boot just touching the ground, the far leg stretched behind the body pushing off on the toes of the boot, the arm nearest the viewer swinging back and the far arm forward, the body at its middle height."},
+        {"id": "down-a", "label": {"es": "Descenso (un pie)", "en": "Down (first foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the down pose of a walk cycle, the weight dropping onto the leg nearest the viewer with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the far leg behind with only the toes of the boot still on the ground, the arm nearest the viewer still back and the far arm still forward."},
+        {"id": "lift-a", "label": {"es": "Despegue (un pie)", "en": "Lift (first foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg nearest the viewer, the knee of the far leg bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-a", "label": {"es": "Paso (un pie)", "en": "Passing (first foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the passing pose of a walk cycle, balancing on the one straight leg nearest the viewer while the far leg is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-a", "label": {"es": "Ascenso (un pie)", "en": "Up (first foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the up pose of a walk cycle, the body at its highest point over the straight leg nearest the viewer on the ball of the boot, the far leg swinging forward with the knee bent and raised, the arm nearest the viewer swinging forward and the far arm back."},
+        {"id": "reach-a", "label": {"es": "Alcance (un pie)", "en": "Reach (first foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the reach pose just before contact in a walk cycle, the far leg stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg nearest the viewer behind the body on its toes, the arm nearest the viewer forward and the far arm back."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the contact pose of a walk cycle, the far leg stretched forward toward the viewer with the heel of the boot just touching the ground, the leg nearest the viewer stretched behind the body pushing off on the toes of the boot, the far arm swinging back and the arm nearest the viewer forward, the body at its middle height."},
+        {"id": "down-b", "label": {"es": "Descenso (otro pie)", "en": "Down (other foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the down pose of a walk cycle, the weight dropping onto the far leg with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg nearest the viewer behind with only the toes of the boot still on the ground, the far arm still back and the arm nearest the viewer still forward."},
+        {"id": "lift-b", "label": {"es": "Despegue (otro pie)", "en": "Lift (other foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the pose after the down pose of a walk cycle, the body starting to rise over the straight far leg, the knee of the leg nearest the viewer bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-b", "label": {"es": "Paso (otro pie)", "en": "Passing (other foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the passing pose of a walk cycle, balancing on the one straight far leg while the leg nearest the viewer is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-b", "label": {"es": "Ascenso (otro pie)", "en": "Up (other foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the up pose of a walk cycle, the body at its highest point over the straight far leg on the ball of the boot, the leg nearest the viewer swinging forward with the knee bent and raised, the far arm swinging forward and the arm nearest the viewer back."},
+        {"id": "reach-b", "label": {"es": "Alcance (otro pie)", "en": "Reach (other foot)"}, "prompt": "Walking toward the viewer and to the viewer's right: the reach pose just before contact in a walk cycle, the leg nearest the viewer stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the far leg behind the body on its toes, the far arm forward and the arm nearest the viewer back."}
+      ]
+    },
+    {
+      "id": "walk-back34", "group": "cycle", "view": "back34", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "back34", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "title": {"es": "Andar de tres cuartos de espaldas", "en": "Walk, back three-quarter"},
+      "summary": {"es": "Ciclo de andar de doce poses de tres cuartos de espaldas, alejándose hacia la derecha: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle in back three-quarter view, moving away toward the right: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
+      "poses": [
+        {"id": "contact-a", "label": {"es": "Contacto (un pie)", "en": "Contact (first foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the contact pose of a walk cycle, the leg nearest the viewer stretched forward away from the viewer with the heel of the boot just touching the ground, the far leg stretched behind the body pushing off on the toes of the boot, the arm nearest the viewer swinging back and the far arm forward, the body at its middle height."},
+        {"id": "down-a", "label": {"es": "Descenso (un pie)", "en": "Down (first foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the down pose of a walk cycle, the weight dropping onto the leg nearest the viewer with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the far leg behind with only the toes of the boot still on the ground, the arm nearest the viewer still back and the far arm still forward."},
+        {"id": "lift-a", "label": {"es": "Despegue (un pie)", "en": "Lift (first foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg nearest the viewer, the knee of the far leg bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-a", "label": {"es": "Paso (un pie)", "en": "Passing (first foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the passing pose of a walk cycle, balancing on the one straight leg nearest the viewer while the far leg is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-a", "label": {"es": "Ascenso (un pie)", "en": "Up (first foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the up pose of a walk cycle, the body at its highest point over the straight leg nearest the viewer on the ball of the boot, the far leg swinging forward with the knee bent and raised, the arm nearest the viewer swinging forward and the far arm back."},
+        {"id": "reach-a", "label": {"es": "Alcance (un pie)", "en": "Reach (first foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the reach pose just before contact in a walk cycle, the far leg stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg nearest the viewer behind the body on its toes, the arm nearest the viewer forward and the far arm back."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the contact pose of a walk cycle, the far leg stretched forward away from the viewer with the heel of the boot just touching the ground, the leg nearest the viewer stretched behind the body pushing off on the toes of the boot, the far arm swinging back and the arm nearest the viewer forward, the body at its middle height."},
+        {"id": "down-b", "label": {"es": "Descenso (otro pie)", "en": "Down (other foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the down pose of a walk cycle, the weight dropping onto the far leg with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg nearest the viewer behind with only the toes of the boot still on the ground, the far arm still back and the arm nearest the viewer still forward."},
+        {"id": "lift-b", "label": {"es": "Despegue (otro pie)", "en": "Lift (other foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the pose after the down pose of a walk cycle, the body starting to rise over the straight far leg, the knee of the leg nearest the viewer bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-b", "label": {"es": "Paso (otro pie)", "en": "Passing (other foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the passing pose of a walk cycle, balancing on the one straight far leg while the leg nearest the viewer is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-b", "label": {"es": "Ascenso (otro pie)", "en": "Up (other foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the up pose of a walk cycle, the body at its highest point over the straight far leg on the ball of the boot, the leg nearest the viewer swinging forward with the knee bent and raised, the far arm swinging forward and the arm nearest the viewer back."},
+        {"id": "reach-b", "label": {"es": "Alcance (otro pie)", "en": "Reach (other foot)"}, "prompt": "Walking away from the viewer toward the viewer's right: the reach pose just before contact in a walk cycle, the leg nearest the viewer stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the far leg behind the body on its toes, the far arm forward and the arm nearest the viewer back."}
+      ]
+    },
+    {
+      "id": "walk-back", "group": "cycle", "view": "back", "scaleBy": "height", "facing": "front", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "back", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "title": {"es": "Andar de espaldas", "en": "Walk, back"},
+      "summary": {"es": "Ciclo de andar de doce poses de espaldas, alejándose de la cámara: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle from behind, moving away from the camera: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
+      "poses": [
+        {"id": "contact-a", "label": {"es": "Contacto (un pie)", "en": "Contact (first foot)"}, "prompt": "Walking away from the viewer: the contact pose of a walk cycle, the leg on the viewer's left stepping away from the viewer, the boot looking smaller and higher in the picture with the heel of the boot just touching the ground, the leg on the viewer's right behind the body, nearer to the viewer pushing off on the toes of the boot, the arm on the viewer's left swinging back and the arm on the viewer's right forward, the body at its middle height."},
+        {"id": "down-a", "label": {"es": "Descenso (un pie)", "en": "Down (first foot)"}, "prompt": "Walking away from the viewer: the down pose of a walk cycle, the weight dropping onto the leg on the viewer's left with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg on the viewer's right behind with only the toes of the boot still on the ground, the arm on the viewer's left still back and the arm on the viewer's right still forward."},
+        {"id": "lift-a", "label": {"es": "Despegue (un pie)", "en": "Lift (first foot)"}, "prompt": "Walking away from the viewer: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg on the viewer's left, the knee of the leg on the viewer's right bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-a", "label": {"es": "Paso (un pie)", "en": "Passing (first foot)"}, "prompt": "Walking away from the viewer: the passing pose of a walk cycle, balancing on the one straight leg on the viewer's left while the leg on the viewer's right is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-a", "label": {"es": "Ascenso (un pie)", "en": "Up (first foot)"}, "prompt": "Walking away from the viewer: the up pose of a walk cycle, the body at its highest point over the straight leg on the viewer's left on the ball of the boot, the leg on the viewer's right swinging forward with the knee bent and raised, the arm on the viewer's left swinging forward and the arm on the viewer's right back."},
+        {"id": "reach-a", "label": {"es": "Alcance (un pie)", "en": "Reach (first foot)"}, "prompt": "Walking away from the viewer: the reach pose just before contact in a walk cycle, the leg on the viewer's right stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg on the viewer's left behind the body on its toes, the arm on the viewer's left forward and the arm on the viewer's right back."},
+        {"id": "contact-b", "label": {"es": "Contacto (otro pie)", "en": "Contact (other foot)"}, "prompt": "Walking away from the viewer: the contact pose of a walk cycle, the leg on the viewer's right stepping away from the viewer, the boot looking smaller and higher in the picture with the heel of the boot just touching the ground, the leg on the viewer's left behind the body, nearer to the viewer pushing off on the toes of the boot, the arm on the viewer's right swinging back and the arm on the viewer's left forward, the body at its middle height."},
+        {"id": "down-b", "label": {"es": "Descenso (otro pie)", "en": "Down (other foot)"}, "prompt": "Walking away from the viewer: the down pose of a walk cycle, the weight dropping onto the leg on the viewer's right with the knee slightly bent and the whole boot flat on the ground, the body at its lowest point, the leg on the viewer's left behind with only the toes of the boot still on the ground, the arm on the viewer's right still back and the arm on the viewer's left still forward."},
+        {"id": "lift-b", "label": {"es": "Despegue (otro pie)", "en": "Lift (other foot)"}, "prompt": "Walking away from the viewer: the pose after the down pose of a walk cycle, the body starting to rise over the straight leg on the viewer's right, the knee of the leg on the viewer's left bending as its boot lifts off the ground behind the body, the arms coming back toward the sides."},
+        {"id": "passing-b", "label": {"es": "Paso (otro pie)", "en": "Passing (other foot)"}, "prompt": "Walking away from the viewer: the passing pose of a walk cycle, balancing on the one straight leg on the viewer's right while the leg on the viewer's left is bent at the knee with its boot lifted and passing forward close under the body, the two legs close together, the arms hanging near the sides."},
+        {"id": "up-b", "label": {"es": "Ascenso (otro pie)", "en": "Up (other foot)"}, "prompt": "Walking away from the viewer: the up pose of a walk cycle, the body at its highest point over the straight leg on the viewer's right on the ball of the boot, the leg on the viewer's left swinging forward with the knee bent and raised, the arm on the viewer's right swinging forward and the arm on the viewer's left back."},
+        {"id": "reach-b", "label": {"es": "Alcance (otro pie)", "en": "Reach (other foot)"}, "prompt": "Walking away from the viewer: the reach pose just before contact in a walk cycle, the leg on the viewer's left stretched ahead of the body with the knee almost straight and the heel about to touch the ground, the leg on the viewer's right behind the body on its toes, the arm on the viewer's right forward and the arm on the viewer's left back."}
+      ]
+    },
+    {
+      "id": "idle-side", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "pingpong", "fps": 2, "template": "character-reaction", "resolution": "896x1152", "motion": "idle", "dir": "side", "checks": ["mirror"],
+      "title": {"es": "Respirar de perfil", "en": "Breathe, side"},
+      "summary": {"es": "El personaje quieto respira de perfil, mirando a la derecha: los hombros suben y bajan un poco. Dos poses.", "en": "The character stands still and breathes in side view, looking right: the shoulders rise and fall a little. Two poses."},
+      "poses": [
+        {"id": "rest", "label": {"es": "En reposo", "en": "At rest"}, "prompt": "Standing relaxed with the arms hanging at the sides, the weight on both feet, a calm neutral stance."},
+        {"id": "inhale", "label": {"es": "Inspirando", "en": "Inhaling"}, "prompt": "Standing relaxed with the arms hanging at the sides, the chest slightly raised and the shoulders a little higher as in a deep breath in, a calm neutral stance."}
+      ]
+    },
+    {
+      "id": "idle-front34", "group": "cycle", "view": "front34", "scaleBy": "height", "facing": "right", "loop": "pingpong", "fps": 2, "template": "character-reaction", "resolution": "896x1152", "motion": "idle", "dir": "front34", "checks": ["mirror"],
+      "title": {"es": "Respirar de tres cuartos de frente", "en": "Breathe, front three-quarter"},
+      "summary": {"es": "El personaje quieto respira de tres cuartos de frente: los hombros suben y bajan un poco. Dos poses.", "en": "The character stands still and breathes in front three-quarter view: the shoulders rise and fall a little. Two poses."},
+      "poses": [
+        {"id": "rest", "label": {"es": "En reposo", "en": "At rest"}, "prompt": "Standing relaxed with the arms hanging at the sides, the weight on both feet, a calm neutral stance."},
+        {"id": "inhale", "label": {"es": "Inspirando", "en": "Inhaling"}, "prompt": "Standing relaxed with the arms hanging at the sides, the chest slightly raised and the shoulders a little higher as in a deep breath in, a calm neutral stance."}
+      ]
+    },
+    {
+      "id": "idle-back34", "group": "cycle", "view": "back34", "scaleBy": "height", "facing": "right", "loop": "pingpong", "fps": 2, "template": "character-reaction", "resolution": "896x1152", "motion": "idle", "dir": "back34", "checks": ["mirror"],
+      "title": {"es": "Respirar de tres cuartos de espaldas", "en": "Breathe, back three-quarter"},
+      "summary": {"es": "El personaje quieto respira de tres cuartos de espaldas: los hombros suben y bajan un poco. Dos poses.", "en": "The character stands still and breathes in back three-quarter view: the shoulders rise and fall a little. Two poses."},
+      "poses": [
+        {"id": "rest", "label": {"es": "En reposo", "en": "At rest"}, "prompt": "Standing relaxed with the arms hanging at the sides, the weight on both feet, a calm neutral stance."},
+        {"id": "inhale", "label": {"es": "Inspirando", "en": "Inhaling"}, "prompt": "Standing relaxed with the arms hanging at the sides, the chest slightly raised and the shoulders a little higher as in a deep breath in, a calm neutral stance."}
+      ]
+    },
+    {
+      "id": "idle-back", "group": "cycle", "view": "back", "scaleBy": "height", "facing": "front", "loop": "pingpong", "fps": 2, "template": "character-reaction", "resolution": "896x1152", "motion": "idle", "dir": "back", "checks": ["mirror"],
+      "title": {"es": "Respirar de espaldas", "en": "Breathe, back"},
+      "summary": {"es": "El personaje quieto respira de espaldas: los hombros suben y bajan un poco. Dos poses.", "en": "The character stands still and breathes from behind: the shoulders rise and fall a little. Two poses."},
+      "poses": [
+        {"id": "rest", "label": {"es": "En reposo", "en": "At rest"}, "prompt": "Standing relaxed with the arms hanging at the sides, the weight on both feet, a calm neutral stance."},
+        {"id": "inhale", "label": {"es": "Inspirando", "en": "Inhaling"}, "prompt": "Standing relaxed with the arms hanging at the sides, the chest slightly raised and the shoulders a little higher as in a deep breath in, a calm neutral stance."}
       ]
     }
   ]

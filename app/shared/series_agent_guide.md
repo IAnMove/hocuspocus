@@ -106,14 +106,15 @@ character's ink.
 
 `characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
-approves it in Characters › Animaciones.
+approves it in Characters › Animaciones. `characters.animation.make_set` {character_id, set `walk-directions`} makes the
+twelve-pose walks of five directions (for 3D sets) as one resumable job.
 Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
 `autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
 pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.
 The app marks it «aprobada por el agente»: the owner can revert it. In `review` mode both are refused.
 
 In a Series shot a cast entry plays an **approved** animation of its kit (`animation`, see *cast*), and `enterGait: "walk"`
-walks in with its approved `walk` sheet. The check and `series.shot.update` refuse a pending or rejected sheet
+walks in with its approved `walk-12` sheet (else `walk`). The check and `series.shot.update` refuse a pending or rejected sheet
 («pending approval: approve it in Characters › Animaciones»): ask the person; an agent cannot approve.
 A walk-in whose sheet is not approved keeps the bob and the check warns `walk_sheet_not_approved`.
 `"cast": [{"characterId": "gloria", "x": 34, "enterFrom": "left", "enterDuration": 3, "enterGait": "walk", "animation":

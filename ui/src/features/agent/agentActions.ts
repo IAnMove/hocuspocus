@@ -28,7 +28,7 @@ import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentReren
 import type { AgentApplySeriesShotCardAction } from './seriesShotCardCapabilities'
 import type { AgentCheckSeriesLocationStageAction, AgentSetSeriesLocationStageAction } from './seriesStageCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
-import type { AgentMakeCharacterAnimationAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
+import type { AgentMakeCharacterAnimationAction, AgentMakeCharacterAnimationSetAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type { AgentRoomSetsAction } from './roomSetsCapabilities'
@@ -654,6 +654,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentSetSeriesLocationStageAction
   | AgentCheckSeriesLocationStageAction
   | AgentMakeCharacterAnimationAction
+  | AgentMakeCharacterAnimationSetAction
   | AgentReviewCharacterAnimationAction
   | AgentSetVoiceBandAction
   | AgentMediaToolAction

@@ -281,7 +281,7 @@ character. Each one is a few poses of the same figure joined into a sprite sheet
 
 | group | animations |
 |---|---|
-| Cycles (5) | `walk` (four poses of the gait, side view, looks right), `run`, `step` (two poses: the stride and the legs together), `idle` (breathing), `jump` |
+| Cycles (14) | `walk` (four poses of the gait, side view, looks right), `run`, `step` (two poses: the stride and the legs together), `idle` (breathing), `jump`; and for characters that move in a 3D set the **full walks** `walk-12`, `walk-front`, `walk-front34`, `walk-back34`, `walk-back` (twelve poses at 12 fps) and the breaths `idle-side`, `idle-front34`, `idle-back34`, `idle-back` (see «Full walks and the five directions») |
 | Gestures (11) | `wave`, `nod`, `shake` (head no), `point`, `shrug`, `bow`, `clap`, `cheer`, `salute`, `facepalm`, `think` |
 | Anime expressions (18) | `angry`, `surprised`, `sad`, `happy`, `embarrassed`, `scared`, `smug`, `confused`, `determined`, `tired`, `love`, `disgusted`, `bored`, `worried`, `nervous` (nervous laugh), `laughing`, `wink`, `pout`: two poses each, from a hint to the full expression (anger vein, shock lines, sweat drop, hearts) |
 
@@ -337,14 +337,54 @@ mode it is ignored and the job says so (`autoApproveNote`). The checks, set agai
 | `ground_line` | the lowest row of every figure is on the line `feet`, within 2 % of the cell (real: 0.1 %) |
 | `scale_spread` | the smallest figure is at least 80 % of the biggest (legs 80 %, head 70 %, measured before the sheet equalised them; jump and bow 45 %); real walks 0.93 to 0.99 |
 | `scale_measure` | the sheet was scaled by what was asked, not by the height it falls back to when the legs or head cannot be measured |
+| `figure_height` (the full walks only) | every figure is as tall as the median of the cycle, within 3 % |
+| `repeated_poses` (the full walks only) | the same drawing (a hash of the figure) fills at most two cells in a row |
+| `direction_mirror` (the full walks and the breaths) | the sheet is not the same drawing as another direction of the kit, nor its mirror (at least 75 % of the cells match) |
 
 The checks catch a pose drawn at another size, a bad key, a missing pose or a broken sheet. They do not judge identity (a walk sheet
 of a younger-looking character passes): the agent still looks at the sheet and rejects it when it is out of model.
 
 **An animation of your own** ("A medida" in the panel; `custom {title, view, poses}` in the request): a name, a framing (`bust`,
-`front`, `side`) and one line per pose (up to 6, 600 characters each). The words stay on the kit with each pose, so any pose can be
+`front`, `side`, `front34`, `back34`, `back`) and one line per pose (up to 12, 600 characters each). The words stay on the kit with each pose, so any pose can be
 made again alone, and on the job, so an animation not on the kit yet stays on screen after a reload. The defaults of one (fps, loop,
 `scaleBy` and `facing` by framing) live in `custom` of `app/shared/character_animations.json`, one place for the panel and the server.
+
+**Full walks and the five directions (for characters that move in a 3D set).** A character that walks around a room is seen from five
+directions: `side` (the profile, looks right), `front34` (three quarters from the front, looks toward the camera and to the right), `front`,
+`back34` (three quarters from behind, moves away toward the right) and `back`. The ones that look **left are never generated**: the renderer
+flips the same sheet. Each direction has a twelve-pose walk at 12 fps (one cycle a second, a sheet of 6 columns x 2 rows): `walk-12` (side),
+`walk-front`, `walk-front34`, `walk-back34`, `walk-back`. A cycle is the contact, down, lift, passing, up and reach of each leg, with the
+arm opposite to the leading leg swinging back; the old four-pose `walk` stays, and a kit with only that one works as before. The breaths are
+`idle-side`, `idle-front34`, `idle-back34`, `idle-back` (two poses; `idle` is the front one). The prompts of the new views ask for a
+three-quarter or a back view (`views`, `viewNegatives` and `custom.views` in the catalog); `facing` is `right` for `side`, `front34` and
+`back34` and `front` for `front` and `back` (`front` there means «looks neither way», so the walk-in never mirrors it).
+
+*The data contract with the 3D engine* (`app/services/character_animation_directions.py`, `ui/src/lib/characterAnimationDirections.ts`):
+each animation of `kit.animations` may carry `motion` (`"walk"` | `"idle"`) and `dir` (`"side"` | `"front"` | `"front34"` | `"back34"` |
+`"back"`). The job writes them with the sheet. When they are missing (older data, a kit saved by hand) a reader deduces them: `dir` from `view`
+(`side`, `front`, `front34`, `back34`, `back`; a `bust` has none) and `motion` from `group: cycle` plus an id that starts with `walk` or `idle`
+(`run`, `jump`, `step`, gestures, expressions and the author's own have none). What is stored wins. `sheets_for(animations, motion, dir)`
+lists the approved sheets of a direction, the one with more cells first (`walk-12` before `walk`); `walk_sheet` is the one a Series
+entrance plays. A sheet is a grid of equal cells (`sheet.columns` x `sheet.rows`, `sheet.count` cells in the order of the poses), the boots on
+the line `feet` of the cell, as always.
+
+*One job for the five* (`services/character_animation_set_job.py`): the panel button **Crear andares completos** (and **Solo el andar de doce
+poses**, **Respirar en cinco direcciones**), MCP `characters.animation.make_set` {character_id, set `walk-directions` | `walk-12` |
+`idle-directions`, model?, autoApprove?} and the Wizard's `make_character_animation_set` start the same job, `POST
+/api/v1/character-kits/animations/make-set` (follow it with `GET .../sets/{job}` or `characters.animation.status`, stop it with
+`characters.animation.cancel`; the job id is `animset-...`). It takes the sheets the character does not have yet, one after another (the GPU
+makes one animation at a time), each as an ordinary animation job: every pose with the character's own picture as the first reference
+and, from the second sheet on, **the first pose of the neighbouring direction as a second reference** (`sets` in the catalog says which:
+`walk-12` first, `walk-front34` after it, `walk-front` after that, `walk-back34` after `walk-12`, `walk-back` after that), so the identity
+carries from direction to direction. A model that takes one reference only refuses the second and the job goes on with the character's
+picture alone (`refsDropped`). Each sheet is saved pending, like any other. The set is **resumable**: a failure, a cancel or a restart stops it
+where it was and keeps every sheet and pose already made, and asking again skips the sheets the character has and continues (the sheet that
+stopped keeps its poses). With `autoApprove` and the owner's one-shot mode each sheet that passes the checks is approved by the agent
+(a copy or a mirror of another direction stays pending and the set goes on). The job is a file under `.character-animation-set-jobs-v1`.
+The kit keeps at most 48 animations; the catalog has 43, so a set that would not fit is refused before any picture is made.
+
+What the checks cannot tell: that the three-quarter or the back view is **the same character** as the front one. Qwen may change the outfit
+or the hair behind the head. A person (or an agent that looks at the sheets) approves or rejects each direction; **Rehacer** makes one pose again.
 
 `scaleBy` keeps the figure one size from pose to pose, because the model draws every pose at a slightly different size and frames it a
 little differently (up to 6 % between the cells of one wave, and 30 % in the head of one pair of busts, where the second pose showed
@@ -357,7 +397,7 @@ more of the body):
   (DWPose, on the CPU); when no face is found in some pose the sheet is joined by `height` and the reply says so (`scaleBy` is the mode
   used, `requestedScaleBy` the one asked for, `measures` what was measured). The width of the head was tried first and failed: a
   head turned or tipped back is narrower.
-The catalog gives each animation its own (`front` → `base`, `bust` → `face`, `side` → `height`).
+The catalog gives each animation its own (`front` → `base`, `bust` → `face`, `side` → `height`; a walk and the three new views `height`).
 
 The Video 2D card that plays it is named in the list: `walk-cycle-sheet` for cycles (controls `frames`, `columns`, `facing`,
 `step`: two steps make a cycle), `walk-two-pose` for `step` (one step is a sheet of two poses; the figure stops on the last cell) and `character-reaction` for gestures and expressions (`frames`, `columns`, `fps`, `loop`,
@@ -401,11 +441,11 @@ A Series script plays an **approved** animation of the kit (`app/services/series
   criterion) when the character speaks in the shot.
   The sheet is its own layer (`kit-<kit>-sheet-<id>`, a `sheet` sequence with `start` = the window's start second); stop-motion
   holds (`motionStep`) apply to it like to every picture.
-- **`enterGait: "walk"` with the kit's approved `walk` sheet:** the sheet plays on loop for the whole entrance, on the same slide
+- **`enterGait: "walk"` with the kit's approved `walk-12` sheet, else its approved `walk`:** the sheet plays on loop for the whole entrance, on the same slide
   at the same pace, with no bob or sway (the drawings step), one cycle (two steps) per `2 × enterStep` seconds, so the footfalls
   and the `repeat: "steps"` sounds land on the feet. It is mirrored when the character enters against the way the sheet looks
-  (`facing`: a sheet that looks right entering from the right). Without an approved `walk` sheet the entrance is the bob it
-  always was (the check warns `walk_sheet_not_approved` when the sheet exists but is not approved).
+  (`facing`: a sheet that looks right entering from the right). Without an approved `walk-12` or `walk` sheet the entrance is the bob it
+  always was (the check warns `walk_sheet_not_approved` when a walk sheet exists but none is approved; a pending `walk-12` never hides an approved `walk`).
 - **Limits:** one animation per cast entry; an `animation` that would start inside a walk-in that plays the walk sheet is refused
   by the check (start it at the walk's end; the compiler moves it there if it gets past the check). A bust expression goes with a bust pose in a `medium` or `close` shot and is sized from the head, not from the whole pose.
 
@@ -676,6 +716,10 @@ The animation catalog (`character_animations.json`: groups, views, the sheet con
 
 `{animation, pose, description?, style?, screen?}` → `{prompt, negative, screen, resolution}`. `404` for an unknown
 animation, pose or style.
+
+### `POST /api/v1/character-kits/animations/make-set`
+
+`{workspace, kitId, set: walk-directions | walk-12 | idle-directions, model?, autoApprove?}` → `{job}`: one set job (`animset-...`, `status`, `sheets[]` with `animationId`, `status` waiting | running | completed | skipped | failed | cancelled, `jobId`, `reviewState`, `failed`, `done`, `total`). `GET .../animations/sets?workspace=&kitId=` lists them, `GET .../animations/sets/{job}?workspace=` follows one, `POST .../animations/sets/{job}/cancel` {workspace} stops it. `400` unknown set, `404` unknown character, `400 animation_limit` when the sheets would not fit on the kit.
 
 ### `POST /api/v1/character-kits/animations/sheet`
 
