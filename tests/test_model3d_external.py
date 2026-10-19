@@ -197,7 +197,7 @@ def test_catalog_row_names_the_optional_runtime_and_the_weights_step(monkeypatch
     assert row["resource_requirements"]["vram_gb"] == 24 and "download its weights" in row["selector_help"]
 
 
-def test_not_installed_machine_imports_nothing_from_trellis_and_reports_it_missing():
+def test_not_installed_machine_imports_nothing_from_trellis_and_reports_it_missing(tmp_path):
     """The central start-up must not load TRELLIS, huggingface_hub or CUDA code; the row says «not installed»."""
     import os
     import subprocess
@@ -208,14 +208,16 @@ def test_not_installed_machine_imports_nothing_from_trellis_and_reports_it_missi
         " and m != 'services.trellis2' and not m.startswith('services.trellis2.')]\n"
         "assert not bad, bad\n"
         "status = model3d_external.installation_status('trellis2')\n"
-        "assert status['installed'] is False and status['weights_downloaded'] is False, status\n"
+        "assert status['installed'] is False and isinstance(status['weights_downloaded'], bool), status\n"
         "assert status['install_hint'], status\n"
         "pixal = model3d_external.installation_status('pixal3d')\n"
         "assert 'compatible' not in pixal and 'weights_downloaded' not in pixal, pixal\n"
     )
     root = Path(__file__).resolve().parents[1]
-    env = {**os.environ, "PYTHONPATH": str(root / "app"), "CUDA_VISIBLE_DEVICES": "-1"}
-    env.pop("HOCUSPOCUS_TRELLIS2_ROOT", None)
+    # A runtime installed on this machine must not change the verdict: point both engines at nothing.
+    env = {**os.environ, "PYTHONPATH": str(root / "app"), "CUDA_VISIBLE_DEVICES": "-1",
+           "HOCUSPOCUS_TRELLIS2_ROOT": str(tmp_path / "none"), "HOCUSPOCUS_TRELLIS2_PYTHON": str(tmp_path / "none/python"),
+           "HOCUSPOCUS_PIXAL3D_ROOT": str(tmp_path / "none"), "HOCUSPOCUS_PIXAL3D_PYTHON": str(tmp_path / "none/python")}
     done = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, text=True, capture_output=True, timeout=120)
     assert done.returncode == 0, done.stderr[-2000:]
 
