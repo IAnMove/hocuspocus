@@ -31,6 +31,7 @@ from typing import Any
 from urllib.parse import quote
 
 from services import series_cast_animation as cast_animation
+from services import series_stage as stage_math
 from services import series_entrances as entrances
 from services import series_finish
 from services import series_shot_extras as extras
@@ -99,7 +100,7 @@ def _cast_entry(value: Any) -> dict[str, Any] | None:
     return {"characterId": value["characterId"][:160], **_text_field(value, "poseId", 120),
             **_numbers(value, (("x", -50, 150), ("scale", 0.2, 4))), **_choice(value, "motion", MOTIONS),
             **_choice(value, "enterFrom", ("left", "right")), **entrances.entry_fields(value), **cast_animation.entry_fields(value),
-            **_explicit_transform(value.get("transform")),
+            **_explicit_transform(value.get("transform")), **stage_math.cast_fields(value),
             # A pose cut by its image border is moved so the cut stays out of the frame; false keeps it where x puts it.
             **({"edgeSnap": False} if value.get("edgeSnap") is False else {}),
             # from_script moves a cast member looking out of the frame (series_look_room); false keeps x.
@@ -571,6 +572,35 @@ def _narrative(series: dict[str, Any], episode: dict[str, Any], shot: dict[str, 
             "visualIntent": str(shot.get("action") or shot.get("prompt") or "")[:500]}
 
 
+def _figure_height(series: dict[str, Any], entry: dict[str, Any]) -> float:
+    """How tall a cast member is (metres): the entry's ``heightM``, else the character's ``layout2d.heightM``, else an adult
+    (``ADULT_M``) times the character's own ``layout2d.scale``, which a height replaces on a plate with a stage."""
+    character = next((item for item in series.get("characters") or [] if item.get("id") == entry["characterId"]), {})
+    own = character.get("layout2d") if isinstance(character.get("layout2d"), dict) else {}
+    for value in (entry.get("heightM"), own.get("heightM")):
+        if _number(value, 0.2, 6) is not None:
+            return float(value)
+    scale = _number(own.get("scale"), 0.2, 4)
+    return round(stage_math.ADULT_M * (scale if scale is not None else 1.0), 3)
+
+
+def _with_stage(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any]) -> None:
+    """A wide or two-shot on a plate whose location has a ``stage`` (``series_stage``): the compiler sizes the cast by it. Each
+    cast member then carries its height and ``depth`` (when it names one) and ``boost`` is only a scale the shot asked for."""
+    location = next((item for item in series.get("locations") or [] if item.get("id") == shot.get("locationId")), None)
+    stage = stage_math.location_stage(location)
+    if not stage or spec["framing"] not in stage_math.FRAMINGS or not spec.get("background"):
+        return
+    seen = [entry for entry in _cast_entries(shot) if kit_ref(series, entry["characterId"])]
+    for item, entry in zip(spec["cast"], seen):
+        item["heightM"] = _figure_height(series, entry)
+        depth = stage_math.depth_value(entry.get("depth"))
+        if depth is not None:
+            item["depth"] = depth
+        item["boost"] = float(entry["scale"]) if _number(entry.get("scale"), 0.2, 4) is not None else 1.0
+    spec["stage"] = stage
+
+
 def _with_set(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any], focus: float, workspace: str) -> dict[str, Any]:
     background = background_for(series, shot, workspace)
     detail = shot_detail(shot)
@@ -580,6 +610,7 @@ def _with_set(spec: dict[str, Any], series: dict[str, Any], shot: dict[str, Any]
     if props:
         spec["props"] = props
     spec.update(plan_layers(series, shot, spec["framing"], focus, workspace))
+    _with_stage(spec, series, shot)
     return spec
 
 

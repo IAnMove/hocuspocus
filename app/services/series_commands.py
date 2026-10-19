@@ -1002,6 +1002,10 @@ _RUNNERS.update(_ANIMATION_RUNNERS)
 from services.series_card_commands import OPERATIONS as _CARD_OPERATIONS, RUNNERS as _CARD_RUNNERS  # noqa: E402
 OPERATIONS.update(_CARD_OPERATIONS)
 _RUNNERS.update(_CARD_RUNNERS)
+# So are the plate stage tools (services/series_stage_commands.py).
+from services.series_stage_commands import OPERATIONS as _STAGE_OPERATIONS, RUNNERS as _STAGE_RUNNERS  # noqa: E402
+OPERATIONS.update(_STAGE_OPERATIONS)
+_RUNNERS.update(_STAGE_RUNNERS)
 # So is the voice band (services/voice_band_commands.py).
 from services.voice_band_commands import OPERATIONS as _VOICE_BAND_OPERATIONS, RUNNERS as _VOICE_BAND_RUNNERS  # noqa: E402
 OPERATIONS.update(_VOICE_BAND_OPERATIONS)

@@ -49,7 +49,7 @@ from services import series_hearing
 from services.series_document_card import layout_document, stored_document
 from services.series_duration_estimate import estimate_episode
 from services.series_continuity import same_picture_warnings
-from services import series_fx_warnings
+from services import series_fx_warnings, series_stage_checks
 from services.series_script_warnings import finish_check, group_warning
 from services.series_shot_plan import FRAMINGS, LANGUAGE_KEYS, MOTIONS, frame_size, language_key
 from services.series_render import SERIES_RESOLUTIONS, series_resolution_preset
@@ -219,6 +219,7 @@ class EpisodeScript:
         if shot.get("kind") not in (None, "2d", *METHODS):
             check.problems.append(f"{where}: kind must be 2d, {', '.join(METHODS)}")
         self._check_cast(shot, where)
+        series_stage_checks.check_script_shot(self, shot, where, self.shot_id(index))
         self._check_animations(index, shot, where)
         self._check_lines(shot, where)
         self._check_files(shot, where)

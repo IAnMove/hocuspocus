@@ -880,6 +880,7 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
     from services.series_ambience import check_sound_design
     from services.series_finish import store_look
     from services.series_layers import normalize_location
+    from services.series_stage import normalize_location_stage
     from services.series_production import normalize_production_methods
     from services.series_voice_rooms import check_voice_rooms
     if not isinstance(value, dict):
@@ -901,10 +902,10 @@ def normalize_series_project(value: Any, key: str, workspace_id: str) -> dict:
         }) for index, item in enumerate(_objects(project.get("characters")))
     ]
     locations = [
-        normalize_location(_normalize_entity(item, "location", index, {
+        normalize_location_stage(normalize_location(_normalize_entity(item, "location", index, {
             "name": f"Location {index + 1}", "purpose": "", "description": "",
             "referenceAssetIds": [], "variants": [], "currentState": {}, "approval": "draft",
-        }), f"locations[{index}].layout2d") for index, item in enumerate(_objects(project.get("locations")))
+        }), f"locations[{index}].layout2d"), f"locations[{index}].layout2d") for index, item in enumerate(_objects(project.get("locations")))
     ]
     props = [
         _normalize_entity(item, "prop", index, {
