@@ -533,3 +533,56 @@ Painted textures also remain a production `spec.sets` entry of the same shape. T
 A `kind: "3d"` Series shot names `set: "<room>"`. Each person carries `at: {x, z}` in metres or `near`, `mid` or `far`. Feet stand on the floor at that height (`heightM`, default 1.7). Use it for a wide interior full-body shot. A person outside the floor, on the door or on furniture is an error. A mold room (`location.set3d`) stays the other path and is not merged with a named box room.
 
 The wide frame is the shared camera in `app/shared/room_box_camera.json`: eye height 1.6 m, just outside the open side, field of view 48. Flat props can look like cardboard when the camera moves.
+
+## Directional figures (a flat character that turns to the camera)
+
+A 2D character in a 3D shot used to be one picture that always looked at the camera. A cast entry that says where it looks or goes is
+now drawn like the sprites of Octopath, Paper Mario or Don't Starve: a flat figure in the scene, lit by its key light, hidden by the
+set, and showing the drawing of the angle between where it looks and where the camera is (front, three-quarter front, side,
+three-quarter back, back; the left is the mirror of the right), with its walk cycle played by the ground it covers. Only an entry with
+`heading` or `walkTo` changes; everything else in the shot is drawn as before.
+
+```json
+{"kind": "3d", "set": "kitchen", "cast": [
+  {"characterId": "ana", "at": {"x": 1.5, "z": 0}, "heading": "right", "walkTo": {"x": -1.5, "z": 0}, "walkSpeed": 1.2, "walkAt": 0.5, "lightTint": 0.6}]}
+```
+
+- **`heading`:** degrees against the camera at the start of the shot (0 faces it, 90 faces screen right, 180 turns its back, -90 faces
+  screen left) or `toward`, `right`, `away`, `left`. It is the way the figure looks while it stands (before and after its walk). Because it is
+  read against the first camera, a still figure changes drawing when the camera orbits or travels around it.
+- **`walkTo` `{x, z}`, `walkSpeed`, `walkAt`:** the figure walks in a straight line from where it stands (`at`, or its place in the
+  template) to that point, in metres, at `walkSpeed` m/s (default 1.2, from 0.2 to 6) from `walkAt` seconds into the shot. While it
+  walks it looks along its path; it plays the walk sheet of the direction of its path against the camera, one cycle every two steps of
+  0.75 m (so the feet and the ground agree and nothing slides). When it arrives it shows the idle sheet of its `heading` (or of
+  the way it walked).
+- **The kit:** each approved animation of the Character Kit that is a walk or an idle of one side carries `motion` (`walk` or `idle`)
+  and `dir` (`front`, `front34`, `side`, `back34`, `back`): `walk` or `walk-12` and `idle-side` (a sheet looks right), `walk-front`, `walk-front34`,
+  `walk-back34`, `walk-back`, `idle-<dir>`. With no `dir`, a `side` or `front` view says it; with no `motion`, a cycle whose id starts with `walk` or `idle`
+  says it. A sheet drawn looking left says `facing: "left"`. A direction the kit lacks is drawn by the nearest one it has; with no
+  walk or idle sheet at all the base pose glides. Nothing is an error: the script check warns `direction_sheet_missing`.
+- **Fade:** when the drawing changes (another sheet, the other side, the pose) the old one fades into the new one over 0.12 s
+  (`crossfadeSeconds`), added up so the figure never thins. It starts on the frame of the change and is the same on every export; a jump in
+  time (a seek) shows no fade. The 10 degrees of hysteresis still keep it from flickering at a boundary.
+- **Mirror and asymmetric costumes:** the left is the right sheet mirrored, unless the kit drew that side itself: `dir: "side_r"`, `"front34_r"`
+  or `"back34_r"` is a sheet that looks left (a front or a back has no other side) and beats the mirror, for a badge, a sword arm or a parting. A kit that
+  says `asymmetric: true` is warned (`mirror_flips_detail`) when the shot mirrors a direction it has no `_r` sheet for.
+- **Speech, mouth and eyes:** a character that speaks never shows a walk sheet. While one of its lines runs the figure stands where it is and
+  the walk goes on afterwards, so it arrives later by the time it spoke (`walk_blocked_by_speech`, with the seconds, on the render's item; the
+  script check warns before it when the character has lines and a walk). It shows the idle sheet of its direction **if that sheet says where its mouth is**
+  (`mouth` `{offsetX, offsetY, scale, rotation?}` on the kit animation, in % of the cell's longer edge, like the pose anchors; `eyes` the same for the blink):
+  the kit's mouth drawing of each cue and its blink are drawn there, mirrored with the sheet. A sheet with no `mouth` shows the talking pose (a front picture)
+  instead, and the check warns `direction_sheet_no_mouth` for the directions the shot needs.
+- **Light and depth:** a figure drawn from sheets is unlit, so it does not brighten and darken as the camera goes round it, and is multiplied by the
+  key light of the scene: its colour at its strength, `lightTint` of the way from white (cast field or `screen.directional.lightTint`, 0 to 1, default 0.6, 0 turns it off).
+  It is a plane with alpha in the depth buffer, so a column, a piece of furniture or the walls of a room hide it, and it hides what is behind it; its contact shadow
+  is on the floor.
+- **Checks:** `direction_sheet_missing`, `direction_sheet_no_mouth`, `mirror_flips_detail`, `walk_path_outside_room` (the destination is off the floor of a box room; the
+  walk is not stopped) and `walk_blocked_by_speech`. A bad value (`heading: "up"`, `walkTo: {x: 1}`, a speed with no destination, `lightTint: 3`) or the fields on a shot that
+  is not 3D stops the script.
+- **Doors:** the script (`series.episode.from_script`, `series.shot.update`, `edit_series_shot`), the 3D cast part of the shot inspector
+  (Looks, Walks to x and z, Speed, Starts at, Light tint) and, for a plain Video 3D scene, the `directional` binding of `world3d.scene.patch`
+  (`{sheets, heading?, walk? {to, speed, start}, speech?, lightTint?}` on an image cutout; `null` removes it).
+- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
+  drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
+  `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot, a walk that stops to speak, the frames of a fade and a
+  column in front of and behind two figures, with a synthetic five-direction kit, and checks the pixels.

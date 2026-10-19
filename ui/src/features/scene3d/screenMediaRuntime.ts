@@ -1,10 +1,11 @@
 import { CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, type Object3D } from 'three'
-import { mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
+import { hasOwnArt, mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
 import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlane } from './screenPlane.ts'
 import { applyPsxImageMaterial, type ImageLook } from './imageLook'
 import { applyImageColorKey } from './imageColorKey'
 import { loadImagePoses } from './imagePoseRuntime'
 import { loadTalkingCutout } from './talkingCutout'
+import { loadDirectionalSprite } from './directionalRuntime'
 
 export type ScreenMediaRuntime = {
   /** The painted picture, for light the screen throws on its surroundings. */
@@ -65,7 +66,7 @@ function screenSurfaceAspect(target: Mesh, screen: MediaScreen, imagePlate: bool
 
 function applyScreenLook(material: MeshBasicMaterial, texture: CanvasTexture, screen: MediaScreen, imagePlate?: { look?: ImageLook }) {
   material.map = texture
-  if (screen.transparent || screen.poseSequence || screen.talk) {
+  if (screen.transparent || hasOwnArt(screen)) {
     material.transparent = true
     material.alphaTest = .05
     material.depthWrite = true
@@ -170,6 +171,7 @@ function drawScreenFrame(context: CanvasRenderingContext2D, canvas: HTMLCanvasEl
 }
 
 async function loadScreenSource(screen: MediaScreen, shared: SharedVideo | null, image: HTMLImageElement | null, signal: AbortSignal) {
+  if (screen.directional?.sheets.length) return loadDirectionalSprite(screen, signal)
   if (screen.poseSequence) return loadImagePoses(screen.poseSequence, signal)
   if (screen.talk) return loadTalkingCutout(screen.talk, signal)
   if (shared) await untilAborted(shared.ready, signal)
@@ -182,7 +184,7 @@ export async function bindScreenMedia(root: Object3D, screen: MediaScreen, stand
   const { attachedPlane, target, previous, canvas, context, texture, material } = prepareScreenSurface(root, screen, standalone, imagePlate)
   const shared = screen.media === 'video' ? acquireVideo(screen.sourceUrl, screen.style === 'crt') : null
   const video = shared?.video ?? null
-  const image = video || screen.poseSequence || screen.talk ? null : new Image()
+  const image = video || hasOwnArt(screen) ? null : new Image()
   let poses: { paint(context: CanvasRenderingContext2D, screen: MediaScreen, seconds: number): void; dispose(): void } | undefined
   const abort = new AbortController()
   let released = false

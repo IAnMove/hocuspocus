@@ -318,7 +318,8 @@
         "tests/characterization/test_repaint.py",
         "tests/test_canonical_task_bind.py",
         "tests/test_creation_models.py",
-        "tests/test_dev_tools.py"
+        "tests/test_dev_tools.py",
+        "tests/test_series_directional.py"
       ]
     },
     {
@@ -2756,6 +2757,24 @@
         "tests/test_production_stage_frames.py",
         "tests/test_production_shot_edit.py",
         "tests/test_production_cast_portrait.py"
+      ]
+    },
+    {
+      "prefix": "app/services/series_directional.py",
+      "paths": [
+        "tests/test_series_directional.py"
+      ]
+    },
+    {
+      "prefix": "app/services/directional_sprite.py",
+      "paths": [
+        "tests/test_series_directional.py"
+      ]
+    },
+    {
+      "prefix": "app/shared/directional_sprites.json",
+      "paths": [
+        "tests/test_series_directional.py"
       ]
     }
   ]

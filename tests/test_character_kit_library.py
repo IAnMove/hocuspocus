@@ -122,3 +122,11 @@ def test_a_pose_may_carry_its_own_blink_and_a_blob_is_refused(tmp_path):
     kit["anchors"]["base"]["blinkSource"] = "blob:http://x/1"
     with pytest.raises(ValueError, match="persistent"):
         normalize_character_kit(kit)
+
+
+def test_a_kit_keeps_asymmetric_true_and_drops_anything_else():
+    from services.character_kit_library import normalize_character_kit as normalize_kit
+    base = {"version": 1, "id": "ana", "name": "Ana", "style": "cutout"}
+    assert normalize_kit({**base, "asymmetric": True}).get("asymmetric") is True
+    assert "asymmetric" not in normalize_kit({**base, "asymmetric": False})
+    assert "asymmetric" not in normalize_kit(base)

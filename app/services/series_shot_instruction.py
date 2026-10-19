@@ -32,6 +32,8 @@ Answer with JSON only: {{"changes": {{...}}, "append": {{...}}, "summary": "what
 - Use only the character ids, poses, location ids, files and effect kinds you are given. Never invent a file name.
 Shot vocabulary (same as series.episode.from_script):
 - cast: [{{"characterId", "poseId", "x" (% of frame width), "enterFrom": "left"|"right", "motion": "idle"|"still"|"shake"}}]
+- cast of a 3d shot: [{{"characterId", "at": {{"x", "z"}} metres | near|mid|far, "heading": degrees (0 toward the camera, 90 screen right, 180 away)
+  | toward|right|away|left, "walkTo": {{"x", "z"}} metres, "walkSpeed": m/s (1.2), "walkAt": seconds}}] (it turns to the camera and walks)
 - lines: [{{"who": characterId, "es": "...", "en": "...", "pauseBefore": seconds}}] (one key per language the episode has)
 - framing: wide|two|medium|close|insert|title; camera: static|push|pull|pan-left|pan-right|drift (push: slow push-in;
   pull: slow pull-out; pan-left/pan-right: across the plate; drift: a slight float; static: none)

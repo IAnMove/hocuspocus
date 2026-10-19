@@ -483,6 +483,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
             stand_ins.add(slot["id"])
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
+    _bind_directional(slot, binding)
     return warnings
 
 
@@ -547,6 +548,25 @@ def _bind_checked(slot: dict, binding: dict) -> None:
             slot[key] = _checked(key, binding[key], slot)
         except ValueError as error:
             raise World3DSceneError(f"invalid_{key}", f"{slot.get('id')}: {error}") from error
+
+
+def _bind_directional(slot: dict, binding: dict) -> None:
+    """A 2D figure that turns to the camera lives in the screen of an image object; ``null`` takes it off."""
+    if "directional" not in binding:
+        return
+    screen = slot.get("screen") if isinstance(slot.get("screen"), dict) else None
+    if binding["directional"] is None:
+        if screen is not None:
+            screen.pop("directional", None)
+        return
+    try:
+        if slot.get("media") != "image":
+            raise ValueError("directional plays on an image object")
+        value = slot_fields.directional(binding["directional"])
+    except ValueError as error:
+        raise World3DSceneError("invalid_directional", f"{slot.get('id')}: {error}") from error
+    screen = slot.setdefault("screen", {})
+    screen.update(media="image", sourceUrl=screen.get("sourceUrl") or slot.get("sourceUrl") or "", directional=value)
 
 
 def _checked(key: str, value, slot: dict):
@@ -731,7 +751,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
-        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "position", "rotationY", "scale",
+        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template"],
     }

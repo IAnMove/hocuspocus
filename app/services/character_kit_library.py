@@ -282,6 +282,8 @@ def normalize_character_kit(value: Any, fallback_id: str = "") -> dict[str, Any]
             raise ValueError(str(exc)) from exc
     if value.get("lookNotes"):
         result["lookNotes"] = _text(value["lookNotes"], "Character look notes", 4000)
+    if value.get("asymmetric") is True:
+        result["asymmetric"] = True  # a badge or a scar on one side: mirroring a sheet flips it (the engine warns ``mirror_flips_detail``)
     if value.get("restPose") is not None:
         rest = value["restPose"]
         if not isinstance(rest, dict):

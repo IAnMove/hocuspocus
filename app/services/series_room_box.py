@@ -14,6 +14,7 @@ from typing import Any
 from services.room_box import camera_pose, normalize, prop_point
 
 MODEL_HEIGHT = 1.7
+DIRECTION_KEYS = ("heading", "walkTo", "walkSpeed", "walkAt")
 ZONES = ("near", "mid", "far")
 STORE = "scene3d-rooms.json"
 
@@ -261,7 +262,7 @@ def _dressed_cast(shot: dict) -> list[dict]:
             continue
         row = {"characterId": person["characterId"], "objectId": person.get("objectId") or f"subject_{index + 1}",
                "poseId": person.get("poseId") or "base"}
-        for key in ("at", "heightM", "mark"):
+        for key in ("at", "heightM", "mark", *DIRECTION_KEYS):
             if key in person:
                 row[key] = person[key]
         rows.append(row)
