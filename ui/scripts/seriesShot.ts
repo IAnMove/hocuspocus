@@ -13,7 +13,7 @@ import type { Scene, SceneKeyframe, SceneLayer } from '../src/types/index.ts'
 import type { SceneFx } from '../src/features/sceneFx/types.ts'
 import { holdFields } from '../src/features/stopMotion.ts'
 import { gateSheets, sheetLayer, sheetPlacement, sheetWindows, type SheetGate, type SheetRequest } from './seriesSheet.ts'
-import { ADULT_M, FEET_LINE, STAGE_FRAMINGS, stageStanding, type PlateView, type Stage } from './seriesStage.ts'
+import { ADULT_M, FEET_LINE, figureShare, STAGE_FRAMINGS, stageStanding, type PlateView, type Stage } from './seriesStage.ts'
 
 export type Pose = { x: number; y: number; scale: number; opacity?: number; rotation?: number }
 export type Framing = 'wide' | 'two' | 'medium' | 'close' | 'insert' | 'title'
@@ -239,8 +239,8 @@ export function stageView(shot: Pick<ShotSpec, 'stage' | 'background' | 'framing
   return { zoom, y }
 }
 
-/** A whole figure on a plate with a stage: its feet where its ``depth`` puts them and its height from the perspective
- * (``heightM`` metres at that depth), times ``boost`` when the shot gave one. A pose cut at the bottom (a bust) is not a whole
+/** A whole figure on a plate with a stage: its feet where its ``depth`` puts them and its own height from the perspective
+ * (``heightM`` metres at that depth), times ``boost`` when the shot gave one; the pose image is that plus the rig's margin. A pose cut at the bottom (a bust) is not a whole
  * figure: null, and the framing places it. Side cuts are slid out of the frame as ever (``snapToEdges``). */
 export function stagedTransform(kit: CharacterKit, cast: CastSpec, stage: Stage, view: PlateView, aspect: number): Pose | null {
   const poseId = cast.poseId ?? 'base'
@@ -248,8 +248,10 @@ export function stagedTransform(kit: CharacterKit, cast: CastSpec, stage: Stage,
   if (cutRuns(found?.cut?.bottom).length) return null
   const size = poseAsset(kit, poseId)
   const standing = stageStanding(stage, cast.heightM ?? ADULT_M, cast.depth ?? 1, view)
-  const height = standing.height * (cast.boost ?? 1)
-  const base = { x: cast.x, y: round(standing.feetY - height / 2 + height * 0.015), scale: round(scaleForHeight(size, height, aspect)) }
+  // The pose image is the figure plus the rig's margin: size the image, and let its bottom edge hang below the feet by that margin.
+  const share = figureShare(size)
+  const height = standing.height * (cast.boost ?? 1) / share
+  const base = { x: cast.x, y: round(standing.feetY + (1 - share) / 2 * height - height / 2), scale: round(scaleForHeight(size, height, aspect)) }
   return cast.edgeSnap === false || !found?.cut ? base : snapToEdges(base, size, found.cut, aspect, { line: null, fraction: eyeFraction(kit, poseId, size) })
 }
 

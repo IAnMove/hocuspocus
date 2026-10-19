@@ -14,7 +14,9 @@ optional ``layout2d`` block overrides any of it explicitly:
 Locations may carry ``layout2d.homes`` (x % per character, for continuity
 between shots), ``layout2d.backgroundAssetId`` and ``layout2d.layers``: images
 and looping videos at a depth behind or in front of the cast, which a camera
-push moves by depth (``series_layers``; a shot's own list replaces them). ``series.soundDesign``
+push moves by depth (``series_layers``; a shot's own list replaces them). A location with ``layout2d.stage`` (``series_stage``: the
+plate's horizon and one object of known height) sizes the wide and two-shot cast by each entry's ``depth`` (0 far, 1 near) and
+``heightM`` instead of by the framing. ``series.soundDesign``
 holds a stinger for the first shot of each scene and an ambience per
 location (laid by the episode assembly instead when ``ambienceMode`` is
 ``"episode"``: ``series_ambience``), and the room each location's voices are

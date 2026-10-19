@@ -14,7 +14,8 @@ clear message instead of halfway through a render::
      "scenes": [{"id": "cold_open", "location": "street", "variant": "day", "purpose": "..."}],
      "shots": [{"scene": "cold_open", "framing": "wide", "camera": "push",
                 "cast": [["kevin", "base", 58], {"characterId": "mark", "poseId": "wave", "x": 30, "enterFrom": "left"},
-                         ["boss", "bust", 80, {"edgeSnap": false, "lookRoom": false}]],
+                         ["boss", "bust", 80, {"edgeSnap": false, "lookRoom": false}],
+                         {"characterId": "ana", "x": 70, "depth": 0.4, "heightM": 1.6}],  # depth/heightM: see series_stage
                 "lines": [{"who": "kevin", "es": "...", "en": "...", "pauseBefore": 0.6},
                           {"who": "narrator", "es": "...", "voiceRoom": "radio"}],
                 "card": {"kind": "title", "es": ["TITLE", "Episode 3"], "en": [...]},

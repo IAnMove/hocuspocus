@@ -19,6 +19,9 @@ layer's ``depth``, 1 is the nearest the lens): the feet line goes from ``floorTo
 frame) at 1, and the figure is drawn at the height above, ``heightM`` metres (the entry's, else its character's
 ``layout2d.heightM``, else 1.75 times its ``layout2d.scale``). The compiler (``ui/scripts/seriesStage.ts``, which mirrors this file) does it
 for ``wide`` and ``two`` shots; ``medium`` and ``close`` keep their eye-line framing. Without a ``stage`` nothing changes.
+
+The size is the figure's, not the pose image's: the rig leaves a margin of ``FIGURE_MARGIN`` of the image's longest side above and
+below it (``figure_share``). A pose cut at the bottom (a bust), a ``transform`` and a perched character keep their own placement.
 """
 from __future__ import annotations
 
@@ -27,6 +30,8 @@ from typing import Any
 # The framing's feet line (% of the frame height) where depth is 1 (``FEET`` in ui/scripts/seriesShot.ts).
 FEET = 94.0
 ADULT_M = 1.75
+# The margin the rig leaves around a figure, as a share of the pose image's longest side (``flat_rig.crop_figure``, ``margin=0.02``).
+FIGURE_MARGIN = 0.02
 REF_M = 2.0
 FRAMINGS = ("wide", "two")
 DEPTH_WORDS = {"far": 0.0, "mid": 0.5, "near": 1.0}
@@ -174,3 +179,24 @@ def figure_height(size: dict[str, Any], scale: float, aspect: float) -> float:
     """The height (% of the frame) a pose image of ``size`` takes at layer ``scale`` (the layer is contained in the frame)."""
     ratio = size["width"] / size["height"]
     return scale * 100 if ratio < aspect else scale * 100 * aspect / ratio
+
+
+def figure_share(size: dict[str, Any]) -> float:
+    """The share of a pose image's height the figure takes: the rig crops each pose with a margin of ``FIGURE_MARGIN`` of its longest
+    side above and below the figure (``flat_rig.crop_figure``)."""
+    return max(0.5, 1 - 2 * FIGURE_MARGIN * max(size["width"], size["height"]) / size["height"])
+
+
+def placement(size: dict[str, Any], feet: float, figure: float, aspect: float) -> tuple[float, float]:
+    """(layer y %, layer scale) of a pose whose figure is ``figure`` % of the frame tall with its feet on frame y ``feet``."""
+    share = figure_share(size)
+    image = figure / share
+    ratio = size["width"] / size["height"]
+    scale = image / 100 if ratio < aspect else image / 100 * ratio / aspect
+    return feet + (1 - share) / 2 * image - image / 2, scale
+
+
+def figure_of(size: dict[str, Any], y: float, scale: float, aspect: float) -> tuple[float, float]:
+    """(feet y %, figure height %) of a pose drawn at layer ``y`` and ``scale``: the inverse of ``placement``."""
+    image, share = figure_height(size, scale, aspect), figure_share(size)
+    return y + image / 2 - (1 - share) / 2 * image, image * share

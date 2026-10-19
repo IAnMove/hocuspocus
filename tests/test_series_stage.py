@@ -231,14 +231,15 @@ def test_no_plate_no_suggestion_and_a_calibrated_location_is_quiet():
 
 
 def test_a_figure_off_the_perspective_is_flagged_and_one_on_it_is_not():
-    # 450x1000 pose in a 16:9 frame: drawn height is 100 * scale. At feet y 84.55 a 1.75 m person is 0.678 of the frame.
+    # 450x1000 pose in a 16:9 frame: the image is 100 * scale tall, the figure 0.96 of it, feet 2 % of the image above its bottom.
     way_off = {"characterId": "kevin", "transform": {"x": 30, "y": 70, "scale": 0.3}}
     assert _codes(_checked([way_off], stage=OFFICE)) == [("figure_scale_off", "kevin")]
     feet, height = stage_math.standing(OFFICE, 1.75, 0.4)
-    on_it = {"characterId": "kevin", "transform": {"x": 30, "y": round(feet - height / 2 + height * 0.015, 3), "scale": round(height / 100, 3)}}
+    y, scale = stage_math.placement({"width": 450, "height": 1000}, feet, height, 16 / 9)
+    on_it = {"characterId": "kevin", "transform": {"x": 30, "y": round(y, 3), "scale": round(scale, 3)}}
     assert _codes(_checked([on_it], stage=OFFICE)) == []
     warning = next(item for item in _checked([way_off], stage=OFFICE) if item["code"] == "figure_scale_off")
-    assert warning["shots"] == ["e2s00"] and "0.44" in warning["message"] and "depth" in warning["message"]
+    assert warning["shots"] == ["e2s00"] and "0.43" in warning["message"] and "depth" in warning["message"]
 
 
 def test_the_ratio_is_judged_with_the_limits_of_the_brief_and_a_scale_counts_too():
@@ -247,7 +248,8 @@ def test_the_ratio_is_judged_with_the_limits_of_the_brief_and_a_scale_counts_too
     assert _codes(_checked([{"characterId": "kevin", "scale": 0.8}, {"characterId": "gary", "scale": 1.3}], stage=OFFICE)) == []
     # In a two-shot the plate is shown at 1.12: the same perspective figure is drawn bigger and no warning comes of it.
     feet, height = stage_math.standing(OFFICE, 1.75, 1, 1.12, 50)
-    two = {"characterId": "kevin", "transform": {"x": 30, "y": round(feet - height / 2 + height * 0.015, 3), "scale": round(height / 100, 3)}}
+    y, scale = stage_math.placement({"width": 450, "height": 1000}, feet, height, 16 / 9)
+    two = {"characterId": "kevin", "transform": {"x": 30, "y": round(y, 3), "scale": round(scale, 3)}}
     assert _codes(_checked([two], stage=OFFICE, framing="two")) == []
     assert _codes(_checked([{"characterId": "kevin", "scale": 0.3}], stage=OFFICE, framing="medium")) == []
 
@@ -308,11 +310,11 @@ def test_the_planned_shot_compiles_with_the_perspective_and_without_a_stage_as_b
     if not TSX.is_file():
         pytest.skip("ui/node_modules/tsx is not installed")
     staged = _compiled(_series(OFFICE), cast=[{"characterId": "lucky", "depth": 1}, {"characterId": "bigman", "depth": 1}])
-    lucky, bigman = staged["lucky"]["scale"] * 100, staged["bigman"]["scale"] * 100
+    lucky, bigman = staged["lucky"]["scale"] * 96, staged["bigman"]["scale"] * 96  # the figure is 0.96 of the 450x1000 pose image
     assert lucky == pytest.approx(80.352, abs=0.06) and bigman / lucky == pytest.approx(1.4 / 1.8, abs=0.002)
     assert lucky > 62, "a foreground adult is taller than the 2 m door"
     behind = _compiled(_series(OFFICE), cast=[{"characterId": "lucky", "depth": 1}, {"characterId": "bigman", "depth": "far"}])
-    assert behind["bigman"]["scale"] * 100 == pytest.approx(43.4, abs=0.06) and behind["bigman"]["y"] < behind["lucky"]["y"]
+    assert behind["bigman"]["scale"] * 96 == pytest.approx(43.4, abs=0.06) and behind["bigman"]["y"] < behind["lucky"]["y"]
     plain = _compiled(_series())
     assert (plain["lucky"]["scale"], plain["bigman"]["scale"]) == (0.5 * 1.0, 0.5 * 0.78), "no stage: the framing and the character's scale, as ever"
     told = _compiled(_series(), cast=[{"characterId": "lucky", "depth": 0.1, "heightM": 3}, {"characterId": "bigman", "depth": 1}])
@@ -322,6 +324,7 @@ def test_the_planned_shot_compiles_with_the_perspective_and_without_a_stage_as_b
 def test_python_and_the_compiler_share_the_feet_line_and_the_constants():
     source = (ROOT / "ui" / "scripts" / "seriesStage.ts").read_text(encoding="utf-8")
     assert f"FEET_LINE = {int(stage_math.FEET)}" in source and f"ADULT_M = {stage_math.ADULT_M}" in source
+    assert f"FIGURE_MARGIN = {stage_math.FIGURE_MARGIN}" in source
     assert f"STAGE_FRAMINGS = {list(stage_math.FRAMINGS)!r}".replace("'", "'") in source
     assert "const FEET = FEET_LINE" in (ROOT / "ui" / "scripts" / "seriesShot.ts").read_text(encoding="utf-8")
 

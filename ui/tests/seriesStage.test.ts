@@ -39,10 +39,11 @@ function shot(overrides: Partial<ShotSpec> = {}): ShotSpec {
 
 const staged = (overrides: Partial<ShotSpec> = {}) => shot({ stage: OFFICE, ...overrides })
 const pose = (spec: ShotSpec, kitId: string) => compileSeriesShot(kits, spec).layers.find(layer => layer.characterKitRef?.id === kitId && !layer.faceBinding)!
-/** Feet line and height (% of the frame) of a 450x1000 pose drawn at a layer transform: its image is contained in the frame. */
+/** Feet line and figure height (% of the frame) of a 450x1000 pose drawn at a layer transform: its image is contained in the frame
+ * and the figure is the image less the rig's 2 % margin of its longest side above and below. */
 const body = ({ transform }: { transform: { y: number; scale: number } }) => {
-  const height = transform.scale * 100
-  return { height, feet: transform.y + height / 2 - height * 0.015 }
+  const image = transform.scale * 100
+  return { height: image * 0.96, feet: transform.y + image / 2 - image * 0.02 }
 }
 /** The layer scale is stored to 0.001 (0.1 % of the frame height), so a drawn height is exact to 0.06. */
 const near = (actual: number, expected: number, tolerance = 0.06) => assert.ok(Math.abs(actual - expected) <= tolerance, `${actual} is not ${expected}`)

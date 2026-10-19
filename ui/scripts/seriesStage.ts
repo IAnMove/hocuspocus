@@ -18,6 +18,8 @@ export const FEET_LINE = 94
 export const ADULT_M = 1.75
 /** The framings that follow the stage; medium shots and close-ups keep their eye-line framing. */
 export const STAGE_FRAMINGS = ['wide', 'two'] as const
+/** The margin the rig leaves around a figure, as a share of the pose image's longest side (``flat_rig.crop_figure``). */
+export const FIGURE_MARGIN = 0.02
 /** The least a figure's feet may be below the horizon (plate fraction): at it the perspective height is nil. */
 const MIN_BELOW = 0.01
 const round = (value: number) => Math.round(value * 1000) / 1000
@@ -50,4 +52,9 @@ export function stageStanding(stage: Stage, heightM: number, depth: number, view
 /** What the perspective gives (% of the frame height) for a figure whose feet are at frame y ``feet``. */
 export function expectedHeight(stage: Stage, heightM: number, feet: number, view: PlateView): number {
   return perspectiveHeight(stage, heightM, plateY(view, feet)) * 100 * view.zoom
+}
+
+/** The share of a pose image's height the figure takes: the rig crops each pose with ``FIGURE_MARGIN`` above and below the figure. */
+export function figureShare(size: { width: number; height: number }): number {
+  return Math.max(0.5, 1 - 2 * FIGURE_MARGIN * Math.max(size.width, size.height) / size.height)
 }

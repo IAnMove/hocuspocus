@@ -48,10 +48,9 @@ def _ratio(series: dict[str, Any], kits: dict[str, Any], entry: dict[str, Any], 
         return None  # a pose we cannot measure, or a bust that is not a whole figure
     width, height = frame_size(series)
     zoom, _x, view_y = background_view(view["framing"], 50.0, view["detail"])
-    drawn = stage_math.figure_height(asset, float(transform["scale"]), width / height)
-    feet = float(transform["y"]) + drawn / 2 - drawn * 0.015
+    feet, figure = stage_math.figure_of(asset, float(transform["y"]), float(transform["scale"]), width / height)
     wanted = stage_math.expected_height(stage, _figure_height(series, entry), feet, zoom, view_y)
-    return drawn / wanted if wanted > 0 else None
+    return figure / wanted if wanted > 0 else None
 
 
 def findings(series: dict[str, Any], kits: dict[str, Any], view: dict[str, Any]) -> list[tuple[str, str, str]]:
