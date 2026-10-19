@@ -11,6 +11,13 @@ export const DIRECTION_COLORS: Record<Direction, [number, number, number]> = {
   front: [229, 57, 53], front34: [251, 140, 0], side: [67, 160, 71], back34: [30, 136, 229], back: [142, 36, 170],
 }
 export const NOSE: [number, number, number] = [255, 235, 59]
+/** The badge a figure wears on its right arm: seen on the sheets that look right, hidden on a sheet that really looks left. */
+export const BADGE: [number, number, number] = [0, 200, 255]
+/** The mouth drawings of the kit, one colour each, and where the mouth is on the sheets that have one (% of the longer edge of the cell). */
+export const MOUTHS: Record<string, [number, number, number]> = { closed: [90, 40, 10], wide: [10, 255, 60], round: [255, 120, 200] }
+export const COLUMN: [number, number, number] = [140, 120, 100]
+/** The kit's blink drawing: one colour, so a pixel count says whether the eyes are shut. */
+export const BLINK: [number, number, number] = [160, 32, 240]
 export const BOOT: [number, number, number] = [20, 20, 20]
 const SKIN: [number, number, number] = [255, 224, 189]
 const WHITE: [number, number, number] = [255, 255, 255]
@@ -56,14 +63,22 @@ function drawLegs(image: Raster, cx: number, dir: Direction, swing: number, body
   }
 }
 
-function drawHead(image: Raster, cx: number, dir: Direction, body: Rgb) {
-  const shift = dir === 'side' ? 6 : dir === 'front34' ? 12 : dir === 'back34' ? 12 : 0
+function drawBadge(image: Raster, cx: number, dir: Direction, reversed: boolean) {
+  if (dir === 'side' && !reversed) image.rect(cx - 12, 150, cx + 4, 166, BADGE)
+  if (dir === 'front34' && !reversed) image.rect(cx - 30, 140, cx - 16, 154, BADGE)
+}
+
+/** The head of a direction. A reversed sheet is the kit's own drawing of the other side: it looks left, nose and ear included. */
+function drawHead(image: Raster, cx: number, dir: Direction, body: Rgb, reversed: boolean) {
+  const flip = reversed ? -1 : 1
+  const shift = (dir === 'side' ? 6 : dir === 'front34' || dir === 'back34' ? 12 : 0) * flip
   const covered = dir === 'back' || dir === 'back34'
   image.disc(cx + shift, 80, 38, covered ? darker(body) : SKIN)
-  if (dir === 'side') image.rect(cx + shift + 36, 78, cx + shift + 58, 92, NOSE)
-  if (dir === 'front34') { image.rect(cx + shift + 18, 76, cx + shift + 36, 90, NOSE); image.rect(cx + shift - 6, 62, cx + shift + 4, 72, BOOT) }
+  const span = (from: number, to: number) => flip > 0 ? [cx + shift + from, cx + shift + to] : [cx + shift - to, cx + shift - from]
+  if (dir === 'side') image.rect(span(36, 58)[0], 78, span(36, 58)[1], 92, NOSE)
+  if (dir === 'front34') { image.rect(span(18, 36)[0], 76, span(18, 36)[1], 90, NOSE); image.rect(span(-6, 4)[0], 62, span(-6, 4)[1], 72, BOOT) }
   if (dir === 'front') { image.rect(cx - 20, 62, cx - 10, 74, BOOT); image.rect(cx + 10, 62, cx + 20, 74, BOOT) }
-  if (dir === 'back34') image.rect(cx + shift + 26, 72, cx + shift + 38, 88, darker(body))
+  if (dir === 'back34') image.rect(span(26, 38)[0], 72, span(26, 38)[1], 88, darker(body))
 }
 
 function drawPips(image: Raster, count: number, frame: number) {
@@ -71,7 +86,7 @@ function drawPips(image: Raster, count: number, frame: number) {
 }
 
 /** One cell: the figure of a direction at one instant of its cycle, with a pip row that lights the cell number. */
-function drawCell(image: Raster, dir: Direction, motion: 'walk' | 'idle', frame: number, count: number) {
+function drawCell(image: Raster, dir: Direction, motion: 'walk' | 'idle', frame: number, count: number, reversed: boolean) {
   const body = torsoColor(dir, motion)
   const cx = CELL.width / 2
   const swing = motion === 'walk' ? Math.sin(frame / count * Math.PI * 2) : 0
@@ -80,18 +95,19 @@ function drawCell(image: Raster, dir: Direction, motion: 'walk' | 'idle', frame:
   image.rect(cx - 38, 120 - breath, cx + 38, 218, body)
   const arm = dir === 'side' ? -swing * 30 : 0
   image.rect(cx - 52 + arm, 126, cx - 38 + arm, 200, darker(body)); image.rect(cx + 38 + arm, 126, cx + 52 + arm, 200, darker(body))
-  drawHead(image, cx, dir, body)
+  drawHead(image, cx, dir, body, reversed)
+  drawBadge(image, cx, dir, reversed)
   drawPips(image, count, frame)
 }
 
 export type SheetImage = { png: Buffer; columns: number; rows: number; count: number }
 
-export function sheetPng(dir: Direction, motion: 'walk' | 'idle', count: number): SheetImage {
+export function sheetPng(dir: Direction, motion: 'walk' | 'idle', count: number, reversed = false): SheetImage {
   const columns = Math.min(4, count), rows = Math.ceil(count / columns)
   const sheet = new Raster(columns * CELL.width, rows * CELL.height)
   for (let frame = 0; frame < count; frame += 1) {
     const cell = new Raster(CELL.width, CELL.height)
-    drawCell(cell, dir, motion, frame, count)
+    drawCell(cell, dir, motion, frame, count, reversed)
     const left = (frame % columns) * CELL.width, top = Math.floor(frame / columns) * CELL.height
     for (let y = 0; y < CELL.height; y += 1) sheet.pixels.set(cell.pixels.subarray(y * CELL.width * 4, (y + 1) * CELL.width * 4), ((top + y) * sheet.width + left) * 4)
   }
@@ -106,6 +122,43 @@ export function posePng(): Buffer {
   image.disc(150, 100, 52, [190, 180, 170])
   image.rect(100, 440, 150, 450, BOOT); image.rect(150, 440, 200, 450, BOOT)
   return encodePng(image)
+}
+
+/** One mouth drawing: a flat colour, so a pixel count says which one is on a sheet. */
+export function mouthPng(color: Rgb): Buffer {
+  const image = new Raster(40, 24)
+  image.rect(0, 0, 40, 24, color)
+  return encodePng(image)
+}
+
+/** A box as a GLB (what GLTFLoader reads), base on y = 0 and 1.7 high so the scene's own scale sets its height. */
+export function boxGlb(width: number, depth: number, color: Rgb): Buffer {
+  const h = 1.7, x = width / 2, z = depth / 2
+  const faces: [number[], number[]][] = [
+    [[0, 0, 1], [-x, 0, z, x, 0, z, x, h, z, -x, h, z]], [[0, 0, -1], [x, 0, -z, -x, 0, -z, -x, h, -z, x, h, -z]],
+    [[1, 0, 0], [x, 0, z, x, 0, -z, x, h, -z, x, h, z]], [[-1, 0, 0], [-x, 0, -z, -x, 0, z, -x, h, z, -x, h, -z]],
+    [[0, 1, 0], [-x, h, z, x, h, z, x, h, -z, -x, h, -z]], [[0, -1, 0], [-x, 0, -z, x, 0, -z, x, 0, z, -x, 0, z]],
+  ]
+  const positions = new Float32Array(faces.flatMap(([, corners]) => corners))
+  const normals = new Float32Array(faces.flatMap(([normal]) => [...normal, ...normal, ...normal, ...normal]))
+  const indices = new Uint16Array(faces.flatMap((_face, index) => [0, 1, 2, 0, 2, 3].map(corner => index * 4 + corner)))
+  const binary = Buffer.concat([Buffer.from(positions.buffer), Buffer.from(normals.buffer), Buffer.from(indices.buffer)])
+  const json = Buffer.from(JSON.stringify({
+    asset: { version: '2.0' }, scene: 0, scenes: [{ nodes: [0] }], nodes: [{ mesh: 0 }],
+    meshes: [{ primitives: [{ attributes: { POSITION: 0, NORMAL: 1 }, indices: 2, material: 0 }] }],
+    materials: [{ pbrMetallicRoughness: { baseColorFactor: [...color.map(value => value / 255), 1], metallicFactor: 0, roughnessFactor: 1 } }],
+    buffers: [{ byteLength: binary.length }],
+    bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: positions.byteLength, target: 34962 }, { buffer: 0, byteOffset: positions.byteLength, byteLength: normals.byteLength, target: 34962 },
+      { buffer: 0, byteOffset: positions.byteLength + normals.byteLength, byteLength: indices.byteLength, target: 34963 }],
+    accessors: [{ bufferView: 0, componentType: 5126, count: 24, type: 'VEC3', min: [-x, 0, -z], max: [x, h, z] }, { bufferView: 1, componentType: 5126, count: 24, type: 'VEC3' },
+      { bufferView: 2, componentType: 5123, count: 36, type: 'SCALAR' }],
+  }))
+  const pad = (data: Buffer, fill: number) => Buffer.concat([data, Buffer.alloc((4 - data.length % 4) % 4, fill)])
+  const chunks = [[0x4e4f534a, pad(json, 0x20)], [0x004e4942, pad(binary, 0)]] as const
+  const total = 12 + chunks.reduce((sum, [, data]) => sum + 8 + data.length, 0)
+  const header = Buffer.alloc(12)
+  header.writeUInt32LE(0x46546c67, 0); header.writeUInt32LE(2, 4); header.writeUInt32LE(total, 8)
+  return Buffer.concat([header, ...chunks.flatMap(([type, data]) => { const head = Buffer.alloc(8); head.writeUInt32LE(data.length, 0); head.writeUInt32LE(type, 4); return [head, data] })])
 }
 
 /** The floor: 16 by 9 squares, so on a 16 by 9 m plane each one is a metre. */

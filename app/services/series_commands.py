@@ -403,7 +403,9 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "duration?, color?}; a model is 1.7 m x scale tall. A 3d shot's cast entry also takes heading (degrees against the start camera: "
         "0 toward it, 90 screen right, 180 away, or toward|right|away|left), walkTo {x, z} metres, walkSpeed m/s (1.2) and walkAt s: "
         "the figure turns to the camera and shows the sheet of its angle (a kit's approved walk and idle sheets with motion and dir), walks "
-        "by the ground it covers, and stands in its pose while it speaks (warnings direction_sheet_missing, walk_path_outside_room, "
+        "by the ground it covers, fades between sheets, takes the key light by lightTint (0 to 1, 0.6; 0 turns it off) and stands to speak "
+        "(a sheet with a mouth is lip-synced, else its pose; side_r, front34_r and back34_r are a kit's own left-looking sheets, "
+        "which beat the mirror; warnings direction_sheet_missing, direction_sheet_no_mouth, mirror_flips_detail, walk_path_outside_room, "
         "walk_blocked_by_speech). Optional episode.number (integer >= 1) renumbers it; "
         "a number taken in that season is 409 episode_number_taken with the holder's id.",
     ),
@@ -490,7 +492,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "follows the series' look.finish again), cast, lines {who, es, en, "
         "pauseBefore, voiceRoom}, card, music, sfx {file, at, line, anchor, offset, volume, in, length}, fx, props, timing, "
         "voiceRoom, layers, castDepth, clipAudio keep|drop, clipVolume, clipFit cover|contain, kind 2d|3d|video|generated, "
-        "scene3d (a 3d cast entry's heading, walkTo, walkSpeed, walkAt as in from_script), foley, duration, resolution 480p|540p|720p|768p (a video shot's H3 size; it clears only the take's "
+        "scene3d (a 3d cast entry's heading, walkTo, walkSpeed, walkAt, lightTint as in from_script), foley, duration, resolution 480p|540p|720p|768p (a video shot's H3 size; it clears only the take's "
         "approval); null removes a key) and append adds items to cast, lines, sfx, fx, props or layers "
         "without resending them. instruction (words, without changes or append: \"put a hat on him\", \"push in on the "
         "punchline\") has the configured LLM write the edit from the shot, the series' characters, poses, files and effects; "

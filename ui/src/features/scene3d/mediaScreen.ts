@@ -3,7 +3,8 @@ import type { Scene3DSourceRef } from './types.ts'
 import { parseImagePoses, type ImagePose } from './imagePoseSequence'
 import { loopedMediaTime, parseMediaLoop, type MediaLoop } from './mediaLoop'
 import { parseTalkingCutout, type TalkingCutout } from './talkingCutout'
-import { parseDirectional, type DirectionalSprite } from './directionalSprite.ts'
+import { parseDirectional } from './directionalParse.ts'
+import type { DirectionalSprite } from './directionalSprite.ts'
 
 export type MediaScreen = MediaLoop & {
   sourceUrl: string
@@ -33,6 +34,9 @@ export type MediaScreen = MediaLoop & {
   /** A 2D figure that shows the sheet facing the camera and walks (directionalSprite.ts); with `talk`, it talks in its pose. */
   directional?: DirectionalSprite
 }
+
+/** The screen paints its own picture (a pose sequence, a talking cutout, the sheets of a figure) instead of one image or video. */
+export const hasOwnArt = (screen: MediaScreen): boolean => Boolean(screen.poseSequence || screen.talk || screen.directional?.sheets.length)
 
 export const defaultMediaScreen = (): MediaScreen => ({
   sourceUrl: '', media: 'image', mode: 'mesh', targetMesh: 'SCREEN_CONTENT', anchor: '',

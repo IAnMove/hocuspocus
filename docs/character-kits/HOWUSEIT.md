@@ -412,7 +412,9 @@ A Series script plays an **approved** animation of the kit (`app/services/series
 **Directions for a 3D shot.** A Video 3D shot draws a character that has `heading` or `walkTo` (see the 3D HOWUSEIT, Directional figures) with
 the sheet of the angle to the camera. An approved animation carries `motion` (`walk` | `idle`) and `dir` (`front`, `front34`, `side`, `back34`, `back`);
 `side` looks right and the left is its mirror. Ids: `walk` or `walk-12` (side), `walk-front`, `walk-front34`, `walk-back34`, `walk-back`, `idle-<dir>`.
-Without them a `side` or `front` view and a cycle id starting with `walk` or `idle` say it.
+Without them a `side` or `front` view and a cycle id starting with `walk` or `idle` say it. A kit with a badge or a weapon on one side marks itself `asymmetric: true`
+and may draw the other side itself as `dir: "side_r"` (or `front34_r`, `back34_r`: they look left and beat the mirror). A sheet may carry `mouth` and `eyes`
+anchors (`{offsetX, offsetY, scale, rotation?}`, % of the cell's longer edge) so the figure lip-syncs and blinks on it while it speaks.
 
 ### 4.9 A whole Video 2D card as a shot's take
 

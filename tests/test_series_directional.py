@@ -381,3 +381,92 @@ def test_the_patch_tool_stores_the_block_beside_the_talk_of_the_same_object(tmp_
     assert refused.value.detail["code"] == "invalid_directional"
     removed = execute_command("world3d.scene.patch", {**patch, "intent_id": "dir-3", "input": {**patch["input"], "base_revision": 3, "bindings": [{"object_id": "hero", "directional": None}]}}, root)
     assert "directional" not in inspect_scene("studio", "w3d-dir000000000", root)["document"]["slots"][0]["screen"] and removed["result"]["scene"]["revision"] == 4
+
+
+# Fading, mirrors, lip-sync and light --------------------------------------------------------
+
+MOUTH = {"offsetX": 4, "offsetY": -30, "scale": 0.05, "rotation": 0}
+
+
+def test_the_opposite_side_a_kit_draws_is_a_sheet_that_looks_left_and_the_kit_may_say_where_its_mouth_is():
+    animations = {
+        "walk-12": sheet_record(12, motion="walk", dir="side"),
+        "walk-side_r": sheet_record(12, motion="walk", dir="side_r"),
+        "walk-front34_r": sheet_record(12, motion="walk", dir="front34_r"),
+        "walk-front_r": sheet_record(12, motion="walk", dir="front_r"),
+        "idle-side": sheet_record(2, motion="idle", dir="side", mouth=MOUTH, eyes={"offsetX": 0, "offsetY": -40, "scale": 0.1}),
+        "idle-front": sheet_record(2, motion="idle", dir="front", mouth={"offsetX": 900, "offsetY": 0, "scale": 1}),
+    }
+    sheets = {item["id"]: item for item in directional.kit_sheets(kit(**animations))}
+    assert (sheets["walk-side_r"]["dir"], sheets["walk-side_r"]["facing"]) == ("side", "left")
+    assert (sheets["walk-front34_r"]["dir"], sheets["walk-front34_r"]["facing"]) == ("front34", "left")
+    assert "walk-front_r" not in sheets, "a front or a back has no other side"
+    assert "facing" not in sheets["walk-12"]
+    assert sheets["idle-side"]["mouth"] == MOUTH and sheets["idle-side"]["eyes"] == {"offsetX": 0, "offsetY": -40, "scale": 0.1, "rotation": 0}
+    assert "mouth" not in sheets["idle-front"], "an anchor outside the cell is not one"
+
+
+def test_the_stored_block_takes_the_reversed_sheets_the_anchors_and_the_light_tint():
+    from services import world3d_slot_fields as fields
+    base = block_of()["sheets"][0]
+    kept = fields.directional({"sheets": [{**base, "dir": "side_r"}, {**base, "motion": "idle", "mouth": MOUTH}], "heading": 0, "lightTint": 0.25})
+    assert (kept["sheets"][0]["dir"], kept["sheets"][0]["facing"]) == ("side", "left")
+    assert kept["sheets"][1]["mouth"] == MOUTH and kept["lightTint"] == 0.25
+    for bad in ({"sheets": [{**base, "dir": "front_r"}]}, {"sheets": [{**base, "mouth": {"offsetX": 999}}]}, {"sheets": [base], "lightTint": 2}):
+        with pytest.raises(ValueError):
+            fields.directional(bad)
+    assert fields.directional(copy.deepcopy(kept)) == kept
+
+
+def test_the_light_tint_is_a_cast_field_that_needs_a_direction():
+    assert directional.cast_fields({"heading": 0, "lightTint": 0}) == {"heading": 0.0, "lightTint": 0.0}
+    assert directional.cast_fields({"heading": 0, "lightTint": 0.4})["lightTint"] == 0.4
+    assert directional.cast_fields({"heading": 0, "lightTint": 3}) == {"heading": 0.0}
+    assert directional.cast_fields({"lightTint": 0.4}) == {}
+    assert directional.block({"characterId": "ana", "heading": 0, "lightTint": 0.25}, kit(), [], "w")["lightTint"] == 0.25
+    problems, _ = run_check({"kind": "3d", "cast": [{"characterId": "ana", "heading": 0, "lightTint": 3}]})
+    assert any("lightTint" in item for item in problems)
+    problems, _ = run_check({"kind": "3d", "cast": [{"characterId": "ana", "lightTint": 0.5}]})
+    assert any("lightTint" in item and "heading or walkTo" in item for item in problems)
+
+
+def talker_kit(mouth_on=("front", "front34", "side"), asymmetric=False, reversed_on=()):
+    animations = {}
+    for dir_name in FIVE:
+        animations[f"walk-{dir_name}"] = sheet_record(motion="walk", dir=dir_name)
+        animations[f"idle-{dir_name}"] = sheet_record(2, motion="idle", dir=dir_name, loop="pingpong", **({"mouth": MOUTH} if dir_name in mouth_on else {}))
+    for dir_name in reversed_on:
+        animations[f"walk-{dir_name}_r"] = sheet_record(motion="walk", dir=f"{dir_name}_r")
+        animations[f"idle-{dir_name}_r"] = sheet_record(2, motion="idle", dir=f"{dir_name}_r")
+    return {**kit(**animations), **({"asymmetric": True} if asymmetric else {})}
+
+
+def test_a_speaker_whose_sheet_of_a_direction_has_no_mouth_is_told_it_shows_the_pose_there():
+    series = {"rooms": {"kitchen": BOX}}
+    speaks = {"kind": "3d", "set": "kitchen", "lines": [{"who": "ana", "es": "hola"}], "cast": [{"characterId": "ana", "at": {"x": 0, "z": 0}, "heading": "away"}]}
+    _, warnings = run_check(speaks, {"kit-ana": talker_kit()}, series)
+    found = [item for item in warnings if item["code"] == "direction_sheet_no_mouth"]
+    assert len(found) == 1 and "back" in found[0]["message"] and "pose" in found[0]["message"]
+    towards = {**speaks, "cast": [{"characterId": "ana", "at": {"x": 0, "z": 0}, "heading": "toward"}]}
+    assert not [item for item in run_check(towards, {"kit-ana": talker_kit()}, series)[1] if item["code"] == "direction_sheet_no_mouth"]
+    silent = {**speaks, "lines": []}
+    assert not [item for item in run_check(silent, {"kit-ana": talker_kit()}, series)[1] if item["code"] == "direction_sheet_no_mouth"]
+    free = {"kind": "3d", "lines": [{"who": "ana", "es": "hola"}], "cast": [{"characterId": "ana", "heading": 0}]}
+    assert [item["code"] for item in run_check(free, {"kit-ana": talker_kit()})[1] if item["code"] == "direction_sheet_no_mouth"], "any camera may go round it"
+    assert not [item for item in run_check(free, {"kit-ana": talker_kit(mouth_on=FIVE)})[1] if item["code"] == "direction_sheet_no_mouth"]
+    assert not [item for item in run_check(free, {"kit-ana": kit()})[1] if item["code"] == "direction_sheet_no_mouth"], "a kit with no idle sheet has nothing to lip-sync"
+
+
+def test_a_kit_with_a_badge_on_one_side_is_told_when_the_shot_mirrors_it_and_the_opposite_sheet_stops_the_warning():
+    series = {"rooms": {"kitchen": BOX}}
+    # In this box a figure that walks to screen left is seen walking away on its left: sectors with a negative angle, which a right-looking sheet mirrors.
+    leftwards = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": -1.5, "z": 0}, "walkTo": {"x": 1.5, "z": 0}}]}
+    rightwards = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 1.5, "z": 0}, "walkTo": {"x": -1.5, "z": 0}}]}
+    flips = lambda shot, owned: [item for item in run_check(shot, {"kit-ana": owned}, series)[1] if item["code"] == "mirror_flips_detail"]
+    assert len(flips(leftwards, talker_kit(asymmetric=True))) == 1
+    assert "side_r" in flips(leftwards, talker_kit(asymmetric=True))[0]["message"]
+    assert not flips(rightwards, talker_kit(asymmetric=True)), "going to screen right needs no mirror"
+    assert not flips(leftwards, talker_kit()), "a symmetric kit does not mind"
+    assert not flips(leftwards, talker_kit(asymmetric=True, reversed_on=("side", "front34", "back34"))), "its own left side wins over the mirror"
+    free = {"kind": "3d", "cast": [{"characterId": "ana", "heading": 0}]}
+    assert len([item for item in run_check(free, {"kit-ana": talker_kit(asymmetric=True)})[1] if item["code"] == "mirror_flips_detail"]) == 1

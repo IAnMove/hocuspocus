@@ -1163,7 +1163,8 @@
       "walkSpeed": "Speed (m/s)",
       "walkAt": "Starts at (s)",
       "looks": "looks {{heading}}",
-      "walks": "walks to {{x}}, {{z}}"
+      "walks": "walks to {{x}}, {{z}}",
+      "lightTint": "Light tint (0-1)"
     },
     "lines": {
       "title": "Dialogue",

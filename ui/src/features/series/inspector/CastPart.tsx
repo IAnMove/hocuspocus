@@ -88,7 +88,7 @@ export function CastPart({ context, onOpenFaceRig }: { context: PartContext; onO
 }
 
 type Cast3D = NonNullable<SeriesShotScene3D['cast']>
-type Cast3DEntry = Cast3D[number] & { heading?: string | number; walkTo?: { x?: number; z?: number }; walkSpeed?: number; walkAt?: number }
+type Cast3DEntry = Cast3D[number] & { heading?: string | number; walkTo?: { x?: number; z?: number }; walkSpeed?: number; walkAt?: number; lightTint?: number }
 
 const HEADINGS = ['toward', 'right', 'away', 'left'] as const
 
@@ -114,6 +114,7 @@ function DirectionFields({ entry, change }: { entry: Cast3DEntry; change: (entry
       <NumberInput title={t('inspector.cast.walkSpeed')} value={entry.walkSpeed} min={0.2} max={6} step={0.1} placeholder="1.2" onChange={value => change(withField(entry, 'walkSpeed', value))} />
       <NumberInput title={t('inspector.cast.walkAt')} value={entry.walkAt} min={0} max={600} step={0.1} placeholder="0" onChange={value => change(withField(entry, 'walkAt', value))} />
     </>}
+    {(entry.heading !== undefined || entry.walkTo) && <NumberInput title={t('inspector.cast.lightTint')} value={entry.lightTint} min={0} max={1} step={0.1} placeholder="0.6" onChange={value => change(withField(entry, 'lightTint', value))} />}
   </>
 }
 

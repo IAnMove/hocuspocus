@@ -189,10 +189,11 @@ test('a cast member of a 3D shot turns to the camera and walks: heading and dest
   assert.ok(cast.queryByLabelText('Speed (m/s)') === null, 'a speed has nowhere to go until there is a destination')
   fireEvent.change(cast.getByLabelText('Walks to x (m)'), { target: { value: '-1.5' } })
   fireEvent.change(await waitFor(() => cast.getByLabelText('Speed (m/s)')), { target: { value: '0.9' } })
+  fireEvent.change(cast.getByLabelText('Light tint (0-1)'), { target: { value: '0.3' } })
   fireEvent.click(cast.getByRole('button', { name: 'Save' }))
   await waitFor(() => assert.equal(server.posts('/shots/edit').length, 1))
   const saved = (server.posts('/shots/edit')[0] as { changes: { scene3d: { cast: unknown[] } } }).changes.scene3d.cast
-  assert.deepEqual(saved, [{ characterId: 'ines', objectId: 'ines', poseId: 'busto', heading: 'right', walkTo: { x: -1.5, z: 0 }, walkSpeed: 0.9 }])
+  assert.deepEqual(saved, [{ characterId: 'ines', objectId: 'ines', poseId: 'busto', heading: 'right', walkTo: { x: -1.5, z: 0 }, walkSpeed: 0.9, lightTint: 0.3 }])
   fireEvent.click(cast.getByRole('button', { name: 'Edit' }))
   fireEvent.change(await waitFor(() => cast.getByLabelText('Walks to x (m)')), { target: { value: '' } })
   assert.ok(cast.queryByLabelText('Speed (m/s)') === null, 'no destination, no speed')

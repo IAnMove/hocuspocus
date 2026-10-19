@@ -100,31 +100,31 @@ def room_cast_bindings(config):
     return bindings
 
 
+def _listener_row(entry,config,kits,characters,workspace):
+    """The picture binding of a cast member that does not speak: its approved pose, standing on its feet."""
+    from services.series_directional import file_url, uses_direction
+    kit=kits.get(characters.get(entry['characterId']),{})
+    pose=entry.get('poseId','base')
+    asset=kit.get('base',{}) if pose=='base' else kit.get('poses',{}).get(pose,{})
+    if not asset.get('source') or asset.get('reviewState')!='approved':
+        raise ValueError(f"Character {entry['characterId']} needs an approved {pose} pose")
+    row={'object_id':entry['objectId'],'media':'image','source_url':file_url(asset['source'],workspace),'imageLook':{'grounded':True}}
+    if config.get('roomBox') or (entry.get('heightM') and uses_direction(entry)):
+        from services.series_room_box import cutout_scale
+        row.update(cutout_scale(entry))
+    return row
+
+
 def bind_silent_cast(call,workspace,stem,scene,config,lines,kits,characters):
     """Room listeners retain their approved pose even in a shot with no dialogue, and so does a figure that turns and walks
     (``series_directional``) in any shot: it needs its picture first."""
     from services.series_directional import uses_direction
     placed=config.get('roomSet') or config.get('roomBox')
-    if not placed and not any(uses_direction(entry) for entry in config.get('cast',[])): return scene
+    speaking={line['characterId'] for line in lines}
+    listeners=[entry for entry in config.get('cast',[]) if entry['characterId'] not in speaking and (placed or uses_direction(entry))]
+    if not listeners: return scene
     from services.set_generation import require_result
-    speaking={line['characterId'] for line in lines};bindings=[]
-    for entry in config.get('cast',[]):
-        if entry['characterId'] in speaking or not (placed or uses_direction(entry)): continue
-        kit=kits.get(characters.get(entry['characterId']),{})
-        pose=entry.get('poseId','base')
-        asset=kit.get('base',{}) if pose=='base' else kit.get('poses',{}).get(pose,{})
-        if not asset.get('source') or asset.get('reviewState')!='approved':
-            raise ValueError(f"Character {entry['characterId']} needs an approved {pose} pose")
-        source=asset['source']
-        if not source.startswith(('/api/','http://','https://')):
-            from urllib.parse import quote
-            source=f"/api/v1/file/{quote(source.removeprefix('outputs/'))}?workspace={quote(workspace)}"
-        row={'object_id':entry['objectId'],'media':'image','source_url':source,'imageLook':{'grounded':True}}
-        if config.get('roomBox') or (entry.get('heightM') and uses_direction(entry)):
-            from services.series_room_box import cutout_scale
-            row.update(cutout_scale(entry))
-        bindings.append(row)
-    if not bindings: return scene
+    bindings=[_listener_row(entry,config,kits,characters,workspace) for entry in listeners]
     return require_result(call('world3d.scene.patch',{'version':1,'intent_id':f'{stem}-listeners','input':{
         'workspace':workspace,'scene_id':scene['sceneId'],'base_revision':scene['revision'],'bindings':bindings}}))['scene']
 

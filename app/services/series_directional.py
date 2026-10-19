@@ -22,9 +22,10 @@ import math
 from typing import Any
 from urllib.parse import quote
 
-from services.directional_sprite import DIRECTIONS, LOOPS, MOTIONS, SPEC, SPEED_RANGE, WALK_SPEED, heading_degrees, number as _number, wrap as _wrap
+from services.directional_sprite import DIRECTIONS, LOOPS, MOTIONS, SPEC, SPEED_RANGE, WALK_SPEED, anchor, direction_of, heading_degrees, number as _number, wrap as _wrap
 
-KEYS = ("heading", "walkTo", "walkSpeed", "walkAt")
+KEYS = ("heading", "walkTo", "walkSpeed", "walkAt", "lightTint")
+LATERAL = tuple(SPEC["lateral"])
 VIEW_DIRECTION = {"side": "side", "front": "front"}
 REACH = 100
 LATE = 600
@@ -54,6 +55,9 @@ def cast_fields(entry: dict[str, Any]) -> dict[str, Any]:
             value = _number(entry.get(key), low, high)
             if value is not None:
                 fields[key] = value
+    tint = _number(entry.get("lightTint"), 0, 1)
+    if tint is not None and ("heading" in fields or "walkTo" in fields):
+        fields["lightTint"] = tint
     return fields
 
 
@@ -79,11 +83,13 @@ def _motion(name: str, made: dict[str, Any], animations: dict[str, Any]) -> str 
     return next((motion for motion in MOTIONS if name.startswith(motion)), None)
 
 
-def _direction(made: dict[str, Any]) -> str | None:
-    """The side the sheet is drawn from: its own ``dir``, else its view (side and front)."""
-    if made.get("dir") in DIRECTIONS:
-        return str(made["dir"])
-    return VIEW_DIRECTION.get(str(made.get("view")))
+def _direction(made: dict[str, Any]) -> tuple[str, bool] | None:
+    """The side the sheet is drawn from and whether it is the kit's own drawing of the other side (``side_r``, which looks left): its
+    own ``dir``, else its view (side and front)."""
+    if made.get("dir") is not None:
+        return direction_of(made["dir"])
+    found = VIEW_DIRECTION.get(str(made.get("view")))
+    return (found, False) if found else None
 
 
 def _count(value: Any, high: int) -> int | None:
@@ -97,22 +103,31 @@ def file_url(source: str, workspace: str) -> str:
     return f"/api/v1/file/{quote(source.removeprefix('outputs/'))}?workspace={quote(workspace)}"
 
 
+def _grid(sheet: dict[str, Any]) -> list[int | None]:
+    cell = sheet.get("cell") if isinstance(sheet.get("cell"), dict) else {}
+    return [_count(sheet.get("count"), 64), _count(sheet.get("columns"), 64), _count(sheet.get("rows"), 64),
+            _count(cell.get("width"), 16384), _count(cell.get("height"), 16384)]
+
+
+def _playing(made: dict[str, Any], direction: tuple[str, bool]) -> dict[str, Any]:
+    """How a kit animation plays and where its mouth and eyes are, as the scene stores them."""
+    fps = _number(made.get("fps"), 1, 60)
+    found: dict[str, Any] = {"fps": fps if fps is not None else 8, "loop": made["loop"] if made.get("loop") in LOOPS else "loop"}
+    if direction[1] or made.get("facing") == "left":
+        found["facing"] = "left"
+    found.update({key: value for key in ("mouth", "eyes") if (value := anchor(made.get(key)))})
+    return found
+
+
 def _sheet(name: str, made: Any, animations: dict[str, Any], workspace: str) -> dict[str, Any] | None:
     if not isinstance(made, dict) or made.get("reviewState") != "approved" or not isinstance(made.get("sheet"), dict):
         return None
     motion, direction, sheet = _motion(name, made, animations), _direction(made), made["sheet"]
-    cell = sheet.get("cell") if isinstance(sheet.get("cell"), dict) else {}
-    numbers = [_count(sheet.get("count"), 64), _count(sheet.get("columns"), 64), _count(sheet.get("rows"), 64),
-               _count(cell.get("width"), 16384), _count(cell.get("height"), 16384)]
-    if not motion or not direction or None in numbers or not isinstance(sheet.get("source"), str) or not sheet["source"]:
+    count, columns, rows, width, height = _grid(sheet)
+    if not motion or not direction or None in (count, columns, rows, width, height) or not isinstance(sheet.get("source"), str) or not sheet["source"]:
         return None
-    fps = _number(made.get("fps"), 1, 60)
-    result = {"id": name, "motion": motion, "dir": direction, "source": file_url(sheet["source"], workspace), "columns": numbers[1], "rows": numbers[2],
-              "count": numbers[0], "cell": {"width": numbers[3], "height": numbers[4]}, "fps": fps if fps is not None else 8,
-              "loop": made["loop"] if made.get("loop") in LOOPS else "loop"}
-    if made.get("facing") == "left":
-        result["facing"] = "left"
-    return result
+    return {"id": name, "motion": motion, "dir": direction[0], "source": file_url(sheet["source"], workspace), "columns": columns, "rows": rows,
+            "count": count, "cell": {"width": width, "height": height}, **_playing(made, direction)}
 
 
 def kit_sheets(kit: Any, workspace: str = "") -> list[dict[str, Any]]:
@@ -134,6 +149,8 @@ def block(entry: dict[str, Any], kit: Any, windows: list[Any] | None, workspace:
         result["walk"] = {"to": [fields["walkTo"]["x"], fields["walkTo"]["z"]], "speed": fields.get("walkSpeed", WALK_SPEED), "start": fields.get("walkAt", 0)}
     if windows:
         result["speech"] = [[float(start), float(end)] for start, end in windows]
+    if "lightTint" in fields:
+        result["lightTint"] = fields["lightTint"]
     return result
 
 
@@ -166,9 +183,18 @@ def nearest_direction(target: str, available: set[str] | frozenset[str]) -> str 
     return min(available, key=lambda name: (abs(order[name] - order[target]), order[name]), default=None)
 
 
+Sector = tuple[str, bool]
+"""A direction and whether the figure looks to the left of the camera (a negative angle), which a right-looking sheet mirrors."""
+
+
+def _signed(theta: float) -> Sector:
+    angle = _wrap(theta)
+    reach = abs(angle)
+    return DIRECTIONS[0 if reach <= _HALF_SECTOR else min(len(DIRECTIONS) - 1, math.ceil((reach - _HALF_SECTOR) / 45))], angle < 0
+
+
 def _sector(theta: float) -> str:
-    reach = abs(_wrap(theta))
-    return DIRECTIONS[0 if reach <= _HALF_SECTOR else min(len(DIRECTIONS) - 1, math.ceil((reach - _HALF_SECTOR) / 45))]
+    return _signed(theta)[0]
 
 
 def _angle(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float]) -> float | None:
@@ -194,39 +220,45 @@ def _box_eye(spec: dict[str, Any]) -> tuple[float, float]:
     return float(eye[0]), float(eye[2])
 
 
-def _needed(entry: dict[str, Any], start: tuple[float, float], spec: dict[str, Any] | None) -> dict[str, set[str]]:
-    """The directions of each motion a fixed camera will ask for: along the path for the walk, at the ends for the idle."""
-    if spec is None:
-        every = set(DIRECTIONS)
-        return {"walk": set(every) if "walkTo" in entry else set(), "idle": set(every)}
-    eye, fields = _box_eye(spec), cast_fields(entry)
+def _every() -> set[Sector]:
+    """Every sector, when any camera may go round the figure: both sides of the lateral directions."""
+    return {(name, negative) for name in DIRECTIONS for negative in ((False, True) if name in LATERAL else (False,))}
+
+
+def _sector_at(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float]) -> Sector:
+    theta = _angle(facing, at, eye)
+    return _signed(theta if theta is not None else 0.0)
+
+
+def _sectors(entry: dict[str, Any], start: tuple[float, float] | None, spec: dict[str, Any] | None) -> dict[str, set[Sector]]:
+    """The sectors of each motion a fixed camera will ask for: along the path for the walk, at the ends for the idle. With no fixed
+    camera (a template, an orbit) any of them."""
+    fields = cast_fields(entry)
+    if spec is None or start is None:
+        return {"walk": _every() if "walkTo" in fields else set(), "idle": _every()}
+    eye = _box_eye(spec)
     heading = fields.get("heading")
     rest = _heading_facing(heading, start, eye) if heading is not None else None
     if "walkTo" not in fields:
-        theta = _angle(rest or (0.0, 1.0), start, eye)
-        return {"walk": set(), "idle": {_sector(theta if theta is not None else 0.0)}}
+        return {"walk": set(), "idle": {_sector_at(rest or (0.0, 1.0), start, eye)}}
     end = (fields["walkTo"]["x"], fields["walkTo"]["z"])
     length = math.hypot(end[0] - start[0], end[1] - start[1])
     travel = ((end[0] - start[0]) / length, (end[1] - start[1]) / length) if length > 1e-9 else (0.0, 1.0)
-    walk = set()
-    for step in range(int(length / _SAMPLE_METERS) + 2):
-        along = min(length, step * _SAMPLE_METERS)
-        theta = _angle(travel, (start[0] + travel[0] * along, start[1] + travel[1] * along), eye)
-        walk.add(_sector(theta if theta is not None else 0.0))
-    idle = {_sector(_angle(rest or travel, point, eye) or 0.0) for point in (start, end)}
-    return {"walk": walk, "idle": idle}
+    along = (min(length, step * _SAMPLE_METERS) for step in range(int(length / _SAMPLE_METERS) + 2))
+    walk = {_sector_at(travel, (start[0] + travel[0] * metres, start[1] + travel[1] * metres), eye) for metres in along}
+    return {"walk": walk, "idle": {_sector_at(rest or travel, point, eye) for point in (start, end)}}
 
 
 def needed_directions(entry: dict[str, Any], start: tuple[float, float], spec: dict[str, Any] | None) -> set[str]:
     """Every direction the entry's shot can ask for. ``spec`` is the box room of a shot with a fixed camera, else None (any camera)."""
-    found = _needed(entry, start, spec)
-    return found["walk"] | found["idle"]
+    return {name for sectors in _sectors(entry, start, spec).values() for name, _negative in sectors}
 
 
 # The script check ---------------------------------------------------------------------------
 
 _SPEED_TEXT = f"{SPEED_RANGE[0]:g} to {SPEED_RANGE[1]:g} m/s"
 _NAMES = ", ".join(SPEC["headings"])
+_FIX = "make them in Characters › Animaciones"
 
 
 def _entry_problems(entry: dict[str, Any], where: str) -> list[str]:
@@ -243,6 +275,11 @@ def _entry_problems(entry: dict[str, Any], where: str) -> list[str]:
             problems.append(f"{who} {key} needs walkTo, the place it walks to")
         elif _number(entry[key], low, high) is None:
             problems.append(f"{who} {key} must be {unit}")
+    if "lightTint" in entry:
+        if "heading" not in entry and "walkTo" not in entry:
+            problems.append(f"{who} lightTint needs heading or walkTo: only a figure that turns to the camera takes the light")
+        elif _number(entry["lightTint"], 0, 1) is None:
+            problems.append(f"{who} lightTint must be 0 to 1 (0 turns the light tint off)")
     return problems
 
 
@@ -273,24 +310,56 @@ def _start(entry: dict[str, Any], spec: dict[str, Any] | None) -> tuple[float, f
         return None
 
 
-def _missing_text(sheets: list[dict[str, Any]], needed: dict[str, set[str]]) -> str | None:
+def _missing_text(sheets: list[dict[str, Any]], needed: dict[str, set[Sector]]) -> str | None:
     if not sheets:
-        return "has no walk or idle sheet in its kit, so it moves and turns in its base pose: make them in Characters › Animaciones"
+        return f"has no walk or idle sheet in its kit, so it moves and turns in its base pose: {_FIX}"
     gaps = []
     for motion in MOTIONS:
         have = {sheet["dir"] for sheet in sheets if sheet["motion"] == motion}
         for direction in DIRECTIONS:
-            if direction in needed.get(motion, set()) and direction not in have:
+            if direction in {name for name, _negative in needed.get(motion, set())} and direction not in have:
                 near = nearest_direction(direction, have) if have else None
                 gaps.append(f"{motion} {direction} (nearest: {near})" if near else f"{motion} {direction} (nothing nearer: the idle or the pose is drawn)")
-    if not gaps:
+    return f"has no sheet for {', '.join(gaps)}, so the nearest one is drawn: {_FIX}" if gaps else None
+
+
+def _mouth_text(sheets: list[dict[str, Any]], needed: dict[str, set[Sector]]) -> str | None:
+    """While a figure speaks it stands on its idle sheet; one with no mouth anchor shows the talking pose (a front picture) instead."""
+    idle = [sheet for sheet in sheets if sheet["motion"] == "idle"]
+    if not idle:
         return None
-    return f"has no sheet for {', '.join(gaps)}, so the nearest one is drawn: make them in Characters › Animaciones"
+    voiced = {sheet["dir"] for sheet in idle if sheet.get("mouth")}
+    have = {sheet["dir"] for sheet in idle}
+    wanted = {name for sectors in needed.values() for name, _negative in sectors}
+    silent = [name for name in DIRECTIONS if name in wanted and (nearest_direction(name, have) if name not in have else name) not in voiced]
+    if not silent:
+        return None
+    return (f"speaks in this shot but its idle sheet for {', '.join(silent)} has no mouth, so while it faces that way it shows its talking pose "
+            f"(a front picture) instead: give those sheets a mouth anchor (kit animation mouth {{offsetX, offsetY, scale}})")
+
+
+def _mirror_text(sheets: list[dict[str, Any]], needed: dict[str, set[Sector]]) -> str | None:
+    """The motions and directions a right-looking sheet will be mirrored for, because the kit drew no ``_r`` sheet of that side."""
+    flips = []
+    for motion in MOTIONS:
+        if not any(sheet["motion"] == motion for sheet in sheets):
+            continue
+        drawn_left = {sheet["dir"] for sheet in sheets if sheet["motion"] == motion and sheet.get("facing") == "left"}
+        flips += [f"{motion} {name}" for name in LATERAL if (name, True) in needed.get(motion, set()) and name not in drawn_left]
+    if not flips:
+        return None
+    names = sorted({flip.split()[1] for flip in flips})
+    return (f"is asymmetric (its kit says so) and the shot mirrors its {', '.join(flips)}, so what it wears on one side flips to the other: "
+            f"draw the opposite side as {', '.join(f'{name}_r' for name in names)} ({_FIX})")
+
+
+def _warn(warnings: list[dict[str, Any]], code: str, who: str, shot_id: str, text: str) -> None:
+    from services.series_script_warnings import group_warning
+    group_warning(warnings, code, who, shot_id, text)
 
 
 def _outside(entry: dict[str, Any], spec: dict[str, Any]) -> str | None:
-    fields = cast_fields(entry)
-    destination = fields.get("walkTo")
+    destination = cast_fields(entry).get("walkTo")
     if not destination:
         return None
     half_w, half_d = spec["size"]["w"] / 2, spec["size"]["d"] / 2
@@ -299,41 +368,45 @@ def _outside(entry: dict[str, Any], spec: dict[str, Any]) -> str | None:
     return f"walks to x {destination['x']:g}, z {destination['z']:g}, outside the room floor ({spec['size']['w']:g} x {spec['size']['d']:g} m)"
 
 
-def _warn(warnings: list[dict[str, Any]], code: str, who: str, shot_id: str, text: str) -> None:
-    from services.series_script_warnings import group_warning
-    group_warning(warnings, code, who, shot_id, text)
+def _entry_warnings(checker: Any, entry: dict[str, Any], spec: dict[str, Any] | None, speaks: bool, shot_id: str, warnings: list[dict[str, Any]]) -> None:
+    who = str(entry.get("characterId"))
+    kit = _kit_of(checker, who)
+    sheets = kit_sheets(kit)
+    needed = _sectors(entry, _start(entry, spec), spec)
+    for code, text in (("direction_sheet_missing", _missing_text(sheets, needed)),
+                       ("direction_sheet_no_mouth", _mouth_text(sheets, needed) if speaks else None),
+                       ("mirror_flips_detail", _mirror_text(sheets, needed) if kit.get("asymmetric") is True else None),
+                       ("walk_path_outside_room", _outside(entry, spec) if spec else None),
+                       ("walk_blocked_by_speech", "walks and speaks in this shot: it stops walking, and shows its talking pose or a sheet with a mouth, while "
+                        "its own voice runs" if speaks and "walkTo" in cast_fields(entry) else None)):
+        if text:
+            _warn(warnings, code, who, shot_id, text)
+
+
+def _used(shot: dict[str, Any]) -> list[dict[str, Any]]:
+    """The cast entries of a script shot that say anything of where they look or go."""
+    from services.series_script import _cast_entry
+    return [entry for entry in (_cast_entry(raw) for raw in shot.get("cast") or []) if any(key in entry for key in KEYS)]
 
 
 def check_shot(checker: Any, shot: dict[str, Any], where: str, shot_id: str, warnings: list[dict[str, Any]], series: dict[str, Any],
                root: str | None = None) -> None:
     """Problems that stop the script (a bad value, or the fields on a shot that is not 3D) and the grouped warnings that do not:
-    ``direction_sheet_missing`` (the kit lacks a direction the shot can ask for: the nearest one is drawn),
-    ``walk_path_outside_room`` (the destination is off the floor of the box room) and ``walk_blocked_by_speech`` (the character
-    speaks in the shot, and a speaking figure stands still)."""
-    from services.series_script import _cast_entry
-    entries = [_cast_entry(raw) for raw in shot.get("cast") or []]
-    used = [entry for entry in entries if any(key in entry for key in KEYS)]
+    ``direction_sheet_missing`` (the kit lacks a direction the shot can ask for: the nearest one is drawn), ``direction_sheet_no_mouth``
+    (the character speaks and its sheet of a direction has no mouth: the talking pose shows), ``mirror_flips_detail`` (an asymmetric
+    kit is mirrored for lack of its ``_r`` sheet), ``walk_path_outside_room`` (the destination is off the floor of the box room) and
+    ``walk_blocked_by_speech`` (the character speaks in the shot, and a speaking figure stands still)."""
+    used = _used(shot)
     if not used:
         return
     if shot.get("kind") != "3d":
         checker.problems.append(f"{where}: heading and walkTo are only for a 3d shot")
         return
-    problems = [problem for entry in used for problem in _entry_problems(entry, where)]
-    checker.problems.extend(problems)
+    checker.problems.extend(problem for entry in used for problem in _entry_problems(entry, where))
     spec = _box_spec(shot, series, root)
     speakers = {line.get("who") for line in shot.get("lines") or [] if isinstance(line, dict)}
     for entry in (entry for entry in used if uses_direction(entry)):
-        who = str(entry.get("characterId"))
-        start = _start(entry, spec)
-        found = _missing_text(kit_sheets(_kit_of(checker, who)), _needed(entry, start, spec if start else None))
-        if found:
-            _warn(warnings, "direction_sheet_missing", who, shot_id, found)
-        outside = _outside(entry, spec) if spec else None
-        if outside:
-            _warn(warnings, "walk_path_outside_room", who, shot_id, outside)
-        if "walkTo" in cast_fields(entry) and who in speakers:
-            _warn(warnings, "walk_blocked_by_speech", who, shot_id,
-                  "walks and speaks in this shot: it stops walking, and shows its talking pose, while its own voice runs")
+        _entry_warnings(checker, entry, spec, entry.get("characterId") in speakers, shot_id, warnings)
 
 
 # The render's check ---------------------------------------------------------------------------

@@ -1,12 +1,13 @@
 import spec from '../../../../app/shared/directional_sprites.json' with { type: 'json' }
 import animationCatalog from '../../../../app/shared/character_animations.json' with { type: 'json' }
-import { durableScene3DSourceUrl } from './slotSource.ts'
+import type { CutoutAnchor } from './talkingCutout.ts'
 
-/** A 2D figure in a 3D shot that shows the drawing facing the camera (the effect of Doom and the 2.5D games): the sheet of
- * the angle between where the figure looks and where the camera is, mirrored for the left, with its walk cycle played by
- * the ground it covers. Everything here is a pure function of the document and the time; `DirectionMemory` is the only
- * state, and it forgets on any jump in time, so a seek always lands on the same drawing. The numbers are
- * `app/shared/directional_sprites.json`, which the server reads too (`services/series_directional.py`). */
+/** A 2D figure in a 3D shot that shows the drawing facing the camera (the sprites of Octopath, Paper Mario and the 2.5D games):
+ * the sheet of the angle between where the figure looks and where the camera is, mirrored for the left unless the kit drew
+ * that side, faded from the sheet it showed before, with its walk cycle played by the ground it covers. Everything here is a
+ * pure function of the document and the time; `DirectionMemory` is the only state, and it forgets on any jump in time, so a
+ * seek always lands on the same drawing. The numbers are `app/shared/directional_sprites.json`, which the server reads too
+ * (`services/series_directional.py`). */
 export const DIRECTIONS = ['front', 'front34', 'side', 'back34', 'back'] as const
 export type Direction = (typeof DIRECTIONS)[number]
 export type Motion = 'walk' | 'idle'
@@ -21,15 +22,13 @@ export const CYCLE_METERS = STEP_METERS * CYCLE_STEPS
 export const DEFAULT_WALK_SPEED: number = spec.walkSpeed
 export const HYSTERESIS_DEGREES: number = spec.hysteresisDeg
 const RESET_SECONDS: number = spec.resetSeconds
+/** Seconds a change of drawing takes to fade from the old sheet to the new one. */
+export const CROSSFADE_SECONDS: number = spec.crossfadeSeconds
+/** How much of the key light's colour and strength the sprite takes by default (0 turns it off). */
+export const LIGHT_TINT: number = spec.lightTint
 const SECTOR_DEGREES = 45
 const HALF_SECTOR = SECTOR_DEGREES / 2
-const LATERAL = new Set<string>(spec.lateral)
-const MAX_SHEETS = 24
-const MAX_WINDOWS = 64
-const MIN_SPEED = 0.05
-const MAX_SPEED = 20
-const SECONDS = 3600
-const REACH = 1000
+export const LATERAL = new Set<string>(spec.lateral)
 const MIN_ASPECT = 0.1
 const MAX_ASPECT = 4
 /** The width of a figure's feet in plane units (the plane is two units high): the contact shadow under it. */
@@ -47,15 +46,23 @@ export type DirectionalSheet = {
   cell: { width: number; height: number }
   fps: number
   loop: Loop
-  /** Where the sheet looks when it is not to the right (a `side` sheet drawn looking left). */
+  /** Where the sheet looks when it is not to the right (a `side` sheet drawn looking left: the kit's `side_r`). */
   facing?: 'left' | 'right' | 'front'
+  /** Where the mouth and the eyes are in the cell (% of its longer edge, as the kit's pose anchors): the sheet can lip-sync. */
+  mouth?: CutoutAnchor
+  eyes?: CutoutAnchor
   /** Where the boots are in the cell and how much of it the figure fills; the catalog's when absent. */
   feet?: number
   figure?: number
 }
 
 export type DirectionalWalk = { to: V2; speed: number; start: number }
-export type DirectionalView = { kind: 'sheet'; sheet: number; mirror: boolean; frame: number } | { kind: 'pose'; talking: boolean }
+/** What is drawn: a cell of a sheet (with its mouth when the figure speaks) or the pose. */
+export type Drawn = { kind: 'sheet'; sheet: number; mirror: boolean; frame: number; speaking: boolean } | { kind: 'pose'; talking: boolean }
+/** What is drawn, and what it is fading in from for `CROSSFADE_SECONDS` after a change. */
+export type DirectionalView = Drawn & { blend?: { from: Drawn; mix: number } }
+/** A drawing without its cell: the identity that a fade compares. */
+type Look = { kind: 'sheet'; sheet: number; mirror: boolean; speaking: boolean } | { kind: 'pose'; talking: boolean }
 
 /** `screen.directional`: what the figure can show, where it looks, where it walks and when it speaks. */
 export type DirectionalSprite = {
@@ -63,18 +70,22 @@ export type DirectionalSprite = {
   /** Degrees against the camera of the start of the shot: 0 faces it, 90 faces screen right, 180 turns its back. */
   heading?: number
   walk?: DirectionalWalk
-  /** Seconds in which the figure speaks: it shows its talking pose and does not walk. */
+  /** Seconds in which the figure speaks: it stands, and shows a sheet that has a mouth, else its talking pose. */
   speech?: Window[]
+  /** How much of the key light's colour and strength it takes, 0 to 1 (`LIGHT_TINT` when absent). */
+  lightTint?: number
   /** Set by the painter pass for one frame; never stored. */
   view?: DirectionalView
 }
 
 export type Sector = { index: number; dir: Direction; negative: boolean }
 
+/** Largest time and distance a stored value may name, in seconds and metres. */
+export const SECONDS = 3600
 const degrees = (radians: number) => radians * 180 / Math.PI
 const radians = (value: number) => value * Math.PI / 180
-const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
-const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
+export const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value)
+export const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value))
 
 /** An angle in (-180, 180]. */
 export function normalizeDegrees(value: number): number {
@@ -100,15 +111,32 @@ export function sectorOf(theta: number, previous?: Sector | null): Sector {
   return plainSector(theta)
 }
 
-/** The sector each figure holds from one frame to the next. It forgets after a jump in time. */
+const lookKey = (look: Look) => look.kind === 'sheet' ? `s${look.sheet}${look.mirror ? 'm' : ''}${look.speaking ? 'v' : ''}` : `p${look.talking ? 't' : ''}`
+
+/** What each figure holds from one frame to the next: its sector, and the drawing it is fading from. It forgets after a jump in time. */
 export class DirectionMemory {
   private readonly held = new Map<string, { sector: Sector; t: number }>()
+  private readonly looks = new Map<string, { look: Look; t: number; from?: Look; since: number }>()
 
   choose(id: string, t: number, theta: number): Sector {
     const last = this.held.get(id)
     const sector = sectorOf(theta, last && Math.abs(t - last.t) <= RESET_SECONDS ? last.sector : null)
     this.held.set(id, { sector, t })
     return sector
+  }
+
+  /** The drawing to fade out of while `look` fades in, and how far in it is (0 on the frame of the change). Nothing for the first
+   * drawing, after a jump in time, or once the fade is over. */
+  fade(id: string, t: number, look: Look): { from: Look; mix: number } | undefined {
+    const last = this.looks.get(id)
+    const kept = last && Math.abs(t - last.t) <= RESET_SECONDS ? last : undefined
+    const changed = Boolean(kept && lookKey(kept.look) !== lookKey(look))
+    const from = changed ? kept!.look : kept?.from
+    const since = changed || !kept ? t : kept.since
+    const mix = from ? Math.max(0, (t - since) / CROSSFADE_SECONDS) : 1
+    const active = from && mix < 1 ? from : undefined
+    this.looks.set(id, { look, t, from: active, since })
+    return active ? { from: active, mix } : undefined
   }
 }
 
@@ -197,20 +225,26 @@ export function strideFrame(distance: number, count: number, loop: Loop): number
   return cellAt(Math.floor(Math.max(0, distance) / CYCLE_METERS * period), count, loop)
 }
 
-function bestPerDirection(sheets: readonly DirectionalSheet[], motion: Motion): Map<number, number> {
+/** Of two sheets of one direction, the one that looks the way the sector does (no mirror needed), then the one with more cells. */
+function preferred(a: DirectionalSheet, b: DirectionalSheet, negative: boolean): boolean {
+  const matches = (sheet: DirectionalSheet) => LATERAL.has(sheet.dir) && (sheet.facing === 'left') === negative
+  return matches(a) !== matches(b) ? matches(a) : a.count > b.count
+}
+
+function bestPerDirection(sheets: readonly DirectionalSheet[], motion: Motion, negative: boolean): Map<number, number> {
   const best = new Map<number, number>()
   sheets.forEach((sheet, index) => {
     if (sheet.motion !== motion) return
     const key = DIRECTIONS.indexOf(sheet.dir)
     const held = best.get(key)
-    if (held === undefined || sheet.count > sheets[held].count) best.set(key, index)
+    if (held === undefined || preferred(sheet, sheets[held], negative)) best.set(key, index)
   })
   return best
 }
 
-function nearestSheet(sheets: readonly DirectionalSheet[], motion: Motion, target: number): number {
-  const best = bestPerDirection(sheets, motion)
-  const keys = [...best.keys()].sort((a, b) => Math.abs(a - target) - Math.abs(b - target) || a - b)
+function nearestSheet(sheets: readonly DirectionalSheet[], motion: Motion, sector: Sector): number {
+  const best = bestPerDirection(sheets, motion, sector.negative)
+  const keys = [...best.keys()].sort((a, b) => Math.abs(a - sector.index) - Math.abs(b - sector.index) || a - b)
   return keys.length ? best.get(keys[0])! : -1
 }
 
@@ -218,12 +252,12 @@ function mirrored(sheet: DirectionalSheet, sector: Sector): boolean {
   return LATERAL.has(sheet.dir) ? sector.negative !== (sheet.facing === 'left') : false
 }
 
-/** The sheet for a sector: the one of its direction, else the nearest direction the kit has (a tie takes the one nearer
- * the front); a walk with no walk sheet glides on an idle one; index -1 is the pose. A left sector mirrors a sheet that
- * looks right. */
+/** The sheet for a sector: the one of its direction that looks its way (a kit may draw both sides: `side` and `side_r`), else the
+ * other side mirrored, else the nearest direction the kit has (a tie takes the one nearer the front); a walk with no walk sheet
+ * glides on an idle one; index -1 is the pose. */
 export function pickSheet(sheets: readonly DirectionalSheet[], motion: Motion, sector: Sector): { index: number; mirror: boolean; exact: boolean } {
   for (const wanted of motion === 'walk' ? ['walk', 'idle'] as const : ['idle'] as const) {
-    const index = nearestSheet(sheets, wanted, sector.index)
+    const index = nearestSheet(sheets, wanted, sector)
     if (index >= 0) return { index, mirror: mirrored(sheets[index], sector), exact: wanted === motion && sheets[index].dir === sector.dir }
   }
   return { index: -1, mirror: false, exact: false }
@@ -244,19 +278,32 @@ function facingOf(sprite: DirectionalSprite, state: WalkState | null, context: V
   return state?.travel ?? headingFacing(0, context.start, context.eye0)
 }
 
-/** What the figure shows at `t` from the camera at `eye`: a cell of a sheet, or its pose (talking while it speaks). */
+function chooseLook(sprite: DirectionalSprite, state: WalkState | null, sector: Sector, t: number): Look {
+  const speaking = inWindow(sprite.speech, t)
+  const picked = pickSheet(sprite.sheets, !speaking && state?.phase === 'walking' ? 'walk' : 'idle', sector)
+  // A figure that speaks never shows a walk sheet: a sheet with a mouth, else the pose that has one.
+  if (picked.index < 0 || (speaking && !sprite.sheets[picked.index].mouth)) return { kind: 'pose', talking: speaking }
+  return { kind: 'sheet', sheet: picked.index, mirror: picked.mirror, speaking }
+}
+
+function drawn(sprite: DirectionalSprite, look: Look, state: WalkState | null, t: number): Drawn {
+  if (look.kind === 'pose') return look
+  const sheet = sprite.sheets[look.sheet]
+  const frame = sheet.motion === 'walk' ? strideFrame(state?.distance ?? 0, sheet.count, sheet.loop) : cellAt(Math.floor(t * sheet.fps), sheet.count, sheet.loop)
+  return { ...look, frame }
+}
+
+/** What the figure shows at `t` from the camera at `eye`: a cell of a sheet, or its pose (talking while it speaks), and the drawing
+ * it fades in from when it just changed. */
 export function directionalView(sprite: DirectionalSprite, context: ViewContext): { view: DirectionalView; theta: number | null; sector: Sector } {
   const state = sprite.walk ? walkState(context.start, sprite.walk, sprite.speech, context.t) : null
   const at: V2 = state ? [state.x, state.z] : context.start
   const theta = faceAngle(facingOf(sprite, state, context), at, context.eye)
   const sector = context.memory.choose(context.id, context.t, theta ?? 0)
-  if (inWindow(sprite.speech, context.t)) return { view: { kind: 'pose', talking: true }, theta, sector }
-  const picked = pickSheet(sprite.sheets, state?.phase === 'walking' ? 'walk' : 'idle', sector)
-  if (picked.index < 0) return { view: { kind: 'pose', talking: false }, theta, sector }
-  const sheet = sprite.sheets[picked.index]
-  const frame = sheet.motion === 'walk' ? strideFrame(state?.distance ?? 0, sheet.count, sheet.loop)
-    : cellAt(Math.floor(context.t * sheet.fps), sheet.count, sheet.loop)
-  return { view: { kind: 'sheet', sheet: picked.index, mirror: picked.mirror, frame }, theta, sector }
+  const look = chooseLook(sprite, state, sector, context.t)
+  const fade = context.memory.fade(context.id, context.t, look)
+  const view: DirectionalView = { ...drawn(sprite, look, state, context.t), ...(fade ? { blend: { from: drawn(sprite, fade.from, state, context.t), mix: fade.mix } } : {}) }
+  return { view, theta, sector }
 }
 
 /** The plane every cell is drawn on: as wide as the widest cell, with the boots on the catalog's line. */
@@ -272,57 +319,13 @@ export function spriteFoot(sprite: Pick<DirectionalSprite, 'sheets'>): { bottom:
   return { bottom: 1 - feet, center: 0.5, width: Math.min(1, FOOT_METERS / aspect) }
 }
 
-// Reading a stored block --------------------------------------------------------------------------------------------
-
-const integer = (value: unknown, low: number, high: number): value is number => Number.isInteger(value) && (value as number) >= low && (value as number) <= high
-
-function parseSheet(raw: unknown): DirectionalSheet | undefined {
-  if (!raw || typeof raw !== 'object') return undefined
-  const value = raw as Record<string, unknown>
-  const cell = (value.cell ?? {}) as Record<string, unknown>
-  const source = durableScene3DSourceUrl(typeof value.source === 'string' ? value.source : '')
-  const { motion, dir, count, columns, rows } = value, { width, height } = cell
-  if (!source || source.length > 2000 || !(spec.motions as unknown[]).includes(motion) || !(DIRECTIONS as readonly unknown[]).includes(dir)
-    || !integer(count, 1, 64) || !integer(columns, 1, 64) || !integer(rows, 1, 64) || !integer(width, 1, 16384) || !integer(height, 1, 16384)) return undefined
-  const sheet: DirectionalSheet = { motion: motion as Motion, dir: dir as Direction, source, columns, rows, count, cell: { width, height },
-    fps: finite(value.fps) ? clamp(value.fps, 1, 60) : 8, loop: value.loop === 'pingpong' || value.loop === 'once' ? value.loop : 'loop' }
-  if (typeof value.id === 'string' && value.id.length <= 80) sheet.id = value.id
-  if (value.facing === 'left' || value.facing === 'right' || value.facing === 'front') sheet.facing = value.facing
-  for (const key of ['feet', 'figure'] as const) {
-    const share = value[key]
-    if (finite(share) && share > 0 && share <= 1) sheet[key] = share
-  }
-  return sheet
-}
-
-function parseWalk(raw: unknown): DirectionalWalk | undefined {
-  if (!raw || typeof raw !== 'object') return undefined
-  const { to, speed, start } = raw as Record<string, unknown>
-  if (!Array.isArray(to) || to.length !== 2 || !finite(to[0]) || !finite(to[1]) || Math.abs(to[0]) > REACH || Math.abs(to[1]) > REACH || !finite(speed) || !finite(start)) return undefined
-  return { to: [to[0], to[1]], speed: clamp(speed, MIN_SPEED, MAX_SPEED), start: clamp(start, 0, SECONDS) }
-}
-
-function parseSpeech(raw: unknown): Window[] | undefined {
-  if (!Array.isArray(raw)) return undefined
-  const windows = raw.slice(0, MAX_WINDOWS).filter((item): item is [number, number] =>
-    Array.isArray(item) && item.length === 2 && finite(item[0]) && finite(item[1]) && item[0] >= 0 && item[1] <= SECONDS && item[1] > item[0])
-    .sort((a, b) => a[0] - b[0])
-  const merged: [number, number][] = []
-  for (const [start, end] of windows) {
-    const last = merged[merged.length - 1]
-    if (last && start <= last[1]) last[1] = Math.max(last[1], end)
-    else merged.push([start, end])
-  }
-  return merged.length ? merged : undefined
-}
-
-/** A stored `screen.directional`: the sheets that are well formed, and the heading, walk and speech windows that are. A figure with
- * no sheet still turns and walks, in its pose; a block that says none of it is nothing. */
-export function parseDirectional(raw: unknown): DirectionalSprite | undefined {
-  if (!raw || typeof raw !== 'object') return undefined
-  const value = raw as Record<string, unknown>
-  const sheets = (Array.isArray(value.sheets) ? value.sheets.slice(0, MAX_SHEETS) : []).map(parseSheet).filter((sheet): sheet is DirectionalSheet => Boolean(sheet))
-  const heading = headingDegrees(value.heading), walk = parseWalk(value.walk), speech = parseSpeech(value.speech)
-  if (!sheets.length && heading === undefined && !walk) return undefined
-  return { sheets, ...(heading !== undefined ? { heading } : {}), ...(walk ? { walk } : {}), ...(speech ? { speech } : {}) }
+/** The colour a sprite is multiplied by to sit in the light of the scene: the key light's colour at its strength, taken `amount`
+ * of the way from white (0 is off). A soft multiply, so a white light at full strength leaves the picture as drawn. */
+export function lightTint(color: string, intensity: number, amount: number): [number, number, number] {
+  const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(color)
+  const mix = clamp(finite(amount) ? amount : 0, 0, 1)
+  if (!match || mix === 0) return [1, 1, 1]
+  const level = clamp(0.35 + 0.65 * (finite(intensity) ? intensity : 1), 0.35, 1)
+  const channel = (index: number) => 1 + (parseInt(match[index], 16) / 255 * level - 1) * mix
+  return [channel(1), channel(2), channel(3)]
 }

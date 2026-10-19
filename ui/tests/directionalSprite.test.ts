@@ -3,10 +3,11 @@ import { test } from 'node:test'
 import { parseMediaScreen, mediaScreenMountKey } from '../src/features/scene3d/mediaScreen.ts'
 import { facingSlot, isDirectional, walkedSlot } from '../src/features/scene3d/directionalPaint.ts'
 import { spriteFoot, spriteFrame } from '../src/features/scene3d/directionalSprite.ts'
+import { parseDirectional } from '../src/features/scene3d/directionalParse.ts'
 import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 import {
-  DirectionMemory, directionalPosition, directionalView, faceAngle, headingDegrees, headingFacing, normalizeDegrees, parseDirectional,
-  pickSheet, sectorOf, strideFrame, travelFacing, walkState, type DirectionalSheet, type DirectionalSprite, type V2,
+  CROSSFADE_SECONDS, DirectionMemory, directionalPosition, directionalView, faceAngle, headingDegrees, headingFacing, normalizeDegrees,
+  lightTint, pickSheet, sectorOf, strideFrame, travelFacing, walkState, type DirectionalSheet, type DirectionalSprite, type V2,
 } from '../src/features/scene3d/directionalSprite.ts'
 
 const sheet = (motion: DirectionalSheet['motion'], dir: DirectionalSheet['dir'], count = 12, extra: Partial<DirectionalSheet> = {}): DirectionalSheet =>
@@ -300,4 +301,118 @@ test('a figure whose kit has no sheet still turns and walks in its pose', () => 
   assert.equal(painted.scale, 1, 'no sheet, no cell: the pose keeps its own size')
   const moved = walkedSlot(slot, [0, 0, 0], 2).position, length = Math.hypot(2, 3)
   assert.ok(Math.abs(moved[0] - 1.8 * 2 / length) < 1e-9 && Math.abs(moved[2] - 1.8 * 3 / length) < 1e-9)
+})
+
+const MOUTH = { offsetX: 4, offsetY: -30, scale: 0.05, rotation: 0 }
+
+test('a change of drawing fades in over 0.12 s, a frame at a time, and never the first one or one after a jump in time', () => {
+  assert.equal(CROSSFADE_SECONDS, 0.12)
+  const eye: V2 = [0, 5], start: V2 = [0, 0]
+  const memory = new DirectionMemory()
+  const at = (t: number, theta: number) => {
+    // A figure whose facing turns with the camera: the camera sits at the angle that makes the figure look theta degrees off.
+    const radians = theta * Math.PI / 180
+    return directionalView(sprite({ heading: 0 }), { start, eye0: eye, eye: [5 * Math.sin(radians), 5 * Math.cos(radians)], t, memory, id: 'ana' })
+  }
+  assert.equal('blend' in at(0, 0).view, false, 'the first picture has nothing to fade from')
+  assert.equal(at(1 / 30, 0).view.blend, undefined)
+  // 1.0 s of sequential frames: front turns to front34 (past 32.5 degrees) at t = 0.1.
+  const frames: { t: number; kind: string; mix?: number }[] = []
+  for (let step = 3; step <= 14; step += 1) {
+    const t = step / 30
+    const view = at(t, t < 0.1 ? 0 : 40).view
+    frames.push({ t, kind: view.kind, mix: view.blend?.mix })
+  }
+  const faded = frames.filter(frame => frame.mix !== undefined)
+  assert.equal(faded.length, 4, 'the fade lasts 0.12 s: four frames at 30 fps')
+  assert.equal(faded[0].mix, 0, 'it starts on the frame of the change, still the old picture')
+  assert.ok(faded.every((frame, index) => index === 0 || frame.mix! > faded[index - 1].mix!), 'it rises')
+  assert.ok(faded.every(frame => frame.mix! >= 0 && frame.mix! < 1))
+  const last = frames[frames.length - 1]
+  assert.equal(last.mix, undefined, 'and ends')
+  // A jump in time forgets the figure: no fade out of a picture that was seen a long time ago.
+  assert.equal(at(30, 80).view.blend, undefined)
+})
+
+test('the picture a fade comes from is the one that was drawn, and it keeps walking while it fades out', () => {
+  const eye: V2 = [0, -3.35], start: V2 = [1.5, 0.5]
+  const walker = sprite({ walk: { to: [-1.5, 0.5], speed: 1.2, start: 0 } })
+  const memory = new DirectionMemory()
+  let changed: ReturnType<typeof directionalView> | undefined
+  let previous: ReturnType<typeof directionalView> | undefined
+  for (let step = 0; step <= 90 && !changed; step += 1) {
+    const now = directionalView(walker, { start, eye0: eye, eye, t: step / 30, memory, id: 'luis' })
+    if (now.view.blend) changed = now
+    previous = now
+  }
+  assert.ok(changed && previous, 'the walker turns from front34 to side on its way')
+  const blend = changed!.view.blend!
+  assert.equal(blend.from.kind, 'sheet')
+  if (blend.from.kind === 'sheet' && previous!.view.kind === 'sheet') {
+    assert.equal(ALL[blend.from.sheet].dir, ALL[previous!.view.sheet].dir)
+    assert.equal(blend.from.mirror, previous!.view.mirror)
+    assert.equal(ALL[blend.from.sheet].motion, 'walk')
+  }
+  if (changed!.view.kind === 'sheet') assert.equal(ALL[changed!.view.sheet].dir, 'side')
+  assert.ok(blend.mix >= 0 && blend.mix < 0.5)
+})
+
+test('a figure that is drawn by the same sheet in the same way when its sector changes does not fade (a front sheet has no mirror)', () => {
+  const only = sprite({ heading: 0 })
+  only.sheets = [sheet('idle', 'front', 2, { loop: 'pingpong' })]
+  const eye: V2 = [0, 5]
+  const memory = new DirectionMemory()
+  const at = (t: number, theta: number) => {
+    const radians = theta * Math.PI / 180
+    return directionalView(only, { start: [0, 0], eye0: eye, eye: [5 * Math.sin(radians), 5 * Math.cos(radians)], t, memory, id: 'ana' })
+  }
+  at(0, 0)
+  for (let step = 1; step <= 10; step += 1) assert.equal(at(step / 30, step * 8).view.blend, undefined, `step ${step}`)
+})
+
+test('the kit can give the opposite side as its own sheet, which beats the mirror', () => {
+  const right = sheet('walk', 'side', 12), left = sheet('walk', 'side', 12, { facing: 'left', source: '/api/v1/file/walk-side_r.png' })
+  const both = [right, left]
+  const pick = (sheets: DirectionalSheet[], theta: number) => {
+    const found = pickSheet(sheets, 'walk', sectorOf(theta))
+    return { source: found.index >= 0 ? sheets[found.index].source : null, mirror: found.mirror }
+  }
+  assert.deepEqual(pick(both, 90), { source: right.source, mirror: false })
+  assert.deepEqual(pick(both, -90), { source: left.source, mirror: false })
+  assert.deepEqual(pick([right], -90), { source: right.source, mirror: true })
+  assert.deepEqual(pick([left], 90), { source: left.source, mirror: true })
+  // A front34 asked for with only a left-looking side sheet takes the nearest direction and its mirror as before.
+  assert.equal(pick([left], 45).mirror, true)
+  const parsed = parseDirectional({ sheets: [{ ...sheet('walk', 'front34'), dir: 'front34_r' }, { ...sheet('idle', 'side', 2), dir: 'side_r' }] })!
+  assert.deepEqual(parsed.sheets.map(item => [item.dir, item.facing]), [['front34', 'left'], ['side', 'left']])
+  assert.equal(parseDirectional({ sheets: [{ ...sheet('walk', 'front'), dir: 'front_r' }] }), undefined, 'a front or a back has no other side')
+})
+
+test('while it speaks a figure shows its sheet with a mouth when the sheet has one, else its talking pose', () => {
+  const eye: V2 = [0, 5]
+  const talker = (mouth: boolean) => sprite({ heading: 90, speech: [[1, 2]], sheets: [...ALL.filter(item => item.motion === 'walk'),
+    ...ALL.filter(item => item.motion === 'idle').map(item => mouth ? { ...item, mouth: MOUTH } : item)] })
+  const view = (value: DirectionalSprite, t: number) => directionalView(value, { start: [0, 0], eye0: eye, eye, t, memory: new DirectionMemory(), id: 'ana' }).view
+  const withMouth = view(talker(true), 1.5)
+  assert.ok(withMouth.kind === 'sheet' && withMouth.speaking && ALL[withMouth.sheet].motion === 'idle' && ALL[withMouth.sheet].dir === 'side' && !withMouth.mirror)
+  assert.deepEqual(view(talker(false), 1.5), { kind: 'pose', talking: true })
+  const quiet = view(talker(true), 0.5)
+  assert.ok(quiet.kind === 'sheet' && !quiet.speaking)
+  const parsed = parseDirectional({ sheets: [{ ...sheet('idle', 'side', 2), mouth: MOUTH, eyes: { offsetX: 0, offsetY: -40, scale: 0.12 } }] })!
+  assert.deepEqual(parsed.sheets[0].mouth, MOUTH)
+  assert.deepEqual(parsed.sheets[0].eyes, { offsetX: 0, offsetY: -40, scale: 0.12, rotation: 0 })
+  assert.equal(parseDirectional({ sheets: [{ ...sheet('idle', 'side', 2), mouth: { offsetX: 999, offsetY: 0, scale: 1 } }] })!.sheets[0].mouth, undefined)
+})
+
+test('the sprite takes the colour and strength of the key light by a soft multiply that can be turned off', () => {
+  assert.deepEqual(lightTint('#ffffff', 1.2, 0), [1, 1, 1], '0 turns it off')
+  assert.deepEqual(lightTint('#ffffff', 1.2, 1), [1, 1, 1], 'a white light at full strength leaves the picture as drawn')
+  const warm = lightTint('#ffcc88', 1.0, 1)
+  assert.ok(warm[0] > warm[1] && warm[1] > warm[2] && warm.every(value => value <= 1))
+  const half = lightTint('#ffcc88', 1.0, 0.5)
+  assert.ok(half[2] > warm[2] && half[2] < 1, 'half the amount is half way to white')
+  assert.ok(lightTint('#ffffff', 0.3, 1)[0] < 0.7, 'a dim light darkens it')
+  assert.deepEqual(lightTint('not a colour', 1, 1), [1, 1, 1])
+  assert.equal(parseDirectional({ sheets: [sheet('idle', 'side', 2)], lightTint: 0.25 })!.lightTint, 0.25)
+  assert.equal(parseDirectional({ sheets: [sheet('idle', 'side', 2)], lightTint: 4 })!.lightTint, undefined)
 })

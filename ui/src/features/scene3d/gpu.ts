@@ -68,7 +68,8 @@ import { EnvironmentLighting, applyLook } from './environmentLighting'
 import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
 import { findHandBone, followHand, parseHold } from './handHold'
 import { DirectionMemory } from './directionalSprite.ts'
-import { facingSlot, isDirectional, referenceEye, walkedSlot } from './directionalPaint.ts'
+import { awaitsView, cameraPass, walkedSlot } from './directionalPaint.ts'
+import { tintSprite } from './directionalLight.ts'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -547,7 +548,7 @@ function paintActor(world: GpuWorld, slot: Scene3DSlot, sceneSeconds: number, sh
   const gpu = world.slots.get(slot.id)
   if (!gpu) return
   // A directional figure is painted once, in the camera pass, with the drawing its angle asks for.
-  if (gpu.screen && slot.screen && !(slot.screen.directional && !slot.screen.directional.view)) void gpu.screen.seek(sceneSeconds, slot.screen).catch(() => {})
+  if (gpu.screen && slot.screen && !awaitsView(slot)) void gpu.screen.seek(sceneSeconds, slot.screen).catch(() => {})
   poseLoadedSlot(gpu, slot)
   resetTypingPose(gpu.root)
   paintSlotSequence(gpu, slot, sceneSeconds, shotDuration)
@@ -618,11 +619,9 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   world.camera.position.set(...shaken.eye)
   world.camera.lookAt(...shaken.look)
   world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
-  const directions = world.directions ??= new DirectionMemory()
-  const eye0 = posedSlots.some(isDirectional) ? referenceEye(document) : [0, 0] as const
-  posedSlots.forEach((slot, index) => {
-    if (isDirectional(slot)) paintActor(world, facingSlot(slot, document.slots[index].position, { memory: directions, eye: shaken.eye, eye0, t: sceneSeconds }), sceneSeconds, document.duration)
-    else if (slot.billboard && slot.media === 'image') paintActor(world, { ...slot, rotationY: Math.atan2(shaken.eye[0]-slot.position[0], shaken.eye[2]-slot.position[2]) }, sceneSeconds, document.duration)
+  cameraPass(document, posedSlots, { memory: world.directions ??= new DirectionMemory(), eye: shaken.eye, t: sceneSeconds }, (painted, tint) => {
+    paintActor(world, painted, sceneSeconds, document.duration)
+    tintSprite(world.slots.get(painted.id)?.root, tint)
   })
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()

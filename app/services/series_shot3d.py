@@ -446,6 +446,15 @@ def _template(call: Callable, workspace: str, config: dict[str, Any], error: Cal
     return template_id
 
 
+def _direct(call: Callable, workspace: str, stem: str, scene_id: str, revision: int, bindings: list[dict[str, Any]],
+            error: Callable[..., Exception]) -> int:
+    """The sheets, heading and walk of the cast members that turn to the camera (``series_directional``), after their voices; the new revision."""
+    if not bindings:
+        return revision
+    return _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-directional-{revision}", "input": {
+        "workspace": workspace, "scene_id": scene_id, "base_revision": revision, "bindings": bindings}}), "set the directions of the cast", error)["scene"]["revision"]
+
+
 def _talk(call: Callable, workspace: str, stem: str, scene_id: str, revision: int, entry: dict[str, str], kit_id: str,
           spoken: list[dict[str, Any]], error: Callable[..., Exception]) -> int:
     """One cast object speaks its lines as its Character Kit; returns the new scene revision."""
@@ -528,11 +537,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     source = scene_source_digest(config, root)
     audio = audio_content(root, (line["filename"] for line in [*lines, *(tracks or [])]))
     held = read_fields(shot)
-    asked = (config, template_id, source, round(duration, 3), lines, audio, sound, effects)
-    if plate:
-        asked = (*asked, plate)
-    if directed:
-        asked = (*asked, directed)
+    asked = (config, template_id, source, round(duration, 3), lines, audio, sound, effects, *[extra for extra in (plate, directed) if extra])
     digest = hashlib.sha1(repr((*asked, tuple(sorted(held.items()))) if held else asked).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
@@ -545,9 +550,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
         kit_id = series_characters.get(entry["characterId"])
         if spoken and kit_id:
             revision = _talk(call, workspace, stem, scene_id, revision, entry, kit_id, spoken, error)
-    if directed:
-        revision = _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-directional-{revision}", "input": {
-            "workspace": workspace, "scene_id": scene_id, "base_revision": revision, "bindings": directed}}), "set the directions of the cast", error)["scene"]["revision"]
+    revision = _direct(call, workspace, stem, scene_id, revision, directed, error)
     published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
     return {**published, "renderDigest": digest}
