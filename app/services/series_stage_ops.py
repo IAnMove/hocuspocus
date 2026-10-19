@@ -78,6 +78,14 @@ def _plate_path(series: dict[str, Any], location_id: str, workspace: str, root: 
     return path
 
 
+def _eye(stage: dict[str, Any] | None) -> dict[str, Any]:
+    """``eyeHeightM`` (what the stage implies for the camera) and, when odd, a ``warning`` to re-read the numbers."""
+    if not stage:
+        return {}
+    note = stage_math.eye_height_note(stage)
+    return {"eyeHeightM": stage_math.eye_height_m(stage), **({"warning": note} if note else {})}
+
+
 class SeriesStage:
     def __init__(self, *, read_library: Callable[[str], dict], change_series: Callable[..., dict], workspace_dir: Callable[[str], str]) -> None:
         self.read_library, self.change_series, self.workspace_dir = read_library, change_series, workspace_dir
@@ -108,7 +116,8 @@ class SeriesStage:
             stored = self.change_series(workspace, series_id, change)
         except KeyError as error:
             raise StageError("not_found", f"Series {series_id} not found", 404) from error
-        return {"locationId": location_id, "stage": stage, "affectedShots": affected_shots(stored, location_id), "revision": stored.get("revision")}
+        return {"locationId": location_id, "stage": stage, "affectedShots": affected_shots(stored, location_id), "revision": stored.get("revision"),
+                **_eye(stage)}
 
     def check(self, workspace: str, series_id: str, location_id: str, body: dict[str, Any]) -> dict[str, Any]:
         """The grid over the plate, as a workspace file, with the numbers to read it by (nothing is written to the series)."""
@@ -130,7 +139,8 @@ class SeriesStage:
         return {"locationId": location_id, "plate": {"file": path.name, "width": plate.width, "height": plate.height},
                 "grid": {"file": name, "url": f"/api/v1/file/{quote(name)}?workspace={quote(workspace)}", "step": step,
                          "width": picture.width, "height": picture.height},
-                "stage": saved, **({"proposal": proposal} if proposal else {}), "suggestion": grid.suggest_horizon(plate),
+                "stage": saved, **({"proposal": proposal} if proposal else {}), **_eye(proposal or saved),
+                "suggestion": grid.suggest_horizon(plate),
                 "how": ("LOOK at the grid image and read numbers off it, as fractions of the plate's height from the top: baseY = the line where "
                         "a reference object of known height stands on the floor (a door's foot), heightPct = how tall it is (its top to its foot), "
                         "horizon = the camera's eye line (a room has none visible: eye height is about 1.6 m up any wall, so a 2 m door's "

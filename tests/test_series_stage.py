@@ -444,6 +444,7 @@ def test_setting_a_stage_stores_it_on_the_location_and_names_the_shots_it_resize
     reply = asyncio.run(set_stage("ls", "office", StageSet(workspace="cast", horizon=0.22, ref={"baseY": 0.72, "heightPct": 0.62})))
     assert reply["stage"] == OFFICE and reply["locationId"] == "office" and reply["revision"] == 4
     assert reply["affectedShots"] == ["s1"], "the 2D wide and two-shots with people in that location"
+    assert reply["eyeHeightM"] == pytest.approx(1.61, abs=0.01) and "warning" not in reply
     assert store.series["locations"][0]["layout2d"]["stage"] == OFFICE and store.series["locations"][0]["layout2d"]["homes"], "the rest is kept"
     far = asyncio.run(set_stage("ls", "office", StageSet(workspace="cast", horizon=0.2, ref={"baseY": 0.7, "heightPct": 0.6, "heightM": 2.1}, floorTop=0.65)))
     assert far["stage"]["floorTop"] == 0.65 and store.series["locations"][0]["layout2d"]["stage"]["ref"]["heightM"] == 2.1
@@ -484,6 +485,9 @@ def test_checking_a_plate_writes_the_grid_into_the_workspace_and_answers_with_nu
     assert again["grid"]["file"] == grid["file"], "the same question names the same file"
     proposal = asyncio.run(check("ls", "office", StageCheck(workspace="cast", horizon=0.22, ref={"baseY": 0.72, "heightPct": 0.62}, step=0.05)))
     assert proposal["proposal"] == OFFICE and proposal["grid"]["file"] != grid["file"] and proposal["grid"]["step"] == 0.05
+    assert proposal["eyeHeightM"] == pytest.approx(1.61, abs=0.01) and "eyeHeightM" not in reply
+    odd = asyncio.run(check("ls", "office", StageCheck(workspace="cast", horizon=0.65, ref={"baseY": 0.72, "heightPct": 0.62})))
+    assert odd["eyeHeightM"] < 0.3 and "camera" in odd["warning"], "a horizon read too low is told"
     store.series["locations"][0]["layout2d"]["stage"] = OFFICE
     saved = asyncio.run(check("ls", "office", StageCheck(workspace="cast")))
     assert saved["stage"] == OFFICE, "the saved stage is drawn over the grid"
@@ -522,3 +526,12 @@ def test_the_mcp_tools_call_the_same_routes():
         ("POST", "/api/v1/series/ls/locations/office/stage"), ("POST", "/api/v1/series/ls/locations/office/stage/check")]
     assert calls[0][2] == {"workspace": "series", "horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62}}
     assert calls[1][2] == {"workspace": "series", "step": 0.05}
+
+
+def test_a_stage_says_how_high_it_puts_the_camera_so_a_misread_horizon_shows():
+    assert stage_math.eye_height_m(OFFICE) == pytest.approx(1.61, abs=0.01)
+    assert stage_math.eye_height_note(OFFICE) is None
+    low = {"horizon": 0.69, "ref": {"baseY": 0.765, "heightPct": 0.145, "heightM": 1.1}}
+    assert stage_math.eye_height_m(low) == pytest.approx(0.57, abs=0.01)
+    assert "0.57 m high" in stage_math.eye_height_note(low) and "low angle" in stage_math.eye_height_note(low)
+    assert "high angle" in stage_math.eye_height_note({"horizon": 0.1, "ref": {"baseY": 0.9, "heightPct": 0.3, "heightM": 2}})

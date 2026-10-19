@@ -32,6 +32,8 @@ FRAMINGS = ("wide", "two")
 DEPTH_WORDS = {"far": 0.0, "mid": 0.5, "near": 1.0}
 # A figure drawn outside this share of what the perspective says is flagged (``figure_scale_off``).
 SCALE_LOW, SCALE_HIGH = 0.75, 1.35
+# The camera heights (metres) that need no remark (``eye_height_note``).
+EYE_LOW, EYE_HIGH = 1.0, 2.4
 # The least a figure's feet may be below the horizon (plate fraction): at it the perspective height is nil.
 _MIN_BELOW = 0.01
 _REF_KEYS = ("baseY", "heightPct", "heightM")
@@ -78,6 +80,22 @@ def normalize_location_stage(location: dict[str, Any], label: str) -> dict[str, 
     else:
         location["layout2d"] = {**layout, "stage": normalize_stage(layout["stage"], f"{label}.stage")}
     return location
+
+
+def eye_height_m(stage: dict[str, Any]) -> float:
+    """The camera height (metres) this stage implies: how many metres lie between the reference's foot and the horizon. A person's eye
+    level camera is about 1.6 m; far from 1 to 2.4 m the horizon or the reference was probably misread."""
+    ref = stage["ref"]
+    return round((ref["baseY"] - stage["horizon"]) * ref["heightM"] / ref["heightPct"], 2)
+
+
+def eye_height_note(stage: dict[str, Any]) -> str | None:
+    """A hint when the stage implies an odd camera height; None when it is plausible (a low or high camera is a choice, not an error)."""
+    height = eye_height_m(stage)
+    if EYE_LOW <= height <= EYE_HIGH:
+        return None
+    return (f"this stage puts the camera {height:g} m high (the metres between the reference's foot and the horizon); a camera at eye level "
+            f"is about 1.6 m. Re-read the horizon and the reference on the grid unless the plate really is a {'low' if height < EYE_LOW else 'high'} angle")
 
 
 def location_stage(location: Any) -> dict[str, Any] | None:
