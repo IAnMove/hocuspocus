@@ -306,6 +306,26 @@ def test_applying_the_same_card_again_does_nothing_twice_and_other_inputs_replac
     assert [path.name for path in tmp_path.glob("*.scene.json")] == [first["scene"]]
 
 
+def test_a_same_input_reapply_does_not_overwrite_video2d_edits(tmp_path):
+    """The take's sceneFilename is the file a person opens in Video 2D. An agent retry of the same apply
+    (or a Wizard that calls again) used to rewrite that file with a fresh compile while reporting reused,
+    so the edits and the approved MP4 no longer matched."""
+    world = World(tmp_path)
+    first = world.apply(cast=WALK)
+    path = tmp_path / first["scene"]
+    edited = json.loads(path.read_text(encoding="utf-8"))
+    edited["layers"].append({"id": "person-mouth", "type": "image", "source": "/api/v1/file/mouth.png?workspace=cast"})
+    path.write_text(json.dumps(edited), encoding="utf-8")
+    again = world.apply(cast=WALK)
+    assert again["take"]["reused"] is True and again["take"]["attemptId"] == first["take"]["attemptId"]
+    kept = json.loads(path.read_text(encoding="utf-8"))
+    assert kept["layers"][-1]["id"] == "person-mouth", "Video 2D work survives an identical apply"
+    assert again["scene"] == first["scene"] and world.tool_names().count("scenes.video2d.export") == 1
+    path.unlink()
+    recovered = world.apply(cast=WALK)
+    assert recovered["take"]["reused"] is True and (tmp_path / first["scene"]).is_file(), "a missing scene is written again"
+
+
 def test_an_approved_card_take_is_not_superseded(tmp_path):
     world = World(tmp_path, autonomy="one_shot")
     world.apply(cast=WALK, approve=True)

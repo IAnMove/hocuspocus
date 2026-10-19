@@ -40,6 +40,26 @@ def model_takes_negative_prompt(model: str) -> bool:
     return not (isinstance(meta, dict) and meta.get("no_negative_prompt", False))
 
 
+def image_step_range(model: str) -> tuple[int, int]:
+    """``inference_steps_min/max`` from the model definition; 1..1000 when the file names none (same gate as ``generation.image``)."""
+    meta = _definition(model).get("model")
+    meta = meta if isinstance(meta, dict) else {}
+    low, high = meta.get("inference_steps_min"), meta.get("inference_steps_max")
+    return (
+        low if isinstance(low, int) and not isinstance(low, bool) else 1,
+        high if isinstance(high, int) and not isinstance(high, bool) else 1000,
+    )
+
+
+def legal_image_steps(model: str, steps: int | None) -> int:
+    """Steps ``generation.image`` will admit for ``model``. An out-of-range count (Turbo is locked at 8) becomes the model's own default."""
+    allowed = default_image_steps(model)
+    if not isinstance(steps, int) or isinstance(steps, bool):
+        return allowed
+    low, high = image_step_range(model)
+    return steps if low <= steps <= high else allowed
+
+
 def default_image_steps(model: str) -> int:
     return model_image_steps(model) or (40 if str(model).startswith("qwen_image_21") else 4)
 
@@ -67,10 +87,12 @@ def default_image_model() -> str:
 
 def image_choice(entry: dict, style: dict) -> tuple[str, int | None]:
     """(model, steps) for one cast member or shot. An entry that picks its own model without steps runs it
-    at that model's default (None here; ``Production.image`` reads app/defaults), not at the style's steps."""
+    at that model's default (None here; ``Production.image`` reads app/defaults), not at the style's steps.
+    A step count the model cannot run (Turbo is 8 only) becomes that model's default."""
     look = style.get("image_model") or DEFAULT_IMAGE_MODEL
     model = entry.get("image_model") or look
-    return model, entry.get("image_steps", style.get("image_steps") if model == look else None)
+    raw = entry.get("image_steps", style.get("image_steps") if model == look else None)
+    return model, None if raw is None else legal_image_steps(model, raw)
 
 
 def image_style_defaults(style: dict, explicit: dict) -> dict:
@@ -78,10 +100,17 @@ def image_style_defaults(style: dict, explicit: dict) -> dict:
 
     A model chosen without steps runs at its own default steps, never at the
     steps a preset set for another model (Flux 2 Klein on a Qwen look gets 4, not 40).
+    A step count the chosen model cannot run is replaced by that model's default:
+    ``generation.image`` refuses Turbo at anything but 8.
     """
     if "image_model" in explicit:
         chosen = explicit["image_model"]
-        steps = model_image_steps(chosen) if isinstance(chosen, str) and "image_steps" not in explicit else None
-        return {**style, "image_steps": steps} if steps else style
+        if not isinstance(chosen, str):
+            return style
+        if "image_steps" not in explicit:
+            steps = model_image_steps(chosen)
+            return {**style, "image_steps": steps} if steps else style
+        return {**style, "image_steps": legal_image_steps(chosen, explicit.get("image_steps"))}
     model = default_image_model()
-    return {**style, "image_model": model, "image_steps": explicit.get("image_steps", default_image_steps(model))}
+    raw = explicit["image_steps"] if "image_steps" in explicit else None
+    return {**style, "image_model": model, "image_steps": legal_image_steps(model, raw)}

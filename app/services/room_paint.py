@@ -13,9 +13,11 @@ The same room, words, style and seed give the same request, so a second call fin
 """
 from __future__ import annotations
 
+import contextlib
 import copy
 import hashlib
 import json
+import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -229,6 +231,40 @@ def _work(call: Call, workspace: str, root: Path, name: str, spec: dict, plan: d
     finally:
         with _ACTIVE_LOCK:
             _ACTIVE.discard((str(root), name, fp))
+        _drop_staging(root, name, fp)
+
+
+def _staging_dir(root: Path, name: str, fp: str) -> Path:
+    """Pictures of this request, away from the canonical ``rooms/<name>/<surface>.png`` a newer paint already published."""
+    return root / "rooms" / name / f".paint-{fp}"
+
+
+def _is_current(root: Path, name: str, fp: str) -> bool:
+    record = room_store.record_of(root, name)
+    return isinstance(record, dict) and (record.get("paint") or {}).get("request") == fp
+
+
+def _drop_staging(root: Path, name: str, fp: str) -> None:
+    folder = _staging_dir(root, name, fp)
+    if not folder.is_dir():
+        return
+    for item in folder.iterdir():
+        item.unlink(missing_ok=True)
+    with contextlib.suppress(OSError):
+        folder.rmdir()
+
+
+def _publish(root: Path, name: str, painted: dict) -> dict:
+    """Move each staged picture onto ``rooms/<name>/<surface>.png`` once this request still owns the room."""
+    published = {}
+    for surface, entry in painted.items():
+        canonical = f"rooms/{name}/{surface}.png"
+        source = root / entry["file"]
+        if not source.is_file():
+            raise FileNotFoundError(f"staged {surface} picture is missing")
+        os.replace(source, root / canonical)
+        published[surface] = {**entry, "file": canonical, "sha": file_sha(root / canonical)}
+    return published
 
 
 def _set_state(root: Path, name: str, fp: str, changes: dict) -> bool:
@@ -258,13 +294,16 @@ def _paint_all(call: Call, workspace: str, root: Path, name: str, plan: dict, fp
 
     with ThreadPoolExecutor(max_workers=max(1, len(requests))) as pool:
         made = dict(zip(requests, pool.map(make, requests)))
+    if not _is_current(root, name, fp):
+        return {}, []
     entries, warnings = {}, []
     for surface, (row, failure) in made.items():
         if row is None:
             warnings.append({"code": "paint_failed", "surface": surface, "error": failure})
             continue
         try:
-            entry = _process(call, workspace, root, name, surface, plan[surface], requests[surface], row, f"{tag}-{surface}", warnings)
+            entry = _process(call, workspace, root, name, fp, surface, plan[surface], requests[surface], row,
+                             f"{tag}-{surface}", warnings)
         except Exception as error:  # noqa: BLE001
             warnings.append({"code": "paint_failed", "surface": surface, "error": str(error)[:300]})
             continue
@@ -273,7 +312,7 @@ def _paint_all(call: Call, workspace: str, root: Path, name: str, plan: dict, fp
     return entries, warnings
 
 
-def _process(call, workspace, root, name, surface, item, request, row, tag, warnings) -> dict | None:
+def _process(call, workspace, root, name, fp, surface, item, request, row, tag, warnings) -> dict | None:
     path = set_skins.asset_path(row["files"][0], root, workspace)
     with Image.open(path) as opened:
         picture = opened.convert("RGB")
@@ -286,7 +325,9 @@ def _process(call, workspace, root, name, surface, item, request, row, tag, warn
             warnings.append({"code": "seam_fallback", "surface": surface, "seam_error": metrics["seam_error"],
                              "limit": defaults()["texture"]["seamMax"]})
             return None
-    file = f"rooms/{name}/{surface}.png"
+    folder = _staging_dir(root, name, fp)
+    folder.mkdir(parents=True, exist_ok=True)
+    file = f"rooms/{name}/.paint-{fp}/{surface}.png"
     picture.save(root / file)
     return {"source": "ai", "file": file, "tile_m": item["tile_m"], "prompt": item["prompt"], "seed": item["seed"],
             "sha": file_sha(root / file), **({"metrics": metrics} if metrics else {})}
@@ -339,10 +380,12 @@ def _finish(root: Path, name: str, spec: dict, fp: str, style: str, painted: dic
                                "error": "no surface could be painted; the room keeps its procedural materials"}
             room_store.write(root, library)
             return
-        entries = {**room_store.surfaces_of(record), **painted}
-        record["file"] = room_store.rebuild(root, name, spec, entries)
+        # Rebuild from the staged pictures so a superseded job never overwrites the published PNGs; then publish.
+        record["file"] = room_store.rebuild(root, name, spec, {**room_store.surfaces_of(record), **painted})
+        published = _publish(root, name, painted)
+        entries = {**room_store.surfaces_of(record), **published}
         record["surfaces"] = entries
         record["paint"] = {**record["paint"], "status": "completed", "engine": "ai", "style": style, "warnings": warnings,
-                           "look": look_fingerprint(spec, entries), "painted": sorted(painted)}
+                           "look": look_fingerprint(spec, entries), "painted": sorted(published)}
         record["paint"].pop("error", None)
         room_store.write(root, library)

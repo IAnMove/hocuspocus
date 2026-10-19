@@ -116,7 +116,7 @@ class TestJobLifecycleWiring(unittest.TestCase):
                 "register_abort_state", "finish_job", "record_job_outputs",
             },
             "_run_sfx_generation": {
-                "finish_job", "record_job_outputs",
+                "finish_job", "record_job_outputs", "mark_producing",
             },
         }
         for function_name, required in expected.items():
