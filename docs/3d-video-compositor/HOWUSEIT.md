@@ -573,4 +573,3 @@ shot is drawn as before.
   drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
   `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot with a synthetic five-direction
   kit and checks the pixels.
-

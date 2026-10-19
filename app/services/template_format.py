@@ -76,10 +76,6 @@ def _screen_refs(screen: dict) -> Iterator[MediaRef]:
     for pose in screen.get("poseSequence") or []:
         if isinstance(pose, dict):
             yield pose, "sourceUrl"
-    directional = screen.get("directional")
-    for sheet in (directional.get("sheets") or []) if isinstance(directional, dict) else []:
-        if isinstance(sheet, dict):
-            yield sheet, "source"
 
 
 def _slot_refs(slot: dict) -> Iterator[MediaRef]:

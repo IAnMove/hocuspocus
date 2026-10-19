@@ -348,3 +348,36 @@ def test_the_tools_say_the_new_fields():
         assert word in text, word
     patch = next(item for item in command_catalog() if item["name"] == "world3d.scene.patch")
     assert "directional" in json.dumps(patch)
+
+
+def test_the_patch_tool_stores_the_block_beside_the_talk_of_the_same_object(tmp_path):
+    """The Series render talks first and binds the directions after: the stored object keeps both, and the tool replays and refuses like the rest."""
+    from fastapi import HTTPException
+    from services.character_kit_library import write_character_kit_library
+    from services.world3d_scenes import _write, inspect_scene
+    from services.world3d_template_commands import execute_command
+    root = lambda workspace: str(tmp_path / workspace)
+    (tmp_path / "studio").mkdir()
+    asset = lambda name: {"id": name, "name": name, "source": f"/api/v1/file/kits/lola/{name}.png?workspace=studio", "reviewState": "approved", "width": 400, "height": 800}
+    lola = {"id": "lola", "name": "Lola", "style": "cutout", "base": asset("base"), "mouth": {"closed": asset("m-closed")}, "eyes": {"blink": asset("blink")},
+            "anchors": {"base": {"mouth": {"offsetX": 1, "offsetY": -19, "scale": 0.06, "rotation": 0}}}}
+    write_character_kit_library(root("studio"), {"version": 1, "activeId": "lola", "kits": {"lola": lola}}, base_revision=0)
+    _write("studio", "w3d-dir000000000", {"revision": 1, "templateId": "t", "warnings": [], "document": {
+        "duration": 6, "camera": {}, "slots": [{"id": "hero", "slot": "subject_1", "media": "image", "sourceUrl": ""}]}}, root)
+    talked = execute_command("world3d.scene.talk", {"version": 1, "intent_id": "talk-1", "input": {
+        "workspace": "studio", "scene_id": "w3d-dir000000000", "base_revision": 1, "object_id": "hero", "kit_id": "lola", "lines": [{"start": 1.0, "cues": []}]}}, root)
+    assert talked["result"]["scene"]["revision"] == 2
+    patch = {"version": 1, "intent_id": "dir-1", "input": {"workspace": "studio", "scene_id": "w3d-dir000000000", "base_revision": 2,
+                                                          "bindings": [{"object_id": "hero", "directional": block_of(heading="right", walk={"to": [2, 1], "speed": 1.2, "start": 0.5}, speech=[[1.0, 2.0]])}]}}
+    reply = execute_command("world3d.scene.patch", patch, root)
+    assert reply["result"]["scene"]["revision"] == 3 and "directional" in reply["result"]["scene"]["editable"]
+    screen = inspect_scene("studio", "w3d-dir000000000", root)["document"]["slots"][0]["screen"]
+    assert screen["talk"]["base"].endswith("base.png?workspace=studio") and screen["directional"]["heading"] == 90
+    assert screen["directional"]["walk"]["to"] == [2, 1] and screen["directional"]["speech"] == [[1.0, 2.0]] and screen["media"] == "image"
+    assert execute_command("world3d.scene.patch", patch, root)["replayed"] is True
+    bad = {**patch, "intent_id": "dir-2", "input": {**patch["input"], "base_revision": 3, "bindings": [{"object_id": "hero", "directional": {"sheets": "x"}}]}}
+    with pytest.raises(HTTPException) as refused:
+        execute_command("world3d.scene.patch", bad, root)
+    assert refused.value.detail["code"] == "invalid_directional"
+    removed = execute_command("world3d.scene.patch", {**patch, "intent_id": "dir-3", "input": {**patch["input"], "base_revision": 3, "bindings": [{"object_id": "hero", "directional": None}]}}, root)
+    assert "directional" not in inspect_scene("studio", "w3d-dir000000000", root)["document"]["slots"][0]["screen"] and removed["result"]["scene"]["revision"] == 4

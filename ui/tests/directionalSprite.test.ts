@@ -245,6 +245,13 @@ test('a screen with a directional block keeps it, with the talk block beside it,
   assert.equal(screen.sourceUrl, '/pose.png')
   const plain = parseMediaScreen({ media: 'image', sourceUrl: '/a.png' })!
   assert.equal('directional' in plain, false)
+  // Every screen that does not say it stays as it was read before directional figures existed.
+  const talking = { base: '/pose.png', mouths: { closed: '/m.png' }, mouth: { offsetX: 0, offsetY: -18, scale: 0.05, rotation: 0 }, rest: 'closed', cues: [] }
+  for (const raw of [{ media: 'image', sourceUrl: '/a.png' }, { media: 'image', sourceUrl: '/p.png', talk: talking }, { media: 'image', poseSequence: [{ sourceUrl: '/p.png', duration: 1 }] }, { media: 'video', sourceUrl: '/v.mp4' }]) {
+    const read = parseMediaScreen(raw)!
+    assert.equal('directional' in read, false, JSON.stringify(raw))
+    assert.deepEqual(parseMediaScreen(JSON.parse(JSON.stringify(read))), read)
+  }
   assert.equal(mediaScreenMountKey(plain), mediaScreenMountKey(parseMediaScreen({ media: 'image', sourceUrl: '/a.png', directional: { sheets: [] } })))
   // The sheets mount with it, the heading and the walk do not: editing them repaints without loading again.
   const key = mediaScreenMountKey(screen)
