@@ -40,6 +40,8 @@ type Prop = { id: string; file: string; at: readonly [number, number]; heightM: 
 type Shot = {
   name: string; duration: number; camera: Scene3DDocument['camera']; figures: Figure[]; props?: Prop[]; columns: number
   light?: { color: string; intensity: number }; times: number[] | 'fade'
+  /** Alpha (0-255) of the faint halo around every figure of the kit, as a keyed picture has. */
+  halo?: number
 }
 
 /** Mouth anchors on the idle sheets that have a mouth (% of the cell's longer edge): front, three-quarter and side; the backs have none. */
@@ -65,9 +67,19 @@ const SHOTS: Shot[] = [
   { name: 'walk', duration: 6, columns: 4, times: [0.2, 0.4, 0.6, 0.8, 1.0, 1.2, 1.4, 2.5],
     camera: { family: 'fixed', eye: [0, 1.3, 6.5], look: [0, 1, 0], fov: 40 },
     figures: [{ id: 'ana', slot: 'subject_1', heightM: 1.8, at: [-3, 0], sprite: { walk: { to: [3, 0], speed: 1.2, start: 0 }, speech: [[2, 3]] } }] },
-  { name: 'fade', duration: 4, columns: 4, times: 'fade',
+  { name: 'fade', duration: 4, columns: 4, times: 'fade', halo: 40,
     camera: { family: 'fixed', eye: [0, 1.3, 6.5], look: [0, 1, 0], fov: 40 },
     figures: [{ id: 'ana', slot: 'subject_1', heightM: 1.8, at: [-3, 0], sprite: { walk: { to: [3, 0], speed: 1.2, start: 0 } } }] },
+  { name: 'overlap', duration: 2, columns: 2, times: [0.5, 1.5], halo: 40,
+    camera: { family: 'fixed', eye: [0, 1.3, 6.5], look: [0, 1, 0], fov: 40 },
+    figures: [
+      // Two pairs side by side at one depth, planes overlapping: the red one faces the camera, the purple one turns its back. In the first pair the purple
+      // stands to the right of the red, in the second to its left, so whichever the renderer draws first, one of them is the back one.
+      { id: 'a1', slot: 'subject_1', heightM: 1.7, at: [-1.8, 0], sprite: { heading: 0 } },
+      { id: 'a2', slot: 'prop', heightM: 1.7, at: [-1.35, 0], sprite: { heading: 180 } },
+      { id: 'b1', slot: 'prop', heightM: 1.7, at: [1.35, 0], sprite: { heading: 180 } },
+      { id: 'b2', slot: 'prop', heightM: 1.7, at: [1.8, 0], sprite: { heading: 0 } },
+    ] },
   { name: 'occlude', duration: 2, columns: 2, times: [0.5, 1.5],
     camera: { family: 'fixed', eye: [0, 1.3, 6.5], look: [0, 1, 0], fov: 40 },
     figures: [
@@ -80,14 +92,14 @@ const SHOTS: Shot[] = [
 const url = (name: string) => `/api/v1/file/${name}?workspace=${WORKSPACE}`
 
 /** Every file the page asks for, by name, and the sheets as the server hands them to a scene (with the kit's own `side_r`). */
-function kitFiles() {
+function kitFiles(halo = 0) {
   const files = new Map<string, Buffer>([['pose.png', posePng()], ['floor.png', floorPng()], ['column.glb', boxGlb(0.5, 0.5, COLUMN)]])
   for (const [state, color] of Object.entries(MOUTHS)) files.set(`mouth-${state}.png`, mouthPng(color))
   files.set('blink.png', mouthPng(BLINK))
   const sheets: DirectionalSprite['sheets'] = []
   const add = (motion: 'walk' | 'idle', dir: Direction, reversed: boolean) => {
     const count = motion === 'walk' ? WALK_CELLS : IDLE_CELLS
-    const made = sheetPng(dir, motion, count, reversed)
+    const made = sheetPng(dir, motion, count, reversed, halo)
     const name = `${motion}-${dir}${reversed ? '_r' : ''}.png`
     files.set(name, made.png)
     const mouth = motion === 'idle' && !reversed ? MOUTH_ANCHORS[dir] : undefined
@@ -248,6 +260,19 @@ const OCCLUDE = `(async (dataUrl, behind, front, tolerance) => {
     column: back.other.filter(x => x > behind.edge + 3).length, frontOwn: ahead.own.length, frontOther: ahead.other.length, frontWarm: ahead.warm }
 })`
 
+/** Runs in the page: how many pixels of each colour there are in each box. */
+const COUNT = `(async (dataUrl, boxes, tolerance) => {
+  const image = new Image(); image.src = dataUrl; await image.decode()
+  const canvas = document.createElement('canvas'); canvas.width = image.width; canvas.height = image.height
+  const context = canvas.getContext('2d', { willReadFrequently: true }); context.drawImage(image, 0, 0)
+  return boxes.map(({ box, color }) => {
+    const [x0, y0, x1, y1] = box, data = context.getImageData(x0, y0, x1 - x0, y1 - y0).data
+    let found = 0
+    for (let i = 0; i < data.length; i += 4) if (Math.abs(data[i] - color[0]) <= tolerance && Math.abs(data[i + 1] - color[1]) <= tolerance && Math.abs(data[i + 2] - color[2]) <= tolerance) found += 1
+    return { found, total: (x1 - x0) * (y1 - y0) }
+  })
+})`
+
 const COMPOSE = `(async (frames, columns, cell) => {
   const rows = Math.ceil(frames.length / columns)
   const sheet = document.createElement('canvas'); sheet.width = columns * cell.width; sheet.height = rows * cell.height
@@ -379,6 +404,15 @@ function columnEdge(prop: Prop, document: Scene3DDocument, t: number): number {
   return Math.min(...corners)
 }
 
+/** The body of a figure never thins while its sheet is swapped for another: at every frame of the fade, the pixels that are the old sheet, the new sheet or their blend
+ * are at least 85 % of the fewer of the two when each stands alone. With an alpha cut of one half the two must live together without a flicker. */
+function bodyFailures(report: { figures: { drew: string }[] }[], counts: Record<string, number>[]): string[] {
+  const from = report[0].figures[0].drew, to = report[report.length - 1].figures[0].drew
+  const floor = 0.85 * Math.min(counts[0][from] ?? 0, counts[counts.length - 1][to] ?? 0)
+  const totals = counts.map(found => (found[from] ?? 0) + (found[to] ?? 0) + (found.blend ?? 0))
+  return floor > 0 && totals.every(total => total >= floor) ? [] : [`the body thins during the fade: ${JSON.stringify(totals)} px, never under ${Math.round(floor)}`]
+}
+
 /** What the depth test does: the column hides the figure behind it and the figure in front hides the column. */
 async function occlusionFailures(page: Page, png: string, want: Expectation[], shot: Shot, document: Scene3DDocument, t: number): Promise<string[]> {
   const [behind, front] = [want.find(item => item.id === 'ana')!, want.find(item => item.id === 'eva')!]
@@ -398,6 +432,20 @@ async function occlusionFailures(page: Page, png: string, want: Expectation[], s
   return failures
 }
 
+/** The plane of a figure is its cell, wider than the figure, and a keyed picture has a faint alpha all over it. Where two figures stand side by side
+ * at one depth with their planes overlapping, each must show its own torso whole: neither cut by the other's empty plane (which would write depth) nor washed
+ * by its halo. Whichever the renderer draws first, the other is the one that suffers, so every figure of the shot is checked. */
+async function overlapFailures(page: Page, png: string, want: Expectation[], t: number): Promise<string[]> {
+  const color = (item: Expectation) => scale(torsoColor(item.dir, item.motion === 'walk' ? 'walk' : 'idle'), item.tint)
+  const boxes = want.map(item => {
+    const unit = (item.ground[1] - item.headY) / 1.7, high = item.ground[1] - (item.ground[1] - item.headY) * 0.6, low = item.ground[1] - (item.ground[1] - item.headY) * 0.38
+    return { box: [Math.round(item.ground[0] - 0.1 * unit), Math.round(high), Math.round(item.ground[0] + 0.1 * unit), Math.round(low)] as Rect, color: color(item) }
+  })
+  const counts = await page.evaluate(`${COUNT}(${JSON.stringify(png)}, ${JSON.stringify(boxes)}, 18)`) as { found: number; total: number }[]
+  return counts.flatMap((shown, index) => shown.found < shown.total * 0.9
+    ? [`t=${t.toFixed(3)} ${want[index].id} shows its torso in only ${shown.found}/${shown.total} px: another figure's empty plane cuts or washes it`] : [])
+}
+
 const label = (item: Expectation) => `${item.id}: ${item.sheetId}${item.frame !== null ? `#${item.frame}` : ''}${item.mirror ? ' mirrored' : ''}${item.speaking ? ' speaks' : ''}${item.blend ? ` fade ${item.blend.mix.toFixed(2)} from ${item.blend.from}` : ''}`
 
 async function proveShot(page: Page, shot: Shot, raw: Scene3DDocument, out: string) {
@@ -410,6 +458,7 @@ async function proveShot(page: Page, shot: Shot, raw: Scene3DDocument, out: stri
   const times = shot.times === 'fade' ? Array.from({ length: 8 }, (_unused, index) => (start + index) / 30) : shot.times
   const frames: { t: number; png: string; lines: string[] }[] = [], failures: string[] = [], report: { figures: { fade?: number }[] }[] = []
   let judged = 0
+  const fadeCounts: Record<string, number>[] = []
   // The renderer holds a figure's sector from frame to frame; the oracle follows the same frames in the same order.
   const memory = new DirectionMemory()
   expectations(shot, document, 0, memory)   // the first paint of the stage, before the first frame
@@ -423,17 +472,19 @@ async function proveShot(page: Page, shot: Shot, raw: Scene3DDocument, out: stri
     const want = expectations(shot, document, t, memory)
     const probes = want.map(item => probeOf(item, byId.get(item.id)!))
     const measured = await page.evaluate(`${MEASURE}(${JSON.stringify(png)}, ${JSON.stringify(probes)}, 16, ${JSON.stringify({ ...PIP, count: WALK_CELLS })})`) as Measured[]
-    if (shot.name === 'occlude') { failures.push(...await occlusionFailures(page, png, want, shot, document, t)); judged += 2 }
+    if (shot.name === 'overlap') { failures.push(...await overlapFailures(page, png, want, t)); judged += want.length }
+    else if (shot.name === 'occlude') { failures.push(...await occlusionFailures(page, png, want, shot, document, t)); judged += 2 }
     else want.forEach((item, index) => {
       const result = judge(t, item, measured[index], want, byId.get(item.id)!)
       failures.push(...result.failures)
       if (result.judged) judged += 1
     })
     frames.push({ t, png, lines: want.map(label) })
+    fadeCounts.push(measured[0]?.counts ?? {})
     report.push({ t, figures: want.map((item, index) => ({ id: item.id, sheet: item.sheetId, frame: item.frame, mirror: item.mirror, speaking: item.speaking, fade: item.blend?.mix, drew: measured[index].winner, lit: measured[index].lit, bootRow: measured[index].bootBottom, ground: Math.round(item.ground[1]) })) } as never)
     fs.writeFileSync(path.join(out, `${shot.name}-${t.toFixed(3)}.png`), Buffer.from(png.split(',')[1], 'base64'))
   }
-  if (shot.times === 'fade') failures.push(...fadeFailures(report))
+  if (shot.times === 'fade') failures.push(...fadeFailures(report), ...bodyFailures(report as unknown as { figures: { drew: string }[] }[], fadeCounts))
   const sheet = await page.evaluate(`${COMPOSE}(${JSON.stringify(frames)}, ${shot.columns}, { width: 640, height: 360 })`) as string
   const sheetPath = path.join(out, `directional-${shot.name}.sheet.png`)
   fs.writeFileSync(sheetPath, Buffer.from(sheet.split(',')[1], 'base64'))
@@ -445,7 +496,7 @@ async function main() {
   const args = process.argv.slice(2)
   const out = path.resolve(argAfter(args, '--out') ?? fs.mkdtempSync(path.join(os.tmpdir(), 'directional-proof-')))
   fs.mkdirSync(out, { recursive: true })
-  const { files, sheets } = kitFiles()
+  const plain = kitFiles()
   const bundle = await bundleRenderer(out)
   const { chromium } = await import('playwright')
   const browser = await chromium.launch({ headless: true, args: WEBGL_ARGS })
@@ -453,8 +504,10 @@ async function main() {
   const results = []
   try {
     for (const shot of SHOTS) {
-      const page = await openPage(browser, files, bundle, problems)
-      results.push(await proveShot(page, shot, sceneDocument(shot, sheets), out))
+      // A shot that asks for a halo gets its own kit: the same pictures with a faint alpha around every figure.
+      const kit = shot.halo ? kitFiles(shot.halo) : plain
+      const page = await openPage(browser, kit.files, bundle, problems)
+      results.push(await proveShot(page, shot, sceneDocument(shot, kit.sheets), out))
       await page.close()
     }
   } finally {

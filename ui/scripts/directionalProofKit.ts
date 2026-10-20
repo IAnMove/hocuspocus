@@ -31,6 +31,10 @@ class Raster {
     const at = (y * this.width + x) * 4
     this.pixels[at] = rgb[0]; this.pixels[at + 1] = rgb[1]; this.pixels[at + 2] = rgb[2]; this.pixels[at + 3] = 255
   }
+  /** What a keyed picture really has around a figure: a faint alpha (soft key edges, a baked glow), above the 5 % an alpha test would drop and under half. */
+  halo(alpha: number) {
+    for (let at = 0; at < this.pixels.length; at += 4) if (this.pixels[at + 3] === 0) { this.pixels[at] = 255; this.pixels[at + 1] = 255; this.pixels[at + 2] = 255; this.pixels[at + 3] = alpha }
+  }
   rect(x0: number, y0: number, x1: number, y1: number, rgb: Rgb) {
     for (let y = Math.round(y0); y < Math.round(y1); y += 1) for (let x = Math.round(x0); x < Math.round(x1); x += 1) this.dot(x, y, rgb)
   }
@@ -102,12 +106,13 @@ function drawCell(image: Raster, dir: Direction, motion: 'walk' | 'idle', frame:
 
 export type SheetImage = { png: Buffer; columns: number; rows: number; count: number }
 
-export function sheetPng(dir: Direction, motion: 'walk' | 'idle', count: number, reversed = false): SheetImage {
+export function sheetPng(dir: Direction, motion: 'walk' | 'idle', count: number, reversed = false, halo = 0): SheetImage {
   const columns = Math.min(4, count), rows = Math.ceil(count / columns)
   const sheet = new Raster(columns * CELL.width, rows * CELL.height)
   for (let frame = 0; frame < count; frame += 1) {
     const cell = new Raster(CELL.width, CELL.height)
     drawCell(cell, dir, motion, frame, count, reversed)
+    if (halo) cell.halo(halo)
     const left = (frame % columns) * CELL.width, top = Math.floor(frame / columns) * CELL.height
     for (let y = 0; y < CELL.height; y += 1) sheet.pixels.set(cell.pixels.subarray(y * CELL.width * 4, (y + 1) * CELL.width * 4), ((top + y) * sheet.width + left) * 4)
   }

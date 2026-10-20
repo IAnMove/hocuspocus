@@ -24,6 +24,10 @@ export const HYSTERESIS_DEGREES: number = spec.hysteresisDeg
 const RESET_SECONDS: number = spec.resetSeconds
 /** Seconds a change of drawing takes to fade from the old sheet to the new one. */
 export const CROSSFADE_SECONDS: number = spec.crossfadeSeconds
+/** A sprite writes colour and depth only where its alpha is at least this much: the faint alpha a keyed picture has around its figure (a soft
+ * edge, a baked glow) must not cut a figure behind it with the rectangle of its plane. During a fade the two sheets add up to full alpha where they
+ * overlap, and each keeps its own alpha elsewhere, so the silhouettes swap at the middle of the fade and nothing flickers. */
+export const ALPHA_CUT = 0.5
 /** How much of the key light's colour and strength the sprite takes by default (0 turns it off). */
 export const LIGHT_TINT: number = spec.lightTint
 const SECTOR_DEGREES = 45

@@ -617,7 +617,8 @@ three-quarter back, back; the left is the mirror of the right), with its walk cy
 - **Light and depth:** a figure drawn from sheets is unlit, so it does not brighten and darken as the camera goes round it, and is multiplied by the
   key light of the scene: its colour at its strength, `lightTint` of the way from white (cast field or `screen.directional.lightTint`, 0 to 1, default 0.6, 0 turns it off).
   It is a plane with alpha in the depth buffer, so a column, a piece of furniture or the walls of a room hide it, and it hides what is behind it; its contact shadow
-  is on the floor.
+  is on the floor. It writes colour and depth only where its alpha is at least a half (`ALPHA_CUT`, with alpha to coverage for a smooth edge), so the faint alpha a keyed picture
+  has around its figure never cuts a figure behind it with the rectangle of its plane; during a fade the two sheets add up where they overlap and the silhouettes swap at the middle.
 - **Checks:** `direction_sheet_missing`, `direction_sheet_no_mouth`, `mirror_flips_detail`, `walk_path_outside_room` (the destination is off the floor of a box room; the
   walk is not stopped) and `walk_blocked_by_speech`. A bad value (`heading: "up"`, `walkTo: {x: 1}`, a speed with no destination, `lightTint: 3`) or the fields on a shot that
   is not 3D stops the script.

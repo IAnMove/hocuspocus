@@ -1,5 +1,6 @@
 import { CanvasTexture, DoubleSide, Mesh, MeshBasicMaterial, SRGBColorSpace, type Object3D } from 'three'
 import { hasOwnArt, mediaScreenRect, mediaScreenTime, type MediaScreen } from './mediaScreen.ts'
+import { ALPHA_CUT } from './directionalSprite'
 import { SCREEN_PLANE_NAME, attachScreenPlane, detachScreenPlane, screenUsesPlane } from './screenPlane.ts'
 import { applyPsxImageMaterial, type ImageLook } from './imageLook'
 import { applyImageColorKey } from './imageColorKey'
@@ -68,7 +69,7 @@ function applyScreenLook(material: MeshBasicMaterial, texture: CanvasTexture, sc
   material.map = texture
   if (screen.transparent || hasOwnArt(screen)) {
     material.transparent = true
-    material.alphaTest = .05
+    material.alphaTest = screen.directional ? ALPHA_CUT : .05
     material.depthWrite = true
   }
   if (imagePlate?.look?.psx) applyPsxImageMaterial(material, texture, imagePlate.look.psx)
