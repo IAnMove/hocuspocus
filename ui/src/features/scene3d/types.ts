@@ -241,6 +241,8 @@ export type Scene3DCamera = {
   frameFormat?: 'landscape' | 'portrait'
   /** Camera shake windows in scene seconds, added after the pose is computed. */
   shake?: import('./cameraShake').Scene3DCameraShake[]
+  /** Lens shift: the fraction of the frame's height the horizon sits above the middle (a plate room's camera). Absent: none. */
+  lensShift?: number
 }
 
 export type Scene3DFraming = {

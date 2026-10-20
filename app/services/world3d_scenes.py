@@ -36,7 +36,7 @@ _MAX_SLOTS = 24
 _ADDED_MEDIA = ("model3d", "image")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
 _CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat",
-                  "shake"}
+                  "shake", "lensShift"}
 # Same bounds as ui/src/features/scene3d/cameraShake.ts; the editor rejects a document outside them.
 _SHAKE_RANGES = {"start": (0, 600), "end": (0, 600), "amplitude": (0, 2), "frequency": (0, 60), "decay": (0, 60), "seed": (0, 1_000_000)}
 _SHAKE_REQUIRED = {"start", "end", "amplitude", "frequency"}
@@ -188,6 +188,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     if isinstance(changes.get("camera"), dict):
         if "shake" in changes["camera"]:
             _check_shake(changes["camera"]["shake"])
+        if "lensShift" in changes["camera"]:
+            _check_lens_shift(changes["camera"]["lensShift"])
         document["camera"] = {**document["camera"], **{key: deepcopy(value) for key, value in changes["camera"].items() if key in _CAMERA_FIELDS}}
     if "playbackSpeed" in changes or "playback_speed" in changes:
         document["playbackSpeed"] = _speed(changes.get("playbackSpeed", changes.get("playback_speed")))
@@ -202,6 +204,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         _set_motion_lab(document, changes["motionLab"])
     _set_render_look(document, changes)
     _set_modifiers(document, changes)
+    _set_look(document, changes)
     _retarget(document)
     warnings.extend(_turn_pictures(document, stand_ins))
     record["revision"] += 1
@@ -282,6 +285,12 @@ def _valid_shake_window(window) -> bool:
     if "seed" in window and type(window["seed"]) is not int:
         return False
     return window["end"] > window["start"] and window["amplitude"] > 0 and window["frequency"] > 0
+
+
+def _check_lens_shift(value) -> None:
+    """``camera.lensShift``: the fraction of the frame's height the horizon sits above its middle, at most half a frame either way."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not -0.5 <= value <= 0.5:
+        raise World3DSceneError("invalid_camera_lens_shift", "camera.lensShift is a number from -0.5 to 0.5 (a share of the frame's height)")
 
 
 def _check_shake(shake) -> None:
@@ -753,7 +762,7 @@ def _view(scene_id: str, record: dict) -> dict:
         "warnings": record.get("warnings") or [], "traits": _traits(document),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
-                     "renderLook", "toon", "motionLab", "grade", "lens", "camera_template"],
+                     "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
 
 
@@ -791,6 +800,25 @@ def _traits(document: dict) -> dict:
         "slotIds": [slot.get("id") for slot in document.get("slots") or []],
         **({"motionLab": deepcopy(document["motionLab"])} if "motionLab" in document else {}),
     }
+
+
+_TONE_MAPPINGS = ("aces", "agx", "neutral", "none")
+
+
+def _set_look(document: dict, changes: dict) -> None:
+    """``look`` ``{toneMapping: aces|agx|neutral|none, exposure?}`` (``null`` removes it), after a grade has set its own. ``none`` leaves the
+    picture as drawn: a plate room asks for it so its plate comes out as itself."""
+    if "look" not in changes:
+        return
+    value = changes["look"]
+    if value is None:
+        document.pop("look", None)
+        return
+    exposure = value.get("exposure", 0) if isinstance(value, dict) else None
+    if (not isinstance(value, dict) or set(value) - {"toneMapping", "exposure"} or value.get("toneMapping") not in _TONE_MAPPINGS
+            or isinstance(exposure, bool) or not isinstance(exposure, (int, float)) or not -4 <= exposure <= 4):
+        raise World3DSceneError("invalid_look", f"look is {{toneMapping: {', '.join(_TONE_MAPPINGS)}, exposure?: -4 to 4}}, or null")
+    document["look"] = {"toneMapping": value["toneMapping"], "exposure": float(exposure)}
 
 
 def _set_render_look(document: dict, changes: dict) -> None:

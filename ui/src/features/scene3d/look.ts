@@ -18,7 +18,8 @@ export type Scene3DLighting = {
     blur: number
   }
 }
-export type ToneMappingName = 'aces' | 'agx' | 'neutral'
+/** `none` leaves the picture as drawn: a plate room (app/services/room_plate.py) asks for it so its plate comes out as itself. */
+export type ToneMappingName = 'aces' | 'agx' | 'neutral' | 'none'
 export type Scene3DLook = {
   toneMapping: ToneMappingName
   /** Exposure in EV: the frame is multiplied by 2^exposure before tone mapping. */
@@ -35,7 +36,7 @@ export const NEW_SCENE_LOOK: Scene3DLook = { toneMapping: 'aces', exposure: -0.5
 
 const SOURCES: readonly EnvironmentSource[] = ['room', 'hdri', 'none']
 const BACKGROUNDS: readonly EnvironmentBackground[] = ['set', 'hdri', 'blurred']
-const TONE_MAPPINGS: readonly ToneMappingName[] = ['aces', 'agx', 'neutral']
+const TONE_MAPPINGS: readonly ToneMappingName[] = ['aces', 'agx', 'neutral', 'none']
 
 function bounded(value: unknown, min: number, max: number, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : fallback

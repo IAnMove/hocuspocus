@@ -8,7 +8,8 @@ type SoftwareFrame = { width: number; height: number; pixels: Uint8Array }
 
 export type RoomBoxPaint = {
   size: { w: number; d: number; h: number }
-  door: { wall: string; x: number; w: number; h: number }
+  /** A plate room has none: its door is in the picture. */
+  door?: { wall: string; x: number; w: number; h: number }
   characters: { x: number; z: number; heightM: number; color: [number, number, number] }[]
 }
 
@@ -24,7 +25,7 @@ export function paintRoomBox(frame: SoftwareFrame, document: Scene3DDocument, ey
   const box = document.roomBox
   if (!box) return false
   paintFloor(frame, box, eye, look, fov, aspect)
-  fillWorldQuad(frame, doorCorners(box), DOOR, eye, look, fov, aspect)
+  if (box.door) fillWorldQuad(frame, doorCorners(box.door, box.size), DOOR, eye, look, fov, aspect)
   const people = [...box.characters].sort((a, b) => b.z - a.z)
   for (const person of people) fillWorldQuad(frame, characterCorners(person), person.color, eye, look, fov, aspect)
   return true
@@ -75,9 +76,8 @@ function vecAdd(a: Vec3, b: Vec3): Vec3 {
   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]]
 }
 
-function doorCorners(box: RoomBoxPaint): Vec3[] {
-  const { w, d } = box.size
-  const door = box.door
+function doorCorners(door: NonNullable<RoomBoxPaint['door']>, size: RoomBoxPaint['size']): Vec3[] {
+  const { w, d } = size
   const half = door.w / 2
   if (door.wall === 'left' || door.wall === 'right') {
     const x = door.wall === 'left' ? -w / 2 + 0.02 : w / 2 - 0.02
@@ -132,14 +132,19 @@ export function validRoomBoxPaint(value: unknown): value is RoomBoxPaint {
   const box = value as RoomBoxPaint
   const size = box.size
   const door = box.door
-  if (!size || !door || !Array.isArray(box.characters)) return false
-  if (![size.w, size.d, size.h, door.w, door.h].every(item => typeof item === 'number' && item > 0)) return false
-  if (typeof door.wall !== 'string' || typeof door.x !== 'number' || !Number.isFinite(door.x)) return false
+  if (!size || !Array.isArray(box.characters)) return false
+  if (![size.w, size.d, size.h].every(item => typeof item === 'number' && item > 0)) return false
+  if (door != null && !validDoor(door)) return false
   return box.characters.every(person => !!person
     && typeof person.x === 'number' && typeof person.z === 'number'
     && typeof person.heightM === 'number' && person.heightM > 0
     && Array.isArray(person.color) && person.color.length === 3
     && person.color.every(item => typeof item === 'number' && Number.isFinite(item)))
+}
+
+function validDoor(door: NonNullable<RoomBoxPaint['door']>): boolean {
+  if (![door.w, door.h].every(item => typeof item === 'number' && item > 0)) return false
+  return typeof door.wall === 'string' && typeof door.x === 'number' && Number.isFinite(door.x)
 }
 
 function put(frame: SoftwareFrame, x: number, y: number, rgb: [number, number, number]) {

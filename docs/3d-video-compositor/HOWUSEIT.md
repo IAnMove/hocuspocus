@@ -534,6 +534,48 @@ A `kind: "3d"` Series shot names `set: "<room>"`. Each person carries `at: {x, z
 
 The wide frame is the shared camera in `app/shared/room_box_camera.json`: eye height 1.6 m, just outside the open side, field of view 48. Flat props can look like cardboard when the camera moves.
 
+### Plate rooms: a painted plate as the back wall
+
+`walls` may be a picture of the workspace (`{file: "plate.png"}`, or `{asset: …}` with the same meaning: a file of this workspace or its `/api/v1/file/…` URL) instead of words. The room is then **that plate seen from its own camera, with a floor to walk on in front of it**: with the camera still, the 3D shot is the 2D plate (measured on the office and silos plates of the Lucky Starr series: mean absolute difference 0.03 and 0.21 on a 0–255 scale). Everything is in metres and comes from the plate's perspective, the same numbers `location.layout2d.stage` keeps for a 2D shot:
+
+```json
+{"kind": "room", "prompt": "the Council's office", "walls": {"file": "office-plate.png"},
+ "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62, "heightM": 2.0}, "floorTop": 0.72}}
+```
+
+All the fractions are of the plate's height, from the top. `horizon` is where the eye line falls (a level camera sees it there); `ref` is one object of known height on the floor (a door: `baseY` its foot, `heightPct` how tall it looks, `heightM` 2 by default); `floorTop` (default `baseY`) is the farthest floor a person may stand on. From them `put` derives the camera height `(baseY - horizon) × heightM / heightPct` (1.61 m for the office; a result outside 1.0–2.4 m warns `eye_height`), the card's distance and the room's `size` (**leave `size`, `windows` and `ceiling` out**: the plate has them). Without `stage` the plate is taken to be seen from a 1.6 m camera with a 2 m door 40 % of its height and `put` says `stage_assumed`: measure it (`series.location.stage.check` draws the grid when that tool is present). Optional: `fov` (vertical lens, default 48), `range` (below) and `door {x, w, h}` in metres from the middle of the back wall (+x toward the left of the frame, as in every room), only so nobody stands on it.
+
+- **The back wall and the floor are the plate.** The card shows the rows above the floor; the floor in front of it is the plate's own floor rows projected from the same camera, so the painted floor and the floor a person walks on are one floor (no tiling, no seam, no gradient to hide one). A horizon that is not the middle of the picture is handled by a lens shift (`camera.lensShift`, the fraction of the frame the horizon sits above the middle): verticals stay vertical, as in the plate. The GLB is unlit (`KHR_materials_unlit`) and the room asks for `look: {toneMapping: "none"}` (a new value beside `aces`, `agx` and `neutral`; a scene patch takes it as the top-level `look`, after any grade), so neither the scene's lamps nor ACES repaint the plate: through the app's own renderer in Chromium the room-only frame differs from the plate by 0.02 on a 0–255 scale (ACES at −0.5 EV, what a new scene wears, would differ by 15).
+- **What the plate does not show is its edge, mirrored, blurred and darkened.** The side walls and the ceiling are baked from the plate's border (a pyramid of blurred copies; the farther from the picture, the blurrier and darker, never black), so a camera that moves a little finds more room and not a void. Give `walls: {back: {file}, left: {file}, right: {file}}` to draw a side wall yourself (`left` is the left of the frame).
+- **People stand on the floor in metres.** `at {x, z}` with `z` from the nearest floor the frame shows (`room.plate.visible.near_z`) to the back wall; `near`, `mid` and `far` are inside that range. A person whose feet are below the frame is an error.
+- **Furniture that people must walk behind is a prop with a cut-out:** `props: [{prompt, on: "floor", x, z, y?, height_m, image: {file: "desk.png"}}]`, a PNG with alpha (`props.create` and `image.remove_background` make them). The cut-out is cropped to what it draws, so `height_m` is the object's height and the bottom of the card is its foot; it stands at `x, z` as a masked card (alpha is a mask, not a blend) that writes depth, so a person who walks behind it is hidden by it and one in front covers it. A prop cut out of the plate itself and placed with the plate's own numbers lands on the same pixels (measured: difference 0.0 over the desk). Anything painted into the plate and not cut out is glued to the wall and the floor and slides when the camera moves. The directional sprites of the cast are depth tested, so against a prop a person behind it is hidden and one in front covers it (proved in Chromium with `ui/scripts/plate-room-proof.ts`, run by `HOCUSPOCUS_BROWSER_PROOF=1 pytest tests/test_room_plate.py -k real_renderer`).
+- **The camera holds only near the plate's viewpoint.** `range {orbit_deg, shift_m}` (default 25° and 0.5 m) is where the illusion holds. A shot may move the camera from the plate's viewpoint with `scene3d.camera: {shift: {x, y, z}, yaw, pitch}` (metres, degrees); past the range, `series.episode.from_script` check says `camera_breaks_plate`. With a smooth ±0.4 m move the parallax comes free: the plate is a card behind the people.
+- **`scene3d.room.paint` with a picture is the paint.** `{workspace, name, walls: {file}}` (or `back`, `left`, `right`, `stage`, `fov`, `range`) replaces the plate (or its numbers) at once, with no model, and the room follows it; the same words are refused on a plate room, and a picture is refused on a room with no plate (put it again). The pictures stay where they were (`surfaces` in `scene3d-rooms.json` keeps each file and its hash, so a changed plate changes the room's look and re-renders only its shots).
+
+```bash
+curl -s localhost:42003/api/v1/scene3d/rooms/commands -H 'content-type: application/json' -d '{
+  "version": 1, "operation": "scene3d.room.put", "intent_id": "office-1",
+  "input": {"workspace": "default", "name": "office", "room": {"kind": "room", "prompt": "office",
+    "walls": {"file": "office-plate.png"}, "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62}}}}}'
+```
+
+```javascript
+const put = await fetch('/api/v1/scene3d/rooms/commands', { method: 'POST', headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ version: 1, operation: 'scene3d.room.put', intent_id: 'office-1', input: { workspace: 'default', name: 'office',
+    room: { kind: 'room', prompt: 'office', walls: { file: 'office-plate.png' }, stage: { horizon: 0.22, ref: { baseY: 0.72, heightPct: 0.62 } } } } }) })
+const { camera, metres } = (await put.json()).result.room.plate   // eye height, card distance, lens shift
+```
+
+```python
+from services.room_box_commands import run
+result = run("scene3d.room.put", {"version": 1, "intent_id": "office-1", "input": {"workspace": "default", "name": "office", "room": {
+    "kind": "room", "prompt": "office", "walls": {"file": "office-plate.png"},
+    "stage": {"horizon": 0.22, "ref": {"baseY": 0.72, "heightPct": 0.62}}}}})["result"]
+print(result["room"]["size"], result["room"]["plate"]["camera"], result.get("warnings"))
+```
+
+Limits to know: a plate drawn with an inconsistent perspective (the stage reads a camera far from 1.6 m) gives people who look too big or too small; the extension is a soft guess, not a drawing, so keep camera moves small; specular highlights painted into the floor are part of the picture and do not move with the camera; an exterior plate is a very large box (the silos plate is 20 × 13 m) whose edges are a soft horizon smear.
+
 ## Directional figures (a flat character that turns to the camera)
 
 A 2D character in a 3D shot used to be one picture that always looked at the camera. A cast entry that says where it looks or goes is
