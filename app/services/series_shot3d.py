@@ -422,7 +422,8 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
     setup.update({key: config[key] for key in ("renderLook", "toon") if key in config})
     from services.world3d_stage_documents import stage_camera
     if config.get("roomBox"):
-        from services.series_room_box import box_camera
+        from services.series_room_box import box_camera, refresh_box_room
+        config = refresh_box_room(config, root)
         setup["camera"] = box_camera(config["roomBox"], config.get("camera"))
         if config["roomBox"].get("plate"):
             setup["look"] = {"toneMapping": "none", "exposure": 0}   # the plate carries its own light: no grade may repaint it
