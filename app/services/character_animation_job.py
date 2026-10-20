@@ -331,8 +331,9 @@ class CharacterAnimationJobs:
         return params
 
     def _draw(self, job: dict[str, Any], tools: LocalTools, pose: dict[str, Any], built: dict[str, str], guide: dict[str, Any] | None,
-              seed: int, attempt: int) -> tuple[str, str]:
-        """One drawing of a pose and its key: the raw picture's file name and the keyed URL. A second or third try has names of its own."""
+              seed: int, attempt: int, drawn: Callable[[str], None]) -> tuple[str, str]:
+        """One drawing of a pose and its key: the raw picture's file name and the keyed URL; ``drawn`` hears of the raw picture before it is
+        keyed. A second or third try has names of its own."""
         definition, again = job["definition"], f"-{attempt + 1}" if attempt else ""
         # The file name carries the job: a pose made again never overwrites the picture the saved animation still uses.
         output = f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}{again}"
@@ -344,6 +345,7 @@ class CharacterAnimationJobs:
             # This model takes fewer references than were sent: the character's own picture alone is what every pose needs.
             job["refsDropped"] = True
             name = tools.image(f"{job['jobId']}-{pose['id']}-image-alone{again}", self._image_params(job, built, seed, guide), output)
+        drawn(name)
         return name, tools.key(f"{job['jobId']}-{pose['id']}-key{again}", name, built["screen"])
 
     def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
@@ -352,13 +354,18 @@ class CharacterAnimationJobs:
         built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
                             custom={"view": definition["view"], "text": pose["prompt"]} if definition.get("custom") else None)
         guide = guide_for(definition, pose["id"], workspace_root=root, name=f"{job['kitId']}-{definition['id']}-{pose['id']}-guide-{job['jobId'][-6:]}.png")
-        job.setdefault("prompt", built["prompt"])
+        job.setdefault("prompt", guided_prompt(built["prompt"], guide, len(job.get("extraRefs") or [])))
         take.update(status="generating", **({"guide": file_url(guide["file"], workspace)} if guide else {}))
         self._update(store, job)
+
+        def keying(name: str) -> None:
+            take.update(status="keying", raw=file_url(name, workspace))
+            self._update(store, job)
+
         best: dict[str, Any] | None = None
         for attempt in range(tries(guide)):
             seed = take["seed"] if attempt == 0 else random.randrange(2_000_000_000)
-            name, keyed = self._draw(job, tools, pose, built, guide, seed, attempt)
+            name, keyed = self._draw(job, tools, pose, built, guide, seed, attempt, keying)
             drawn = {"raw": file_url(name, workspace), "keyed": keyed, "seed": seed}
             if guide:  # a walk pose is measured against its guide and drawn again when its legs are far off
                 drawn["gait"] = gait_of(guide, resolve_character_kit_image(keyed, uploads_root=self.deps.uploads_root(), workspace_root=root))

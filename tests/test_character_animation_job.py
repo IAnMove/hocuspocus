@@ -752,7 +752,7 @@ def test_the_twelve_pose_walk_is_made_at_twelve_frames_a_second_with_its_contrac
     guides = [frame["guide"] for frame in made["frames"]]
     assert len(server.of("generation.image")) == 12 and _refs(server) == [[f"/api/v1/file/hero-key.png?workspace={WS}", guide] for guide in guides], \
         "the first direction has the character's own picture and the guide of each pose"
-    # An old four-pose walk is made exactly as before: no new checks, no new fields beyond the contract.
+    # The old four-pose walk keeps its four poses and no new checks; it is drawn over its guide like the full walks.
     old = jobs.start(WS, "hero", "walk")
     assert old["status"] == "completed" and _kit(root)["animations"]["walk"]["sheet"]["columns"] == 4 and _kit(root)["animations"]["walk"]["motion"] == "walk"
 
