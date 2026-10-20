@@ -34,9 +34,11 @@ from services import agent_autonomy
 from services.character_animation_checks import failed, sheet_checks, summary
 from services.character_animation_cycle_checks import sibling_sheets
 from services.character_animation_directions import contract_of
+from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
 from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
                                            pose_prompt)
+from services.character_kit_face_cleanup import resolve_character_kit_image
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.local_generation import LocalTools, ToolError, file_url
 from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
@@ -308,42 +310,65 @@ class CharacterAnimationJobs:
             job["status"] = "cancelling"  # a cancel that arrived while a step ran is not lost
         store.save(job)
 
-    def _image_params(self, job: dict[str, Any], built: dict[str, str], seed: int) -> dict[str, Any]:
-        """One pose's request: the character's picture is the identity reference. Every model runs its own steps and guidance (the server's
-        settings for it, else its definition in app/defaults: the default Turbo runs 8 and CFG 1), and one that takes no negative prompt gets none."""
+    def _image_params(self, job: dict[str, Any], built: dict[str, str], seed: int, guide: dict[str, Any] | None = None) -> dict[str, Any]:
+        """One pose's request: the character's picture is the identity reference, then the pose's guide (a walk) and the extra pictures.
+        Every model runs its own steps and guidance (the server's settings for it, else its definition in app/defaults: the default Turbo
+        runs 8 and CFG 1), and one that takes no negative prompt gets none. A model that refused the extra pictures gets the character's
+        picture alone and the plain prompt."""
         model = job["model"]
         steps, guidance = default_image_steps(model), 1
         if self.deps.model_defaults:
             own = self.deps.model_defaults(model) or {}
             steps, guidance = own.get("num_inference_steps") or steps, own.get("guidance_scale") or guidance
-        extra = [] if job.get("refsDropped") else job.get("extraRefs") or []
-        params: dict[str, Any] = {"prompt": built["prompt"], "model_type": model, "resolution": built["resolution"], "seed": seed,
-                                  "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": [job["reference"], *extra], "video_prompt_type": "I"}
+        alone = bool(job.get("refsDropped"))
+        extra = [] if alone else job.get("extraRefs") or []
+        shown = None if alone else guide
+        refs = [job["reference"], *([file_url(shown["file"], job["workspace"])] if shown else []), *extra]
+        params: dict[str, Any] = {"prompt": guided_prompt(built["prompt"], shown, len(extra)), "model_type": model, "resolution": built["resolution"],
+                                  "seed": seed, "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": refs, "video_prompt_type": "I"}
         if steps > 8 and model_takes_negative_prompt(model):
             params["negative_prompt"] = built["negative"]
         return params
 
-    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
-        definition = job["definition"]
-        built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
-                            custom={"view": definition["view"], "text": pose["prompt"]} if definition.get("custom") else None)
-        params = self._image_params(job, built, take["seed"])
-        job.setdefault("prompt", built["prompt"])
-        take["status"] = "generating"
-        self._update(store, job)
+    def _draw(self, job: dict[str, Any], tools: LocalTools, pose: dict[str, Any], built: dict[str, str], guide: dict[str, Any] | None,
+              seed: int, attempt: int) -> tuple[str, str]:
+        """One drawing of a pose and its key: the raw picture's file name and the keyed URL. A second or third try has names of its own."""
+        definition, again = job["definition"], f"-{attempt + 1}" if attempt else ""
         # The file name carries the job: a pose made again never overwrites the picture the saved animation still uses.
-        output = f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}"
+        output = f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}{again}"
         try:
-            name = tools.image(f"{job['jobId']}-{pose['id']}-image", params, output)
+            name = tools.image(f"{job['jobId']}-{pose['id']}-image{again}", self._image_params(job, built, seed, guide), output)
         except ToolError as error:
-            if not job.get("extraRefs") or job.get("refsDropped") or "image_refs" not in str(error):
+            if not (job.get("extraRefs") or guide) or job.get("refsDropped") or "image_refs" not in str(error):
                 raise
             # This model takes fewer references than were sent: the character's own picture alone is what every pose needs.
             job["refsDropped"] = True
-            name = tools.image(f"{job['jobId']}-{pose['id']}-image-alone", self._image_params(job, built, take["seed"]), output)
-        take.update(status="keying", raw=file_url(name, job["workspace"]))
+            name = tools.image(f"{job['jobId']}-{pose['id']}-image-alone{again}", self._image_params(job, built, seed, guide), output)
+        return name, tools.key(f"{job['jobId']}-{pose['id']}-key{again}", name, built["screen"])
+
+    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
+        definition, workspace = job["definition"], job["workspace"]
+        root = self.deps.workspace_dir(workspace)
+        built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
+                            custom={"view": definition["view"], "text": pose["prompt"]} if definition.get("custom") else None)
+        guide = guide_for(definition, pose["id"], workspace_root=root, name=f"{job['kitId']}-{definition['id']}-{pose['id']}-guide-{job['jobId'][-6:]}.png")
+        job.setdefault("prompt", built["prompt"])
+        take.update(status="generating", **({"guide": file_url(guide["file"], workspace)} if guide else {}))
         self._update(store, job)
-        take.update(status="ready", keyed=tools.key(f"{job['jobId']}-{pose['id']}-key", name, built["screen"]))
+        best: dict[str, Any] | None = None
+        for attempt in range(tries(guide)):
+            seed = take["seed"] if attempt == 0 else random.randrange(2_000_000_000)
+            name, keyed = self._draw(job, tools, pose, built, guide, seed, attempt)
+            drawn = {"raw": file_url(name, workspace), "keyed": keyed, "seed": seed}
+            if guide:  # a walk pose is measured against its guide and drawn again when its legs are far off
+                drawn["gait"] = gait_of(guide, resolve_character_kit_image(keyed, uploads_root=self.deps.uploads_root(), workspace_root=root))
+                take["tries"] = attempt + 1
+            if best is None or abs(drawn["gait"]["measured"] - guide["expected"]) < abs(best["gait"]["measured"] - guide["expected"]):
+                best = drawn
+            if not guide or drawn["gait"]["ok"]:
+                break
+            self._update(store, job)
+        take.update(status="ready", **(best or {}))
         self._update(store, job)
 
     def _run(self, workspace: str, job_id: str) -> None:
@@ -387,7 +412,8 @@ class CharacterAnimationJobs:
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
             "frames": [{"id": take["id"], "source": take["keyed"],
-                        **({"prompt": pose["prompt"], "label": pose["label"]["en"]} if definition.get("custom") else {})}
+                        **({"prompt": pose["prompt"], "label": pose["label"]["en"]} if definition.get("custom") else {}),
+                        **{key: take[key] for key in ("guide", "gait") if take.get(key)}}
                        for take, pose in zip(job["takes"], definition["poses"])],
             "fps": definition["fps"], "loop": definition["loop"], "facing": definition["facing"], "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
