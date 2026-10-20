@@ -4,6 +4,9 @@ import { parseMediaScreen, mediaScreenMountKey } from '../src/features/scene3d/m
 import { facingSlot, isDirectional, walkedSlot } from '../src/features/scene3d/directionalPaint.ts'
 import { spriteFoot, spriteFrame } from '../src/features/scene3d/directionalSprite.ts'
 import { parseDirectional } from '../src/features/scene3d/directionalParse.ts'
+import { imageCutoutMesh } from '../src/features/scene3d/imageCutout.ts'
+import { ALPHA_CUT } from '../src/features/scene3d/directionalSprite.ts'
+import type { Material } from 'three'
 import type { Scene3DSlot } from '../src/features/scene3d/types.ts'
 import {
   CROSSFADE_SECONDS, DirectionMemory, directionalPosition, directionalView, faceAngle, headingDegrees, headingFacing, normalizeDegrees,
@@ -420,4 +423,15 @@ test('the sprite takes the colour and strength of the key light by a soft multip
   assert.deepEqual(lightTint('not a colour', 1, 1), [1, 1, 1])
   assert.equal(parseDirectional({ sheets: [sheet('idle', 'side', 2)], lightTint: 0.25 })!.lightTint, 0.25)
   assert.equal(parseDirectional({ sheets: [sheet('idle', 'side', 2)], lightTint: 4 })!.lightTint, undefined)
+})
+
+test('a directional figure writes colour and depth only where it is at least half opaque; any other cutout keeps its old cut', () => {
+  const material = (slot: Scene3DSlot) => imageCutoutMesh(slot, null).material as Material & { alphaTest: number; alphaToCoverage: boolean; depthWrite: boolean }
+  const sprite = material(slotOf({ heading: 0 }))
+  assert.equal(ALPHA_CUT, 0.5)
+  assert.equal(sprite.alphaTest, ALPHA_CUT); assert.equal(sprite.alphaToCoverage, true); assert.equal(sprite.depthWrite, true)
+  const bare = material(slotOf({ sheets: [], heading: 0 }))
+  assert.equal(bare.alphaTest, ALPHA_CUT, 'a figure that has no sheet is a sprite too')
+  const plain = material({ ...slotOf({ heading: 0 }), screen: undefined } as unknown as Scene3DSlot)
+  assert.equal(plain.alphaTest, 0.05); assert.equal(plain.alphaToCoverage, false)
 })

@@ -4,7 +4,7 @@ import { applyImageColorKey } from './imageColorKey'
 import { imageWindowGeometry } from './imageWindows'
 import { imageContactShadow, textureFootprint } from './imageGrounding'
 import { settledTexture } from './imageSettle'
-import { spriteFoot, spriteFrame } from './directionalSprite'
+import { ALPHA_CUT, spriteFoot, spriteFrame } from './directionalSprite'
 import { hasSheets } from './directionalPaint'
 import type { Scene3DSlot } from './types'
 
@@ -13,9 +13,12 @@ function cutoutAspect(texture: Texture | null) {
   return image?.width && image.height ? image.width / image.height : 1
 }
 
+/** A directional figure cuts at half alpha, with alpha to coverage so the edge stays smooth: it writes depth only where it is opaque. */
+const alphaCut = (slot: Scene3DSlot) => slot.screen?.directional ? { alphaTest: ALPHA_CUT, alphaToCoverage: true } : { alphaTest: .05, alphaToCoverage: false }
+
 function cutoutMaterial(slot: Scene3DSlot, texture: Texture | null) {
   const options = { map: texture, color: slot.imageLook?.tint ?? (texture ? 0xffffff : 0x243044), side: DoubleSide,
-    transparent: true, alphaTest: .05, depthWrite: true }
+    transparent: true, ...alphaCut(slot), depthWrite: true }
   // A sprite drawn from sheets is unlit: its brightness must not swing with the camera angle; it takes the key light by a tint.
   const material = slot.imageLook?.unlit || hasSheets(slot) ? new MeshBasicMaterial(options) : new MeshStandardMaterial({ ...options, roughness: .9 })
   if (texture && slot.imageLook?.psx) applyPsxImageMaterial(material, texture, slot.imageLook.psx)
