@@ -340,6 +340,7 @@ mode it is ignored and the job says so (`autoApproveNote`). The checks, set agai
 | `figure_height` (the full walks only) | every figure is as tall as the median of the cycle, within 3 % |
 | `repeated_poses` (the full walks only) | the same drawing (a hash of the figure) fills at most two cells in a row |
 | `direction_mirror` (the full walks and the breaths) | the sheet is not the same drawing as another direction of the kit, nor its mirror (at least 75 % of the cells match) |
+| `walk_gait` (the full walks) | every pose has its legs as far apart as the guide's walk has them at that moment of the step, seen from the sheet's direction, within 15 % of the figure's height after one scale for the whole sheet (0.7 to 1.15). It fails a passing pose drawn as a full stride and a back view that turned three-quarter. Run on 12 sheets made from words alone (Lucky Starr, 2026-10-20) it failed 10: the front walk of Lucky and the two four-pose walks passed |
 
 The checks catch a pose drawn at another size, a bad key, a missing pose or a broken sheet. They do not judge identity (a walk sheet
 of a younger-looking character passes): the agent still looks at the sheet and rejects it when it is out of model.
@@ -382,6 +383,22 @@ where it was and keeps every sheet and pose already made, and asking again skips
 stopped keeps its poses). With `autoApprove` and the owner's one-shot mode each sheet that passes the checks is approved by the agent
 (a copy or a mirror of another direction stays pending and the set goes on). The job is a file under `.character-animation-set-jobs-v1`.
 The kit keeps at most 48 animations; the catalog has 43, so a set that would not fit is refused before any picture is made.
+
+*Pose guides* (`services/walk_guides.py`, `services/character_animation_guides.py`). Asked for twelve poses in words, one at a time, Qwen
+draws three leg positions in no order, and a three-quarter or a back view drifts toward a profile from one pose to the next. So every pose
+of a walk (`"guide": "walk"` in the catalog: `walk`, `walk-12` and the four directions) is drawn over a guide: a walk computed in 3D from
+the joint angles of a human gait (hip, knee and ankle through the cycle, the arms swinging against the legs, the pelvis turning and swaying
+over the leg that carries it, the body as high as the lowest sole lets it be) and seen from the camera of the sheet's direction, a little
+above the hips, so the foot that steps toward the camera is lower in the picture. Pose *i* of *n* is the phase *i/n* of the cycle: phase 0
+is the contact of the leg nearest the viewer in the profile (the character's right; in the back view the catalog starts with the viewer's
+left, the character's left), the free foot passes under the body at a quarter of the cycle, and the second half is the first with the legs
+swapped. The guide goes as picture 2 after the character's own (then the neighbouring direction, if the set sends it), and the prompt
+starts by saying what each picture is (`guide.text` of the catalog for its `style`: `skeleton`, an OpenPose skeleton whose colours say
+which limb is which and that has no face from behind, or `mannequin`, a grey figure with the near limbs lighter). The guide is a picture of
+the workspace (`<kit>-<animation>-<pose>-guide-<job>.png`) and the pose keeps it (`frames[].guide`). After keying, the job measures the legs
+of the pose against the guide's at that phase (`frames[].gait`: expected, measured, ok) and draws it again with another seed when they
+are more than `guide.tolerance` apart, `guide.tries` drawings in all; the closest stays. A model that refuses a second picture draws the
+walk from the words, and the poses are still measured. Breaths, gestures, expressions and the author's own animations have no guide.
 
 What the checks cannot tell: that the three-quarter or the back view is **the same character** as the front one. Qwen may change the outfit
 or the hair behind the head. A person (or an agent that looks at the sheets) approves or rejects each direction; **Rehacer** makes one pose again.
