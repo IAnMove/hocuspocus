@@ -5,7 +5,7 @@ import type { Scene3DDocument } from './types'
 import { isMotionLab } from './motionlab/types'
 
 const TONE_MAPPING: Record<ToneMappingName, ToneMapping> = {
-  aces: ACESFilmicToneMapping, agx: AgXToneMapping, neutral: NeutralToneMapping,
+  aces: ACESFilmicToneMapping, agx: AgXToneMapping, neutral: NeutralToneMapping, none: NoToneMapping,
 }
 
 /** Reflections and soft fill for imported models and complete native motion sets.

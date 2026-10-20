@@ -65,6 +65,7 @@ import { lightningGlow } from '../sceneFx/lightningMesh'
 import type { PixelPalette } from './pixel/pixelPalettes'
 import { DRAFT_RENDER, type ExportRenderQuality } from './exportQuality'
 import { EnvironmentLighting, applyLook } from './environmentLighting'
+import { applyLensShift } from './lensShift'
 import { clipWeightsAt, parseClipCues, type Scene3DClipCue } from './clipCues'
 import { findHandBone, followHand, parseHold } from './handHold'
 import { DirectionMemory } from './directionalSprite.ts'
@@ -623,6 +624,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
     paintActor(world, painted, sceneSeconds, document.duration)
     tintSprite(world.slots.get(painted.id)?.root, tint)
   })
+  applyLensShift(world.camera, document.camera.lensShift)
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)

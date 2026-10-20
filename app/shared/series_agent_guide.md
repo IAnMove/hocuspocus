@@ -184,7 +184,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 
 - **framing:** `wide` (everyone, full body), `two` (two characters), `medium` (one, waist up), `close` (one face),
   `insert`/`title` (no cast; cards).
-- **camera:** `static` (default), `push`/`pull` (slow push-in/out), `pan-left`, `pan-right` or `drift`; other words
+- **camera:** `static` (default), `push`/`pull` (slow), `pan-left`, `pan-right` or `drift`; other words
   are `static` (push-in words `push`). Follow the series' `cameraLanguage`, else push on punchlines.
 - **finish:** `paper` (default), `none`, a Video 2D finish id (`scenes.catalog`) or `{texture, grain, vignette}`;
   else the series' `look.finish`.
@@ -349,34 +349,34 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
 2. Call `series.location.set3d` with a version 1 envelope and a new `intent_id`:
    `input: {workspace, series_id, location_id, mold: "despacho", size: "medium", skin, props: []}`.
-   For example, `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
+   `skin = {wall_back: {image: "straight-on shelves and framed plans"}, floor: {texture: "oak parquet", tile_m: 1}, wall_left: {color: "#b9aa94"}}`.
    `light` (optional) relights the mold with another preset of its kind: interiors `office_day`, `bar_warm`, `studio`,
    `clinical`; exteriors `daylight`, `dusk`, `night_sky` (a night street gets a night key light and a dark sky).
    `wall_back: {image: "location"}` reuses the approved location picture. Asset skins: `{image: {asset: "wall.png"}}`,
    `{texture: {asset: "tile.png"}}` or `{video: {asset: "screen.mp4"}}`. Poll `series.location.set3d.status` until
-   completed. A `texture` that will not tile is painted once over its surface
-   instead (`metrics.fallback: "image"`): the set is still built.
+   completed. A `texture` that will not tile is painted once
+   instead (`metrics.fallback: "image"`).
 3. The location's 3D shots inherit its set; `scene3d.roomCamera` selects `two_shot`, `ots_a`, `ots_b`, `wide`, `close_1`, `close_2` or `entrance`.
    In `series.episode.from_script`, use `kind: "3d", cast: [["pedro", "base", "behind_desk"]]`.
 4. Create a prop with `props.create`: `input: {workspace, name: "lamp", description: "small brass desk lamp", heightM: 0.4, style: "layered paper cutouts"}`.
-   Poll `props.status` with `job_id`, look at the candidate PNGs, then `props.approve` the chosen `id`.
-   `props.list` filters by `style` and `query`; `props.import` accepts an existing PNG and `heightM`.
+   Poll `props.status` (`job_id`), view the candidate PNGs, `props.approve` the chosen `id`.
+   `props.list` filters by `style`, `query`; `props.import` takes a PNG and `heightM`.
    For an image outside the library, `image.remove_background` takes `source, method: "auto" | "screen" | "u2net", crop: true` and returns `file`, `bbox`, `method` and halo report.
 5. Add an approved prop to one shot with `scene3d.item.add`:
    `input: {workspace, target: {series_id, episode_id, shot: 1}, item: {prop: "<approved-id>"}, at: {anchor: "desk_left"}}`.
    A working Video 3D scene uses `target: {scene_id}`; direct media uses `item: {image: "lamp.png"}` or an existing `{glb: "lamp.glb"}` with `heightM`.
-   `scene3d.item.list` returns object ids; move one with `scene3d.item.update` and `id, at: {position: [x, y, z]}` (metres).
-   Remove it with `scene3d.item.remove` and `id`; updates can change `heightM`, `rotationY` (radians), `billboard` and `shadow`.
+   `scene3d.item.list` gives ids; `scene3d.item.update` (`id`, `at: {position: [x, y, z]}` m, `heightM`, `rotationY` radians,
+   `billboard`, `shadow`) changes one, `scene3d.item.remove` (`id`) removes it.
    For every shot at the location, put `{prop: "<approved-id>", anchor: "desk_left"}` in `set3d.props`.
-6. Every mutation takes a new `intent_id` (the same one only to retry the identical call); read each result first.
-   The back wall's straight-on painting, in the series style, carries the detail. Real heights on the mold's anchors
+6. Every mutation takes a new `intent_id` (reuse one only to retry a call); read each result first.
+   The back wall's straight-on painting carries the detail. Real heights on the mold's anchors
    rest objects on their surfaces (a tall object at a low anchor warns `item_too_tall`). At most 12 objects per shot,
-   inherited set props included; look at the previews before approving.
+   inherited set props included; preview before approving.
 7. Shape molds (`sala`, `sala_ventana`, `mostrador`, `filas`, `pasillo`, `umbral`, `escalera`,
    `escenario_publico`, `vehiculo`) and exteriors (`calle`, `plaza`, `orilla`, `azotea`: no ceiling, the view on `wall_back`, a sun
    preset) sit beside the named interiors. A `kind: "3d"` shot may name a stage card, `scene3d: {template: "stage-sala",
    roomCamera: "ots_a"}`: the mold in its own colours, with dust and a breathing key light; a location set still brings the skin.
-8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide interior, full body; `scene3d.room.put` textures it, `scene3d.room.paint` repaints it with AI. A `kind: "3d"` shot names `set` and `at` (`{x, z}`, `near`, `mid`, `far`). A cast entry's `heading` (degrees from the first camera: 0 toward, 90 right, 180 away, or a name) and `walkTo {x, z}` (`walkSpeed` 1.2, `walkAt`) draw the kit's walk and idle sheets (`motion`, `dir`) by angle to the camera; it stops to speak. See HOWUSEIT (Box rooms, Directional figures).
+8. A box room is `kind: "room"`, `size: {w, d, h}`, no `mold`: wide, full body; `scene3d.room.put` textures it, `.paint` repaints it. `walls: {file}` (a plate) + `stage`: the plate is the room, no `size`; a prop's `image` (PNG with alpha) hides people; `scene3d.camera` `{shift, yaw, pitch}` warns `camera_breaks_plate` past `range`. A `kind: "3d"` shot names `set`, `at` (`{x, z}`, +x frame-left; or `near`, `mid`, `far`). A cast entry's `heading` (degrees from the first camera: 0 toward, 90 right, 180 away, or a name) and `walkTo {x, z}` (`walkSpeed` 1.2, `walkAt`) draw the kit's walk and idle sheets (`motion`, `dir`) by angle to the camera; it stops to speak. See HOWUSEIT (Box rooms, Directional figures).
 
 ## How to choose a 3D shot
 

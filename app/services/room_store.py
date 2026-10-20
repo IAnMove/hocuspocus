@@ -69,7 +69,11 @@ def rebuild(root: Path, name: str, spec: dict, entries: dict) -> str:
 
 def new_record(root: Path, name: str, spec: dict) -> dict:
     """A room with the procedural look its words choose, and its GLB written."""
-    entries = default_entries(spec)
+    if spec.get("plate"):
+        from services.room_plate_commands import entries_of
+        entries = entries_of(root, spec)
+    else:
+        entries = default_entries(spec)
     file = rebuild(root, name, spec, entries)
     return {"spec": spec, "file": file, "surfaces": entries,
             "paint": {"status": "not_painted", "look": look_fingerprint(spec, entries)}}

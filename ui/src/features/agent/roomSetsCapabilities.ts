@@ -32,8 +32,8 @@ export function registerRoomSetCapabilities(register: typeof defineCapability) {
   register<AgentRoomSetsAction>({
     name: 'room_sets',
     title: 'Store and paint a metric room',
-    description: 'Store, read or paint a metric box room (metres, open toward the camera) for a wide interior full-body shot. scene3d.room.put stores it already textured with procedural materials; scene3d.room.paint repaints it with the image model in the background (poll scene3d.room.paint.status); a surface the model cannot paint keeps its procedural material.',
-    useWhen: 'The user asks for an interior room at real size, with people standing on the floor, or for its walls, floor and door to look like something.',
+    description: 'Store, read or paint a metric box room (metres, open toward the camera) for a wide interior full-body shot. scene3d.room.put stores it already textured with procedural materials; scene3d.room.paint repaints it with the image model in the background (poll scene3d.room.paint.status); a surface the model cannot paint keeps its procedural material. With walls as a picture {file} of the workspace (a painted plate, plus its stage {horizon, ref: {baseY, heightPct, heightM}}) the room is that plate seen from its own camera with a floor to walk on in front of it; paint with walls {file} swaps the plate at once, with no model. A prop takes image {file}, a PNG with alpha, so a person can walk behind it.',
+    useWhen: 'The user asks for an interior room at real size, with people standing on the floor, for its walls, floor and door to look like something, or to use a painted plate as the room.',
     parameters: ['operation', 'input'],
     inputSchema: {
       type: 'object', additionalProperties: false,

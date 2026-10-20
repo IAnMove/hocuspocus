@@ -11,6 +11,7 @@ import math
 from pathlib import Path
 from typing import Any
 
+from services import room_plate
 from services.room_box import camera_pose, normalize, prop_point
 
 MODEL_HEIGHT = 1.7
@@ -102,10 +103,27 @@ def cutout_scale(entry: dict) -> dict:
     return {"scale": height / 2, "imageLook": {"grounded": True, "shadow": 0.45}, "grounded": True}
 
 
-def box_camera(spec: dict) -> dict:
-    """The shared wide frame: adult eye height, just outside the open side."""
+def box_camera(spec: dict, moved: Any = None) -> dict:
+    """The shared wide frame: adult eye height, just outside the open side. A plate room's is the plate's own viewpoint, lens shift
+    included, moved by the shot's ``camera`` ({shift: {x, y, z}, yaw, pitch}) when it has one."""
+    plate = spec.get("plate")
+    if plate:
+        move = moved if isinstance(moved, dict) else {}
+        pose = room_plate.pose_of(plate, move.get("shift"), move.get("yaw"), move.get("pitch"))
+        return {"family": "fixed", "eye": pose["eye"], "look": pose["look"], "fov": pose["fov"], "lensShift": pose["lensShift"]}
     pose = camera_pose(float(spec["size"]["d"]))
     return {"family": "fixed", "eye": pose["eye"], "look": pose["look"], "fov": pose["fov"]}
+
+
+def plate_warnings(shot: dict, series: dict | None, root: str | None) -> list[dict]:
+    """``camera_breaks_plate`` for a shot that stands in a plate room and moves or turns its camera past the plate's range."""
+    record = find_room(series, root, shot.get("set"))
+    spec = _quiet_spec(record)
+    if not spec or not spec.get("plate"):
+        return []
+    scene = shot.get("scene3d") if isinstance(shot.get("scene3d"), dict) else {}
+    camera = box_camera(spec, scene.get("camera"))
+    return room_plate.camera_report(spec["plate"], camera)
 
 
 def box_cast_bindings(config: dict) -> list[dict]:
@@ -165,6 +183,8 @@ def place(spec: dict, at: Any) -> tuple[float, float]:
     """``at`` as metres on the floor. ``near`` is toward the camera, ``far`` toward the back wall."""
     size = spec["size"]
     if at in ZONES:
+        if spec.get("plate"):
+            return 0.0, room_plate.zones(spec["plate"])[at]
         z = {"near": -size["d"] / 2 + 0.75, "mid": 0.0, "far": size["d"] / 2 - 0.75}[at]
         return 0.0, round(z, 4)
     if not isinstance(at, dict) or "x" not in at or "z" not in at:
@@ -199,6 +219,9 @@ def _one_stand(spec: dict, who: str, at: Any) -> list[str]:
     if abs(x) > size["w"] / 2 or abs(z) > size["d"] / 2:
         return [f"{who} stands outside the room floor"]
     problems = []
+    plate = spec.get("plate")
+    if plate and z < plate["visible"]["near_z"] - 1e-6:
+        problems.append(f"{who} stands below the plate's frame: the nearest floor it shows is z {plate['visible']['near_z']:g}")
     if _on_door(spec, x, z):
         problems.append(f"{who} stands on the door")
     if _on_furniture(spec, x, z):
@@ -208,6 +231,8 @@ def _one_stand(spec: dict, who: str, at: Any) -> list[str]:
 
 def _on_door(spec: dict, x: float, z: float) -> bool:
     door, size = spec["door"], spec["size"]
+    if not door:
+        return False
     along, wall = _wall_distances(size, door["wall"], door["x"], x, z)
     return along <= door["w"] / 2 + 0.15 and wall <= 0.35
 
