@@ -119,7 +119,7 @@ def _cast_entry(entry: Any) -> dict[str, Any] | None:
 
 
 def _placed(entry: dict[str, Any]) -> dict[str, Any]:
-    """Where a person stands in a box room, and how tall, when the shot named either."""
+    """Where a person stands in a box room, how tall, and where it looks and walks (``series_directional``), when the shot named them."""
     kept: dict[str, Any] = {}
     at = entry.get("at")
     if at in ("near", "mid", "far"):
@@ -131,6 +131,8 @@ def _placed(entry: dict[str, Any]) -> dict[str, Any]:
     height = _number(entry.get("heightM"), 0.3, 3.0)
     if height is not None:
         kept["heightM"] = height
+    from services.series_directional import cast_fields
+    kept.update(cast_fields(entry))
     return kept
 
 
@@ -422,6 +424,8 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
     if config.get("roomBox"):
         from services.series_room_box import box_camera
         setup["camera"] = box_camera(config["roomBox"], config.get("camera"))
+        if config["roomBox"].get("plate"):
+            setup["look"] = {"toneMapping": "none", "exposure": 0}   # the plate carries its own light: no grade may repaint it
     elif stage_camera(config):
         setup["camera"] = stage_camera(config)
     if effects:
@@ -460,6 +464,15 @@ def _template(call: Callable, workspace: str, config: dict[str, Any], error: Cal
     _ok(call("world3d.templates.user.put", {"version": 1, "intent_id": f"tpl-{template_id}", "input": {
         "workspace": workspace, "id": template_id, "title": stem[:80], "document": document["document"]}}), "register 3D scene", error)
     return template_id
+
+
+def _direct(call: Callable, workspace: str, stem: str, scene_id: str, revision: int, bindings: list[dict[str, Any]],
+            error: Callable[..., Exception]) -> int:
+    """The sheets, heading and walk of the cast members that turn to the camera (``series_directional``), after their voices; the new revision."""
+    if not bindings:
+        return revision
+    return _ok(call("world3d.scene.patch", {"version": 1, "intent_id": f"{stem}-directional-{revision}", "input": {
+        "workspace": workspace, "scene_id": scene_id, "base_revision": revision, "bindings": bindings}}), "set the directions of the cast", error)["scene"]["revision"]
 
 
 def _talk(call: Callable, workspace: str, stem: str, scene_id: str, revision: int, entry: dict[str, str], kit_id: str,
@@ -524,15 +537,19 @@ def _held(shot: dict[str, Any], document: Any) -> dict[str, Any]:
 def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any], lines: list[dict[str, Any]], duration: float,
                 kits: dict[str, Any], series_characters: dict[str, str], error: Callable[..., Exception],
                 tracks: list[dict[str, Any]] | None = None, root: str | None = None,
-                screen_fx: list[dict[str, Any]] | None = None, plate: str | None = None) -> dict[str, Any]:
+                screen_fx: list[dict[str, Any]] | None = None, plate: str | None = None,
+                speech: dict[str, list[list[float]]] | None = None) -> dict[str, Any]:
     """Instantiate, set the length, sound and objects, make every cast object talk and publish; returns the published scene.
 
     ``tracks`` are the shot's ambience, stinger and music (``series_shot_plan.sound_tracks``); they join the scene
     soundtrack, where the page ducks them under the dialogue like it does in a 2D shot. ``root`` is the workspace
     folder, where a clip named by name is looked up in its model. ``screen_fx`` are the shot's timed screen effects
-    (``series_shot_extras.fx_cues``), drawn over the 3D frame like over a 2D one.
+    (``series_shot_extras.fx_cues``), drawn over the 3D frame like over a 2D one. ``speech`` is when each character speaks
+    (``series_directional.speech_windows``): a figure that turns and walks stands still and shows its talking pose meanwhile.
     """
     config = normalize_scene3d(shot.get("scene3d")) or {}
+    from services.series_directional import directional_bindings
+    directed = directional_bindings(config, kits, series_characters, speech or {}, workspace)
     sound = scene_sound(workspace, tracks)
     # Intents carry a digest of what was asked: a resumed job replays them, a changed take gets new ones.
     effects = _shot_effects(screen_fx)
@@ -540,9 +557,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
     source = scene_source_digest(config, root)
     audio = audio_content(root, (line["filename"] for line in [*lines, *(tracks or [])]))
     held = read_fields(shot)
-    asked = (config, template_id, source, round(duration, 3), lines, audio, sound, effects)
-    if plate:
-        asked = (*asked, plate)
+    asked = (config, template_id, source, round(duration, 3), lines, audio, sound, effects, *[extra for extra in (plate, directed) if extra])
     digest = hashlib.sha1(repr((*asked, tuple(sorted(held.items()))) if held else asked).encode()).hexdigest()[:10]
     stem = f"{job_id}-{shot['id']}-{digest}"
     scene = open_shot_scene(call, workspace, stem, shot, duration, error, root=root, sound=sound, effects=effects, lines=lines,
@@ -555,6 +570,7 @@ def build_scene(call: Callable, workspace: str, job_id: str, shot: dict[str, Any
         kit_id = series_characters.get(entry["characterId"])
         if spoken and kit_id:
             revision = _talk(call, workspace, stem, scene_id, revision, entry, kit_id, spoken, error)
+    revision = _direct(call, workspace, stem, scene_id, revision, directed, error)
     published = _ok(call("world3d.scene.publish", {"version": 1, "intent_id": f"{stem}-publish-{revision}", "input": {
         "workspace": workspace, "scene_id": scene_id}}), "publish 3D scene", error)["scene"]
     return {**published, "renderDigest": digest}

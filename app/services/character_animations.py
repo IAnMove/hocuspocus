@@ -32,6 +32,8 @@ FACINGS = ("left", "right", "front")
 # What a sheet does and which way the character faces in it: the data contract with the 3D engine (services/character_animation_directions.py).
 MOTIONS = ("walk", "idle")
 DIRS = ("side", "front", "front34", "back34", "back")
+# A sheet that looks LEFT and beats the mirror of its right-facing twin (front and back have no left or right twin).
+FLIPPED_DIRS = ("side_r", "front34_r", "back34_r")
 REVIEW_STATES = ("pending", "approved", "rejected")
 # Who gave the review: a person in the app, or an agent in «Modo un solo disparo» (services/agent_autonomy.py). Data made before this
 # has neither, and stays valid.
@@ -213,11 +215,24 @@ def _frames(raw: Any) -> list[dict[str, str]]:
 def _contract(raw: dict[str, Any], label: str) -> dict[str, str]:
     """The ``motion`` and ``dir`` an entry stores (the data contract with the 3D engine), each one of its list."""
     found = {}
-    for key, allowed in (("motion", MOTIONS), ("dir", DIRS)):
+    for key, allowed in (("motion", MOTIONS), ("dir", DIRS + FLIPPED_DIRS)):
         if raw.get(key) is not None:
             if raw[key] not in allowed:
                 raise CharacterAnimationError(f"{label} {key} is one of {', '.join(allowed)}")
             found[key] = raw[key]
+    return found
+
+
+def _anchor(raw: Any, label: str) -> dict[str, float]:
+    """A per-sheet ``mouth`` or ``eyes`` anchor: ``{offsetX, offsetY, scale, rotation?}`` in % of the long side of the cell."""
+    numbers = ("offsetX", "offsetY", "scale")
+    if not isinstance(raw, dict) or any(isinstance(raw.get(key), bool) or not isinstance(raw.get(key), (int, float)) for key in numbers):
+        raise CharacterAnimationError(f"{label} is {{offsetX, offsetY, scale, rotation?}}, numbers in % of the cell")
+    found = {key: float(raw[key]) for key in numbers}
+    if raw.get("rotation") is not None:
+        if isinstance(raw["rotation"], bool) or not isinstance(raw["rotation"], (int, float)):
+            raise CharacterAnimationError(f"{label} rotation is a number of degrees")
+        found["rotation"] = float(raw["rotation"])
     return found
 
 
@@ -250,6 +265,9 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["group"] not in GROUPS:
             raise CharacterAnimationError(f"{label} group is one of {', '.join(GROUPS)}")
         result["group"] = raw["group"]
+    for key in ("mouth", "eyes"):
+        if raw.get(key) is not None:
+            result[key] = _anchor(raw[key], f"{label} {key}")
     return {**result, **_contract(raw, label)}
 
 
@@ -368,5 +386,5 @@ def build_sheet(sources: list[str], *, uploads_root: str, workspace_root: str, w
             "poses": [{"width": pose.width, "height": pose.height} for pose in poses]}
 
 
-__all__ = ["CUSTOM_VIEWS", "DIRS", "MOTIONS", "CharacterAnimationError", "animation_def", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
+__all__ = ["CUSTOM_VIEWS", "DIRS", "FLIPPED_DIRS", "MOTIONS", "CharacterAnimationError", "animation_def", "SCALE_BY", "body_measure", "CharacterKitFaceCleanupError", "animation", "build_sheet", "catalog", "normalize_animation",
            "normalize_kit_animations", "pose_prompt", "sheet_layout"]

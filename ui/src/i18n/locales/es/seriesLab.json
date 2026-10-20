@@ -1185,7 +1185,22 @@
       "enters": "entra por {{side}}",
       "object": "objeto {{id}}",
       "open": "Abrir a {{name}} en Personajes (face rig de esta pose)",
-      "openShort": "Abrir"
+      "openShort": "Abrir",
+      "heading": "Mira",
+      "noHeading": "Como está",
+      "headings": {
+        "toward": "a la cámara",
+        "right": "a la derecha",
+        "away": "de espaldas a la cámara",
+        "left": "a la izquierda"
+      },
+      "walkX": "Anda hasta x (m)",
+      "walkZ": "Anda hasta z (m)",
+      "walkSpeed": "Velocidad (m/s)",
+      "walkAt": "Empieza en (s)",
+      "looks": "mira {{heading}}",
+      "walks": "anda hasta {{x}}, {{z}}",
+      "lightTint": "Tinte de luz (0-1)"
     },
     "lines": {
       "title": "Diálogo",

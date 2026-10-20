@@ -545,10 +545,10 @@ The wide frame is the shared camera in `app/shared/room_box_camera.json`: eye he
 
 All the fractions are of the plate's height, from the top. `horizon` is where the eye line falls (a level camera sees it there); `ref` is one object of known height on the floor (a door: `baseY` its foot, `heightPct` how tall it looks, `heightM` 2 by default); `floorTop` (default `baseY`) is the farthest floor a person may stand on. From them `put` derives the camera height `(baseY - horizon) × heightM / heightPct` (1.61 m for the office; a result outside 1.0–2.4 m warns `eye_height`), the card's distance and the room's `size` (**leave `size`, `windows` and `ceiling` out**: the plate has them). Without `stage` the plate is taken to be seen from a 1.6 m camera with a 2 m door 40 % of its height and `put` says `stage_assumed`: measure it (`series.location.stage.check` draws the grid when that tool is present). Optional: `fov` (vertical lens, default 48), `range` (below) and `door {x, w, h}` in metres from the middle of the back wall (+x toward the left of the frame, as in every room), only so nobody stands on it.
 
-- **The back wall and the floor are the plate.** The card shows the rows above the floor; the floor in front of it is the plate's own floor rows projected from the same camera, so the painted floor and the floor a person walks on are one floor (no tiling, no seam, no gradient to hide one). A horizon that is not the middle of the picture is handled by a lens shift (`camera.lensShift`, the fraction of the frame the horizon sits above the middle): verticals stay vertical, as in the plate. The GLB is unlit (`KHR_materials_unlit`), so the scene's lamps and tone mapping leave the plate's colours alone.
+- **The back wall and the floor are the plate.** The card shows the rows above the floor; the floor in front of it is the plate's own floor rows projected from the same camera, so the painted floor and the floor a person walks on are one floor (no tiling, no seam, no gradient to hide one). A horizon that is not the middle of the picture is handled by a lens shift (`camera.lensShift`, the fraction of the frame the horizon sits above the middle): verticals stay vertical, as in the plate. The GLB is unlit (`KHR_materials_unlit`) and the room asks for `look: {toneMapping: "none"}` (a new value beside `aces`, `agx` and `neutral`; a scene patch takes it as the top-level `look`, after any grade), so neither the scene's lamps nor ACES repaint the plate: through the app's own renderer in Chromium the room-only frame differs from the plate by 0.02 on a 0–255 scale (ACES at −0.5 EV, what a new scene wears, would differ by 15).
 - **What the plate does not show is its edge, mirrored, blurred and darkened.** The side walls and the ceiling are baked from the plate's border (a pyramid of blurred copies; the farther from the picture, the blurrier and darker, never black), so a camera that moves a little finds more room and not a void. Give `walls: {back: {file}, left: {file}, right: {file}}` to draw a side wall yourself (`left` is the left of the frame).
 - **People stand on the floor in metres.** `at {x, z}` with `z` from the nearest floor the frame shows (`room.plate.visible.near_z`) to the back wall; `near`, `mid` and `far` are inside that range. A person whose feet are below the frame is an error.
-- **Furniture that people must walk behind is a prop with a cut-out:** `props: [{prompt, on: "floor", x, z, y?, height_m, image: {file: "desk.png"}}]`, a PNG with alpha (`props.create` and `image.remove_background` make them). The cut-out is cropped to what it draws, so `height_m` is the object's height and the bottom of the card is its foot; it stands at `x, z` as a masked card (alpha is a mask, not a blend) that writes depth, so a person who walks behind it is hidden by it and one in front covers it. A prop cut out of the plate itself and placed with the plate's own numbers lands on the same pixels (measured: difference 0.0 over the desk). Anything painted into the plate and not cut out is glued to the wall and the floor and slides when the camera moves.
+- **Furniture that people must walk behind is a prop with a cut-out:** `props: [{prompt, on: "floor", x, z, y?, height_m, image: {file: "desk.png"}}]`, a PNG with alpha (`props.create` and `image.remove_background` make them). The cut-out is cropped to what it draws, so `height_m` is the object's height and the bottom of the card is its foot; it stands at `x, z` as a masked card (alpha is a mask, not a blend) that writes depth, so a person who walks behind it is hidden by it and one in front covers it. A prop cut out of the plate itself and placed with the plate's own numbers lands on the same pixels (measured: difference 0.0 over the desk). Anything painted into the plate and not cut out is glued to the wall and the floor and slides when the camera moves. The directional sprites of the cast are depth tested, so against a prop a person behind it is hidden and one in front covers it (proved in Chromium with `ui/scripts/plate-room-proof.ts`, run by `HOCUSPOCUS_BROWSER_PROOF=1 pytest tests/test_room_plate.py -k real_renderer`).
 - **The camera holds only near the plate's viewpoint.** `range {orbit_deg, shift_m}` (default 25° and 0.5 m) is where the illusion holds. A shot may move the camera from the plate's viewpoint with `scene3d.camera: {shift: {x, y, z}, yaw, pitch}` (metres, degrees); past the range, `series.episode.from_script` check says `camera_breaks_plate`. With a smooth ±0.4 m move the parallax comes free: the plate is a card behind the people.
 - **`scene3d.room.paint` with a picture is the paint.** `{workspace, name, walls: {file}}` (or `back`, `left`, `right`, `stage`, `fov`, `range`) replaces the plate (or its numbers) at once, with no model, and the room follows it; the same words are refused on a plate room, and a picture is refused on a room with no plate (put it again). The pictures stay where they were (`surfaces` in `scene3d-rooms.json` keeps each file and its hash, so a changed plate changes the room's look and re-renders only its shots).
 
@@ -575,3 +575,56 @@ print(result["room"]["size"], result["room"]["plate"]["camera"], result.get("war
 ```
 
 Limits to know: a plate drawn with an inconsistent perspective (the stage reads a camera far from 1.6 m) gives people who look too big or too small; the extension is a soft guess, not a drawing, so keep camera moves small; specular highlights painted into the floor are part of the picture and do not move with the camera; an exterior plate is a very large box (the silos plate is 20 × 13 m) whose edges are a soft horizon smear.
+
+## Directional figures (a flat character that turns to the camera)
+
+A 2D character in a 3D shot used to be one picture that always looked at the camera. A cast entry that says where it looks or goes is
+now drawn like the sprites of Octopath, Paper Mario or Don't Starve: a flat figure in the scene, lit by its key light, hidden by the
+set, and showing the drawing of the angle between where it looks and where the camera is (front, three-quarter front, side,
+three-quarter back, back; the left is the mirror of the right), with its walk cycle played by the ground it covers. Only an entry with
+`heading` or `walkTo` changes; everything else in the shot is drawn as before.
+
+```json
+{"kind": "3d", "set": "kitchen", "cast": [
+  {"characterId": "ana", "at": {"x": 1.5, "z": 0}, "heading": "right", "walkTo": {"x": -1.5, "z": 0}, "walkSpeed": 1.2, "walkAt": 0.5, "lightTint": 0.6}]}
+```
+
+- **`heading`:** degrees against the camera at the start of the shot (0 faces it, 90 faces screen right, 180 turns its back, -90 faces
+  screen left) or `toward`, `right`, `away`, `left`. It is the way the figure looks while it stands (before and after its walk). Because it is
+  read against the first camera, a still figure changes drawing when the camera orbits or travels around it.
+- **`walkTo` `{x, z}`, `walkSpeed`, `walkAt`:** the figure walks in a straight line from where it stands (`at`, or its place in the
+  template) to that point, in metres, at `walkSpeed` m/s (default 1.2, from 0.2 to 6) from `walkAt` seconds into the shot. While it
+  walks it looks along its path; it plays the walk sheet of the direction of its path against the camera, one cycle every two steps of
+  0.75 m (so the feet and the ground agree and nothing slides). When it arrives it shows the idle sheet of its `heading` (or of
+  the way it walked).
+- **The kit:** each approved animation of the Character Kit that is a walk or an idle of one side carries `motion` (`walk` or `idle`)
+  and `dir` (`front`, `front34`, `side`, `back34`, `back`): `walk` or `walk-12` and `idle-side` (a sheet looks right), `walk-front`, `walk-front34`,
+  `walk-back34`, `walk-back`, `idle-<dir>`. With no `dir`, a `side` or `front` view says it; with no `motion`, a cycle whose id starts with `walk` or `idle`
+  says it. A sheet drawn looking left says `facing: "left"`. A direction the kit lacks is drawn by the nearest one it has; with no
+  walk or idle sheet at all the base pose glides. Nothing is an error: the script check warns `direction_sheet_missing`.
+- **Fade:** when the drawing changes (another sheet, the other side, the pose) the old one fades into the new one over 0.12 s
+  (`crossfadeSeconds`), added up so the figure never thins. It starts on the frame of the change and is the same on every export; a jump in
+  time (a seek) shows no fade. The 10 degrees of hysteresis still keep it from flickering at a boundary.
+- **Mirror and asymmetric costumes:** the left is the right sheet mirrored, unless the kit drew that side itself: `dir: "side_r"`, `"front34_r"`
+  or `"back34_r"` is a sheet that looks left (a front or a back has no other side) and beats the mirror, for a badge, a sword arm or a parting. A kit that
+  says `asymmetric: true` is warned (`mirror_flips_detail`) when the shot mirrors a direction it has no `_r` sheet for.
+- **Speech, mouth and eyes:** a character that speaks never shows a walk sheet. While one of its lines runs the figure stands where it is and
+  the walk goes on afterwards, so it arrives later by the time it spoke (`walk_blocked_by_speech`, with the seconds, on the render's item; the
+  script check warns before it when the character has lines and a walk). It shows the idle sheet of its direction **if that sheet says where its mouth is**
+  (`mouth` `{offsetX, offsetY, scale, rotation?}` on the kit animation, in % of the cell's longer edge, like the pose anchors; `eyes` the same for the blink):
+  the kit's mouth drawing of each cue and its blink are drawn there, mirrored with the sheet. A sheet with no `mouth` shows the talking pose (a front picture)
+  instead, and the check warns `direction_sheet_no_mouth` for the directions the shot needs.
+- **Light and depth:** a figure drawn from sheets is unlit, so it does not brighten and darken as the camera goes round it, and is multiplied by the
+  key light of the scene: its colour at its strength, `lightTint` of the way from white (cast field or `screen.directional.lightTint`, 0 to 1, default 0.6, 0 turns it off).
+  It is a plane with alpha in the depth buffer, so a column, a piece of furniture or the walls of a room hide it, and it hides what is behind it; its contact shadow
+  is on the floor.
+- **Checks:** `direction_sheet_missing`, `direction_sheet_no_mouth`, `mirror_flips_detail`, `walk_path_outside_room` (the destination is off the floor of a box room; the
+  walk is not stopped) and `walk_blocked_by_speech`. A bad value (`heading: "up"`, `walkTo: {x: 1}`, a speed with no destination, `lightTint: 3`) or the fields on a shot that
+  is not 3D stops the script.
+- **Doors:** the script (`series.episode.from_script`, `series.shot.update`, `edit_series_shot`), the 3D cast part of the shot inspector
+  (Looks, Walks to x and z, Speed, Starts at, Light tint) and, for a plain Video 3D scene, the `directional` binding of `world3d.scene.patch`
+  (`{sheets, heading?, walk? {to, speed, start}, speech?, lightTint?}` on an image cutout; `null` removes it).
+- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
+  drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
+  `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot, a walk that stops to speak, the frames of a fade and a
+  column in front of and behind two figures, with a synthetic five-direction kit, and checks the pixels.

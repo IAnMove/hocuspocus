@@ -82,6 +82,7 @@ test('a plate room takes its camera from the plate, with the lens shift, and dra
   })
   assert.deepEqual(staged.camera.eye, [0, 1.6129, -1.8113])
   assert.equal(staged.camera.lensShift, 0.28)
+  assert.deepEqual(staged.look, { toneMapping: 'none', exposure: 0 }, 'the plate carries its own light')
   assert.equal(staged.camera.family, 'fixed')
   assert.equal(staged.roomBox?.door, undefined)
   assert.equal(staged.slots.find(slot => slot.id === 'room-box')?.scale, 2.32 / 1.7)
@@ -89,6 +90,7 @@ test('a plate room takes its camera from the plate, with the lens shift, and dra
   assert.equal(round?.camera.lensShift, 0.28)
   const ordinary = stageRoomBox(createDefaultScene3DDocument(), { size: { w: 4, d: 5, h: 2.6 }, door: { wall: 'back', x: 0, w: 0.9, h: 2 } })
   assert.equal('lensShift' in ordinary.camera, false, 'an ordinary room keeps the camera it had')
+  assert.notEqual(ordinary.look?.toneMapping, 'none', 'and the look it had')
 })
 
 test('a lens shift moves the horizon without moving the verticals, and no shift leaves the camera alone', () => {

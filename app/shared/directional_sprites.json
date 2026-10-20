@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "note": "Directional 2D figures in a 3D shot: the figure is a flat sprite and the drawing that faces the camera is chosen by angle (ui/src/features/scene3d/directionalSprite.ts, services/series_directional.py). Angles are degrees of the figure's facing against the line to the camera: 0 faces the camera, +90 faces screen-right, 180 turns its back. A sheet looks right; the left is its mirror.",
+  "directions": {
+    "front": 0,
+    "front34": 45,
+    "side": 90,
+    "back34": 135,
+    "back": 180
+  },
+  "lateral": [
+    "front34",
+    "side",
+    "back34"
+  ],
+  "headings": {
+    "toward": 0,
+    "right": 90,
+    "away": 180,
+    "left": 270
+  },
+  "hysteresisDeg": 10,
+  "stepMeters": 0.75,
+  "cycleSteps": 2,
+  "walkSpeed": 1.2,
+  "walkSpeedRange": [
+    0.2,
+    6
+  ],
+  "resetSeconds": 0.5,
+  "motions": [
+    "walk",
+    "idle"
+  ],
+  "crossfadeSeconds": 0.12,
+  "lightTint": 0.6,
+  "lateral_note": "A kit may also draw the other side of a lateral direction as its own sheet: dir side_r, front34_r or back34_r looks left and beats the mirror."
+}

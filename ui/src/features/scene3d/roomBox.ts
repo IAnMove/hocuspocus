@@ -58,6 +58,8 @@ export function stageRoomBox(document: Scene3DDocument, spec: RoomBoxSpec): Scen
   delete camera.framing
   delete camera.lensShift
   document.camera = { ...camera, family: 'fixed', eye: [...pose.eye], look: [...pose.look], fov: pose.fov, ...(plate ? { lensShift: plate.lensShift } : {}) }
+  // The plate carries its own light: no tone mapping may repaint it.
+  if (plate) document.look = { toneMapping: 'none', exposure: 0 }
   applyNamedLight(document, 'soft')
   const characters = (spec.characters ?? []).map((person, index) => ({
     x: person.x,

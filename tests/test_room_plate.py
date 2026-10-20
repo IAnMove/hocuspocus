@@ -498,3 +498,86 @@ def test_a_scene_patch_keeps_a_lens_shift_and_refuses_a_bad_one(tmp_path):
         with pytest.raises(World3DSceneError) as error:
             patch_scene("studio", "w3d-00000000beef", workspace_dir, {"camera": {"lensShift": bad}}, 2)
         assert error.value.code == "invalid_camera_lens_shift"
+
+
+def test_a_scene_patch_sets_the_look_after_a_grade_and_a_plate_shot_asks_for_none(tmp_path):
+    import json
+    from services.series_shot3d import _setup, normalize_scene3d
+    from services.world3d_scenes import World3DSceneError, patch_scene
+    workspace_dir = lambda name: str(tmp_path / name)  # noqa: E731
+    folder = Path(workspace_dir("studio")) / "world3d-edits"
+    folder.mkdir(parents=True)
+    document = {"templateId": "anime-impact-frame", "slots": [], "look": {"toneMapping": "aces", "exposure": -0.5},
+                "camera": {"family": "fixed", "fov": 40, "eye": [0, 1, 5], "look": [0, 1, 0]}}
+    (folder / "w3d-00000000beef.json").write_text(json.dumps({"revision": 1, "templateId": "anime-impact-frame", "document": document,
+                                                                 "warnings": []}), encoding="utf-8")
+    viewed = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"grade": "noir", "look": {"toneMapping": "none"}}, 1)
+    assert viewed["document"]["look"] == {"toneMapping": "none", "exposure": 0.0} and "look" in viewed["editable"]
+    cleared = patch_scene("studio", "w3d-00000000beef", workspace_dir, {"look": None}, 2)
+    assert "look" not in cleared["document"]
+    for bad in ("none", {"toneMapping": "filmic"}, {"toneMapping": "none", "exposure": 9}, {"toneMapping": "none", "gamma": 1}, {"exposure": 0}):
+        with pytest.raises(World3DSceneError) as error:
+            patch_scene("studio", "w3d-00000000beef", workspace_dir, {"look": bad}, 3)
+        assert error.value.code == "invalid_look"
+    plate = {"kind": "room", "prompt": "p", "floor": "f", "walls": "w", "plate": {"back": BACK, "stage": OFFICE}}
+    box = {"kind": "room", "prompt": "p", "size": {"w": 4, "d": 5}, "floor": "oak", "walls": "plaster"}
+    fail = lambda *_args: RuntimeError("unused")  # noqa: E731
+    assert _setup("w", None, {**normalize_scene3d({"template": "two-shot"}), "roomBox": normalize(plate), "cast": []}, [], fail, [])["look"] == {"toneMapping": "none", "exposure": 0}
+    assert "look" not in _setup("w", None, {**normalize_scene3d({"template": "two-shot"}), "roomBox": normalize(box), "cast": []}, [], fail, [])
+
+
+# ---------------------------------------------------------------- the real renderer (opt in: Chromium on the CPU)
+
+
+@pytest.mark.skipif(not __import__("os").environ.get("HOCUSPOCUS_BROWSER_PROOF"),
+                    reason="set HOCUSPOCUS_BROWSER_PROOF=1 to render through the owned World3D renderer in Chromium (SwiftShader, no GPU)")
+def test_in_the_real_renderer_the_plate_comes_out_as_itself_and_a_prop_hides_a_person_behind_it(workspace):
+    """The directional sprites of #1170 are depth tested; a masked prop of a plate room writes depth: behind it a person is hidden, in front
+    of it a person covers it. The same frames show the lens shift and the unlit plate coming out of the app's own renderer."""
+    import json
+    import subprocess
+    out = workspace / "proof"
+    out.mkdir()
+    plate_image = _plate_picture((1920, 1088))
+    plate_image.save(workspace / "office.png")
+    _cutout(workspace / "post.png", (200, 400), 0)
+    room = {"kind": "room", "prompt": "an office", "walls": {"file": "office.png"}, "stage": OFFICE,
+            "props": [{"prompt": "a post", "on": "floor", "x": 0.5, "z": 1.0, "height_m": 1.0, "image": {"file": "post.png"}}]}
+    result = _put("proof", room)
+    plate, size = result["room"]["plate"], result["room"]["size"]
+    frames = [{"name": "none", "figures": []},
+              {"name": "behind", "figures": [{"id": "behind", "x": 0.5, "z": 1.3, "heightM": 1.75}]},
+              {"name": "front", "figures": [{"id": "front", "x": 0.5, "z": 0.6, "heightM": 1.75}]}]
+    (out / "spec.json").write_text(json.dumps({"glb": str(workspace / result["file"]), "width": 1920, "height": 1088, "size": size,
+                                               "camera": plate["camera"], "look": "default", "frames": frames}))
+    root = Path(__file__).resolve().parents[1]
+    run = subprocess.run([str(root / "ui" / "node_modules" / ".bin" / "tsx"), "--tsconfig", "tsconfig.app.json", "scripts/plate-room-proof.ts",
+                          "--spec", str(out / "spec.json"), "--out", str(out)], cwd=root / "ui", capture_output=True, text=True, timeout=600)
+    assert run.returncode == 0, run.stderr[-1500:] + run.stdout[-500:]
+    frame = {name: np.asarray(Image.open(out / f"{name}.png").convert("RGB"), float) for name in ("none", "behind", "front")}
+    shown = np.abs(frame["none"] - np.asarray(plate_image, float))
+    camera = plate["camera"]
+    corners = [_pinhole([0.5 + dx, y, 1.0], camera, 1920 / 1088) for dx in (-0.25, 0.25) for y in (0.0, 1.0)]
+    left, right = int(min(c[0] for c in corners) * 1920) + 4, int(max(c[0] for c in corners) * 1920) - 4
+    top, bottom = int(min(c[1] for c in corners) * 1088) + 4, int(max(c[1] for c in corners) * 1088) - 4
+    # The post is a brown card in front of the plate, so the room-only frame differs from the plate inside it: compare everywhere else.
+    others = np.ones(shown.shape[:2], bool)
+    others[max(0, top - 6):bottom + 6, max(0, left - 6):right + 6] = False
+    assert shown[others].mean() < 0.5 and np.percentile(shown[others], 99) <= 3, \
+        "the room, staged as the app stages it, is the plate: lens shift, unlit, no tone mapping"
+
+    def figure(name):
+        return np.abs(frame[name] - frame["none"]).max(axis=2) > 12
+
+    behind, front = figure("behind"), figure("front")
+    inside = (slice(top, bottom), slice(left, right))
+    keep = __import__("os").environ.get("HOCUSPOCUS_PROOF_OUT")
+    if keep:
+        Path(keep).mkdir(parents=True, exist_ok=True)
+        for name in ("none", "behind", "front"):
+            (Path(keep) / f"plate-room-{name}.png").write_bytes((out / f"{name}.png").read_bytes())
+        print("figure pixels: behind above the post", int(behind[:top - 2].sum()), "over the post", int(behind[inside].sum()), "| front over the post", int(front[inside].sum()))
+    assert behind[:top - 2].sum() > 3000, "the head and chest of the person behind the post are seen above it"
+    assert behind[inside].sum() == 0, "and not one pixel of that person is painted over the post: the sprite is depth tested against the masked card"
+    assert front[inside].sum() > 5000, "the person in front of the post covers it"
+    assert front[:top].sum() > 3000

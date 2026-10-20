@@ -22,7 +22,7 @@ const MAX_CUES = 10000
 const finite = (value: unknown, low: number, high: number): value is number =>
   typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high
 
-function parseAnchor(raw: unknown): CutoutAnchor | undefined {
+export function parseAnchor(raw: unknown): CutoutAnchor | undefined {
   const value = raw as Partial<CutoutAnchor> | undefined
   if (!value || !finite(value.offsetX, -200, 200) || !finite(value.offsetY, -200, 200) || !finite(value.scale, 0.001, 20)) return undefined
   return { offsetX: value.offsetX, offsetY: value.offsetY, scale: value.scale, rotation: finite(value.rotation, -360, 360) ? value.rotation : 0 }

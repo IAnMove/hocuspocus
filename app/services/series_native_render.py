@@ -49,7 +49,7 @@ from services.series_review import episode_mode
 from services.series_review_gate import actionable_shots, assembly_blockers, render_passes, video_promotion
 from services.series_scene_inputs import audio_content
 from services.series_shot_bridge import measure_props, run_series_shot, with_pose_sizes
-from services import series_shot3d
+from services import series_directional, series_shot3d
 from services.series_plate_checks import location_plate_url
 from services.series_shot_extras import fx_cues, pauses, sfx_tracks, timing_args
 from services.series_sound_cuts import materialize_cuts
@@ -936,10 +936,13 @@ class SeriesNativeRender:
         from services.series_sets import inherit_shot
         room_shot = inherit_shot(series, shot)
         room_scene = room_shot.get("scene3d") or {}
+        speech = series_directional.speech_windows(beats, timing)
         scene = series_shot3d.build_scene(self.deps.call, workspace, job["jobId"], room_shot, lines, duration, kits, characters, NativeRenderError,
                                           tracks=tracks, root=self.deps.workspace_dir(workspace),
                                           screen_fx=fx_cues(layout, timing, duration),
-                                          plate=None if room_scene.get("roomSet") or room_scene.get("roomBox") else location_plate_url(series, shot, workspace))
+                                          plate=None if room_scene.get("roomSet") or room_scene.get("roomBox") else location_plate_url(series, shot, workspace),
+                                          speech=speech)
+        series_directional.note(item, series_directional.render_warnings(room_shot, speech, series_directional.object_starts(scene.get("document")), shot["id"]))
         config = series_shot3d.normalize_scene3d(shot.get("scene3d")) or {}
         intent = f"{job['jobId']}-{shot['id']}-3d-{scene['renderDigest']}-{scene['revision']}-export{self._retry_suffix(item)}"[:160]
         # A staged review's preview is the cheap faithful look: draft quality, whatever the shot's own.
