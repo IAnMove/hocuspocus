@@ -358,7 +358,7 @@ def _walker(path: Path, phase: int, *, height: int = 200, flip: bool = False) ->
     pixels[40:110, 48:92] = (230, 180, 30, 255)
     pixels[110:height - 4 * (phase % 6), near:near + 12] = (30, 30, 40, 255)  # a dark leg, lifted a little more in each phase
     pixels[110:height, far:far + 12] = (235, 235, 245, 255)  # and a light one
-    pixels[45:60 + 3 * phase, 94:104] = (200, 160, 120, 255)
+    pixels[45:50 + 8 * phase, 94:108] = (200, 160, 120, 255)  # an arm that reaches lower in each phase
     image = Image.fromarray(pixels)
     (image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if flip else image).save(path)
     return path
