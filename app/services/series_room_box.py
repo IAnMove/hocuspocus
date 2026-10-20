@@ -76,6 +76,27 @@ def dress_shot(shot: dict, series: dict | None, root: str | None, location: dict
     return config
 
 
+def refresh_box_room(config: dict, root: str | None) -> dict:
+    """The stored room this shot stands in, so a paint that changed the plate is what the render uses.
+
+    ``from_script`` snapshots ``roomBox`` and the room-box slot's scale at compile. A later plate ``paint``
+    rebuilds the GLB and changes ``paint.look`` (takes render again) but leaves that snapshot; without this
+    the camera and the slot scale would be the old plate's while the GLB is the new one."""
+    if not root or not isinstance(config.get("roomBox"), dict):
+        return config
+    item = next((row for row in config.get("objects") or [] if isinstance(row, dict) and row.get("objectId") == "room-box"), None)
+    if not item or not isinstance(item.get("file"), str):
+        return config
+    record = find_room(None, root, Path(item["file"]).stem)
+    spec = _quiet_spec(record)
+    if not spec:
+        return config
+    refreshed = dict(config)
+    refreshed["roomBox"] = spec
+    refreshed["objects"] = [_room_object(spec, room_file(record, Path(item["file"]).stem)), *_without(config.get("objects"), "room-box")]
+    return refreshed
+
+
 def look_digest(shot: dict, root: str | None) -> str | None:
     """How the stored room this shot stands in looks now: a changed look renders the shot again, a changed other room does not.
 
