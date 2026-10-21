@@ -1,0 +1,1194 @@
+{
+ "schema": 1,
+ "note": "Condensed safetensors headers; regenerate with scripts/h3_checkpoint_header_fixture.py",
+ "checkpoints": {
+  "fused_turbo_int8_convrot": {
+   "source": {
+    "repo": "MATLOWAI/minimax-h3-fused-turbo-int8-convrot",
+    "revision": "3b51096a1bf67608d98131116558202208fcf195",
+    "path": "diffusion_models/minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors",
+    "size": 20980178976,
+    "sha256": "4262e4e9963c553fa00016bbe83961407a4fc0a888be95fd836c8d4f2304e48b"
+   },
+   "header_bytes": 95504,
+   "metadata": null,
+   "comfy_quant_sizes": [
+    93
+   ],
+   "comfy_quant": {
+    "blocks.0.attn.qkv_proj": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"per_channel\": true, \"convrot_groupsize\": 256}"
+   },
+   "tensors": {
+    "adaln_basis": [
+     "F32",
+     [
+      8,
+      2688
+     ],
+     1
+    ],
+    "adaln_mean": [
+     "F32",
+     [
+      2688
+     ],
+     1
+    ],
+    "adaln_t_table": [
+     "F32",
+     [
+      1025,
+      8
+     ],
+     1
+    ],
+    "audio_patch_proj.bias": [
+     "F32",
+     [
+      5376
+     ],
+     1
+    ],
+    "audio_patch_proj.weight": [
+     "F32",
+     [
+      5376,
+      32
+     ],
+     1
+    ],
+    "blocks.N.adaln_proj.linear.bias": [
+     "F32",
+     [
+      96768
+     ],
+     50
+    ],
+    "blocks.N.adaln_proj.linear.weight": [
+     "BF16",
+     [
+      96768,
+      8
+     ],
+     50
+    ],
+    "blocks.N.attn.k_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     50
+    ],
+    "blocks.N.attn.out_proj.comfy_quant": [
+     "U8",
+     [
+      93
+     ],
+     50
+    ],
+    "blocks.N.attn.out_proj.weight": [
+     "I8",
+     [
+      5376,
+      7168
+     ],
+     50
+    ],
+    "blocks.N.attn.out_proj.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     50
+    ],
+    "blocks.N.attn.q_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     50
+    ],
+    "blocks.N.attn.qkv_proj.comfy_quant": [
+     "U8",
+     [
+      93
+     ],
+     50
+    ],
+    "blocks.N.attn.qkv_proj.weight": [
+     "I8",
+     [
+      21504,
+      5376
+     ],
+     50
+    ],
+    "blocks.N.attn.qkv_proj.weight_scale": [
+     "F32",
+     [
+      21504,
+      1
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc1.comfy_quant": [
+     "U8",
+     [
+      93
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc1.weight": [
+     "I8",
+     [
+      28672,
+      5376
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc1.weight_scale": [
+     "F32",
+     [
+      28672,
+      1
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc2.comfy_quant": [
+     "U8",
+     [
+      93
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc2.weight": [
+     "I8",
+     [
+      5376,
+      14336
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc2.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     50
+    ],
+    "blocks.N.norm1.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     50
+    ],
+    "blocks.N.norm2.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     50
+    ],
+    "condition_proj.bias": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "condition_proj.weight": [
+     "BF16",
+     [
+      5376,
+      5120
+     ],
+     1
+    ],
+    "final_layer.adaln_proj.linear.bias": [
+     "F32",
+     [
+      10752
+     ],
+     1
+    ],
+    "final_layer.adaln_proj.linear.weight": [
+     "BF16",
+     [
+      10752,
+      8
+     ],
+     1
+    ],
+    "final_layer.audio_out.bias": [
+     "F32",
+     [
+      32
+     ],
+     1
+    ],
+    "final_layer.audio_out.weight": [
+     "F32",
+     [
+      32,
+      5376
+     ],
+     1
+    ],
+    "final_layer.norm.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "final_layer.video_out.bias": [
+     "F32",
+     [
+      96
+     ],
+     1
+    ],
+    "final_layer.video_out.weight": [
+     "F32",
+     [
+      96,
+      5376
+     ],
+     1
+    ],
+    "rope.inv_freq": [
+     "F32",
+     [
+      16
+     ],
+     1
+    ],
+    "token_refiner.blocks.N.attn.k_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.weight": [
+     "BF16",
+     [
+      5376,
+      7168
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.q_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.weight": [
+     "BF16",
+     [
+      21504,
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.weight": [
+     "BF16",
+     [
+      28672,
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.weight": [
+     "BF16",
+     [
+      5376,
+      14336
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.norm1.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.norm2.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     2
+    ],
+    "token_refiner.final_norm.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "video_patch_proj.bias": [
+     "F32",
+     [
+      5376
+     ],
+     1
+    ],
+    "video_patch_proj.weight": [
+     "F32",
+     [
+      5376,
+      96
+     ],
+     1
+    ]
+   }
+  },
+  "fasth3_v2_int8_convrot": {
+   "source": {
+    "repo": "FastVideo/FastVideo-FastH3-Comfy",
+    "revision": "ec1e3aa374a91c57b0b94a1623b7e657c0498cf2",
+    "path": "diffusion_models/fastvideo_fasth3_8step_v2_pruned_int8_convrot.safetensors",
+    "size": 22128378696,
+    "sha256": "0922785978dc9bfe1adf27d8b291b0ca763f9f165f882e6cb297c72fbb6deda8"
+   },
+   "header_bytes": 114256,
+   "metadata": {
+    "format": "pt"
+   },
+   "comfy_quant_sizes": [
+    72
+   ],
+   "comfy_quant": {
+    "blocks.0.attn.qkv_proj": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"convrot_groupsize\": 256}",
+    "token_refiner.blocks.0.attn.qkv_proj": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"convrot_groupsize\": 256}",
+    "blocks.0.attn.to_gate_compress": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"convrot_groupsize\": 256}"
+   },
+   "tensors": {
+    "adaln_t_table": [
+     "F32",
+     [
+      1025,
+      8
+     ],
+     1
+    ],
+    "audio_patch_proj.bias": [
+     "F32",
+     [
+      5376
+     ],
+     1
+    ],
+    "audio_patch_proj.weight": [
+     "F32",
+     [
+      5376,
+      32
+     ],
+     1
+    ],
+    "blocks.N.adaln_proj.linear.bias": [
+     "F16",
+     [
+      96768
+     ],
+     50
+    ],
+    "blocks.N.adaln_proj.linear.weight": [
+     "F16",
+     [
+      96768,
+      8
+     ],
+     50
+    ],
+    "blocks.N.attn.k_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     50
+    ],
+    "blocks.N.attn.out_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     50
+    ],
+    "blocks.N.attn.out_proj.weight": [
+     "I8",
+     [
+      5376,
+      7168
+     ],
+     50
+    ],
+    "blocks.N.attn.out_proj.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     50
+    ],
+    "blocks.N.attn.q_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     50
+    ],
+    "blocks.N.attn.qkv_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     50
+    ],
+    "blocks.N.attn.qkv_proj.weight": [
+     "I8",
+     [
+      21504,
+      5376
+     ],
+     50
+    ],
+    "blocks.N.attn.qkv_proj.weight_scale": [
+     "F32",
+     [
+      21504,
+      1
+     ],
+     50
+    ],
+    "blocks.N.attn.to_gate_compress.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     50
+    ],
+    "blocks.N.attn.to_gate_compress.weight": [
+     "I8",
+     [
+      7168,
+      5376
+     ],
+     50
+    ],
+    "blocks.N.attn.to_gate_compress.weight_scale": [
+     "F32",
+     [
+      7168,
+      1
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc1.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc1.weight": [
+     "I8",
+     [
+      28672,
+      5376
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc1.weight_scale": [
+     "F32",
+     [
+      28672,
+      1
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc2.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc2.weight": [
+     "I8",
+     [
+      5376,
+      14336
+     ],
+     50
+    ],
+    "blocks.N.mlp.fc2.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     50
+    ],
+    "blocks.N.norm1.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     50
+    ],
+    "blocks.N.norm2.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     50
+    ],
+    "condition_proj.bias": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "condition_proj.weight": [
+     "BF16",
+     [
+      5376,
+      5120
+     ],
+     1
+    ],
+    "final_layer.adaln_proj.linear.bias": [
+     "F16",
+     [
+      10752
+     ],
+     1
+    ],
+    "final_layer.adaln_proj.linear.weight": [
+     "F16",
+     [
+      10752,
+      8
+     ],
+     1
+    ],
+    "final_layer.audio_out.bias": [
+     "F32",
+     [
+      32
+     ],
+     1
+    ],
+    "final_layer.audio_out.weight": [
+     "F32",
+     [
+      32,
+      5376
+     ],
+     1
+    ],
+    "final_layer.norm.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "final_layer.video_out.bias": [
+     "F32",
+     [
+      96
+     ],
+     1
+    ],
+    "final_layer.video_out.weight": [
+     "F32",
+     [
+      96,
+      5376
+     ],
+     1
+    ],
+    "rope.inv_freq": [
+     "F32",
+     [
+      16
+     ],
+     1
+    ],
+    "token_refiner.blocks.N.attn.k_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.weight": [
+     "I8",
+     [
+      5376,
+      7168
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.q_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.weight": [
+     "I8",
+     [
+      21504,
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.weight_scale": [
+     "F32",
+     [
+      21504,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.weight": [
+     "I8",
+     [
+      28672,
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.weight_scale": [
+     "F32",
+     [
+      28672,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.weight": [
+     "I8",
+     [
+      5376,
+      14336
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.norm1.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.norm2.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     2
+    ],
+    "token_refiner.final_norm.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "video_patch_proj.bias": [
+     "F32",
+     [
+      5376
+     ],
+     1
+    ],
+    "video_patch_proj.weight": [
+     "F32",
+     [
+      5376,
+      96
+     ],
+     1
+    ]
+   }
+  },
+  "fasth3_trim_int8_convrot": {
+   "source": {
+    "repo": "FastVideo/FastVideo-FastH3-Trim-Comfy",
+    "revision": "f66c13dc17391dd4da99242a407918b92bf7d5fc",
+    "path": "diffusion_models/fastvideo_fasth3_trim_8step_int8_convrot.safetensors",
+    "size": 18924757904,
+    "sha256": "ff6e40bc592f7362ea0d7bfcf4e0402bb2c26376d9d1bd4fffb047a5203c2153"
+   },
+   "header_bytes": 97720,
+   "metadata": {
+    "format": "pt"
+   },
+   "comfy_quant_sizes": [
+    72
+   ],
+   "comfy_quant": {
+    "blocks.0.attn.qkv_proj": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"convrot_groupsize\": 256}",
+    "token_refiner.blocks.0.attn.qkv_proj": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"convrot_groupsize\": 256}",
+    "blocks.0.attn.to_gate_compress": "{\"format\": \"int8_tensorwise\", \"convrot\": true, \"convrot_groupsize\": 256}"
+   },
+   "tensors": {
+    "adaln_t_table": [
+     "F32",
+     [
+      1025,
+      16
+     ],
+     1
+    ],
+    "audio_patch_proj.bias": [
+     "F32",
+     [
+      5376
+     ],
+     1
+    ],
+    "audio_patch_proj.weight": [
+     "F32",
+     [
+      5376,
+      32
+     ],
+     1
+    ],
+    "blocks.N.adaln_proj.linear.bias": [
+     "F32",
+     [
+      96768
+     ],
+     42
+    ],
+    "blocks.N.adaln_proj.linear.weight": [
+     "F32",
+     [
+      96768,
+      16
+     ],
+     42
+    ],
+    "blocks.N.attn.k_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     42
+    ],
+    "blocks.N.attn.out_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     42
+    ],
+    "blocks.N.attn.out_proj.weight": [
+     "I8",
+     [
+      5376,
+      7168
+     ],
+     42
+    ],
+    "blocks.N.attn.out_proj.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     42
+    ],
+    "blocks.N.attn.q_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     42
+    ],
+    "blocks.N.attn.qkv_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     42
+    ],
+    "blocks.N.attn.qkv_proj.weight": [
+     "I8",
+     [
+      21504,
+      5376
+     ],
+     42
+    ],
+    "blocks.N.attn.qkv_proj.weight_scale": [
+     "F32",
+     [
+      21504,
+      1
+     ],
+     42
+    ],
+    "blocks.N.attn.to_gate_compress.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     42
+    ],
+    "blocks.N.attn.to_gate_compress.weight": [
+     "I8",
+     [
+      7168,
+      5376
+     ],
+     42
+    ],
+    "blocks.N.attn.to_gate_compress.weight_scale": [
+     "F32",
+     [
+      7168,
+      1
+     ],
+     42
+    ],
+    "blocks.N.mlp.fc1.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     42
+    ],
+    "blocks.N.mlp.fc1.weight": [
+     "I8",
+     [
+      28672,
+      5376
+     ],
+     42
+    ],
+    "blocks.N.mlp.fc1.weight_scale": [
+     "F32",
+     [
+      28672,
+      1
+     ],
+     42
+    ],
+    "blocks.N.mlp.fc2.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     42
+    ],
+    "blocks.N.mlp.fc2.weight": [
+     "I8",
+     [
+      5376,
+      14336
+     ],
+     42
+    ],
+    "blocks.N.mlp.fc2.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     42
+    ],
+    "blocks.N.norm1.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     42
+    ],
+    "blocks.N.norm2.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     42
+    ],
+    "condition_proj.bias": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "condition_proj.weight": [
+     "BF16",
+     [
+      5376,
+      5120
+     ],
+     1
+    ],
+    "final_layer.adaln_proj.linear.bias": [
+     "F32",
+     [
+      10752
+     ],
+     1
+    ],
+    "final_layer.adaln_proj.linear.weight": [
+     "F32",
+     [
+      10752,
+      16
+     ],
+     1
+    ],
+    "final_layer.audio_out.bias": [
+     "F32",
+     [
+      32
+     ],
+     1
+    ],
+    "final_layer.audio_out.weight": [
+     "F32",
+     [
+      32,
+      5376
+     ],
+     1
+    ],
+    "final_layer.norm.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "final_layer.video_out.bias": [
+     "F32",
+     [
+      96
+     ],
+     1
+    ],
+    "final_layer.video_out.weight": [
+     "F32",
+     [
+      96,
+      5376
+     ],
+     1
+    ],
+    "rope.inv_freq": [
+     "F32",
+     [
+      16
+     ],
+     1
+    ],
+    "token_refiner.blocks.N.attn.k_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.weight": [
+     "I8",
+     [
+      5376,
+      7168
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.out_proj.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.q_norm.weight": [
+     "BF16",
+     [
+      128
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.weight": [
+     "I8",
+     [
+      21504,
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.attn.qkv_proj.weight_scale": [
+     "F32",
+     [
+      21504,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.weight": [
+     "I8",
+     [
+      28672,
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc1.weight_scale": [
+     "F32",
+     [
+      28672,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.comfy_quant": [
+     "U8",
+     [
+      72
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.weight": [
+     "I8",
+     [
+      5376,
+      14336
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.mlp.fc2.weight_scale": [
+     "F32",
+     [
+      5376,
+      1
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.norm1.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     2
+    ],
+    "token_refiner.blocks.N.norm2.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     2
+    ],
+    "token_refiner.final_norm.weight": [
+     "BF16",
+     [
+      5376
+     ],
+     1
+    ],
+    "video_patch_proj.bias": [
+     "F32",
+     [
+      5376
+     ],
+     1
+    ],
+    "video_patch_proj.weight": [
+     "F32",
+     [
+      5376,
+      96
+     ],
+     1
+    ]
+   }
+  }
+ }
+}

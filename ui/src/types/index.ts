@@ -870,6 +870,7 @@ export interface ModelOptions {
   minimax_h3_text_encoder_default?: string
   minimax_h3_semantic_bridge?: boolean
   minimax_h3_fused_turbo?: boolean
+  minimax_h3_fasth3?: boolean
   minimax_h3_turbo?: {
     preset_id?: string
     presets?: Array<{ id: string; label: string; filename: string; steps: number; weight: number; description: string; runtime: string; workflow: string }>

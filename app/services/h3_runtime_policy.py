@@ -120,6 +120,10 @@ def normalize_studio_h3_policy(body: dict, model_def: dict | None = None) -> dic
 def normalize_h3_runtime_request(body: dict, model_def: dict) -> bool:
     normalize_studio_h3_policy(body, model_def)
     from models.minimax_h3.turbo import normalize_minimax_h3_turbo_request
+    if model_def.get("minimax_h3_fasth3"):
+        from models.minimax_h3.fasth3 import normalize_fasth3_request
+        normalize_fasth3_request(body)
+        return False
     if model_def.get("minimax_h3_fused_turbo"):
         from models.minimax_h3.fused_turbo import normalize_fused_h3_request
         normalize_fused_h3_request(body)
