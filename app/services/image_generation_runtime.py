@@ -5,6 +5,7 @@ import threading
 
 from services.image_generation_commands import ImageGenerationCommands, validate_image_model, command_error
 from services.job_lifecycle import register_generation_job, request_cancel
+from services.remote_image_generation import is_remote_image_params, prepare_remote_image
 
 
 def create_image_generation_commands(runtime):
@@ -19,12 +20,15 @@ def create_image_generation_commands(runtime):
         try:
             runtime["_jobs"][job["id"]] = job
             params = job.get("params") if isinstance(job.get("params"), dict) else {}
+            # A remote model (MiniMax Image-01) never uses the GPU: it must not wait in the local queue.
+            remote = is_remote_image_params(params)
             # Studio generate and recovery leave a pending H3 window plan off
             # the GPU FIFO so LLM planning does not block later jobs. Command
             # admission also uses generate(), which can set this marker.
-            if not isinstance(params.get("_h3_window_plan_pending"), dict):
+            if not remote and not isinstance(params.get("_h3_window_plan_pending"), dict):
                 register_generation_job(runtime["_gen_lock"], job)
-            runtime["_cancel_h3_idle_release"]()
+            if not remote:
+                runtime["_cancel_h3_idle_release"]()
             thread.start()
         except Exception:
             if thread.ident is None:
@@ -45,7 +49,19 @@ def create_image_generation_commands(runtime):
         except runtime["execution_mode"].ExecutionModeError as error:
             raise command_error(409, "execution_policy", str(error)) from error
 
+    def prepare_remote(params, media=False):
+        """MiniMax Image-01: no model files and no GPU; the same checks and the one reference every door needs."""
+        def resolve(value):
+            working, found = resources().prepare_media({"image_refs": [value]})
+            return working["image_refs"][0], found[0]
+
+        return prepare_remote_image(params, services=runtime["wgp"].server_config.get("services", {}),
+                                    resolve=resolve if media else None)
+
     def preflight(params):
+        if is_remote_image_params(params):
+            prepare_remote(params)
+            return
         execution_policy(params["workspace"])
         validate_image_model(params, model_definition=runtime["wgp"].get_model_def,
                              model_downloaded=runtime["_check_model_downloaded"],
@@ -65,6 +81,8 @@ def create_image_generation_commands(runtime):
         )
 
     def prepare_studio(params):
+        if is_remote_image_params(params):
+            return prepare_remote(params, media=True)
         from services.studio_image_preparation import prepare_studio_image
         from shared.wangp1272 import processors
         return prepare_studio_image(

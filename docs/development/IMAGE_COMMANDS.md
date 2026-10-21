@@ -206,6 +206,32 @@ on an already uncertain retry does not delete the hint. A storage-cleanup
 failure after receiving a valid receipt does not turn admission into failure.
 JavaScript clients reject unsafe integer seeds instead of rounding a literal.
 
+## Remote image model: MiniMax Image-01
+
+`minimax:image-01` is chosen exactly like `qwen_image_21_turbo`: the model pickers (the catalog marks it
+`resource_requirements.tier: remote`, `remote: true`, `requires_api_key: true`, `api_key_set`), `generation.image`
+version 1 and 2 (UI, MCP and Wizard all reach `ImageGenerationCommands.submit`), the legacy `POST /api/v1/generate`
+and the character animation job (`model: "minimax:image-01"`). The one definition is
+`services/remote_image_generation.py` (catalog, defaults, checks, references); its worker is
+`services/remote_image_worker.py`. The core profile uses the same module.
+
+* It is an ordinary job: same job and task ids, receipt, `GET /api/v1/status`, `jobs.wait`, cancel, queue recovery.
+  It is never registered in the local GPU queue, so a busy GPU does not delay it. The task reports provider
+  `minimax` and the resource lane `remote:https://api.minimax.io`.
+* Steps, guidance and seed do not apply. A command may leave them out (neutral values are filled in the effective
+  command; the receipt keeps the caller's own spelling). Resolution becomes the nearest supported aspect ratio.
+* Image-01 takes one character reference (`subject_reference`): it keeps the face and invents the outfit. The first
+  `image_refs` entry is sent (else the start frame). Every other reference, frame, guide, mask, a negative prompt and
+  LoRAs are not sent, and the receipt lists each one in `receipt.notes` (stored with the admission, so a replay shows
+  the same notes). The finished job's message repeats them.
+* Without a key the request is refused before admission with `409 provider_key_missing`: Settings → Services →
+  MiniMax Image API key (`services.minimax_image_api_key`; `services.minimax_api_key` also works). Nothing is
+  admitted, so the same `intent_id` can be sent again once the key is saved. The key is read from the server
+  settings when the call is made; it is never written to a job, task, receipt, sidecar or log.
+* A cancel while the HTTP request is in flight cannot recall it: the job ends `cancelled` and the picture that
+  came back is deleted (the provider already counted the call). A restart during the call leaves the job as an
+  interrupted leftover; resuming it asks MiniMax again.
+
 ## Validation boundary
 
 Provider-free service, HTTP/MCP, SQLite concurrency/failure and browser client

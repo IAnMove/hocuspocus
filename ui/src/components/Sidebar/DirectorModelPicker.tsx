@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL, withoutExternalImageModel } from '../../lib/externalModels'
 import type { DirectorPipelineType, ModelDef, ModelFamily } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 
@@ -17,7 +17,7 @@ function directorModelGroups({ mode, families, models, enabledModels, nsfwMode, 
 }) {
   return getFamiliesForMode(mode, families).map(family => ({
     family,
-    models: getModelsForFamily(family.id, models, mode)
+    models: withoutExternalImageModel(getModelsForFamily(family.id, models, mode))
       .filter(model => enabledModels.has(model.model_type))
       .filter(model => !model.nsfw_only || nsfwMode)
       .filter(model => mode === 'image'

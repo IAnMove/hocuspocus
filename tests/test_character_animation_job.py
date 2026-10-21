@@ -878,3 +878,22 @@ def test_the_make_route_takes_a_custom_animation_of_twelve_poses_in_any_directio
     assert "Three-quarter back view" in server.of("generation.image")[0]["params"]["prompt"]
     assert client.post(url, json=turn("top", 2)).status_code == 422, "a view the catalog does not list"
     assert client.post(url, json=turn("back", 13)).status_code == 422, "thirteen poses are too many"
+
+
+def test_a_remote_image_model_makes_every_pose_from_the_characters_picture_alone(directions):
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "idle-back", model="minimax:image-01", references=["/api/v1/file/other.png?workspace=demo"])
+    assert job["status"] == "completed" and job["refsDropped"] is True
+    base = f"/api/v1/file/hero-key.png?workspace={WS}"
+    assert all(refs == [base] for refs in _refs(server)), "Image-01 takes one character reference: the others are not even sent"
+    assert {item["params"]["model_type"] for item in server.of("generation.image")} == {"minimax:image-01"}
+    assert _kit(root)["animations"]["idle-back"]["model"] == "minimax:image-01"
+
+
+def test_a_model_id_may_carry_a_provider_prefix_but_never_a_path():
+    from services.character_animation_job import _MODEL
+    from services.character_animation_set_job import _MODEL as SET_MODEL
+
+    for pattern in (_MODEL, SET_MODEL):
+        assert pattern.fullmatch("minimax:image-01") and pattern.fullmatch("qwen_image_21_turbo")
+        assert not pattern.fullmatch("minimax:../x") and not pattern.fullmatch(":image-01") and not pattern.fullmatch("a/b")

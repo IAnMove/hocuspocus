@@ -4,7 +4,7 @@ import type { TFunction } from 'i18next'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import { h3CatalogEntry } from '../../lib/h3Catalog'
-import { catalogVramGb, resolveModelCatalog } from '../../lib/modelCatalog'
+import { catalogVramGb, isRemoteModel, resolveModelCatalog } from '../../lib/modelCatalog'
 import type { ModelDef } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { H3ModelName } from './H3ModelInfo'
@@ -168,6 +168,7 @@ function selectorModelHelp(model: ModelDef, t: TFunction<'studio'>): string {
   if (h3) {
     return [t(`h3Catalog.${h3.variant}Hint`), t('h3Catalog.memory')].join('\n\n')
   }
+  if (isRemoteModel(model)) return t('modelCatalog.remoteHint')
   const catalog = resolveModelCatalog(model)
   return [
     t(`modelCatalog.${catalog.variant}Hint`),
@@ -191,7 +192,7 @@ function ModelBadges({ model }: {
     supports_audio_input?: boolean
     generates_audio?: boolean
     supports_ref_images?: boolean
-    resource_requirements?: { vram_gb?: number }
+    resource_requirements?: { vram_gb?: number; tier?: string }
   }
 }) {
   const { t } = useUiTranslation('studio')
@@ -210,6 +211,9 @@ function ModelBadges({ model }: {
   }
   if (model.supports_ref_images) {
     badges.push({ label: t('model.refs'), title: t('model.refsHint') })
+  }
+  if (isRemoteModel(model)) {
+    badges.push({ label: t('model.remote'), title: t('model.remoteHint') })
   }
   if (badges.length === 0) return null
   return (

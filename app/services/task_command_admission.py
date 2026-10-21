@@ -59,13 +59,17 @@ def _decode_admission(row):
         raise OSError("Command admission storage is corrupt") from error
 
 
-def _receipt(intent_id: str, operation: str, task: dict) -> dict:
-    return {
+def _receipt(intent_id: str, operation: str, task: dict, notes: list | None = None) -> dict:
+    receipt = {
         "version": 1, "commandId": intent_id, "operation": operation, "status": "queued",
         "entities": [], "artifacts": [], "taskIds": [task["id"]], "pipelineIds": [],
         "result": {"job_id": task["backend_job_id"], "task_id": task["id"],
                    "root_task_id": task["root_id"], "workspace": task["workspace"], "status": "queued"},
     }
+    if notes:
+        # What the runtime did not apply of the request (a reference a remote model cannot take). Stored with the receipt.
+        receipt["notes"] = [str(note) for note in notes]
+    return receipt
 
 
 class TaskCommandAdmission:
@@ -126,7 +130,8 @@ class TaskCommandAdmission:
         return [self.command_admission(row["intent_id"]) for row in rows]
 
     def admit_command_task(self, *, intent_id: str, operation: str, digest: str,
-                           original: dict, effective: dict, task_fields: dict, fingerprint_version: int = 1) -> dict:
+                           original: dict, effective: dict, task_fields: dict, fingerprint_version: int = 1,
+                           notes: list | None = None) -> dict:
         """Commit one task/event and its recoverable receipt, or replay it.
 
         The caller validates the domain specification and supplies trusted task
@@ -143,7 +148,7 @@ class TaskCommandAdmission:
         task = self._build_task(task_fields)
         if task["status"] != "queued" or not task["backend_job_id"]:
             raise ValueError("Command admission requires a queued task and exact backend job ID")
-        receipt = _receipt(intent_id, operation, task)
+        receipt = _receipt(intent_id, operation, task, notes)
         if fingerprint_version >= 2:
             receipt.update(commandVersion=original["version"], contentFingerprint=digest, fingerprintVersion=fingerprint_version)
         with self._write_lock, self._connect() as connection:

@@ -318,8 +318,14 @@ export function resolveModelCatalog(model: ModelCatalogInput): ResolvedModelCata
   return { variant, capability, ...merged }
 }
 
-/** Badge VRAM. H3 keeps its measured-memory block instead of a typical minimum. */
+/** A model that runs on a provider's server (MiniMax Image-01): no GPU and no files to download. */
+export function isRemoteModel(model: { resource_requirements?: { tier?: string } | null }): boolean {
+  return model.resource_requirements?.tier === 'remote'
+}
+
+/** Badge VRAM. H3 keeps its measured-memory block instead of a typical minimum. A remote model needs none. */
 export function catalogVramGb(model: ModelCatalogInput): number | undefined {
+  if (isRemoteModel(model)) return undefined
   if (h3CatalogEntry(model.model_type)) return model.resource_requirements?.vram_gb
   return resolveModelCatalog(model).requirements.vram_gb
 }
