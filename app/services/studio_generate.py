@@ -11,6 +11,8 @@ import threading
 
 from fastapi import HTTPException, Request
 
+from services.remote_image_generation import is_remote_image_params
+
 # Bound by the router factory. None until the full server mounts the route.
 _cancel_h3_idle_release = None
 _get_active_workspace = None
@@ -74,6 +76,8 @@ async def generate(request: Request):
         body["prompt"] = "Viggle character replacement"
     if not is_sfx and not body.get("prompt"):
         raise HTTPException(status_code=400, detail="prompt is required")
+    if not is_sfx and is_remote_image_params(body):
+        return _submit_remote_image(request, body, provenance, requested_workspace)
     # SFX virtual models (mmaudio_*) are frontend-only; skip backend model validation
     if not is_sfx and wgp.get_model_def(body["model_type"]) is None:
         raise HTTPException(status_code=400, detail=f"Unknown model: {body['model_type']}")
@@ -587,3 +591,32 @@ async def generate(request: Request):
     if h3_window_plan_response is not None:
         response["h3_window_plan"] = h3_window_plan_response
     return response
+
+
+def _submit_remote_image(request, body, provenance, workspace):
+    """A ``minimax:`` image: no model definition and no GPU queue, but the same admission, job and receipt as any image."""
+    from services import remote_image_generation as remote
+
+    workspace = body.pop("workspace", None) or workspace
+    if getattr(request, "prepared_studio_images", False) is not True:
+        # A direct caller sends the request as it is; the command door already prepared its own.
+        body, _resources = remote.prepare_remote_image(
+            {**body, "workspace": workspace}, services=wgp.server_config.get("services", {}),
+            resolve=remote.legacy_resolver(workspace, uploads_dir=os.path.join(os.getcwd(), "uploads"),
+                                           workspace_dir=_workspace_dir(workspace)))
+        body.pop("workspace", None)
+    leftovers = globals().get("_job_leftovers")
+    duplicate = leftovers.duplicate_for_submit(body, workspace) if leftovers is not None else None
+    admission = getattr(request, "admit_generation_command", None)
+    if duplicate is not None:
+        if callable(admission):
+            raise HTTPException(status_code=409, detail=duplicate)
+        return duplicate
+    if callable(admission):
+        return admission(body, workspace, provenance)
+    job = _new_generation_job(body, workspace, reserve_generation=False, provenance=provenance)
+    _jobs[job["id"]] = job
+    _persist_generation_job(job)
+    threading.Thread(target=_run_generation_with_preparation, args=(job["id"],), daemon=False).start()
+    return {"job_id": job["id"], "task_id": job.get("task_id"),
+            "root_task_id": job.get("root_task_id") or job.get("task_id"), "status": "queued"}

@@ -57,7 +57,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
-        "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo), "
+        "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo; "
+        "model minimax:image-01 uses no GPU, keeps only the face of that picture and invents the outfit), "
         "keyed on its screen, joined into one sprite sheet that keeps the figure one size, and saved on the kit as animations.<id> "
         "with reviewState pending. animation is an id from characters.animations (walk, wave, angry, cheer...); for one of your own "
         "pass a new slug and custom {title, view bust|front|side|front34|back34|back, poses: one text per pose, up to 12}. pose makes that one pose of an "
@@ -77,7 +78,7 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "directions that look left are these mirrored when rendered, never generated), walk-12 only the profile walk, idle-directions the "
         "two-pose breaths. Only the sheets the character does not have yet are made, one after another (the GPU makes one at a time), each "
         "as the job of characters.animation.make with the character's own picture and the first pose of the neighbouring direction as "
-        "identity references (default model qwen_image_21_turbo). Every sheet is saved pending with motion and dir and the same automatic "
+        "identity references (default model qwen_image_21_turbo; model minimax:image-01 takes only the character's own picture). Every sheet is saved pending with motion and dir and the same automatic "
         "checks (and, for a direction, that it is not the copy or the mirror of another direction of the kit); a person plays and approves "
         "them in Characters › Animaciones, or with autoApprove: true and the owner's one-shot mode (agent_autonomy = one_shot) each sheet "
         "that passes the checks is approved for you (ignored with a note in review mode, like characters.animation.make). Returns a set "

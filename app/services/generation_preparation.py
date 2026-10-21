@@ -16,6 +16,7 @@ import torch
 from fastapi import HTTPException
 
 from services import creation_model_service, execution_mode, minimax_h3_service, resource_scheduler
+from services.remote_image_worker import is_remote_image_job, run_remote_image_job
 from services.job_lifecycle import (
     acknowledge_cancel,
     finish_job,
@@ -120,6 +121,13 @@ def _run_generation_with_preparation(job_id: str) -> bool:
     job = _jobs.get(job_id)
     if not isinstance(job, dict):
         return False
+    if is_remote_image_job(job):
+        # MiniMax Image-01: an HTTP call, not a model. It never enters the local generation queue.
+        return run_remote_image_job(
+            job, services=lambda: wgp.server_config.get("services", {}),
+            publish_sidecar=_publish_generation_sidecar_for_studio_job,
+            remove_persisted=_remove_persisted_generation_job,
+        )
     try:
         native_worker = _image_generation_commands.native_worker(job)
     except HTTPException as error:

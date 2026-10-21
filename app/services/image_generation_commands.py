@@ -20,6 +20,7 @@ from services.generation_output_name import (
 )
 from services.image_generation_spec import freeze_image_generation_spec, ImageGenerationSpecError
 from services.job_lifecycle import priority_fields, take_submission_priority
+from services.remote_image_generation import complete_remote_command, is_remote_image_params, receipt_notes
 from services.task_command_admission import TaskCommandConflict
 from services.wangp_submission import JsonRequest
 
@@ -127,7 +128,9 @@ class ImageGenerationCommands:
         provenance = deepcopy(provenance)
         provenance["command"]["command_id"] = frozen["original"]["intent_id"]
         adapter = self.operations.get(frozen["original"]["operation"])
-        defaults = self.runtime_defaults() if adapter is None or adapter.use_generation_defaults else {}
+        # A remote model (MiniMax Image-01) does not use the local engine's settings.
+        local_defaults = adapter is None or adapter.use_generation_defaults
+        defaults = self.runtime_defaults() if local_defaults and not is_remote_image_params(body) else {}
         native_params = {**deepcopy(defaults), **deepcopy(body)}
         job = self.make_job(native_params, workspace, reserve_generation=False, publish_task=False, provenance=provenance)
         effective = deepcopy(frozen["effective"])
@@ -137,6 +140,7 @@ class ImageGenerationCommands:
             intent_id=frozen["original"]["intent_id"], operation=frozen["original"]["operation"],
             digest=frozen["fingerprint"], original=frozen["original"], effective=effective,
             task_fields=self.task_fields(job), fingerprint_version=frozen["fingerprint_version"],
+            notes=receipt_notes(effective.get("resources")),
         )
         entry = registry.command_admission(frozen["original"]["intent_id"])
         self._dispatch_admitted(registry, entry)
@@ -214,6 +218,7 @@ class ImageGenerationCommands:
             adapter = self.operations.get(command["operation"])
             if adapter is not None:
                 return adapter.freeze(command)
+        sent, command = command, complete_remote_command(command)
         if isinstance(command, dict) and type(command.get("version")) is int and command["version"] == 2:
             from services.studio_image_spec import freeze_studio_image_spec
             frozen = freeze_studio_image_spec(command)
@@ -222,6 +227,9 @@ class ImageGenerationCommands:
         else:
             frozen = freeze_image_generation_spec(command)
             params = frozen["effective"]["input"]
+        if command is not sent:
+            # The caller's own spelling stays the original; the neutral steps/guidance/seed are only effective.
+            frozen["original"] = deepcopy(sent)
         return frozen, params
 
     def receipt(self, workspace, intent_id):

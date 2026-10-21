@@ -3606,6 +3606,11 @@
           "id": "hunyuan3d",
           "label": "Hunyuan3D",
           "order": 350
+        },
+        {
+          "id": "minimax",
+          "label": "MiniMax (remote API)",
+          "order": 1170
         }
       ],
       "models": [
@@ -3977,6 +3982,41 @@
           "supports_ref_images": true
         },
         {
+          "api_key_set": false,
+          "architecture": "minimax_image",
+          "description": "Remote MiniMax Image-01: no GPU, billed to your MiniMax plan. Needs an API key in Settings → Services. Takes one character reference (it keeps the face and invents the outfit).",
+          "director": {
+            "generates_audio": false,
+            "image": {
+              "compatible": true,
+              "reason": ""
+            },
+            "max_image_refs": 1,
+            "supports_audio_input": false,
+            "supports_voice_reference": false,
+            "video": {}
+          },
+          "family": "minimax",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": true,
+          "is_i2v": false,
+          "is_t2v": false,
+          "model_type": "minimax:image-01",
+          "name": "MiniMax Image-01 (remote, no GPU)",
+          "nsfw_only": false,
+          "remote": true,
+          "requires_api_key": true,
+          "resource_requirements": {
+            "backend": "minimax",
+            "note": "Remote API, no GPU",
+            "tier": "remote"
+          },
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
           "architecture": "unirig",
           "family": "hunyuan3d",
           "fps": 0,
@@ -3999,8 +4039,8 @@
   "models summary": {
     "body": {
       "counts": {
-        "families": 2,
-        "models": 15
+        "families": 3,
+        "models": 16
       },
       "families": [
         {
@@ -4018,6 +4058,14 @@
           "description": "Hunyuan3D",
           "id": "hunyuan3d",
           "name": "Hunyuan3D"
+        },
+        {
+          "counts": {
+            "models": 1
+          },
+          "description": "MiniMax (remote API)",
+          "id": "minimax",
+          "name": "MiniMax (remote API)"
         }
       ],
       "models": [
@@ -4133,6 +4181,15 @@
           "description": "",
           "id": "pixal3d",
           "name": "Pixal3D"
+        },
+        {
+          "counts": {
+            "director": 6,
+            "requirements": 3
+          },
+          "description": "Remote MiniMax Image-01: no GPU, billed to your MiniMax plan. Needs an API key in Settings → Services. Takes one character reference (it keeps the face and inve",
+          "id": "minimax:image-01",
+          "name": "MiniMax Image-01 (remote, no GPU)"
         },
         {
           "counts": {},
