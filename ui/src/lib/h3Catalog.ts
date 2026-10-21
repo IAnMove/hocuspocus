@@ -3,7 +3,7 @@
  * GPU includes allocator reservations; PSS includes server children.
  */
 export interface H3CatalogEntry {
-  variant: 'pruned' | 'full' | 'fast' | 'legacy'
+  variant: 'pruned' | 'full' | 'fast' | 'distilled' | 'legacy'
   workflow: 'frames' | 'references'
   measured?: { ram: number; vram: number; profile: number; warmOnly?: boolean }
 }
@@ -17,6 +17,9 @@ const entries: Record<string, H3CatalogEntry> = {
   minimax_h3_fused_turbo: { variant: 'fast', workflow: 'frames', measured: { ram: 40.6, vram: 21.1, profile: 3, warmOnly: true } },
   minimax_h3_ref2va_fused_turbo: { variant: 'fast', workflow: 'references', measured: { ram: 39.9, vram: 21.4, profile: 3 } },
   minimax_h3_legacy: { variant: 'legacy', workflow: 'frames' },
+  // Official FastVideo FastH3 (8-step DMD2, text to video). Not measured on this GPU yet.
+  minimax_h3_fasth3_v2: { variant: 'distilled', workflow: 'frames' },
+  minimax_h3_fasth3_trim: { variant: 'distilled', workflow: 'frames' },
 }
 
 export function h3CatalogEntry(modelType: string): H3CatalogEntry | undefined {
@@ -26,7 +29,7 @@ export function h3CatalogEntry(modelType: string): H3CatalogEntry | undefined {
 /** Frames-workflow ID for a variant. Series stores this and L1 maps strategy. */
 export function h3FramesModelId(modelType: string): string {
   const entry = h3CatalogEntry(modelType)
-  if (!entry) return modelType
+  if (!entry || entry.variant === 'distilled') return modelType
   const match = Object.entries(entries).find(([, item]) => (
     item.variant === entry.variant && item.workflow === 'frames'
   ))
@@ -34,9 +37,9 @@ export function h3FramesModelId(modelType: string): string {
 }
 
 export function h3FusedStepRange(modelType: string): { min: number; max: number; fallback: number } | null {
-  return h3CatalogEntry(modelType)?.variant === 'fast'
-    ? { min: 4, max: 8, fallback: 4 }
-    : null
+  const variant = h3CatalogEntry(modelType)?.variant
+  if (variant === 'distilled') return { min: 8, max: 8, fallback: 8 }
+  return variant === 'fast' ? { min: 4, max: 8, fallback: 4 } : null
 }
 
 export const SERIES_SETUP_VIDEO_MODELS = [
