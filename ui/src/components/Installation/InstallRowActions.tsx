@@ -3,7 +3,7 @@ import { Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import type { InstallComponent, InstallStatus } from '../../api/installManager'
 import { formatBytes } from '../../lib/format'
-import { rowActions } from '../../lib/installView'
+import { reclaimLabel, rowActions } from '../../lib/installView'
 import type { InstallAction } from './useInstallManager'
 
 const CONFIRM_WINDOW_MS = 4000
@@ -42,6 +42,7 @@ export function InstallRowActions({ row, status, acting, onAct }: Props) {
   const { t } = useUiTranslation('settings')
   const [confirming, setConfirming] = useState(false)
   const actions = rowActions(row, status)
+  const freed = reclaimLabel(row)?.bytes ?? null
 
   useEffect(() => {
     if (!confirming) return undefined
@@ -73,7 +74,7 @@ export function InstallRowActions({ row, status, acting, onAct }: Props) {
           className={`ml-auto flex items-center gap-1 rounded border px-2 py-1 text-[11px] transition-colors disabled:opacity-40 ${removeStyle}`}
         >
           <Trash2 size={11} />
-          {confirming ? t('installation.confirmUninstall', { size: formatBytes(row.sizeBytes ?? row.estimatedBytes) }) : t('installation.uninstall')}
+          {confirming ? (freed === null ? t('installation.confirmUninstallUnknown') : t('installation.confirmUninstall', { size: formatBytes(freed) })) : t('installation.uninstall')}
         </button>
       )}
     </div>

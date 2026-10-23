@@ -3,7 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import type { InstallComponent, InstallState, InstallStatus } from '../../api/installManager'
 import { formatBytes } from '../../lib/format'
-import { finishedNotice, sizeLabel } from '../../lib/installView'
+import { finishedNotice, reclaimLabel, sizeLabel } from '../../lib/installView'
 import { InstallOutput } from './InstallOutput'
 import { InstallRowActions } from './InstallRowActions'
 import { InstallRowNotices } from './InstallRowNotices'
@@ -30,6 +30,14 @@ function SizeText({ row }: { row: InstallComponent }) {
   if (size.kind === 'measuring') return <>{t('installation.measuring')}</>
   if (size.kind === 'estimated') return <>{t('installation.estimated', { size: formatBytes(size.bytes ?? 0) })}</>
   return <>{formatBytes(size.bytes ?? 0)}</>
+}
+
+/** Removing frees less than the folder size when uv linked its packages from Pinokio's shared cache. */
+function ReclaimHint({ row }: { row: InstallComponent }) {
+  const { t } = useUiTranslation('settings')
+  const reclaim = reclaimLabel(row)
+  if (!reclaim?.mostlyShared || reclaim.bytes === null) return null
+  return <p className="text-[10px] leading-snug text-text-muted">{t('installation.reclaimHint', { size: formatBytes(reclaim.bytes) })}</p>
 }
 
 /** The installer's terminal: always visible while it runs, on request after a failure. */
@@ -66,6 +74,7 @@ export function InstallRow({ row, status, acting, onAct }: Props) {
         {t(`installation.components.${row.id}.summary`, { defaultValue: row.summary })}
       </p>
       <div className="text-[10px] text-text-muted tabular-nums"><SizeText row={row} /></div>
+      <ReclaimHint row={row} />
       <InstallRowNotices row={row} freeBytes={status.disk.freeBytes} />
       <InstallRowActions row={row} status={status} acting={acting} onAct={onAct} />
       <OutputToggle row={row} />

@@ -72,7 +72,8 @@ class InstallManager:
         """A job ended: forget what we knew about this component."""
         with self._lock:
             self._profiles = None
-        self._meter.invalidate(self._root / component.env)
+        for relative in (component.env, *component.remove):
+            self._meter.invalidate(self._root / relative)
 
     def _current_profiles(self) -> dict:
         with self._lock:

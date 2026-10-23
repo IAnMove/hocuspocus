@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { InstallComponent, InstallStatus } from '../src/api/installManager.ts'
-import { SUCCESS_NOTICE_MS, exceedsFreeSpace, finishedNotice, rowActions, sizeLabel } from '../src/lib/installView.ts'
+import { SUCCESS_NOTICE_MS, exceedsFreeSpace, finishedNotice, reclaimLabel, rowActions, sizeLabel } from '../src/lib/installView.ts'
 
 const GB = 1024 ** 3
 
 function row(patch: Partial<InstallComponent> = {}): InstallComponent {
   return {
     id: 'sam', engine: 'sam', title: 'SAM', summary: '', estimatedBytes: 6 * GB, restartRequired: false,
-    state: 'not_installed', supported: true, reason: null, sizeBytes: 0, job: null, ...patch,
+    state: 'not_installed', supported: true, reason: null, sizeBytes: 0, reclaimableBytes: 0, job: null, ...patch,
   }
 }
 
@@ -44,6 +44,13 @@ test('size shows the estimate before installing, the measurement after, and says
   assert.deepEqual(sizeLabel(row({ state: 'unsupported' })), { bytes: 6 * GB, kind: 'estimated' })
   assert.deepEqual(sizeLabel(row({ state: 'installed', sizeBytes: 5 * GB })), { bytes: 5 * GB, kind: 'measured' })
   assert.deepEqual(sizeLabel(row({ state: 'installed', sizeBytes: null })), { bytes: null, kind: 'measuring' })
+})
+
+test('removal says what it really frees, and when uv shared most of the folder with Pinokio\'s cache', () => {
+  assert.equal(reclaimLabel(row()), null, 'nothing to free before it is installed')
+  assert.deepEqual(reclaimLabel(row({ state: 'installed', sizeBytes: 7 * GB, reclaimableBytes: 0.3 * GB })), { bytes: 0.3 * GB, mostlyShared: true })
+  assert.deepEqual(reclaimLabel(row({ state: 'needs_update', sizeBytes: 7 * GB, reclaimableBytes: 6 * GB })), { bytes: 6 * GB, mostlyShared: false })
+  assert.deepEqual(reclaimLabel(row({ state: 'installed', sizeBytes: 7 * GB, reclaimableBytes: null })), { bytes: null, mostlyShared: false })
 })
 
 test('the low-space warning only applies to something that still has to be downloaded', () => {
