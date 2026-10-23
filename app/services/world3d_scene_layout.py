@@ -10,6 +10,7 @@ from __future__ import annotations
 from copy import deepcopy
 
 from services.world3d_scene_bounds import CUTOUT_HEIGHT, MODEL_HEIGHT, placed_bounds, slot_native_bounds
+from services.world3d_scene_collisions import scene_collisions
 
 MAX_ITEMS = 32
 CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tall (its bounding-box height, whatever its length); "
@@ -22,17 +23,28 @@ LAYOUT_DOC = ("It also shows the shot in metres: camera (the authored family, ey
               "so a whole-environment GLB is 1.7 m tall at scale 1. boundsM.size is its own width, height and depth; min, max, center and bottomY are "
               "scene coordinates after position and rotationY, and a grounded object's lowest point sits at position[1]. It is the rest pose, so an "
               "animation can reach outside it. boundsM is null with a boundsReason (marker, not_a_3d_model, outside_workspace, missing_file, not_glb, "
-              "truncated, missing_min_max...) when the object cannot be measured. Publish a scene and it opens in the Video 3D editor's Open dialog."
+              "truncated, missing_min_max...) when the object cannot be measured. layout.collisions lists where an object that moves (motion) passes through another "
+              "model, by the other model's parts (one box per mesh node): [{a, b, part, partName?, from_s, to_s, at [x, y, z], depth_m}] with a \"collision: ...\" warning each "
+              "(layout.collisionsOmitted counts the passages beyond the cap); flat low parts (the ground) are not obstacles, objects that stand still are never compared, "
+              "and collide: false exempts an object. A fixed camera whose eye is inside a part warns camera_inside_geometry. "
+              "Publish a scene and it opens in the Video 3D editor's Open dialog."
               ) % MAX_ITEMS
 _PLAIN_CAMERA = ("family", "eye", "look", "fov", "frameFormat", "orbitRadius", "orbitHeight", "orbitTurns", "eyeOffset", "targetOffset", "lensShift")
 _FRAMING = ("targetSlot", "anchor", "from", "to", "lookFrom", "lookTo", "orbitTurns", "fovFrom", "fovTo", "relativeToFacing")
 
 
-def scene_layout(document: dict, workspace: str | None, workspace_dir) -> dict:
-    """``camera``, ``light``, ``duration``, ``size`` and ``layout`` of a scene document, ready to merge into a view."""
+def scene_layout(document: dict, workspace: str | None, workspace_dir, passes: dict | None = None) -> dict:
+    """``camera``, ``light``, ``duration``, ``size`` and ``layout`` of a scene document, ready to merge into a view.
+
+    ``layout.collisions`` lists where a moving object passes through another (``passes``: the result of ``scene_collisions``
+    when the caller has it already)."""
     camera, light = document.get("camera"), document.get("light")
     size = {key: document[key] for key in ("width", "height", "fps") if key in document}
     layout = _layout(document, workspace, workspace_dir)
+    found = passes if passes is not None else scene_collisions(document, workspace, workspace_dir)
+    layout["collisions"] = found["collisions"]
+    if found["omitted"]:
+        layout["collisionsOmitted"] = found["omitted"]
     return {"camera": _camera(camera) if isinstance(camera, dict) else None,
             "light": deepcopy(light) if isinstance(light, dict) else None,
             "duration": document.get("duration"), "size": size, "layout": layout}

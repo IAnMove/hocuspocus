@@ -26,6 +26,7 @@ from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
 from services.world3d_blank_scene import editor_warnings
 from services.world3d_scene_fit import apply_fit
+from services.world3d_scene_collisions import scene_collisions
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
 from services.world3d_stage_cards import is_stage
@@ -760,11 +761,13 @@ def _retarget(document: dict) -> None:
 
 def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
+    passes = scene_collisions(document, workspace, workspace_dir)
+    shown = scene_layout(document, workspace, workspace_dir, passes)
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
-        "warnings": [*(record.get("warnings") or []), *editor_warnings(document)], "traits": _traits(document),
-        **scene_layout(document, workspace, workspace_dir),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
+        **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
                      "motion", "collide", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
