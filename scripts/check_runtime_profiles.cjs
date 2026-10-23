@@ -1,5 +1,6 @@
 // Execute launcher plans with mocked Pinokio capabilities; never install packages.
 const assert = require('node:assert/strict')
+const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const runtime = require('../runtime_install')
@@ -94,7 +95,7 @@ for (const input of [undefined, null, {}, {success: false}]) {
   assert.equal(guard.next, null)
 }
 assert.equal(render(guard.when, {input: {success: true}}), 'false')
-for (const filename of ['torch', 'runtime_setup', 'hunyuan3d_install', 'sam_install', 'rigging_install', 'ui_build', 'hf_login']) {
+for (const filename of ['torch', 'runtime_setup', 'hunyuan3d_install', 'sam_install', 'rigging_install', 'minimax_h3_install', 'ui_build', 'hf_login']) {
   const final = require(`../${filename}.js`).run.at(-1)
   assert.equal(final.method, 'script.return')
   assert.equal(final.params.success, true)
@@ -116,6 +117,56 @@ for (const exitCode of [0, 7]) {
   assert.equal(output.includes('731729'), exitCode === 0, output)
   assert.equal(output.includes('Error: HOCUS_RUNTIME_FAILED'), exitCode !== 0, output)
 }
+// Optional components come from app/runtime/install_catalog.json: Install asks what to add,
+// Update only refreshes what is already there, and the base install never includes them.
+const components = require('../install_components')
+const catalogIds = require('../app/runtime/install_catalog.json').components.map(c => c.id)
+assert.deepEqual(components.components.map(c => c.id), catalogIds)
+for (const component of components.components) {
+  assert(runtime.catalog.engines[component.engine], `${component.id}: engine missing from profiles.json`)
+  assert(fs.existsSync(path.resolve(__dirname, '..', component.script)), `${component.id}: missing ${component.script}`)
+  assert.equal(require(`../${component.script}`).run.at(-1).method, 'script.return')
+}
+const setupPlan = require('../runtime_setup').run
+assert(!JSON.stringify(setupPlan).includes('engines.minimax_h3.installed'), 'H3 Legacy must not be part of the base install')
+const optionalStep = id => components.setupSteps().find(step => step.params?.uri === `${id}_install.js`)
+const setupContext = (args, present = [], unsupported = []) => ({
+  ...context('linux'), args, exists: name => present.includes(name),
+  local: {runtime: {engines: Object.fromEntries(Object.keys(runtime.catalog.engines).map(
+    k => [k, {supported: !unsupported.includes(k), installed: false}]))}},
+})
+const runsSetup = (args, present, unsupported) => components.components
+  .filter(c => render(optionalStep(c.id).when, setupContext(args, present, unsupported)) === 'true').map(c => c.id)
+assert.deepEqual(runsSetup({update: true}), [], 'Update must not add components nobody installed')
+assert.deepEqual(runsSetup({update: false}), [], 'Install without ticks adds nothing')
+assert.deepEqual(runsSetup({update: false, extras: ''}), [])
+assert.deepEqual(runsSetup({update: true}, ['app/services/sam/env', 'app/services/minimax_h3/env']), ['sam', 'minimax_h3'],
+  'Update keeps refreshing what exists, H3 Legacy included')
+assert.deepEqual(runsSetup({update: false, extras: 'rigging,minimax_h3'}), ['rigging', 'minimax_h3'])
+assert.deepEqual(runsSetup({update: false, extras: 'sam'}, [], ['sam']), [], 'An unsupported engine is skipped, not failed')
+const failure = components.setupSteps().find(step => step.params?.uri === undefined && step.next === null)
+assert.equal(render(failure.when, {...setupContext({update: false, extras: 'sam'}), input: {success: false}}), 'false',
+  'A component that was not started cannot report a failed install')
+
+const dialog = components.chooseSteps()
+const form = dialog.find(step => step.method === 'input').params.form
+assert.deepEqual(form.map(field => field.key), catalogIds)
+assert(form.every(field => field.type === 'checkbox' && field.title.includes('GB') && field.description))
+assert(dialog[0].params.description.includes('always installed'))
+const choice = input => render(dialog[1].params.extras, {input})
+assert.equal(choice({sam: true, rigging: false, minimax_h3: true}), 'sam,minimax_h3')
+assert.equal(choice({}), '')
+assert.equal(choice(undefined), '')
+for (const step of dialog) {
+  assert.equal(render(step.when, {local: {runtime: {engines: {wangp: {supported: false}}}}}), 'false', 'Core machines are not asked')
+  assert.equal(render(step.when, {local: {runtime: {engines: {wangp: {supported: true}}}}}), 'true')
+}
+const handoff = require('../install').run.find(step => step.params?.uri === 'runtime_setup.js').params.params
+assert.equal(handoff.update, false)
+assert.equal(render(handoff.extras, {local: {extras: 'sam,rigging'}}), 'sam,rigging')
+assert.equal(render(handoff.extras, {local: {}}), '', 'A skipped dialog hands over no extras')
+assert.deepEqual(require('../install').run.map(step => step.method).filter(m => m === 'input').length, 2)
+
 console.log('Runtime profile launcher execution contract: PASS')
 
 async function checkUiLaunchers() {
@@ -138,6 +189,14 @@ async function checkUiLaunchers() {
     assert.equal(entries.some(item => item.href === 'rigging_install.js'), platform === 'linux')
     assert(entries.some(item => item.href === 'start.js'), 'Existing Start must remain accessible')
   }
+  for (const platform of ['win32', 'linux', 'darwin']) {
+    const items = flatten(await menu({platform, arch: 'x64', gpu: 'nvidia'}, info))
+    assert.equal(items.some(item => item.href === 'minimax_h3_install.js'), platform !== 'darwin')
+    assert.equal(items.find(item => item.href === 'creation_models_install.js').text, 'Update FLUX 3 / Drama 3 Support')
+  }
+  const fresh = flatten(await menu({platform: 'linux', arch: 'x64', gpu: 'nvidia'}, {...info, exists: name => name === 'app/env'}))
+  assert.equal(fresh.find(item => item.href === 'minimax_h3_install.js').text, 'Install MiniMax H3 Legacy (ComfyUI)')
+  assert(fresh.some(item => item.href === 'creation_models_install.js'), 'FLUX 3 / Drama 3 stays on every computer')
   const unknown = flatten(await menu({}, info))
   assert(unknown.some(item => item.href === 'sam_install.js'), 'Unknown hardware must not hide features')
   const pending = flatten(await menu({platform: 'win32', arch: 'unknown', gpu: 'unknown'}, info))
@@ -149,7 +208,7 @@ async function checkUiLaunchers() {
   const core = flatten(await menu({}, coreInfo))
   assert(core.some(item => item.href === 'start.js' && !item.params), 'Core must keep Start')
   assert(!core.some(item => item.text === 'LoRAs' || item.params?.compile), 'Core has no WanGP models')
-  assert(!core.some(item => ['hunyuan3d_install.js', 'sam_install.js', 'rigging_install.js', 'hf_login.js'].includes(item.href)))
+  assert(!core.some(item => ['hunyuan3d_install.js', 'sam_install.js', 'rigging_install.js', 'minimax_h3_install.js', 'hf_login.js'].includes(item.href)))
   const nvidia = flatten(await menu({platform: 'win32', arch: 'x64', gpu: 'nvidia'}, info))
   assert(!nvidia.some(item => item.href === 'trellis2_install.js'), 'Official TRELLIS recipe is Linux-only')
   const linux = flatten(await menu({platform: 'linux', arch: 'x64', gpu: 'nvidia'}, info))

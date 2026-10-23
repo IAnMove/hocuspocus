@@ -17,6 +17,7 @@ from typing import Any, Mapping
 
 from app_identity import read_app_version
 from services import runtime_profiles as profiles
+from services.install_catalog import optional_engines
 
 SCHEMA = "hocuspocus.user-diagnostics-report"
 SCHEMA_VERSION = 1
@@ -412,12 +413,12 @@ def describe_engine(name: str, selected: Mapping[str, Any], receipt: Mapping[str
     if not supported and not selected.get("supersededBy"):
         repair = repair_for_reason(selected.get("reason") if isinstance(selected.get("reason"), str) else None)
     elif supported and not receipt.get("installed"):
-        repair = REPAIR["install_update"] if selected.get("defaultInstall") else REPAIR["install_optional"]
+        repair = REPAIR["install_optional"] if name in optional_engines() else REPAIR["install_update"]
     return {
         "id": name,
         "label": selected.get("label"),
         "required": bool(selected.get("required")),
-        "optional": not selected.get("defaultInstall"),
+        "optional": name in optional_engines() or not selected.get("defaultInstall"),
         "supported": supported,
         "installed": bool(receipt.get("installed")) and supported,
         "reason": selected.get("reason"),
