@@ -18,19 +18,33 @@ LOOKED_AT = ("appear", "do", "face", "fx")
 
 
 def check(stage: Stage, beats: list[Beat]) -> None:
-    camera = stage.document.get("camera")
-    if not isinstance(camera, dict) or camera.get("family") != "fixed" or not _triple(camera.get("eye")) or not _triple(camera.get("look")):
+    view = _fixed_view(stage)
+    if view is None:
         return
-    view = _View(camera, float(stage.document.get("width") or 1280) / max(1.0, float(stage.document.get("height") or 720)))
     for beat in beats:
         slot = stage.slot(beat.who)
         if slot is None or (slot.get("media") or "model3d") != "model3d" or not slot.get("sourceUrl"):
             continue
-        if beat.verb in LOOKED_AT and not _shows(view, slot, [beat.t], stage.duration):
-            stage.warn(f"actor_out_of_frame: {beat.who} is outside the fixed camera's frame at {beat.t:g} s (beats[{beat.index}] {beat.verb}); "
-                       "move the camera, the object or the beat")
-        elif beat.verb == "go" and slot.get("motion") and not _shows(view, slot, _along(slot, beat, stage.duration), stage.duration):
-            stage.warn(f"actor_out_of_frame: {beat.who} is never inside the fixed camera's frame during beats[{beat.index}] go; move the camera or the path")
+        text = _unseen(view, slot, beat, stage.duration)
+        if text:
+            stage.warn(text)
+
+
+def _fixed_view(stage: Stage) -> "_View | None":
+    camera = stage.document.get("camera")
+    if not isinstance(camera, dict) or camera.get("family") != "fixed" or not _triple(camera.get("eye")) or not _triple(camera.get("look")):
+        return None
+    return _View(camera, float(stage.document.get("width") or 1280) / max(1.0, float(stage.document.get("height") or 720)))
+
+
+def _unseen(view: "_View", slot: dict, beat: Beat, duration: float) -> str | None:
+    """The warning for a beat whose object is out of the picture when it should be seen, else None."""
+    if beat.verb in LOOKED_AT and not _shows(view, slot, [beat.t], duration):
+        return (f"actor_out_of_frame: {beat.who} is outside the fixed camera's frame at {beat.t:g} s (beats[{beat.index}] {beat.verb}); "
+                "move the camera, the object or the beat")
+    if beat.verb == "go" and slot.get("motion") and not _shows(view, slot, _along(slot, beat, duration), duration):
+        return f"actor_out_of_frame: {beat.who} is never inside the fixed camera's frame during beats[{beat.index}] go; move the camera or the path"
+    return None
 
 
 def _triple(value) -> bool:

@@ -186,12 +186,8 @@ def _object_point(index: int, spec: dict, start: float, context: dict, key: str)
     slot = next((item for item in document.get("slots") or [] if isinstance(item, dict) and item.get("id") == spec["object_id"]), None)
     if slot is None:
         raise refusal(index, f".{key}.object_id {spec['object_id']!r} is not an object of the scene")
-    offset = spec.get("offset", [0, 0, 0])
-    if not isinstance(offset, (list, tuple)) or len(offset) != 3 or not all(_finite(item) for item in offset):
-        raise refusal(index, f".{key}.offset must be [x, y, z] metres in the object's own frame")
-    position, rotation = pose_at(slot, start, float(document.get("duration") or 0))
-    cos, sin = math.cos(rotation), math.sin(rotation)
-    world = [position[0] + offset[0] * cos + offset[2] * sin, position[1] + offset[1], position[2] - offset[0] * sin + offset[2] * cos]
+    offset = _offset(index, spec.get("offset", [0, 0, 0]), key)
+    world = _world_point(slot, offset, start, float(document.get("duration") or 0))
     where = {"position": {axis: round(max(-MAX_AT, min(MAX_AT, value)), 4) for axis, value in zip("xyz", world)}}
     local = _local_offset(slot, offset, context)
     if local is None:
@@ -201,6 +197,19 @@ def _object_point(index: int, spec: dict, start: float, context: dict, key: str)
     if any(abs(value) > MAX_ANCHOR for value in local.values()):
         raise refusal(index, f".{key}.offset is farther than the editor keeps an anchored cue ({MAX_ANCHOR:g} units of the model); use a smaller offset")
     return {**where, "anchor": {"slotId": slot["id"], "offset": local}}
+
+
+def _offset(index: int, value: Any, key: str) -> list[float]:
+    if not isinstance(value, (list, tuple)) or len(value) != 3 or not all(_finite(item) for item in value):
+        raise refusal(index, f".{key}.offset must be [x, y, z] metres in the object's own frame")
+    return [float(item) for item in value]
+
+
+def _world_point(slot: dict, offset: list[float], seconds: float, duration: float) -> list[float]:
+    """Where an offset in the object's own frame is in the scene at a time (the object's place and turn then)."""
+    position, rotation = pose_at(slot, seconds, duration)
+    cos, sin = math.cos(rotation), math.sin(rotation)
+    return [position[0] + offset[0] * cos + offset[2] * sin, position[1] + offset[1], position[2] - offset[0] * sin + offset[2] * cos]
 
 
 def _local_offset(slot: dict, offset, context: dict) -> dict | None:

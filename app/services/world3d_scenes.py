@@ -204,8 +204,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         _set_soundtrack(document, changes["soundtrack"], workspace)
     if "screenFx" in changes:
         _set_screen_fx(document, changes["screenFx"])
-    if "worldFx" in changes:
-        warnings.extend(set_world_fx(document, changes["worldFx"], scene_collisions(document, workspace, workspace_dir)["collisions"], workspace, workspace_dir))
+    warnings.extend(_set_world_fx(document, changes, workspace, workspace_dir))
     if "voiceOver" in changes:
         _set_voice_over(document, changes["voiceOver"], workspace)
     if "motionLab" in changes:
@@ -235,6 +234,14 @@ def update_scene(workspace: str, scene_id: str, workspace_dir, base_revision: in
     record["warnings"] = warnings
     _write(workspace, scene_id, record, workspace_dir)
     return {**_view(scene_id, record, workspace, workspace_dir), **extra}
+
+
+def _set_world_fx(document: dict, changes: dict, workspace: str | None, workspace_dir) -> list[str]:
+    """``worldFx``: the caller's 3D effects (``fx-*``), placed once the bindings have put the objects where they are."""
+    if "worldFx" not in changes:
+        return []
+    found = scene_collisions(document, workspace, workspace_dir)["collisions"]
+    return set_world_fx(document, changes["worldFx"], found, workspace, workspace_dir)
 
 
 def _set_camera_template(document: dict, template_id) -> list[str]:

@@ -263,18 +263,30 @@ def _named(row: dict) -> str:
 # ----------------------------------------------------------------------------------------------------------------- camera
 
 def _camera_warnings(document: dict, bodies: list[Body], duration: float) -> list[str]:
-    camera = document.get("camera")
-    eye = camera.get("eye") if isinstance(camera, dict) and camera.get("family") == "fixed" else None
-    if not isinstance(eye, list) or len(eye) != 3 or not all(isinstance(item, (int, float)) and math.isfinite(item) for item in eye):
+    eye = _fixed_eye(document)
+    if eye is None:
         return []
     seen = []
     for body in bodies:
-        times = [duration * index / (EYE_TIMES - 1) for index in range(EYE_TIMES)] if body.moving else [0.0]
-        found = next((part for seconds in times if _visible(body, seconds) for part in _eye_in(body, eye, seconds, duration)), None)
+        found = _inside(body, eye, duration)
         if found is not None:
             seen.append(f"camera_inside_geometry: the fixed camera's eye {[round(float(v), 2) for v in eye]} is inside {body.id} "
                         f"(part {found['index']}{_named({'partName': found.get('name')})}); move the camera or the object (an interior shot may be meant)")
     return seen[:MAX_WARNINGS]
+
+
+def _fixed_eye(document: dict) -> list | None:
+    """The eye of a fixed camera (the one family whose eye is the document's own); None for the others."""
+    camera = document.get("camera")
+    eye = camera.get("eye") if isinstance(camera, dict) and camera.get("family") == "fixed" else None
+    ok = isinstance(eye, list) and len(eye) == 3 and all(isinstance(item, (int, float)) and math.isfinite(item) for item in eye)
+    return eye if ok else None
+
+
+def _inside(body: Body, eye: list, duration: float) -> dict | None:
+    """The first part whose box holds the eye, when the body is at the start (a mover: also the middle and the end)."""
+    times = [duration * index / (EYE_TIMES - 1) for index in range(EYE_TIMES)] if body.moving else [0.0]
+    return next((part for seconds in times if _visible(body, seconds) for part in _eye_in(body, eye, seconds, duration)), None)
 
 
 def _eye_in(body: Body, eye: list, seconds: float, duration: float) -> list[dict]:
