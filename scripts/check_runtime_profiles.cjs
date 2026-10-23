@@ -187,6 +187,9 @@ const description = dialog[0].params.description
 assert(render(description, {local: {runtime: {diskFreeGiB: 106, unavailable: ['Not available here: UniRig. Linux only.']}}}).includes('Not available here: UniRig'))
 assert(!render(description, {local: {runtime: {diskFreeGiB: 106, unavailable: []}}}).includes('Optional, from the Advanced menu'),
   'The dialog lists the extras itself; it must not repeat them')
+const finalDialog = require('../install').run.filter(step => step.method === 'input').pop().params.description
+assert(render(finalDialog, machine()).includes('Settings > Installation'), 'Computers with extras are told where to manage them')
+assert(!render(finalDialog, machine({wangp: {supported: false}})).includes('Settings > Installation'), 'Core-only computers have no extras to manage')
 const handoff = require('../install').run.find(step => step.params?.uri === 'runtime_setup.js').params.params
 assert.equal(handoff.update, false)
 assert.equal(render(handoff.extras, {local: {extras: 'sam,rigging'}}), 'sam,rigging')
