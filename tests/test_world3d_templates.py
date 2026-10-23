@@ -663,7 +663,7 @@ def test_a_patch_binds_a_clip_sequence_a_hand_hold_and_an_appearance_and_refuses
     assert {"clips", "hold", "appearance"} <= set(viewed["editable"])
     legacy = patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [{"object_id": "hero", "clips": ["Walk"]}]}, 2)
     hero = next(item for item in legacy["document"]["slots"] if item["id"] == "hero")
-    assert hero["clip"] is None and "clips" not in hero and legacy["warnings"] == ["incompatible_clip:hero:Idle"], "clip names are the old check"
+    assert hero["clip"] is None and "clips" not in hero and [w for w in legacy["warnings"] if not w.startswith("editor_would_refuse")] == ["incompatible_clip:hero:Idle"], "clip names are the old check"
     released = patch_scene("studio", "w3d-0000abcd9999", workspace_dir, {"bindings": [{"object_id": "rifle", "hold": None},
                                                                                        {"object_id": "guard", "clips": None, "appearance": None}]}, 3)
     slots = {item["id"]: item for item in released["document"]["slots"]}

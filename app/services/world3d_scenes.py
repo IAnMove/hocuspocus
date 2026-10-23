@@ -24,6 +24,7 @@ from services.scene_documents import get_document, save_document
 from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_blank_scene import editor_warnings
 from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_layout import scene_layout
 from services.world3d_stage_cards import is_stage
@@ -213,9 +214,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     record["warnings"] = warnings
     record["templateId"] = document.get("templateId") or record["templateId"]
     _write(workspace, scene_id, record, workspace_dir)
-    viewed = _view(scene_id, record, workspace, workspace_dir)
-    viewed["warnings"] = warnings
-    return viewed
+    return _view(scene_id, record, workspace, workspace_dir)
 
 
 def _set_camera_template(document: dict, template_id) -> list[str]:
@@ -369,7 +368,7 @@ def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
     record["published"] = {"file": saved["name"], "revision": record["revision"]}
     _write(workspace, scene_id, record, workspace_dir)
     return {"sceneId": scene_id, "revision": record["revision"], "file": saved["name"], "url": saved.get("url"),
-            "editor": opened.get("editor"), "document": opened["document"], "traits": traits}
+            "editor": opened.get("editor"), "document": opened["document"], "traits": traits, "warnings": editor_warnings(opened["document"])}
 
 
 def working_scenes(workspace: str, workspace_dir, *, unpublished_only: bool = True) -> list[dict]:
@@ -437,7 +436,7 @@ def put_user_template(workspace: str, workspace_dir, row: dict) -> dict:
               "document": document, **_stamp(previous)}
     rows.append(stored)
     _atomic(target, {"version": 1, "templates": rows})
-    return {"id": template_id, "source": "workspace", "title": stored["title"]}
+    return {"id": template_id, "source": "workspace", "title": stored["title"], "warnings": editor_warnings(document)}
 
 
 def compile_template_document(template_id: str) -> dict:
@@ -761,7 +760,7 @@ def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_d
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
-        "warnings": record.get("warnings") or [], "traits": _traits(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document)], "traits": _traits(document),
         **scene_layout(document, workspace, workspace_dir),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",

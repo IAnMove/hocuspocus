@@ -54,6 +54,19 @@ def blank_template_row(template_id: str = "user-blank-stage", title: str = "Blan
             "document": blank_document(**document_fields)}
 
 
+WARNING = "editor_would_refuse"
+MAX_WARNINGS = 8
+WARNING_DOC = ("warnings may carry editor_would_refuse: <problem> when the document would not open in the Video 3D editor "
+               "(a light without kind \"directional\", an fps outside 24/30/60...). Nothing is refused: fix it with a patch or a better template.")
+
+
+def editor_warnings(document) -> list[str]:
+    """``editor_shape_problems`` as warning strings for a reply (at most ``MAX_WARNINGS``, the rest counted). Never refuses."""
+    problems = editor_shape_problems(document)
+    shown = [f"{WARNING}: {problem}" for problem in problems[:MAX_WARNINGS]]
+    return shown + ([f"{WARNING}: {len(problems) - MAX_WARNINGS} more"] if len(problems) > MAX_WARNINGS else [])
+
+
 def editor_shape_problems(document) -> list[str]:
     """What the Video 3D editor's shape gate would refuse in a document, in words; ``[]`` when it opens.
 
@@ -82,6 +95,11 @@ def _finite(value) -> bool:
 
 def _positive(value) -> bool:
     return _finite(value) and value > 0
+
+
+def _whole(value) -> bool:
+    """Number.isInteger(value) && value >= 0 (JSON may carry 1.0)."""
+    return _finite(value) and value >= 0 and float(value).is_integer()
 
 
 def _vector(value) -> bool:
@@ -134,6 +152,6 @@ def _slot_problems(slot) -> list[str]:
     if slot.get("slot") not in ROLES:
         problems.append(f"slot must be one of {', '.join(ROLES)}")
     clip = slot.get("clip")
-    if clip is not None and not (isinstance(clip, dict) and type(clip.get("index")) is int and clip["index"] >= 0 and isinstance(clip.get("name"), str)):
+    if clip is not None and not (isinstance(clip, dict) and _whole(clip.get("index")) and isinstance(clip.get("name"), str)):
         problems.append("clip is null or {index, name}")
     return problems

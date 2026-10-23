@@ -91,3 +91,57 @@ def test_what_the_agent_built_opens_in_the_editor_as_inspect_showed_it(tmp_path)
     assert again == {key: seen[key] for key in ("camera", "light", "duration", "size", "layout")}, "the saved file shows the same layout"
     assert working_scenes(WORKSPACE, workspace_dir(tmp_path)) == [], "published: it leaves the Open dialog's working list"
     assert [row["sceneId"] for row in working_scenes(WORKSPACE, workspace_dir(tmp_path), unpublished_only=False)] == [scene_id]
+
+
+def _preset_light_row(document=None):
+    row = blank_template_row("user-preset-light", "Preset light")
+    row["document"] = document or {**row["document"], "light": {"preset": "studio"}}
+    return row
+
+
+def _editor_warnings(reply):
+    return [text for text in reply["warnings"] if text.startswith("editor_would_refuse: ")]
+
+
+def test_a_document_the_editor_would_refuse_still_saves_and_publishes_with_a_warning_in_every_reply(tmp_path):
+    put = call(tmp_path, "world3d.templates.user.put", **_preset_light_row())
+    assert put["template"]["id"] == "user-preset-light" and len(_editor_warnings(put["template"])) == 1
+    assert "light must be" in put["template"]["warnings"][0]
+    scene = call(tmp_path, "world3d.scene.instantiate", template_id="user-preset-light")["scene"]
+    assert len(_editor_warnings(scene)) == 1
+    model_glb(tmp_path, "tower.glb")
+    patched = call(tmp_path, "world3d.scene.patch", scene_id=scene["sceneId"], base_revision=1, bindings=[
+        {"object_id": "tower", "add": True, "source_url": "/api/v1/file/tower.glb?workspace=studio", "fit": {"heightM": 5}}])["scene"]
+    assert len(_editor_warnings(patched)) == 1 and patched["layout"]["items"][0]["boundsM"]
+    seen = call(tmp_path, "world3d.scene.inspect", scene_id=scene["sceneId"])["scene"]
+    assert _editor_warnings(seen) == _editor_warnings(patched), "the warning is not stored: inspect shows it once, not once per patch"
+    published = call(tmp_path, "world3d.scene.publish", scene_id=scene["sceneId"])["scene"]
+    assert published["editor"] == "video3d" and published["file"] and len(_editor_warnings(published)) == 1
+    assert published["document"]["light"] == {"preset": "studio"}, "nothing was repaired or refused"
+
+
+def test_a_valid_document_carries_no_editor_warning_anywhere(tmp_path):
+    put = call(tmp_path, "world3d.templates.user.put", **blank_template_row())
+    scene = call(tmp_path, "world3d.scene.instantiate", template_id="user-blank-stage")["scene"]
+    model_glb(tmp_path, "tower.glb")
+    patched = call(tmp_path, "world3d.scene.patch", scene_id=scene["sceneId"], base_revision=1, bindings=[
+        {"object_id": "tower", "add": True, "source_url": "/api/v1/file/tower.glb?workspace=studio"}])["scene"]
+    seen = call(tmp_path, "world3d.scene.inspect", scene_id=scene["sceneId"])["scene"]
+    published = call(tmp_path, "world3d.scene.publish", scene_id=scene["sceneId"])["scene"]
+    assert put["template"]["warnings"] == [] and scene["warnings"] == [] and patched["warnings"] == []
+    assert seen["warnings"] == [] and published["warnings"] == []
+
+
+def test_a_partial_template_is_still_accepted_and_the_warnings_are_capped(tmp_path):
+    put = call(tmp_path, "world3d.templates.user.put", id="user-partial", title="Partial", document={"slots": []})
+    assert put["status"] == "completed" and put["template"]["warnings"] and all(text.startswith("editor_would_refuse: ") for text in put["template"]["warnings"])
+    many = {"slots": [{"id": f"p{index}", "slot": "nope"} for index in range(30)]}
+    capped = call(tmp_path, "world3d.templates.user.put", id="user-many", title="Many", document=many)["template"]["warnings"]
+    assert len(capped) == 9 and capped[-1].endswith(" more")
+    assert editor_shape_problems({**blank_document(), "slots": [{**marker_slot("a"), "clip": {"index": 1.0, "name": "Walk"}}]}) == [], "a whole number written 1.0 is an index"
+
+
+def test_the_tool_descriptions_name_the_editor_warning():
+    tools = {item["name"]: item["description"] for item in command_catalog()}
+    for name in ("world3d.scene.inspect", "world3d.scene.patch", "world3d.scene.publish", "world3d.templates.user.put"):
+        assert "editor_would_refuse" in tools[name], name
