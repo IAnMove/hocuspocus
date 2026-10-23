@@ -21,7 +21,10 @@ class TestPinokioGpuCompatibility(unittest.TestCase):
         self.assertNotIn("Classic Compiled", launcher)
         self.assertNotIn("start_classic.js", launcher)
         self.assertIn('=== "darwin"', launcher)
-        self.assertIn("sam_install.js", launcher)
+        # The optional installers are generated from the catalog, not listed by hand.
+        self.assertIn("components.menuItems(info, 'nvidia')", launcher)
+        catalog = (_ROOT / "app" / "runtime" / "install_catalog.json").read_text(encoding="utf-8")
+        self.assertIn("sam_install.js", catalog)
 
     def test_fresh_install_still_uses_pinokios_documented_gpu_variable(self):
         installer = (_ROOT / "install.js").read_text(encoding="utf-8")

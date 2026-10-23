@@ -4,11 +4,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "app"))
+from services.install_catalog import optional_engines  # noqa: E402
 from services.runtime_profiles import detect_profiles  # noqa: E402
 
 FEATURES = {
@@ -37,8 +39,9 @@ def summary(result: dict) -> list[str]:
             reason = item["reason"].removeprefix(f"{item['label']} ")  # group shared driver limits
             blocked.setdefault(reason[:1].upper() + reason[1:], []).append(FEATURES.get(name, item["label"]))
     lines += [f"Not available here: {', '.join(features)}. {reason}" for reason, features in blocked.items()]
+    on_request = optional_engines()
     optional = [FEATURES.get(name, item["label"]) for name, item in engines.items()
-                if item["supported"] and not item.get("defaultInstall") and not item.get("installed")]
+                if item["supported"] and name in on_request and not item.get("installed")]
     if optional:
         lines.append(f"Optional, from the Advanced menu: {', '.join(optional)}.")
     return lines
@@ -53,6 +56,8 @@ def main() -> None:
     args = parser.parse_args()
     result = detect_profiles(platform=args.platform, arch=args.arch, gpu=args.gpu)
     result["summary"] = summary(result)
+    # Shown by the Install dialog next to each extra's size. A top-level key, not hashed into any recipe.
+    result["diskFreeGiB"] = round(shutil.disk_usage(ROOT).free / 2 ** 30, 1)
     target = ROOT / "app" / ".runtime" / "capabilities.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     temporary = target.with_suffix(f".{os.getpid()}.tmp")

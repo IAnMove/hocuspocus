@@ -4,7 +4,8 @@
   "sections": "Settings sections",
   "tabs": {
     "performance": "Performance",
-    "integrations": "Integrations"
+    "integrations": "Integrations",
+    "installation": "Installation"
   },
   "appearance": {
     "title": "Appearance",
@@ -435,5 +436,76 @@
     "connected": "{{server}} · protocol {{protocol}} · {{count}} tools",
     "authVerified": "Authentication and tool discovery verified. No tools were executed.",
     "tokenUnavailable": "Profile checked. Authentication and tools were not checked because no enabled token is available in this Settings session."
+  },
+  "installation": {
+    "intro": "The studio and local generation are always installed. Add the extras you need and remove the ones you do not. Downloaded models and generated media are managed in the Storage Manager.",
+    "loading": "Checking what is installed…",
+    "freeSpace": "{{free}} free of {{total}} on this disk",
+    "measuring": "measuring…",
+    "estimated": "about {{size}} once installed",
+    "keepOpen": "A change is in progress. The other buttons unlock when it finishes. Keep HocusPocus open meanwhile: stopping or restarting it can interrupt the install.",
+    "lowSpace": "Needs about {{size}} and only {{free}} is free.",
+    "installing": "Installing. This can take several minutes.",
+    "removing": "Removing…",
+    "installedReady": "Installed and ready to use.",
+    "installedRestart": "Installed. Restart HocusPocus to use it.",
+    "removed": "Removed.",
+    "install": "Install",
+    "update": "Update",
+    "uninstall": "Remove",
+    "confirmUninstall": "Click again to remove ({{size}})",
+    "showOutput": "Show installer output",
+    "hideOutput": "Hide installer output",
+    "storageManager": "Storage Manager",
+    "storageHint": "models, LoRAs, media",
+    "base": {
+      "title": "Studio and local generation",
+      "summary": "Projects, editors, Director, Wizard and local generation with WanGP, including native MiniMax H3. Always installed.",
+      "updateHint": "Use Update in Pinokio to repair or update the base install."
+    },
+    "state": {
+      "installed": "Installed",
+      "not_installed": "Not installed",
+      "needs_update": "Needs update",
+      "running": "Working",
+      "unsupported": "Not available here"
+    },
+    "failure": {
+      "not_installed_after_run": "The installer ended but this is still not installed. Show the output for the error.",
+      "interrupted": "The removal was interrupted. Remove it again to finish.",
+      "removal_failed": "Some files could not be removed. Close anything that uses them and try again.",
+      "launcher_unavailable": "The installer could not be started.",
+      "unknown": "The last change did not finish."
+    },
+    "launcher": {
+      "not_in_pinokio": "This copy of HocusPocus was not started from Pinokio, so it cannot install. Use Pinokio's Advanced menu.",
+      "no_pterm": "Pinokio's command line tool (pterm) was not found, so it cannot install from here. Use Pinokio's Advanced menu."
+    },
+    "components": {
+      "creation_models": {
+        "title": "FLUX 3 / Drama 3",
+        "summary": "Isolated ComfyUI runtime for FLUX 3 Klein images and Drama 3 voices."
+      },
+      "hunyuan3d": {
+        "title": "3D generation (Hunyuan3D)",
+        "summary": "Local image-to-3D meshes and textures. Windows also needs Visual Studio Build Tools."
+      },
+      "trellis2": {
+        "title": "TRELLIS.2",
+        "summary": "Official Microsoft 4B image-to-3D. Linux with an NVIDIA GPU of 24 GB or more."
+      },
+      "sam": {
+        "title": "Inpaint masks (SAM 3.1)",
+        "summary": "Segment Anything masks for inpainting."
+      },
+      "rigging": {
+        "title": "AI rigging (UniRig)",
+        "summary": "Automatic skeletons for 3D characters. Linux only."
+      },
+      "minimax_h3": {
+        "title": "MiniMax H3 Legacy (ComfyUI)",
+        "summary": "The original ComfyUI workflow for MiniMax H3. The native H3 in the base install covers normal use."
+      }
+    }
   }
 }

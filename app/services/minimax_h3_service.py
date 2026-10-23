@@ -298,6 +298,14 @@ _idle_shutdown_timer: threading.Timer | None = None
 DEFAULT_IDLE_SHUTDOWN_SECONDS = 10.0
 
 
+# H3 Legacy is an optional component (app/runtime/install_catalog.json), not part of the base install.
+NOT_INSTALLED_MESSAGE = (
+    "MiniMax H3 Legacy (ComfyUI) is not installed. Install it in Settings > Installation, or from "
+    "Pinokio: Advanced > Install MiniMax H3 Legacy (ComfyUI). The native H3 models in the base "
+    "install do not need it."
+)
+
+
 def _python_executable() -> Path:
     return python_path(ENV_DIR, kind="conda")
 
@@ -508,9 +516,7 @@ def ensure_runtime(
                 return f"http://127.0.0.1:{_port}"
             stop_runtime()
         if not is_runtime_installed():
-            raise RuntimeError(
-                "MiniMax H3 support is not installed. Run Update (or Install) from the Pinokio menu first."
-            )
+            raise RuntimeError(NOT_INSTALLED_MESSAGE)
         _port = _free_port()
         _runtime_profile = profile
         progress("Starting the isolated MiniMax H3 runtime…")
@@ -943,9 +949,7 @@ def _generate_impl(params: dict, job_id: str, out_dir: str, progress: Callable[[
     workflow, pipeline = build_workflow(params, job_id)
     profile = _profile_name(params)
     if not is_runtime_installed():
-        raise RuntimeError(
-            "MiniMax H3 support is not installed. Run Update (or Install) from the Pinokio menu first."
-        )
+        raise RuntimeError(NOT_INSTALLED_MESSAGE)
     _ensure_models(pipeline, profile, lambda message: progress(message, 3, 0, 0))
     base_url = ensure_runtime(
         lambda message: progress(message, 8, 0, 0),
