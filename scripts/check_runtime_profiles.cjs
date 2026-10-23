@@ -58,6 +58,17 @@ for (const platform of ['linux', 'win32']) {
   }
 }
 
+// uv's check rejects decord's Linux wheel tag, so the known-tag repair must run before it on
+// every engine, or a fresh Linux install stops at "built for a different platform".
+for (const engine of Object.keys(runtime.catalog.engines)) {
+  const verify = runtime.installEngines([engine]).find(step => JSON.stringify(step.params || {}).includes('runtime_verify.py'))
+  assert(verify, `${engine} must verify its environment`)
+  const message = verify.params.message
+  const check = message.search(/runtime_pip\.py.*? --engine \w+ -- check/)
+  assert(message.includes('python scripts/runtime_wheel_tags.py'), `${engine} must correct known wheel tags`)
+  assert(message.indexOf('runtime_wheel_tags.py') < check, `${engine} must correct wheel tags before uv checks them`)
+}
+
 // Machines without a local AI recipe (AMD, Intel, CPU, old drivers) install core only.
 for (const platform of ['linux', 'win32', 'darwin']) {
   const ctx = {...context(platform), which: name => name === 'ffmpeg' ? null : '/usr/bin/' + name}
