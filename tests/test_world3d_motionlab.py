@@ -198,3 +198,13 @@ def test_catalog_discovery_and_apply_query_compile_real_native_documents(tmp_pat
     assert scene["pending"] == []
     assert scene["traits"]["motionLab"] == MOTION_LAB_DEFAULTS
     assert inspect_scene(WORKSPACE, scene["sceneId"], workspace_dir)["document"] == exact["document"]
+
+
+def test_a_cue_with_sound_and_no_volume_is_audible_like_in_the_editor():
+    """The editor reads a missing volume as 0.25; an agent's ``sound: true`` explosion must not export as a silent MP4."""
+    blast = {"kind": "explosion", "start": 1, "end": 3, "sound": True}
+    assert _has_sound(_document(worldSfx=[blast]))
+    assert _has_sound(_document(sfx=[{**blast, "kind": "sparks"}]))
+    assert not _has_sound(_document(worldSfx=[{**blast, "volume": 0}]))
+    assert not _has_sound(_document(worldSfx=[{**blast, "sound": False}]))
+    assert not _has_sound(_document(worldSfx=[{"kind": "explosion", "start": 1, "end": 3}]))
