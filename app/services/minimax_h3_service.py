@@ -300,8 +300,9 @@ DEFAULT_IDLE_SHUTDOWN_SECONDS = 10.0
 
 # H3 Legacy is an optional component (app/runtime/install_catalog.json), not part of the base install.
 NOT_INSTALLED_MESSAGE = (
-    "MiniMax H3 Legacy (ComfyUI) is not installed. Install it from Pinokio: Advanced > "
-    "Install MiniMax H3 Legacy (ComfyUI). The native H3 models in the base install do not need it."
+    "MiniMax H3 Legacy (ComfyUI) is not installed. Install it in Settings > Installation, or from "
+    "Pinokio: Advanced > Install MiniMax H3 Legacy (ComfyUI). The native H3 models in the base "
+    "install do not need it."
 )
 
 

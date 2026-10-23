@@ -4,7 +4,8 @@
   "sections": "Secciones de ajustes",
   "tabs": {
     "performance": "Rendimiento",
-    "integrations": "Integraciones"
+    "integrations": "Integraciones",
+    "installation": "Instalación"
   },
   "appearance": {
     "title": "Apariencia",
@@ -435,5 +436,76 @@
     "connected": "{{server}} · protocolo {{protocol}} · {{count}} herramientas",
     "authVerified": "Autenticación y catálogo comprobados. No se ejecutó ninguna herramienta.",
     "tokenUnavailable": "Perfil comprobado. No se verificaron la autenticación ni las herramientas porque esta sesión de Ajustes no dispone de un token activo."
+  },
+  "installation": {
+    "intro": "El estudio y la generación local se instalan siempre. Añade los extras que necesites y quita los que no. Los modelos descargados y los medios generados se gestionan en el Gestor de almacenamiento.",
+    "loading": "Comprobando qué está instalado…",
+    "freeSpace": "{{free}} libres de {{total}} en este disco",
+    "measuring": "midiendo…",
+    "estimated": "unos {{size}} una vez instalado",
+    "keepOpen": "Hay un cambio en curso. Los demás botones se desbloquean cuando termine. Mantén HocusPocus abierto mientras tanto: pararlo o reiniciarlo puede interrumpir la instalación.",
+    "lowSpace": "Necesita unos {{size}} y solo hay {{free}} libres.",
+    "installing": "Instalando. Puede tardar varios minutos.",
+    "removing": "Quitando…",
+    "installedReady": "Instalado y listo para usar.",
+    "installedRestart": "Instalado. Reinicia HocusPocus para usarlo.",
+    "removed": "Quitado.",
+    "install": "Instalar",
+    "update": "Actualizar",
+    "uninstall": "Quitar",
+    "confirmUninstall": "Pulsa otra vez para quitar ({{size}})",
+    "showOutput": "Ver la salida del instalador",
+    "hideOutput": "Ocultar la salida del instalador",
+    "storageManager": "Gestor de almacenamiento",
+    "storageHint": "modelos, LoRAs, medios",
+    "base": {
+      "title": "Estudio y generación local",
+      "summary": "Proyectos, editores, Director, Wizard y generación local con WanGP, incluido el H3 de MiniMax nativo. Se instala siempre.",
+      "updateHint": "Usa Update en Pinokio para reparar o actualizar la instalación base."
+    },
+    "state": {
+      "installed": "Instalado",
+      "not_installed": "No instalado",
+      "needs_update": "Necesita actualizarse",
+      "running": "En curso",
+      "unsupported": "No disponible aquí"
+    },
+    "failure": {
+      "not_installed_after_run": "El instalador terminó pero esto sigue sin estar instalado. Mira la salida para ver el error.",
+      "interrupted": "La eliminación se interrumpió. Quítalo otra vez para terminar.",
+      "removal_failed": "No se pudieron borrar algunos archivos. Cierra lo que los use e inténtalo de nuevo.",
+      "launcher_unavailable": "No se pudo iniciar el instalador.",
+      "unknown": "El último cambio no terminó."
+    },
+    "launcher": {
+      "not_in_pinokio": "Esta copia de HocusPocus no se arrancó desde Pinokio, así que no puede instalar. Usa el menú Advanced de Pinokio.",
+      "no_pterm": "No se encontró la herramienta de línea de comandos de Pinokio (pterm), así que no puede instalar desde aquí. Usa el menú Advanced de Pinokio."
+    },
+    "components": {
+      "creation_models": {
+        "title": "FLUX 3 / Drama 3",
+        "summary": "Entorno aislado de ComfyUI para imágenes FLUX 3 Klein y voces Drama 3."
+      },
+      "hunyuan3d": {
+        "title": "Generación 3D (Hunyuan3D)",
+        "summary": "Mallas y texturas 3D locales a partir de una imagen. En Windows también necesita Visual Studio Build Tools."
+      },
+      "trellis2": {
+        "title": "TRELLIS.2",
+        "summary": "Imagen a 3D oficial de Microsoft (4B). Linux con una GPU NVIDIA de 24 GB o más."
+      },
+      "sam": {
+        "title": "Máscaras de inpaint (SAM 3.1)",
+        "summary": "Máscaras de Segment Anything para el inpainting."
+      },
+      "rigging": {
+        "title": "Rigging con IA (UniRig)",
+        "summary": "Esqueletos automáticos para personajes 3D. Solo Linux."
+      },
+      "minimax_h3": {
+        "title": "MiniMax H3 Legacy (ComfyUI)",
+        "summary": "El flujo original de ComfyUI para MiniMax H3. El H3 nativo de la instalación base cubre el uso normal."
+      }
+    }
   }
 }
