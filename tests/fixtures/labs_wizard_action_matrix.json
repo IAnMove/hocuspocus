@@ -3420,7 +3420,7 @@
       "persistence": "Workspace world3d-edits working copy and a published .world3d.scene.json",
       "presentation": "video_3d",
       "test": "ui/tests/world3dTemplatesWizard.test.ts",
-      "notes": "MCP, the Wizard and the production planner share the editor catalog. A tie or an unknown id does not invent a scene.",
+      "notes": "MCP, the Wizard and the production planner share the editor catalog. A tie or an unknown id does not invent a scene. world3d.scene.beats (who does what when) and the patch fields worldFx, motion.start and motion.end go through the same command door.",
       "prompt_fixture": "",
       "blocking_defect": ""
     },
