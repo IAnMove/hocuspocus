@@ -307,6 +307,16 @@ def test_produce_refuses_a_language_without_a_version(tmp_path):
         service.start("cast", "uv", "nope")
 
 
+def test_produce_is_refused_while_a_line_of_the_episode_is_recording(tmp_path):
+    from services.series_native_render import recording_episode
+    service = producer(tmp_path, Production())
+    service.deps.voice_jobs = lambda _workspace: [{"jobId": "voice-1", "episodeId": "ep2", "status": "running"}]
+    with pytest.raises(ProduceError) as raised:
+        service.start("cast", "uv", "ep2", languages=["spanish"])
+    assert (raised.value.code, raised.value.status) == ("voice_running", 409)
+    assert not recording_episode([{"jobId": "voice-1", "episodeId": "ep1", "status": "running"}], "ep2")
+
+
 def test_a_production_cut_by_a_restart_is_interrupted_and_resumes(tmp_path):
     from services.series_jobs import SeriesJobStore
     tools = Production(fail_english=0)

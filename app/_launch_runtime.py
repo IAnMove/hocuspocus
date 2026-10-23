@@ -2785,9 +2785,11 @@ api.include_router(create_series_shot_edit_router(
         prompt=prompt, system_prompt=system, schema=schema, max_new_tokens=3000, stage="Series Lab shot edit", llm_override=None)))
 from services.series_line_voice import SeriesLineVoice
 from routers.series_shot_inspector import create_series_shot_inspector_router
+_series_voices = SeriesLineVoice(_series_native_render, read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
+                                 read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {})
+_series_native_render.deps.voice_jobs = _series_voices.jobs
 api.include_router(create_series_shot_inspector_router(
-    voices=SeriesLineVoice(_series_native_render, read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
-                           read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}),
+    voices=_series_voices,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)), workspace_dir=_workspace_dir,
     call=_local_mcp.call, bind_loop=_local_mcp.bind_loop))
 from routers.series_guide import create_series_guide_router
@@ -2800,7 +2802,8 @@ from routers.series_produce import create_series_produce_router
 api.include_router(create_series_produce_router(
     SeriesProduce(ProduceDeps(call=_local_mcp.call, workspace_dir=_workspace_dir,
                               read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
-                              stale_shots=_series_native_render.stale_shots, review_blockers=_series_native_render.review_blockers)),
+                              stale_shots=_series_native_render.stale_shots, review_blockers=_series_native_render.review_blockers,
+                              voice_jobs=_series_voices.jobs)),
     call=_local_mcp.call, bind_loop=_local_mcp.bind_loop,
     read_library=lambda workspace: _read_series_workspace(_series_library_workspace(workspace)),
     read_kits=lambda workspace: _read_kit_library(_workspace_dir(workspace)).get("kits") or {}, workspace_dir=_workspace_dir,

@@ -169,7 +169,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "approved, 3D at its own quality, approved) or promote (an approved 2D or draft-3D preview is the final: "
         "approved, nothing renders); shots waiting for an approval are listed in job.waiting, not failed. shot_ids "
         "render a new preview of a shot whose preview waits for review; only_changed renders just the shots without an "
-        "up-to-date approved take that the review lets through (like produce). Returns the job; poll "
+        "up-to-date approved take that the review lets through (like produce). Refused while a line of the episode is "
+        "being recorded (series.shot.voice). Returns the job; poll "
         "series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
@@ -183,7 +184,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.render_native.resume": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
-        "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
+        "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines. "
+        "Refused while a line of the episode is being recorded (series.shot.voice).",
     ),
     "series.episode.from_script": (
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"},
@@ -245,7 +247,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "location are rendered, so producing again after a fix just renders what changed and recuts; rerender true renders "
         "every shot again. An episode in plan or preview review mode renders what its review lets through and, while "
         "shots wait for an approval, stops before the cut with status waiting and job.waiting [{shotId, order, reason "
-        "plan|preview|final}]; resume after the approvals (previews then get their finals). Poll "
+        "plan|preview|final}]; resume after the approvals (previews then get their finals). Refused while a line of the "
+        "episode is being recorded (series.shot.voice). Poll "
         "series.episode.produce.status every minute or two; chapters lists the files.",
     ),
     "series.episode.produce.status": (
@@ -258,7 +261,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.produce.resume": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
-        "Resume a stopped or failed production from its first unfinished step; a failed render resumes its own job.",
+        "Resume a stopped or failed production from its first unfinished step; a failed render resumes its own job. "
+        "Refused while a line of the episode is being recorded (series.shot.voice).",
     ),
     "series.location.plate3d": (
         {"workspace": WORKSPACE, "series_id": ID, "location_id": ID, "scene": {"type": "string", "minLength": 1, "maxLength": 200},
@@ -525,7 +529,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "(the character's voice for the language, silence trimmed, qa.speech, mouth cues). A line already recorded with "
         "this text and voice is kept unless retake is true: then another take with another seed replaces it once it is "
         "good (a failed retake keeps the old one). The shot's take is not touched: render the shot (series.shot.update "
-        "render) to hear it. Refused while the episode renders on the server. Returns a job: poll series.shot.voice.status.",
+        "render) to hear it. Refused while the episode renders on the server; a render or produce of the episode is "
+        "refused while this recording runs. Returns a job: poll series.shot.voice.status.",
     ),
     "series.shot.voice.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,
