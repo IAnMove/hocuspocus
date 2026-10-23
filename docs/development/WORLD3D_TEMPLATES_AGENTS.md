@@ -314,6 +314,8 @@ the editor and `world3d.scene.patch`; see
 
 `world3d.templates.user.put` stores `world3d-user-templates.json` in the workspace. Ids start with `user-`. Browser `localStorage` is left untouched and stays invisible until a template is copied into that file.
 
+**Building a scene without a template.** Register a blank stage as a personal template (camera, a `kind: "directional"` light and `slots: []`; the recipe and the editor's stricter shape rules are in [HOWUSEIT, Agent-built scenes](../3d-video-compositor/HOWUSEIT.md#agent-built-scenes-layout-bounds-fit-and-a-blank-start)), instantiate it, and add each model with `world3d.scene.patch` (`{"object_id": "tower", "add": true, "source_url": "/api/v1/file/tower.glb?workspace=<ws>", "fit": {"heightM": 30}, "position": [0, 0, -10]}`). A model is drawn 1.7 m x `scale` tall whatever its length, so size it with `fit` (`heightM`, `widthM`, `depthM`, `longestM` or `"native"`) rather than a guessed `scale`. After each patch read `layout.items[].boundsM` in the reply (the object's real size and place in metres, from the workspace GLB's rest pose) and `camera` to see what is where; `boundsReason` says why an object has no bounds. `world3d.scene.publish` makes the scene open in the Video 3D editor, and until then it is listed in the editor's Open dialog.
+
 ## Honest limits
 
 - The production compiler drops the template soundtrack. The song belongs to the production.
