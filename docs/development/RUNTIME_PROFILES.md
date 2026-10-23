@@ -67,6 +67,30 @@ only the components whose environment exists. Nothing else enumerates them:
 same file, so a new component is one catalog entry plus its `<id>_install.js`, which
 `scripts/check_runtime_profiles.cjs` and `tests/test_install_catalog.py` verify.
 
+## Installation tab
+
+Settings > Installation (`ui/src/components/Installation`) lists the same components with their
+state, measured or estimated size and the free disk space, and installs, updates or removes each
+one. The server side is `services/install_manager.py` behind `GET /api/v1/system/install`,
+`POST .../{id}/install`, `POST .../{id}/uninstall` and `GET .../{id}/output`, mounted by
+`create_system_capabilities_router`, so the core runtime serves it too.
+
+- **Install runs the component's own Pinokio script** (`pterm start <id>_install.js --ref
+  pinokio://127.0.0.1:42000/api/<folder>`), so the menu and the tab can never drift. `pterm` runs
+  detached with its output in `app/.runtime/install-jobs/<id>.log`. It streams the script's
+  terminal, always exits 0, and Pinokio stops the script if the client dies, so success is decided
+  by re-reading what is installed, never by the exit code. Stopping or restarting HocusPocus
+  during an install can interrupt it.
+- **Without Pinokio** (no `pterm`, or a checkout outside `<pinokio>/api/`) the tab shows state and
+  can remove, but Install is disabled. `HOCUS_PINOKIO_REF` and `HOCUS_PINOKIO_PORT` override the
+  address.
+- **One change at a time**, persisted in `app/.runtime/install-jobs/<id>.json`; a job whose client
+  has vanished after a server restart is closed from the installed state.
+- **Uninstall** deletes what `install_catalog.json` lists plus `app/.runtime/<engine>.managed`, on a
+  thread, and refuses a link (a shared environment) or an engine that is running.
+- Installing is not offered to MCP or the Wizard yet: it downloads gigabytes, so a person starts
+  it from the tab.
+
 Each entry also lists the folders Uninstall may delete. They must be generated folders
 inside `app/services` (a test rejects tracked files and any path outside it), the
 engine's environment is always one of them, and downloaded model files are never

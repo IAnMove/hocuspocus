@@ -1089,7 +1089,7 @@ export interface MultiClip {
   keyframes: MultiClipKeyframe[]
 }
 
-export type SettingsTab = 'performance' | 'integrations'
+export type SettingsTab = 'performance' | 'integrations' | 'installation'
 
 export type TextProvider =
   | 'local'

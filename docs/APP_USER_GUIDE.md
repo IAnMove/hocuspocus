@@ -19,7 +19,12 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 - **Actividad:** cola de tareas, uso de GPU y RAM, errores; cancelar, reintentar
   o reanudar una tarea.
 - **Ajustes:** idioma, tema, modelos locales, proveedores remotos, integraciones
-  (token MCP) y almacenamiento. En el servidor completo, al compartir en LAN
+  (token MCP) y almacenamiento. La pestaña **Installation** lista los motores
+  opcionales (FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig y H3 Legacy) con
+  su estado y su tamaño: instala, actualiza o quita cada uno con un botón y sigue
+  la salida del instalador en vivo. Instalar necesita que la app esté abierta
+  desde Pinokio; quitar solo borra el entorno, no los modelos descargados (esos
+  se gestionan en el Gestor de almacenamiento). En el servidor completo, al compartir en LAN
   la autenticación está encendida por defecto; el servidor core no tiene esa
   puerta: [LAN_AUTH](development/LAN_AUTH.md).
 - **Ayuda:** el tutorial dentro de la app, con capturas de la interfaz actual.

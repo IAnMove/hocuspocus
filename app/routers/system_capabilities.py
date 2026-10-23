@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
+from routers.install_manager import create_install_manager_router
 from services.platform_capabilities import (
     CapabilityDenied,
     platform_capabilities,
@@ -17,6 +18,7 @@ def create_system_capabilities_router() -> APIRouter:
     def get_capabilities():
         return platform_capabilities()
 
+    router.include_router(create_install_manager_router())
     return router
 
 
