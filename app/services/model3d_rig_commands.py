@@ -58,9 +58,9 @@ def command_catalog() -> list[dict]:
 
 
 def _library_route():
-    """The REST route function, so the MCP read and GET /api/v1/rig/meshy/animations are one operation."""
-    from routers import rig
-    return rig.meshy_animation_library
+    """The function behind GET /api/v1/rig/meshy/animations, so the MCP read and the route are one operation."""
+    from services.meshy_rig_service import read_animation_library
+    return read_animation_library
 
 
 def _library_handler(library=None):

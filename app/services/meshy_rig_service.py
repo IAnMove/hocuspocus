@@ -252,6 +252,17 @@ def animation_library(
     }
 
 
+def read_animation_library(**filters: Any) -> dict[str, Any]:
+    """``animation_library`` with HTTP errors: the one operation behind the REST route and the MCP command."""
+    from fastapi import HTTPException
+    try:
+        return animation_library(**filters)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except MeshyError as error:
+        raise HTTPException(status_code=error.status_code if error.status_code in {401, 402, 429} else 502, detail=str(error)) from error
+
+
 def resolve_actions(key: str, entries: list[str], cancelled: Callable[[], bool] | None = None) -> list[dict[str, Any]]:
     """Library entries for ``entries`` (action ids or keys), in order. Unknown ones fail before anything is paid."""
     items, _cached = library_items(key, cancelled)
