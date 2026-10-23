@@ -32,6 +32,20 @@ export function sizeLabel(row: InstallComponent): SizeLabel {
   return { bytes: row.sizeBytes, kind: 'measured' }
 }
 
+export interface ReclaimLabel {
+  /** Bytes a removal really frees; null while the server is still measuring. */
+  bytes: number | null
+  /** Most of the folder is packages Pinokio keeps in its shared cache, so the folder size overstates the gain. */
+  mostlyShared: boolean
+}
+
+export function reclaimLabel(row: InstallComponent): ReclaimLabel | null {
+  if (row.state !== 'installed' && row.state !== 'needs_update') return null
+  const bytes = row.reclaimableBytes
+  const mostlyShared = bytes !== null && row.sizeBytes !== null && bytes < row.sizeBytes / 2
+  return { bytes, mostlyShared }
+}
+
 /** An install of a missing component that the free disk space cannot hold. */
 export function exceedsFreeSpace(row: InstallComponent, freeBytes: number): boolean {
   return row.state === 'not_installed' && row.estimatedBytes > freeBytes

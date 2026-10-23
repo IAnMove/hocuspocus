@@ -25,7 +25,7 @@ const GB = 1024 ** 3
 function component(id: string, patch: Partial<InstallComponent> = {}): InstallComponent {
   return {
     id, engine: id, title: id, summary: `${id} summary`, estimatedBytes: 6 * GB, restartRequired: false,
-    state: 'not_installed', supported: true, reason: null, sizeBytes: 0, job: null, ...patch,
+    state: 'not_installed', supported: true, reason: null, sizeBytes: 0, reclaimableBytes: 0, job: null, ...patch,
   }
 }
 
@@ -36,7 +36,7 @@ function status(patch: Partial<InstallStatus> = {}): InstallStatus {
     base: { title: 'Studio', summary: '', estimatedBytes: 11 * GB, engine: 'wangp', installed: true, state: 'installed', sizeBytes: 11 * GB },
     components: [
       component('sam'),
-      component('hunyuan3d', { state: 'installed', sizeBytes: 9 * GB, restartRequired: true }),
+      component('hunyuan3d', { state: 'installed', sizeBytes: 9 * GB, reclaimableBytes: 0.5 * GB, restartRequired: true }),
       component('rigging', { state: 'unsupported', supported: false, reason: 'Linux only' }),
     ],
     busy: null,
@@ -101,7 +101,8 @@ test('removing takes two clicks and never starts on the first', async () => {
     const { fireEvent, waitFor } = await import('@testing-library/react')
     const remove = () => row.querySelector('button')!
     fireEvent.click(remove())
-    assert.match(remove().textContent ?? '', /Click again to remove \(9\.0 GB\)/)
+    assert.match(remove().textContent ?? '', /Click again to remove \(frees about 512 MB\)/)
+    assert.match(row.textContent ?? '', /Removing frees about 512 MB\. The rest are packages Pinokio keeps in its shared cache/)
     assert(!server.calls.some(call => call.endsWith('/uninstall')))
     fireEvent.click(remove())
     await waitFor(() => assert(server.calls.includes('POST /api/v1/system/install/hunyuan3d/uninstall')))
