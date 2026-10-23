@@ -222,6 +222,21 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     return _view(scene_id, record, workspace, workspace_dir)
 
 
+def update_scene(workspace: str, scene_id: str, workspace_dir, base_revision: int, change) -> dict:
+    """Read a working scene, check its revision, let ``change(document)`` edit the document in place, write the next revision and return its view.
+
+    ``change`` returns ``(warnings, extra)``: the warnings the reply carries and fields merged into the view. If it raises,
+    nothing is written."""
+    record = _read(workspace, scene_id, workspace_dir)
+    if type(base_revision) is not int or base_revision != record["revision"]:
+        raise World3DSceneError("revision_conflict", "The scene changed since this revision. Reload before editing.", 409)
+    warnings, extra = change(record["document"])
+    record["revision"] += 1
+    record["warnings"] = warnings
+    _write(workspace, scene_id, record, workspace_dir)
+    return {**_view(scene_id, record, workspace, workspace_dir), **extra}
+
+
 def _set_camera_template(document: dict, template_id) -> list[str]:
     """``camera_template``: a ``kind: camera`` card's camera and framing on this scene, which keeps its duration, cast
     and place. Camera fields patched alongside merge over it."""
