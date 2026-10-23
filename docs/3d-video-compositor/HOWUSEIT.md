@@ -629,3 +629,39 @@ three-quarter back, back; the left is the mirror of the right), with its walk cy
   drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
   `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot, a walk that stops to speak, the frames of a fade and a
   column in front of and behind two figures, with a synthetic five-direction kit, and checks the pixels.
+
+## Agent-built scenes: layout, bounds, fit and a blank start
+
+An agent that builds a Video 3D scene through `world3d.scene.*` cannot see the frame, so the scene tells it where everything is. `world3d.scene.inspect`, and the reply of every `world3d.scene.patch` (the inspect view of the new revision), carry, next to `objects` (unchanged: the ids and roles patches address):
+
+- `camera`: the authored `family`, `eye`, `look`, `fov`, `framing` (target, anchor, from/to, fov move) and a `shake` summary (`windows`, first start, last end, largest amplitude). An orbit, a framing or a shake moves the live eye from these values; they are not a per-frame position.
+- `light`, `duration` and `size` (`width`, `height`, `fps`).
+- `layout.items`: one row per object (at most 32; `layout.omitted` counts the rest) with `id`, `role`, `media`, `position`, `rotationY`, `scale`, `sourceUrl`, `clip` and `boundsM`.
+
+**`boundsM` is in metres and follows the renderer.** A 3D model is drawn **1.7 m x `scale` tall: its bounding-box height, whatever its length** (`fitGltf` in `ui/src/features/scene3d/gpu.ts`; an image cutout is a plane 2 m x `scale` tall). The model is scaled about its own origin and never re-centred, so a whole-environment GLB (a Meshy island, a street) enters as a 1.7 m object until `scale` says otherwise, and x/z stay wherever the GLB put its origin. `boundsM.size` is the model's own width, height and depth after that scaling; `min`, `max` and `center` are the scene coordinates after `position` and `rotationY`; `bottomY` is the lowest point. A `grounded` object is lowered or lifted so that point sits at `position[1]`. The numbers come from the POSITION accessor `min`/`max` of the GLB's JSON chunk (no buffer is read) under the node transforms of the default scene, so they are the **rest pose**: a skinned model is measured in its bind pose and a clip can reach outside the box. A moving object (`motion`) travels from the placed position.
+
+`boundsM` is `null` with a `boundsReason` when the object cannot be measured, and an inspect never fails because of it: `marker` (no model bound yet), `not_a_3d_model`, `outside_workspace` (uploads, example media, other workspaces, remote URLs), `missing_file`, `not_glb` (a `.gltf`, or a file that is not a GLB), `truncated`, `json_too_large`, `missing_min_max`, `no_meshes`, `unmeasurable`. Bind workspace `.glb` files (`/api/v1/file/<name>?workspace=<ws>`) to get bounds.
+
+**`fit` sizes an object in metres instead of guessing `scale`.** In a `world3d.scene.patch` binding, `fit` is exactly one of:
+
+| `fit` | scale is set so that | needs the GLB |
+|---|---|---|
+| `{"heightM": 30}` | the bounding-box height is 30 m (`scale = heightM / 1.7`) | no |
+| `{"widthM": 6}` / `{"depthM": 6}` | the model's own x / z extent, before `rotationY` | yes |
+| `{"longestM": 80}` | the longest of its three extents | yes |
+| `"native"` | the GLB is at its file size taken as metres (`scale = height / 1.7`); a size outside 1 cm to 30 m warns `fit_native_unusual` | yes |
+
+A `source_url` bound in the same binding is measured. A binding with both `fit` and `scale` is refused (`invalid_fit`), as are a bad key, a non-positive or non-finite size, and a model with no extent on that axis; a GLB that cannot be read for `widthM`, `depthM`, `longestM` or `native` is `bounds_unavailable` (use `heightM`). An image cutout accepts `heightM` only. A refused patch writes nothing. The scale is stored on the object like any other, so the editor shows and edits it as usual.
+
+**A blank start.** The built-in cards are compiled from the UI's TypeScript templates, so there is no built-in blank card; a personal template needs none. Register this once per workspace, then instantiate it, patch objects in with `add: true`, and publish:
+
+```json
+{"operation": "world3d.templates.user.put", "input": {"workspace": "default", "id": "user-blank-stage", "title": "Blank stage", "document": {
+  "version": 1, "units": "meters", "up": "y", "templateId": "two-shot", "width": 1280, "height": 720, "fps": 30, "duration": 5,
+  "camera": {"family": "fixed", "eye": [0, 1.6, 6], "look": [0, 1, 0], "fov": 45},
+  "light": {"kind": "directional", "direction": [-0.4, -1, -0.3], "intensity": 1.2, "color": "#ffffff"}, "slots": []}}}
+```
+
+`services.world3d_blank_scene.blank_template_row()` builds the same row (and `markers=[("hero", "subject_1")]` adds empty model objects for a cast). Added objects are always `prop`; give an empty slot another role in the template when you need `subject_1`. The editor is stricter than the save: `light` must be `{kind: "directional", direction, intensity, color}` (a `{"preset": ...}` light saves but the editor shows "Invalid Video3D scene"), `fps` is 24, 30 or 60, and `editor_shape_problems(document)` in the same module lists what the editor would refuse. Nothing is blocked: the replies of `world3d.templates.user.put`, `world3d.scene.inspect`, `world3d.scene.patch` and `world3d.scene.publish` carry each problem as a warning `editor_would_refuse: <problem>` (at most 8, then a count), so an agent sees it before the user opens the scene. Then: `world3d.scene.instantiate` -> `world3d.scene.patch` (`source_url`, `fit`, `position`, `camera`) -> `world3d.scene.inspect` to read `layout.items` -> `world3d.scene.preview` -> `world3d.scene.publish`.
+
+**Opening it.** An unpublished working copy (`world3d-edits/w3d-<id>.json`) is listed in the Video 3D editor's **Open** dialog with the template's title; opening it loads the current revision, with every object, the camera and the light editable. `world3d.scene.publish` saves the same document as an ordinary scene file (`*.world3d.scene.json`) that opens in the same editor, and the working copy then leaves the Open dialog's list of unpublished scenes.

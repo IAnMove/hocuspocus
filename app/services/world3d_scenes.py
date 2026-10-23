@@ -24,6 +24,9 @@ from services.scene_documents import get_document, save_document
 from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_blank_scene import editor_warnings
+from services.world3d_scene_fit import apply_fit
+from services.world3d_scene_layout import scene_layout
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
@@ -66,11 +69,11 @@ def instantiate_template(workspace: str, template_id: str, workspace_dir) -> dic
     scene_id = "w3d-" + uuid.uuid4().hex[:12]
     record = {"revision": 1, "templateId": document.get("templateId") or template_id, "document": document, "warnings": []}
     _write(workspace, scene_id, record, workspace_dir)
-    return _view(scene_id, record)
+    return _view(scene_id, record, workspace, workspace_dir)
 
 
 def inspect_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
-    return _view(scene_id, _read(workspace, scene_id, workspace_dir))
+    return _view(scene_id, _read(workspace, scene_id, workspace_dir), workspace, workspace_dir)
 
 
 SCENE_TRACK_PREFIX = "scene-"
@@ -181,7 +184,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     bindings = _bindings(changes)
     stand_ins: set[str] = set()
     for binding in bindings:
-        warnings.extend(_bind(document, binding, stand_ins))
+        warnings.extend(_bind(document, binding, stand_ins, workspace, workspace_dir))
     _check_carriers(document["slots"], bindings)
     if "camera_template" in changes:
         warnings.extend(_set_camera_template(document, changes["camera_template"]))
@@ -211,9 +214,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     record["warnings"] = warnings
     record["templateId"] = document.get("templateId") or record["templateId"]
     _write(workspace, scene_id, record, workspace_dir)
-    viewed = _view(scene_id, record)
-    viewed["warnings"] = warnings
-    return viewed
+    return _view(scene_id, record, workspace, workspace_dir)
 
 
 def _set_camera_template(document: dict, template_id) -> list[str]:
@@ -323,7 +324,7 @@ def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
     record["revision"] += 1
     record["warnings"] = []
     _write(workspace, scene_id, record, workspace_dir)
-    viewed = _view(scene_id, record)
+    viewed = _view(scene_id, record, workspace, workspace_dir)
     viewed["talk"] = {key: value for key, value in talked.items() if key != "talk"}
     return viewed
 
@@ -367,7 +368,7 @@ def publish_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
     record["published"] = {"file": saved["name"], "revision": record["revision"]}
     _write(workspace, scene_id, record, workspace_dir)
     return {"sceneId": scene_id, "revision": record["revision"], "file": saved["name"], "url": saved.get("url"),
-            "editor": opened.get("editor"), "document": opened["document"], "traits": traits}
+            "editor": opened.get("editor"), "document": opened["document"], "traits": traits, "warnings": editor_warnings(opened["document"])}
 
 
 def working_scenes(workspace: str, workspace_dir, *, unpublished_only: bool = True) -> list[dict]:
@@ -435,7 +436,7 @@ def put_user_template(workspace: str, workspace_dir, row: dict) -> dict:
               "document": document, **_stamp(previous)}
     rows.append(stored)
     _atomic(target, {"version": 1, "templates": rows})
-    return {"id": template_id, "source": "workspace", "title": stored["title"]}
+    return {"id": template_id, "source": "workspace", "title": stored["title"], "warnings": editor_warnings(document)}
 
 
 def compile_template_document(template_id: str) -> dict:
@@ -468,7 +469,7 @@ def _bindings(changes: dict) -> list[dict]:
     return bindings
 
 
-def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
+def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | None = None, workspace_dir=None) -> list[str]:
     """Apply one binding. A picture that takes a model's place without a turn of its own joins ``stand_ins``."""
     if binding.get("add") is True:
         _add_slot(document, binding)
@@ -493,7 +494,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
-    return warnings
+    return warnings + apply_fit(slot, binding, workspace, workspace_dir)
 
 
 PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
@@ -754,12 +755,13 @@ def _retarget(document: dict) -> None:
     framing["targetSlot"] = target["id"]
 
 
-def _view(scene_id: str, record: dict) -> dict:
+def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
-        "warnings": record.get("warnings") or [], "traits": _traits(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document)], "traits": _traits(document),
+        **scene_layout(document, workspace, workspace_dir),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],

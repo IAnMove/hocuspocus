@@ -180,7 +180,7 @@ def test_a_picture_turn_the_tool_cannot_measure_keeps_the_binding_and_says_so(tm
         {"object_id": "side", "media": "image", "source_url": PICTURE}]}, 1)
     side = out["document"]["slots"][0]
     assert (side["media"], side["surface"], side["rotationY"]) == ("image", "cutout", 1.4)
-    assert out["warnings"] == ["picture_turn_skipped: invalid_world3d_document"]
+    assert [w for w in out["warnings"] if not w.startswith("editor_would_refuse")] == ["picture_turn_skipped: invalid_world3d_document"]
 
 
 @NODE
