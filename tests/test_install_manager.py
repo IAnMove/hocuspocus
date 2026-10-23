@@ -245,3 +245,19 @@ def test_launcher_needs_a_pinokio_checkout_and_the_pterm_client(tmp_path):
     assert resolve(inside, {}, which=lambda name: None)[1] == "no_pterm"
     forced = resolve(tmp_path, {"HOCUS_PINOKIO_REF": "pinokio://h:1/api/y"}, which=lambda name: "/bin/pterm")
     assert forced[0].ref == "pinokio://h:1/api/y"
+
+
+def test_engine_in_use_answers_even_when_the_service_cannot_be_imported(monkeypatch):
+    # The core runtime has no websocket client, so importing the H3 service raises there.
+    import builtins
+    from services import install_manager
+    real_import = builtins.__import__
+
+    def refuse(name, *args, **kwargs):
+        if name == "services" and args and args[2] and "minimax_h3_service" in args[2]:
+            raise ImportError("websocket")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", refuse)
+    assert install_manager._engine_in_use("minimax_h3") is False
+    assert install_manager._engine_in_use("sam") is False

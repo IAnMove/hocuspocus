@@ -38,7 +38,10 @@ def _detect(inspect_engines: set[str] | None = None) -> dict:
 def _engine_in_use(engine: str) -> bool:
     """Whether a running sidecar holds this engine's environment open."""
     if engine == "minimax_h3":
-        from services import minimax_h3_service
+        try:
+            from services import minimax_h3_service
+        except ImportError:
+            return False  # the core runtime ships without its websocket client, and runs no sidecar
         return minimax_h3_service.is_runtime_running()
     return False
 
