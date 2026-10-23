@@ -22,6 +22,7 @@ function chooseSteps() {
   return [
     {...gate, method: 'input', params: {
       title: 'Choose what to install',
+      confirm: 'Install',
       description: `<b>The studio and local generation (${gib(data.base.estimatedGiB)}) are always installed.</b> ` +
         'Tick the extras you want now. You can add or remove each one later in the app (Settings > Installation) or from the Advanced menu here. ' +
         'Free disk space: {{local.runtime.diskFreeGiB}} GB. {{local.runtime.summary.join(" ")}}',

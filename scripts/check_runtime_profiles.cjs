@@ -153,6 +153,7 @@ const form = dialog.find(step => step.method === 'input').params.form
 assert.deepEqual(form.map(field => field.key), catalogIds)
 assert(form.every(field => field.type === 'checkbox' && field.title.includes('GB') && field.description))
 assert(dialog[0].params.description.includes('always installed'))
+assert.equal(dialog[0].params.confirm, 'Install', 'The dialog has one button and it must say what it does')
 const choice = input => render(dialog[1].params.extras, {input})
 assert.equal(choice({sam: true, rigging: false, minimax_h3: true}), 'sam,minimax_h3')
 assert.equal(choice({}), '')
