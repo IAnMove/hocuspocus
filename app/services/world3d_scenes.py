@@ -24,6 +24,7 @@ from services.scene_documents import get_document, save_document
 from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_scene_layout import scene_layout
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
@@ -66,11 +67,11 @@ def instantiate_template(workspace: str, template_id: str, workspace_dir) -> dic
     scene_id = "w3d-" + uuid.uuid4().hex[:12]
     record = {"revision": 1, "templateId": document.get("templateId") or template_id, "document": document, "warnings": []}
     _write(workspace, scene_id, record, workspace_dir)
-    return _view(scene_id, record)
+    return _view(scene_id, record, workspace, workspace_dir)
 
 
 def inspect_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
-    return _view(scene_id, _read(workspace, scene_id, workspace_dir))
+    return _view(scene_id, _read(workspace, scene_id, workspace_dir), workspace, workspace_dir)
 
 
 SCENE_TRACK_PREFIX = "scene-"
@@ -211,7 +212,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     record["warnings"] = warnings
     record["templateId"] = document.get("templateId") or record["templateId"]
     _write(workspace, scene_id, record, workspace_dir)
-    viewed = _view(scene_id, record)
+    viewed = _view(scene_id, record, workspace, workspace_dir)
     viewed["warnings"] = warnings
     return viewed
 
@@ -323,7 +324,7 @@ def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
     record["revision"] += 1
     record["warnings"] = []
     _write(workspace, scene_id, record, workspace_dir)
-    viewed = _view(scene_id, record)
+    viewed = _view(scene_id, record, workspace, workspace_dir)
     viewed["talk"] = {key: value for key, value in talked.items() if key != "talk"}
     return viewed
 
@@ -754,12 +755,13 @@ def _retarget(document: dict) -> None:
     framing["targetSlot"] = target["id"]
 
 
-def _view(scene_id: str, record: dict) -> dict:
+def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
         "document": document, "objects": _objects(document), "pending": _pending(document),
         "warnings": record.get("warnings") or [], "traits": _traits(document),
+        **scene_layout(document, workspace, workspace_dir),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
                      "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
