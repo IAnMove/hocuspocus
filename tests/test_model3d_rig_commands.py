@@ -110,6 +110,6 @@ def test_rig_is_callable_through_authenticated_mcp_without_discovery(tmp_path):
 def test_humanoid_engine_is_a_rig_option_with_pose():
     submit = command_catalog()[0]
     payload = submit["inputSchema"]["properties"]["input"]["properties"]
-    assert payload["engine"]["enum"] == ["unirig", "procedural", "humanoid"]
+    assert payload["engine"]["enum"] == ["unirig", "procedural", "humanoid", "meshy"]
     assert payload["pose"]["enum"] == ["auto", "t", "a"]
     assert "not_humanoid" in submit["description"]

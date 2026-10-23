@@ -9,6 +9,7 @@ from typing import Any
 
 from services import core_workspace as core, workspace_busy
 from services.generation_output_name import canonical_file_url
+from services.meshy_options import request_options
 from services.provider_profile import alias_model3d_provider, refuse_remote_retexture
 
 _JOBS: dict[str, dict[str, Any]] = {}
@@ -140,15 +141,15 @@ def _draw_minimax_still(prompt: str, output_dir: str, job_id: str) -> str | None
     return str(result.get("path") or "") or None
 
 
-def _publish_asset_manifest(job_id: str, filename: str, provider: str) -> None:
+def _publish_asset_manifest(job_id: str, filename: str, provider: str, meshy: dict[str, Any] | None = None) -> None:
     """Best effort, like the full server's sidecar publish: the GLB is on disk and the provider call was paid for."""
     try:
-        _write_asset_manifest(job_id, filename, provider)
+        _write_asset_manifest(job_id, filename, provider, meshy)
     except Exception as exc:
         print(f"[core-3d] asset manifest failed for {filename}: {exc}")
 
 
-def _write_asset_manifest(job_id: str, filename: str, provider: str) -> None:
+def _write_asset_manifest(job_id: str, filename: str, provider: str, meshy: dict[str, Any] | None = None) -> None:
     from services.asset_manifest import publish_generation_job_sidecar
 
     with _LOCK:
@@ -169,6 +170,7 @@ def _write_asset_manifest(job_id: str, filename: str, provider: str) -> None:
                 "model_type": request.get("model"),
                 "provider": provider,
                 "image_path": os.path.basename(str(request.get("image_path") or "")) or None,
+                **({"meshy": meshy} if meshy else {}),
             },
         },
         job_id_key="job_id",
@@ -215,7 +217,8 @@ def start_job(
         "provenance": dict(body.get("provenance") or {}),
         "created_at": time.time(), "updated_at": time.time(),
         "_cancel_requested": False,
-        "_request": {"prompt": prompt, "image_path": image_path, "model": model_id, "output_dir": output_dir},
+        "_request": {"prompt": prompt, "image_path": image_path, "model": model_id, "output_dir": output_dir,
+                     **({"meshy_options": request_options(body, model_id)} if provider == "meshy" else {})},
     }
     with _LOCK:
         _JOBS[job_id] = job
@@ -233,7 +236,7 @@ def _call_provider(provider: str, request: dict[str, Any], stem: str, cancelled,
             api_key=str(services.get("meshy_api_key") or ""),
             output_dir=output_dir, prompt=str(request.get("prompt") or ""),
             image_path=request.get("image_path"), model=str(request.get("model") or "latest"),
-            cancelled=cancelled, filename_stem=stem,
+            cancelled=cancelled, filename_stem=stem, options=request.get("meshy_options"),
         )
     from services.hi3d_service import generate_model as generate_hi3d
     image_path = request.get("image_path")
@@ -269,7 +272,7 @@ def _run(job_id: str) -> None:
             return
         result = _call_provider(provider, dict(job.get("_request") or {}), f"{provider}-{job_id[:8]}", cancelled, job_id)
         filename = result["filename"]
-        _publish_asset_manifest(job_id, filename, provider)
+        _publish_asset_manifest(job_id, filename, provider, result.get("meshy"))
         _patch(job_id, status="completed", phase="completed", progress=1.0,
                message="3D model ready", filename=filename, url=canonical_file_url(filename, job.get("workspace")))
     except Exception as exc:

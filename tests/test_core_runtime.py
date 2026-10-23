@@ -142,11 +142,25 @@ class CoreRuntimeTests(unittest.TestCase):
         missing = self.client.post("/api/v1/video-editor/probe", json={"source": "missing.mp4"})
         self.assertEqual(missing.status_code, 400)
 
+    def test_meshy_rig_is_offered_by_the_core_server_and_needs_the_users_key(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            (core_runtime.core.outputs_root() / "hero.glb").write_bytes(b"glTF")
+            with patch("services.meshy_rig_service.api_key", return_value=""):
+                engines = {engine["id"]: engine for engine in self.client.get("/api/v1/rig/capabilities").json()["engines"]}
+                refused = self.client.post("/api/v1/rig/generate", json={"source": "hero.glb", "engine": "meshy"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertFalse(engines["meshy"]["installed"])
+        self.assertTrue(engines["meshy"]["remote"])
+        self.assertEqual(refused.status_code, 400, refused.text)
+        self.assertIn("Settings", refused.json()["detail"])
+
     def test_procedural_rig_runs_without_the_3d_engine(self):
         import shutil
         import time
         capabilities = self.client.get("/api/v1/rig/capabilities").json()
-        self.assertEqual([engine["id"] for engine in capabilities["engines"]], ["procedural", "humanoid"])
+        self.assertEqual([engine["id"] for engine in capabilities["engines"]], ["procedural", "humanoid", "meshy"])
         self.assertTrue(capabilities["engines"][0]["installed"], capabilities["engines"][0]["install_hint"])
         self.assertTrue(capabilities["animations"])
         folder, previous = self._in_temp_workspace()
