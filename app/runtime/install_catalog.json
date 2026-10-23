@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "base": {
+    "title": "Studio and local generation",
+    "summary": "Projects, editors, Director, Wizard and local NVIDIA generation (WanGP, including native MiniMax H3). Always installed.",
+    "estimatedGiB": 11
+  },
+  "components": [
+    {
+      "id": "creation_models",
+      "engine": "creation_models",
+      "script": "creation_models_install.js",
+      "title": "FLUX 3 / Drama 3 Support",
+      "summary": "Isolated ComfyUI runtime for FLUX 3 Klein images and Drama 3 voices.",
+      "estimatedGiB": 7,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-wand-magic-sparkles", "gate": "always"},
+      "remove": [
+        "app/services/creation_models/env",
+        "app/services/creation_models/vendor",
+        "app/services/creation_models/input",
+        "app/services/creation_models/output",
+        "app/services/creation_models/extra_model_paths.json"
+      ]
+    },
+    {
+      "id": "hunyuan3d",
+      "engine": "hunyuan3d",
+      "script": "hunyuan3d_install.js",
+      "title": "3D Generation (Hunyuan3D)",
+      "summary": "Local image-to-3D meshes and textures. On Windows it also needs Visual Studio Build Tools.",
+      "estimatedGiB": 10,
+      "restartRequired": true,
+      "menu": {"icon": "fa-solid fa-cube", "gate": "nvidia"},
+      "remove": [
+        "app/services/hunyuan3d/env",
+        "app/services/hunyuan3d/vendor"
+      ]
+    },
+    {
+      "id": "trellis2",
+      "engine": "trellis2",
+      "script": "trellis2_install.js",
+      "title": "TRELLIS.2 (optional, Linux NVIDIA 24GB)",
+      "summary": "Official Microsoft 4B image-to-3D. Linux with an NVIDIA GPU of 24 GB or more.",
+      "estimatedGiB": 10,
+      "restartRequired": true,
+      "menu": {"icon": "fa-solid fa-cube", "gate": "nvidia"},
+      "remove": [
+        "app/services/model3d_runtimes/trellis2/env",
+        "app/services/model3d_runtimes/trellis2/vendor"
+      ]
+    },
+    {
+      "id": "sam",
+      "engine": "sam",
+      "script": "sam_install.js",
+      "title": "Inpaint Support (SAM 3.1)",
+      "summary": "Segment Anything masks for inpainting.",
+      "estimatedGiB": 6,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-vector-square", "gate": "nvidia"},
+      "remove": [
+        "app/services/sam/env",
+        "app/services/sam/sam3"
+      ]
+    },
+    {
+      "id": "rigging",
+      "engine": "rigging",
+      "script": "rigging_install.js",
+      "title": "AI Rigging (UniRig)",
+      "summary": "Automatic skeletons for 3D characters. Linux only.",
+      "estimatedGiB": 8,
+      "restartRequired": true,
+      "menu": {"icon": "fa-solid fa-person-running", "gate": "nvidia"},
+      "remove": [
+        "app/services/rigging/env",
+        "app/services/rigging/vendor"
+      ]
+    },
+    {
+      "id": "minimax_h3",
+      "engine": "minimax_h3",
+      "script": "minimax_h3_install.js",
+      "title": "MiniMax H3 Legacy (ComfyUI)",
+      "summary": "The original ComfyUI workflow for MiniMax H3. The native H3 in the base install covers normal use.",
+      "estimatedGiB": 6.5,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-film", "gate": "nvidia"},
+      "remove": [
+        "app/services/minimax_h3/env",
+        "app/services/minimax_h3/vendor"
+      ]
+    }
+  ]
+}

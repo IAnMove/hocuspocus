@@ -1,5 +1,6 @@
 // Loaded after git pull too, so Update executes the new revision's recipes.
 const runtime = require('./runtime_install')
+const components = require('./install_components')
 module.exports = {
   requires: {bundle: 'ai'},
   run: [
@@ -9,24 +10,11 @@ module.exports = {
     {when: "{{!exists('app/postprocessing/seedvc/__init__.py')}}", method: 'shell.run', params: {
       message: runtime.guarded('git clone --depth 1 --branch v1.0.0 https://github.com/Blizaine/maestro-seedvc app/postprocessing/seedvc'),
     }},
-    ...runtime.installEngines(['core', 'wangp', 'minimax_h3']),
+    ...runtime.installEngines(['core', 'wangp']),
     ...runtime.call('speech_install.js'),
-    ...runtime.call('creation_models_install.js').map(step => ({...step,
-      when: "{{args.update && exists('app/services/creation_models/env') && local.runtime.engines.creation_models.supported}}",
-    })),
-    // Optional engines, installed from the Advanced menu, are refreshed only if present.
-    ...runtime.call('trellis2_install.js').map(step => ({...step,
-      when: `{{args.update && exists('app/services/model3d_runtimes/trellis2/env') && local.runtime.engines.trellis2.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
-    })),
-    ...runtime.call('hunyuan3d_install.js').map(step => ({...step,
-      when: `{{args.update && exists('app/services/hunyuan3d/env') && local.runtime.engines.hunyuan3d.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
-    })),
-    ...runtime.call('sam_install.js').map(step => ({...step,
-      when: `{{args.update && exists('app/services/sam/env') && local.runtime.engines.sam.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
-    })),
-    ...runtime.call('rigging_install.js').map(step => ({...step,
-      when: `{{args.update && exists('app/services/rigging/env') && local.runtime.engines.rigging.supported${step.when ? ' && (' + step.when.slice(2,-2) + ')' : ''}}}`,
-    })),
+    // Optional components (install_catalog.json): Install adds the ones ticked in its dialog,
+    // Update refreshes only those whose environment already exists.
+    ...components.setupSteps(),
     {method: 'log', params: {
       raw: '{{"HocusPocus runtime recipes checked.\\r\\n" + local.runtime.summary.join("\\r\\n")}}',
     }},

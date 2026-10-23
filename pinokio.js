@@ -1,5 +1,6 @@
 const path = require('path')
 const runtimeCatalog = require('./app/runtime/profiles.json')
+const components = require('./install_components')
 module.exports = {
   version: "8.0",
   title: "HocusPocus · Creation Lab",
@@ -16,11 +17,9 @@ module.exports = {
         (!arch || runtimeCatalog.architectures.includes(arch)) &&
         (!gpu || gpu === 'unknown' || runtimeCatalog.accelerators.includes(gpu))
     }
+    // Entries of components that hide on hardware their engine does not support.
     const filterOptional = items => items.filter(item =>
-      item.href === 'sam_install.js' ? optionalAvailable('sam')
-        : item.href === 'rigging_install.js' ? optionalAvailable('rigging')
-        : item.href === 'hunyuan3d_install.js' ? optionalAvailable('hunyuan3d')
-        : item.href === 'trellis2_install.js' ? optionalAvailable('trellis2') : true
+      !(item.href in components.gatedEngines) || optionalAvailable(components.gatedEngines[item.href])
     ).map(item => item.menu ? {...item, menu: filterOptional(item.menu)} : item)
     // Do not gate this menu on kernel.gpu. Pinokio can render an app menu
     // before its hardware inventory has populated that property, which would
@@ -111,13 +110,7 @@ module.exports = {
         }]), {
           icon: "fa-solid fa-ellipsis",
           text: "Advanced",
-          menu: [{
-            icon: "fa-solid fa-wand-magic-sparkles",
-            text: info.exists("app/services/creation_models/env")
-              ? "Update FLUX 3 / Drama 3 Support"
-              : "Install FLUX 3 / Drama 3 Support",
-            href: "creation_models_install.js",
-          }, {
+          menu: [...components.menuItems(info, 'always'), {
             icon: "fa-solid fa-comment-dots",
             text: "Repair offline lip sync",
             href: "speech_install.js",
@@ -132,31 +125,7 @@ module.exports = {
             icon: "fa-solid fa-key",
             text: "Log in to Hugging Face",
             href: "hf_login.js",
-          }]), ...(coreOnly || (kernel.platform || require("os").platform()) === "darwin" ? [] : [{
-            icon: "fa-solid fa-cube",
-            text: info.exists("app/services/hunyuan3d/env")
-              ? "Update 3D Generation (Hunyuan3D)"
-              : "Install 3D Generation (Hunyuan3D)",
-            href: "hunyuan3d_install.js",
-          }, {
-            icon: "fa-solid fa-cube",
-            text: info.exists("app/services/model3d_runtimes/trellis2/env")
-              ? "Update TRELLIS.2 (optional, Linux NVIDIA 24GB)"
-              : "Install TRELLIS.2 (optional, Linux NVIDIA 24GB)",
-            href: "trellis2_install.js",
-          }, {
-            icon: "fa-solid fa-vector-square",
-            text: info.exists("app/services/sam/env")
-              ? "Update Inpaint Support (SAM 3.1)"
-              : "Install Inpaint Support (SAM 3.1)",
-            href: "sam_install.js",
-          }, {
-            icon: "fa-solid fa-person-running",
-            text: info.exists("app/services/rigging/env")
-              ? "Update AI Rigging (UniRig)"
-              : "Install AI Rigging (UniRig)",
-            href: "rigging_install.js",
-          }]), {
+          }]), ...(coreOnly || (kernel.platform || require("os").platform()) === "darwin" ? [] : components.menuItems(info, 'nvidia')), {
             icon: "fa-solid fa-plug",
             text: "Reinstall",
             href: "install.js",
