@@ -46,16 +46,61 @@ gains a supported NVIDIA setup installs WanGP into the same environment.
 | Core/remote, fallback | Both, plus Apple Silicon; Linux ARM | `app/env` (venv) | 3.10 / none / none |
 | HocusPocus / WanGP, including native H3 | Both | `app/env` (venv) | 3.10 / 2.7.0 Linux, 2.7.1 Windows / 12.8 |
 | Hunyuan3D, optional | Both | `app/services/hunyuan3d/env` (conda) | 3.10 / 2.7.0 / 12.8 |
-| H3 **Legacy**, ComfyUI | Both | `app/services/minimax_h3/env` (conda) | 3.11 / 2.10.0 / 13.0 |
+| H3 **Legacy**, ComfyUI, optional | Both | `app/services/minimax_h3/env` (conda) | 3.11 / 2.10.0 / 13.0 |
 | SAM, optional | Both | `app/services/sam/env` (conda) | 3.12 / 2.7.0 / 12.8 |
 | UniRig, optional | Linux | `app/services/rigging/env` (conda) | 3.11 / 2.7.0 / 12.8 |
 
 Procedural rigging is CPU-only (NumPy + pygltflib) and runs with the main
 `app/env` interpreter on every machine, core included; the Hunyuan3D env is
-only a fallback for installs not yet updated. Hunyuan3D, SAM and UniRig are
-optional (`defaultInstall: false`): Install skips them, the Advanced menu
-installs them, and Update refreshes them only where their env exists. Only
-the Hunyuan3D installer checks the Windows compiler.
+only a fallback for installs not yet updated. Only the Hunyuan3D installer
+checks the Windows compiler.
+
+## Optional components
+
+The base install is `core` or `wangp` (native H3 included). Everything else is a
+component listed once in [`install_catalog.json`](../../app/runtime/install_catalog.json):
+FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig and H3 Legacy. Install asks which
+to add (a checkbox dialog showing each size and the free disk space; unticked means
+"not now"), the Advanced menu installs or updates each one later, and Update refreshes
+only the components whose environment exists. Nothing else enumerates them:
+`install_components.js` (Pinokio) and `services/install_catalog.py` (server) read the
+same file, so a new component is one catalog entry plus its `<id>_install.js`, which
+`scripts/check_runtime_profiles.cjs` and `tests/test_install_catalog.py` verify.
+
+## Installation tab
+
+Settings > Installation (`ui/src/components/Installation`) lists the same components with their
+state, measured or estimated size and the free disk space, and installs, updates or removes each
+one. The server side is `services/install_manager.py` behind `GET /api/v1/system/install`,
+`POST .../{id}/install`, `POST .../{id}/uninstall` and `GET .../{id}/output`, mounted by
+`create_system_capabilities_router`, so the core runtime serves it too.
+
+- **Install runs the component's own Pinokio script** (`pterm start <id>_install.js --ref
+  pinokio://127.0.0.1:42000/api/<folder>`), so the menu and the tab can never drift. `pterm` runs
+  detached with its output in `app/.runtime/install-jobs/<id>.log`. It streams the script's
+  terminal, always exits 0, and Pinokio stops the script if the client dies, so success is decided
+  by re-reading what is installed, never by the exit code. Stopping or restarting HocusPocus
+  during an install can interrupt it.
+- **Without Pinokio** (no `pterm`, or a checkout outside `<pinokio>/api/`) the tab shows state and
+  can remove, but Install is disabled. `HOCUS_PINOKIO_REF` and `HOCUS_PINOKIO_PORT` override the
+  address.
+- **One change at a time**, persisted in `app/.runtime/install-jobs/<id>.json`; a job whose client
+  has vanished after a server restart is closed from the installed state.
+- **Uninstall** deletes what `install_catalog.json` lists plus `app/.runtime/<engine>.managed`, on a
+  thread, and refuses a link (a shared environment) or an engine that is running.
+- Installing is not offered to MCP or the Wizard yet: it downloads gigabytes, so a person starts
+  it from the tab.
+
+Each entry also lists the folders Uninstall may delete. They must be generated folders
+inside `app/services` (a test rejects tracked files and any path outside it), the
+engine's environment is always one of them, and downloaded model files are never
+included: they belong to the Storage Manager.
+
+H3 Legacy keeps `defaultInstall: true` in `profiles.json` even though Install no longer
+adds it. That field is part of the install fingerprint, so changing it would mark every
+existing install stale and reinstall about 6 GB. The catalog carries the policy instead
+(`install_catalog.optional_engines()`), and `defaultInstall` only distinguishes the base
+from everything else for code that predates the catalog.
 
 CUDA 13 requires driver 580 or newer. CUDA 12 recipes use NVIDIA's minor
 compatibility floor; newer drivers are recommended, especially for JIT kernels.
