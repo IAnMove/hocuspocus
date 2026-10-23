@@ -15,6 +15,15 @@ MAX_ITEMS = 32
 CONVENTION = (f"metres, y up. A 3D model is drawn {MODEL_HEIGHT:g} m x scale tall (its bounding-box height, whatever its length); "
               f"an image cutout {CUTOUT_HEIGHT:g} m x scale tall. boundsM.size is the model's own width, height and depth; "
               "boundsM.min/max/center/bottomY are in the scene after position and rotationY. A grounded object's lowest point sits at position[1].")
+LAYOUT_DOC = ("It also shows the shot in metres: camera (the authored family, eye, look, fov, framing and a shake summary; an orbit, "
+              "a framing or a shake moves the live camera from these), light, duration, size {width, height, fps} and layout.items, one per object "
+              "(at most %d) with id, role, media, position, rotationY, scale, sourceUrl, clip and boundsM. boundsM is a 3D model's real size and place "
+              "from its workspace .glb, by the renderer's own sums: a model is drawn 1.7 m x scale tall (its bounding-box height, whatever its length), "
+              "so a whole-environment GLB is 1.7 m tall at scale 1. boundsM.size is its own width, height and depth; min, max, center and bottomY are "
+              "scene coordinates after position and rotationY, and a grounded object's lowest point sits at position[1]. It is the rest pose, so an "
+              "animation can reach outside it. boundsM is null with a boundsReason (marker, not_a_3d_model, outside_workspace, missing_file, not_glb, "
+              "truncated, missing_min_max...) when the object cannot be measured. Publish a scene and it opens in the Video 3D editor's Open dialog."
+              ) % MAX_ITEMS
 _PLAIN_CAMERA = ("family", "eye", "look", "fov", "frameFormat", "orbitRadius", "orbitHeight", "orbitTurns", "eyeOffset", "targetOffset", "lensShift")
 _FRAMING = ("targetSlot", "anchor", "from", "to", "lookFrom", "lookTo", "orbitTurns", "fovFrom", "fovTo", "relativeToFacing")
 

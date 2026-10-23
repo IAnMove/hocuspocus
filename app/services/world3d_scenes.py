@@ -24,6 +24,7 @@ from services.scene_documents import get_document, save_document
 from services.world3d_grades import apply_grade
 from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
+from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_layout import scene_layout
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
@@ -182,7 +183,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     bindings = _bindings(changes)
     stand_ins: set[str] = set()
     for binding in bindings:
-        warnings.extend(_bind(document, binding, stand_ins))
+        warnings.extend(_bind(document, binding, stand_ins, workspace, workspace_dir))
     _check_carriers(document["slots"], bindings)
     if "camera_template" in changes:
         warnings.extend(_set_camera_template(document, changes["camera_template"]))
@@ -469,7 +470,7 @@ def _bindings(changes: dict) -> list[dict]:
     return bindings
 
 
-def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
+def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | None = None, workspace_dir=None) -> list[str]:
     """Apply one binding. A picture that takes a model's place without a turn of its own joins ``stand_ins``."""
     if binding.get("add") is True:
         _add_slot(document, binding)
@@ -494,7 +495,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str]) -> list[str]:
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
-    return warnings
+    return warnings + apply_fit(slot, binding, workspace, workspace_dir)
 
 
 PICTURE_SCALE = 0.85     # a 1.7 m model over a 2 m cutout plane (ui/src/features/scene3d/pictureStandIn.ts)
