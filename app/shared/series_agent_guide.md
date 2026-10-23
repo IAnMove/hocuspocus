@@ -392,7 +392,10 @@ closer camera. Packs: `dialogue-*` (`ots-a`/`ots-b` keep the eyelines, `table`, 
 `transitionIn` is the join between two takes and needs no card). Modifiers go on the scene, not on the shot:
 `world3d.scene.instantiate` → `world3d.scene.patch` with `light` (`noon`… `dawn`), `grade` (`natural`… `film`),
 `lens` (`14mm`–`200mm`) or `camera_template` (a `kind: camera` card) → `world3d.scene.publish` → `scene3d:
-{"scene": "<file>"}`. What the production dry run warns ruins a series shot too: `template_still` (a `still` card
+{"scene": "<file>"}`. `world3d.scene.inspect` and every patch reply show the `camera` and, per object, `layout.items[].boundsM` (its real
+size and place in metres); a model is drawn 1.7 m × `scale` tall whatever its length, so size it with a binding's `fit`
+(`{"heightM"|"widthM"|"depthM"|"longestM": metres}` or `"native"`) instead of guessing `scale`. A scene from nothing starts from a blank
+personal template (`docs/3d-video-compositor/HOWUSEIT.md`, "Agent-built scenes"). What the production dry run warns ruins a series shot too: `template_still` (a `still` card
 with no clip, motion, camera or world), `stage_unskinned` (a stage in its mold colours: give the location a set
 skin), `looks_samey` (one template and place in more than four shots in a row), `template_reused` (one card in
 more than four shots).
