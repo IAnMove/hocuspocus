@@ -25,7 +25,7 @@ def create_rig_router(
     engine_gate: Callable[[dict], None] | None = None,
     filter_engines: Callable[[list], list] | None = None,
 ) -> APIRouter:
-    """The four ``/api/v1/rig`` routes, in the full server's order."""
+    """The ``/api/v1/rig`` routes, in the full server's order."""
     router = APIRouter()
 
     @router.get("/api/v1/rig/capabilities")
@@ -35,6 +35,18 @@ def create_rig_router(
         if filter_engines is not None:
             payload["engines"] = filter_engines(payload["engines"])
         return payload
+
+    @router.get("/api/v1/rig/meshy/animations")
+    def meshy_animation_library(search: str = "", category: str = "", sub_category: str = "", limit: int = 100, offset: int = 0):
+        """Meshy's animation library (free to read; needs the user's Meshy key). Entries go in ``animations`` of an engine ``meshy`` rig."""
+        from services import meshy_rig_service
+        from services.meshy_http import MeshyError
+        try:
+            return meshy_rig_service.animation_library(search=search, category=category, sub_category=sub_category, limit=limit, offset=offset)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except MeshyError as e:
+            raise HTTPException(status_code=e.status_code if e.status_code in {401, 402, 429} else 502, detail=str(e))
 
     @router.post("/api/v1/rig/generate")
     async def generate_rig(request: Request):
@@ -97,6 +109,7 @@ def create_rig_router(
         return job
 
     # Launch's task cancel and rig commands call these by name.
+    globals()["meshy_animation_library"] = meshy_animation_library
     globals()["generate_rig"] = generate_rig
     globals()["rig_job_status"] = rig_job_status
     globals()["cancel_rig_job"] = cancel_rig_job

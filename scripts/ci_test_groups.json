@@ -146,6 +146,7 @@
         "tests/test_media_thumbnails.py",
         "tests/test_memory_trim.py",
         "tests/test_meshy_generation.py",
+        "tests/test_meshy_rig.py",
         "tests/test_minimax_h3_duration.py",
         "tests/test_minimax_h3_fused_turbo.py",
         "tests/test_minimax_h3_pdd.py",

@@ -76,6 +76,7 @@ class FakeMeshy:
         self.files: dict[str, bytes] = {}
         self.library: list[dict] = []
         self.delete_status = 204
+        self.on_poll = None          # called with the task id on every status read
         self._counter = 0
 
     def install(self, monkeypatch) -> "FakeMeshy":
@@ -125,6 +126,7 @@ class FakeMeshy:
             return {**base, "result": result, "expires_at": 1_900_000_000_000}
         sent = next((body for made, _id, body in self.created if made == "anim"), {})
         names = [f"Action {action}" for action in sent.get("action_ids", [])]
+        base["consumed_credits"] = 3 * len(names)   # 3 credits per animation
         self.files.setdefault(f"{ASSETS}/{task}-anim.glb", glb(tuple((name, 1.0) for name in names)))
         return {**base, "result": {"animation_glb_url": f"{ASSETS}/{task}-anim.glb"}, "expires_at": 1_800_000_000_000}
 
@@ -162,6 +164,8 @@ class FakeMeshy:
         if kind is None:
             return error(404, "Task not found")
         seen = sum(1 for call in self.calls if call[0] == "GET" and call[1].endswith(f"/{task}"))
+        if self.on_poll:
+            self.on_poll(task)
         return Response(self._task(kind, task, seen - 1))
 
     def delete(self, url: str, headers=None, timeout=None, **_kw) -> Response:
