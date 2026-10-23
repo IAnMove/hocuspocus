@@ -12,7 +12,7 @@ module.exports = {
     ...runtime.call("runtime_setup.js", {update: false, extras: "{{local.extras || ''}}"}),
     {method: "input", params: {
       title: "Installation completed",
-      description: "{{local.runtime.summary.join(' ')}} Click Start."
+      description: "The studio is installed. {{(local.runtime.unavailable || []).join(' ')}} {{local.runtime.engines.wangp.supported ? 'Add or remove extras any time in Settings > Installation. ' : ''}}Click Start."
     }}
   ]
 }

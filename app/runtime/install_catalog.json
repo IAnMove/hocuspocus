@@ -12,7 +12,7 @@
       "script": "creation_models_install.js",
       "title": "FLUX 3 / Drama 3 Support",
       "summary": "Isolated ComfyUI runtime for FLUX 3 Klein images and Drama 3 voices.",
-      "estimatedGiB": 7,
+      "estimatedGiB": 6,
       "restartRequired": false,
       "menu": {"icon": "fa-solid fa-wand-magic-sparkles", "gate": "always"},
       "remove": [
@@ -43,7 +43,7 @@
       "script": "trellis2_install.js",
       "title": "TRELLIS.2 (optional, Linux NVIDIA 24GB)",
       "summary": "Official Microsoft 4B image-to-3D. Linux with an NVIDIA GPU of 24 GB or more.",
-      "estimatedGiB": 10,
+      "estimatedGiB": 13,
       "restartRequired": true,
       "menu": {"icon": "fa-solid fa-cube", "gate": "nvidia"},
       "remove": [
@@ -57,7 +57,7 @@
       "script": "sam_install.js",
       "title": "Inpaint Support (SAM 3.1)",
       "summary": "Segment Anything masks for inpainting.",
-      "estimatedGiB": 6,
+      "estimatedGiB": 7,
       "restartRequired": false,
       "menu": {"icon": "fa-solid fa-vector-square", "gate": "nvidia"},
       "remove": [
@@ -71,7 +71,7 @@
       "script": "rigging_install.js",
       "title": "AI Rigging (UniRig)",
       "summary": "Automatic skeletons for 3D characters. Linux only.",
-      "estimatedGiB": 8,
+      "estimatedGiB": 11,
       "restartRequired": true,
       "menu": {"icon": "fa-solid fa-person-running", "gate": "nvidia"},
       "remove": [

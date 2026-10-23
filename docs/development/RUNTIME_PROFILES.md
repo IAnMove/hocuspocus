@@ -125,6 +125,16 @@ Python 3.11 and checks its version, then corrects that tag and its RECORD hash.
 Other mismatches remain errors. Installation keeps `uv pip check` and imports `bpy`, Flash Attention,
 Torch Scatter/Cluster and SpConv before writing a successful runtime receipt.
 
+decord 0.6.0 (WanGP and SAM on Linux) has the same kind of upstream mistake: its
+`manylinux2010_x86_64` wheel is named `py3-none` but its `WHEEL` file says `cp36-cp36m`,
+so `uv pip check` stops a fresh install with "built for a different platform". Before
+the check, `scripts/runtime_wheel_tags.py` corrects that one known tag (and its RECORD
+hash) on Linux x86_64, only after `decord` imports. Windows (`py3-none-any`) and macOS
+are untouched, and any other version, tag or failure is left for uv to report. The
+script is deliberately not part of the install fingerprint: only a new install needs
+it, so existing installs must not look out of date. A new known tag is one `KNOWN_TAGS`
+entry.
+
 ### Windows native toolchain
 
 The Hunyuan recipe uses CUDA Toolkit 12.8 and x64 MSVC 14.2x/14.3x/14.4x.
