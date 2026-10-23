@@ -145,6 +145,10 @@ def _slots_problems(slots, camera) -> list[str]:
     return problems
 
 
+def _motion_lost(motion) -> bool:
+    return motion is not None and not (isinstance(motion, dict) and _vector(motion.get("to")))
+
+
 def _slot_problems(slot) -> list[str]:
     if not isinstance(slot, dict) or not isinstance(slot.get("id"), str) or not slot["id"]:
         return ["needs a text id"]
@@ -153,8 +157,7 @@ def _slot_problems(slot) -> list[str]:
         problems.append("needs position [x, y, z], a scale above 0 and a rotationY")
     if slot.get("slot") not in ROLES:
         problems.append(f"slot must be one of {', '.join(ROLES)}")
-    motion = slot.get("motion")
-    if motion is not None and not (isinstance(motion, dict) and _vector(motion.get("to"))):
+    if _motion_lost(slot.get("motion")):
         problems.append("motion needs to [x, y, z]; the editor drops a move without it")
     clip = slot.get("clip")
     if clip is not None and not (isinstance(clip, dict) and _whole(clip.get("index")) and isinstance(clip.get("name"), str)):
