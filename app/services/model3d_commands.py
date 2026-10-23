@@ -15,6 +15,7 @@ from routers.wangp_mcp import RequestJournal, UncertainRequest
 from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.generation_provenance import normalize_submission_provenance
 from services.mcp_intent import check_intent_id, intent_digest
+from services.meshy_options import json_schema as meshy_json_schema
 from services.wangp_submission import JsonRequest
 
 
@@ -28,8 +29,10 @@ def command_catalog() -> list[dict]:
             "image_path": {"type": "string"},
             "images": {"type": "object", "additionalProperties": {"type": "string"}},
             "model_id": {"type": "string"},
+            "provider": {"type": "string", "description": "Default is the production profile's 3D provider; meshy and hi3d are paid cloud generators."},
             "preset": {"type": "string"},
             "output_format": {"type": "string", "enum": ["glb", "obj", "ply", "stl"]},
+            "meshy": meshy_json_schema(),
         },
         "required": ["workspace"],
         "description": "The existing /api/v1/model3d/generate body; GLB is the default output.",
@@ -44,7 +47,8 @@ def command_catalog() -> list[dict]:
         ("model3d.generate", generate, True,
          "Submit to a selected native 3D generator using the GPU lane and workspace publisher. "
          "TRELLIS.2 and Pixal3D require one front image; Hunyuan text uses the existing "
-         "MiniMax reference-image configuration. Poll model3d.status."),
+         "MiniMax reference-image configuration. Provider meshy is a paid cloud generator (the user's own key) "
+         "and takes the optional meshy options. Poll model3d.status."),
         ("model3d.status", status, False,
          "Read a native Model3D job in its exact workspace, including the published GLB URL."),
     ):
