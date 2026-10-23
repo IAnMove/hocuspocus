@@ -40,6 +40,8 @@ LIBRARY = f"{ANIMATIONS}/library"
 MAX_MODEL_BYTES = 100 * 1024 * 1024
 MAX_ACTIONS = 10
 DEFAULT_HEIGHT_METERS = 1.7
+MIN_HEIGHT_METERS, MAX_HEIGHT_METERS = 0.1, 100
+DATA_URI_PREFIX = "data:application/octet-stream;base64,"
 LIBRARY_TTL_SECONDS = 600
 LIBRARY_PAGE = 100
 LIBRARY_MAX_PAGE = 500
@@ -84,7 +86,7 @@ def engine_entry() -> dict[str, Any]:
         "id": "meshy",
         "label": "Meshy (cloud)",
         "description": (
-            "Meshy's cloud rigging for a textured humanoid GLB that faces +Z (up to 100 MB): a rigged GLB plus free walking "
+            "Meshy's cloud rigging for a textured humanoid GLB that faces +Z (up to about 75 MB): a rigged GLB plus free walking "
             "and running clips, and optionally clips from Meshy's animation library. Uses your own Meshy credits."
         ),
         "installed": ready,
@@ -100,8 +102,8 @@ def engine_entry() -> dict[str, Any]:
 def parse_request(body: dict[str, Any]) -> dict[str, Any]:
     """``height_meters`` and the library entries (action ids or keys) of an engine ``meshy`` request."""
     height = body.get("height_meters", DEFAULT_HEIGHT_METERS)
-    if isinstance(height, bool) or not isinstance(height, (int, float)) or not 0 < height <= 100:
-        raise ValueError("height_meters must be a number of meters above 0 and up to 100")
+    if isinstance(height, bool) or not isinstance(height, (int, float)) or not MIN_HEIGHT_METERS <= height <= MAX_HEIGHT_METERS:
+        raise ValueError(f"height_meters must be a number of meters from {MIN_HEIGHT_METERS} to {MAX_HEIGHT_METERS}")
     raw = body.get("animations")
     if raw is None:
         raw = []
@@ -172,11 +174,16 @@ def glb_problem(data: bytes) -> tuple[str, str] | None:
     return None
 
 
+def encoded_size(size: int) -> int:
+    """Length of the data URI for ``size`` bytes of GLB: Meshy's 100 MB limit counts the URI, base64 adds a third."""
+    return len(DATA_URI_PREFIX) + 4 * -(-size // 3)
+
+
 def read_source(path: Path) -> bytes:
     size = path.stat().st_size
-    if size > MAX_MODEL_BYTES:
-        raise _invalid(f"The GLB is {size // 1_000_000} MB and Meshy accepts at most {MAX_MODEL_BYTES // 1024 // 1024} MB. "
-                       "Reduce its textures or polygons and try again.", "too_large")
+    if encoded_size(size) > MAX_MODEL_BYTES:
+        raise _invalid(f"The GLB is {size // 1_000_000} MB; Meshy accepts at most {MAX_MODEL_BYTES // 1024 // 1024} MB as an upload, "
+                       "which is about 75 MB of GLB. Reduce its textures or polygons and try again.", "too_large")
     data = path.read_bytes()
     problem = glb_problem(data)
     if problem:
@@ -297,6 +304,11 @@ def _rig_error(error: MeshyError) -> MeshyError:
     return error
 
 
+def _named(error: MeshyError, task_id: str, label: str) -> MeshyError:
+    """The same error, saying which Meshy task it concerns: the credits are spent, so the user can find it at Meshy."""
+    return MeshyError(f"{error} ({label} task {task_id})", error.status_code, code=error.code, reason=error.reason)
+
+
 def _extra_clip(url: str, role: str, warnings: list[str]) -> bytes | None:
     try:
         return http.download(url)
@@ -307,14 +319,16 @@ def _extra_clip(url: str, role: str, warnings: list[str]) -> bytes | None:
 
 def _rig(key: str, model: bytes, height: float, job_id: str, cancelled, warnings: list[str], low: float, high: float) -> _Rigged:
     progress = _stage(job_id, "rigging", "Meshy is rigging the model", low, high)
-    data_uri = "data:application/octet-stream;base64," + base64.b64encode(model).decode("ascii")
+    data_uri = DATA_URI_PREFIX + base64.b64encode(model).decode("ascii")
+    task_id = ""
     try:
         created = http.call("post", RIGGING, key, body={"model_url": data_uri, "height_meters": height},
                             timeout=(15, 300), cancelled=cancelled, fallback="Meshy rigging failed")
         task_id = http.task_id(created)
         task = http.poll_task(f"{RIGGING}/{task_id}", key, cancelled=cancelled, on_progress=progress, timeout_s=10 * 60)
     except MeshyError as error:
-        raise _rig_error(error) from error
+        problem = _rig_error(error)
+        raise (_named(problem, task_id, "Meshy rig") if task_id and problem is error else problem) from error
     result = task.get("result") or {}
     glb_url = str(result.get("rigged_character_glb_url") or "").strip()
     if not glb_url:
@@ -334,7 +348,10 @@ def _animate(key: str, rig_task: str, actions: list[dict[str, Any]], job_id: str
     body = {"rig_task_id": rig_task, "action_ids": [action["action_id"] for action in actions]}
     created = http.call("post", ANIMATIONS, key, body=body, cancelled=cancelled, fallback="Meshy animation failed")
     task_id = http.task_id(created)
-    task = http.poll_task(f"{ANIMATIONS}/{task_id}", key, cancelled=cancelled, on_progress=progress, timeout_s=10 * 60)
+    try:
+        task = http.poll_task(f"{ANIMATIONS}/{task_id}", key, cancelled=cancelled, on_progress=progress, timeout_s=10 * 60)
+    except MeshyError as error:
+        raise _named(error, task_id, "Meshy animation") from error
     url = str((task.get("result") or {}).get("animation_glb_url") or "").strip()
     if not url:
         raise MeshyError("Meshy returned no animated GLB")
@@ -349,7 +366,7 @@ def _loop_unknown(clip: Any) -> dict[str, Any]:
 def _inspect(name: str, data: bytes, actions: list[dict[str, Any]] | None, warnings: list[str]) -> dict[str, Any]:
     """Clip list and joint count of one downloaded GLB. Clip order follows ``action_ids`` for the animated file."""
     report = inspect_glb_bytes(data, limits=INSPECT_LIMITS)
-    if report.status != "valid":
+    if report.status != "valid" and not report.animations:
         warnings.append(f"glb_not_inspectable: {name} ({', '.join(issue.code for issue in report.issues) or report.status})")
     clips = [_loop_unknown(clip) for clip in report.animations]
     if actions and len(actions) == len(clips):

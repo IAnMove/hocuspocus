@@ -36,7 +36,7 @@ def command_catalog() -> list[dict]:
                   "legs_too_short, asymmetry, not_upright, degenerate) instead of guessing. Procedural clips stay body-chain approximations. "
                   "Engine meshy sends the GLB to Meshy (the user's own key and credits: 5 for the rig, 3 per library animation; walking and "
                   "running clips come free as <name>-walking.glb and <name>-running.glb beside it): the model must be textured, upright, "
-                  "facing +Z and at most 100 MB; its animations are library entries (action_id or key from model3d.meshy.animations, up to 10), "
+                  "facing +Z and at most about 75 MB (Meshy's limit is 100 MB of base64 upload); its animations are library entries (action_id or key from model3d.meshy.animations, up to 10), "
                   "published as one GLB with one clip per animation. A pose Meshy cannot read fails with not_humanoid / meshy_pose_estimation_failed. "
                   "Poll model3d.rig.status; a finished humanoid job lists clips as {index, name, duration, loop, contacts} (foot landings); "
                   "loop false marks a hold such as kneel_pray or crouch, which ends in its pose: play it once. "
@@ -48,7 +48,7 @@ def command_catalog() -> list[dict]:
                               "pose": {"enum": ["auto", "t", "a"], "description": "Ignored hint; the humanoid engine detects the pose."},
                               "animations": {"type": "array", "minItems": 1, "items": {"type": ["string", "integer"]},
                                              "description": "Clip ids for the local engines; for meshy, library action ids or keys (max 10)."},
-                              "height_meters": {"type": "number", "exclusiveMinimum": 0, "maximum": 100,
+                              "height_meters": {"type": "number", "minimum": 0.1, "maximum": 100,
                                                 "description": "Engine meshy only: the character's height (default 1.7)."},
                               "rig_profile": {"type": "string"}, "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
                               "animation_bpm": {"type": "number", "minimum": 60, "maximum": 180}},

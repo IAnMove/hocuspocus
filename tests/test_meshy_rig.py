@@ -118,6 +118,18 @@ def test_a_failed_animation_still_saves_the_rig_that_was_paid_for(meshy):
     assert len(written(meshy)) == 4
 
 
+def test_an_animation_task_that_fails_after_it_started_still_names_its_task(meshy):
+    meshy.script["anim"] = [{"status": "FAILED", "task_error": {"message": "boom"}, "consumed_credits": 0}]
+    done = rig(meshy, animations=["walk_forward"])
+    assert done["status"] == "completed" and "boom" in done["warnings"][0] and "anim-2" in done["warnings"][0]
+
+
+def test_a_glb_that_needs_an_extension_still_lists_its_clips_quietly(meshy):
+    meshy.files["https://assets.meshy.ai/rig-1-walk.glb"] = glb((("Walking", 1.0),), extensions=("KHR_mesh_quantization",))
+    done = rig(meshy)
+    assert done["files"][1]["clips"][0]["name"] == "Walking" and done["warnings"] == []
+
+
 def test_a_pose_meshy_cannot_read_is_the_not_humanoid_refusal(meshy):
     meshy.errors["POST /v1/rigging"] = [error(422, "Pose estimation failed.")]
     done = rig(meshy)
@@ -143,6 +155,15 @@ def test_a_model_over_100_mb_is_refused_before_any_request(meshy):
     done = rig(meshy)
     assert done["status"] == "failed" and done["error_code"] == "invalid_input" and done["error_reason"] == "too_large"
     assert "100 MB" in done["error"] and meshy.calls == []
+
+
+def test_the_100_mb_limit_counts_the_encoded_upload(meshy):
+    with open(meshy.folder / "hero.glb", "r+b") as handle:
+        handle.truncate(80 * 1024 * 1024)       # 80 MB of GLB is about 107 MB once base64 encoded
+    done = rig(meshy)
+    assert done["error_reason"] == "too_large" and "75 MB" in done["error"] and meshy.calls == []
+    mb = 1024 * 1024
+    assert meshy_rig_service.encoded_size(74 * mb) <= meshy_rig_service.MAX_MODEL_BYTES < meshy_rig_service.encoded_size(76 * mb)
 
 
 @pytest.mark.parametrize("data,reason", [

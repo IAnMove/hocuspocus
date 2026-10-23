@@ -149,7 +149,7 @@ image to a textured model 30 (15 with lite). The gallery picture is saved as `<n
 ### Rig and animate (`engine: "meshy"`)
 
 `model3d.rig` with `engine: "meshy"` rigs a workspace GLB in Meshy's cloud: 5 credits. The model must be a **textured
-humanoid**, a `.glb` of at most 100 MB, upright, **facing +Z**, and not Draco or meshopt compressed. `height_meters`
+humanoid**, a `.glb` of at most about 75 MB (Meshy's limit is 100 MB for the base64 upload), upright, **facing +Z**, and not Draco or meshopt compressed. `height_meters`
 (default 1.7) sets its size. The job saves the rigged GLB and, free with the rig, `<name>-walking.glb` and
 `<name>-running.glb` beside it.
 

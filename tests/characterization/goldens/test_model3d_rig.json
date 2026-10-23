@@ -469,7 +469,7 @@
             "rig": 5,
             "walking_and_running": 0
           },
-          "description": "Meshy's cloud rigging for a textured humanoid GLB that faces +Z (up to 100 MB): a rigged GLB plus free walking and running clips, and optionally clips from Meshy's animation library. Uses your own Meshy credits.",
+          "description": "Meshy's cloud rigging for a textured humanoid GLB that faces +Z (up to about 75 MB): a rigged GLB plus free walking and running clips, and optionally clips from Meshy's animation library. Uses your own Meshy credits.",
           "id": "meshy",
           "install_hint": "Add your Meshy API key in Settings → Services.",
           "installed": false,
