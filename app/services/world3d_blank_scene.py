@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import math
 
+from services.world3d_world_fx import world_fx_problems
+
 ROLES = ("subject_1", "subject_2", "prop", "background")
 CAMERA_FAMILIES = ("fixed", "establishment", "follow", "orbit", "reveal", "encounter", "pursuit", "product", "musical", "side",
                    "front", "chase", "hood", "wing")
@@ -86,7 +88,7 @@ def editor_shape_problems(document) -> list[str]:
         problems.append("fps must be 24, 30 or 60")
     problems += _camera_problems(document.get("camera")) + _light_problems(document.get("light"))
     problems += _slots_problems(document.get("slots"), document.get("camera"))
-    return problems
+    return problems + world_fx_problems(document)
 
 
 def _finite(value) -> bool:

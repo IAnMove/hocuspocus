@@ -29,6 +29,7 @@ from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_collisions import scene_collisions
 from services.world3d_scene_layout import scene_layout
 from services.world3d_scene_motion import bind_motion, retime as retime_motion
+from services.world3d_world_fx import set_world_fx, world_fx_view
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
@@ -203,6 +204,8 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         _set_soundtrack(document, changes["soundtrack"], workspace)
     if "screenFx" in changes:
         _set_screen_fx(document, changes["screenFx"])
+    if "worldFx" in changes:
+        warnings.extend(set_world_fx(document, changes["worldFx"], scene_collisions(document, workspace, workspace_dir)["collisions"], workspace, workspace_dir))
     if "voiceOver" in changes:
         _set_voice_over(document, changes["voiceOver"], workspace)
     if "motionLab" in changes:
@@ -765,11 +768,11 @@ def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_d
     shown = scene_layout(document, workspace, workspace_dir, passes)
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
-        "document": document, "objects": _objects(document), "pending": _pending(document),
+        "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
         "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
         **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
-                     "motion", "collide", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
+                     "motion", "collide", "grounded", "camera", "playbackSpeed", "worldFx", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
 
