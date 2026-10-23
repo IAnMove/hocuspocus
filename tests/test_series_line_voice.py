@@ -153,6 +153,13 @@ def test_lines_are_refused_while_the_episode_renders_without_a_voice_or_when_unk
         voices.start("cast", "uv", "ep1", "s03", 1)
     assert (busy.value.code, busy.value.status) == ("render_running", 409)
     monkeypatch.undo()
+    render.deps.voice_jobs = lambda _workspace: [{"jobId": "voice-1", "episodeId": "ep1", "status": "running"}]
+    with pytest.raises(NativeRenderError) as recording:
+        render.start("cast", "uv", "ep1", shot_ids=["s03"])
+    assert (recording.value.code, recording.value.status) == ("voice_running", 409)
+    render.deps.voice_jobs = lambda _workspace: [{"jobId": "voice-1", "episodeId": "ep2", "status": "running"}]
+    render._refuse_voice("cast", "ep1")
+    render.deps.voice_jobs = None
     kits = render.deps.read_kits("cast")
     for kit in kits.values():
         kit.pop("voice")
@@ -208,6 +215,17 @@ def test_the_voice_tools_call_the_routes_over_mcp(tmp_path):
     followed = call(handlers, "series.shot.voice.status", {"workspace": "series", "job_id": "voice-1"})
     assert calls[2][:2] == ("GET", "http://127.0.0.1:9/api/v1/series/voice-jobs/voice-1?workspace=series")
     assert followed["result"]["job"]["status"] == "completed"
+
+
+def test_a_stopped_render_does_not_resume_while_a_line_is_recording(tmp_path):
+    _tools, render, _voices = setup(tmp_path)
+    render._store("cast").save({"jobId": "native-1", "workspace": "cast", "seriesId": "uv", "episodeId": "ep1",
+                                "status": "interrupted", "language": "spanish",
+                                "items": [{"shotId": "s03", "stage": "voices", "status": "queued", "lines": {}}]})
+    render.deps.voice_jobs = lambda _workspace: [{"jobId": "voice-1", "episodeId": "ep1", "status": "running"}]
+    with pytest.raises(NativeRenderError) as busy:
+        render.resume("cast", "native-1")
+    assert (busy.value.code, busy.value.status) == ("voice_running", 409)
 
 
 def test_a_job_cut_by_a_restart_reads_as_interrupted(tmp_path):
