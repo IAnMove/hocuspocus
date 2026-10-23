@@ -24,6 +24,16 @@ FEATURES = {
 }
 
 
+def unavailable(result: dict) -> list[str]:
+    """What this computer cannot run and why, grouped by reason. Shown by the Install dialogs."""
+    blocked: dict[str, list[str]] = {}
+    for name, item in result["engines"].items():
+        if name != "core" and not item["supported"] and not item.get("supersededBy"):
+            reason = item["reason"].removeprefix(f"{item['label']} ")  # group shared driver limits
+            blocked.setdefault(reason[:1].upper() + reason[1:], []).append(FEATURES.get(name, item["label"]))
+    return [f"Not available here: {', '.join(features)}. {reason}" for reason, features in blocked.items()]
+
+
 def summary(result: dict) -> list[str]:
     """What this computer installs, what it cannot run and why, in plain words."""
     engines = result["engines"]
@@ -33,12 +43,7 @@ def summary(result: dict) -> list[str]:
         lines = [f"Installs {FEATURES['core']}; no local AI models."]
     else:
         return [f"Nothing can be installed on this computer: {engines['core']['reason']}"]
-    blocked: dict[str, list[str]] = {}
-    for name, item in engines.items():
-        if name != "core" and not item["supported"] and not item.get("supersededBy"):
-            reason = item["reason"].removeprefix(f"{item['label']} ")  # group shared driver limits
-            blocked.setdefault(reason[:1].upper() + reason[1:], []).append(FEATURES.get(name, item["label"]))
-    lines += [f"Not available here: {', '.join(features)}. {reason}" for reason, features in blocked.items()]
+    lines += unavailable(result)
     on_request = optional_engines()
     optional = [FEATURES.get(name, item["label"]) for name, item in engines.items()
                 if item["supported"] and name in on_request and not item.get("installed")]
@@ -56,6 +61,7 @@ def main() -> None:
     args = parser.parse_args()
     result = detect_profiles(platform=args.platform, arch=args.arch, gpu=args.gpu)
     result["summary"] = summary(result)
+    result["unavailable"] = unavailable(result)
     # Shown by the Install dialog next to each extra's size. A top-level key, not hashed into any recipe.
     result["diskFreeGiB"] = round(shutil.disk_usage(ROOT).free / 2 ** 30, 1)
     target = ROOT / "app" / ".runtime" / "capabilities.json"
