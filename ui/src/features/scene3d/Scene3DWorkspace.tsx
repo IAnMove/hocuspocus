@@ -166,7 +166,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   }, [])
   const workspaceRef = useRef('')
   const stageRef = useRef<Scene3DStageHandle>(null)
-  const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed') })
+  const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed'), timed: editorT('travel.walkTimed') })
   const exportAbortRef = useRef<AbortController | null>(null)
   const renderChoiceRef = useRef<RenderChoice>({ level: 'draft', shutter: 0 })
   const fps = sceneDoc.fps

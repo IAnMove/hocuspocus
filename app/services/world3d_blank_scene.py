@@ -151,6 +151,9 @@ def _slot_problems(slot) -> list[str]:
         problems.append("needs position [x, y, z], a scale above 0 and a rotationY")
     if slot.get("slot") not in ROLES:
         problems.append(f"slot must be one of {', '.join(ROLES)}")
+    motion = slot.get("motion")
+    if motion is not None and not (isinstance(motion, dict) and _vector(motion.get("to"))):
+        problems.append("motion needs to [x, y, z]; the editor drops a move without it")
     clip = slot.get("clip")
     if clip is not None and not (isinstance(clip, dict) and _whole(clip.get("index")) and isinstance(clip.get("name"), str)):
         problems.append("clip is null or {index, name}")

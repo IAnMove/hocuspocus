@@ -27,6 +27,7 @@ from services.world3d_modifiers import apply_camera_template, apply_lens, check_
 from services.world3d_blank_scene import editor_warnings
 from services.world3d_scene_fit import apply_fit
 from services.world3d_scene_layout import scene_layout
+from services.world3d_scene_motion import bind_motion, retime as retime_motion
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
@@ -494,6 +495,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
+    bind_motion(slot, binding, document.get("duration") or 0)
     return warnings + apply_fit(slot, binding, workspace, workspace_dir)
 
 
@@ -663,6 +665,7 @@ def _retime(document: dict, duration) -> None:
             _scale(slot["appearance"], factor, "start", "duration")
         for cue in _dicts(slot.get("clips")):
             _scale(cue, factor, "start", "duration")
+        retime_motion(slot.get("motion"), factor)
     _retime_camera_and_backdrop(document, factor)
 
 
@@ -763,7 +766,7 @@ def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_d
         "warnings": [*(record.get("warnings") or []), *editor_warnings(document)], "traits": _traits(document),
         **scene_layout(document, workspace, workspace_dir),
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
-                     "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
+                     "motion", "collide", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
 
@@ -776,7 +779,7 @@ def _objects(document: dict) -> list[dict]:
             "id": slot.get("id"), "role": slot.get("slot"), "media": slot.get("media"), "sourceUrl": source,
             "marker": not source, "finished": bool(source), "clip": slot.get("clip"), "position": slot.get("position"),
             "rotationY": slot.get("rotationY"), "scale": slot.get("scale"), "motion": slot.get("motion"),
-            "accepted": [slot.get("media") or "model3d"],
+            "accepted": [slot.get("media") or "model3d"], **({"collide": False} if slot.get("collide") is False else {}),
             **{key: slot[key] for key in _CHECKED_FIELDS if slot.get(key) is not None},
         })
     return objects
