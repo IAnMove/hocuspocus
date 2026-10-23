@@ -9,7 +9,7 @@ from services.world3d_blank_scene import editor_shape_problems
 from services.world3d_scenes import World3DSceneError, patch_scene
 from services.world3d_template_commands import command_catalog, execute_command
 from services.world3d_world_fx import world_fx_problems
-from tests.test_world3d_scene_collisions import TOWN, WALKER, passer, village, walker, world
+from tests.test_world3d_scene_collisions import passer, world
 from tests.test_world3d_scene_layout import SCENE, WORKSPACE, model_glb, scene, slot, workspace_dir
 
 

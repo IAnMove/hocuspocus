@@ -30,7 +30,7 @@ import math
 from dataclasses import dataclass, field
 
 from services.world3d_scene_bounds import normalisation, slot_native_bounds, slot_native_parts
-from services.world3d_scene_motion import is_timed, pose_at, window
+from services.world3d_scene_motion import pose_at, window
 
 LOG = logging.getLogger(__name__)
 MAX_BODIES = 32
