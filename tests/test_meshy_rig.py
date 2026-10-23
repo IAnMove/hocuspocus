@@ -71,6 +71,7 @@ def test_a_rig_without_animations_saves_the_rigged_glb_and_the_free_clips(meshy)
     main = done["filename"]
     assert main.endswith(".glb") and "_rigged_hero_" in main
     assert done["clips"] == [] and done["engine"] == "meshy" and done["joint_count"] == 0
+    assert done["provider"] == "meshy" and done["resource_lane"].startswith("remote:")
     assert [(item["role"], [clip["name"] for clip in item["clips"]]) for item in done["files"]] == [
         ("main", []), ("walking", ["Walking"]), ("running", ["Running"])]
     assert done["files"][1]["filename"] == main.replace(".glb", "-walking.glb")

@@ -28,7 +28,7 @@ import uuid
 from pathlib import Path
 from typing import Any, Callable
 
-from . import execution_mode, meshy_http as http
+from . import execution_mode, meshy_http as http, resource_scheduler
 from .asset_manifest import publish_generation_sidecar_best_effort
 from .generation_output_name import canonical_file_url
 from .meshy_http import MeshyError
@@ -133,6 +133,8 @@ def start_job(
         "status": "queued", "progress": 0.0, "phase": "queued", "message": "Queued Meshy rig job",
         "error": None, "filename": None, "url": None,
         "engine": "meshy", "workspace": str(workspace or "default"), "rig_profile": "humanoid",
+        # Activity shows a cloud task, not the local rig CPU lane the other engines wait on.
+        "provider": "meshy", "resource_lane": resource_scheduler.remote_lane("meshy").key,
         "source_file": os.path.basename(source_path), "created_at": now, "updated_at": now,
         "request": {"source": os.path.abspath(source_path), "output_dir": os.path.abspath(output_dir), **options},
     }

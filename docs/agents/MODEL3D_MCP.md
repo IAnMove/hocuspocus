@@ -178,7 +178,9 @@ paid for, the rigged GLB is still saved and `warnings` says so. Cancelling a tas
 | unknown library entry | `invalid_input` / `unknown_animation` (nothing paid) |
 | too many unfinished tasks for the plan | `meshy_busy` (the call waits up to ten minutes first) |
 
-Nothing is written when a job fails. Meshy's rate limit (429) is waited out with its `Retry-After`.
+Nothing is written when a job fails. Meshy's rate limit (429) is waited out with its `Retry-After`. Job status is kept
+in memory like every rig job: if the server restarts while Meshy works, the task still finishes (and costs) at Meshy
+but this app loses the job, so wait for a Meshy job to end before you restart.
 
 ### The animation library
 
