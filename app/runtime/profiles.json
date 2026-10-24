@@ -22,6 +22,10 @@
     },
     "12.4": {
       "linux": "550.54.14"
+    },
+    "12.1": {
+      "linux": "530.30.02",
+      "win32": "531.14"
     }
   },
   "driverRecommended": {
@@ -35,6 +39,10 @@
     },
     "12.4": {
       "linux": "550.54.14"
+    },
+    "12.1": {
+      "linux": "530.30.02",
+      "win32": "531.14"
     }
   },
   "engines": {
@@ -338,6 +346,35 @@
       "vendors": [
         "creation_comfy",
         "drama3_nodes"
+      ],
+      "defaultInstall": false
+    },
+    "mia": {
+      "label": "Make-It-Animatable",
+      "installStepsVersion": 1,
+      "env": "app/services/mia/env",
+      "environment": "conda",
+      "python": "3.11",
+      "required": false,
+      "platforms": [
+        "linux"
+      ],
+      "unsupportedReason": "Make-It-Animatable's Blender export (bpy) and its CUDA 12.1 wheels are available on Linux x64 only. The humanoid and procedural rigs stay available.",
+      "cuda": "12.1",
+      "torch": "2.1.2",
+      "torchvision": "0.16.2",
+      "requirements": "app/services/mia/requirements.txt",
+      "constraints": {
+        "numpy": "1.26.4",
+        "bpy": "4.3.0"
+      },
+      "verificationImports": [
+        "bpy",
+        "torch",
+        "pygltflib"
+      ],
+      "vendors": [
+        "make_it_animatable"
       ],
       "defaultInstall": false
     }

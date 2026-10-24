@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: Make-It-Animatable (`engine: "mia"`) as an optional Linux rig for humanoids the standard rig refuses.** The same rig operation accepts it from the rig panel, MCP and the Wizard. A humanoid refusal of `turned`, `hands_stuck` or `not_upright` names `mia` when that engine is installed, and does not switch by itself. Code is MIT; the demo weights are Apache-2.0.
+
 **Fixed: removing an extra no longer promises space it does not free.** uv fills each environment with hard links to Pinokio's shared package cache, so removing SAM (listed 7 GB) really freed 0.3 GB. The Installation tab now measures what a removal frees (files that nothing else links, over every folder the removal deletes), says it in the confirm button («frees about 0.3 GB») and, when most of the folder is shared, explains that Pinokio's Disk Saver can reclaim the rest.
 
 **Changed: the Install dialog only offers extras this computer can run and that are not installed yet.** Before, it listed all six: UniRig on Windows could be ticked and was skipped without a word, and a Reinstall offered what was already there. The list is now computed when the dialog opens, the dialog is skipped when there is nothing to offer, the line that repeated the extras («Optional, from the Advanced menu») is gone, and the final dialog says what is installed instead of repeating the pre-install summary.

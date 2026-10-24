@@ -80,6 +80,20 @@
       ]
     },
     {
+      "id": "mia",
+      "engine": "mia",
+      "script": "mia_install.js",
+      "title": "Make-It-Animatable",
+      "summary": "Rigs a humanoid in any pose, including meshes the standard humanoid rig refuses (turned, hands against the body, not upright). Linux x64 only. Code is MIT (Zhiyang Guo); the demo weights are Apache-2.0. The Mixamo bones.fbx template has no stated dataset licence and is downloaded at install (about 70 KB), not stored in git. Blender (bpy) writes the skinned file; importing the upstream app also loads that template with bpy. About 8 GB is an estimate: the five demo weight files are 2.33 GB on disk and the environment was not measured. Does not switch engines by itself.",
+      "estimatedGiB": 8,
+      "restartRequired": true,
+      "menu": {"icon": "fa-solid fa-person-walking", "gate": "nvidia"},
+      "remove": [
+        "app/services/mia/env",
+        "app/services/mia/vendor"
+      ]
+    },
+    {
       "id": "minimax_h3",
       "engine": "minimax_h3",
       "script": "minimax_h3_install.js",

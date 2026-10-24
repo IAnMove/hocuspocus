@@ -462,6 +462,13 @@
           "install_hint": null,
           "installed": true,
           "label": "Humanoid (standard)"
+        },
+        {
+          "description": "Predicts a Mixamo-style skeleton for a humanoid in any pose, then bakes the clip library. Linux only. Use it when the standard humanoid rig refuses a turned, hands-down or not-upright mesh.",
+          "id": "mia",
+          "install_hint": "Open HocusPocus Lab in Pinokio and run 'Install Make-It-Animatable'. Linux only. The demo weights are about 2.33 GB on disk.",
+          "installed": false,
+          "label": "Make-It-Animatable"
         }
       ],
       "humanoid_animations": [

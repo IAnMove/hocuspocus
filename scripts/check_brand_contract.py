@@ -99,6 +99,8 @@ def main() -> int:
             ".maestro-tasks-v1.sqlite3",
         ROOT / "app" / "services" / "rigging" / "rig_worker_unirig.py":
             "MAESTRO_EVENT",
+        ROOT / "app" / "services" / "rigging" / "rig_worker_mia.py":
+            "MAESTRO_EVENT",
     }
     for path, snippet in compatibility.items():
         if snippet not in path.read_text(encoding="utf-8"):

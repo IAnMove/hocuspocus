@@ -58,7 +58,10 @@ rig safely fails with `error_code: "not_humanoid"` and `error_reason` one of
 `hands_stuck` (arms against the body or straight down), `arms_raised` (arms
 well above the shoulders), `turned` (the body is at an angle to the front
 view), `single_leg` (no gap between the legs, and no feet under a robe), `legs_too_short`, `asymmetry`,
-`not_upright` or `degenerate`. A source the engine cannot read, such as a
+`not_upright` or `degenerate`. When that failure is `turned`, `hands_stuck` or
+`not_upright` and Make-It-Animatable is installed, the same job sets
+`suggested_engine` to `mia` (Linux, optional). The server does not switch
+engines; send a new `model3d.rig` with `engine: "mia"`. A source the engine cannot read, such as a
 Draco or meshopt compressed GLB, fails with `error_code: "invalid_input"`.
 Nothing is written in either case.
 

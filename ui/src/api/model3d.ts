@@ -183,6 +183,8 @@ export interface RigJob {
   /** Set when the worker refused the mesh, e.g. ``not_humanoid`` with reason ``hands_stuck``. */
   error_code?: string
   error_reason?: string
+  /** Set when a humanoid refusal can be retried with another installed engine. The server does not switch. */
+  suggested_engine?: string
   /** Humanoid engine: what was detected and which clips the GLB holds. */
   humanoid?: HumanoidRigSummary
   created_at: number
