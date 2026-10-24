@@ -343,7 +343,8 @@
     "hint": "Select any object, even when another is in front.",
     "image": "Image",
     "model3d": "3D model",
-    "screen": "Image / video"
+    "screen": "Image / video",
+    "splat": "Gaussian splat"
   },
   "translate": "Move",
   "rotate": "Rotate Y",

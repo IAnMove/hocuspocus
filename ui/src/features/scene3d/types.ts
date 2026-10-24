@@ -173,7 +173,7 @@ export type Scene3DMotion = {
   walk?: import('./walkPath').Scene3DMotionWalk
 }
 
-export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen'
+export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen' | 'splat'
 
 export type Scene3DLoop = {
   cylinder: boolean
@@ -224,6 +224,8 @@ export type Scene3DSlot = {
   hold?: import('./handHold').Scene3DHold
   motion?: Scene3DMotion
   loop?: Scene3DLoop
+  /** Floor of a Gaussian-splat set, in metres. The invisible plane the cast stands on. */
+  splat?: { floorY: number }
 }
 
 export type Scene3DCamera = {
