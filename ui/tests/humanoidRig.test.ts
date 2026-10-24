@@ -3,7 +3,7 @@ import test from 'node:test'
 import type { RigCapabilities, RigProfile } from '../src/api/model3d'
 import {
   clampBpm, clipGroups, clipIsRecommended, clipsForEngine, humanoidClipSelection, previewAsset, recommendedClipIds,
-  isRigSource, refusalKey, rigFooterKey, rigHelpKey, rigJobBody, rigLabel, warningKeys,
+  isRigSource, profileForEngine, refusalKey, rigFooterKey, rigHelpKey, rigJobBody, rigLabel, showsMiaSuggestion, warningKeys,
 } from '../src/components/Sidebar/humanoidRig'
 
 const profile = {
@@ -46,8 +46,16 @@ test('humanoid engine lists its own clips, grouped, with its own previews', () =
   assert.equal(previewAsset('procedural', 'walk'), 'animation-walk')
   assert.deepEqual(humanoidClipSelection(['idle', 'walk', 'wave', 'talk', 'dance_side']), ['idle', 'walk', 'wave', 'talk'])
   assert.equal(rigHelpKey('humanoid'), 'rig.humanoidHelp')
+  assert.equal(rigHelpKey('mia'), 'rig.miaHelp')
+  assert.equal(rigHelpKey('unirig'), 'rig.unirigHelp')
   assert.equal(rigFooterKey('humanoid'), 'rig.humanoidFooter')
+  assert.equal(rigFooterKey('mia'), 'rig.miaFooter')
   assert.equal(rigFooterKey('procedural'), 'rig.proceduralFooter')
+  assert.equal(profileForEngine('mia', 'prop'), 'humanoid')
+  assert.equal(profileForEngine('procedural', 'prop'), 'prop')
+  assert.equal(showsMiaSuggestion({ suggested_engine: 'mia' }), true)
+  assert.equal(showsMiaSuggestion({ suggested_engine: 'unirig' }), false)
+  assert.equal(showsMiaSuggestion(null), false)
 })
 
 test('humanoid jobs send a tempo and no procedural fit', () => {

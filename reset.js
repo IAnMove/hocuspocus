@@ -26,6 +26,8 @@ module.exports = {
     { method: "fs.rm", params: { path: "app/ckpts/creation_models" } },
     { method: "fs.rm", params: { path: "app/services/rigging/env" } },
     { method: "fs.rm", params: { path: "app/services/rigging/vendor" } },
+    { method: "fs.rm", params: { path: "app/services/mia/env" } },
+    { method: "fs.rm", params: { path: "app/services/mia/vendor" } },
     // Seed-VC voice conversion checkout (cloned by runtime_setup.js)
     { method: "fs.rm", params: { path: "app/postprocessing/seedvc" } },
     // SAM checkpoints downloaded on first use
