@@ -75,6 +75,31 @@ def test_a_pose_prompt_keeps_the_character_and_asks_for_one_pose_on_a_screen():
         pose_prompt("dance", "a")
 
 
+def test_a_walk_that_is_not_a_profile_holds_its_view_in_words_and_nothing_else_does():
+    """Qwen turns the body to draw a stride, and the default Turbo gets no negative prompt: the walks of front, front34, back34 and back say in
+    words that the body keeps its turn. A side walk, an idle and the author's own animations are asked as before."""
+    held = catalog()["walkViews"]
+    walks = [item for item in catalog()["animations"] if item.get("motion") == "walk" and item["view"] != "side"]
+    assert {item["view"] for item in walks} == {"front", "front34", "back34", "back"} == set(held) - {"note"}
+    for item in walks:
+        text = pose_prompt(item["id"], item["poses"][0]["id"], "a pilot")["prompt"]
+        assert held[item["view"]] in text
+        assert text.index(catalog()["views"][item["view"]]) < text.index(held[item["view"]]) < text.index(item["poses"][0]["prompt"]), item["id"]
+    assert "stays square to the viewer" in pose_prompt("walk-back", "passing-a")["prompt"] and "never turns to a profile" in pose_prompt("walk-back", "up-b")["prompt"]
+    assert not any(words in pose_prompt("walk-12", "contact-a")["prompt"] for words in (held["front"], held["back"], held["front34"], held["back34"]))
+    idle = next(item for item in catalog()["animations"] if item["id"] == "idle")
+    assert not any(words in pose_prompt("idle", idle["poses"][0]["id"])["prompt"] for words in held.values())
+    custom = pose_prompt("my-walk", "pose-1", "a pilot", custom={"view": "back", "text": "Walking away with a heavy bag"})
+    assert held["back"] not in custom["prompt"]
+
+
+def test_the_views_that_can_drift_have_their_own_negative_for_the_models_that_take_one():
+    negatives = catalog()["viewNegatives"]
+    assert "three-quarter view" in negatives["front"] and "exact side profile" in negatives["back34"] and "three-quarter view" in negatives["back"]
+    assert "three-quarter view" in pose_prompt("walk-front", "contact-a")["negative"] and "head turned" in pose_prompt("walk-back", "contact-a")["negative"]
+    assert "three-quarter" not in pose_prompt("walk-12", "contact-a")["negative"]
+
+
 def test_an_animation_the_author_describes_is_built_like_a_catalog_one():
     built = pose_prompt("my-grin", "pose-1", "Ana, a detective", "paper-cutout", custom={"view": "bust", "text": "Anime expression: a lopsided grin with one eyebrow up"})
     assert built["resolution"] == "1024x1024" and built["screen"] == "green"

@@ -20,6 +20,9 @@
     "left": 270
   },
   "hysteresisDeg": 10,
+  "walkDiagonalDeg": 12,
+  "walkHysteresisDeg": 4,
+  "walkDiagonal_note": "While a figure walks, the part of its movement that is larger decides the sheet: toward or away from the camera (front, back) or across the screen (side). The three-quarter sheets draw only a really diagonal walk, the angles from 45 - walkDiagonalDeg to 45 + walkDiagonalDeg off the line to the camera (and the same from the back). 12 is about 3:2 (a walk 1.5 times more toward the camera than across it is still a front walk); 22.5 gives every sector the same width as for a figure that stands, 0 turns the three-quarter sheets off while walking. walkHysteresisDeg is how far past an edge a walking figure keeps its sheet (a straight walk crosses each edge once, so it can be small). A kit with no three-quarter sheet for the motion splits that band at 45 (or 135) degrees, so the larger part of the movement still decides.",
   "stepMeters": 0.75,
   "cycleSteps": 2,
   "walkSpeed": 1.2,
