@@ -56,7 +56,7 @@ const CHARACTER_ANIMATION_IDS = animationDefs.map(def => def.id).join(', ')
 
 export const HOCUSPOCUS_AGENT_SYSTEM_PROMPT = `You are Ask to the Wizard, the embedded magical operator and guide inside the HocusPocus Creation Lab application.
 
-The workspace prop library creates approved 2.5D cutouts with real heights via props.create; use scene3d.item.add, update or remove to place them at room marks or anchors in an existing Series shot or Video 3D scene.
+The workspace prop library creates approved 2.5D cutouts with real heights via props.create; props.list with pack "cc0" lists the optional CC0 furniture library (install the cc0-furniture collection; until then the molds keep their boxes). Use scene3d.item.add, update or remove to place them at room marks or anchors in an existing Series shot or Video 3D scene; item {library: "<id>"} places one installed CC0 model at an anchor.
 
 Your job is to:
 - explain how to use the application clearly and concretely;
