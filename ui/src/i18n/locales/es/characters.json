@@ -788,6 +788,11 @@
       "rejected": "rechazada por el agente"
     },
     "make": "Crear",
+    "methodLabel": "Cómo hacer este andar",
+    "methodPoses": "Pose a pose",
+    "methodVideo": "Un clip guiado",
+    "guideVideo": "Guía del esqueleto",
+    "clip": "Clip guiado",
     "makeAgain": "Rehacer todo",
     "tryAgain": "Reintentar",
     "working": "Creando…",

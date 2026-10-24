@@ -16,6 +16,10 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
   (``refsDropped``). ``services/character_animation_set_job.py`` makes several animations in turn with this.
 * The sheet of a twelve-pose cycle is a grid of six columns, and the entry saved on the kit carries ``motion`` and ``dir``
   (``services/character_animation_directions.py``); the checks of a direction also read the other directions of the kit.
+* ``method`` ``video`` (optional; the default is the pose-by-pose path above) makes a catalog walk from one LTX-2.3 clip
+  guided by the gait skeleton (``services/walk_video_method.py``), keys it and samples the same sheet. It needs the distilled
+  weights and the union-control LoRA. Without them, or for anything that is not a walk, the request fails and this path is
+  not used. ``make_set`` stays pose by pose.
 """
 from __future__ import annotations
 
@@ -34,12 +38,15 @@ from services import agent_autonomy
 from services.character_animation_checks import failed, sheet_checks, summary
 from services.character_animation_cycle_checks import sibling_sheets
 from services.character_animation_directions import contract_of
+from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
 from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
                                            pose_prompt)
+from services.character_kit_face_cleanup import resolve_character_kit_image
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.local_generation import LocalTools, ToolError, file_url
 from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
+from services.walk_video_method import LTX_MODEL, NOT_INSTALLED, WalkVideoError, accept_walk_method, clip_fields, fill_video_takes, weights_present
 
 JOBS_DIR = ".character-animation-jobs-v1"
 ACTIVE = ("queued", "running", "cancelling")
@@ -70,6 +77,8 @@ class AnimationJobDeps:
     # The services config now (``agent_autonomy`` lives there): read when a job starts and again when it ends, so a mode the owner
     # switches off meanwhile is respected. None means «review».
     services: Callable[[], Mapping[str, Any]] | None = None
+    # None asks the disk whether LTX-2.3 distilled and the union-control LoRA are installed. A test can answer instead.
+    walk_video_ready: Callable[[], bool] | None = None
 
 
 def _now() -> float:
@@ -224,9 +233,10 @@ class CharacterAnimationJobs:
         return definition
 
     def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None,
-                 references: list[str] | None = None) -> dict[str, Any]:
+                 references: list[str] | None = None, method_name: str = "poses") -> dict[str, Any]:
         ids = [item["id"] for item in definition["poses"]]
-        kept = self._kept(workspace, kit, definition["id"], pose, ids)
+        # A guided clip replaces every pose. A pose kept from an earlier pose-by-pose try is not a frame of that clip.
+        kept = {} if method_name == "video" else self._kept(workspace, kit, definition["id"], pose, ids)
         takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
                  {"id": item, "status": "waiting", "seed": random.randrange(2_000_000_000)} for item in ids]
         job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit["id"], "animationId": definition["id"],
@@ -238,6 +248,9 @@ class CharacterAnimationJobs:
         if definition.get("custom"):
             # What the author wrote stays visible on the job, so an animation that is not on the kit yet can be shown and tried again.
             job["custom"] = {"title": definition["title"]["es"], "view": definition["view"], "poses": [item["prompt"] for item in definition["poses"]]}
+        if method_name == "video":
+            job["method"] = "video"
+            job["model"] = LTX_MODEL
         return job
 
     def _services(self) -> Mapping[str, Any]:
@@ -256,8 +269,20 @@ class CharacterAnimationJobs:
             raise AnimationJobError("invalid_reference", f"references are up to {MAX_REFERENCES} persistent picture URLs, not browser blob URLs")
         return found
 
+    def _accept_method(self, method: str | None, definition: dict[str, Any], pose: str | None) -> str:
+        try:
+            return accept_walk_method(method, definition, pose)
+        except WalkVideoError as error:
+            raise AnimationJobError(error.code, str(error)) from error
+
+    def _require_video_weights(self) -> None:
+        ready = self.deps.walk_video_ready
+        if not (weights_present() if ready is None else bool(ready())):
+            raise AnimationJobError("ltx_not_installed", NOT_INSTALLED)
+
     def start(self, workspace: str, kit_id: str, animation_id: str, *, custom: dict[str, Any] | None = None, pose: str | None = None,
-              model: str | None = None, auto_approve: bool = False, references: list[str] | None = None) -> dict[str, Any]:
+              model: str | None = None, auto_approve: bool = False, references: list[str] | None = None,
+              method: str | None = None) -> dict[str, Any]:
         """Make (or, with ``pose``, make one pose again of) an animation of a saved character. Returns the job; a request for an
         animation that is already being made returns that job. ``auto_approve`` asks the job to approve what it made when the sheet passes
         the automatic checks; it is ignored (the job says so) unless ``agent_autonomy`` is ``one_shot``. ``references`` are extra pictures
@@ -267,11 +292,14 @@ class CharacterAnimationJobs:
         extra = self._references(references)
         kit = self._kit(workspace, kit_id)
         definition = self._definition(kit, animation_id, custom, pose)
+        chosen = self._accept_method(method, definition, pose)
         with self._guard:
             running = next((job for job in self.jobs(workspace, kit_id) if job.get("animationId") == animation_id and job.get("status") in ACTIVE), None)
             if running:
                 return running
-            job = {**self._new_job(workspace, kit, definition, pose, model, extra), **self._auto_fields(auto_approve)}
+            if chosen == "video":
+                self._require_video_weights()
+            job = {**self._new_job(workspace, kit, definition, pose, model, extra, chosen), **self._auto_fields(auto_approve)}
             self._store(workspace).save(job)
             thread = threading.Thread(target=self._run, args=(workspace, job["jobId"]), name=f"character-animation-{job['jobId']}", daemon=True)
             self._threads[job["jobId"]] = thread
@@ -308,42 +336,72 @@ class CharacterAnimationJobs:
             job["status"] = "cancelling"  # a cancel that arrived while a step ran is not lost
         store.save(job)
 
-    def _image_params(self, job: dict[str, Any], built: dict[str, str], seed: int) -> dict[str, Any]:
-        """One pose's request: the character's picture is the identity reference. Every model runs its own steps and guidance (the server's
-        settings for it, else its definition in app/defaults: the default Turbo runs 8 and CFG 1), and one that takes no negative prompt gets none."""
+    def _image_params(self, job: dict[str, Any], built: dict[str, str], seed: int, guide: dict[str, Any] | None = None) -> dict[str, Any]:
+        """One pose's request: the character's picture is the identity reference, then the pose's guide (a walk) and the extra pictures.
+        Every model runs its own steps and guidance (the server's settings for it, else its definition in app/defaults: the default Turbo
+        runs 8 and CFG 1), and one that takes no negative prompt gets none. A model that refused the extra pictures gets the character's
+        picture alone and the plain prompt."""
         model = job["model"]
         steps, guidance = default_image_steps(model), 1
         if self.deps.model_defaults:
             own = self.deps.model_defaults(model) or {}
             steps, guidance = own.get("num_inference_steps") or steps, own.get("guidance_scale") or guidance
-        extra = [] if job.get("refsDropped") else job.get("extraRefs") or []
-        params: dict[str, Any] = {"prompt": built["prompt"], "model_type": model, "resolution": built["resolution"], "seed": seed,
-                                  "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": [job["reference"], *extra], "video_prompt_type": "I"}
+        alone = bool(job.get("refsDropped"))
+        extra = [] if alone else job.get("extraRefs") or []
+        shown = None if alone else guide
+        refs = [job["reference"], *([file_url(shown["file"], job["workspace"])] if shown else []), *extra]
+        params: dict[str, Any] = {"prompt": guided_prompt(built["prompt"], shown, len(extra)), "model_type": model, "resolution": built["resolution"],
+                                  "seed": seed, "guidance_scale": guidance, "num_inference_steps": steps, "image_refs": refs, "video_prompt_type": "I"}
         if steps > 8 and model_takes_negative_prompt(model):
             params["negative_prompt"] = built["negative"]
         return params
 
-    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
-        definition = job["definition"]
-        built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
-                            custom={"view": definition["view"], "text": pose["prompt"]} if definition.get("custom") else None)
-        params = self._image_params(job, built, take["seed"])
-        job.setdefault("prompt", built["prompt"])
-        take["status"] = "generating"
-        self._update(store, job)
+    def _draw(self, job: dict[str, Any], tools: LocalTools, pose: dict[str, Any], built: dict[str, str], guide: dict[str, Any] | None,
+              seed: int, attempt: int, drawn: Callable[[str], None]) -> tuple[str, str]:
+        """One drawing of a pose and its key: the raw picture's file name and the keyed URL; ``drawn`` hears of the raw picture before it is
+        keyed. A second or third try has names of its own."""
+        definition, again = job["definition"], f"-{attempt + 1}" if attempt else ""
         # The file name carries the job: a pose made again never overwrites the picture the saved animation still uses.
-        output = f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}"
+        output = f"{job['kitId']}-{definition['id']}-{pose['id']}-{job['jobId'][-6:]}{again}"
         try:
-            name = tools.image(f"{job['jobId']}-{pose['id']}-image", params, output)
+            name = tools.image(f"{job['jobId']}-{pose['id']}-image{again}", self._image_params(job, built, seed, guide), output)
         except ToolError as error:
-            if not job.get("extraRefs") or job.get("refsDropped") or "image_refs" not in str(error):
+            if not (job.get("extraRefs") or guide) or job.get("refsDropped") or "image_refs" not in str(error):
                 raise
             # This model takes fewer references than were sent: the character's own picture alone is what every pose needs.
             job["refsDropped"] = True
-            name = tools.image(f"{job['jobId']}-{pose['id']}-image-alone", self._image_params(job, built, take["seed"]), output)
-        take.update(status="keying", raw=file_url(name, job["workspace"]))
+            name = tools.image(f"{job['jobId']}-{pose['id']}-image-alone{again}", self._image_params(job, built, seed, guide), output)
+        drawn(name)
+        return name, tools.key(f"{job['jobId']}-{pose['id']}-key{again}", name, built["screen"])
+
+    def _take(self, store: JobStore, job: dict[str, Any], take: dict[str, Any], tools: LocalTools, pose: dict[str, Any]) -> None:
+        definition, workspace = job["definition"], job["workspace"]
+        root = self.deps.workspace_dir(workspace)
+        built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"),
+                            custom={"view": definition["view"], "text": pose["prompt"]} if definition.get("custom") else None)
+        guide = guide_for(definition, pose["id"], workspace_root=root, name=f"{job['kitId']}-{definition['id']}-{pose['id']}-guide-{job['jobId'][-6:]}.png")
+        job.setdefault("prompt", guided_prompt(built["prompt"], guide, len(job.get("extraRefs") or [])))
+        take.update(status="generating", **({"guide": file_url(guide["file"], workspace)} if guide else {}))
         self._update(store, job)
-        take.update(status="ready", keyed=tools.key(f"{job['jobId']}-{pose['id']}-key", name, built["screen"]))
+
+        def keying(name: str) -> None:
+            take.update(status="keying", raw=file_url(name, workspace))
+            self._update(store, job)
+
+        best: dict[str, Any] | None = None
+        for attempt in range(tries(guide)):
+            seed = take["seed"] if attempt == 0 else random.randrange(2_000_000_000)
+            name, keyed = self._draw(job, tools, pose, built, guide, seed, attempt, keying)
+            drawn = {"raw": file_url(name, workspace), "keyed": keyed, "seed": seed}
+            if guide:  # a walk pose is measured against its guide and drawn again when its legs are far off
+                drawn["gait"] = gait_of(guide, resolve_character_kit_image(keyed, uploads_root=self.deps.uploads_root(), workspace_root=root))
+                take["tries"] = attempt + 1
+            if best is None or abs(drawn["gait"]["measured"] - guide["expected"]) < abs(best["gait"]["measured"] - guide["expected"]):
+                best = drawn
+            if not guide or drawn["gait"]["ok"]:
+                break
+            self._update(store, job)
+        take.update(status="ready", **(best or {}))
         self._update(store, job)
 
     def _run(self, workspace: str, job_id: str) -> None:
@@ -357,14 +415,17 @@ class CharacterAnimationJobs:
                 if self._cancelled(store, job_id):
                     raise ToolError("cancelled", "the job was cancelled")
                 self._update(store, job, status="running")
-                poses = {item["id"]: item for item in job["definition"]["poses"]}
-                for take in job["takes"]:
-                    if take["status"] not in ("reused", "ready"):
-                        try:
-                            self._take(store, job, take, tools, poses[take["id"]])
-                        except ToolError as error:
-                            take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
-                            raise
+                if job.get("method") == "video":
+                    self._video_cycle(store, job, tools)
+                else:
+                    poses = {item["id"]: item for item in job["definition"]["poses"]}
+                    for take in job["takes"]:
+                        if take["status"] not in ("reused", "ready"):
+                            try:
+                                self._take(store, job, take, tools, poses[take["id"]])
+                            except ToolError as error:
+                                take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
+                                raise
                 self._update(store, job, stage="sheet")
                 self._finish(store, job)
         except ToolError as error:
@@ -377,6 +438,17 @@ class CharacterAnimationJobs:
         finally:
             self._tools.pop(job_id, None)
 
+    def _video_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
+        """One guided clip, then one keyed frame per pose. A tool error fails the job the same way a pose does."""
+        try:
+            fill_video_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]), uploads_root=self.deps.uploads_root(),
+                             update=lambda **changes: self._update(store, job, **changes))
+        except ToolError as error:
+            for take in job["takes"]:
+                if take["status"] not in ("ready", "reused"):
+                    take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
+            raise
+
     def _finish(self, store: JobStore, job: dict[str, Any]) -> None:
         definition, workspace = job["definition"], job["workspace"]
         root = self.deps.workspace_dir(workspace)
@@ -387,18 +459,19 @@ class CharacterAnimationJobs:
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
             "frames": [{"id": take["id"], "source": take["keyed"],
-                        **({"prompt": pose["prompt"], "label": pose["label"]["en"]} if definition.get("custom") else {})}
+                        **({"prompt": pose["prompt"], "label": pose["label"]["en"]} if definition.get("custom") else {}),
+                        **{key: take[key] for key in ("guide", "gait") if take.get(key)}}
                        for take, pose in zip(job["takes"], definition["poses"])],
             "fps": definition["fps"], "loop": definition["loop"], "facing": definition["facing"], "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            **contract_of(definition["id"], definition),
+            **contract_of(definition["id"], definition), **clip_fields(job),
             **({"title": definition["title"]["es"]} if definition.get("custom") else {}), **({"prompt": job["prompt"]} if job.get("prompt") else {}),
         }
         normalize_kit_animations({definition["id"]: entry})
         self._save_on_kit(workspace, job["kitId"], definition["id"], entry)
         approval = self._auto_approve(job, sheet, definition) if job.get("autoApprove") else {}
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
-                  "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"],
+                  "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
                   **{key: approval[key] for key in ("autoApproved", "checks") if key in approval}}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})

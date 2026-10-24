@@ -12,6 +12,10 @@ tolerances are ``sheet.checks`` of ``app/shared/character_animations.json``.
 * ``direction_mirror`` (``"mirror"``): a sheet that is the same drawing as another direction of the same kit, or its mirror, is not a
   new direction (the model ignored the view). The mirror is what the engine renders for the other side, so a duplicate would show
   the same walk twice. A sheet that cannot be read is skipped, not failed.
+* ``walk_gait`` (``"gait"``): each pose of a walk has the legs as wide as the walk of ``services/walk_guides.py`` has them at that moment
+  of the step, seen from the sheet's direction (``leg_spread`` against ``expected_spread``), after one scale for the whole sheet (a
+  character in a long coat or with a short step is not wrong). A cell far off is a pose drawn at the wrong moment of the step or from
+  the wrong side: a back view that turned three-quarter has the stride of a profile.
 """
 from __future__ import annotations
 
@@ -24,6 +28,7 @@ from PIL import Image, ImageOps
 from services.character_animation_directions import contract_of
 from services.character_animations import catalog
 from services.character_kit_face_cleanup import CharacterKitFaceCleanupError, resolve_character_kit_image
+from services.walk_guides import TURN, expected_spread, leg_spread
 
 HASH_SIDE = 16
 
@@ -118,8 +123,25 @@ def mirror_check(mine: list[Image.Image | None], own: dict[str, Any], siblings: 
                  "this direction is a copy of " + ", ".join(found) if found else f"different from the other {len(siblings)} direction(s) of the kit or their mirrors")
 
 
+SCALE_RANGE = (0.7, 1.15)
+
+
+def gait_check(figures: list[Image.Image | None], direction: str | None, limit: float, floor: int) -> dict[str, Any]:
+    if direction not in TURN or not figures:
+        return check("walk_gait", True, 0.0, limit, "no direction to compare the legs with")
+    measured = np.array([leg_spread(figure, floor) if figure is not None else 0.0 for figure in figures])
+    expected = np.array([expected_spread(direction, index / len(figures)) for index in range(len(figures))])
+    scale = float(np.clip((measured @ expected) / max(1e-9, expected @ expected), *SCALE_RANGE))
+    off = np.abs(measured - scale * expected)
+    far = [index + 1 for index in np.nonzero(off > limit)[0]]
+    return check("walk_gait", not far, round(float(off.max()), 3), limit,
+                 f"the legs of cell(s) {', '.join(map(str, far))} are not where the step puts them (wrong moment or wrong side)" if far
+                 else f"every pose has the legs of its moment of the step (scale {scale:.2f})")
+
+
 def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str, Any], siblings: Sequence[dict[str, Any]] = ()) -> list[dict[str, Any]]:
-    """The checks the animation asks for (``definition["checks"]``: ``height``, ``repeats``, ``mirror``), none for one that asks for none."""
+    """The checks the animation asks for (``definition["checks"]``: ``height``, ``repeats``, ``gait``, ``mirror``), none for one that asks
+    for none."""
     asked = definition.get("checks") or []
     if not asked:
         return []
@@ -131,6 +153,8 @@ def cycle_checks(image: Image.Image, sheet: dict[str, Any], definition: dict[str
         found.append(height_check(figures, float(rules["height"])))
     if "repeats" in asked:
         found.append(repeats_check(figures, int(rules["repeatRun"]), int(rules["samePoseBits"])))
+    if "gait" in asked:
+        found.append(gait_check(figures, contract_of(definition["id"], definition).get("dir"), float(rules["gait"]), floor))
     if "mirror" in asked:
         others = [item for item in siblings if item.get("id") != definition["id"] and item.get("dir") != definition.get("dir")]
         found.append(mirror_check(figures, sheet, others, rules, floor))

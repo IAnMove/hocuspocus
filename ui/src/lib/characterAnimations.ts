@@ -19,6 +19,8 @@ export type AnimationDef = {
   custom?: boolean
   /** The data contract with the 3D engine (lib/characterAnimationDirections.ts), the sheet's columns and the checks the animation asks for. */
   motion?: 'walk' | 'idle'; dir?: 'side' | 'front' | 'front34' | 'back34' | 'back'; columns?: number; checks?: string[]
+  /** A catalog walk can also be made from one pose-guided clip (`method: "video"`). */
+  guide?: 'walk'
 }
 
 /** The sheet's contract with the Video 2D cards: boots (or the bottom of a bust) on the line `feet` of a cell, the figure
@@ -54,6 +56,8 @@ export type KitAnimation = {
   /** Who gave the review: a person (the panel's buttons) or an agent in «Modo un solo disparo» (services/agent_autonomy.py), with its note
    * and when. Animations saved before this have none, and read as a person's. */
   reviewedBy?: AnimationReviewer; reviewNote?: string; reviewedAt?: string
+  /** A walk made from one guided clip keeps the skeleton video and the clip, so both can be opened again. */
+  guideVideo?: string; clip?: string
 }
 export type AnimationReviewer = 'person' | 'agent'
 export type AnimationState = 'none' | CharacterKitReviewState
