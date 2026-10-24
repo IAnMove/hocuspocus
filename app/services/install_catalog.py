@@ -37,6 +37,7 @@ class Component:
     licence: str | None = None
     license: str = ""
     ready_file: str = ""
+    platforms: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for relative in self.remove:
@@ -54,11 +55,14 @@ class Component:
             "id": self.id, "engine": self.engine, "title": self.title, "summary": self.summary,
             "estimatedBytes": self.estimated_bytes, "restartRequired": self.restart_required,
         }
+        # Only components that declare these carry them, so the existing rows stay the same shape.
         record = licence_for_id(self.licence)
         if record:
             payload["licence"] = record
         if self.license:
             payload["license"] = self.license
+        if self.platforms:
+            payload["platforms"] = list(self.platforms)
         return payload
 
 
@@ -82,6 +86,7 @@ def components() -> tuple[Component, ...]:
             restart_required=bool(entry.get("restartRequired")), remove=tuple(entry["remove"]),
             licence=entry.get("licence") if isinstance(entry.get("licence"), str) else None,
             license=str(entry.get("license") or ""), ready_file=str(entry.get("readyFile") or ""),
+            platforms=tuple(entry.get("platforms") or ()),
         )
         for entry in _load()["components"]
     )

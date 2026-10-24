@@ -28,9 +28,11 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/audio_shorten.py` | CPU song shorten. It never enters the generation queue. | 123 | launch | tests/test_recoverability_followups.py |
 | `app/routers/blend.py` | POST /api/v1/blend. | 569 | launch | tests/characterization/test_run_generation.py, tests/characterization/test_studio_generate.py, tests/test_job_lifecycle_wiring.py |
 | `app/routers/canonical_tasks.py` | HTTP boundary for the canonical Activity task registry. | 269 | both | tests/test_canonical_tasks_router.py, tests/test_task_adapter_helpers.py |
-| `app/routers/character_animation_jobs.py` | HTTP for making a character's animations on the server (services/character_animation_job.… | 80 | — | tests/test_character_animation_job.py, tests/test_output_delete_workspace.py |
-| `app/routers/character_kit_face.py` | HTTP boundary for Character Kit Face Rig overlay cleanup. | 116 | both | tests/test_character_animations.py, tests/test_character_kit_face_cleanup.py, tests/test_scene3d_profiles.py |
-| `app/routers/character_kit_library.py` | Character Kit library HTTP shared by full launch and core runtime. | 126 | launch | tests/test_character_kit_library_router.py, tests/test_flat_rig.py, tests/test_flat_rig_realistic.py |
+| `app/routers/character_animation_jobs.py` | HTTP for making a character's animations on the server (services/character_animation_job.… | 85 | — | tests/test_character_animation_job.py, tests/test_output_delete_workspace.py |
+| `app/routers/character_animation_review.py` | HTTP for an agent's review of a character's animation (''services/character_animation_rev… | 44 | — | tests/test_character_animation_job.py |
+| `app/routers/character_animation_sets.py` | HTTP for making several animations of a character as one server job (services/character_a… | 72 | — | tests/test_character_animation_job.py |
+| `app/routers/character_kit_face.py` | HTTP boundary for Character Kit Face Rig overlay cleanup. | 125 | both | tests/test_character_animations.py, tests/test_character_kit_face_cleanup.py, tests/test_scene3d_profiles.py |
+| `app/routers/character_kit_library.py` | Character Kit library HTTP shared by full launch and core runtime. | 143 | launch | tests/test_character_kit_library_router.py, tests/test_flat_rig.py, tests/test_flat_rig_realistic.py |
 | `app/routers/character_tools.py` | Browser routes for the one-click character tools; MCP keeps its own envelope. | 47 | launch | tests/test_character_tools.py |
 | `app/routers/checkpoints.py` | Routes mounted where the launch module registered them. | 48 | launch | — |
 | `app/routers/civitai.py` | Routes mounted where the launch module registered them. | 56 | launch | — |
@@ -51,6 +53,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/huggingface.py` | Routes mounted where the launch module registered them. | 32 | launch | — |
 | `app/routers/image_generation_commands.py` | HTTP and MCP projections of the executable image command contract. | 204 | both | tests/test_generation_contract.py, tests/test_image_generation_commands.py, tests/test_job_leftovers.py |
 | `app/routers/image_remove_background.py` | REST projection of the idempotent image cutout command. | 10 | launch | — |
+| `app/routers/install_manager.py` | HTTP surface of the Installation tab. Thin: every route is one InstallManager call. | 36 | — | tests/test_install_manager.py |
 | `app/routers/lan_auth.py` | LAN authentication handshake routes. | 85 | both | tests/test_import_layers.py, tests/test_lan_auth.py |
 | `app/routers/lips_creator.py` | Workspace-scoped mouth collections, independent of the character cast. | 69 | — | tests/test_lips_creator.py, tests/test_lips_creator_commands.py |
 | `app/routers/llm.py` | LLM HTTP surface: load/generate, song-writer, H3 windows, enhance, describe. | 876 | both | tests/test_llm_router.py, tests/test_minimax_song_writer_prompt.py, tests/test_nsfw_guidance.py |
@@ -89,7 +92,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/scene_commands.py` | — | 49 | both | tests/test_document_origin.py, tests/test_scene_effect_commands.py, tests/test_scene_library.py |
 | `app/routers/scene_packages.py` | HTTP surface for portable Video3D scene packages. Independent of Gradio. | 217 | core | tests/test_scene_packages.py |
 | `app/routers/scenes_favorites.py` | Favorites, scene projects and scene recordings. | 152 | both | tests/characterization/test_jobs_and_tasks.py, tests/test_core_runtime.py, tests/test_document_origin.py |
-| `app/routers/series_assembly.py` | Ordered Series episode assembly API. | 796 | both | tests/characterization/test_jobs_and_tasks.py, tests/test_output_delete_workspace.py, tests/test_series_assembly_contract.py |
+| `app/routers/series_assembly.py` | Ordered Series episode assembly API. | 799 | both | tests/characterization/test_jobs_and_tasks.py, tests/test_output_delete_workspace.py, tests/test_series_assembly_contract.py |
 | `app/routers/series_guide.py` | HTTP for the agent guide and compact episodes (services/series_guide.py). | 45 | launch | tests/test_series_agent_fixes.py |
 | `app/routers/series_language_versions.py` | HTTP for an episode's language versions: write lines by hand, translate with the LLM, rem… | 108 | launch | tests/test_document_origin.py, tests/test_recoverability_last.py, tests/test_series_language_versions.py |
 | `app/routers/series_library.py` | Series Lab library and project HTTP surface shared by full launch and core runtime. | 771 | launch | tests/test_core_runtime.py, tests/test_document_origin.py, tests/test_import_layers.py |
@@ -100,10 +103,12 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/series_render.py` | Series render HTTP routes for the full server. | 494 | launch | tests/characterization/test_series.py, tests/test_production_generation_link.py, tests/test_production_producer_link.py |
 | `app/routers/series_review.py` | HTTP for an episode's staged review (''services/series_review.py''): its production mode,… | 74 | both | tests/test_series_review_router.py |
 | `app/routers/series_sets.py` | REST projection of location room commands. | 17 | launch | tests/test_room_integration.py |
-| `app/routers/series_shot_edit.py` | HTTP for reading and editing one Series shot by id or number (services/series_shot_edit.p… | 201 | launch | tests/test_series_look_room.py, tests/test_series_shot_edit.py |
+| `app/routers/series_shot_card.py` | HTTP for putting a Video 2D card on a Series shot (''services/series_shot_card.py''). | 54 | — | tests/test_series_shot_card.py |
+| `app/routers/series_shot_edit.py` | HTTP for reading and editing one Series shot by id or number (services/series_shot_edit.p… | 222 | launch | tests/test_series_look_room.py, tests/test_series_shot_card.py, tests/test_series_shot_edit.py |
 | `app/routers/series_shot_inspector.py` | HTTP for Series Lab's shot inspector: one line's voice now, and a 3D shot's plan in the V… | 127 | launch | tests/test_output_delete_workspace.py, tests/test_series_line_voice.py, tests/test_series_shot3d_editor.py |
-| `app/routers/set_catalog.py` | REST discovery of interior molds. | 11 | launch | tests/test_set_molds.py |
-| `app/routers/settings.py` | Settings HTTP surface moved out of the full server. | 437 | launch | tests/test_system_memory_profiles.py |
+| `app/routers/series_stage.py` | HTTP for calibrating a location plate's perspective (''services/series_stage_ops.py''). | 61 | — | tests/test_series_stage.py |
+| `app/routers/set_catalog.py` | REST discovery of interior molds. | 16 | launch | tests/test_room_box.py, tests/test_set_molds.py |
+| `app/routers/settings.py` | Settings HTTP surface moved out of the full server. | 442 | launch | tests/test_creation_models.py, tests/test_system_memory_profiles.py |
 | `app/routers/storage_tools.py` | HTTP routes for the storage duplicate finder. | 44 | launch | tests/test_router_wiring.py |
 | `app/routers/story_lab.py` | Story Lab HTTP routes for the full server. | 385 | launch | tests/characterization/test_stories.py, tests/test_comic_plan_resume_contract.py, tests/test_story_lab_trailer_ui.py |
 | `app/routers/story_library.py` | Story Lab library HTTP shared by full launch and core runtime. | 105 | launch | — |
@@ -112,8 +117,8 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/routers/studio_generate.py` | HTTP route for POST /api/v1/generate. | 63 | launch | — |
 | `app/routers/studio_segmentation.py` | HTTP routes for SAM status and segment preview. | 38 | launch | — |
 | `app/routers/style_library.py` | HTTP surface for the persistent style library. | 110 | both | tests/test_style_library.py |
-| `app/routers/system.py` | System HTTP surface moved out of the full server. | 332 | launch | — |
-| `app/routers/system_capabilities.py` | HTTP surface for the platform capability authority. | 28 | both | tests/test_import_layers.py, tests/test_platform_capabilities.py |
+| `app/routers/system.py` | System HTTP surface moved out of the full server. | 337 | launch | — |
+| `app/routers/system_capabilities.py` | HTTP surface for the platform capability authority. | 30 | both | tests/test_import_layers.py, tests/test_platform_capabilities.py |
 | `app/routers/templates.py` | HTTP projection of the template library (''/api/v1/templates''). | 112 | launch | tests/test_template_library.py |
 | `app/routers/tools.py` | HTTP boundary for standalone image tools. | 859 | launch | tests/characterization/test_run_generation.py, tests/test_execution_mode.py, tests/test_job_lifecycle_wiring.py |
 | `app/routers/uploads.py` | Uploads: POST /api/v1/upload and GET /api/v1/uploads/{filename}, one implementation for b… | 153 | both | tests/test_core_runtime.py, tests/test_import_layers.py, tests/test_uploads_router.py |
@@ -139,7 +144,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | `app/services/kernel/__init__.py` | The shared services of one server: config, workspaces, paths, jobs, tasks and the runtime… | 1 | launch | tests/test_architecture_contracts.py, tests/test_architecture_graph.py, tests/test_h3_preplan_job_contract.py |
 | `app/services/kernel/config.py` | The live server configuration and its atomic save. | 63 | — | tests/test_h3_preplan_job_contract.py, tests/test_import_layers.py, tests/test_kernel_services.py |
 | `app/services/kernel/context.py` | The runtime context: the kernel services of one server, built once. | 68 | launch | tests/test_kernel_services.py |
-| `app/services/kernel/jobs.py` | The generation job registry, the single-GPU FIFO slot and the durable queue. | 443 | — | tests/test_activity_generation_details.py, tests/test_h3_preplan_job_contract.py, tests/test_import_layers.py |
+| `app/services/kernel/jobs.py` | The generation job registry, the single-GPU FIFO slot and the durable queue. | 447 | — | tests/test_activity_generation_details.py, tests/test_h3_preplan_job_contract.py, tests/test_import_layers.py |
 | `app/services/kernel/paths.py` | Path containment and upload slots shared by both servers and by services. | 128 | — | tests/test_architecture_graph.py, tests/test_core_runtime.py, tests/test_custom_character_voice.py |
 | `app/services/kernel/tasks.py` | Where a workspace's canonical task registry is found, and the adapter registry skeleton. | 57 | — | tests/test_kernel_services.py |
 | `app/services/kernel/workspaces.py` | The active workspace and the output folder each workspace name stands for. | 94 | — | tests/test_kernel_services.py, tests/test_task_adapter_helpers.py, tests/test_wangp_frame_extraction.py |
@@ -150,8 +155,8 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 | --- | --- | ---: | --- | --- |
 | `app/services/generation_worker/__init__.py` | The generation worker: ''_run_generation'' split into a frame and the phases it chains th… | 14 | launch | tests/characterization/test_generation_worker_bind.py, tests/characterization/test_run_generation.py, tests/test_generation_worker_bind.py |
 | `app/services/generation_worker/finalize.py` | The end of a generation run: post-processing passes and the hand-over. | 682 | — | tests/characterization/test_studio_generate.py, tests/test_frame_exact_outputs.py |
-| `app/services/generation_worker/prepare.py` | The start of a generation run: the frame, the GPU slot, the preflight and the task manife… | 954 | — | tests/characterization/test_run_generation.py |
-| `app/services/generation_worker/tasks.py` | The middle of a generation run: the task queue, the task loop and the collection of outpu… | 645 | — | — |
+| `app/services/generation_worker/prepare.py` | The start of a generation run: the frame, the GPU slot, the preflight and the task manife… | 959 | — | tests/characterization/test_run_generation.py |
+| `app/services/generation_worker/tasks.py` | The middle of a generation run: the task queue, the task loop and the collection of outpu… | 646 | — | — |
 
 ## services/generation
 
@@ -202,7 +207,7 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 
 ## services/hunyuan3d
 
-`app/services/hunyuan3d/__init__.py` (1 —), `app/services/hunyuan3d/build_mesh_painter.py` (55 —), `app/services/hunyuan3d/external_worker.py` (91 —), `app/services/hunyuan3d/humanoid_animation.py` (180 —)
+`app/services/hunyuan3d/__init__.py` (1 —), `app/services/hunyuan3d/build_mesh_painter.py` (55 —), `app/services/hunyuan3d/external_worker.py` (101 —), `app/services/hunyuan3d/humanoid_animation.py` (180 —)
 `app/services/hunyuan3d/patch_windows_sources.py` (84 —), `app/services/hunyuan3d/procedural_rig.py` (899 —), `app/services/hunyuan3d/rig_worker.py` (57 —), `app/services/hunyuan3d/weight_integrity.py` (76 —)
 `app/services/hunyuan3d/worker.py` (519 —)
 
@@ -218,6 +223,14 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 ## services/sam
 
 `app/services/sam/sam_service.py` (632 —)
+
+## services/see_through
+
+`app/services/see_through/__init__.py` (1 —), `app/services/see_through/worker.py` (90 —)
+
+## services/trellis2
+
+`app/services/trellis2/assets.py` (104 —), `app/services/trellis2/catalog.py` (65 —), `app/services/trellis2/install_native.py` (56 —), `app/services/trellis2/preflight.py` (7 —)
 
 ## UI slices
 
@@ -261,45 +274,48 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 
 ## services
 
-`app/services/__init__.py` (1 both), `app/services/access_log_filter.py` (83 launch), `app/services/activity_media.py` (59 —), `app/services/agent_activity.py` (493 both), `app/services/alternative_songs.py` (942 launch)
-`app/services/asset_catalog.py` (310 —), `app/services/asset_library.py` (194 —), `app/services/asset_manifest.py` (725 launch), `app/services/assets_upload.py` (490 launch), `app/services/audio_analysis.py` (1538 —)
-`app/services/audio_jobs.py` (222 launch), `app/services/audio_levels.py` (52 —), `app/services/audio_mix.py` (109 —), `app/services/audio_trim.py` (156 —), `app/services/auk_speech_contract.py` (21 —)
-`app/services/blend_run.py` (330 launch), `app/services/canonical_task_fields.py` (197 launch), `app/services/canonical_task_helpers.py` (74 —), `app/services/canonical_task_publishers.py` (376 launch)
-`app/services/canonical_task_sync.py` (252 launch), `app/services/character_animation_commands.py` (115 —), `app/services/character_animation_job.py` (355 —), `app/services/character_animations.py` (344 —)
-`app/services/character_face_patch.py` (147 —), `app/services/character_kit_face_cleanup.py` (197 —), `app/services/character_kit_library.py` (505 launch), `app/services/character_sheet.py` (177 —)
-`app/services/character_speech_definition.py` (226 —), `app/services/character_styles.py` (57 —), `app/services/checkpoints.py` (632 launch), `app/services/civitai.py` (580 launch), `app/services/civitai_downloads.py` (900 launch)
-`app/services/clip_align.py` (354 launch), `app/services/comic_animatic.py` (302 launch), `app/services/comic_director_json.py` (146 launch), `app/services/comic_helpers.py` (397 launch), `app/services/command_input_errors.py` (28 —)
-`app/services/core_canonical_tasks.py` (277 core), `app/services/core_generation_commands.py` (305 core), `app/services/core_production.py` (105 core), `app/services/core_remote_3d.py` (290 —), `app/services/core_remote_image.py` (288 core)
-`app/services/core_series_assembly.py` (171 both), `app/services/core_workspace.py` (250 core), `app/services/creation_model_catalog.py` (117 —), `app/services/creation_model_execution.py` (51 —)
-`app/services/creation_model_graphs.py` (94 —), `app/services/creation_model_service.py` (222 —), `app/services/debug_trace.py` (196 launch), `app/services/diorama_set.py` (180 —), `app/services/director_comic_film.py` (101 —)
+`app/services/__init__.py` (1 both), `app/services/access_log_filter.py` (83 launch), `app/services/activity_media.py` (59 —), `app/services/agent_activity.py` (493 both), `app/services/agent_autonomy.py` (33 —)
+`app/services/alternative_songs.py` (942 launch), `app/services/asset_catalog.py` (310 —), `app/services/asset_library.py` (194 —), `app/services/asset_manifest.py` (725 launch), `app/services/assets_upload.py` (490 launch)
+`app/services/audio_analysis.py` (1538 —), `app/services/audio_jobs.py` (222 launch), `app/services/audio_levels.py` (52 —), `app/services/audio_mix.py` (109 —), `app/services/audio_trim.py` (156 —)
+`app/services/auk_speech_contract.py` (21 —), `app/services/blend_run.py` (330 launch), `app/services/canonical_task_fields.py` (197 launch), `app/services/canonical_task_helpers.py` (74 —)
+`app/services/canonical_task_publishers.py` (376 launch), `app/services/canonical_task_sync.py` (252 launch), `app/services/character_animation_checks.py` (132 —), `app/services/character_animation_commands.py` (182 —)
+`app/services/character_animation_cycle_checks.py` (160 —), `app/services/character_animation_directions.py` (84 —), `app/services/character_animation_job.py` (439 —), `app/services/character_animation_review.py` (87 —)
+`app/services/character_animation_set_job.py` (240 —), `app/services/character_animations.py` (390 —), `app/services/character_face_patch.py` (147 —), `app/services/character_kit_face_cleanup.py` (197 —)
+`app/services/character_kit_library.py` (527 launch), `app/services/character_sheet.py` (177 —), `app/services/character_speech_definition.py` (290 —), `app/services/character_styles.py` (57 —), `app/services/checkpoints.py` (632 launch)
+`app/services/civitai.py` (580 launch), `app/services/civitai_downloads.py` (900 launch), `app/services/clip_align.py` (354 launch), `app/services/comic_animatic.py` (302 launch), `app/services/comic_director_json.py` (146 launch)
+`app/services/comic_helpers.py` (397 launch), `app/services/command_input_errors.py` (28 —), `app/services/core_canonical_tasks.py` (277 core), `app/services/core_generation_commands.py` (305 core)
+`app/services/core_production.py` (105 core), `app/services/core_remote_3d.py` (290 —), `app/services/core_remote_image.py` (288 core), `app/services/core_series_assembly.py` (171 both), `app/services/core_workspace.py` (252 core)
+`app/services/creation_model_catalog.py` (117 —), `app/services/creation_model_execution.py` (57 —), `app/services/creation_model_graphs.py` (94 —), `app/services/creation_model_service.py` (442 —)
+`app/services/creation_runtime_confinement.py` (336 —), `app/services/debug_trace.py` (196 launch), `app/services/diorama_set.py` (180 —), `app/services/directional_sprite.py` (188 —), `app/services/director_comic_film.py` (101 —)
 `app/services/director_comic_jobs.py` (220 launch), `app/services/director_model_compat.py` (328 —), `app/services/director_pipeline.py` (14536 launch), `app/services/director_pipeline_state.py` (174 —)
 `app/services/director_plan_jobs.py` (297 —), `app/services/director_review.py` (154 —), `app/services/director_v2_plan.py` (461 launch), `app/services/director_video_strategy.py` (1070 —), `app/services/document_origin.py` (191 —)
 `app/services/durable_generation_queue.py` (122 —), `app/services/enhance_guides.py` (161 —), `app/services/episode_av_sync.py` (161 —), `app/services/episode_finishing.py` (608 —), `app/services/example_assets.py` (95 —)
 `app/services/example_collections.py` (140 —), `app/services/execution_mode.py` (253 launch), `app/services/export_output_name.py` (145 —), `app/services/export_qa.py` (547 launch), `app/services/export_receipts.py` (116 —)
-`app/services/face_enlarge.py` (136 —), `app/services/face_landmarks.py` (195 —), `app/services/flat_rig.py` (1130 —), `app/services/flat_rig_base.py` (31 —), `app/services/flat_rig_eyes.py` (525 —), `app/services/flat_rig_hints.py` (57 —)
-`app/services/flat_rig_ink.py` (90 —), `app/services/flat_rig_look.py` (66 —), `app/services/flat_rig_metrics.py` (206 —), `app/services/flat_rig_preview.py` (175 —), `app/services/flat_rig_warp.py` (518 —)
+`app/services/face_enlarge.py` (136 —), `app/services/face_landmarks.py` (195 —), `app/services/flat_rig.py` (1136 —), `app/services/flat_rig_base.py` (31 —), `app/services/flat_rig_eyes.py` (525 —), `app/services/flat_rig_hints.py` (57 —)
+`app/services/flat_rig_ink.py` (90 —), `app/services/flat_rig_look.py` (77 —), `app/services/flat_rig_metrics.py` (206 —), `app/services/flat_rig_preview.py` (175 —), `app/services/flat_rig_warp.py` (518 —)
 `app/services/game_audio.py` (495 —), `app/services/game_commands.py` (444 launch), `app/services/game_estimate.py` (201 —), `app/services/game_export.py` (852 —), `app/services/game_frames.py` (319 —), `app/services/game_guide.py` (77 —)
 `app/services/game_image_ops.py` (209 —), `app/services/game_inputs.py` (90 —), `app/services/game_jobs.py` (88 —), `app/services/game_library.py` (1007 —), `app/services/game_list.py` (475 —), `app/services/game_pixel.py` (280 —)
 `app/services/game_produce.py` (636 launch), `app/services/game_prompts.py` (195 —), `app/services/game_qa.py` (367 —), `app/services/game_sfxr.py` (275 —), `app/services/game_sheet.py` (225 —), `app/services/game_tiles.py` (172 —)
-`app/services/game_tools.py` (538 —), `app/services/generation_coefficients.py` (403 launch), `app/services/generation_flashvsr.py` (211 launch), `app/services/generation_h3_release.py` (125 launch)
+`app/services/game_tools.py` (541 —), `app/services/generation_coefficients.py` (403 launch), `app/services/generation_flashvsr.py` (211 launch), `app/services/generation_h3_release.py` (125 launch)
 `app/services/generation_jobs.py` (166 launch), `app/services/generation_memory.py` (681 —), `app/services/generation_option_helpers.py` (216 launch), `app/services/generation_output_name.py` (268 core)
-`app/services/generation_postprocess.py` (201 launch), `app/services/generation_preparation.py` (355 launch), `app/services/generation_provenance.py` (238 —), `app/services/generation_record.py` (1116 —)
-`app/services/generation_record_io.py` (304 —), `app/services/generation_recovery.py` (167 launch), `app/services/generation_sfx.py` (231 launch), `app/services/generation_validation_notices.py` (66 —), `app/services/glb_cleanup.py` (334 —)
+`app/services/generation_postprocess.py` (201 launch), `app/services/generation_preparation.py` (360 launch), `app/services/generation_provenance.py` (238 —), `app/services/generation_record.py` (1116 —)
+`app/services/generation_record_io.py` (304 —), `app/services/generation_recovery.py` (167 launch), `app/services/generation_sfx.py` (239 launch), `app/services/generation_validation_notices.py` (66 —), `app/services/glb_cleanup.py` (334 —)
 `app/services/gpu_engine_win.py` (154 —), `app/services/gpu_machine_lock.py` (521 —), `app/services/guide_loader.py` (57 —), `app/services/guide_resolution.py` (46 —), `app/services/h3_frame_lattice.py` (63 —)
 `app/services/h3_prompt_finalization.py` (14 —), `app/services/h3_prompt_policy.py` (119 —), `app/services/h3_runtime_policy.py` (217 launch), `app/services/h3_story_contract.py` (279 —), `app/services/h3_window_planner.py` (766 —)
 `app/services/hardware_detect.py` (220 launch), `app/services/hardware_probe.py` (28 launch), `app/services/hf_import.py` (473 launch), `app/services/hi3d_service.py` (199 —), `app/services/host_guard.py` (95 launch)
 `app/services/image_edit_workflow.py` (75 —), `app/services/image_generation_commands.py` (371 —), `app/services/image_generation_runtime.py` (127 launch), `app/services/image_generation_spec.py` (280 —)
-`app/services/image_remove_background.py` (141 launch), `app/services/inpaint_service.py` (441 —), `app/services/install_speech_tools.py` (67 —), `app/services/job_leftovers.py` (550 launch), `app/services/job_lifecycle.py` (1036 launch)
-`app/services/jobs_cancel.py` (202 launch), `app/services/jobs_wait.py` (242 launch), `app/services/lan_auth.py` (291 launch), `app/services/language_intent.py` (100 —), `app/services/lips_creator_commands.py` (364 launch)
-`app/services/lipsync_qa.py` (210 launch), `app/services/live_stats.py` (152 core), `app/services/llama_release_assets.py` (25 —), `app/services/llm_routing.py` (138 —), `app/services/llm_service.py` (6865 —)
-`app/services/local_generation.py` (187 —), `app/services/local_mcp.py` (80 launch), `app/services/lora_compat.py` (113 —), `app/services/lora_guides.py` (554 launch), `app/services/lora_library.py` (1221 launch)
-`app/services/lyric_timeline.py` (334 —), `app/services/lyrics_language.py` (364 —), `app/services/managed_loras.py` (209 launch), `app/services/managed_preprocessors.py` (385 —), `app/services/mcp_access.py` (63 both)
-`app/services/mcp_compact.py` (154 —), `app/services/mcp_intent.py` (94 —), `app/services/mcp_oauth.py` (259 launch), `app/services/mcp_profiles.py` (86 launch), `app/services/media_compose.py` (210 —)
-`app/services/media_dimensions.py` (375 launch), `app/services/media_frame.py` (168 —), `app/services/media_kinds.py` (48 —), `app/services/media_options.py` (116 launch), `app/services/media_paths.py` (206 —)
-`app/services/media_publication.py` (53 —), `app/services/media_refs.py` (31 —), `app/services/media_thumbnails.py` (194 —), `app/services/memory_trim.py` (71 —), `app/services/meshy_3d_service.py` (160 —)
-`app/services/minimax_h3_duration.py` (468 —), `app/services/minimax_h3_service.py` (1098 launch), `app/services/minimax_image_service.py` (194 core), `app/services/minimax_music_models.py` (10 —)
-`app/services/minimax_music_service.py` (192 —), `app/services/minors_rule.py` (59 —), `app/services/mix_concat.py` (505 —), `app/services/mix_concat_blocks.py` (175 —), `app/services/model3d_commands.py` (150 launch)
-`app/services/model3d_external.py` (111 —), `app/services/model3d_input_path.py` (44 both), `app/services/model3d_rig_commands.py` (30 launch), `app/services/model3d_service.py` (1415 launch), `app/services/model_downloads.py` (473 launch)
+`app/services/image_remove_background.py` (166 launch), `app/services/inpaint_service.py` (448 —), `app/services/install_catalog.py` (98 —), `app/services/install_jobs.py` (202 —), `app/services/install_launcher.py` (65 —)
+`app/services/install_manager.py` (122 —), `app/services/install_remove.py` (75 —), `app/services/install_speech_tools.py` (67 —), `app/services/install_status.py` (156 —), `app/services/job_leftovers.py` (550 launch)
+`app/services/job_lifecycle.py` (1044 launch), `app/services/jobs_cancel.py` (202 launch), `app/services/jobs_wait.py` (242 launch), `app/services/lan_auth.py` (291 launch), `app/services/language_intent.py` (100 —)
+`app/services/lips_creator_commands.py` (367 launch), `app/services/lipsync_qa.py` (210 launch), `app/services/live_stats.py` (152 core), `app/services/llama_release_assets.py` (25 —), `app/services/llm_routing.py` (138 —)
+`app/services/llm_service.py` (6865 —), `app/services/local_generation.py` (187 —), `app/services/local_mcp.py` (80 launch), `app/services/lora_compat.py` (113 —), `app/services/lora_guides.py` (554 launch)
+`app/services/lora_library.py` (1221 launch), `app/services/lyric_timeline.py` (334 —), `app/services/lyrics_language.py` (364 —), `app/services/managed_loras.py` (209 launch), `app/services/managed_preprocessors.py` (385 —)
+`app/services/mcp_access.py` (63 both), `app/services/mcp_compact.py` (154 —), `app/services/mcp_intent.py` (94 —), `app/services/mcp_oauth.py` (259 launch), `app/services/mcp_profiles.py` (87 launch)
+`app/services/media_compose.py` (210 —), `app/services/media_dimensions.py` (375 launch), `app/services/media_frame.py` (168 —), `app/services/media_kinds.py` (48 —), `app/services/media_options.py` (116 launch)
+`app/services/media_paths.py` (206 —), `app/services/media_publication.py` (53 —), `app/services/media_refs.py` (31 —), `app/services/media_thumbnails.py` (194 —), `app/services/memory_trim.py` (71 —)
+`app/services/meshy_3d_service.py` (160 —), `app/services/minimax_h3_duration.py` (468 —), `app/services/minimax_h3_service.py` (1102 launch), `app/services/minimax_image_service.py` (194 core), `app/services/minimax_music_models.py` (10 —)
+`app/services/minimax_music_service.py` (192 —), `app/services/minors_rule.py` (59 —), `app/services/mix_concat.py` (505 —), `app/services/mix_concat_blocks.py` (175 —), `app/services/model3d_commands.py` (151 launch)
+`app/services/model3d_external.py` (156 —), `app/services/model3d_input_path.py` (44 both), `app/services/model3d_rig_commands.py` (30 launch), `app/services/model3d_service.py` (1430 launch), `app/services/model_downloads.py` (481 launch)
 `app/services/model_file_groups.py` (107 launch), `app/services/model_options.py` (273 launch), `app/services/model_selectors.py` (374 —), `app/services/model_visibility.py` (337 launch), `app/services/montage_commands.py` (172 launch)
 `app/services/montage_derive.py` (73 —), `app/services/montage_documents.py` (402 launch), `app/services/montage_preview.py` (410 launch), `app/services/montage_shots.py` (343 launch), `app/services/music_fake_worker.py` (71 —)
 `app/services/music_finalization.py` (327 —), `app/services/music_model_contract.py` (495 —), `app/services/music_production.py` (771 launch), `app/services/music_submission.py` (383 —), `app/services/native_generation_operation.py` (17 —)
@@ -309,48 +325,54 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 `app/services/phoneme_worker.py` (107 —), `app/services/platform_capabilities.py` (260 core), `app/services/pose_facing.py` (181 —), `app/services/production_backplates.py` (64 —), `app/services/production_camera.py` (163 —)
 `app/services/production_cast_portrait.py` (86 —), `app/services/production_clip_qa.py` (213 —), `app/services/production_close.py` (33 —), `app/services/production_commands.py` (224 —), `app/services/production_control.py` (73 —)
 `app/services/production_diorama.py` (115 —), `app/services/production_disk.py` (112 —), `app/services/production_dry_run.py` (376 —), `app/services/production_enhance.py` (49 —), `app/services/production_estimate.py` (140 —)
-`app/services/production_frame_clock.py` (18 —), `app/services/production_generation_link.py` (69 —), `app/services/production_image_defaults.py` (74 —), `app/services/production_lyric_looks.py` (106 —)
-`app/services/production_media_commands.py` (36 both), `app/services/production_media_common.py` (299 —), `app/services/production_models.py` (537 —), `app/services/production_package.py` (157 —)
+`app/services/production_frame_clock.py` (18 —), `app/services/production_generation_link.py` (69 —), `app/services/production_image_defaults.py` (116 —), `app/services/production_lyric_looks.py` (106 —)
+`app/services/production_media_commands.py` (36 both), `app/services/production_media_common.py` (299 —), `app/services/production_models.py` (547 —), `app/services/production_package.py` (157 —)
 `app/services/production_parallax.py` (126 —), `app/services/production_perf.py` (31 —), `app/services/production_plan.py` (230 —), `app/services/production_preview.py` (566 —), `app/services/production_producer_link.py` (66 —)
-`app/services/production_profile.py` (247 —), `app/services/production_profile_defaults.py` (39 —), `app/services/production_progress.py` (63 —), `app/services/production_project_link.py` (845 —)
+`app/services/production_profile.py` (247 —), `app/services/production_profile_defaults.py` (51 —), `app/services/production_progress.py` (63 —), `app/services/production_project_link.py` (845 —)
 `app/services/production_publication.py` (240 —), `app/services/production_quality.py` (43 —), `app/services/production_quality_gate.py` (518 —), `app/services/production_resolution.py` (79 —)
 `app/services/production_resource_gate.py` (115 —), `app/services/production_resume.py` (185 launch), `app/services/production_review.py` (418 launch), `app/services/production_review_checks.py` (599 —)
-`app/services/production_review_layers.py` (173 —), `app/services/production_rooms.py` (127 —), `app/services/production_run.py` (186 —), `app/services/production_scene2d.py` (471 —), `app/services/production_scene3d.py` (449 —)
-`app/services/production_scene_ops.py` (87 —), `app/services/production_scene_retry.py` (143 —), `app/services/production_seeds.py` (36 —), `app/services/production_sheets.py` (70 —), `app/services/production_shot_actions.py` (619 —)
-`app/services/production_shot_commands.py` (185 —), `app/services/production_shot_edit.py` (312 —), `app/services/production_shot_plan.py` (421 —), `app/services/production_shot_redo.py` (104 —)
-`app/services/production_shot_regeneration.py` (153 —), `app/services/production_shot_request.py` (129 —), `app/services/production_shot_review.py` (266 —), `app/services/production_shot_sources.py` (99 —)
-`app/services/production_shot_view.py` (562 —), `app/services/production_smoothness.py` (302 —), `app/services/production_song.py` (97 —), `app/services/production_song_switch.py` (124 —), `app/services/production_stage_clips.py` (146 —)
-`app/services/production_stage_frames.py` (239 —), `app/services/production_stage_run.py` (117 —), `app/services/production_stage_scenes.py` (294 —), `app/services/production_state.py` (37 —), `app/services/production_structure.py` (156 —)
-`app/services/production_style_presets.py` (49 —), `app/services/production_subject_count.py` (185 —), `app/services/production_takes.py` (92 —), `app/services/production_timing.py` (101 —)
-`app/services/production_trailer_audio.py` (151 —), `app/services/production_treatment.py` (264 —), `app/services/production_turn.py` (48 —), `app/services/production_usage.py` (104 —), `app/services/production_video_model.py` (104 —)
-`app/services/production_wait.py` (121 —), `app/services/production_windows.py` (103 —), `app/services/production_work_catalog.py` (277 —), `app/services/production_work_commands.py` (180 —), `app/services/project_catalog.py` (391 —)
-`app/services/prop_commands.py` (200 —), `app/services/prop_library.py` (80 —), `app/services/provider_profile.py` (283 —), `app/services/publication_server.py` (41 —), `app/services/publish_presets.py` (231 —)
-`app/services/qa_accent.py` (250 launch), `app/services/qa_people.py` (355 launch), `app/services/readable_names.py` (49 —), `app/services/recast_endpoint.py` (1175 launch), `app/services/recast_masks.py` (770 launch)
-`app/services/recast_matte.py` (505 launch), `app/services/recast_preview.py` (355 —), `app/services/recast_reference_compose.py` (1088 launch), `app/services/recast_reference_prepare.py` (1033 launch)
-`app/services/recast_shot_manifest.py` (789 launch), `app/services/recast_shot_planning.py` (665 launch), `app/services/recast_shot_run.py` (233 launch), `app/services/recipes.py` (269 —), `app/services/rembg_adapter.py` (99 —)
-`app/services/repaint_planning.py` (642 launch), `app/services/repaint_run.py` (297 launch), `app/services/request_guards.py` (123 both), `app/services/request_numbers.py` (49 —), `app/services/resource_scheduler.py` (461 launch)
-`app/services/rig_service.py` (1097 —), `app/services/runtime_environment.py` (86 —), `app/services/runtime_profiles.py` (409 —), `app/services/runtime_sources.py` (55 —), `app/services/safe_download.py` (426 launch)
-`app/services/scail2_lora.py` (176 —), `app/services/scene2d_blank_frames.py` (38 —), `app/services/scene2d_export.py` (365 launch), `app/services/scene2d_schema.py` (416 —), `app/services/scene2d_text_boxes.py` (462 —)
-`app/services/scene2d_validate.py` (686 launch), `app/services/scene3d_items.py` (218 —), `app/services/scene3d_speech.py` (129 —), `app/services/scene_asset_facts.py` (506 launch), `app/services/scene_commands.py` (314 both)
-`app/services/scene_documents.py` (210 launch), `app/services/scene_export_lane.py` (43 —), `app/services/scene_export_leftovers.py` (64 launch), `app/services/scene_favorites.py` (71 launch), `app/services/scene_library.py` (64 —)
-`app/services/scene_links.py` (136 —), `app/services/scene_packages.py` (1031 launch), `app/services/scene_packages_import.py` (313 —), `app/services/scene_recording.py` (335 —), `app/services/scene_save.py` (467 core)
-`app/services/scene_speech_command.py` (66 —), `app/services/search_index.py` (188 —), `app/services/secure_download.py` (136 —), `app/services/series_ambience.py` (244 —), `app/services/series_assembly.py` (76 —)
-`app/services/series_asset_path.py` (37 —), `app/services/series_canon_snapshot.py` (136 —), `app/services/series_commands.py` (1096 launch), `app/services/series_continuity.py` (185 —), `app/services/series_cutouts.py` (104 —)
-`app/services/series_document_card.py` (322 —), `app/services/series_duration_estimate.py` (108 —), `app/services/series_entrances.py` (95 —), `app/services/series_episode.py` (69 —), `app/services/series_episode_numbers.py` (65 —)
-`app/services/series_finish.py` (132 —), `app/services/series_guide.py` (163 —), `app/services/series_hearing.py` (226 —), `app/services/series_jobs.py` (113 —), `app/services/series_kit_pins.py` (248 —)
-`app/services/series_language_versions.py` (334 launch), `app/services/series_layers.py` (153 —), `app/services/series_library.py` (1785 launch), `app/services/series_lifecycle.py` (100 —), `app/services/series_line_voice.py` (228 launch)
-`app/services/series_look_room.py` (143 —), `app/services/series_native_render.py` (1017 launch), `app/services/series_plan_jobs.py` (623 launch), `app/services/series_planning.py` (1353 —), `app/services/series_plate_checks.py` (266 —)
+`app/services/production_review_layers.py` (173 —), `app/services/production_room_box.py` (83 —), `app/services/production_rooms.py` (136 —), `app/services/production_run.py` (186 —), `app/services/production_scene2d.py` (471 —)
+`app/services/production_scene3d.py` (488 —), `app/services/production_scene_ops.py` (87 —), `app/services/production_scene_retry.py` (143 —), `app/services/production_seeds.py` (36 —), `app/services/production_sheets.py` (70 —)
+`app/services/production_shot_actions.py` (619 —), `app/services/production_shot_commands.py` (185 —), `app/services/production_shot_edit.py` (312 —), `app/services/production_shot_plan.py` (421 —)
+`app/services/production_shot_redo.py` (104 —), `app/services/production_shot_regeneration.py` (153 —), `app/services/production_shot_request.py` (129 —), `app/services/production_shot_review.py` (266 —)
+`app/services/production_shot_sources.py` (99 —), `app/services/production_shot_view.py` (562 —), `app/services/production_smoothness.py` (302 —), `app/services/production_song.py` (97 —), `app/services/production_song_switch.py` (124 —)
+`app/services/production_stage_clips.py` (146 —), `app/services/production_stage_frames.py` (239 —), `app/services/production_stage_run.py` (117 —), `app/services/production_stage_scenes.py` (294 —)
+`app/services/production_state.py` (37 —), `app/services/production_structure.py` (156 —), `app/services/production_style_presets.py` (49 —), `app/services/production_subject_count.py` (185 —), `app/services/production_takes.py` (92 —)
+`app/services/production_timing.py` (101 —), `app/services/production_trailer_audio.py` (151 —), `app/services/production_treatment.py` (264 —), `app/services/production_turn.py` (48 —), `app/services/production_usage.py` (104 —)
+`app/services/production_video_model.py` (104 —), `app/services/production_wait.py` (121 —), `app/services/production_windows.py` (103 —), `app/services/production_work_catalog.py` (277 —), `app/services/production_work_commands.py` (180 —)
+`app/services/project_catalog.py` (391 —), `app/services/prop_commands.py` (200 —), `app/services/prop_library.py` (80 —), `app/services/provider_profile.py` (283 —), `app/services/publication_server.py` (41 —)
+`app/services/publish_presets.py` (231 —), `app/services/qa_accent.py` (250 launch), `app/services/qa_people.py` (355 launch), `app/services/readable_names.py` (49 —), `app/services/recast_endpoint.py` (1175 launch)
+`app/services/recast_masks.py` (770 launch), `app/services/recast_matte.py` (505 launch), `app/services/recast_preview.py` (355 —), `app/services/recast_reference_compose.py` (1088 launch)
+`app/services/recast_reference_prepare.py` (1033 launch), `app/services/recast_shot_manifest.py` (789 launch), `app/services/recast_shot_planning.py` (665 launch), `app/services/recast_shot_run.py` (233 launch)
+`app/services/recipes.py` (269 —), `app/services/rembg_adapter.py` (99 —), `app/services/repaint_planning.py` (642 launch), `app/services/repaint_run.py` (297 launch), `app/services/request_guards.py` (123 both)
+`app/services/request_numbers.py` (49 —), `app/services/resource_scheduler.py` (463 launch), `app/services/rig_service.py` (1097 —), `app/services/room_box.py` (591 —), `app/services/room_box_commands.py` (188 —)
+`app/services/room_box_trim.py` (174 —), `app/services/room_materials.py` (448 —), `app/services/room_paint.py` (391 —), `app/services/room_plate.py` (307 —), `app/services/room_plate_commands.py` (123 —)
+`app/services/room_plate_extend.py` (85 —), `app/services/room_plate_parts.py` (216 —), `app/services/room_store.py` (87 —), `app/services/room_surfaces.py` (105 —), `app/services/runtime_environment.py` (86 —)
+`app/services/runtime_profiles.py` (423 —), `app/services/runtime_sources.py` (55 —), `app/services/safe_download.py` (426 launch), `app/services/scail2_lora.py` (176 —), `app/services/scene2d_blank_frames.py` (38 —)
+`app/services/scene2d_export.py` (365 launch), `app/services/scene2d_schema.py` (417 —), `app/services/scene2d_text_boxes.py` (462 —), `app/services/scene2d_validate.py` (686 launch), `app/services/scene3d_items.py` (218 —)
+`app/services/scene3d_speech.py` (129 —), `app/services/scene_asset_facts.py` (506 launch), `app/services/scene_commands.py` (314 both), `app/services/scene_documents.py` (210 launch), `app/services/scene_export_lane.py` (43 —)
+`app/services/scene_export_leftovers.py` (64 launch), `app/services/scene_favorites.py` (71 launch), `app/services/scene_library.py` (64 —), `app/services/scene_links.py` (136 —), `app/services/scene_packages.py` (1031 launch)
+`app/services/scene_packages_import.py` (313 —), `app/services/scene_recording.py` (335 —), `app/services/scene_save.py` (467 core), `app/services/scene_speech_command.py` (66 —), `app/services/search_index.py` (188 —)
+`app/services/secure_download.py` (136 —), `app/services/see_through_layers.py` (294 —), `app/services/series_ambience.py` (244 —), `app/services/series_assembly.py` (81 —), `app/services/series_asset_path.py` (37 —)
+`app/services/series_canon_snapshot.py` (136 —), `app/services/series_card_commands.py` (47 —), `app/services/series_cast_animation.py` (238 —), `app/services/series_commands.py` (1125 launch), `app/services/series_continuity.py` (185 —)
+`app/services/series_cutouts.py` (104 —), `app/services/series_directional.py` (461 —), `app/services/series_document_card.py` (322 —), `app/services/series_duration_estimate.py` (118 —), `app/services/series_entrances.py` (95 —)
+`app/services/series_episode.py` (69 —), `app/services/series_episode_numbers.py` (65 —), `app/services/series_expression_silence.py` (200 —), `app/services/series_finish.py` (132 —), `app/services/series_fx_classes.py` (60 —)
+`app/services/series_fx_warnings.py` (27 —), `app/services/series_guide.py` (163 —), `app/services/series_hearing.py` (226 —), `app/services/series_jobs.py` (113 —), `app/services/series_kit_pins.py` (248 —)
+`app/services/series_language_versions.py` (334 launch), `app/services/series_layers.py` (156 —), `app/services/series_library.py` (1786 launch), `app/services/series_lifecycle.py` (100 —), `app/services/series_line_voice.py` (229 launch)
+`app/services/series_look_room.py` (143 —), `app/services/series_native_render.py` (1158 launch), `app/services/series_plan_jobs.py` (623 launch), `app/services/series_planning.py` (1353 —), `app/services/series_plate_checks.py` (266 —)
 `app/services/series_plates.py` (169 launch), `app/services/series_produce.py` (366 launch), `app/services/series_production.py` (159 —), `app/services/series_reference_router.py` (470 —), `app/services/series_render.py` (699 —)
-`app/services/series_render_jobs.py` (592 launch), `app/services/series_review.py` (464 —), `app/services/series_review_gate.py` (169 —), `app/services/series_scene_inputs.py` (52 —), `app/services/series_score.py` (254 —)
-`app/services/series_script.py` (540 —), `app/services/series_script_history.py` (145 —), `app/services/series_script_problems.py` (94 —), `app/services/series_script_warnings.py` (232 —), `app/services/series_set_items.py` (26 —)
-`app/services/series_sets.py` (223 —), `app/services/series_shot3d.py` (529 —), `app/services/series_shot3d_editor.py` (166 —), `app/services/series_shot_bridge.py` (90 —), `app/services/series_shot_dialogue.py` (155 —)
-`app/services/series_shot_edit.py` (370 —), `app/services/series_shot_extras.py` (231 —), `app/services/series_shot_foley.py` (132 —), `app/services/series_shot_instruction.py` (90 —), `app/services/series_shot_plan.py` (622 —)
-`app/services/series_sound_cuts.py` (118 —), `app/services/series_stop_motion.py` (81 —), `app/services/series_take_inputs.py` (286 —), `app/services/series_take_sound.py` (286 —), `app/services/series_templates.py` (84 —)
-`app/services/series_transitions.py` (307 —), `app/services/series_video_foley.py` (93 —), `app/services/series_video_inputs.py` (131 —), `app/services/series_video_shots.py` (974 —), `app/services/series_voice_rooms.py` (347 —)
-`app/services/server_endpoint.py` (50 —), `app/services/server_entry.py` (110 both), `app/services/server_lifecycle.py` (178 —), `app/services/set_commands.py` (20 launch), `app/services/set_generation.py` (79 —)
+`app/services/series_render_jobs.py` (592 launch), `app/services/series_review.py` (464 —), `app/services/series_review_gate.py` (169 —), `app/services/series_room_box.py` (300 —), `app/services/series_scene_inputs.py` (52 —)
+`app/services/series_score.py` (254 —), `app/services/series_script.py` (560 —), `app/services/series_script_history.py` (145 —), `app/services/series_script_problems.py` (94 —), `app/services/series_script_warnings.py` (232 —)
+`app/services/series_set_items.py` (26 —), `app/services/series_sets.py` (235 —), `app/services/series_shot3d.py` (587 —), `app/services/series_shot3d_editor.py` (166 —), `app/services/series_shot_bridge.py` (90 —)
+`app/services/series_shot_card.py` (420 —), `app/services/series_shot_card_bind.py` (239 —), `app/services/series_shot_card_lines.py` (90 —), `app/services/series_shot_dialogue.py` (155 —), `app/services/series_shot_edit.py` (370 —)
+`app/services/series_shot_extras.py` (242 —), `app/services/series_shot_foley.py` (132 —), `app/services/series_shot_instruction.py` (92 —), `app/services/series_shot_plan.py` (659 —), `app/services/series_sound_cuts.py` (118 —)
+`app/services/series_stage.py` (202 —), `app/services/series_stage_checks.py` (111 —), `app/services/series_stage_commands.py` (61 —), `app/services/series_stage_grid.py` (214 —), `app/services/series_stage_ops.py` (148 —)
+`app/services/series_stop_motion.py` (81 —), `app/services/series_take_inputs.py` (292 —), `app/services/series_take_range.py` (136 —), `app/services/series_take_sound.py` (286 —), `app/services/series_templates.py` (84 —)
+`app/services/series_transitions.py` (311 —), `app/services/series_video_foley.py` (93 —), `app/services/series_video_inputs.py` (131 —), `app/services/series_video_shots.py` (974 —), `app/services/series_voice_rooms.py` (347 —)
+`app/services/server_endpoint.py` (50 —), `app/services/server_entry.py` (110 both), `app/services/server_lifecycle.py` (178 —), `app/services/set_commands.py` (22 launch), `app/services/set_generation.py` (79 —)
 `app/services/set_glb_size.py` (55 —), `app/services/set_molds.py` (186 —), `app/services/set_skins.py` (189 —), `app/services/settings_store.py` (118 launch), `app/services/song_analysis.py` (229 launch)
 `app/services/song_shorten.py` (306 —), `app/services/speech_alignment.py` (54 —), `app/services/speech_analysis_cache.py` (241 —), `app/services/speech_analysis_request.py` (27 —), `app/services/speech_file_commands.py` (116 —)
-`app/services/speech_language.py` (40 —), `app/services/speech_qa.py` (226 launch), `app/services/speech_reference_pauses.py` (276 —), `app/services/speech_text_es.py` (322 —), `app/services/storage_tools.py` (276 launch)
+`app/services/speech_language.py` (40 —), `app/services/speech_qa.py` (253 launch), `app/services/speech_reference_pauses.py` (276 —), `app/services/speech_text_es.py` (325 —), `app/services/storage_tools.py` (276 launch)
 `app/services/storage_usage.py` (177 launch), `app/services/story_asset_import.py` (83 —), `app/services/story_lab_jobs.py` (531 launch), `app/services/story_lab_schema.py` (912 —), `app/services/story_library.py` (353 —)
 `app/services/story_music_generation_record.py` (175 —), `app/services/story_music_jobs.py` (483 launch), `app/services/studio_edit_requests.py` (653 launch), `app/services/studio_generate.py` (589 launch)
 `app/services/studio_image_alpha.py` (60 —), `app/services/studio_image_alpha_restore.py` (143 —), `app/services/studio_image_conditioning.py` (35 —), `app/services/studio_image_preparation.py` (77 —)
@@ -362,15 +384,16 @@ Mount is `launch`, `core`, `both`, or `ui` when `useStore.ts` imports the slice.
 `app/services/task_controls.py` (70 —), `app/services/task_identity.py` (29 —), `app/services/task_maintenance.py` (366 —), `app/services/task_manager.py` (1100 —), `app/services/template_commands.py` (149 launch)
 `app/services/template_community.py` (147 launch), `app/services/template_format.py` (463 —), `app/services/template_library.py` (480 launch), `app/services/template_search.py` (110 —), `app/services/tool_sidecars.py` (89 —)
 `app/services/tools_upscale.py` (371 —), `app/services/tools_upscale_commands.py` (261 —), `app/services/tools_upscale_preparation.py` (412 —), `app/services/tools_upscale_spec.py` (357 —), `app/services/ui_distribution.py` (149 both)
-`app/services/upload_stream.py` (254 core), `app/services/upload_video_metadata.py` (52 both), `app/services/user_diagnostics.py` (559 —), `app/services/video2d_catalogs.py` (648 launch), `app/services/video2d_character_ops.py` (125 launch)
-`app/services/video2d_compile.py` (658 launch), `app/services/video2d_edit.py` (1215 launch), `app/services/video2d_edit_titles.py` (278 —), `app/services/video2d_preset_catalog.py` (38 —), `app/services/video2d_preview.py` (486 launch)
+`app/services/upload_stream.py` (254 core), `app/services/upload_video_metadata.py` (52 both), `app/services/user_diagnostics.py` (577 —), `app/services/video2d_catalogs.py` (648 launch), `app/services/video2d_character_ops.py` (125 launch)
+`app/services/video2d_compile.py` (665 launch), `app/services/video2d_edit.py` (1215 launch), `app/services/video2d_edit_titles.py` (278 —), `app/services/video2d_preset_catalog.py` (38 —), `app/services/video2d_preview.py` (486 launch)
 `app/services/video2d_template_cards.py` (375 —), `app/services/video_editor.py` (685 —), `app/services/video_editor_frames.py` (687 —), `app/services/video_editor_layers.py` (334 —), `app/services/video_editor_time_cards.py` (412 —)
 `app/services/video_extra_info.py` (521 —), `app/services/video_generation_commands.py` (46 —), `app/services/video_generation_spec.py` (416 —), `app/services/video_generation_v3.py` (662 —), `app/services/video_layout.py` (119 —)
-`app/services/vocal_isolation.py` (103 —), `app/services/vocal_isolation_worker.py` (79 —), `app/services/voice_pitch.py` (92 —), `app/services/voxcpm2_speech_contract.py` (22 —), `app/services/wangp_agent_adapters.py` (108 launch)
-`app/services/wangp_analysis.py` (106 —), `app/services/wangp_submission.py` (258 launch), `app/services/win_safe_files.py` (653 launch), `app/services/wizard_conversations.py` (236 —), `app/services/wizard_workflow_executor.py` (787 both)
-`app/services/wizard_workflow_supervisor.py` (36 —), `app/services/wizard_workflows.py` (283 —), `app/services/workspace_asset_import.py` (222 —), `app/services/workspace_busy.py` (185 —), `app/services/workspace_cleanup.py` (184 —)
-`app/services/workspace_commands.py` (144 launch), `app/services/workspace_folder_commands.py` (66 —), `app/services/workspace_registry.py` (285 both), `app/services/workspace_store_lock.py` (41 —)
-`app/services/world3d_export.py` (1100 both), `app/services/world3d_frame_encoder.py` (90 —), `app/services/world3d_grades.py` (42 —), `app/services/world3d_look.py` (44 —), `app/services/world3d_media_cache.py` (137 —)
-`app/services/world3d_modifiers.py` (142 —), `app/services/world3d_renderer_support.py` (34 —), `app/services/world3d_scenes.py` (871 launch), `app/services/world3d_slot_fields.py` (103 —), `app/services/world3d_stage_cards.py` (149 —)
-`app/services/world3d_stage_documents.py` (102 —), `app/services/world3d_talk.py` (183 —), `app/services/world3d_template_catalog.py` (624 —), `app/services/world3d_template_commands.py` (275 launch)
-`app/services/world3d_template_vocabulary.py` (235 —), `app/services/world3d_thumbnails.py` (309 —), `app/services/writing_guide.py` (180 —)
+`app/services/vocal_isolation.py` (103 —), `app/services/vocal_isolation_worker.py` (79 —), `app/services/voice_band.py` (130 —), `app/services/voice_band_commands.py` (45 —), `app/services/voice_cleanliness.py` (153 —)
+`app/services/voice_pitch.py` (92 —), `app/services/voxcpm2_speech_contract.py` (22 —), `app/services/wangp_agent_adapters.py` (108 launch), `app/services/wangp_analysis.py` (106 —), `app/services/wangp_submission.py` (258 launch)
+`app/services/win_safe_files.py` (653 launch), `app/services/wizard_conversations.py` (236 —), `app/services/wizard_workflow_executor.py` (787 both), `app/services/wizard_workflow_supervisor.py` (36 —)
+`app/services/wizard_workflows.py` (283 —), `app/services/workspace_asset_import.py` (222 —), `app/services/workspace_busy.py` (185 —), `app/services/workspace_cleanup.py` (184 —), `app/services/workspace_commands.py` (144 launch)
+`app/services/workspace_folder_commands.py` (66 —), `app/services/workspace_registry.py` (285 both), `app/services/workspace_store_lock.py` (41 —), `app/services/world3d_export.py` (1100 both), `app/services/world3d_frame_encoder.py` (90 —)
+`app/services/world3d_grades.py` (42 —), `app/services/world3d_look.py` (44 —), `app/services/world3d_media_cache.py` (137 —), `app/services/world3d_modifiers.py` (142 —), `app/services/world3d_renderer_support.py` (34 —)
+`app/services/world3d_scenes.py` (919 launch), `app/services/world3d_slot_fields.py` (109 —), `app/services/world3d_stage_cards.py` (149 —), `app/services/world3d_stage_documents.py` (102 —), `app/services/world3d_talk.py` (183 —)
+`app/services/world3d_template_catalog.py` (624 —), `app/services/world3d_template_commands.py` (275 launch), `app/services/world3d_template_vocabulary.py` (235 —), `app/services/world3d_thumbnails.py` (309 —)
+`app/services/writing_guide.py` (180 —)

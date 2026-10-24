@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { characterKitMouthSource, createCharacterKit, mountCharacterKitLayers, type CharacterKit, type CharacterKitAsset } from '../src/lib/characterKit'
 import { lockFaceRigEyePlacement, lockFaceRigMouthPlacement } from '../src/lib/characterKitFaceRig'
-import { flatRigPoseSource, imageToZoom, mouthLineRigRequest, mouthZoom, savedMouthLine, zoomToImage } from '../src/lib/flatRigMouth'
+import { flatRigPoseSource, imageToZoom, layerFaceStyle, mouthLineRigRequest, mouthZoom, savedMouthLine, zoomToImage } from '../src/lib/flatRigMouth'
 import { compileSeriesShot, type ShotSpec } from '../scripts/seriesShot.ts'
 
 const STATES = ['closed', 'small', 'wide', 'round', 'pressed', 'medium', 'pucker', 'bite', 'tongue'] as const
@@ -64,12 +64,22 @@ test('a Series shot compiles a warp pose with its own mouths at its own anchor',
 
 test('moving a warp pose\'s mouth keeps its own drawings and blink; another pose never inherits the base\'s', () => {
   const kit = warpKit()
+  kit.anchors.busto.layers = { eyewhite: file('layer-eye'), mouth: file('layer-mouth') }
+  kit.anchors.base.layers = { eyewhite: file('base-eye') }
   const moved = lockFaceRigMouthPlacement(kit, 'busto', anchor(-9))
   assert.deepEqual(moved.anchors.busto.mouthSources, own('busto'))
   assert.equal(moved.anchors.busto.blinkSource, file('hero-busto-blink'))
+  assert.deepEqual(moved.anchors.busto.layers, { eyewhite: file('layer-eye'), mouth: file('layer-mouth') })
   const fresh = { ...kit, anchors: { base: kit.anchors.base } }
   assert.equal(lockFaceRigEyePlacement(fresh, 'other', anchor(-30)).anchors.other.mouthSources, undefined)
   assert.equal(lockFaceRigMouthPlacement(fresh, 'other', anchor(-30)).anchors.other.mouthSources, undefined)
+  assert.equal(lockFaceRigEyePlacement(fresh, 'other', anchor(-30)).anchors.other.layers, undefined)
+  assert.equal(lockFaceRigMouthPlacement(fresh, 'other', anchor(-30)).anchors.other.layers, undefined)
+})
+
+test('a layer face style keeps the last look and asks for layers', () => {
+  assert.deepEqual(layerFaceStyle({ mouthStyle: 'warp', smile: 0.15 }), { mouthStyle: 'warp', smile: 0.15, faceSource: 'layers' })
+  assert.deepEqual(layerFaceStyle(undefined), { faceSource: 'layers' })
 })
 
 test('the mouth line editor reads the rigged original, the saved line and re-rigs with the hint', () => {

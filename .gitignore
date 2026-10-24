@@ -105,6 +105,11 @@ app/services/hunyuan3d/vendor/
 app/services/model3d_runtimes/
 app/services/rigging/vendor/
 
+# See-through (SIGGRAPH 2026) checkout, env and Hugging Face cache. Installed on request.
+app/services/see_through/env/
+app/services/see_through/vendor/
+app/services/see_through/hf/
+
 # MiniMax H3 isolated ComfyUI runtime, inputs/outputs, and model weights
 app/services/minimax_h3/env/
 app/services/minimax_h3/vendor/

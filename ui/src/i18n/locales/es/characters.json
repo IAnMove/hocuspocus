@@ -188,6 +188,14 @@
   },
   "faceRig": {
     "mouthsOnPose": "Bocas sobre “{{pose}}”",
+    "seeThrough": {
+      "button": "Colocar ojos y boca desde capas",
+      "busy": "Separando capas…",
+      "done": "El parpadeo y la boca siguen las capas de See-through.",
+      "hint": "Linux con una GPU NVIDIA. Instala See-through en Ajustes > Instalación. Riggea todas las poses y puede tardar unos minutos cada una.",
+      "missing": "Guarda el personaje antes de colocar las capas.",
+      "failed": "No se han podido colocar las capas."
+    },
     "steps": {
       "box": "Arrastra la caja amarilla hasta tapar los labios. Al soltar se guarda sola.",
       "wipe": "Si el dibujo todavía tiene boca pintada, pulsa Limpiar zona de la boca.",

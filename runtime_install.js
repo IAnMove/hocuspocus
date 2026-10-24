@@ -222,6 +222,26 @@ function engineSteps(engine, platform) {
       pip(engine, platform, 'install spconv-cu126==2.3.8'),
       pip(engine, platform, 'install torch_scatter==2.1.2 torch_cluster==1.6.3 -f https://data.pyg.org/whl/torch-2.7.0%2Bcu128.html')],
   }})
+  if (engine === 'see_through') {
+    // Pinned here, not in vendors.json: that file is hashed into every engine's fingerprint.
+    const src = spec.source
+    const dest = 'app/services/see_through/vendor/see-through'
+    const base = shell(engine, platform)
+    run.push({when: `{{!exists('${dest}/.git')}}`, method: 'shell.run', params: {
+      message: `git clone --depth 1 --no-checkout ${src.url} ${dest}`,
+    }})
+    run.push({method: 'shell.run', params: {
+      path: dest,
+      message: `git fetch --depth 1 origin ${src.revision} && git checkout --detach ${src.revision}`,
+    }})
+    run.push({method: 'shell.run', params: {...base, message: pip(engine, platform, `install -e ${dest}/common`)}})
+    run.push({method: 'shell.run', params: {...base, env: {...base.env,
+      HF_HOME: "{{path.resolve('app/services/see_through/hf')}}", HF_HUB_DISABLE_TELEMETRY: '1'},
+      message: [
+        'python -c "from huggingface_hub import snapshot_download; snapshot_download(\'24yearsold/seethroughv0.0.2_layerdiff3d_nf4\')"',
+        'python -c "from huggingface_hub import snapshot_download; snapshot_download(\'24yearsold/seethroughv0.0.1_marigold_nf4\')"',
+      ]}})
+  }
   // Corrects the few upstream wheel tags uv's check rejects (decord on Linux). It is a no-op
   // elsewhere and is not hashed: existing installs never needed it, so they stay current.
   run.push({method: 'shell.run', params: {...shell(engine, platform), message: [
@@ -236,6 +256,9 @@ function engineSteps(engine, platform) {
   }
   const markers = {hunyuan3d: '.maestro_hunyuan3d_v1.installed', minimax_h3: '.maestro_minimax_h3_v2.installed', rigging: '.maestro_rigging_v1.installed'}
   if (markers[engine]) run.push({method: 'fs.write', params: {path: `${spec.env}/${markers[engine]}`, text: catalog.revision}})
+  if (engine === 'see_through') run.push({method: 'fs.write', params: {
+    path: `${spec.env}/.maestro_see_through_v1.installed`, text: spec.source.revision,
+  }})
   return run.map(step => step.method === 'shell.run' ? {
     ...step, params: {...step.params, message: guarded(step.params.message)},
   } : step)

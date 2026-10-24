@@ -79,6 +79,8 @@ export interface CharacterKit {
     /** This pose's own mouth drawings (flat-rig warp mouths, cut from its drawing), placed at `mouth`; they share
      * the review of the kit's mouth for the same state. See characterKitMouthSource. */
     mouthSources?: Partial<Record<CharacterMouthState, string>>
+    /** See-through class PNGs for this pose (eyewhite, mouth, …), saved with the rig. */
+    layers?: Record<string, string>
   }>
   provenance: Array<Record<string, unknown>>
   /** Small animations (walk, wave, anime expressions): a sprite sheet of poses of this character, by animation id. */

@@ -101,7 +101,7 @@ CharacterKit
     design: { provider: local, model: drama3_voicedesign, voiceId: "design", name, language, instructions? }
   lookNotes?
   speech3d? { model, digest, settings? }
-  anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources? } }
+  anchors { [poseId]: { mouth, mouthStates?, eyes?, blink?, blinkSource?, mouthSources?, layers? } }
   animations? { [animationId]: { sheet, frames[], fps, loop, facing, reviewState, view?, prompt?, model?, createdAt? } }
   provenance[]
 ```
@@ -119,6 +119,11 @@ They share the review of `kit.mouth[state]`, which holds the base pose's. While
 it does, each pose mounts its own (`characterKitMouthSource`) and a pose with
 none mounts no mouth, never another pose's face. A drawing put on `kit.mouth`
 later is shared by every pose again.
+
+`anchors[pose].layers` (`{class: url}`) are the See-through RGBA masks for that
+pose (eyewhite, irides, eyelash, mouth, and any other class the pipeline
+painted). They are written when a flat rig uses `style.faceSource: "layers"`.
+A pose that starts from the base pose's anchors does not inherit them.
 
 `mountCharacterKitLayers` parents each approved overlay to its pose, sets
 `faceBinding`, and starts with the closed mouth visible. Mounting a kit pose
