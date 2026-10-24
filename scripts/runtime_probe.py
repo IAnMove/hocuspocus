@@ -21,6 +21,7 @@ FEATURES = {
     "sam": "inpaint masks (SAM 3.1)",
     "rigging": "AI rigging (UniRig)",
     "trellis2": "optional official image-to-3D (TRELLIS.2)",
+    "see_through": "See-through layers",
 }
 
 

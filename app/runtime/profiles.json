@@ -340,6 +340,48 @@
         "drama3_nodes"
       ],
       "defaultInstall": false
+    },
+    "see_through": {
+      "label": "See-through",
+      "installStepsVersion": 1,
+      "env": "app/services/see_through/env",
+      "environment": "conda",
+      "python": "3.12",
+      "required": false,
+      "platforms": ["linux"],
+      "unsupportedReason": "See-through layers need Linux x64 with an NVIDIA GPU. The flat rig still places the eyes and the mouth without them.",
+      "cuda": "12.8",
+      "torch": "2.8.0",
+      "torchvision": "0.23.0",
+      "torchaudio": "2.8.0",
+      "requirements": "app/services/see_through/requirements.txt",
+      "constraints": {
+        "accelerate": "1.13.0",
+        "bitsandbytes": "0.49.2",
+        "diffusers": "0.37.0",
+        "einops": "0.8.2",
+        "huggingface-hub": "1.7.2",
+        "numpy": "2.2.6",
+        "omegaconf": "2.3.0",
+        "opencv-python": "4.13.0.92",
+        "pillow": "12.1.1",
+        "pillow-jxl-plugin": "1.3.7",
+        "psd-tools": "1.14.2",
+        "pyyaml": "6.0.3",
+        "safetensors": "0.7.0",
+        "scipy": "1.15.3",
+        "setuptools": "75.8.0",
+        "tokenizers": "0.22.2",
+        "tqdm": "4.67.3",
+        "transformers": "5.0.0"
+      },
+      "vendors": [],
+      "defaultInstall": false,
+      "source": {
+        "url": "https://github.com/shitagaki-lab/see-through",
+        "revision": "df019de5129d6c4b406587a14c3501669441a783",
+        "license": "Apache-2.0"
+      }
     }
   }
 }
