@@ -217,6 +217,8 @@ def list_models(detail: bool = True):
     })
 
     payload = {"families": families, "models": models}
+    from services.model_licences import annotate_catalog
+    annotate_catalog(payload)
     if detail:
         return payload
     from services.mcp_compact import summarize_model_catalog

@@ -333,5 +333,9 @@
     "invalidStatus": "result.status “{{status}}” no es válido.",
     "crossWorkspaceResult": "result contiene referencias de varios workspaces.",
     "invalidResult": "Resultado de comando inválido."
+  },
+  "licence": {
+    "territory": "Esta licencia no se aplica en {{territories}}.",
+    "link": "Licencia"
   }
 }

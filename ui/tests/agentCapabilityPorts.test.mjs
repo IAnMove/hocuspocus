@@ -35,6 +35,8 @@ const AGENT_ACTIONS_IMPORTS = [
   '../../i18n',
   // Pure helper: the content language of new work follows the UI language.
   '../../lib/contentLanguage',
+  // Pure sentence for a family's territory licence. No store write, transport or execution port.
+  '../../lib/licenceNotice',
   '../../stores/useStore',
   '../../types',
   '../comics/generateArtwork',
