@@ -33,7 +33,7 @@ function guardedInput(action: AgentLipsyncRedoAction, workspace: string | undefi
   return lipsyncInput(action.input, named || workspace || '', action.engine)
 }
 
-async function executeLipsyncRedo(action: AgentLipsyncRedoAction, context: CapabilityExecutionContext): Promise<CapabilityExecutionOutcome> {
+export async function executeLipsyncRedo(action: AgentLipsyncRedoAction, context: CapabilityExecutionContext): Promise<CapabilityExecutionOutcome> {
   const posted = await postLipsyncRedo(guardedInput(action, context.workspace), {
     surface: 'wizard', intentId: context.generationContext?.commandId,
   })
@@ -75,7 +75,7 @@ export function registerLipsyncRedoCapabilities(register: typeof defineCapabilit
       return action.confirm === true && engineOf(action.engine) ? [] : ['Confirm the lip redo and name infinitetalk or longcat_avatar.']
     },
     async prepare(action) { return action },
-    execute: executeLipsyncRedo,
+    async execute(action, context) { return context.adapters.lipsyncRedo.command(action, context) },
     correlate(_action, outcome) { return outcome.target },
     async track(_action, outcome) { return outcome },
     report: { targetKind: 'output', successState: 'completed' },

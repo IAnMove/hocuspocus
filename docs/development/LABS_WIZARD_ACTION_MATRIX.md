@@ -1405,6 +1405,14 @@ registered by `registerMediaToolCapabilities` in
 result is a workspace file with a provenance sidecar. Coverage is in
 `ui/tests/mediaToolWizard.test.ts` and `tests/test_production_media_router.py`.
 
+`shot.lipsync.redo` (`lipsync_redo`) redoes the lips of one finished shot as a new take through
+`lipsyncRedo.command`, registered by `registerLipsyncRedoCapabilities` in
+`ui/src/features/agent/lipsyncRedoCapabilities.ts`. It posts `shot.lipsync.redo` to
+`/api/v1/media/commands`, the handler the MCP tool of the same name runs. The original clip and any
+series approval stay. Engines are `infinitetalk` (Apache-2.0) and `longcat_avatar` (MIT). Missing weights
+return their size on disk and wait for the existing model download. Coverage is in
+`ui/tests/lipsyncRedo.test.tsx` and `tests/test_shot_lipsync_redo.py`.
+
 ## Video 2D music cards
 
 `video2d.templates.suggest` (`video2d_templates`) reads the Video 2D music cards through

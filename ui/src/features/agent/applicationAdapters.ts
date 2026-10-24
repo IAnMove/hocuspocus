@@ -54,6 +54,7 @@ import { executeMakeCharacterAnimation, executeMakeCharacterAnimationSet, execut
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
+import { executeLipsyncRedo } from './lipsyncRedoCapabilities'
 import { executeVideo2DTemplates } from './video2dTemplateCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { roomSetMessage } from './roomSetsCapabilities'
@@ -215,6 +216,7 @@ export interface WizardApplicationAdapters {
     review(action: import('./characterAnimationCapabilities').AgentReviewCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
   }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
+  lipsyncRedo: { command(action: import('./lipsyncRedoCapabilities').AgentLipsyncRedoAction, context: import('./capabilityRegistry').CapabilityExecutionContext): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -812,6 +814,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   }
   adapters.mediaTools = {
     async command(action, workspace, commandId) { return executeMediaTool(action, workspace, commandId) },
+  }
+  adapters.lipsyncRedo = {
+    async command(action, context) {
+      const outcome = await executeLipsyncRedo(action, context)
+      return {
+        ...outcome,
+        target: outcome.target ?? { kind: 'output', id: action.engine, title: 'shot.lipsync.redo' },
+      }
+    },
   }
   adapters.lipsCreator = {
     async command(action, workspace) {

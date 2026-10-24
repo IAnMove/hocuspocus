@@ -94,7 +94,9 @@ test('the Wizard calls shot.lipsync.redo and shows the disk size without downloa
     return { ok: false, status: 409, json: async () => ({ detail: { code: 'model_unavailable', bytes: 99, model_type: 'longcat_avatar', message: 'missing' } }) }
   }) as typeof fetch
   try {
-    const outcome = await capability.execute(action!, { adapters: {} as never, workspace: 'orcos-libres', generationContext: { actor: 'wizard', commandId: 'lip-1' } })
+    const { createDefaultApplicationAdapters } = await import('../src/features/agent/applicationAdapters.ts')
+    const adapters = createDefaultApplicationAdapters()
+    const outcome = await capability.execute(action!, { adapters, workspace: 'orcos-libres', generationContext: { actor: 'wizard', commandId: 'lip-1' } })
     assert.match(outcome.message, /99 bytes on disk/)
     assert.match(outcome.message, /longcat_avatar/)
     assert.equal(sent.length, 1)
@@ -104,7 +106,7 @@ test('the Wizard calls shot.lipsync.redo and shows the disk size without downloa
     })
     await assert.rejects(capability.execute({
       type: 'lipsync_redo', engine: 'infinitetalk', confirm: true, input: { workspace: 'other', clip: 'a.mp4' },
-    }, { adapters: {} as never, workspace: 'film' }), /active workspace/)
+    }, { adapters, workspace: 'film' }), /active workspace/)
   } finally {
     globalThis.fetch = previous
   }
