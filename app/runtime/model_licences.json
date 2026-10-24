@@ -1,0 +1,39 @@
+{
+  "records": [
+    {
+      "id": "hunyuan",
+      "url": "https://github.com/Tencent-Hunyuan/HunyuanVideo/blob/main/LICENSE.txt",
+      "territoryExcluded": ["EU", "UK", "KR"],
+      "commercial": true,
+      "note": "Tencent Hunyuan Community License. HunyuanVideo-Avatar and HunyuanCustom use the same territory sentence in their own LICENSE files. Commercial use is allowed below 100 million monthly active users."
+    },
+    {
+      "id": "hunyuan_1_5",
+      "url": "https://github.com/Tencent-Hunyuan/HunyuanVideo-1.5/blob/main/LICENSE",
+      "territoryExcluded": ["EU", "UK", "KR"],
+      "commercial": true,
+      "note": "Tencent Hunyuan Community License for HunyuanVideo 1.5. Same territory sentence as Hunyuan Video. Commercial use is allowed below 100 million monthly active users."
+    },
+    {
+      "id": "hunyuan3d",
+      "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE",
+      "territoryExcluded": ["EU", "UK", "KR"],
+      "commercial": true,
+      "note": "Tencent Hunyuan 3D 2.0 Community License. Hunyuan3D 2.1 and Hunyuan3D-2mini use the same territory sentence. Commercial use is allowed below 1 million monthly active users."
+    },
+    {
+      "id": "minimax_h3",
+      "url": "https://huggingface.co/MiniMaxAI/MiniMax-H3/blob/main/LICENSE",
+      "territoryExcluded": ["EU", "UK", "KR", "US"],
+      "commercial": true,
+      "note": "MiniMax H3 Community License. Excluded territories are the EU, the UK, South Korea and the United States. Commercial use is allowed below 20 million USD yearly revenue. Native H3, H3 Advanced and the legacy ComfyUI component share this record."
+    }
+  ],
+  "families": {
+    "hunyuan": "hunyuan",
+    "hunyuan_1_5": "hunyuan_1_5",
+    "hunyuan3d": "hunyuan3d",
+    "minimax_h3": "minimax_h3",
+    "h3_advanced": "minimax_h3"
+  }
+}

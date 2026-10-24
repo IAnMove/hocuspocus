@@ -122,12 +122,15 @@ def summarize_model(model: dict) -> dict[str, Any]:
     director = model.get("director")
     if isinstance(director, dict):
         counts["director"] = len(director)
-    return {
+    summary = {
         "id": model.get("model_type") or model.get("id"),
         "name": one_line(model.get("name")) or one_line(model.get("model_type")),
         "description": description,
         "counts": counts,
     }
+    if isinstance(model.get("licenceId"), str) and model.get("licenceId"):
+        summary["licenceId"] = model["licenceId"]
+    return summary
 
 
 def summarize_model_catalog(payload: dict) -> dict[str, Any]:
@@ -140,15 +143,19 @@ def summarize_model_catalog(payload: dict) -> dict[str, Any]:
             by_family[family] = by_family.get(family, 0) + 1
     return {
         "counts": {"models": len(models), "families": len(families)},
-        "families": [
-            {
-                "id": item.get("id"),
-                "name": one_line(item.get("label")) or one_line(item.get("id")),
-                "description": one_line(item.get("label")),
-                "counts": {"models": by_family.get(item.get("id"), 0)},
-            }
-            for item in families
-            if isinstance(item, dict)
-        ],
+        "families": [_family_summary(item, by_family) for item in families if isinstance(item, dict)],
         "models": [summarize_model(item) for item in models if isinstance(item, dict)],
     }
+
+
+def _family_summary(item: dict, by_family: dict) -> dict[str, Any]:
+    summary = {
+        "id": item.get("id"),
+        "name": one_line(item.get("label")) or one_line(item.get("id")),
+        "description": one_line(item.get("label")),
+        "counts": {"models": by_family.get(item.get("id"), 0)},
+    }
+    licence = item.get("licence")
+    if isinstance(licence, dict) and licence.get("url"):
+        summary["licence"] = licence
+    return summary
