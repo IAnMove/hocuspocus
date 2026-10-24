@@ -268,6 +268,38 @@ def test_agreeing_whites_stay_and_the_brows_are_kept():
     assert len(rig["brows"]) == 2 and rig["brows"][0][2] < rig["brows"][1][0]
 
 
+def test_a_gorthak_tick_does_not_replace_the_painted_mouth():
+    """The landmark mouth on Gorthak is a short vertical tick, about 1/10 of the real mouth.
+
+    Landmarks may replace the mouth only when it is at least 0.35 of the eye-pair
+    width, centred below the eyes, and the mouth-point scores average at least 0.35.
+    """
+    face = _face()
+    points = _anime_points()
+    # Eye centres sit 100 px apart. A tick 8 px wide is under 0.35 of that, on the nose.
+    points[23:28] = [[206, 240, 0.9], [210, 232, 0.9], [210, 240, 0.9], [210, 248, 0.9], [214, 240, 0.9]]
+    geom = anime_face_landmarks.geometry_from_points(points)
+    assert geom["mouth"]["width"] < anime_face_landmarks.MOUTH_WIDTH_OF_EYES * geom["pair_width"]
+    assert geom["mouth"]["width"] < 0.15 * 80, "about a tenth of the painted mouth"
+    assert not anime_face_landmarks.mouth_plausible(geom)
+    high = anime_face_landmarks.geometry_from_points(_anime_points(mouth_y=80))
+    assert high["mouth"]["width"] > anime_face_landmarks.MOUTH_WIDTH_OF_EYES * high["pair_width"]
+    assert not anime_face_landmarks.mouth_plausible(high), "a wide mouth above the eyes"
+    unsure = [[*point[:2], 0.9] for point in _anime_points()]
+    for index in range(23, 28):
+        unsure[index][2] = 0.05
+    low = anime_face_landmarks.geometry_from_points(unsure)
+    assert low["mouth"]["score"] < anime_face_landmarks.MOUTH_POINT_SCORE
+    assert not anime_face_landmarks.mouth_plausible(low)
+    assert anime_face_landmarks.mouth_plausible(anime_face_landmarks.geometry_from_points(_anime_points()))
+    rig = rig_pose(face, INK, anime={"keypoints": points})
+    plain = rig_pose(face, INK, anime=False)
+    assert rig["mouthSource"] == "whites" and rig["mouth_box"] == plain["mouth_box"]
+    assert "mouth_landmarks_implausible" in rig["warnings"]
+    assert "mouth_not_found" not in rig["warnings"] and "mouth_disagree" not in rig["warnings"]
+    assert abs(_mouth_y(face, rig) - MOUTH_Y) <= 12
+
+
 def test_a_disagreeing_mouth_is_placed_on_the_landmark_line_without_a_wipe():
     face = _face()
     rig = rig_pose(face, INK, anime={"keypoints": _anime_points(mouth_y=520)})

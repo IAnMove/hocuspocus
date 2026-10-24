@@ -21,8 +21,11 @@ landmarks (``face_landmarks``, when its models are installed) place the search:
 the mark search alone takes a nose stroke or a socket shadow for a graphic-novel
 mouth and misses a bust's shaded eyes. When the optional anime-face component is
 installed, its 28 points place the eyes, blink, brows and mouth where that white
-search fails or disagrees (``anime_face_landmarks``); a hint still wins, and the
-pose records ``eyesSource`` and ``mouthSource``. Without the component nothing changes. With ``mouthStyle: "ink"`` the painted
+search fails or disagrees (``anime_face_landmarks``). The mouth is replaced only
+when the landmark mouth is plausible (wide enough, below the eyes, scores above
+the floor); otherwise a painted mouth stays, with ``mouth_landmarks_implausible``.
+A hint still wins, and the pose records ``eyesSource`` and ``mouthSource``.
+Without the component nothing changes. With ``mouthStyle: "ink"`` the painted
 mouth is kept as the rest shape and the open shapes are drawn in its own ink;
 with ``"warp"`` each pose talks with its own drawing (``flat_rig_warp``): the
 lower lip and jaw move down and the gap is inked, one set of patches per pose.

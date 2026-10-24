@@ -88,22 +88,41 @@ def _landmark_mouth(figure, rgb, alpha, eyes_box, geom, guide):
     return (figure, False, False, None, None, float(mx), float(my), background), updated
 
 
+def _whites_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, near, realistic, rig_mouth, warnings):
+    pack = rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, near, realistic)
+    return pack, "whites", warnings, None
+
+
 def anime_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, hinted, guide, geom, realistic, rig_mouth, find_mouth):
-    """Whites when they agree with the landmarks; the landmark line when they fail or disagree. A hint wins."""
+    """Whites when they agree, or when the landmark mouth is not plausible.
+
+    The landmark line is used only when the white search fails or disagrees and
+    ``mouth_plausible`` is true. A hint still wins. An implausible landmark mouth
+    leaves a found white mouth in place and warns ``mouth_landmarks_implausible``.
+    """
     if hinted is not None or not geom or not geom.get("mouth"):
         near = hinted if hinted is not None else guide.get("mouth")
         pack = rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, near, realistic)
         return pack, "hint" if hinted is not None else "whites", [], guide
     screen = style["screen"]
     probe = _probe_mouth(find_mouth, rgb, alpha, face_eyes, screen, realistic, None)
-    if probe is not None and not anime_face_landmarks.mouth_disagree(probe[0], geom):
-        pack = rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, None, realistic)
-        return pack, "whites", [], guide
+    plausible = anime_face_landmarks.mouth_plausible(geom)
+    if probe is not None and (not plausible or not anime_face_landmarks.mouth_disagree(probe[0], geom)):
+        warnings = ["mouth_landmarks_implausible"] if not plausible else []
+        pack, source, warnings, _guide = _whites_mouth(
+            figure, rgb, alpha, eyes_box, face_eyes, style, ink, None, realistic, rig_mouth, warnings)
+        return pack, source, warnings, guide
+    if not plausible:
+        # No painted mouth, and the landmark mouth is too small, too high or too unsure to invent one.
+        pack, source, warnings, _guide = _whites_mouth(
+            figure, rgb, alpha, eyes_box, face_eyes, style, ink, None, realistic, rig_mouth, [])
+        return pack, source, warnings, guide
     centre = geom["mouth"]["center"]
     close = _probe_mouth(find_mouth, rgb, alpha, face_eyes, screen, realistic, centre)
     if close is not None and not anime_face_landmarks.mouth_disagree(close[0], geom):
-        pack = rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, centre, realistic)
-        return pack, "whites", [], guide
+        pack, source, warnings, _guide = _whites_mouth(
+            figure, rgb, alpha, eyes_box, face_eyes, style, ink, centre, realistic, rig_mouth, [])
+        return pack, source, warnings, guide
     pack, guide = _landmark_mouth(figure, rgb, alpha, eyes_box, geom, guide)
     warnings = ["mouth_disagree"] if probe is not None or close is not None else []
     return pack, "landmarks", warnings, guide

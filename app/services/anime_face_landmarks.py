@@ -19,8 +19,12 @@ between the two eye centres), or when it is wider or taller than
 ``1 + EYE_SIZE_FRACTION`` (1.5×) the landmark pair box. A smaller white that
 shares the centre, such as a highlight, does not disagree. A painted mouth
 disagrees when its centre is farther than ``MOUTH_FRACTION`` (0.50) of the
-landmark mouth width. Points whose mean score is under ``MIN_SCORE`` (0.35)
-are ignored; missing scores count as sure.
+landmark mouth width. Landmarks replace that mouth only when it is plausible
+(``mouth_plausible``): the landmark mouth is at least ``MOUTH_WIDTH_OF_EYES``
+(0.35) times the eye-pair width, its centre is below the eye-pair box, and the
+mean of the five mouth-point scores is at least ``MOUTH_POINT_SCORE`` (0.35).
+Points whose mean score is under ``MIN_SCORE`` (0.35) are ignored; missing
+scores count as sure.
 """
 from __future__ import annotations
 
@@ -38,6 +42,10 @@ EYE_CENTER_FRACTION = 0.30
 EYE_SIZE_FRACTION = 0.50
 MOUTH_FRACTION = 0.50
 MIN_SCORE = 0.35
+# A landmark mouth shorter than this fraction of the eye-pair width is a tick, not a mouth.
+MOUTH_WIDTH_OF_EYES = 0.35
+# Mean of the five mouth points (23–27). The same floor as the whole-face mean.
+MOUTH_POINT_SCORE = 0.35
 _LEFT_BROW, _RIGHT_BROW = slice(5, 8), slice(8, 11)
 _LEFT_EYE, _RIGHT_EYE, _MOUTH = slice(11, 17), slice(17, 23), slice(23, 28)
 
@@ -127,11 +135,13 @@ def geometry_from_points(points: Any) -> dict[str, Any] | None:
     eyes, eye_boxes = _pair((xy[_LEFT_EYE], xy[_RIGHT_EYE]))
     brows, brow_boxes = _pair((xy[_LEFT_BROW], xy[_RIGHT_BROW]))
     mouth = xy[_MOUTH]
+    mouth_scores = scores[_MOUTH]
     centres = [group.mean(axis=0) for group in eyes]
     pair = np.concatenate([np.asarray(box, float) for box in eye_boxes])
     return {
         "score": round(score, 3),
         "points": xy,
+        "point_scores": [float(value) for value in scores],
         "eye_outlines": eyes,
         "eyes": eye_boxes,
         "pair_center": tuple(float(v) for v in (centres[0] + centres[1]) / 2),
@@ -140,7 +150,8 @@ def geometry_from_points(points: Any) -> dict[str, Any] | None:
                      float(max(pair[2], pair[6])), float(max(pair[3], pair[7]))),
         "brows": brow_boxes,
         "mouth": {"points": mouth, "center": tuple(float(v) for v in mouth.mean(axis=0)),
-                  "width": float(np.ptp(mouth[:, 0]))},
+                  "width": float(np.ptp(mouth[:, 0])),
+                  "score": round(float(np.mean(mouth_scores)), 3)},
     }
 
 
@@ -149,7 +160,11 @@ def into_crop(geom: dict[str, Any], crop, size) -> dict[str, Any]:
     moved = np.asarray(geom["points"], float) - np.asarray(crop[:2], float)
     moved[:, 0] = np.clip(moved[:, 0], 0, max(0, size[0] - 1))
     moved[:, 1] = np.clip(moved[:, 1], 0, max(0, size[1] - 1))
-    scored = np.column_stack([moved, np.full(28, max(float(geom["score"]), MIN_SCORE))])
+    # Keep each point's score. Filling with the face mean would hide an unsure mouth.
+    scores = np.asarray(geom.get("point_scores", []), float)
+    if scores.shape != (28,):
+        scores = np.full(28, max(float(geom["score"]), MIN_SCORE))
+    scored = np.column_stack([moved, scores])
     return geometry_from_points(scored) or geom
 
 
@@ -176,6 +191,25 @@ def mouth_disagree(found_box, geom: dict[str, Any]) -> bool:
     centre = np.array([(x0 + x1) / 2, (y0 + y1) / 2])
     width = max(float(geom["mouth"]["width"]), 1.0)
     return float(np.linalg.norm(centre - np.array(geom["mouth"]["center"]))) > MOUTH_FRACTION * width
+
+
+def mouth_plausible(geom: dict[str, Any]) -> bool:
+    """True when the landmark mouth may replace the painted one.
+
+    It must be at least ``MOUTH_WIDTH_OF_EYES`` (0.35) times the eye-pair width,
+    its centre must be below the eye-pair box (image y grows downward), and the
+    mean of the five mouth-point scores must be at least ``MOUTH_POINT_SCORE``
+    (0.35). A missing mouth score counts as sure, as a detection without scores does.
+    """
+    mouth = geom.get("mouth") or {}
+    pair = max(float(geom.get("pair_width") or 0.0), 1.0)
+    if float(mouth.get("width") or 0.0) < MOUTH_WIDTH_OF_EYES * pair:
+        return False
+    _mx, my = mouth.get("center") or (0.0, 0.0)
+    if float(my) <= float(geom["pair_box"][3]):
+        return False
+    score = mouth.get("score")
+    return score is None or float(score) >= MOUTH_POINT_SCORE
 
 
 def lip_contour(geom: dict[str, Any]) -> np.ndarray:
