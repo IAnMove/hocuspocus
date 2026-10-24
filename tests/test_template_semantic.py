@@ -100,9 +100,19 @@ def test_absent_model_matches_the_lexical_ranker_and_does_not_embed():
     assert nothing["matches"] == [] and nothing["semantic"] is False
 
 
-def test_a_stub_fills_unknown_words_and_marks_the_rows_partial():
+def test_a_flat_neighbourhood_does_not_invent_cards(tmp_path):
+    """e5-small bunches short cards together. A flat top must not become a result."""
+    table = {"ask": [1.0, 0.0]}
+    pool = []
+    for index in range(FILL_LIMIT + 1):
+        table[f"card-{index}"] = [1.0, 0.0]
+        pool.append(Row(0, f"card-{index}", index, f"card-{index}"))
+    template_semantic.force_embedder(Stub(table, model_id="flat-top"))
+    ranked, used = rank_rows("ask", [], pool=pool, cache_dir=tmp_path)
+    assert used is True and ranked == []
+
     class Flat:
-        model_id = "flat"
+        model_id = "flat-catalog"
 
         def embed(self, texts, *, prefix):
             return [[1.0, 0.0] for _text in texts]
@@ -110,9 +120,8 @@ def test_a_stub_fills_unknown_words_and_marks_the_rows_partial():
     template_semantic.force_embedder(Flat())
     report = search_report("xyzzy xyzzy plugh", limit=3)
     assert report["semantic"] is True
+    assert report["templates"] == []
     assert report["unknown_words"] == ["xyzzy", "plugh"]
-    assert report["templates"] and all(card["match"] == "partial" for card in report["templates"])
-    assert "semantic" not in report["templates"][0]
 
 
 def test_mean_pool_ignores_padding_and_normalises():

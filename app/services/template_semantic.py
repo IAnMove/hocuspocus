@@ -16,11 +16,13 @@ about 4). It does not beat a title-phrase bonus of 80 or an exact-id bonus of
 different scores, and ``apply_query`` may instantiate the winner. With the model
 absent, scores and order are the lexical ones.
 
-When no card matches lexically, the same model fills from the pool. A card is
-kept when its cosine is at least ``MIN_SIMILARITY`` (0.75) and within
-``FILL_MARGIN`` (0.04) of the best, at most ``FILL_LIMIT`` (8). Callers mark
-those rows ``partial``, so nothing is applied automatically. ``unknown_words``
-stays the lexical list.
+When no card matches lexically, the same model may fill from the pool. A card
+is kept when its cosine is at least ``MIN_SIMILARITY`` (0.75) and within
+``FILL_MARGIN`` (0.04) of the best. If more than ``FILL_LIMIT`` (8) cards sit
+in that band, the neighbourhood is flat and the fill is refused: on these
+short cards e5-small's cosines bunch up, and a flat top is not a match.
+Callers mark a real fill ``partial``, so nothing is applied automatically.
+``unknown_words`` stays the lexical list.
 
 Card text is the title, the one-line description and the trait, use and place
 words. Queries use the e5 prefix ``query: `` and cards use ``passage: ``.
@@ -246,8 +248,11 @@ def _keep_close(scored: list[tuple[int, float]]) -> list[tuple[int, int]]:
         return []
     floor = best - FILL_MARGIN
     kept = [item for item in scored if item[1] >= floor and item[1] >= MIN_SIMILARITY]
+    # A flat top is the anisotropy of a short-card embedding, not a match.
+    if len(kept) > FILL_LIMIT:
+        return []
     kept.sort(key=lambda item: (-item[1], item[0]))
-    return [(order, hybrid_score(0, similarity)) for order, similarity in kept[:FILL_LIMIT]]
+    return [(order, hybrid_score(0, similarity)) for order, similarity in kept]
 
 
 def fingerprint(model_id: str, items: list[tuple[str, str]]) -> str:
