@@ -356,7 +356,8 @@ def _fit(sections: list[tuple[str, list[Row]]]) -> list[str]:
             biggest = max(convertible, key=lambda title: _row_count(sections, title))
             modes[biggest] = "index"
             continue
-        if width < 240:
+        # 240 is not enough once the indexed services list covers every merged feature.
+        if width < 280:
             width += 40
             continue
         return lines
