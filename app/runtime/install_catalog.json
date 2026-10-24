@@ -109,6 +109,27 @@
       "remove": [
         "app/services/template_semantic_model"
       ]
+    },
+    {
+      "id": "anime_face",
+      "engine": "anime_face",
+      "script": "anime_face_install.js",
+      "title": "Anime face landmarks",
+      "summary": "28-point anime face landmarks for the flat rig, on CPU. The package and the Hugging Face weights are MIT. Vendored mmpose, mmdet and mmcv code is Apache-2.0. Linux x64, Windows x64 and Apple Silicon.",
+      "license": "MIT",
+      "thirdParty": [
+        {"name": "anime-face-detector", "version": "0.1.0", "license": "MIT"},
+        {"name": "hysts/anime-face-detector-yolov3", "license": "MIT"},
+        {"name": "hysts/anime-face-detector-hrnetv2", "license": "MIT"},
+        {"name": "mmpose 0.29.0, mmdet 2.28.2, mmcv 1.7.0 (vendored)", "license": "Apache-2.0"}
+      ],
+      "estimatedGiB": 1,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-face-smile", "gate": "always"},
+      "remove": [
+        "app/services/anime_face/env",
+        "app/services/anime_face/cache"
+      ]
     }
   ]
 }

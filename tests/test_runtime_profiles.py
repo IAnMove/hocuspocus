@@ -393,17 +393,37 @@ def test_child_python_does_not_import_from_parent_pythonpath(tmp_path):
     assert Path(result.stdout.strip()).resolve() == target.resolve()
 
 
+def _expected_constraints(spec: dict, platform: str) -> dict:
+    names = [key for key in ("torch", "torchvision", "torchaudio") if key in spec]
+    if spec.get("cuda"):
+        suffix = "+cu" + spec["cuda"].replace(".", "")
+    elif spec.get("torchIndex") == "cpu":
+        # macOS CPU wheels have no +cpu local version; Linux and Windows do.
+        suffix = "" if platform == "darwin" else "+cpu"
+    else:
+        suffix = None
+    extra = {key: spec[key] + suffix for key in names} if suffix is not None else {}
+    return {**spec["constraints"], **extra}
+
+
+def _constraint_pins(spec: dict) -> dict:
+    return dict(line.split("==", 1) for line in (ROOT / spec["constraintFile"]).read_text().splitlines()
+                if line and not line.startswith("#"))
+
+
 def test_constraint_files_match_the_selected_recipe():
     for platform in profiles.catalog()["platforms"]:
         for engine, definition in profiles.catalog()["engines"].items():
             if platform not in definition["platforms"]:
                 continue
             spec = profiles.recipe(engine, platform)
-            actual = dict(line.split("==", 1) for line in (ROOT / spec["constraintFile"]).read_text().splitlines()
-                          if line and not line.startswith("#"))
-            expected = {**spec["constraints"], **{k: spec[k] + "+cu" + spec["cuda"].replace(".", "")
-                        for k in ("torch", "torchvision", "torchaudio") if k in spec}}
-            assert actual == expected
+            assert _constraint_pins(spec) == _expected_constraints(spec, platform)
+    for engine, definition in profiles.catalog()["engines"].items():
+        if definition.get("torchIndex") != "cpu":
+            continue
+        for platform in definition["platforms"]:
+            spec = profiles.recipe(engine, platform)
+            assert _constraint_pins(spec) == _expected_constraints(spec, platform)
 
 
 def test_windows_recipe_edits_do_not_change_the_linux_fingerprint():
@@ -826,6 +846,7 @@ def test_install_summary_names_missing_features_and_why():
     blocked = next(line for line in amd if "NVIDIA" in line)
     assert "(WanGP)" in blocked and "(UniRig)" in blocked
     assert any("template semantic search" in line for line in amd)
+    assert any("Anime face landmarks" in line and "Advanced" in line for line in amd)
     old_driver = summary("win32", "x64", "nvidia", "470.1")
     # Engines blocked by the same driver floor share one line.
     assert any("(WanGP)" in line and "(Hunyuan3D)" in line and "528.33" in line for line in old_driver)

@@ -146,8 +146,13 @@ function engineSteps(engine, platform) {
       message: `uv venv --python ${spec.python} --seed ${spec.env}`,
     }})
   }
-  const torch = ['torch', 'torchvision', 'torchaudio'].filter(k => spec[k])
-    .map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
+  const torchNames = ['torch', 'torchvision', 'torchaudio'].filter(k => spec[k])
+  // CPU wheels: Linux and Windows publish 2.7.0+cpu; macOS publishes 2.7.0 with no local tag.
+  // CUDA engines keep the +cu suffix exactly as before.
+  const torch = spec.torchIndex === 'cpu'
+    ? torchNames.map(k => `${k}==${spec[k]}${platform === 'darwin' ? '' : '+cpu'}`).join(' ') +
+      ' --index https://download.pytorch.org/whl/cpu --index-strategy unsafe-best-match'
+    : torchNames.map(k => `${k}==${spec[k]}+cu${spec.cuda.replace('.', '')}`).join(' ')
   const removals = engine === 'wangp' && platform === 'win32'
     ? [pip(engine, platform, 'uninstall torchcodec')] : []
   if (engine === 'trellis2') run.push({method: 'shell.run', params: {
@@ -204,6 +209,13 @@ function engineSteps(engine, platform) {
   }
   if (engine === 'sam') run.push({method: 'shell.run', params: {...shell(engine, platform),
     message: pip(engine, platform, `install ${vendors.sam3.path}`)}})
+  if (engine === 'anime_face') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    env: {...shell(engine, platform).env, CUDA_VISIBLE_DEVICES: '',
+      HF_HOME: 'app/services/anime_face/cache',
+      HUGGINGFACE_HUB_CACHE: 'app/services/anime_face/cache/hub'},
+    message: 'python -c "from anime_face_detector import create_detector; create_detector(\'yolov3\', device=\'cpu\')"',
+  }})
   if (engine === 'rigging') run.push({method: 'shell.run', params: {
     ...shell(engine, platform, '.', {CUDA_HOME: "{{path.resolve(path.dirname(which('nvcc')), '..')}}"}),
     message: [pip(engine, platform, 'install flash-attn==2.7.4.post1 --no-build-isolation'),

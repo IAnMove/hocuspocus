@@ -231,6 +231,12 @@
     "poseAlt": "{{name}} pose",
     "overlayAlt": "{{name}} {{state}} overlay",
     "dragBoxHint": "Drag the rectangle over the original mouth. Drag its corner horizontally and vertically to change width and height independently. Wiping affects this rectangle; the new mouth keeps its own proportions.",
+    "placementSource": "Eyes from {{eyes}}, mouth from {{mouth}}.",
+    "sources": {
+      "whites": "the white of the eyes",
+      "landmarks": "anime landmarks",
+      "hint": "your mark"
+    },
     "wiping": "Wiping…",
     "wipeMouth": "Wipe mouth area",
     "lockMouths": "Apply placement to all mouths",

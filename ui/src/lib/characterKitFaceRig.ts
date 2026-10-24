@@ -11,6 +11,7 @@ import {
   type CharacterKitReviewState,
   type CharacterMouthState,
 } from './characterKit'
+import { keptFacePlacement } from './faceRigPlacement'
 
 export const CHARACTER_FACE_RIG_STATES = [...CHARACTER_MOUTH_STATES, 'open-eyes', 'blink'] as const
 export type CharacterKitFaceRigState = typeof CHARACTER_FACE_RIG_STATES[number]
@@ -294,7 +295,8 @@ export function lockFaceRigMouthPlacement(
   // The pose keeps what is its own: its mouth and blink drawings and a hidden-eyes flag.
   const own = kit.anchors[normalizedPoseId]
   const kept = { ...(own?.mouthSources ? { mouthSources: own.mouthSources } : {}),
-    ...(own?.blinkSource ? { blinkSource: own.blinkSource } : {}), ...(own?.blink === false ? { blink: false } : {}) }
+    ...(own?.blinkSource ? { blinkSource: own.blinkSource } : {}), ...(own?.blink === false ? { blink: false } : {}),
+    ...keptFacePlacement(own) }
   const mouthStates = {
     closed: nextAnchor,
     small: nextAnchor,

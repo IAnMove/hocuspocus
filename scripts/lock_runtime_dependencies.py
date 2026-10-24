@@ -23,9 +23,18 @@ from services.runtime_profiles import catalog, recipe  # noqa: E402
 def resolve(engine: str, platform: str) -> None:
     spec = recipe(engine, platform)
     constraints = ROOT / spec["constraintFile"]
-    cuda = spec["cuda"].replace(".", "") if spec.get("cuda") else None
-    pins = {**spec["constraints"], **{k: spec[k] + "+cu" + cuda
-            for k in ("torch", "torchvision", "torchaudio") if k in spec}}
+    names = [key for key in ("torch", "torchvision", "torchaudio") if key in spec]
+    if spec.get("torchIndex") == "cpu":
+        # macOS CPU wheels are versioned 2.7.0; Linux and Windows are 2.7.0+cpu.
+        suffix = "" if platform == "darwin" else "+cpu"
+        pins = {**spec["constraints"], **{key: spec[key] + suffix for key in names}}
+        indexes = ["--extra-index-url", "https://download.pytorch.org/whl/cpu",
+                   "--index-strategy", "unsafe-best-match"]
+    else:
+        cuda = spec["cuda"].replace(".", "") if spec.get("cuda") else None
+        pins = {**spec["constraints"], **{key: spec[key] + "+cu" + cuda for key in names}} if cuda else dict(spec["constraints"])
+        indexes = ["--extra-index-url", f"https://download.pytorch.org/whl/cu{cuda}",
+                   "--index-strategy", "unsafe-best-match"] if cuda else []
     constraints.write_text("# ABI contract from app/runtime/profiles.json\n" +
                            "".join(f"{k}=={v}\n" for k, v in pins.items()), encoding="utf-8")
     with tempfile.TemporaryDirectory(prefix="hocus-runtime-lock-") as temporary:
@@ -43,8 +52,6 @@ def resolve(engine: str, platform: str) -> None:
         inputs.write_text(f"-r {source.as_posix()}\n" + "\n".join(spec.get("acceleratorPackages", [])) +
                           ("\nhf-xet\npip\n" if engine == "wangp" else "\n"), encoding="utf-8")
         output = folder / "resolved.txt"
-        indexes = ["--extra-index-url", f"https://download.pytorch.org/whl/cu{cuda}",
-                   "--index-strategy", "unsafe-best-match"] if cuda else []
         subprocess.run(["uv", "--no-config", "pip", "compile", str(inputs), "--constraint", str(constraints),
                         *indexes, "--python-version", spec["python"],
                         "--python-platform", {"linux": "x86_64-unknown-linux-gnu", "win32": "x86_64-pc-windows-msvc",

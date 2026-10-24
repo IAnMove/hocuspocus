@@ -124,6 +124,22 @@ def test_a_pose_may_carry_its_own_blink_and_a_blob_is_refused(tmp_path):
         normalize_character_kit(kit)
 
 
+def test_a_pose_keeps_the_flat_rig_placement_source():
+    from services.character_kit_library import normalize_character_kit
+    mouth = {"offsetX": 0, "offsetY": -20, "scale": 0.05, "rotation": 0}
+    kit = {"id": "lola", "name": "Lola", "style": "cutout",
+           "base": {"id": "b", "name": "Lola", "source": "/api/v1/file/b.png?workspace=w", "reviewState": "approved"},
+           "poses": {}, "mouth": {}, "eyes": {},
+           "anchors": {"base": {"mouth": mouth, "eyesSource": "landmarks", "mouthSource": "whites",
+                                "brows": [[10, 20, 30, 40], [50.2, 20, 80, 41]]}}}
+    saved = normalize_character_kit(kit)["anchors"]["base"]
+    assert saved["eyesSource"] == "landmarks" and saved["mouthSource"] == "whites"
+    assert saved["brows"] == [[10, 20, 30, 40], [50, 20, 80, 41]]
+    kit["anchors"]["base"]["eyesSource"] = "guess"
+    with pytest.raises(ValueError, match="eyesSource"):
+        normalize_character_kit(kit)
+
+
 def test_a_kit_keeps_asymmetric_true_and_drops_anything_else():
     from services.character_kit_library import normalize_character_kit as normalize_kit
     base = {"version": 1, "id": "ana", "name": "Ana", "style": "cutout"}
