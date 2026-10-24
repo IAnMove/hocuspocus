@@ -1,6 +1,7 @@
 """The optional semantic layer: scoring, ties, cache, and the lexical path when it is off."""
 from __future__ import annotations
 
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -141,6 +142,12 @@ def test_the_component_is_mit_cpu_and_weights_only():
     assert engine["platforms"] == ["darwin", "linux", "win32"]
     script = (ROOT / "template_semantic_install.js").read_text(encoding="utf-8")
     assert "installEngines(" not in script and "script.return" in script
+    assert 'scripts/download_template_semantic.py' in script and "app/scripts/" not in script
+    spec = importlib.util.spec_from_file_location(
+        "download_template_semantic", ROOT / "scripts" / "download_template_semantic.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.DEFAULT_DIR == ROOT / "app" / "services" / "template_semantic_model"
     assert "pytorch_model.bin" not in MODEL_FILES and "onnx" not in " ".join(MODEL_FILES)
     assert MODEL_ID == "intfloat/multilingual-e5-small"
     assert QUERY_PREFIX == "query: " and PASSAGE_PREFIX == "passage: "
