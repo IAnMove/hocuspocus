@@ -340,6 +340,34 @@
         "drama3_nodes"
       ],
       "defaultInstall": false
+    },
+    "template_semantic": {
+      "label": "Template semantic search",
+      "installStepsVersion": 1,
+      "env": "app/services/template_semantic_model",
+      "environment": "venv",
+      "python": "3.10",
+      "required": false,
+      "platforms": [
+        "darwin",
+        "linux",
+        "win32"
+      ],
+      "architectures": {
+        "darwin": [
+          "arm64"
+        ],
+        "linux": [
+          "x64",
+          "arm64"
+        ],
+        "win32": [
+          "x64"
+        ]
+      },
+      "requirements": "app/runtime/requirements-template-semantic.txt",
+      "constraints": {},
+      "defaultInstall": false
     }
   }
 }

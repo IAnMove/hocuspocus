@@ -109,6 +109,9 @@ app/services/rigging/vendor/
 app/services/minimax_h3/env/
 app/services/minimax_h3/vendor/
 
+# Optional template-search weights (intfloat/multilingual-e5-small, MIT). Never tracked.
+app/services/template_semantic_model/
+
 # Retired optional content supplement pack — the download apparatus is
 # gone (nothing reads the pack anymore), but leftover local copies may
 # still exist on dev machines. Never tracked in git.

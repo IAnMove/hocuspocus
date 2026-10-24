@@ -11,6 +11,11 @@ both languages through ``world3d_template_vocabulary``; a literal word outranks 
 word in a line. Query words that no card of the library knows come back as ``unknown_words`` and never count against
 the match. When no card has every known word, the best cards with at least half of them come back marked
 ``match: partial`` and nothing is applied.
+
+When the optional template-semantic weights are installed, the report adds
+``semantic: true`` and each score is the lexical score plus a bounded cosine
+(see ``template_semantic``). Without those weights ``semantic`` is false and
+the scores, order, unknown words and partial flag are the lexical ones.
 """
 from __future__ import annotations
 
@@ -22,6 +27,7 @@ from functools import lru_cache
 from pathlib import Path
 from urllib.parse import quote
 
+from services import template_semantic
 from services.template_search import stem
 from services.world3d_stage_cards import stage_cards
 from services.world3d_template_vocabulary import FORMATS, KINDS, MOVES, QUERY_STOP, SHOT_SIZES, USES, expand
@@ -100,9 +106,10 @@ def search_report(query: str = "", *, category: str | None = None, language: str
     _require_language(language)
     bounded = _limit(limit)
     library = _cards(workspace_dir, workspace)
-    ranked, unknown = _ranked(query, library, _fitting(library, roles, setting, filters), category)
+    ranked, unknown, semantic = _ranked(query, library, _fitting(library, roles, setting, filters), category)
     cards = [_public_card(card, score, match) for score, match, _index, card in ranked[:bounded]]
-    return {"templates": cards, "unknown_words": unknown, "partial": bool(cards) and cards[0]["match"] == "partial"}
+    return {"templates": cards, "unknown_words": unknown, "partial": bool(cards) and cards[0]["match"] == "partial",
+            "semantic": semantic}
 
 
 def page_templates(query: str = "", *, category: str | None = None, language: str | None = None,
@@ -117,8 +124,9 @@ def page_templates(query: str = "", *, category: str | None = None, language: st
     library = _cards(workspace_dir, workspace)
     cards = _fitting(library, roles, setting, filters)
     unknown: list[str] = []
+    semantic = False
     if queried:
-        ranked, unknown = _ranked(query, library, cards, category)
+        ranked, unknown, semantic = _ranked(query, library, cards, category)
         chosen = [(score, match, card) for score, match, _index, card in ranked]
     else:
         filtered = [card for card in cards if _in_category(card, category)]
@@ -127,7 +135,7 @@ def page_templates(query: str = "", *, category: str | None = None, language: st
     page = chosen[start:start + bounded]
     partial = bool(chosen) and chosen[0][1] == "partial"
     return {"templates": [_public_card(card, score, match) for score, match, card in page], "total": len(chosen),
-            "partial": partial, "unknown_words": unknown}
+            "partial": partial, "unknown_words": unknown, "semantic": semantic}
 
 
 def suggest_templates(*, line: str = "", speakers: int | None = None, place: str = "", mood: str = "",
@@ -279,7 +287,53 @@ def _in_category(card: dict, category: str | None) -> bool:
     return not category or card.get("category") == category or category in (card.get("tags") or ())
 
 
-def _ranked(query: str, library: list[dict], cards: list[dict], category: str | None) -> tuple[list[tuple], list[str]]:
+def _ranked(query: str, library: list[dict], cards: list[dict], category: str | None) -> tuple[list[tuple], list[str], bool]:
+    """Lexical rows, then the optional cosine pass. The third value is whether embeddings ran."""
+    lexical, unknown = _lexical_ranked(query, library, cards, category)
+    return _apply_semantic(query, lexical, unknown, cards, category)
+
+
+def _apply_semantic(query: str, lexical: list[tuple], unknown: list[str], cards: list[dict],
+                    category: str | None) -> tuple[list[tuple], list[str], bool]:
+    if not str(query or "").strip() or template_semantic.active() is None:
+        return lexical, unknown, False
+    if lexical:
+        return _rescore_cards(query, lexical, unknown)
+    return _fill_cards(query, unknown, cards, category)
+
+
+def _rescore_cards(query: str, lexical: list[tuple], unknown: list[str]) -> tuple[list[tuple], list[str], bool]:
+    rows = [_semantic_row(order, item) for order, item in enumerate(lexical)]
+    ranked, used = template_semantic.rank_rows(query, rows)
+    if not used:
+        return lexical, unknown, False
+    return [_rescored(lexical, order, score) for order, score in ranked], unknown, True
+
+
+def _semantic_row(order: int, item: tuple) -> template_semantic.Row:
+    score, _match, _index, card = item
+    return template_semantic.Row(score, template_semantic.world3d_passage(card), order, str(card.get("id") or order))
+
+
+def _rescored(lexical: list[tuple], order: int, score: int) -> tuple:
+    _old, match, index, card = lexical[order]
+    return score, match, index, card
+
+
+def _fill_cards(query: str, unknown: list[str], cards: list[dict], category: str | None) -> tuple[list[tuple], list[str], bool]:
+    pool_cards = [card for card in cards if _in_category(card, category)]
+    pool = [_fill_row(order, card) for order, card in enumerate(pool_cards)]
+    ranked, used = template_semantic.rank_rows(query, [], pool=pool)
+    if not used:
+        return [], unknown, False
+    return [(score, "partial", order, pool_cards[order]) for order, score in ranked], unknown, True
+
+
+def _fill_row(order: int, card: dict) -> template_semantic.Row:
+    return template_semantic.Row(0, template_semantic.world3d_passage(card), order, str(card.get("id") or order))
+
+
+def _lexical_ranked(query: str, library: list[dict], cards: list[dict], category: str | None) -> tuple[list[tuple], list[str]]:
     """``(score, match, index, card)`` best first (full matches, else the partial ones) and the unknown words.
 
     A word is unknown when no card of the whole library has it; it is dropped before counting hits, so a query made
