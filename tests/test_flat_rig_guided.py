@@ -323,6 +323,16 @@ def test_a_failed_detector_warns_and_keeps_today(monkeypatch):
     assert rig["eyes_box"] == rig_pose(face, INK, anime=False)["eyes_box"]
 
 
+def test_an_unsure_brighter_box_loses_to_the_sure_face():
+    """Gorthak's wolf buckle outscores his face as a box, and its points are not sure."""
+    from services.anime_face.worker import choose_face
+    buckle = {"bbox": [0, 1500, 40, 1540, 0.9], "keypoints": [[0, 1500, 0.1]] * 28}
+    face = {"bbox": [300, 400, 500, 600, 0.25], "keypoints": [[400, 480, 0.7]] * 28}
+    assert choose_face([buckle, face]) is face
+    assert choose_face([buckle]) is None
+    assert choose_face([]) is None
+
+
 def test_the_kit_remembers_which_source_placed_the_face(tmp_path, monkeypatch):
     folder = tmp_path / "cast"
     folder.mkdir()

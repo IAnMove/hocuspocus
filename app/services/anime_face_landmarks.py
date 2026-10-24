@@ -9,6 +9,10 @@ Point order (image-left is the smaller x; the same order as hysts'
 ``anime-face-detector``): 0–4 contour, 5–7 left brow, 8–10 right brow,
 11–16 left eye, 17–22 right eye, 23–27 mouth (23 leftmost, 26 rightmost).
 
+The worker keeps the highest-scoring box whose 28 points average at least
+``MIN_SCORE``. A brighter box with unsure points, such as a buckle drawn
+like a face, is skipped, and the next sure face is used.
+
 A white-eye box disagrees when its centre is farther than
 ``EYE_CENTER_FRACTION`` (0.30) of the landmark eye-pair width (the distance
 between the two eye centres), or when it is wider or taller than
