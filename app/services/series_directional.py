@@ -222,30 +222,41 @@ def _every() -> set[Sector]:
     return {(name, negative) for name in DIRECTIONS for negative in ((False, True) if name in LATERAL else (False,))}
 
 
-def _sector_at(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float], walking: bool = False) -> Sector:
+def _sector_at(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float], walking: bool = False,
+               drawn: set[str] | None = None) -> Sector:
     theta = _angle(facing, at, eye)
-    return _signed(theta if theta is not None else 0.0, walking)
+    return sector_of(theta if theta is not None else 0.0, walking, drawn)
 
 
-def _sectors(entry: dict[str, Any], start: tuple[float, float] | None, spec: dict[str, Any] | None) -> dict[str, set[Sector]]:
+def drawn_directions(sheets: list[dict[str, Any]]) -> dict[str, set[str]]:
+    """The directions the sheets of a kit draw for each motion (``drawnDirections`` of the renderer): a walk with no walk sheet is drawn by the idle
+    ones. A three-quarter direction the sheets lack is not a gap of the walk: its band is split at 45 (or 135) degrees between the sheets it has."""
+    idle = {sheet["dir"] for sheet in sheets if sheet["motion"] == "idle"}
+    walk = {sheet["dir"] for sheet in sheets if sheet["motion"] == "walk"}
+    return {"walk": walk or idle, "idle": idle}
+
+
+def _sectors(entry: dict[str, Any], start: tuple[float, float] | None, spec: dict[str, Any] | None,
+             drawn: dict[str, set[str]] | None = None) -> dict[str, set[Sector]]:
     """The sectors of each motion a fixed camera will ask for: along the path for the walk (a walking figure faces where it goes, so the
     larger part of its movement decides: ``directional_sprite.edges``), at the ends for the idle (a figure with no heading stands facing where it went,
     so it keeps the sectors of the walk). With no fixed camera (a template, an orbit)
-    any of them."""
+    any of them. ``drawn`` is what the kit's sheets draw for each motion (``drawn_directions``; all five when absent)."""
     fields = cast_fields(entry)
+    drawn = drawn or {}
     if spec is None or start is None:
         return {"walk": _every() if "walkTo" in fields else set(), "idle": _every()}
     eye = _box_eye(spec)
     heading = fields.get("heading")
     rest = _heading_facing(heading, start, eye) if heading is not None else None
     if "walkTo" not in fields:
-        return {"walk": set(), "idle": {_sector_at(rest or (0.0, 1.0), start, eye)}}
+        return {"walk": set(), "idle": {_sector_at(rest or (0.0, 1.0), start, eye, drawn=drawn.get("idle"))}}
     end = (fields["walkTo"]["x"], fields["walkTo"]["z"])
     length = math.hypot(end[0] - start[0], end[1] - start[1])
     travel = ((end[0] - start[0]) / length, (end[1] - start[1]) / length) if length > 1e-9 else (0.0, 1.0)
     along = (min(length, step * _SAMPLE_METERS) for step in range(int(length / _SAMPLE_METERS) + 2))
-    walk = {_sector_at(travel, (start[0] + travel[0] * metres, start[1] + travel[1] * metres), eye, walking=True) for metres in along}
-    return {"walk": walk, "idle": {_sector_at(rest or travel, point, eye, walking=rest is None) for point in (start, end)}}
+    walk = {_sector_at(travel, (start[0] + travel[0] * metres, start[1] + travel[1] * metres), eye, walking=True, drawn=drawn.get("walk")) for metres in along}
+    return {"walk": walk, "idle": {_sector_at(rest or travel, point, eye, walking=rest is None, drawn=drawn.get("idle")) for point in (start, end)}}
 
 
 def needed_directions(entry: dict[str, Any], start: tuple[float, float], spec: dict[str, Any] | None) -> set[str]:
@@ -371,7 +382,7 @@ def _entry_warnings(checker: Any, entry: dict[str, Any], spec: dict[str, Any] | 
     who = str(entry.get("characterId"))
     kit = _kit_of(checker, who)
     sheets = kit_sheets(kit)
-    needed = _sectors(entry, _start(entry, spec), spec)
+    needed = _sectors(entry, _start(entry, spec), spec, drawn_directions(sheets) if sheets else None)
     for code, text in (("direction_sheet_missing", _missing_text(sheets, needed)),
                        ("direction_sheet_no_mouth", _mouth_text(sheets, needed) if speaks else None),
                        ("mirror_flips_detail", _mirror_text(sheets, needed) if kit.get("asymmetric") is True else None),

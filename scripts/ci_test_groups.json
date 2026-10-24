@@ -2780,6 +2780,12 @@
       "paths": [
         "tests/test_series_directional.py"
       ]
+    },
+    {
+      "prefix": "tests/fixtures/directional_walk_sectors.json",
+      "paths": [
+        "tests/test_series_directional.py"
+      ]
     }
   ]
 }

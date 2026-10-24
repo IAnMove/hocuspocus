@@ -171,6 +171,26 @@ def test_a_walker_that_goes_mostly_toward_or_across_the_camera_asks_for_that_dir
     assert {sector for sector in directional._sectors({"walkTo": {"x": 0, "z": -1.5}}, (1.8, 2.0), wide)["idle"]} == {("front", False)}
 
 
+def test_a_kit_without_three_quarter_sheets_has_a_split_band_not_a_gap_and_the_check_says_what_the_renderer_draws():
+    """The renderer draws a diagonal walk by the larger part of its movement when the sheets have no three-quarter one (``drawnDirections``), so the
+    check asks for the front and the side sheets there, and does not call the three-quarter sheets missing."""
+    room = {"size": {"w": 4, "d": 5, "h": 2.6}}
+    entry = {"walkTo": {"x": -1.8, "z": -1.0}}
+    assert {name for name, _ in directional._sectors(entry, (1.8, 2.3), room)["walk"]} == {"front", "front34", "side"}
+    plain = directional.drawn_directions(directional.kit_sheets(kit(**{"walk-front": sheet_record(12, motion="walk", dir="front"), "walk-12": sheet_record(12, motion="walk", dir="side"),
+                                                                       "idle": sheet_record(2, motion="idle", dir="front")})))
+    assert plain == {"walk": {"front", "side"}, "idle": {"front"}}
+    assert {name for name, _ in directional._sectors(entry, (1.8, 2.3), room, plain)["walk"]} == {"front", "side"}
+    assert directional.drawn_directions(directional.kit_sheets(kit(idle=sheet_record(2, motion="idle", dir="front")))) == {"walk": {"front"}, "idle": {"front"}}, \
+        "a walk with no walk sheet is drawn by the idle ones"
+    series = {"rooms": {"kitchen": BOX}}
+    shot = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 1.8, "z": 2.3}, "walkTo": {"x": -1.8, "z": -1.0}}]}
+    kit_ = kit(**{"walk-front": sheet_record(12, motion="walk", dir="front"), "walk-12": sheet_record(12, motion="walk", dir="side"),
+                  "idle-front": sheet_record(2, motion="idle", dir="front"), "idle-side": sheet_record(2, motion="idle", dir="side")})
+    _problems, warnings = run_check(shot, {"kit-ana": kit_}, series)
+    assert not [item for item in warnings if item["code"] == "direction_sheet_missing"], "front and side are drawn: nothing is missing"
+
+
 def test_a_still_figure_in_a_fixed_camera_needs_one_direction_and_a_walker_the_ones_of_its_path():
     spec = {"size": {"w": 4, "d": 5, "h": 2.6}}
     assert directional.needed_directions({"heading": 0, "at": {"x": 0, "z": 0}}, (0, 0), spec) == {"front"}
