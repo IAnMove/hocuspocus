@@ -59,6 +59,13 @@ def handler_for(adapter: str, action: str) -> Handler | None:
         return _handlers.get((str(adapter or "").strip(), _action(action)))
 
 
+def handler_for_task(task: dict, action: str) -> Handler | None:
+    """The handler for a task row: by its adapter or, for a command task that names none (Video 2D and World3D
+    exports), by its operation."""
+    metadata = task.get("metadata") if isinstance(task.get("metadata"), dict) else {}
+    return handler_for(str(metadata.get("adapter") or metadata.get("operation") or ""), action)
+
+
 def registered() -> tuple[tuple[str, str], ...]:
     """Every (adapter, action) with a handler, sorted."""
     with _lock:
