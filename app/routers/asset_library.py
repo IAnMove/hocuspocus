@@ -5,7 +5,7 @@ from pathlib import PurePosixPath
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
-from services.asset_library import ARCHIVE_HOSTS, AssetLibrary, asset_library
+from services.asset_library import FILE_HOSTS, AssetLibrary, asset_library
 from services.example_collections import CollectionDownloads
 from services.media_kinds import MEDIA_TYPES
 from services.secure_download import opener_for
@@ -20,7 +20,7 @@ def _require_action(request: Request) -> None:
 
 def create_asset_library_router(library: AssetLibrary = asset_library, opener=None) -> APIRouter:
     router = APIRouter(tags=["asset-library"])
-    downloads = CollectionDownloads(library, opener=opener or opener_for(ARCHIVE_HOSTS),
+    downloads = CollectionDownloads(library, opener=opener or opener_for(FILE_HOSTS),
                                     busy_message="Another library download is already running")
 
     @router.get("/api/v1/library")
