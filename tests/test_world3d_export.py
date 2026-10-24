@@ -472,6 +472,36 @@ def test_cancel_keeps_the_document_and_recoverable_partials(tmp_path):
     assert list(Path(registry.workspace_dir).glob("*.mp4")) == []
 
 
+def test_activity_cancel_and_jobs_cancel_stop_an_export_by_its_task_row(tmp_path):
+    """The export's task row names no adapter: Activity's Cancel and jobs.cancel reach it by its operation."""
+    from services import task_controls
+    from services.core_canonical_tasks import control_task
+
+    hold = threading.Event()
+    started = threading.Event()
+
+    def renderer(snapshot, staging, progress, cancelled):
+        started.set()
+        hold.wait(8)
+        if cancelled():
+            raise World3DExportCancelled()
+        return _paint(snapshot, staging, progress, cancelled)
+
+    service = _service(tmp_path, renderer=renderer)
+    client = _client(service, tmp_path)
+    posted = client.post("/api/v1/scenes/world3d/export", json=_command("cancel-by-row"))
+    assert posted.status_code == 200, posted.text
+    started.wait(2)
+    registry = service._registry(WORKSPACE)
+    row = registry.get(posted.json()["receipt"]["taskIds"][0])
+    assert task_controls.handler_for_task(row, "cancel") is not None
+    result = control_task(row, "cancel")
+    assert result["status"] == "cancelled"
+    hold.set()
+    assert _wait(registry, row["id"], {"cancelled"})["status"] == "cancelled"
+    assert list(Path(registry.workspace_dir).glob("*.mp4")) == []
+
+
 def test_failure_keeps_document_and_partials_for_retry(tmp_path):
     calls = []
 
@@ -890,3 +920,15 @@ def test_a_published_export_releases_its_frames_and_keeps_its_snapshot(tmp_path,
     name = registry.get(task_id)["result_refs"][0]
     assert (Path(registry.workspace_dir) / name).stat().st_size > 0
     forget_task_registry(registry.workspace_dir)
+
+
+def test_the_full_server_switch_falls_back_to_a_registered_control():
+    """The full server keeps its own Cancel switch; a task it does not know (an export) goes to the registered control."""
+    from services import task_controls
+    from services.canonical_task_sync import _control_canonical_task
+
+    seen = []
+    task_controls.register(OPERATION, "cancel", lambda task: seen.append(task["id"]) or {"status": "cancelled"})
+    row = {"id": "task-1", "workspace": WORKSPACE, "metadata": {"operation": OPERATION}}
+    assert _control_canonical_task(row, "cancel") == {"status": "cancelled"}
+    assert seen == ["task-1"]
