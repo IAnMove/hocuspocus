@@ -17,19 +17,26 @@ const gib = value => `${value} GB`
 
 // Install asks once what to add. Checkboxes cannot start ticked in Pinokio, so
 // "unticked" means "not now", which is why the base install is never listed.
+// The list is computed when the dialog opens: only extras this computer can run and
+// that are not installed yet are offered, and with none left there is nothing to ask.
+const offered = engine => `local.runtime.engines[${engine}].supported && !local.runtime.engines[${engine}].installed`
+
 function chooseSteps() {
-  const gate = {when: '{{local.runtime.engines.wangp.supported}}'}
+  const engines = JSON.stringify([...new Set(components.map(component => component.engine))])
+  const gate = {when: `{{local.runtime.engines.wangp.supported && ${engines}.some(engine => ${offered('engine')})}}`}
+  const fields = components.map(component => ({
+    type: 'checkbox', key: component.id, engine: component.engine,
+    title: `${component.title} (about ${gib(component.estimatedGiB)})`,
+    description: component.summary,
+  }))
   return [
     {...gate, method: 'input', params: {
       title: 'Choose what to install',
+      confirm: 'Install',
       description: `<b>The studio and local generation (${gib(data.base.estimatedGiB)}) are always installed.</b> ` +
         'Tick the extras you want now. You can add or remove each one later in the app (Settings > Installation) or from the Advanced menu here. ' +
-        'Free disk space: {{local.runtime.diskFreeGiB}} GB. {{local.runtime.summary.join(" ")}}',
-      form: components.map(component => ({
-        type: 'checkbox', key: component.id,
-        title: `${component.title} (about ${gib(component.estimatedGiB)})`,
-        description: component.summary,
-      })),
+        'Free disk space: {{local.runtime.diskFreeGiB}} GB. {{(local.runtime.unavailable || []).join(" ")}}',
+      form: `{{${JSON.stringify(fields)}.filter(field => ${offered('field.engine')})}}`,
     }},
     {...gate, method: 'local.set', params: {
       extras: '{{Object.keys(input || {}).filter(key => input[key]).join(",")}}',

@@ -75,3 +75,16 @@ def test_probe_summary_offers_h3_legacy_as_an_extra_not_a_default():
         item["installed"] = False
     text = " ".join(_load_probe().summary(result))
     assert "MiniMax H3 Legacy" in text and "Optional, from the Advanced menu" in text
+
+
+def test_probe_unavailable_names_only_what_this_computer_cannot_run():
+    # The Install dialogs print this next to the list of extras, so it must not repeat that list.
+    result = profiles.select_profiles("win32", "x64", "nvidia", "580.82.09")
+    for item in result["engines"].values():
+        item["installed"] = False
+    probe = _load_probe()
+    lines = probe.unavailable(result)
+    assert lines and all(line.startswith("Not available here") for line in lines)
+    assert any("AI rigging" in line for line in lines), "UniRig is Linux only"
+    assert not any("Optional" in line for line in lines)
+    assert any(line.startswith("Optional, from the Advanced menu") for line in probe.summary(result))

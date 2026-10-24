@@ -356,7 +356,7 @@ flips the same sheet. Each direction has a twelve-pose walk at 12 fps (one cycle
 `walk-front`, `walk-front34`, `walk-back34`, `walk-back`. A cycle is the contact, down, lift, passing, up and reach of each leg, with the
 arm opposite to the leading leg swinging back; the old four-pose `walk` stays, and a kit with only that one works as before. The breaths are
 `idle-side`, `idle-front34`, `idle-back34`, `idle-back` (two poses; `idle` is the front one). The prompts of the new views ask for a
-three-quarter or a back view (`views`, `viewNegatives` and `custom.views` in the catalog); `facing` is `right` for `side`, `front34` and
+three-quarter or a back view (`views`, `viewNegatives` and `custom.views` in the catalog). The default Turbo model takes no negative prompt, so a walk of front, front34, back34 or back also says in words, after its view, that the body keeps its turn and that the step shows in the feet (`walkViews`: Qwen draws a wide stride by turning the body, so a back walk drifts to three-quarter and a front34 walk to a profile); `facing` is `right` for `side`, `front34` and
 `back34` and `front` for `front` and `back` (`front` there means «looks neither way», so the walk-in never mirrors it).
 
 *The data contract with the 3D engine* (`app/services/character_animation_directions.py`, `ui/src/lib/characterAnimationDirections.ts`):

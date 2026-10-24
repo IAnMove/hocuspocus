@@ -18,6 +18,15 @@ function render(template, context) {
   return template.replace(/\{\{([\s\S]*?)\}\}/g, (_, expression) => vm.runInNewContext(expression, context))
 }
 
+// A template that is one single expression keeps its type (Pinokio does the same), so a computed form stays a list.
+function evaluate(template, context) {
+  const single = template.match(/^\{\{([\s\S]*)\}\}$/)
+  if (!single) return render(template, context)
+  const value = vm.runInNewContext(single[1], context)
+  // Objects built inside the vm have another Array/Object realm; copy them so deepEqual compares plain values.
+  return typeof value === 'object' && value !== null ? JSON.parse(JSON.stringify(value)) : value
+}
+
 function context(platform) {
   return {platform, path: platform === 'win32' ? path.win32 : path.posix,
     cwd: platform === 'win32' ? 'C:\\Pinokio Apps\\HocusPocus' : '/tmp/other location/hocus',
@@ -56,6 +65,17 @@ for (const platform of ['linux', 'win32']) {
     assert(all.includes('build_mesh_painter.py'))
     assert.equal(runtime.python('minimax_h3', platform), 'app/services/minimax_h3/env/python.exe')
   }
+}
+
+// uv's check rejects decord's Linux wheel tag, so the known-tag repair must run before it on
+// every engine, or a fresh Linux install stops at "built for a different platform".
+for (const engine of Object.keys(runtime.catalog.engines)) {
+  const verify = runtime.installEngines([engine]).find(step => JSON.stringify(step.params || {}).includes('runtime_verify.py'))
+  assert(verify, `${engine} must verify its environment`)
+  const message = verify.params.message
+  const check = message.search(/runtime_pip\.py.*? --engine \w+ -- check/)
+  assert(message.includes('python scripts/runtime_wheel_tags.py'), `${engine} must correct known wheel tags`)
+  assert(message.indexOf('runtime_wheel_tags.py') < check, `${engine} must correct wheel tags before uv checks them`)
 }
 
 // Machines without a local AI recipe (AMD, Intel, CPU, old drivers) install core only.
@@ -121,6 +141,7 @@ for (const exitCode of [0, 7]) {
 // Update only refreshes what is already there, and the base install never includes them.
 const components = require('../install_components')
 const catalogIds = require('../app/runtime/install_catalog.json').components.map(c => c.id)
+const catalogEngines = require('../app/runtime/install_catalog.json').components.map(c => c.engine)
 assert.deepEqual(components.components.map(c => c.id), catalogIds)
 for (const component of components.components) {
   assert(runtime.catalog.engines[component.engine], `${component.id}: engine missing from profiles.json`)
@@ -149,18 +170,37 @@ assert.equal(render(failure.when, {...setupContext({update: false, extras: 'sam'
   'A component that was not started cannot report a failed install')
 
 const dialog = components.chooseSteps()
-const form = dialog.find(step => step.method === 'input').params.form
+const allEngines = Object.fromEntries(Object.keys(runtime.catalog.engines).map(name => [name, {supported: true, installed: false}]))
+const machine = (patch = {}) => ({local: {runtime: {engines: Object.fromEntries(
+  Object.entries(allEngines).map(([name, state]) => [name, {...state, ...(patch[name] || {})}]))}}})
+const offeredKeys = patch => evaluate(dialog.find(step => step.method === 'input').params.form, machine(patch)).map(field => field.key)
+const form = evaluate(dialog.find(step => step.method === 'input').params.form, machine())
 assert.deepEqual(form.map(field => field.key), catalogIds)
 assert(form.every(field => field.type === 'checkbox' && field.title.includes('GB') && field.description))
+assert.deepEqual(offeredKeys({rigging: {supported: false}, trellis2: {supported: false}}),
+  catalogIds.filter(id => !['rigging', 'trellis2'].includes(id)), 'Extras this computer cannot run are not offered')
+assert.deepEqual(offeredKeys({sam: {installed: true}}), catalogIds.filter(id => id !== 'sam'), 'Installed extras are not offered again')
 assert(dialog[0].params.description.includes('always installed'))
+assert.equal(dialog[0].params.confirm, 'Install', 'The dialog has one button and it must say what it does')
 const choice = input => render(dialog[1].params.extras, {input})
 assert.equal(choice({sam: true, rigging: false, minimax_h3: true}), 'sam,minimax_h3')
 assert.equal(choice({}), '')
 assert.equal(choice(undefined), '')
 for (const step of dialog) {
-  assert.equal(render(step.when, {local: {runtime: {engines: {wangp: {supported: false}}}}}), 'false', 'Core machines are not asked')
-  assert.equal(render(step.when, {local: {runtime: {engines: {wangp: {supported: true}}}}}), 'true')
+  assert.equal(render(step.when, machine({wangp: {supported: false}})), 'false', 'Core machines are not asked')
+  assert.equal(render(step.when, machine()), 'true')
+  const everything = Object.fromEntries(catalogEngines.map(name => [name, {installed: true}]))
+  assert.equal(render(step.when, machine(everything)), 'false', 'With every extra installed there is nothing to ask')
+  const nothingRuns = Object.fromEntries(catalogEngines.map(name => [name, {supported: false}]))
+  assert.equal(render(step.when, machine(nothingRuns)), 'false', 'With no extra this computer can run there is nothing to ask')
 }
+const description = dialog[0].params.description
+assert(render(description, {local: {runtime: {diskFreeGiB: 106, unavailable: ['Not available here: UniRig. Linux only.']}}}).includes('Not available here: UniRig'))
+assert(!render(description, {local: {runtime: {diskFreeGiB: 106, unavailable: []}}}).includes('Optional, from the Advanced menu'),
+  'The dialog lists the extras itself; it must not repeat them')
+const finalDialog = require('../install').run.filter(step => step.method === 'input').pop().params.description
+assert(render(finalDialog, machine()).includes('Settings > Installation'), 'Computers with extras are told where to manage them')
+assert(!render(finalDialog, machine({wangp: {supported: false}})).includes('Settings > Installation'), 'Core-only computers have no extras to manage')
 const handoff = require('../install').run.find(step => step.params?.uri === 'runtime_setup.js').params.params
 assert.equal(handoff.update, false)
 assert.equal(render(handoff.extras, {local: {extras: 'sam,rigging'}}), 'sam,rigging')

@@ -26,6 +26,8 @@ export interface InstallComponent {
   reason: string | null
   /** null while the server is still measuring the folder. */
   sizeBytes: number | null
+  /** What removing it frees: uv links packages from Pinokio's shared cache, which stays. null while measuring. */
+  reclaimableBytes: number | null
   job: InstallJob | null
 }
 

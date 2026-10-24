@@ -210,7 +210,10 @@ function engineSteps(engine, platform) {
       pip(engine, platform, 'install spconv-cu126==2.3.8'),
       pip(engine, platform, 'install torch_scatter==2.1.2 torch_cluster==1.6.3 -f https://data.pyg.org/whl/torch-2.7.0%2Bcu128.html')],
   }})
+  // Corrects the few upstream wheel tags uv's check rejects (decord on Linux). It is a no-op
+  // elsewhere and is not hashed: existing installs never needed it, so they stay current.
   run.push({method: 'shell.run', params: {...shell(engine, platform), message: [
+    'python scripts/runtime_wheel_tags.py',
     pip(engine, platform, 'check'),
     `python scripts/runtime_verify.py --engine ${engine}`,
   ]}})

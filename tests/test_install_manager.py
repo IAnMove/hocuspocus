@@ -1,6 +1,7 @@
 """Installation tab backend: status, jobs, uninstall and routes, without Pinokio or an install."""
 from __future__ import annotations
 
+import os
 import threading
 import time
 from pathlib import Path
@@ -13,7 +14,7 @@ from routers.install_manager import create_install_manager_router
 from services import install_catalog, install_jobs, install_remove
 from services.install_launcher import LauncherTarget, resolve
 from services.install_manager import InstallManager
-from services.install_status import SizeMeter, directory_size
+from services.install_status import Footprint, SizeMeter, directory_footprint
 
 SAM = install_catalog.get("sam")
 H3 = install_catalog.get("minimax_h3")
@@ -72,7 +73,7 @@ def test_log_lines_drop_colour_codes_and_progress_redraws():
     assert install_jobs.clean_log_lines("a\nb\nc\nd", 2) == ["c", "d"]
 
 
-def test_directory_size_counts_files_and_ignores_links(tmp_path):
+def test_directory_footprint_counts_files_and_ignores_links(tmp_path):
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "one").write_bytes(b"x" * 10)
     (tmp_path / "two").write_bytes(b"x" * 5)
@@ -80,17 +81,28 @@ def test_directory_size_counts_files_and_ignores_links(tmp_path):
     outside.mkdir()
     (outside / "huge").write_bytes(b"x" * 1000)
     (tmp_path / "link").symlink_to(outside)
-    assert directory_size(tmp_path) == 15
+    assert directory_footprint(tmp_path) == Footprint(total=15, unshared=15)
+
+
+def test_a_file_that_uv_hard_linked_from_its_cache_is_not_freed_by_removing_the_folder(tmp_path):
+    cache, env = tmp_path / "uv-cache", tmp_path / "env"
+    cache.mkdir()
+    env.mkdir()
+    (cache / "wheel").write_bytes(b"x" * 100)
+    os.link(cache / "wheel", env / "torch.so")  # what uv does: same bytes, second name
+    (env / "own").write_bytes(b"x" * 7)
+    # The 100 bytes stay in the cache after the env goes: only the file nobody else links is freed.
+    assert directory_footprint(env) == Footprint(total=107, unshared=7)
 
 
 def test_size_meter_answers_at_once_and_fills_in_later(tmp_path):
     gate = threading.Event()
-    meter = SizeMeter(measure=lambda path: gate.wait(3) and 7)
+    meter = SizeMeter(measure=lambda path: gate.wait(3) and Footprint(7, 3))
     assert meter.get(tmp_path) is None
     gate.set()
-    wait_for(lambda: meter.get(tmp_path) == 7)
+    wait_for(lambda: meter.get(tmp_path) == Footprint(7, 3))
     meter.invalidate(tmp_path)
-    assert meter.get(tmp_path / "missing") == 0
+    assert meter.get(tmp_path / "missing") == Footprint(0, 0)
 
 
 def test_uninstall_removes_the_environment_and_marker_but_keeps_downloaded_models(tmp_path):
@@ -196,13 +208,16 @@ def test_status_lists_every_component_with_its_state(tmp_path):
     populate(tmp_path, SAM)
     populate(tmp_path, H3)
     manager, _ = manager_for(tmp_path, supported={"sam", "minimax_h3", "hunyuan3d"}, installed={"sam"})
-    wait_for(lambda: manager.status() and manager.status()["components"][3]["sizeBytes"] is not None)
+    wait_for(lambda: manager.status() and manager.status()["components"][3]["sizeBytes"] is not None
+             and manager.status()["components"][3]["reclaimableBytes"] is not None)
     status = {row["id"]: row for row in manager.status()["components"]}
     assert status["sam"]["state"] == "installed"
     assert status["minimax_h3"]["state"] == "needs_update"
     assert status["hunyuan3d"]["state"] == "not_installed" and status["hunyuan3d"]["sizeBytes"] == 0
     assert status["rigging"]["state"] == "unsupported" and status["rigging"]["reason"] == "needs more VRAM"
     assert status["sam"]["estimatedBytes"] > 0 and status["sam"]["restartRequired"] is False
+    assert status["sam"]["reclaimableBytes"] > 0, "what the removal deletes is counted, not only the environment"
+    assert status["hunyuan3d"]["reclaimableBytes"] == 0
     assert manager.status()["base"]["installed"] is True
 
 

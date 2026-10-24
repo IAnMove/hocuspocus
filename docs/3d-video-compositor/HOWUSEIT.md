@@ -602,6 +602,13 @@ three-quarter back, back; the left is the mirror of the right), with its walk cy
   `walk-back34`, `walk-back`, `idle-<dir>`. With no `dir`, a `side` or `front` view says it; with no `motion`, a cycle whose id starts with `walk` or `idle`
   says it. A sheet drawn looking left says `facing: "left"`. A direction the kit lacks is drawn by the nearest one it has; with no
   walk or idle sheet at all the base pose glides. Nothing is an error: the script check warns `direction_sheet_missing`.
+- **Which sheet:** a standing figure takes the sheet of the angle between where it looks and the line to the camera in equal sectors of 45 degrees (front 0, front34
+  45, side 90, back34 135, back 180). A figure that **walks** (or stands facing where it went, with no `heading`) is drawn by the larger part of its movement: front or back
+  while it goes more toward or away from the camera than across, side while it goes more across, and a three-quarter sheet only for a really diagonal walk
+  (`walkDiagonalDeg`, 12: 33 to 57 degrees off the camera's line, and the same from the back; 22.5 gives the standing sectors, 0 turns the three-quarter sheets off
+  while walking). Perspective counts: a crossing near the edge of a wide room is seen from 55 degrees at its ends. A kit that has no three-quarter sheet of the motion
+  splits that band at 45 and 135 degrees, so the larger part still decides; **un-approving a poor three-quarter sheet in the Character Kit is the way to stop using it**.
+  The server check reads the same table (`directional_sprite.edges`), so a walk across a room no longer asks for sheets it will not draw.
 - **Fade:** when the drawing changes (another sheet, the other side, the pose) the old one fades into the new one over 0.12 s
   (`crossfadeSeconds`), added up so the figure never thins. It starts on the frame of the change and is the same on every export; a jump in
   time (a seek) shows no fade. The 10 degrees of hysteresis still keep it from flickering at a boundary.
@@ -625,7 +632,7 @@ three-quarter back, back; the left is the mirror of the right), with its walk cy
 - **Doors:** the script (`series.episode.from_script`, `series.shot.update`, `edit_series_shot`), the 3D cast part of the shot inspector
   (Looks, Walks to x and z, Speed, Starts at, Light tint) and, for a plain Video 3D scene, the `directional` binding of `world3d.scene.patch`
   (`{sheets, heading?, walk? {to, speed, start}, speech?, lightTint?}` on an image cutout; `null` removes it).
-- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
+- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, `walkDiagonalDeg` 12 and `walkHysteresisDeg` 4 for a walking figure, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
   drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
   `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot, a walk that stops to speak, the frames of a fade and a
   column in front of and behind two figures, with a synthetic five-direction kit, and checks the pixels.
