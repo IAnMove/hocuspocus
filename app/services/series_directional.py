@@ -22,14 +22,13 @@ import math
 from typing import Any
 from urllib.parse import quote
 
-from services.directional_sprite import DIRECTIONS, LOOPS, MOTIONS, SPEC, SPEED_RANGE, WALK_SPEED, anchor, direction_of, heading_degrees, number as _number, wrap as _wrap
+from services.directional_sprite import DIRECTIONS, LOOPS, MOTIONS, SPEC, SPEED_RANGE, WALK_SPEED, anchor, direction_of, heading_degrees, number as _number, sector_of
 
 KEYS = ("heading", "walkTo", "walkSpeed", "walkAt", "lightTint")
 LATERAL = tuple(SPEC["lateral"])
 VIEW_DIRECTION = {"side": "side", "front": "front"}
 REACH = 100
 LATE = 600
-_HALF_SECTOR = 22.5
 _SAMPLE_METERS = 0.25
 _ASSET_PREFIXES = ("/api/", "http://", "https://")
 
@@ -187,14 +186,12 @@ Sector = tuple[str, bool]
 """A direction and whether the figure looks to the left of the camera (a negative angle), which a right-looking sheet mirrors."""
 
 
-def _signed(theta: float) -> Sector:
-    angle = _wrap(theta)
-    reach = abs(angle)
-    return DIRECTIONS[0 if reach <= _HALF_SECTOR else min(len(DIRECTIONS) - 1, math.ceil((reach - _HALF_SECTOR) / 45))], angle < 0
+def _signed(theta: float, walking: bool = False) -> Sector:
+    return sector_of(theta, walking)
 
 
-def _sector(theta: float) -> str:
-    return _signed(theta)[0]
+def _sector(theta: float, walking: bool = False) -> str:
+    return _signed(theta, walking)[0]
 
 
 def _angle(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float]) -> float | None:
@@ -225,14 +222,16 @@ def _every() -> set[Sector]:
     return {(name, negative) for name in DIRECTIONS for negative in ((False, True) if name in LATERAL else (False,))}
 
 
-def _sector_at(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float]) -> Sector:
+def _sector_at(facing: tuple[float, float], at: tuple[float, float], eye: tuple[float, float], walking: bool = False) -> Sector:
     theta = _angle(facing, at, eye)
-    return _signed(theta if theta is not None else 0.0)
+    return _signed(theta if theta is not None else 0.0, walking)
 
 
 def _sectors(entry: dict[str, Any], start: tuple[float, float] | None, spec: dict[str, Any] | None) -> dict[str, set[Sector]]:
-    """The sectors of each motion a fixed camera will ask for: along the path for the walk, at the ends for the idle. With no fixed
-    camera (a template, an orbit) any of them."""
+    """The sectors of each motion a fixed camera will ask for: along the path for the walk (a walking figure faces where it goes, so the
+    larger part of its movement decides: ``directional_sprite.edges``), at the ends for the idle (a figure with no heading stands facing where it went,
+    so it keeps the sectors of the walk). With no fixed camera (a template, an orbit)
+    any of them."""
     fields = cast_fields(entry)
     if spec is None or start is None:
         return {"walk": _every() if "walkTo" in fields else set(), "idle": _every()}
@@ -245,8 +244,8 @@ def _sectors(entry: dict[str, Any], start: tuple[float, float] | None, spec: dic
     length = math.hypot(end[0] - start[0], end[1] - start[1])
     travel = ((end[0] - start[0]) / length, (end[1] - start[1]) / length) if length > 1e-9 else (0.0, 1.0)
     along = (min(length, step * _SAMPLE_METERS) for step in range(int(length / _SAMPLE_METERS) + 2))
-    walk = {_sector_at(travel, (start[0] + travel[0] * metres, start[1] + travel[1] * metres), eye) for metres in along}
-    return {"walk": walk, "idle": {_sector_at(rest or travel, point, eye) for point in (start, end)}}
+    walk = {_sector_at(travel, (start[0] + travel[0] * metres, start[1] + travel[1] * metres), eye, walking=True) for metres in along}
+    return {"walk": walk, "idle": {_sector_at(rest or travel, point, eye, walking=rest is None) for point in (start, end)}}
 
 
 def needed_directions(entry: dict[str, Any], start: tuple[float, float], spec: dict[str, Any] | None) -> set[str]:

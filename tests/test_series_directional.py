@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from services import directional_sprite
 from services import series_directional as directional
 from services import series_shot3d
 from services.series_native_render import NativeRenderError
@@ -122,12 +123,52 @@ def test_the_nearest_direction_is_the_one_the_picture_would_take():
 def test_the_server_sectors_are_the_renderers_table():
     """ui/tests/directionalSprite.test.ts walks the same table: 22.5, 67.5, 112.5 and 157.5 degrees are the edges, ties toward the front."""
     def expected(theta):
-        reach = abs(directional._wrap(theta))
+        reach = abs(directional_sprite.wrap(theta))
         return "front" if reach <= 22.5 else "front34" if reach <= 67.5 else "side" if reach <= 112.5 else "back34" if reach <= 157.5 else "back"
     for step in range(-720, 1441):
         assert directional._sector(step / 4) == expected(step / 4), step / 4
     assert [directional._sector(angle) for angle in (22.5, 22.6, 67.5, 67.6, 112.5, 112.6, 157.5, 157.6, -180)] == [
         "front", "front34", "front34", "side", "side", "back34", "back34", "back", "back"]
+
+
+WALK_TABLE = json.loads((Path(__file__).resolve().parent / "fixtures" / "directional_walk_sectors.json").read_text(encoding="utf-8"))
+
+
+def test_the_walking_and_the_standing_sectors_are_the_table_the_renderer_asserts_too():
+    """ui/tests/directionalWalkSector.test.ts reads the same table: the larger part of a walk decides, only a diagonal walk is three-quarter."""
+    assert WALK_TABLE["walkDiagonalDeg"] == SPEC["walkDiagonalDeg"], "the table is for the spec number: change both"
+    for case in WALK_TABLE["cases"]:
+        for sign in (1, -1):
+            angle = sign * case["angle"]
+            assert directional_sprite.sector_of(angle, True)[0] == case["walking"], angle
+            assert directional_sprite.sector_of(angle)[0] == case["standing"], angle
+            if 0 < case["angle"] < 180 and sign < 0:
+                assert directional_sprite.sector_of(angle, True)[1] and directional_sprite.sector_of(angle)[1]
+    assert directional_sprite.edges() == (22.5, 67.5, 112.5, 157.5)
+    half = SPEC["walkDiagonalDeg"]
+    assert directional_sprite.edges(True) == (45 - half, 45 + half, 135 - half, 135 + half)
+
+
+def test_a_kit_without_three_quarter_sheets_splits_their_band_where_the_larger_part_of_the_movement_changes():
+    plain = {"front", "side", "back"}
+    assert directional_sprite.edges(True, plain) == directional_sprite.edges(False, plain) == (45, 45, 135, 135)
+    assert [directional_sprite.sector_of(angle, True, plain)[0] for angle in (30, 44, 46, 100, 130, 136)] == ["front", "front", "side", "side", "side", "back"]
+    assert directional_sprite.edges(True, {"front", "front34", "side"}) == (45 - SPEC["walkDiagonalDeg"], 45 + SPEC["walkDiagonalDeg"], 135, 135)
+    assert directional_sprite.edges(True, set()) == (45, 45, 135, 135)
+
+
+def test_a_walker_that_goes_mostly_toward_or_across_the_camera_asks_for_that_direction_only():
+    """In a fixed camera the walk of a figure is judged by its larger part: the perspective that a plain sector turns into a three-quarter
+    sheet at the ends of a path (a crossing near the edge of a wide room, a slightly diagonal approach) no longer asks for one."""
+    room = {"size": {"w": 4, "d": 5, "h": 2.6}}
+    assert directional.needed_directions({"walkTo": {"x": -1.5, "z": 0}}, (1.5, 0), room) == {"side"}
+    wide = {"size": {"w": 6, "d": 5, "h": 2.6}}
+    approach = directional.needed_directions({"walkTo": {"x": 0, "z": -1.5}}, (1.8, 2.0), wide)
+    assert approach == {"front"}
+    assert directional._sector(25) == "front34" and directional._sector(25, True) == "front"
+    diagonal = directional.needed_directions({"walkTo": {"x": 0, "z": 0}}, (4, 4), wide)
+    assert diagonal == {"front", "front34"}, "a really diagonal approach still asks for the three-quarter sheet"
+    assert {sector for sector in directional._sectors({"walkTo": {"x": 0, "z": -1.5}}, (1.8, 2.0), wide)["idle"]} == {("front", False)}
 
 
 def test_a_still_figure_in_a_fixed_camera_needs_one_direction_and_a_walker_the_ones_of_its_path():
@@ -255,14 +296,16 @@ def test_direction_fields_belong_to_a_3d_shot_and_must_be_well_formed():
 
 
 def test_a_kit_without_the_direction_a_fixed_camera_needs_warns_and_names_the_nearest():
-    partial = kit(**{"walk-12": sheet_record(12, motion="walk", dir="side"), "idle-front": sheet_record(2, motion="idle", dir="front")})
+    partial = kit(**{"walk-front": sheet_record(12, motion="walk", dir="front"), "idle-front": sheet_record(2, motion="idle", dir="front")})
     series = {"rooms": {"kitchen": BOX}}
     shot = {"kind": "3d", "set": "kitchen", "cast": [{"characterId": "ana", "at": {"x": 1.5, "z": 0}, "walkTo": {"x": -1.5, "z": 0}}]}
     problems, warnings = run_check(shot, {"kit-ana": partial}, series)
     assert problems == []
     missing = [item for item in warnings if item["code"] == "direction_sheet_missing"]
     assert len(missing) == 1 and missing[0]["subject"] == "ana" and missing[0]["shots"] == ["s1"]
-    assert "walk" in missing[0]["message"] and "nearest" in missing[0]["message"]
+    assert "walk side (nearest: front)" in missing[0]["message"] and "nearest" in missing[0]["message"]
+    # A crossing is a side walk: the three-quarter sheets it used to ask for at the ends of the path are not missing.
+    assert "front34" not in missing[0]["message"] and "back34" not in missing[0]["message"]
     complete, none = run_check(shot, {"kit-ana": full_kit()}, series)
     assert complete == [] and not [item for item in none if item["code"] == "direction_sheet_missing"]
     nothing, said = run_check({"kind": "3d", "cast": [{"characterId": "ana", "heading": 0}]}, {"kit-ana": kit()})
