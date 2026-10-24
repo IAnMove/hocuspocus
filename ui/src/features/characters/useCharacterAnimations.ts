@@ -61,13 +61,14 @@ export function useCharacterAnimations(workspace: string, kitId: string | undefi
     return () => clearInterval(timer)
   }, [kitId, active, refresh, pollMs, idleMs])
 
-  const start = useCallback(async (kit: CharacterKit, def: AnimationDef, model: string, remake?: string) => {
+  const start = useCallback(async (kit: CharacterKit, def: AnimationDef, model: string, remake?: string, method?: 'poses' | 'video') => {
     setError(''); show(current => ({ ...current, saved: '' }))
     try {
       // An animation the kit does not have yet is made from the words the author wrote; one it has is made again from the words it kept.
       const custom = def.custom && !kit.animations?.[def.id]
         ? { title: def.title.es, view: def.view as 'bust' | 'front' | 'side', poses: def.poses.map(pose => pose.prompt) } : undefined
-      const job = await startAnimationJob({ workspace, kitId: kit.id, animation: def.id, model, ...(remake ? { pose: remake } : {}), ...(custom ? { custom } : {}) })
+      const job = await startAnimationJob({ workspace, kitId: kit.id, animation: def.id, model, ...(remake ? { pose: remake } : {}), ...(custom ? { custom } : {}),
+        ...(method === 'video' && !remake ? { method: 'video' } : {}) })
       known.current[job.jobId] = job.status
       show(current => ({ ...current, jobs: [job, ...current.jobs.filter(item => item.jobId !== job.jobId)] }))
     } catch (cause) { setError((cause as Error).message) }

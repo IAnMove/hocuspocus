@@ -54,7 +54,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "custom": {"type": "object", "additionalProperties": False, "required": ["title", "view", "poses"], "properties": {
              "title": {"type": "string", "maxLength": 80}, "view": _CUSTOM_VIEW,
              "poses": {"type": "array", "minItems": 1, "maxItems": MAX_CUSTOM_POSES, "items": {"type": "string", "maxLength": 600}}}},
-         "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
+         "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80},
+         "method": {"enum": ["poses", "video"]}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
         "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo), "
@@ -67,7 +68,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "characters.animation.review, and only when the owner turned on the one-shot mode (agent_autonomy = one_shot); otherwise that tool "
         "refuses. In that mode autoApprove: true makes the job approve it for you when the sheet passes the automatic checks (cell count "
         "and size, figures filled with clean alpha and not a keyed rectangle, feet on one ground line, figures of one size); a sheet that "
-        "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review.",
+        "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review. "
+        "method video (optional; omit it, or pass poses, for the path above) makes a catalog walk from one LTX-2.3 clip guided by the "
+        "OpenPose gait video, keys it and samples the same sheet. It needs LTX-2.3 distilled and the union-control LoRA installed, and it "
+        "refuses a single pose or an animation that is not a walk. characters.animation.make_set stays pose by pose.",
     ),
     "characters.animation.make_set": (
         {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
@@ -142,7 +146,7 @@ def _sheet(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 
 def _make(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body = {"workspace": data["workspace"], "kitId": data["character_id"], "animation": data["animation"],
-            **{key: data[key] for key in ("custom", "pose", "model", "autoApprove") if key in data}}
+            **{key: data[key] for key in ("custom", "pose", "model", "method", "autoApprove") if key in data}}
     return request("POST", f"{_BASE}/make", body=body)
 
 

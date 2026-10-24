@@ -273,6 +273,9 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
         result["scaleBy"] = raw["scaleBy"]
+    for key in ("guideVideo", "clip"):
+        if raw.get(key):
+            result[key] = _source(raw[key], f"{label} {key}")
     if raw.get("group") is not None:
         if raw["group"] not in GROUPS:
             raise CharacterAnimationError(f"{label} group is one of {', '.join(GROUPS)}")

@@ -24,6 +24,8 @@ export interface AgentMakeCharacterAnimationAction {
   pose?: string
   /** Ask the job to approve what it made when the sheet passes the automatic checks. The server ignores it (and says so) in review mode. */
   autoApprove?: boolean
+  /** poses is the default and is omitted. video asks for one pose-guided clip, only for a catalog walk and never for one pose. */
+  method?: 'poses' | 'video'
   confirm: true
 }
 
@@ -77,7 +79,8 @@ export async function executeMakeCharacterAnimation(action: AgentMakeCharacterAn
   const library = await fetchCharacterKitLibrary(space)
   const kit = findAnimationKit(library.kits, library.activeId, action.kitName)
   const job = await startAnimationJob({ workspace: space, kitId: kit.id, animation: action.animation,
-    ...(action.pose ? { pose: action.pose } : {}), ...(action.custom ? { custom: action.custom } : {}), ...(action.autoApprove ? { autoApprove: true } : {}) })
+    ...(action.pose ? { pose: action.pose } : {}), ...(action.custom ? { custom: action.custom } : {}), ...(action.autoApprove ? { autoApprove: true } : {}),
+    ...(action.method === 'video' && !action.pose ? { method: 'video' } : {}) })
   const key = job.status === 'queued' ? 'wizard:replies.characterAnimationQueued' : 'wizard:replies.characterAnimationStarted'
   const said = i18n.t(key, { name: kit.name, animation: job.title || action.animation, poses: job.takes.length, jobId: job.jobId })
   return {
@@ -121,9 +124,9 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
   register<AgentMakeCharacterAnimationAction>({
     name: 'make_character_animation',
     title: 'Make an animation of a saved character',
-    description: 'Make one small animation (a walk, a gesture such as waving, or an anime expression such as angry) of a saved Character Kit with its own picture as the identity reference, on the server: every pose with Qwen, keyed, joined into a sprite sheet and saved on the character as pending review. animation_id is an id of the animation catalog; for one the catalog does not list give a new lowercase slug and custom_animation {title, view bust|front|side, poses: one description per pose, up to six}. pose_id makes that one pose of an animation already made again. It takes minutes, one animation at a time; the person reviews and approves it in Character Creator › Animaciones. You approve it only when the owner turned on one-shot mode (Settings › Services): then auto_approve=true lets the job approve it when the sheet passes the automatic checks, and review_character_animation approves or rejects one yourself; otherwise the server refuses.',
+    description: 'Make one small animation (a walk, a gesture such as waving, or an anime expression such as angry) of a saved Character Kit with its own picture as the identity reference, on the server: every pose with Qwen, keyed, joined into a sprite sheet and saved on the character as pending review. animation_id is an id of the animation catalog; for one the catalog does not list give a new lowercase slug and custom_animation {title, view bust|front|side, poses: one description per pose, up to six}. pose_id makes that one pose of an animation already made again. method "video" (a catalog walk, with LTX-2.3 distilled and its union-control pose LoRA installed, and with pose_id empty) makes that walk from one skeleton-guided clip; leave method out for the usual poses. It takes minutes, one animation at a time; the person reviews and approves it in Character Creator › Animaciones. You approve it only when the owner turned on one-shot mode (Settings › Services): then auto_approve=true lets the job approve it when the sheet passes the automatic checks, and review_character_animation approves or rejects one yourself; otherwise the server refuses.',
     useWhen: 'The user asks for an animation, gesture, expression or walk of a saved character ("hazle una cara de enfado a Heroína", "que salude", "una animación de andar", "una sonrisa pícara"), or to redo one pose of one.',
-    parameters: ['kit_name', 'animation_id', 'custom_animation', 'pose_id', 'auto_approve', 'confirm'],
+    parameters: ['kit_name', 'animation_id', 'custom_animation', 'pose_id', 'auto_approve', 'method', 'confirm'],
     inputSchema: {
       type: 'object', additionalProperties: false,
       properties: {
@@ -131,7 +134,8 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
         custom_animation: { type: 'object', additionalProperties: false, required: ['title', 'view', 'poses'], properties: {
           title: { type: 'string', maxLength: 80 }, view: { enum: [...customViews] },
           poses: { type: 'array', minItems: 1, maxItems: MAX_CUSTOM_POSES, items: { type: 'string', maxLength: MAX_CUSTOM_TEXT } } } },
-        pose_id: { type: 'string', maxLength: 120 }, auto_approve: { type: 'boolean' }, confirm: { const: true },
+        pose_id: { type: 'string', maxLength: 120 }, auto_approve: { type: 'boolean' },
+        method: { enum: ['poses', 'video'] }, confirm: { const: true },
       },
       required: ['type', 'animation_id', 'confirm'],
     },
@@ -140,8 +144,10 @@ export function registerCharacterAnimationCapabilities(register: typeof defineCa
       const animation = text(raw.animation_id, 64).toLowerCase()
       const custom = customOf(raw.custom_animation)
       if (raw.confirm !== true || !SLUG.test(animation) || custom === null) return null
+      const pose = text(raw.pose_id, 120)
       return { type: 'make_character_animation', kitName: text(raw.kit_name, 160), animation, confirm: true,
-               ...(custom ? { custom } : {}), ...(text(raw.pose_id, 120) ? { pose: text(raw.pose_id, 120) } : {}), ...(raw.auto_approve === true ? { autoApprove: true } : {}) }
+               ...(custom ? { custom } : {}), ...(pose ? { pose } : {}), ...(raw.auto_approve === true ? { autoApprove: true } : {}),
+               ...(raw.method === 'video' && !pose ? { method: 'video' as const } : {}) }
     },
     validate(action) {
       if (action.confirm !== true) return ['confirmation is required']
