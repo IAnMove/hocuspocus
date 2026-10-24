@@ -7,9 +7,17 @@
   "negative": "photo, photorealistic, 3D render, blurry, text, watermark, speech bubble, panel border, frame, multiple characters, background scenery, floor, cast shadow, turnaround sheet, collage of views",
   "viewNegatives": {
     "bust": "full body, whole body, standing figure, waist, hands, legs, feet, boots",
+    "front": "exact side profile, three-quarter view, body turned to one side",
     "front34": "exact side profile, back view, seen from behind",
-    "back34": "front view, facing the viewer, visible face, eyes looking at the viewer",
-    "back": "front view, facing the viewer, visible face, eyes, mouth, nose, looking at the viewer"
+    "back34": "front view, facing the viewer, visible face, eyes looking at the viewer, exact side profile",
+    "back": "front view, facing the viewer, visible face, eyes, mouth, nose, looking at the viewer, exact side profile, three-quarter view, head turned"
+  },
+  "walkViews": {
+    "note": "Said after the view for a walk only (an entry with motion walk). Qwen draws a stride from words as a side-on stride and turns the body to show it (a back walk drifts to three-quarter, a front34 walk to a profile), and the default Turbo model gets no negative prompt (viewNegatives), so the view is held in words: the body keeps its turn and the step shows in the feet, which is how a walk toward or away from a camera reads.",
+    "front": "The whole walk is seen from exactly in front and the body stays square to the viewer in every pose: the shoulders and the hips face the viewer and never turn, the head looks straight at the viewer. The step shows in the legs and the arms only: the boot that steps toward the viewer is larger and lower in the picture and the other boot smaller and higher, the feet landing close under the hips and never in a wide side-on stride.",
+    "front34": "The body keeps the same three-quarter turn of about forty-five degrees in every pose, never turning to a full profile and never square to the viewer. The step is a moderate stride in which the far leg shows ahead of or behind the near leg, and the boot nearer the viewer is larger and lower in the picture.",
+    "back34": "The body keeps the same three-quarter turn away from the viewer of about forty-five degrees in every pose, never turning to a full profile and never square to the viewer. The step is a moderate stride in which the far leg shows ahead of or behind the near leg, and the boot nearer the viewer is larger and lower in the picture.",
+    "back": "The whole walk is seen from exactly behind and the body stays square to the viewer in every pose: the shoulders and the hips face away and never turn, the head is seen from behind and never turns to a profile. The step shows in the legs and the arms only: the boot that steps away from the viewer is smaller and higher in the picture and the boot pushing off larger and lower, the feet landing close under the hips and never in a wide side-on stride."
   },
   "views": {
     "side": "Exact side view of the whole body, facing right, seen from head to boots, centred, the same size as in the reference picture.",
