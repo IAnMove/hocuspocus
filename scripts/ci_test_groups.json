@@ -732,6 +732,18 @@
       ]
     },
     {
+      "prefix": "app/services/anime_face_landmarks.py",
+      "paths": [
+        "tests/test_flat_rig_guided.py"
+      ]
+    },
+    {
+      "prefix": "app/services/anime_face",
+      "paths": [
+        "tests/test_flat_rig_guided.py"
+      ]
+    },
+    {
       "prefix": "app/services/flat_rig.py",
       "paths": [
         "tests/test_flat_rig.py",

@@ -5,7 +5,8 @@ import pytest
 cv2 = pytest.importorskip("cv2")
 from PIL import Image, ImageDraw
 
-from services import face_landmarks
+from services import anime_face_landmarks, face_landmarks
+from services.flat_rig_warp import lips_line
 from services.character_kit_library import patch_character_kit
 from services.flat_rig import (
     LUMA, FlatRigError, _figure_box, draw_ink_mouth, place, rig_character, rig_pose, rig_style,
@@ -195,3 +196,145 @@ def test_a_rig_detects_landmarks_on_each_pose_and_reports_them(tmp_path, monkeyp
     rigged = rig_character(str(folder), "cast", "captain", base_revision=1, style={"mouthStyle": "ink"})
     assert seen == [(420, 760)]
     assert rigged["poses"]["base"]["landmarks"] == ["eyes", "mouth"]
+    assert rigged["poses"]["base"]["eyesSource"] == "whites"
+    assert rigged["character"]["anchors"]["base"]["mouthSource"] == "whites"
+
+
+def _anime_points(eyes=EYES, mouth_y=MOUTH_Y, shift=(0, 0)):
+    """28 anime points on this fixture: contour, brows, two eyes, five mouth points."""
+    sx, sy = shift
+
+    def eye(box):
+        x0, y0, x1, y1 = [v + d for v, d in zip(box, (sx, sy, sx, sy))]
+        return [[x0, (y0 + y1) / 2, 0.95], [(2 * x0 + x1) / 3, y0, 0.95], [(x0 + 2 * x1) / 3, y0, 0.95],
+                [x1, (y0 + y1) / 2, 0.95], [(x0 + 2 * x1) / 3, y1, 0.95], [(2 * x0 + x1) / 3, y1, 0.95]]
+
+    def brow(box):
+        x0, y0, x1, _y1 = box
+        y = y0 - 28 + sy
+        return [[x0 + sx, y, 0.95], [(x0 + x1) / 2 + sx, y - 6, 0.95], [x1 + sx, y, 0.95]]
+
+    contour = [[80 + sx, 220 + sy, 0.95], [120 + sx, 340 + sy, 0.95], [210 + sx, 400 + sy, 0.95],
+               [300 + sx, 340 + sy, 0.95], [340 + sx, 220 + sy, 0.95]]
+    mouth = [[170 + sx, mouth_y + sy, 0.95], [190 + sx, mouth_y + 8 + sy, 0.95], [210 + sx, mouth_y + 12 + sy, 0.95],
+             [250 + sx, mouth_y + sy, 0.95], [230 + sx, mouth_y + 6 + sy, 0.95]]
+    return contour + brow(eyes[0]) + brow(eyes[1]) + eye(eyes[0]) + eye(eyes[1]) + mouth
+
+
+def test_anime_geometry_reads_eyes_brows_and_the_mouth_line():
+    geom = anime_face_landmarks.geometry_from_points(_anime_points())
+    assert geom["eyes"][0][2] < geom["eyes"][1][0]
+    assert geom["brows"][0][0] < geom["brows"][1][0]
+    assert geom["mouth"]["width"] == pytest.approx(80, abs=1)
+    assert anime_face_landmarks.lip_contour(geom).shape == (12, 2)
+    assert lips_line(anime_face_landmarks.lip_contour(geom)).source == "landmarks"
+    assert not anime_face_landmarks.eyes_disagree((118, 138, 302, 192), geom)
+    assert anime_face_landmarks.eyes_disagree((40, 130, 400, 210), geom), "a collar wider than 1.5× the eyes"
+    assert anime_face_landmarks.eyes_disagree((120, 400, 300, 460), geom)
+    assert not anime_face_landmarks.eyes_disagree((190, 155, 230, 175), geom), "a highlight that shares the centre"
+    assert anime_face_landmarks.geometry_from_points([[*p[:2], 0.1] for p in _anime_points()]) is None
+
+
+def test_dark_anime_eyes_take_the_landmark_boxes_and_the_blink_covers_them():
+    face = _face(eyes=(36, 24, 28, 255))
+    with pytest.raises(FlatRigError) as error:
+        rig_pose(face, INK, anime=False)
+    assert error.value.code == "eyes_not_found"
+    rig = rig_pose(face, INK, anime={"keypoints": _anime_points()})
+    assert rig["eyesSource"] == "landmarks" and "eyes_disagree" not in rig["warnings"]
+    ox, oy = _figure_offset(face)
+    x0, y0, x1, y1 = rig["eyes_box"]
+    assert abs(x0 + ox - EYES[0][0]) <= 20 and abs(x1 + ox - EYES[1][2]) <= 20 and abs(y0 + oy - EYES[0][1]) <= 20
+    closed = _closed(rig)
+    cx, cy = int((EYES[0][0] + EYES[0][2]) / 2 - ox), int((EYES[0][1] + EYES[0][3]) / 2 - oy)
+    assert abs(int(closed[cy, cx] @ LUMA) - int(np.dot(SKIN[:3], LUMA))) < 45
+
+
+def test_landmarks_win_when_the_white_eyes_disagree():
+    face = _face()
+    rig = rig_pose(face, INK, anime={"keypoints": _anime_points(shift=(0, 180))})
+    assert rig["eyesSource"] == "landmarks" and "eyes_disagree" in rig["warnings"]
+    _ox, oy = _figure_offset(face)
+    assert rig["eyes_box"][1] + oy > EYES[0][3] + 80
+
+
+def test_agreeing_whites_stay_and_the_brows_are_kept():
+    face = _face()
+    rig = rig_pose(face, INK, anime={"keypoints": _anime_points()})
+    plain = rig_pose(face, INK, anime=False)
+    assert rig["eyesSource"] == "whites" and rig["mouthSource"] == "whites"
+    assert rig["eyes_box"] == plain["eyes_box"] and rig["mouth_box"] == plain["mouth_box"]
+    assert "eyes_disagree" not in rig["warnings"] and "mouth_disagree" not in rig["warnings"]
+    assert len(rig["brows"]) == 2 and rig["brows"][0][2] < rig["brows"][1][0]
+
+
+def test_a_disagreeing_mouth_is_placed_on_the_landmark_line_without_a_wipe():
+    face = _face()
+    rig = rig_pose(face, INK, anime={"keypoints": _anime_points(mouth_y=520)})
+    assert rig["mouthSource"] == "landmarks" and rig["wiped"] is False and rig["seeds"]["point"] is None
+    assert "mouth_disagree" in rig["warnings"] and "mouth_not_found" in rig["warnings"]
+    assert abs(_mouth_y(face, rig) - 520) <= 30
+    assert lips_line(rig["seeds"]["lips"]).source == "landmarks"
+    assert rig["seeds"]["lips"].shape == (12, 2)
+
+
+def test_a_hint_wins_over_disagreeing_anime_landmarks():
+    face = _face()
+    hint = {"eyes": [210 / face.width * 100, 165 / face.height * 100],
+            "mouth": [210 / face.width * 100, MOUTH_Y / face.height * 100], "exact": True}
+    rig = rig_pose(face, INK, hint, anime={"keypoints": _anime_points(shift=(0, 180), mouth_y=520)})
+    assert rig["eyesSource"] == "hint" and rig["mouthSource"] == "hint"
+    assert "eyes_disagree" not in rig["warnings"] and "mouth_disagree" not in rig["warnings"]
+    assert abs(_mouth_y(face, rig) - MOUTH_Y) <= 12
+
+
+def test_without_the_anime_detector_the_rig_matches_today(monkeypatch):
+    monkeypatch.setattr(anime_face_landmarks, "detect", lambda image: None)
+    face, marks = _face(), _landmarks()
+    today = rig_pose(face, INK, None, marks, anime=False)
+    missing = rig_pose(face, INK, None, marks)
+    assert missing["eyes_box"] == today["eyes_box"] and missing["mouth_box"] == today["mouth_box"]
+    assert missing["mouth"] == today["mouth"] and missing["eyes"] == today["eyes"]
+    assert missing["warnings"] == today["warnings"] and missing["guided"] == today["guided"]
+    assert missing["eyesSource"] == today["eyesSource"] == "whites"
+    assert missing["mouthSource"] == today["mouthSource"] == "whites"
+    assert "brows" not in missing
+
+
+def test_turning_anime_landmarks_off_skips_the_detector(monkeypatch):
+    monkeypatch.setenv("HOCUS_ANIME_FACE", "0")
+    called = []
+    monkeypatch.setattr(anime_face_landmarks, "detect", lambda image: called.append(1) or {"keypoints": _anime_points(shift=(0, 180))})
+    rig = rig_pose(_face(), INK)
+    assert called == [] and rig["eyesSource"] == "whites" and "brows" not in rig
+
+
+def test_a_missing_engine_does_not_run_the_detector(monkeypatch):
+    monkeypatch.setattr(anime_face_landmarks, "_python", lambda: None)
+    monkeypatch.setattr(anime_face_landmarks.subprocess, "run", lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("spawned")))
+    assert anime_face_landmarks.detect(Image.new("RGBA", (8, 8))) is None
+
+
+def test_a_failed_detector_warns_and_keeps_today(monkeypatch):
+    monkeypatch.setattr(anime_face_landmarks, "detect", lambda image: {"error": "weights missing"})
+    face = _face()
+    rig = rig_pose(face, INK)
+    assert rig["eyesSource"] == "whites" and "anime_landmarks_failed" in rig["warnings"]
+    assert rig["eyes_box"] == rig_pose(face, INK, anime=False)["eyes_box"]
+
+
+def test_the_kit_remembers_which_source_placed_the_face(tmp_path, monkeypatch):
+    folder = tmp_path / "cast"
+    folder.mkdir()
+    _face(eyes=(36, 24, 28, 255)).save(folder / "captain.png")
+    monkeypatch.setattr(face_landmarks, "detect", lambda image: None)
+    monkeypatch.setattr(anime_face_landmarks, "detect", lambda image: {"keypoints": _anime_points()})
+    asset = {"id": "captain-base", "name": "captain", "source": "/api/v1/file/captain.png?workspace=cast", "kind": "image",
+             "alphaStatus": "transparent", "reviewState": "approved"}
+    patch_character_kit(str(folder), "captain", {"id": "captain", "name": "Captain", "style": "cutout", "base": asset,
+                                                 "poses": {}, "mouth": {}, "eyes": {}, "anchors": {}}, base_revision=0)
+    rigged = rig_character(str(folder), "cast", "captain", base_revision=1, style={"mouthStyle": "ink"})
+    pose, anchor = rigged["poses"]["base"], rigged["character"]["anchors"]["base"]
+    assert pose["eyesSource"] == anchor["eyesSource"] == "landmarks"
+    assert pose["mouthSource"] == anchor["mouthSource"]
+    assert len(anchor["brows"]) == 2
