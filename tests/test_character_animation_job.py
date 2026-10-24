@@ -12,12 +12,15 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from routers.character_animation_jobs import create_character_animation_jobs_router
-from services.character_animations import MAX_ANIMATIONS
+from services.character_animation_directions import contract_of
+from services.character_animations import MAX_ANIMATIONS, catalog
+from services import character_animation_job
 from services.character_animation_job import AnimationJobDeps, AnimationJobError, CharacterAnimationJobs, reference_of
 from services.character_kit_library import patch_character_kit, read_character_kit_library, write_character_kit_library
 from services.local_generation import LocalTools, ToolError, payload_of
 from services.local_mcp import LocalMcp
 from services.studio_key import command_handlers as studio_key_handlers
+from services.walk_guides import expected_spread, phase_of
 
 WS = "demo"
 
@@ -43,12 +46,45 @@ def _spoil(path: Path, how: str) -> None:
     image.save(path)
 
 
+def _guided(stem: str) -> float | None:
+    """How wide the legs of the walk pose a file of the hero is should be, None for a picture that is not a pose of a walk."""
+    for item in sorted(catalog()["animations"], key=lambda entry: -len(entry["id"])):
+        head = f"hero-{item['id']}-"
+        if item.get("guide") and stem.startswith(head):
+            ids = [pose["id"] for pose in item["poses"]]
+            pose = next((name for name in sorted(ids, key=len, reverse=True) if stem[len(head):].startswith(f"{name}-")), None)
+            return expected_spread(contract_of(item["id"], item)["dir"], phase_of(ids.index(pose), len(ids))) if pose else None
+    return None
+
+
+def _legs(path: Path, spread: float) -> None:
+    """Redraw the legs of a keyed figure (rows 10 to 200) so they are ``spread`` of its height wide, as the guide asks."""
+    with Image.open(path) as opened:
+        pixels = np.array(opened.convert("RGBA"))
+    wide = round(spread * 190)
+    left = (pixels.shape[1] - wide) // 2
+    pixels[110:200] = 0
+    pixels[110:200, left:left + 12] = (60, 60, 70, 255)
+    pixels[110:200, left + wide - 12:left + wide] = (60, 60, 70, 255)
+    Image.fromarray(pixels).save(path)
+
+
 class FakeServer:
-    """What the job calls through ``LocalMcp.call``. ``refuse`` names pose ids whose picture fails."""
+    """What the job calls through ``LocalMcp.call``. ``refuse`` names pose ids whose picture fails. A pose of a walk is drawn with the
+    legs its guide asks for unless ``follow_guides`` is off; ``wrong_legs`` lists the n-th keys (1-based) drawn with the legs together."""
 
     def __init__(self, root: Path) -> None:
         self.root, self.calls, self.refuse, self.during = root, [], set(), None
         self.spoil = {}  # n-th key (1-based) -> "small" (a pose drawn at half the size) | "box" (a key that left a whole rectangle)
+        self.follow_guides, self.wrong_legs = True, set()
+
+    def draw_legs(self, name: str) -> None:
+        spread = _guided(Path(name).stem.removesuffix("-key"))
+        if spread is None:
+            return
+        if len(self.of("studio.key")) in self.wrong_legs or not self.follow_guides:
+            spread = 0.08 if spread > 0.3 else 0.6
+        _legs(self.root / name, spread)
 
     def of(self, tool: str) -> list[dict]:
         return [arguments["input"] for name, arguments in self.calls if name == tool]
@@ -70,6 +106,7 @@ class FakeServer:
             source = arguments["input"]["source"]
             name = f"{Path(source).stem}-key.png"
             _picture(self.root / name, keyed=True, shift=len(self.of("studio.key")) % 5)
+            self.draw_legs(name)
             if self.spoil.get(len(self.of("studio.key"))):
                 _spoil(self.root / name, self.spoil[len(self.of("studio.key"))])
             # The shape the real handler answers (services/studio_key.py ``command_handlers``): an operation envelope that is itself
@@ -577,9 +614,9 @@ def test_auto_approve_leaves_a_bad_sheet_pending_with_the_failed_checks(world):
     assert made["reviewState"] == "pending" and "reviewedBy" not in made and small["result"]["reviewState"] == "pending"
     assert small["reviewNote"].startswith("Automatic checks failed: scale_spread")
     server.spoil, server.calls = {2: "box"}, []
-    box = jobs.start(WS, "hero", "walk", auto_approve=True)
+    box = jobs.start(WS, "hero", "wave", auto_approve=True)
     assert box["autoApproved"] is False and "silhouette" in [check["id"] for check in box["checks"] if not check["ok"]]
-    assert _kit(root)["animations"]["walk"]["reviewState"] == "pending"
+    assert _kit(root)["animations"]["wave"]["reviewState"] == "pending"
 
 
 def test_auto_approve_is_ignored_with_a_note_in_review_mode_and_never_by_default(world):
@@ -673,8 +710,13 @@ class VariedServer(FakeServer):
         if tool == "studio.key":
             index = len(self.of("studio.key")) - 1
             sheet, cell = divmod(index, 12)
-            mirrored = bool(self.mirror_sheet) and sheet + 1 == self.mirror_sheet
-            _varied(self.root / reply["result"]["file"], cell + 1 if mirrored else index + 1, flip=mirrored)
+            keyed = self.root / reply["result"]["file"]
+            if self.mirror_sheet and sheet + 1 == self.mirror_sheet:  # the same cell of the first sheet, mirrored
+                with Image.open(self.root / self.of("studio.key")[cell]["source"].replace(".png", "-key.png")) as first:
+                    first.transpose(Image.Transpose.FLIP_LEFT_RIGHT).save(keyed)
+            else:
+                _varied(keyed, index + 1)
+                self.draw_legs(reply["result"]["file"])
         return reply
 
 
@@ -707,8 +749,10 @@ def test_the_twelve_pose_walk_is_made_at_twelve_frames_a_second_with_its_contrac
     assert (made["motion"], made["dir"], made["facing"], made["fps"], made["loop"], made["view"]) == ("walk", "side", "right", 12, "loop", "side")
     assert (made["sheet"]["count"], made["sheet"]["columns"], made["sheet"]["rows"]) == (12, 6, 2) and made["reviewState"] == "approved"
     assert {"figure_height", "repeated_poses", "direction_mirror", "ground_line"} <= {check["id"] for check in job["checks"]}
-    assert len(server.of("generation.image")) == 12 and all(len(refs) == 1 for refs in _refs(server)), "the first direction has only the character's own picture"
-    # An old four-pose walk is made exactly as before: no new checks, no new fields beyond the contract.
+    guides = [frame["guide"] for frame in made["frames"]]
+    assert len(server.of("generation.image")) == 12 and _refs(server) == [[f"/api/v1/file/hero-key.png?workspace={WS}", guide] for guide in guides], \
+        "the first direction has the character's own picture and the guide of each pose"
+    # The old four-pose walk keeps its four poses and no new checks; it is drawn over its guide like the full walks.
     old = jobs.start(WS, "hero", "walk")
     assert old["status"] == "completed" and _kit(root)["animations"]["walk"]["sheet"]["columns"] == 4 and _kit(root)["animations"]["walk"]["motion"] == "walk"
 
@@ -745,11 +789,13 @@ def test_the_set_makes_each_missing_sheet_in_turn_chaining_the_previous_directio
         "walk-back34": ("back34", "walk", 12, "pending"), "walk-back": ("back", "walk", 12, "pending")}, "the job never approves"
     refs, base = _refs(server), f"/api/v1/file/hero-key.png?workspace={WS}"
     first = {name: kit[name]["frames"][0]["source"] for name in kit}
-    assert len(refs) == 60 and all(item == [base] for item in refs[:12])
-    assert all(item == [base, first["walk-12"]] for item in refs[12:24]), "the three-quarter front follows the profile"
-    assert all(item == [base, first["walk-front34"]] for item in refs[24:36]), "the front follows the three-quarter front"
-    assert all(item == [base, first["walk-12"]] for item in refs[36:48]), "the three-quarter back follows the profile"
-    assert all(item == [base, first["walk-back34"]] for item in refs[48:60])
+    guides = [frame["guide"] for name in ("walk-12", "walk-front34", "walk-front", "walk-back34", "walk-back") for frame in kit[name]["frames"]]
+    assert len(refs) == 60 and [item[:2] for item in refs] == [[base, guide] for guide in guides], "the character, then the guide of the pose"
+    assert all(item[2:] == [] for item in refs[:12])
+    assert all(item[2:] == [first["walk-12"]] for item in refs[12:24]), "the three-quarter front follows the profile"
+    assert all(item[2:] == [first["walk-front34"]] for item in refs[24:36]), "the front follows the three-quarter front"
+    assert all(item[2:] == [first["walk-12"]] for item in refs[36:48]), "the three-quarter back follows the profile"
+    assert all(item[2:] == [first["walk-back34"]] for item in refs[48:60])
     children = [sheet["jobId"] for sheet in done["sheets"]]
     assert len(set(children)) == 5 and all(jobs.status(WS, child)["status"] == "completed" for child in children), "each sheet is a job of its own"
     assert sets.status(WS, done["jobId"])["status"] == "completed" and [item["jobId"] for item in sets.jobs(WS, "hero")] == [done["jobId"]]
@@ -777,8 +823,9 @@ def test_a_set_skips_the_sheets_the_character_has_and_continues_where_a_failure_
     assert nothing["status"] == "completed" and {sheet["status"] for sheet in nothing["sheets"]} == {"skipped"} and len(server.of("generation.image")) == 12 - 3 + 36
 
 
-def test_the_set_asks_for_the_agents_approval_only_in_one_shot_and_leaves_a_copied_direction_for_a_person(directions):
+def test_the_set_asks_for_the_agents_approval_only_in_one_shot_and_leaves_a_copied_direction_for_a_person(directions, monkeypatch):
     root, server, jobs, sets = directions
+    monkeypatch.setattr(character_animation_job, "tries", lambda guide: 1)  # one drawing a pose, so the copied sheet stays a copy
     plain = sets.start(WS, "hero", "walk-12", auto_approve=True)
     assert plain["autoApprove"] is False and "agent_autonomy is review" in plain["autoApproveNote"] and _kit(root)["animations"]["walk-12"]["reviewState"] == "pending"
     _mode(jobs, ONE_SHOT)
@@ -790,8 +837,9 @@ def test_the_set_asks_for_the_agents_approval_only_in_one_shot_and_leaves_a_copi
     kit = _kit(root)["animations"]
     assert kit["walk-front34"]["reviewState"] == "approved" and by_name["walk-front34"]["autoApproved"] is True
     copied = by_name["walk-front"]
-    assert copied["autoApproved"] is False and copied["failed"] == ["direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
-    assert jobs.status(WS, copied["jobId"])["reviewNote"].startswith("Automatic checks failed: direction_mirror")
+    assert copied["autoApproved"] is False and copied["failed"] == ["walk_gait", "direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
+    assert jobs.status(WS, copied["jobId"])["reviewNote"].startswith("Automatic checks failed: walk_gait 0."), \
+        "a profile copied into the front has the strides of a profile too"
     assert kit["walk-back34"]["reviewState"] == "approved", "a sheet that fails the checks does not stop the next one"
 
 
@@ -878,3 +926,52 @@ def test_the_make_route_takes_a_custom_animation_of_twelve_poses_in_any_directio
     assert "Three-quarter back view" in server.of("generation.image")[0]["params"]["prompt"]
     assert client.post(url, json=turn("top", 2)).status_code == 422, "a view the catalog does not list"
     assert client.post(url, json=turn("back", 13)).status_code == 422, "thirteen poses are too many"
+
+
+# ----- the walk guides (services/character_animation_guides.py) -----
+
+def test_a_walk_pose_is_drawn_over_its_guide_and_the_prompt_says_what_each_picture_is(world):
+    root, server, jobs = world
+    job = jobs.start(WS, "hero", "walk")
+    base, images = f"/api/v1/file/hero-key.png?workspace={WS}", server.of("generation.image")
+    assert job["status"] == "completed" and len(images) == 4
+    for item, take in zip(images, job["takes"]):
+        assert item["params"]["image_refs"] == [base, take["guide"]] and take["tries"] == 1 and take["gait"]["ok"]
+        assert item["params"]["prompt"].startswith("Picture 1 is the character. Picture 2 is an OpenPose skeleton of the pose")
+        assert "a detective in a mustard coat" in item["params"]["prompt"]
+        assert (root / take["guide"].split("/")[-1].split("?")[0]).is_file(), "the guide is a picture of the workspace"
+    frames = _kit(root)["animations"]["walk"]["frames"]
+    assert [frame["guide"] for frame in frames] == [take["guide"] for take in job["takes"]] and all(frame["gait"]["ok"] for frame in frames)
+    server.calls = []
+    assert jobs.start(WS, "hero", "wave")["status"] == "completed"
+    assert all(item["params"]["image_refs"] == [base] and not item["params"]["prompt"].startswith("Picture") for item in server.of("generation.image")), \
+        "a gesture has no guide"
+
+
+def test_a_walk_pose_with_the_legs_of_another_moment_is_drawn_again_and_the_closest_drawing_stays(world):
+    root, server, jobs = world
+    server.wrong_legs = {2}  # the first drawing of the passing pose has its legs apart
+    job = jobs.start(WS, "hero", "walk")
+    passing = job["takes"][1]
+    assert job["status"] == "completed" and passing["tries"] == 2 and passing["gait"]["ok"]
+    assert len(server.of("generation.image")) == 5 and passing["keyed"].split("?")[0].endswith("-2-key.png")
+    seeds = [item["params"]["seed"] for item in server.of("generation.image")]
+    assert seeds[1] != seeds[2] and passing["seed"] == seeds[2], "the second drawing has a seed of its own and the take keeps it"
+    intents = [arguments["intent_id"] for name, arguments in server.calls if name in ("generation.image", "studio.key")]
+    assert len(intents) == len(set(intents)) == 10
+    server.calls, server.follow_guides = [], False
+    stubborn = jobs.start(WS, "hero", "walk")
+    assert stubborn["status"] == "completed" and len(server.of("generation.image")) == 12, "three drawings a pose and no more"
+    assert all(take["tries"] == 3 and not take["gait"]["ok"] for take in stubborn["takes"])
+    assert all(frame["gait"]["ok"] is False for frame in _kit(root)["animations"]["walk"]["frames"]), "the person sees which poses missed"
+
+
+def test_a_model_that_refuses_the_guide_draws_the_walk_from_the_words_and_still_measures_it(directions):
+    root, server, jobs, _sets = directions
+    server.refs_limit = 1
+    job = jobs.start(WS, "hero", "walk")
+    sent = server.of("generation.image")
+    assert job["status"] == "completed" and job["refsDropped"] is True and len(sent) == 5
+    assert len(sent[0]["params"]["image_refs"]) == 2 and sent[0]["params"]["prompt"].startswith("Picture 1")
+    assert all(len(item["params"]["image_refs"]) == 1 and not item["params"]["prompt"].startswith("Picture") for item in sent[1:])
+    assert all(take["gait"]["ok"] for take in job["takes"])
