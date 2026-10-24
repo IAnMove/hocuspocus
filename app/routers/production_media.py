@@ -1,7 +1,7 @@
 """HTTP for the production media tools, so the Wizard and the UI call the same handlers as MCP agents.
 
 ``POST /api/v1/media/commands`` takes ``{operation, version: 1, input, intent_id?}`` for ``media.frame``,
-``media.compose``, ``audio.trim``, ``assets.import_from_workspace`` and ``studio.key``
+``media.compose``, ``audio.trim``, ``assets.import_from_workspace``, ``shot.lipsync.redo`` and ``studio.key``
 (services/production_media_commands.py, services/studio_key.py).
 """
 from __future__ import annotations
