@@ -746,6 +746,13 @@
       ]
     },
     {
+      "prefix": "app/services/flat_rig_anime.py",
+      "paths": [
+        "tests/test_flat_rig_guided.py",
+        "tests/test_flat_rig.py"
+      ]
+    },
+    {
       "prefix": "app/services/flat_rig.py",
       "paths": [
         "tests/test_flat_rig.py",
