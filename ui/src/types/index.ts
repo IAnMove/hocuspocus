@@ -11,8 +11,10 @@ export interface ModelFamily {
   id: string
   label: string
   order: number
-  /** Set when this family's licence excludes territories. Absent otherwise. */
+  /** Set when every model in this family shares one territory licence. */
   licence?: ModelLicence | null
+  /** Records used by some models when the family mixes products. */
+  licenceRecords?: ModelLicence[] | null
 }
 
 export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story' | 'comic_movie'

@@ -9,6 +9,7 @@ import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import { H3ModelName } from '../Sidebar/H3ModelInfo'
 import { ModelCatalogInfo } from '../Sidebar/ModelCatalogInfo'
 import { LicenceNotice } from '../common/LicenceNotice'
+import { licenceForModel } from '../../lib/licenceNotice'
 import { catalogVramGb } from '../../lib/modelCatalog'
 import { showsCudaControls, usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { MINIMAX_MUSIC_COMMUNITY_MODELS, modelRequirementsText } from '../../lib/minimaxMusicCatalog'
@@ -222,6 +223,7 @@ function ModelVisibilitySection() {
     supports_end_frame?: boolean
     supports_ref_images?: boolean
     tool_only?: boolean
+    licenceId?: string
   }
   const modelsByMode = new Map<GenerationMode, { familyId: string; familyLabel: string; licence?: ModelLicence | null; models: ModelRow[] }[]>()
   for (const { mode } of MODE_LABELS) {
@@ -251,6 +253,7 @@ function ModelVisibilitySection() {
             supports_end_frame: m.supports_end_frame,
             supports_ref_images: m.supports_ref_images,
             tool_only: m.tool_only,
+            licenceId: m.licenceId,
           })),
         })
       }
@@ -375,11 +378,15 @@ function ModelVisibilitySection() {
                       </div>
                     )}
                     <LicenceNotice licence={group.licence} />
-                    {(!showFamilyHeader || !famCollapsed) && group.models.map(m => {
+                    {(!showFamilyHeader || !famCollapsed) && group.models.map((m, index) => {
+                      const modelLicence = group.licence ? null : licenceForModel(m, families)
+                      const previousLicence = index > 0 ? licenceForModel(group.models[index - 1], families) : null
+                      const showModelLicence = Boolean(modelLicence && modelLicence.id !== previousLicence?.id)
                       const alsoDeletes = confirmDelete === m.model_type ? sharedDeleteNames(m) : []
                       const vramGb = catalogVramGb(m)
                       return (
                       <div key={m.model_type}>
+                      {showModelLicence && <LicenceNotice licence={modelLicence} />}
                       <div
                         className="flex items-center gap-2 py-0.5 group"
                       >

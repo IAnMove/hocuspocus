@@ -32,8 +32,10 @@
   "families": {
     "hunyuan": "hunyuan",
     "hunyuan_1_5": "hunyuan_1_5",
-    "hunyuan3d": "hunyuan3d",
     "minimax_h3": "minimax_h3",
     "h3_advanced": "minimax_h3"
+  },
+  "modelPrefixes": {
+    "hunyuan3d": "hunyuan3d"
   }
 }

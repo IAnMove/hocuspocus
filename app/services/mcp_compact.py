@@ -158,4 +158,9 @@ def _family_summary(item: dict, by_family: dict) -> dict[str, Any]:
     licence = item.get("licence")
     if isinstance(licence, dict) and licence.get("url"):
         summary["licence"] = licence
+    records = item.get("licenceRecords")
+    if isinstance(records, list):
+        kept = [record for record in records if isinstance(record, dict) and record.get("url")]
+        if kept:
+            summary["licenceRecords"] = kept
     return summary

@@ -5,6 +5,7 @@ import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/exte
 import type { DirectorPipelineType, ModelDef, ModelFamily } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { LicenceNotice } from '../common/LicenceNotice'
+import { licenceForModel } from '../../lib/licenceNotice'
 
 /** One compatibility catalog shared by Director and Story production selectors. */
 function directorModelGroups({ mode, families, models, enabledModels, nsfwMode, pipelineType, seamless }: {
@@ -90,7 +91,7 @@ export function DirectorModelPicker({ mode, value, onChange, pipeline, allowSeam
       ? t('modelPicker.storyHint')
       : t('modelPicker.soundtrackHint')
 
-  const selectedLicence = families.find(family => family.id === selectedModel?.family)?.licence
+  const selectedLicence = licenceForModel(selectedModel, families)
 
   return (
     <div className="min-w-0">

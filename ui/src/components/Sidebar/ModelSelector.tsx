@@ -9,6 +9,7 @@ import type { ModelDef } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { H3ModelName } from './H3ModelInfo'
 import { LicenceNotice } from '../common/LicenceNotice'
+import { licenceForModel } from '../../lib/licenceNotice'
 
 function displayName(model: ModelDef | undefined, savedName: string | undefined, modelType: string, fallback: string) {
   return model?.name ?? savedName ?? (modelType || fallback)
@@ -49,7 +50,6 @@ export function ModelSelector() {
   const audioSubMode = useStore(s => s.audioSubMode)
 
   const currentModel = models.find(m => m.model_type === currentModelType)
-  const currentFamily = families.find(family => family.id === currentModel?.family)
   const effectiveSubMode = generationMode === 'avatar' ? editSubMode : undefined
   const effectiveAudioSubMode = generationMode === 'audio' ? audioSubMode : undefined
   const modeFamilies = getFamiliesForMode(generationMode, families, effectiveSubMode, effectiveAudioSubMode)
@@ -76,7 +76,7 @@ export function ModelSelector() {
   if (effectiveSubMode === 'recast' && currentModelType === 'viggle_animate') {
     return <div data-wizard-anchor="model" className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs">
       {currentModel?.name || 'Viggle-Animate'}
-      <LicenceNotice licence={currentFamily?.licence} />
+      <LicenceNotice licence={licenceForModel(currentModel, families)} />
     </div>
   }
 
@@ -93,9 +93,9 @@ export function ModelSelector() {
         </span>
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
-      {currentFamily?.licence && (
+      {licenceForModel(currentModel, families) && (
         <div className="px-0.5 pt-1">
-          <LicenceNotice licence={currentFamily.licence} />
+          <LicenceNotice licence={licenceForModel(currentModel, families)} />
         </div>
       )}
 
@@ -127,13 +127,21 @@ export function ModelSelector() {
                   </div>
                 )}
                 {/* Models in family */}
-                {famModels.map(model => {
+                {famModels.map((model, index) => {
                   const isSelected = model.model_type === currentModelType
+                  const modelLicence = family.licence ? null : licenceForModel(model, [family])
+                  const previousLicence = index > 0 ? licenceForModel(famModels[index - 1], [family]) : null
+                  const showModelLicence = Boolean(modelLicence && modelLicence.id !== previousLicence?.id)
                   const help = selectorModelHelp(model, t)
                   const vramGb = catalogVramGb(model)
                   return (
+                    <div key={model.model_type}>
+                    {showModelLicence && (
+                      <div className="px-3 pb-1">
+                        <LicenceNotice licence={modelLicence} />
+                      </div>
+                    )}
                     <div
-                      key={model.model_type}
                       className={`group w-full flex items-center transition-colors ${
                         isSelected
                           ? 'bg-accent-blue/10 text-text-primary'
@@ -164,6 +172,7 @@ export function ModelSelector() {
                           />
                         </span>
                       )}
+                    </div>
                     </div>
                   )
                 })}

@@ -5,13 +5,13 @@ import json
 
 from services import install_catalog
 from services.mcp_compact import summarize_model_catalog
-from services.model_licences import annotate_catalog, for_family, for_id
+from services.model_licences import annotate_catalog, for_family, for_id, licence_id_for
 
 # Families whose licence text excludes the EU, the UK and South Korea.
+# hunyuan3d is not a family key: that UI bucket also lists TRELLIS.2, Pixal3D and UniRig.
 RESTRICTIVE = {
     "hunyuan": ["EU", "UK", "KR"],
     "hunyuan_1_5": ["EU", "UK", "KR"],
-    "hunyuan3d": ["EU", "UK", "KR"],
     "minimax_h3": ["EU", "UK", "KR", "US"],
     "h3_advanced": ["EU", "UK", "KR", "US"],
 }
@@ -28,9 +28,15 @@ def test_every_restrictive_family_carries_one_record():
         seen[family] = record["id"]
     assert seen["h3_advanced"] == seen["minimax_h3"]
     assert for_family("hunyuan")["id"] != for_family("hunyuan_1_5")["id"]
+    assert for_family("hunyuan3d") is None
     assert for_family("wan") is None
     assert for_family("qwen") is None
     assert for_id("missing") is None
+    assert licence_id_for({"model_type": "hunyuan3d-2", "family": "hunyuan3d"}) == "hunyuan3d"
+    assert licence_id_for({"model_type": "hunyuan3d-2.1", "family": "hunyuan3d"}) == "hunyuan3d"
+    assert licence_id_for({"model_type": "trellis2", "family": "hunyuan3d"}) is None
+    assert licence_id_for({"model_type": "pixal3d", "family": "hunyuan3d"}) is None
+    assert licence_id_for({"model_type": "unirig", "family": "hunyuan3d"}) is None
 
 
 def test_variants_do_not_copy_the_record():
@@ -40,6 +46,8 @@ def test_variants_do_not_copy_the_record():
     ids = [record["id"] for record in data["records"]]
     assert len(ids) == len(set(ids))
     assert data["families"]["h3_advanced"] == "minimax_h3"
+    assert "hunyuan3d" not in data["families"]
+    assert data["modelPrefixes"]["hunyuan3d"] == "hunyuan3d"
     assert set(data["records"][0]) == {"id", "url", "territoryExcluded", "commercial", "note"}
 
 
@@ -82,3 +90,19 @@ def test_mcp_listing_returns_the_family_record_once():
     assert avatar["licenceId"] == base["licenceId"] == "hunyuan"
     assert "territoryExcluded" not in avatar
     assert "licenceId" not in other
+    mixed = summarize_model_catalog(annotate_catalog({
+        "families": [{"id": "hunyuan3d", "label": "Hunyuan3D", "order": 350}],
+        "models": [
+            {"model_type": "hunyuan3d-2", "name": "Hunyuan3D 2", "family": "hunyuan3d"},
+            {"model_type": "trellis2", "name": "TRELLIS.2", "family": "hunyuan3d"},
+            {"model_type": "unirig", "name": "UniRig", "family": "hunyuan3d"},
+        ],
+    }))
+    bucket = mixed["families"][0]
+    assert "licence" not in bucket
+    assert bucket["licenceRecords"][0]["id"] == "hunyuan3d"
+    assert bucket["licenceRecords"][0]["territoryExcluded"] == ["EU", "UK", "KR"]
+    by_id = {item["id"]: item for item in mixed["models"]}
+    assert by_id["hunyuan3d-2"]["licenceId"] == "hunyuan3d"
+    assert "licenceId" not in by_id["trellis2"]
+    assert "licenceId" not in by_id["unirig"]

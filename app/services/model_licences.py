@@ -1,6 +1,7 @@
 """Territory licences for catalogue families, stored in one JSON file.
 
-A family points at a record by id. Variants do not copy the record. A family
+A family points at a record by id. Variants do not copy the record. A model
+type prefix does the same when one UI family mixes several products. A family
 with no entry is unchanged, and nothing here refuses a download or a run.
 """
 from __future__ import annotations
@@ -33,10 +34,11 @@ def _load() -> dict:
         _check_record(record)
         records[record["id"]] = record
     families = data.get("families") or {}
-    unknown = [family for family, licence_id in families.items() if licence_id not in records]
+    prefixes = data.get("modelPrefixes") or {}
+    unknown = [name for name, licence_id in {**families, **prefixes}.items() if licence_id not in records]
     if unknown:
         raise ValueError(f"licence family has no record: {', '.join(unknown)}")
-    return {"records": records, "families": dict(families)}
+    return {"records": records, "families": dict(families), "prefixes": dict(prefixes)}
 
 
 def _public(record: dict) -> dict:
@@ -64,16 +66,46 @@ def for_family(family_id: str | None) -> dict | None:
     return for_id(_load()["families"].get(family_id))
 
 
+def licence_id_for(model: dict) -> str | None:
+    """The record id for this model, or None when its licence has no territory notice."""
+    data = _load()
+    family_id = data["families"].get(model.get("family"))
+    if family_id:
+        return family_id
+    model_type = str(model.get("model_type") or "")
+    match = ""
+    found = None
+    for prefix, licence_id in data["prefixes"].items():
+        if model_type.startswith(prefix) and len(prefix) > len(match):
+            match = prefix
+            found = licence_id
+    return found
+
+
 def annotate_catalog(payload: dict) -> dict:
-    """Put the record on each family once, and only the id on each model."""
+    """Put the record on a uniform family once, and only the id on each model."""
+    models = [item for item in payload.get("models") or [] if isinstance(item, dict)]
+    for model in models:
+        licence_id = licence_id_for(model)
+        if for_id(licence_id):
+            model["licenceId"] = licence_id
     for family in payload.get("families") or []:
         if isinstance(family, dict):
-            record = for_family(family.get("id"))
-            if record:
-                family["licence"] = record
-    for model in payload.get("models") or []:
-        if isinstance(model, dict):
-            record = for_family(model.get("family"))
-            if record:
-                model["licenceId"] = record["id"]
+            _annotate_family(family, models)
     return payload
+
+
+def _annotate_family(family: dict, models: list) -> None:
+    rows = [model for model in models if model.get("family") == family.get("id")]
+    if not rows:
+        record = for_family(family.get("id"))
+        if record:
+            family["licence"] = record
+        return
+    ids = [model.get("licenceId") for model in rows]
+    unique = sorted({licence_id for licence_id in ids if licence_id})
+    records = [record for licence_id in unique if (record := for_id(licence_id))]
+    if len(unique) == 1 and all(ids) and records:
+        family["licence"] = records[0]
+    elif records:
+        family["licenceRecords"] = records
