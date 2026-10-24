@@ -33,6 +33,8 @@ class Component:
     estimated_bytes: int
     restart_required: bool
     remove: tuple[str, ...]
+    license: str = ""
+    ready_file: str = ""
 
     def __post_init__(self) -> None:
         for relative in self.remove:
@@ -46,10 +48,13 @@ class Component:
         return profile_catalog()["engines"][self.engine]["env"]
 
     def as_dict(self) -> dict:
-        return {
+        payload = {
             "id": self.id, "engine": self.engine, "title": self.title, "summary": self.summary,
             "estimatedBytes": self.estimated_bytes, "restartRequired": self.restart_required,
         }
+        if self.license:
+            payload["license"] = self.license
+        return payload
 
 
 @lru_cache(maxsize=1)
@@ -70,6 +75,7 @@ def components() -> tuple[Component, ...]:
             id=entry["id"], engine=entry["engine"], script=entry["script"], title=entry["title"],
             summary=entry["summary"], estimated_bytes=int(entry["estimatedGiB"] * GIB),
             restart_required=bool(entry.get("restartRequired")), remove=tuple(entry["remove"]),
+            license=str(entry.get("license") or ""), ready_file=str(entry.get("readyFile") or ""),
         )
         for entry in _load()["components"]
     )

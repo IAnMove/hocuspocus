@@ -212,12 +212,16 @@ def _preview(data, workspace_dir):
 def _apply_query(data, workspace_dir):
     report = _search_report(data, workspace_dir)
     hits, unknown = report["templates"], report["unknown_words"]
+    semantic = bool(report.get("semantic"))
     if not hits:
-        return {"status": "not_found", "candidates": [], "chosenId": None, "scene": None, "unknown_words": unknown}
+        return {"status": "not_found", "candidates": [], "chosenId": None, "scene": None,
+                "unknown_words": unknown, "semantic": semantic}
     if hits[0]["match"] != "full" or (len(hits) > 1 and hits[0]["score"] == hits[1]["score"]):
-        return {"status": "needs_choice", "candidates": hits, "chosenId": None, "scene": None, "unknown_words": unknown}
+        return {"status": "needs_choice", "candidates": hits, "chosenId": None, "scene": None,
+                "unknown_words": unknown, "semantic": semantic}
     scene = instantiate_template(data["workspace"], hits[0]["id"], workspace_dir)
-    return {"status": "completed", "candidates": hits, "chosenId": hits[0]["id"], "scene": scene, "unknown_words": unknown}
+    return {"status": "completed", "candidates": hits, "chosenId": hits[0]["id"], "scene": scene,
+            "unknown_words": unknown, "semantic": semantic}
 
 
 def _input(arguments):
