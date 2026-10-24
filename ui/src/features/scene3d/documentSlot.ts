@@ -10,6 +10,7 @@ import { durableScene3DSourceUrl, parseScene3DSourceRef } from './slotSource.ts'
 import { ATMOS_SET_IDS, isAtmosId } from './atmos/registryIds.ts'
 import { parseClipCues } from './clipCues.ts'
 import { parseHold } from './handHold.ts'
+import { parseSplatFloor } from './splatItem.ts'
 import type { Scene3DDressing, Scene3DSlot } from './types.ts'
 import { isMotionLab } from './motionlab/types'
 
@@ -29,7 +30,7 @@ function drift(value: unknown) {
 }
 
 function parseSlotMedia(media: Scene3DSlot['media']): Scene3DSlot['media'] {
-  return media === 'image' || media === 'screen' ? media : 'model3d'
+  return media === 'image' || media === 'screen' || media === 'splat' ? media : 'model3d'
 }
 
 function parseSurface(surface: Scene3DSlot['surface']) {
@@ -77,6 +78,8 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   const hold = holdable(next) ? parseHold(slot.hold, slot.id) : undefined
   if (hold) next.hold = hold
   else delete next.hold
+  if (next.media === 'splat') next.splat = parseSplatFloor(slot.splat)
+  else delete next.splat
   return next
 }
 

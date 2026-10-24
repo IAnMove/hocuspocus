@@ -31,9 +31,9 @@ from services.world3d_template_catalog import World3DTemplateError, require_card
 _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
 _COMPILED: dict[str, dict] = {}
-_SLOT_FIELDS = {"setItem", "imageLook", "billboard", "sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media"}
+_SLOT_FIELDS = {"setItem", "imageLook", "billboard", "sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media", "splat"}
 _MAX_SLOTS = 24
-_ADDED_MEDIA = ("model3d", "image")
+_ADDED_MEDIA = ("model3d", "image", "splat")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
 _CAMERA_FIELDS = {"family", "fov", "eye", "look", "orbitRadius", "orbitHeight", "orbitTurns", "framing", "eyeOffset", "targetOffset", "frameFormat",
                   "shake", "lensShift"}
@@ -617,7 +617,7 @@ def _add_slot(document: dict, binding: dict) -> None:
         raise World3DSceneError("too_many_objects", f"A Video 3D scene holds at most {_MAX_SLOTS} objects")
     media = binding.get("media") or "model3d"
     if media not in _ADDED_MEDIA:
-        raise World3DSceneError("invalid_patch", "An added object is a model3d or an image")
+        raise World3DSceneError("invalid_patch", "An added object is a model3d, an image or a splat")
     slots.append({"id": object_id, "slot": "prop", "position": [0, 0, 0], "rotationY": 0, "scale": 1, "sourceUrl": "",
                   "media": media, "clip": None, **({"surface": "cutout"} if media == "image" else {})})
 

@@ -45,7 +45,7 @@ RENDER_RECIPE = 9
 SURFACES = ("cutout", "environment", "wall", "floor")
 # A ground style (grass, meadow, sand...) is a floor the scene draws itself; on a set it replaces the set's ground slab.
 FLOOR_STYLES = ("backdrop", "none", "tiles", "mirror", "road", *GROUND_STYLES)
-BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key"}
+BACKGROUND_FIELDS = {"source", "surface", "houses", "ground", "layout", "layers", "key", "splat", "floorY", "scale"}
 LAYER_DEPTHS = ("mid", "near")
 MODEL_HEIGHT = 1.7      # the scene scales a model to this height times its scale
 
@@ -166,6 +166,11 @@ def _check_background(config):
         entry = config["background"] if isinstance(config["background"], dict) else {"source": config["background"]}
         if isinstance(entry, dict) and "roomBox" in entry:
             _check_room_box_background(entry)
+        elif isinstance(entry, dict) and "splat" in entry:
+            from services.production_splat import check_background
+            if entry.get("splat") is not True:
+                raise ValueError("scene3d.background for a splat is {source, splat: true, floorY?, scale?}")
+            check_background(entry)
         elif set(entry) - BACKGROUND_FIELDS or not _source(entry.get("source")) or entry.get("surface", "cutout") not in SURFACES:
             raise ValueError("scene3d.background is a picture (URL, workspace file, stills name or set) or "
                              "{source, surface: cutout|environment|wall|floor}")
@@ -310,7 +315,8 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
         elif box:
             resolved["background"] = box
         else:
-            resolved["background"] = _diorama(entry, made) or {**entry, "source": url(entry["source"])}
+            from services.production_splat import background_of
+            resolved["background"] = background_of(entry, made, url) or _diorama(entry, made) or {**entry, "source": url(entry["source"])}
     return resolved
 
 

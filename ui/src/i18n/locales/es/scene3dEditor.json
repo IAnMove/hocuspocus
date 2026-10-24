@@ -343,7 +343,8 @@
     "hint": "Selecciona cualquier objeto, aunque esté detrás de otro.",
     "image": "Imagen",
     "model3d": "Modelo 3D",
-    "screen": "Imagen / vídeo"
+    "screen": "Imagen / vídeo",
+    "splat": "Splat gaussiano"
   },
   "translate": "Mover",
   "rotate": "Girar Y",

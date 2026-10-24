@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@google/model-viewer": "^4.1.0",
+    "@sparkjsdev/spark": "^2.4.0",
     "dompurify": "^3.2.4",
     "html-to-image": "^1.11.13",
     "i18next": "^26.4.1",

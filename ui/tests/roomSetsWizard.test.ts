@@ -64,4 +64,17 @@ test('wizard capability stores a room through the shared command and does not op
   assert.equal(roomSetMessage({ result: { name: 'kitchen', status: 'running' } }, 'scene3d.room.paint'), 'Room kitchen paint: running.')
   assert.equal(roomSetMessage({ result: { name: 'kitchen', status: 'completed', warnings: [{}] } }, 'scene3d.room.paint.status'), 'Room kitchen paint: completed, 1 warning(s).')
   assert.equal(roomSetMessage({ result: { name: 'kitchen', file: 'rooms/kitchen.glb' } }, 'scene3d.room.put'), 'Stored room kitchen at rooms/kitchen.glb.')
+  const splat = stored.resolve({ type: 'room_sets', operation: 'scene3d.splat.apply', input: { file: 'sets/hall.ply', floorY: 0.4 } })
+  if (!splat) throw new Error('splat did not resolve')
+  let splatIntent = ''
+  const splatOutcome = await stored.execute(splat, {
+    workspace: 'studio',
+    generationContext: { commandId: 'wizard-splat-1' },
+    adapters: { roomSets: { command: async got => {
+      splatIntent = String((got.input as { intent_id?: string }).intent_id || '')
+      return { message: roomSetMessage({ result: { name: 'hall', file: 'sets/hall.ply' } }, 'scene3d.splat.apply') }
+    } } },
+  })
+  assert.equal(splatIntent, 'wizard-splat-1')
+  assert.equal(splatOutcome.message, 'Splat set hall uses sets/hall.ply.')
 })
