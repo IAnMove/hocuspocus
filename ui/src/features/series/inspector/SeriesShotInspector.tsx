@@ -166,7 +166,7 @@ export function SeriesShotInspector({ workspace, series, episode, shot, entry, m
     <div className="@container">
       <div className="grid grid-cols-[minmax(0,1fr)] gap-3 @5xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <div className="min-w-0 space-y-3 @5xl:sticky @5xl:top-14 @5xl:self-start">
-          <InspectorMedia series={series} shot={shot} takes={takes} selected={selected} onSelect={setSelected} kits={kits} />
+          <InspectorMedia series={series} shot={shot} takes={takes} selected={selected} onSelect={setSelected} kits={kits} workspace={workspace} episodeId={episode.id} />
           <ReviewBox scope={[workspace, series.id, episode.id]} shot={shot} entry={entry} mode={mode} hasTake={takes.length > 0} actions={actions} />
           <RegenerateBar series={series} shot={shot} plan={plan} job={render.job} busy={render.busy} error={render.error} onRender={() => actions.rerender(shot)} />
           <PartsNav shotId={shot.id} parts={parts} drafts={context.drafts} />

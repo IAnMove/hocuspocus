@@ -27,6 +27,7 @@ export const AGENT_ACTION_TYPES = [
   'review_character_animation',
   'set_voice_band',
   'media_tool',
+  'lipsync_redo',
   'open_story_section',
   'open_series_section',
   'prepare_video',
