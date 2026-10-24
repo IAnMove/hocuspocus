@@ -111,6 +111,12 @@ def _measure(document: dict) -> tuple[list[float], list[float]]:
 
 def _meshes(document: dict):
     """Each ``(world matrix, mesh index)`` of the default scene, parents before children."""
+    for _index, _node, world, mesh in _mesh_nodes(document):
+        yield world, mesh
+
+
+def _mesh_nodes(document: dict):
+    """Each ``(node index, node, world matrix, mesh index)`` of the default scene's mesh nodes, parents before children."""
     nodes = _list(document.get("nodes"))
     stack = [(index, _IDENTITY, ()) for index in reversed(_roots(document, nodes))]
     visits = 0
@@ -124,7 +130,7 @@ def _meshes(document: dict):
         node = _item(nodes, index)
         world = _multiply(parent, _local(node))
         if "mesh" in node:
-            yield world, node["mesh"]
+            yield index, node, world, node["mesh"]
         for child in reversed(_list(node.get("children"))):
             stack.append((child, world, (*ancestors, index)))
 

@@ -26,7 +26,10 @@ from services.world3d_look import check_render_look, normalize_toon
 from services.world3d_modifiers import apply_camera_template, apply_lens, check_camera_template, set_light
 from services.world3d_blank_scene import editor_warnings
 from services.world3d_scene_fit import apply_fit
+from services.world3d_scene_collisions import scene_collisions
 from services.world3d_scene_layout import scene_layout
+from services.world3d_scene_motion import bind_motion, retime as retime_motion
+from services.world3d_world_fx import set_world_fx, world_fx_view
 from services.world3d_stage_cards import is_stage
 from services.world3d_stage_documents import BASE as STAGE_BASE, DUST_ID, stage_document
 from services.world3d_template_catalog import World3DTemplateError, require_card, user_template_document
@@ -201,6 +204,7 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
         _set_soundtrack(document, changes["soundtrack"], workspace)
     if "screenFx" in changes:
         _set_screen_fx(document, changes["screenFx"])
+    warnings.extend(_set_world_fx(document, changes, workspace, workspace_dir))
     if "voiceOver" in changes:
         _set_voice_over(document, changes["voiceOver"], workspace)
     if "motionLab" in changes:
@@ -215,6 +219,29 @@ def patch_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, bas
     record["templateId"] = document.get("templateId") or record["templateId"]
     _write(workspace, scene_id, record, workspace_dir)
     return _view(scene_id, record, workspace, workspace_dir)
+
+
+def update_scene(workspace: str, scene_id: str, workspace_dir, base_revision: int, change) -> dict:
+    """Read a working scene, check its revision, let ``change(document)`` edit the document in place, write the next revision and return its view.
+
+    ``change`` returns ``(warnings, extra)``: the warnings the reply carries and fields merged into the view. If it raises,
+    nothing is written."""
+    record = _read(workspace, scene_id, workspace_dir)
+    if type(base_revision) is not int or base_revision != record["revision"]:
+        raise World3DSceneError("revision_conflict", "The scene changed since this revision. Reload before editing.", 409)
+    warnings, extra = change(record["document"])
+    record["revision"] += 1
+    record["warnings"] = warnings
+    _write(workspace, scene_id, record, workspace_dir)
+    return {**_view(scene_id, record, workspace, workspace_dir), **extra}
+
+
+def _set_world_fx(document: dict, changes: dict, workspace: str | None, workspace_dir) -> list[str]:
+    """``worldFx``: the caller's 3D effects (``fx-*``), placed once the bindings have put the objects where they are."""
+    if "worldFx" not in changes:
+        return []
+    found = scene_collisions(document, workspace, workspace_dir)["collisions"]
+    return set_world_fx(document, changes["worldFx"], found, workspace, workspace_dir)
 
 
 def _set_camera_template(document: dict, template_id) -> list[str]:
@@ -494,6 +521,7 @@ def _bind(document: dict, binding: dict, stand_ins: set[str], workspace: str | N
     _bind_screen(slot, binding)
     _bind_checked(slot, binding)
     _bind_directional(slot, binding)
+    bind_motion(slot, binding, document.get("duration") or 0)
     return warnings + apply_fit(slot, binding, workspace, workspace_dir)
 
 
@@ -663,6 +691,7 @@ def _retime(document: dict, duration) -> None:
             _scale(slot["appearance"], factor, "start", "duration")
         for cue in _dicts(slot.get("clips")):
             _scale(cue, factor, "start", "duration")
+        retime_motion(slot.get("motion"), factor)
     _retime_camera_and_backdrop(document, factor)
 
 
@@ -757,13 +786,15 @@ def _retarget(document: dict) -> None:
 
 def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_dir=None) -> dict:
     document = record["document"]
+    passes = scene_collisions(document, workspace, workspace_dir)
+    shown = scene_layout(document, workspace, workspace_dir, passes)
     return {
         "sceneId": scene_id, "revision": record["revision"], "templateId": record["templateId"],
-        "document": document, "objects": _objects(document), "pending": _pending(document),
-        "warnings": [*(record.get("warnings") or []), *editor_warnings(document)], "traits": _traits(document),
-        **scene_layout(document, workspace, workspace_dir),
+        "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
+        "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
+        **shown,
         "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
-                     "motion", "grounded", "camera", "playbackSpeed", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
+                     "motion", "collide", "grounded", "camera", "playbackSpeed", "worldFx", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
 
@@ -776,7 +807,7 @@ def _objects(document: dict) -> list[dict]:
             "id": slot.get("id"), "role": slot.get("slot"), "media": slot.get("media"), "sourceUrl": source,
             "marker": not source, "finished": bool(source), "clip": slot.get("clip"), "position": slot.get("position"),
             "rotationY": slot.get("rotationY"), "scale": slot.get("scale"), "motion": slot.get("motion"),
-            "accepted": [slot.get("media") or "model3d"],
+            "accepted": [slot.get("media") or "model3d"], **({"collide": False} if slot.get("collide") is False else {}),
             **{key: slot[key] for key in _CHECKED_FIELDS if slot.get(key) is not None},
         })
     return objects

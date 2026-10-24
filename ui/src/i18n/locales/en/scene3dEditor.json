@@ -3823,7 +3823,11 @@
     "walkReady": "Baked walk: the clip moves the character and each foot stays planted.",
     "walkStale": "The path or the character's placement changed: bake the walk again.",
     "walkNeedsSaved": "Load the character from the workspace (a saved, rigged GLB) to bake a walk.",
-    "walkFailed": "Could not bake the walk"
+    "walkFailed": "Could not bake the walk",
+    "start": "Starts at (s)",
+    "end": "Ends at (s)",
+    "window": "Seconds in the scene. Empty: the move starts at 0 and ends with the shot. Before the start the object sits at its position; after the end it stays at the destination.",
+    "walkTimed": "A walk cannot be baked on a move with a start or an end: clear them, or bake the walk over the whole shot."
   },
   "framing": {
     "title": "Subject framing",

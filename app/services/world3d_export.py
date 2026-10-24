@@ -449,11 +449,15 @@ def _validated_document(raw) -> dict:
     return document
 
 
+# The editor's parsers (sceneFx/types.ts, sceneFx/world.ts) give a cue that says ``sound`` and no ``volume`` this one.
+DEFAULT_CUE_VOLUME = 0.25
+
+
 def _cue_sounds(cue) -> bool:
     if not isinstance(cue, dict) or not cue.get("sound"):
         return False
     try:
-        return float(cue.get("volume") or 0) > 0
+        return float(DEFAULT_CUE_VOLUME if cue.get("volume") is None else cue["volume"]) > 0
     except (TypeError, ValueError):
         return False
 

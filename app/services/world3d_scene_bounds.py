@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 from services.kernel.paths import safe_join
 from services.media_refs import parse_media_ref
 from services.procedural_3d.glb_bounds import glb_bounds
+from services.procedural_3d.glb_parts import glb_parts
 
 MODEL_HEIGHT = 1.7       # fitGltf: a model object is this tall at scale 1
 CUTOUT_HEIGHT = 2.0      # imageCutoutMesh: an image cutout plane is this tall at scale 1
@@ -67,6 +68,28 @@ def native_bounds(path: Path) -> dict:
             _CACHE.clear()
         _CACHE[key] = glb_bounds(path)
     return _CACHE[key]
+
+
+def native_parts(path: Path) -> dict:
+    """``glb_parts`` of a file, remembered until the file changes (the same cache and key as ``native_bounds``)."""
+    try:
+        stat = path.stat()
+    except OSError:
+        return glb_parts(path)
+    key = ("parts", str(path), stat.st_mtime_ns, stat.st_size)
+    if key not in _CACHE:
+        if len(_CACHE) >= _CACHE_LIMIT:
+            _CACHE.clear()
+        _CACHE[key] = glb_parts(path)
+    return _CACHE[key]
+
+
+def slot_native_parts(slot: dict, workspace: str, workspace_dir) -> dict:
+    """The mesh-node boxes of the GLB a model slot points at: ``glb_parts`` (``ok: False`` and a ``reason`` when unreadable)."""
+    path, reason = resolve_workspace_glb(slot.get("sourceUrl"), workspace, workspace_dir)
+    if path is None:
+        return {"ok": False, "parts": [], "omitted": 0, "reason": reason}
+    return native_parts(path)
 
 
 def slot_native_bounds(slot: dict, workspace: str, workspace_dir) -> dict:
