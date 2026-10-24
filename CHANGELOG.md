@@ -6,7 +6,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
-**Added: optional anime face landmarks for the flat rig.** When the Anime face landmarks component is installed, `characters.rig.flat` uses its 28 points for the eye boxes, blink, brows and mouth line if the white-eye search fails or disagrees; a hint still wins, and each pose records `eyesSource` and `mouthSource` (`whites`, `landmarks` or `hint`). Without the component the rig is unchanged.
+**Added: optional anime face landmarks for the flat rig.** When the Anime face landmarks component is installed, `characters.rig.flat` uses its 28 points for the eye boxes, blink, brows and mouth line if the white-eye search fails or disagrees; a hint still wins, and each pose records `eyesSource` and `mouthSource` (`whites`, `landmarks` or `hint`). Without the component the rig is unchanged. The component is in the install catalog (CPU, about 1 GB; Linux x64, Windows x64 and Apple Silicon). The package and the Hugging Face weights are MIT; vendored mmpose, mmdet and mmcv are Apache-2.0.
 
 **Fixed: removing an extra no longer promises space it does not free.** uv fills each environment with hard links to Pinokio's shared package cache, so removing SAM (listed 7 GB) really freed 0.3 GB. The Installation tab now measures what a removal frees (files that nothing else links, over every folder the removal deletes), says it in the confirm button («frees about 0.3 GB») and, when most of the folder is shared, explains that Pinokio's Disk Saver can reclaim the rest.
 

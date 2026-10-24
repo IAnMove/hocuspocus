@@ -740,7 +740,9 @@
     {
       "prefix": "app/services/anime_face",
       "paths": [
-        "tests/test_flat_rig_guided.py"
+        "tests/test_flat_rig_guided.py",
+        "tests/test_install_catalog.py",
+        "tests/test_runtime_profiles.py"
       ]
     },
     {

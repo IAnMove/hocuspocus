@@ -115,12 +115,20 @@ for (const input of [undefined, null, {}, {success: false}]) {
   assert.equal(guard.next, null)
 }
 assert.equal(render(guard.when, {input: {success: true}}), 'false')
-for (const filename of ['torch', 'runtime_setup', 'hunyuan3d_install', 'sam_install', 'rigging_install', 'minimax_h3_install', 'ui_build', 'hf_login']) {
+for (const filename of ['torch', 'runtime_setup', 'hunyuan3d_install', 'sam_install', 'rigging_install', 'minimax_h3_install', 'anime_face_install', 'ui_build', 'hf_login']) {
   const final = require(`../${filename}.js`).run.at(-1)
   assert.equal(final.method, 'script.return')
   assert.equal(final.params.success, true)
 }
 assert(!runtime.guarded('some-command').includes('Error:'), 'PTY echo must not trigger an error on success')
+const animePlan = runtime.installEngines(['anime_face'])
+const animeOn = platform => JSON.stringify(animePlan.filter(step => step.when.includes(`platform === '${platform}'`)))
+assert(animeOn('linux').includes('torch==2.7.0+cpu') && animeOn('linux').includes('https://download.pytorch.org/whl/cpu'))
+assert(!/\+cu\d/.test(animeOn('linux')), 'Anime landmarks stay on the CPU wheel')
+assert(animeOn('darwin').includes('torch==2.7.0 torchvision==0.22.0 --index'))
+assert(!animeOn('darwin').includes('+cpu') && !animeOn('darwin').includes('+cu'))
+const wangpLinux = JSON.stringify(runtime.installEngines(['wangp']).filter(step => step.when.includes("platform === 'linux'")))
+assert(wangpLinux.includes('torch==2.7.0+cu128 torchvision==0.22.0+cu128 torchaudio==2.7.0+cu128'))
 
 // Real host shell, including cmd.exe on Windows CI. A silent failure must
 // produce Pinokio's error sentinel and never execute the following command.
