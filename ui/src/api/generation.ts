@@ -1,5 +1,5 @@
 import { rememberPrompt } from '../lib/promptHistory'
-import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ModelResourceRequirements, ScailResolutionProfile } from '../types'
+import type { DirectorModelCompatibility, GenerationDetails, H3WindowPlan, ModelLicence, ModelResourceRequirements, ScailResolutionProfile } from '../types'
 import { BASE, httpError } from './http'
 
 export interface ApiModel {
@@ -34,12 +34,16 @@ export interface ApiModel {
   // Weight-managed tool models (e.g. UniRig): shown in the settings
   // catalog for download/delete, but never selectable for generation.
   tool_only?: boolean
+  /** Id of the family licence. The full record lives on ApiFamily.licence. */
+  licenceId?: string
 }
 
 export interface ApiFamily {
   id: string
   label: string
   order: number
+  /** Set when this family's licence excludes territories. Absent otherwise. */
+  licence?: ModelLicence | null
 }
 
 export interface ApiResolution {

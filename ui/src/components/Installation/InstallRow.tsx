@@ -4,6 +4,7 @@ import { useUiTranslation } from '../../i18n'
 import type { InstallComponent, InstallState, InstallStatus } from '../../api/installManager'
 import { formatBytes } from '../../lib/format'
 import { finishedNotice, reclaimLabel, sizeLabel } from '../../lib/installView'
+import { LicenceNotice } from '../common/LicenceNotice'
 import { InstallOutput } from './InstallOutput'
 import { InstallRowActions } from './InstallRowActions'
 import { InstallRowNotices } from './InstallRowNotices'
@@ -73,6 +74,7 @@ export function InstallRow({ row, status, acting, onAct }: Props) {
       <p className="text-[11px] leading-snug text-text-secondary">
         {t(`installation.components.${row.id}.summary`, { defaultValue: row.summary })}
       </p>
+      <LicenceNotice licence={row.licence} />
       <div className="text-[10px] text-text-muted tabular-nums"><SizeText row={row} /></div>
       <ReclaimHint row={row} />
       <InstallRowNotices row={row} freeBytes={status.disk.freeBytes} />

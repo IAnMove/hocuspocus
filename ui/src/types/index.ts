@@ -1,7 +1,18 @@
+/** One licence record for a model family. Variants point at it; they do not copy it. */
+export interface ModelLicence {
+  id: string
+  url: string
+  territoryExcluded: string[]
+  commercial: boolean
+  note: string
+}
+
 export interface ModelFamily {
   id: string
   label: string
   order: number
+  /** Set when this family's licence excludes territories. Absent otherwise. */
+  licence?: ModelLicence | null
 }
 
 export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story' | 'comic_movie'
@@ -78,6 +89,8 @@ export interface ModelDef {
   // Weight-managed tool models (e.g. UniRig): shown in the settings
   // catalog for download/delete, but never selectable for generation.
   tool_only?: boolean
+  /** Id of the family licence. The full record lives on ModelFamily.licence. */
+  licenceId?: string
 }
 
 export interface Resolution {

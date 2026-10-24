@@ -3,11 +3,12 @@ import { ChevronDown, ChevronRight, RotateCcw, Check, Download, Trash2, Cpu, Ref
 import type { ModelFolderCandidate } from '../../types'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import * as api from '../../api/client'
-import type { GenerationMode } from '../../types'
+import type { GenerationMode, ModelLicence } from '../../types'
 import { FAMILIES, resolveVariant, onOsThemeChange, type FamilyId, type ThemeMode } from '../../lib/theme'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import { H3ModelName } from '../Sidebar/H3ModelInfo'
 import { ModelCatalogInfo } from '../Sidebar/ModelCatalogInfo'
+import { LicenceNotice } from '../common/LicenceNotice'
 import { catalogVramGb } from '../../lib/modelCatalog'
 import { showsCudaControls, usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { MINIMAX_MUSIC_COMMUNITY_MODELS, modelRequirementsText } from '../../lib/minimaxMusicCatalog'
@@ -222,16 +223,17 @@ function ModelVisibilitySection() {
     supports_ref_images?: boolean
     tool_only?: boolean
   }
-  const modelsByMode = new Map<GenerationMode, { familyId: string; familyLabel: string; models: ModelRow[] }[]>()
+  const modelsByMode = new Map<GenerationMode, { familyId: string; familyLabel: string; licence?: ModelLicence | null; models: ModelRow[] }[]>()
   for (const { mode } of MODE_LABELS) {
     const modeFamilies = getFamiliesForMode(mode, families)
-    const groups: { familyId: string; familyLabel: string; models: ModelRow[] }[] = []
+    const groups: { familyId: string; familyLabel: string; licence?: ModelLicence | null; models: ModelRow[] }[] = []
     for (const fam of modeFamilies) {
       const familyModels = getModelsForFamily(fam.id, visibleModels, mode)
       if (familyModels.length > 0) {
         groups.push({
           familyId: fam.id,
           familyLabel: fam.label,
+          licence: fam.licence,
           models: familyModels.map(m => ({
             model_type: m.model_type,
             name: m.name,
@@ -372,6 +374,7 @@ function ModelVisibilitySection() {
                         </button>
                       </div>
                     )}
+                    <LicenceNotice licence={group.licence} />
                     {(!showFamilyHeader || !famCollapsed) && group.models.map(m => {
                       const alsoDeletes = confirmDelete === m.model_type ? sharedDeleteNames(m) : []
                       const vramGb = catalogVramGb(m)

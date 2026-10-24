@@ -8,6 +8,7 @@ import { catalogVramGb, resolveModelCatalog } from '../../lib/modelCatalog'
 import type { ModelDef } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
 import { H3ModelName } from './H3ModelInfo'
+import { LicenceNotice } from '../common/LicenceNotice'
 
 function displayName(model: ModelDef | undefined, savedName: string | undefined, modelType: string, fallback: string) {
   return model?.name ?? savedName ?? (modelType || fallback)
@@ -48,6 +49,7 @@ export function ModelSelector() {
   const audioSubMode = useStore(s => s.audioSubMode)
 
   const currentModel = models.find(m => m.model_type === currentModelType)
+  const currentFamily = families.find(family => family.id === currentModel?.family)
   const effectiveSubMode = generationMode === 'avatar' ? editSubMode : undefined
   const effectiveAudioSubMode = generationMode === 'audio' ? audioSubMode : undefined
   const modeFamilies = getFamiliesForMode(generationMode, families, effectiveSubMode, effectiveAudioSubMode)
@@ -74,6 +76,7 @@ export function ModelSelector() {
   if (effectiveSubMode === 'recast' && currentModelType === 'viggle_animate') {
     return <div data-wizard-anchor="model" className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs">
       {currentModel?.name || 'Viggle-Animate'}
+      <LicenceNotice licence={currentFamily?.licence} />
     </div>
   }
 
@@ -90,6 +93,11 @@ export function ModelSelector() {
         </span>
         <ChevronDown size={14} className={`shrink-0 text-text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
+      {currentFamily?.licence && (
+        <div className="px-0.5 pt-1">
+          <LicenceNotice licence={currentFamily.licence} />
+        </div>
+      )}
 
       {/* Dropdown (opens upward) */}
       {open && (
@@ -113,6 +121,11 @@ export function ModelSelector() {
                 <div className="px-3 pt-2 pb-1 text-[10px] text-text-muted uppercase tracking-wider font-medium">
                   {family.label}
                 </div>
+                {family.licence && (
+                  <div className="px-3 pb-1">
+                    <LicenceNotice licence={family.licence} />
+                  </div>
+                )}
                 {/* Models in family */}
                 {famModels.map(model => {
                   const isSelected = model.model_type === currentModelType
