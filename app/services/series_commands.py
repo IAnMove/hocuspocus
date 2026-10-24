@@ -77,7 +77,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "style": {"type": "object", "properties": {
              "screen": {"type": "boolean"}, "smile": {"type": "number", "minimum": -1, "maximum": 1},
              "smirk": {"type": "number", "minimum": 0, "maximum": 1}, "width": {"type": "number", "minimum": 0.3, "maximum": 0.9},
-             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
+             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]},
+             "faceSource": {"enum": ["detect", "layers"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
                  "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"},
@@ -115,7 +116,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "otherwise face landmarks sure of the lips place the mouth instead (warning mouth_hint_ignored when the hint was "
         "far off them; poses.<id>.hintIgnored says where each was), and where they are unsure the hint is snapped onto "
         "the painted lips. Hints are "
-        "kept and reused by later rigs; null clears a pose's. Style keys left out keep the kit's look (its last rig's, "
+        "kept and reused by later rigs; null clears a pose's. faceSource layers (Linux NVIDIA, the See-through component) "
+        "places the blink on the eyewhite, irides and eyelash layers and the mouth on the mouth layer, saves those PNGs "
+        "on the kit (anchors.<pose>.layers) and warns layer_missing_<class> when one is absent; omitted or detect keeps "
+        "today's search and does not call See-through. It is kept on a later rig the way mouthStyle is. Not installed: "
+        "see_through_not_installed and the kit is unchanged. Windows and macOS: see_through_unsupported. "
+        "Style keys left out keep the kit's look (its last rig's, "
         "else the rig of the style preset it was made in): a re-rig after adding a pose or placing a mouth line stays "
         "warp unless mouthStyle says otherwise; style in the result is the look used. poses (optional) limits the rig to those "
         "poses; the base is always rigged with them (the blink and the shared mouths come from it). Returns the saved kit, a review image URL (each pose, and "

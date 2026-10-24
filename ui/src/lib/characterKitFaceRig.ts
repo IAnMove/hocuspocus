@@ -270,6 +270,7 @@ function poseAnchorsOrBase(kit: CharacterKit, poseId: string): CharacterKit['anc
   if (own || !kit.anchors.base) return own
   const base = { ...kit.anchors.base }
   delete base.mouthSources
+  delete base.layers
   return base
 }
 
@@ -294,7 +295,8 @@ export function lockFaceRigMouthPlacement(
   // The pose keeps what is its own: its mouth and blink drawings and a hidden-eyes flag.
   const own = kit.anchors[normalizedPoseId]
   const kept = { ...(own?.mouthSources ? { mouthSources: own.mouthSources } : {}),
-    ...(own?.blinkSource ? { blinkSource: own.blinkSource } : {}), ...(own?.blink === false ? { blink: false } : {}) }
+    ...(own?.blinkSource ? { blinkSource: own.blinkSource } : {}), ...(own?.layers ? { layers: own.layers } : {}),
+    ...(own?.blink === false ? { blink: false } : {}) }
   const mouthStates = {
     closed: nextAnchor,
     small: nextAnchor,

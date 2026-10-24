@@ -172,6 +172,24 @@ def _anchor(value: Any, label: str) -> dict[str, float]:
     return result
 
 
+_LAYER_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9 ]{0,31}$")
+
+
+def _pose_layer_sources(value: Any, pose_id: str) -> dict[str, str]:
+    """See-through class PNGs for this pose, kept so a later edit can reopen them."""
+    if not isinstance(value, dict) or not value or len(value) > 32:
+        raise ValueError(f"Anchors for {pose_id} have invalid layers")
+    sources: dict[str, str] = {}
+    for name, raw in value.items():
+        if not isinstance(name, str) or _LAYER_NAME.fullmatch(name) is None:
+            raise ValueError(f"Anchors for {pose_id} have an invalid layer name")
+        source = _text(raw, f"{pose_id} {name} layer", 1200, required=True)
+        if source.lower().startswith(("blob:", "data:")):
+            raise ValueError(f"{pose_id} {name} layer must be persistent, not a browser blob or data URL")
+        sources[name] = source
+    return sources
+
+
 def _pose_mouth_sources(value: Any, pose_id: str) -> dict[str, str]:
     """A pose's own mouth drawings by state (flat-rig warp mouths, cut from that pose): they replace the kit's
     ``mouth`` sources on this pose and share their review state."""
@@ -219,6 +237,8 @@ def _pose_anchors(anchors_raw: Any) -> dict[str, dict[str, Any]]:
             if source.startswith("blob:"):
                 raise ValueError(f"{pose_id} blink source must be persistent, not a browser blob URL")
             group["blinkSource"] = source
+        if raw_group.get("layers") is not None:
+            group["layers"] = _pose_layer_sources(raw_group["layers"], pose_id)
         anchors[pose_id] = group
     return anchors
 

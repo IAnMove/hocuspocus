@@ -188,6 +188,14 @@
   },
   "faceRig": {
     "mouthsOnPose": "Mouths on “{{pose}}”",
+    "seeThrough": {
+      "button": "Place eyes and mouth from layers",
+      "busy": "Splitting layers…",
+      "done": "Blink and mouth now follow the See-through layers.",
+      "hint": "Linux with an NVIDIA GPU. Install See-through from Settings > Installation. This rigs every pose and can take a few minutes each.",
+      "missing": "Save the character before placing layers.",
+      "failed": "Could not place the layers."
+    },
     "steps": {
       "box": "Drag the yellow box until it covers the lips. It saves when you release.",
       "wipe": "If the drawing still has a painted mouth, press Wipe mouth area.",

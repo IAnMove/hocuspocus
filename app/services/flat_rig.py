@@ -1087,7 +1087,11 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         raise FlatRigError("character_not_found", "Character not found", 404)
     look = kit_look(kit, style)
     placed = _kit_hints(kit, hints)
+    from services.see_through_layers import apply_face_layers, prepare_face_layers, save_layers
+    placed, pack = prepare_face_layers(kit, look, workspace, workspace_dir, pose_ids, placed)
     rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids, placed)
+    apply_face_layers(rigs, pack, look, placed)
+    layer_urls, layer_missing = save_layers(pack, kit_id, workspace_dir, workspace)
     mouths = _kit_mouths(rigs, look)
     attach_openings(rigs, mouths)
     name = kit.get("name") or kit_id
@@ -1109,7 +1113,8 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         if pose in own_mouths:
             # Warp mouths are cut from this pose's own drawing: they are its own, in place of the kit's.
             own["mouthSources"] = {state: _url(file, workspace) for state, file in own_mouths[pose].items()}
-        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **own, **({} if rig["blinks"] else {"blink": False})}
+        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **own, **({} if rig["blinks"] else {"blink": False}),
+                         **({"layers": layer_urls[pose]} if pose in layer_urls else {})}
     kit["anchors"] = anchors
     kit["style"] = "cutout"
     warnings = _kit_warnings(rigs)
@@ -1121,6 +1126,7 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         "facings": {pose: facing for pose, facing in facings.items() if facing},
         "unwipedPoses": unwiped, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         **({"mouthLines": {pose: rig["line"] for pose, rig in rigs.items()}} if look["mouthStyle"] == "warp" else {}),
+        **({"layers": layer_missing} if layer_missing else {}),
     }]
     saved = patch_character_kit(workspace_dir, kit_id, kit, base_revision=base_revision)
     return {
