@@ -1119,7 +1119,9 @@
     "media": {
       "take": "Toma {{number}} del plano",
       "takes": "Tomas de este plano",
-      "planOnly": "Aún sin renderizar: el plan"
+      "planOnly": "Aún sin renderizar: el plan",
+      "redoLips": "Rehacer los labios",
+      "lipsEngine": "Motor de lip-sync"
     },
     "regenerate": {
       "stale": "Este plano cambió después de su toma.",
