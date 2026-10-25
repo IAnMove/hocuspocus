@@ -257,6 +257,25 @@ def _anchor(raw: Any, label: str) -> dict[str, float]:
     return found
 
 
+def _puppet_provenance(raw: Any, label: str) -> dict[str, Any] | None:
+    """A puppet walk remembers which drawing it was cut from. Any other provenance is refused."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or raw.get("method") != "puppet":
+        raise CharacterAnimationError(f"{label} provenance is a puppet record")
+    reference = raw.get("reference")
+    if not isinstance(reference, dict):
+        raise CharacterAnimationError(f"{label} provenance names the reference pose")
+    start = raw.get("start")
+    if isinstance(start, bool) or not isinstance(start, (int, float)):
+        raise CharacterAnimationError(f"{label} provenance start is the cycle phase")
+    if not isinstance(raw.get("layers"), bool):
+        raise CharacterAnimationError(f"{label} provenance layers is true or false")
+    return {"method": "puppet", "reference": {"animation": _text(reference.get("animation"), f"{label} reference", 64, required=True),
+                                               "pose": _text(reference.get("pose"), f"{label} reference pose", 120, required=True)},
+            "start": float(start), "layers": raw["layers"]}
+
+
 def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
     """One animation of a kit: its sheet, the keyed pose pictures it was joined from and how it plays."""
     if not isinstance(raw, dict):
@@ -292,6 +311,9 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
     for key in ("mouth", "eyes"):
         if raw.get(key) is not None:
             result[key] = _anchor(raw[key], f"{label} {key}")
+    provenance = _puppet_provenance(raw.get("provenance"), label)
+    if provenance:
+        result["provenance"] = provenance
     return {**result, **_contract(raw, label)}
 
 

@@ -397,3 +397,25 @@ test('choosing one guided clip sends method video', async () => {
     cleanup()
   }
 })
+
+test('choosing the puppet sends method puppet and shows the no-layers note', async () => {
+  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const api = server({ library: kitOf() })
+  const original = globalThis.fetch
+  globalThis.fetch = api.fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.ok(screen.getByTestId('walk-method-walk-12')))
+    assert.equal(screen.queryByTestId('puppet-note-walk-12'), null)
+    fireEvent.change(screen.getByTestId('walk-method-walk-12'), { target: { value: 'puppet' } })
+    assert.match(screen.getByTestId('puppet-note-walk-12').textContent ?? '', /falda|skirt/)
+    fireEvent.click(screen.getByTestId('animation-walk-12').querySelector('button') as HTMLButtonElement)
+    await waitFor(() => assert.equal(api.state.posts!.length, 1))
+    assert.deepEqual(api.state.posts![0].body, { workspace: 'w', kitId: 'ana', animation: 'walk-12', model: 'qwen_image_21', method: 'puppet' })
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})

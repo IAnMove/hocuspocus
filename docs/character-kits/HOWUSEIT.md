@@ -316,6 +316,8 @@ What the job does:
    meanwhile keeps its edits. Play it (the player uses the card's own frame rule), then approve or reject it in the panel.
    **Approve** is a person's decision unless the owner turned on «Modo un solo disparo» (next section): nothing approves it otherwise.
 
+**Marioneta (`method: "puppet"`).** A catalog walk can be cut from one drawing instead of one picture per pose. The panel, MCP `characters.animation.make` and the Wizard (`make_character_animation`) are the same job. The front walk uses the rest pose of `idle`. Every other direction uses `contact-a` of that direction's twelve-pose walk. `reference: {animation, pose}` overrides that pair. A reference the kit does not have is drawn inside the same job and is not saved as a second animation. See-through layers, when installed, are cached in the workspace folder `puppet-layers/<hash>/`. The kit stores only `provenance.layers` (true or false), not the picture URLs. Without See-through the job warns `puppet_no_layers`. The panel shows that note whenever Marioneta is selected. The drawing then needs the legs apart and no skirt. The gait check still runs. Planted feet stay within one pixel. `make_set` stays pose by pose unless `method` is passed. Puppet on `idle-directions` refuses those sheets (`puppet_not_a_walk`). Details: `docs/generation/WALK_PUPPET.md`.
+
 **«Modo un solo disparo» (one-shot mode).** Settings › Services has a switch (`agent_autonomy`: `review`, the default, or
 `one_shot`) so that one request to an agent can go from the idea to a finished animation. Off, nothing changes: a person approves.
 On, an agent may decide what a person normally decides, through the same operation from every door

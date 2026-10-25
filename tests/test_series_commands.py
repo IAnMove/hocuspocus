@@ -279,7 +279,7 @@ def test_a_custom_animation_takes_twelve_poses_over_mcp_in_any_direction():
     assert custom["poses"]["maxItems"] == 12 and custom["view"] == {"enum": ["bust", "front", "side", "front34", "back34", "back"]}
     assert listed[0]["custom"]["properties"]["view"] == custom["view"]
     assert "up to 12" in make[3] and "up to 6" not in make[3] and "walk-12" in listed[3] and "motion" in listed[3]
-    assert make[0]["method"] == {"enum": ["poses", "video"]} and "method video" in make[3] and "make_set stays pose by pose" in make[3]
+    assert make[0]["method"] == {"enum": ["poses", "video", "puppet"]} and "method video" in make[3] and "make_set stays pose by pose" in make[3]
 
 
 def test_a_voice_band_is_set_over_mcp_through_the_same_route_as_the_wizard(tmp_path):
