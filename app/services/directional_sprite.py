@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Collection
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,8 @@ SECONDS = 3600
 REACH = 1000
 # What the renderer clamps a walk to; a stored one outside it is refused.
 STORED_SPEED = (0.05, 20.0)
+SECTOR_DEGREES = 45.0
+HALF_SECTOR = SECTOR_DEGREES / 2
 
 
 def number(value: Any, low: float, high: float) -> float | None:
@@ -40,6 +43,26 @@ def wrap(angle: float) -> float:
     """An angle in (-180, 180]."""
     wrapped = (angle + 180) % 360 - 180
     return 180.0 if wrapped == -180 else round(wrapped, 4)
+
+
+def edges(walking: bool = False, drawn: Collection[str] | None = None) -> tuple[float, float, float, float]:
+    """The four angles off the line to the camera where ``front`` gives way to ``front34``, ``front34`` to ``side``, ``side`` to ``back34`` and
+    ``back34`` to ``back`` (``sectorEdges`` of ``ui/src/features/scene3d/directionalSprite.ts``). A standing figure has equal sectors (22.5, 67.5,
+    112.5, 157.5). A walking one, which faces where it goes, has its three-quarter band ``walkDiagonalDeg`` either side of 45 and 135, so the larger
+    part of its movement decides front, side or back. A diagonal that ``drawn`` (the directions of the sheets) lacks has no band: its two edges meet
+    at 45 (or 135) degrees."""
+    reach = min(max(float(SPEC["walkDiagonalDeg"]), 0.0), HALF_SECTOR) if walking else HALF_SECTOR
+    front34 = reach if drawn is None or "front34" in drawn else 0.0
+    back34 = reach if drawn is None or "back34" in drawn else 0.0
+    return SECTOR_DEGREES - front34, SECTOR_DEGREES + front34, 3 * SECTOR_DEGREES - back34, 3 * SECTOR_DEGREES + back34
+
+
+def sector_of(theta: float, walking: bool = False, drawn: Collection[str] | None = None) -> tuple[str, bool]:
+    """``(direction, negative)`` of an angle off the line to the camera: 0 front, 45 front34, 90 side, 135 back34, 180 back, and a negative angle is
+    the same sector seen from the left. The renderer also keeps the sector held before for a few degrees (hysteresis); a check has no history."""
+    angle = wrap(theta)
+    reach = abs(angle)
+    return DIRECTIONS[sum(1 for edge in edges(walking, drawn) if reach > edge)], angle < 0
 
 
 def heading_degrees(value: Any) -> float | None:

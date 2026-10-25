@@ -2844,6 +2844,12 @@
       "paths": [
         "tests/test_model_licences.py"
       ]
+    },
+    {
+      "prefix": "tests/fixtures/directional_walk_sectors.json",
+      "paths": [
+        "tests/test_series_directional.py"
+      ]
     }
   ]
 }

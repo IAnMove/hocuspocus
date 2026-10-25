@@ -103,7 +103,8 @@ def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id
     background = ((style or {}).get("background") or _GENERIC_BACKGROUND).replace("{screen}", style_catalog()["screens"][screen])
     identity = (fragment.get("identity") or catalog()["identity"]).replace("{description}", words).strip()
     identity += "" if identity.endswith((".", "!", "?", ":", ";")) else "."
-    prompt = " ".join((identity, catalog()["views"][item["view"]], pose["prompt"], background))
+    held = catalog().get("walkViews", {}).get(item["view"]) if item.get("motion") == "walk" else None
+    prompt = " ".join(part for part in (identity, catalog()["views"][item["view"]], held, pose["prompt"], background) if part)
     negative = ", ".join(part for part in (fragment.get("negative") or catalog()["negative"], catalog().get("viewNegatives", {}).get(item["view"])) if part)
     return {"prompt": prompt, "negative": negative, "screen": screen, "resolution": item["resolution"]}
 
