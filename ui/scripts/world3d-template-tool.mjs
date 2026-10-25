@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs'
 import { deflateSync } from 'node:zlib'
 import { createHash } from 'node:crypto'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
+import { buildComicPair } from '../src/features/scene3d/comicPage.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { renderScene3DSoftware } from '../src/features/scene3d/softwareRender.ts'
 import { turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
@@ -11,7 +12,8 @@ const command = process.argv[2]
 if (command === 'document') write(compileDocument(process.argv[3]))
 else if (command === 'preview') write(preview(JSON.parse(readFileSync(0, 'utf8'))))
 else if (command === 'turn-pictures') write(turnPictures(JSON.parse(readFileSync(0, 'utf8'))))
-else throw new Error('use document <id>, preview or turn-pictures')
+else if (command === 'comic') write(compileComic(JSON.parse(readFileSync(0, 'utf8'))))
+else throw new Error('use document <id>, preview, turn-pictures or comic')
 
 function compileDocument(id) {
   let document
@@ -24,6 +26,16 @@ function compileDocument(id) {
   const parsed = parseScene3DDocument(document)
   if (!parsed || parsed.templateId !== id) throw new Error(`unknown_template:${id}`)
   return parsed
+}
+
+function compileComic(body) {
+  const pair = buildComicPair(body)
+  const exit = parseScene3DDocument(pair.exit)
+  const enter = parseScene3DDocument(pair.enter)
+  if (!exit || !enter || exit.templateId !== pair.exit.templateId || enter.templateId !== pair.enter.templateId) {
+    throw new Error('invalid_world3d_document')
+  }
+  return { exit, enter }
 }
 
 function preview(body) {

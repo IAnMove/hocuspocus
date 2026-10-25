@@ -3523,6 +3523,22 @@
       "title": "Rise off",
       "description": "The camera lifts off the figure into a blank backdrop with soft light from above; the next shot can start on anything."
     },
+    "comic-panel-exit": {
+      "title": "Comic panel exit",
+      "description": "The last frame fills one panel, then the camera pulls out until the whole comic page is in frame."
+    },
+    "comic-panel-enter": {
+      "title": "Comic panel enter",
+      "description": "The camera starts on the whole comic page and flies into the next panel until that frame fills the picture."
+    },
+    "comic-panel-exit-portrait": {
+      "title": "Comic panel exit (portrait)",
+      "description": "A vertical chapter change: the last frame fills one panel, then the camera pulls out to the whole page."
+    },
+    "comic-panel-enter-portrait": {
+      "title": "Comic panel enter (portrait)",
+      "description": "A vertical chapter change: the camera starts on the whole page and flies into the next panel until it fills the frame."
+    },
     "speed-run-toward": {
       "title": "Run toward camera",
       "description": "A low lens creeps in on a figure running on the spot over faint radial speed lines. The template brings no clip: bind a GLB with a run clip (clip: run)."
@@ -4253,5 +4269,22 @@
     "generate": "Generate candidates",
     "generating": "Generating prop candidates…",
     "remove": "Remove"
+  },
+  "comicTransition": {
+    "title": "Comic transition",
+    "help": "Pull out of one panel and into the next. Use the frames of the two chapters so both cuts stay invisible. A cutout on the exit or enter panel will show.",
+    "format": "Format",
+    "landscape": "Landscape",
+    "portrait": "Portrait",
+    "from": "Exit panel",
+    "to": "Enter panel",
+    "panel": "Panel",
+    "image": "Image or video",
+    "at": "At (s)",
+    "export": "Export both clips",
+    "run": "Build transition",
+    "working": "Building…",
+    "done": "Saved",
+    "failed": "The transition could not be built"
   }
 }

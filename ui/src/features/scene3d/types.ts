@@ -10,6 +10,7 @@ import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
 import { ANIME_TEMPLATE_IDS } from './animeTemplateIds'
 import { MOTION_LAB_IDS, type MotionLabId } from './motionlab/types'
 import { TRANSITION_TEMPLATE_IDS } from './transitionTemplateIds'
+import { COMIC_TEMPLATE_IDS } from './comicTemplateIds'
 import { SPEED_TEMPLATE_IDS } from './speedTemplateIds'
 import { TITLE_TEMPLATE_IDS } from './titleTemplateIds'
 import { DIALOGUE_TEMPLATE_IDS } from './dialogueTemplateIds'
@@ -139,6 +140,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...ANIME_TEMPLATE_IDS,
   ...MOTION_LAB_IDS,
   ...TRANSITION_TEMPLATE_IDS,
+  ...COMIC_TEMPLATE_IDS,
   ...SPEED_TEMPLATE_IDS,
   ...TITLE_TEMPLATE_IDS,
   ...DIALOGUE_TEMPLATE_IDS,

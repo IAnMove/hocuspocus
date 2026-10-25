@@ -13,6 +13,7 @@ import { techniqueDocument, TECHNIQUE_TEMPLATES, TECHNIQUE_CATEGORIES } from './
 import { animeTemplateDocument, ANIME_TEMPLATES, ANIME_CATEGORIES } from './animeTemplates'
 import { motionLabTemplateDocument, MOTION_LAB_TEMPLATES, MOTION_LAB_CATEGORIES } from './motionlab/templates'
 import { transitionTemplateDocument, TRANSITION_TEMPLATES, TRANSITION_CATEGORIES } from './transitionTemplates'
+import { comicTemplateDocument, COMIC_TEMPLATES, COMIC_CATEGORIES } from './comicPage'
 import { speedTemplateDocument, SPEED_TEMPLATES, SPEED_CATEGORIES } from './speedTemplates'
 import { titleTemplateDocument, TITLE_TEMPLATES, TITLE_CATEGORIES } from './titleTemplates'
 import { dialogueTemplateDocument, DIALOGUE_TEMPLATES, DIALOGUE_CATEGORIES } from './dialogueTemplates'
@@ -97,6 +98,7 @@ export const TEMPLATE_CATEGORIES: Record<Scene3DTemplateId, Scene3DTemplateCateg
   'drive-city-wide': 'drive',
   'drive-tunnel-wing': 'drive',
   ...TRANSITION_CATEGORIES,
+  ...COMIC_CATEGORIES,
   ...SPEED_CATEGORIES,
   ...TITLE_CATEGORIES,
   ...DIALOGUE_CATEGORIES,
@@ -206,6 +208,7 @@ export const SCENE3D_TEMPLATES: readonly Scene3DTemplate[] = [
   ...ANIME_TEMPLATES,
   ...MOTION_LAB_TEMPLATES,
   ...TRANSITION_TEMPLATES,
+  ...COMIC_TEMPLATES,
   ...SPEED_TEMPLATES,
   ...TITLE_TEMPLATES,
   ...DIALOGUE_TEMPLATES,
@@ -408,7 +411,7 @@ const FAMILY_BUILDERS: ReadonlyArray<(id: string) => Scene3DDocument | null | un
   campaignTemplateDocument, effectsTemplateDocument, speechTemplateDocument, mediaTemplateDocument, cinematicDocument,
   atmosTemplateDocument, techniqueDocument,
   motionLabTemplateDocument,
-  transitionTemplateDocument, speedTemplateDocument, titleTemplateDocument,
+  transitionTemplateDocument, comicTemplateDocument, speedTemplateDocument, titleTemplateDocument,
   dialogueTemplateDocument, reactionTemplateDocument, groupTemplateDocument,
 ]
 

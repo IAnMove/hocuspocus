@@ -1,6 +1,6 @@
 # Video 3D templates for agents
 
-The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 801 cards of `app/shared/world3d_templates.json` plus the 28 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 829 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
+The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 805 cards of `app/shared/world3d_templates.json` plus the 28 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 833 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
 
 Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loader.mjs scripts/export-world3d-catalog.mjs` inside `ui`. `--check` fails when the JSON drifts from the editor. The contract behind every field, filter and warning is [TEMPLATE_LIBRARY_MODEL.md](TEMPLATE_LIBRARY_MODEL.md).
 
@@ -10,13 +10,23 @@ A shot is chosen on axes, never from a flat list. The two shelves: a **signature
 
 | axis | field | values (cards that carry each one) |
 | --- | --- | --- |
-| kind | `kind` | `scene` 362, `camera` 263, `look` 161, `stage` 28, `transition` 11, `title` 4 |
-| intent | `uses` | `figure` 455, `establishing` 283, `talk` 269, `look` 161, `action` 91, `reaction` 81, `dialogue` 74, `plate` 74, `speed` 51, `title` 47, `reveal` 41, `impact` 40, `product` 17, `drive` 17, `music` 15, `transition` 12 |
+| kind | `kind` | `scene` 362, `camera` 263, `look` 161, `stage` 28, `transition` 15, `title` 4 |
+| intent | `uses` | `figure` 455, `establishing` 287, `talk` 269, `look` 161, `action` 91, `reaction` 81, `dialogue` 74, `plate` 78, `speed` 51, `title` 47, `reveal` 41, `impact` 40, `product` 17, `drive` 17, `music` 15, `transition` 16 |
 | place | `place` | 133 ids: a dressing (`citadel`, `chase-street`, `treadmill`, `retro-lab`), an `atmos-*` or `pixel-*` world, a `motion-*` set, a mold (`cocina`, `plaza`) |
 | camera | `shot`, `distance`, `moves` | see the table below |
 | cast | `subjects`, `props`, `screens`, `travel`, `authoredFor` | counts, whether a subject crosses the set, the media the slots were authored with |
 
-Every value is derived from the built document (`ui/src/features/scene3d/templateTraits.ts`) or from the mold; nothing is hand-written per card. `kind` is read like this: `look` for the lighting, colour, lens, genre, viral and atmosphere families; `camera` for a technique of the generic citadel set (`camera-movement`, `framing`, `camera-angles`, `composition`, `editing`, `time-and-motion`, `effects`); `transition` for a cut piece of 3 s or less carried by its effects, or any `transition-*` id; `title` for a `title-*` id, or no subject slot and kinetic texts; `stage` for a `stage-*` card; `scene` for everything else. In `uses`, `speed` means the drive category, a chase, pursuit, hood or wing camera, a treadmill or `drive-*` dressing, a subject that travels while the camera tracks, rides or slides, or a `speed-*` id; `impact` a camera shake or an explosive world effect (`action` keeps it too); `dialogue` two subject slots that are not `far`, not a product, not a chase family and without an impact beat; `reaction` one subject, `close`, with a push, an arc or a still frame that is not a look.
+Every value is derived from the built document (`ui/src/features/scene3d/templateTraits.ts`) or from the mold; nothing is hand-written per card. `kind` is read like this: `look` for the lighting, colour, lens, genre, viral and atmosphere families; `camera` for a technique of the generic citadel set (`camera-movement`, `framing`, `camera-angles`, `composition`, `editing`, `time-and-motion`, `effects`); `transition` for a cut piece of 3 s or less carried by its effects, any `transition-*` id, or a `comic-panel-*` chapter change; `title` for a `title-*` id, or no subject slot and kinetic texts; `stage` for a `stage-*` card; `scene` for everything else. In `uses`, `speed` means the drive category, a chase, pursuit, hood or wing camera, a treadmill or `drive-*` dressing, a subject that travels while the camera tracks, rides or slides, or a `speed-*` id; `impact` a camera shake or an explosive world effect (`action` keeps it too); `dialogue` two subject slots that are not `far`, not a product, not a chase family and without an impact beat; `reaction` one subject, `close`, with a push, an arc or a still frame that is not a look.
+
+## Comic chapter transition
+
+Use this when a video changes chapter and the cut should be invisible. `scene3d.comic.transition` (MCP, Wizard and the Video 3D editor; same `POST /api/v1/world3d/templates/commands`) builds two editable scenes that share one page and one wide camera pose:
+
+- `comic-panel-exit` starts with panel P filling the frame and pulls out to the page. `comic-panel-enter` starts on that same wide frame and flies into panel Q. The portrait pair is `comic-panel-exit-portrait` and `comic-panel-enter-portrait` (authored for 9:16, not the generic portrait adapter).
+- `panels` is four images, or `{video, at}` frames. `from_panel` and `to_panel` (0–3) are the frames of the cut, so both cuts can be invisible. A keyed `cutout` may sit 2.5 cm in front of a panel for parallax; leave it off those two panels or the cut will show.
+- `format` is `landscape` or `portrait`. `export: true` renders both clips when the Video 3D exporter is available. The page stands upright and fills the wide frame; it is not a book on a table.
+
+The panel pictures are unlit and ungraded, so they keep the colours of the source frames. The four catalogue cards use licence-free filler art and are in the template library under Transitions.
 
 ## Search
 
@@ -41,7 +51,7 @@ Real replies (`search_report` in `app/services/world3d_template_catalog.py`, the
 | `órbita` | `pixel-orbit` 94 (its exact Spanish title), `dance-orbit` 40, `vehicle-roof-orbit` 40 |
 | `girar alrededor` | `cine-orbit-360`, `face-reaction-arc`, `reaction-orbit-face`, all 25: a tie |
 | `{"kind": "stage"}` (list, no query) | 28 cards in id order, `stage-aula` first |
-| `{"kind": "transition"}` | 11 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom` and the eight `transition-*` |
+| `{"kind": "transition"}` | 15 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom`, the eight `transition-*`, and the four `comic-panel-*` |
 | `{"place": "cocina"}` | 1 card; `{"travel": true}` 65 cards |
 
 `world3d.scene.apply_query` instantiates a scene only when the top card is a full match and its score is strictly higher than the second. A tie or a partial match returns `needs_choice` with the cards and creates nothing; the reply carries `unknown_words` as well. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.

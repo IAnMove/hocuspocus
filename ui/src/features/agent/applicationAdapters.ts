@@ -780,13 +780,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const body = await response.json() as { status?: string; result?: Record<string, unknown>; detail?: { message?: string } }
       if (!response.ok) throw new Error(body.detail?.message || 'Video 3D template command failed')
       const scene = body.result?.scene as { document?: unknown; sceneId?: string; templateId?: string } | undefined
+      const scenes = Array.isArray(body.result?.scenes) ? body.result.scenes as Array<{ sceneId?: string; templateId?: string }> : []
       if (scene?.document && shouldMountWorld3DScene(action.operation)) {
         const { requestWorld3DDocument } = await import('../scene3d/world3dAgent')
         await navigate('video_3d')
         await requestWorld3DDocument({ document: scene.document, sceneId: scene.sceneId || 'world3d' })
       }
       const message = world3dTemplateMessage(body)
-      return { message, metadata: body as Record<string, unknown>, sceneId: scene?.sceneId, target: { kind: 'video_3d_scene', id: scene?.sceneId || 'world3d', title: scene?.templateId || action.operation } }
+      const opened = scene?.sceneId || scenes[0]?.sceneId
+      return { message, metadata: body as Record<string, unknown>, sceneId: opened, target: { kind: 'video_3d_scene', id: opened || 'world3d', title: scene?.templateId || scenes[0]?.templateId || action.operation } }
     },
   }
   adapters.video2dTemplates = {
