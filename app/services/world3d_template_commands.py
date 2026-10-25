@@ -196,6 +196,8 @@ def _get(data, workspace_dir):
     template_id = data.get("template_id")
     card = require_card(template_id, workspace_dir=workspace_dir, workspace=data["workspace"])
     document = user_template_document(template_id, workspace_dir, data["workspace"]) if card.get("source") == "workspace" else compile_template_document(template_id)
+    from services.cc0_props import bind_document
+    bind_document(document, Path(workspace_dir(data["workspace"])), data["workspace"])
     preview = thumbnail_url(card)
     # A copy: require_card returns the cached catalogue card itself.
     return {"status": "completed", "card": {**card, "preview": preview}, "previewUrl": preview, "document": document, "objects": [

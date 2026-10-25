@@ -773,6 +773,21 @@ class World3DExportService:
             raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
         return self.registry_for(workspace)
 
+    def _bind_library(self, frozen: dict, workspace: str) -> None:
+        """Old documents still name ``/api/v1/library/files/…``. Copy each GLB once and retarget the snapshot."""
+        from services.cc0_props import bind_document
+        snapshot = frozen["effective"]["input"]["snapshot"]
+        changed = set(bind_document(snapshot["document"], Path(self.workspace_dir(workspace)), workspace))
+        if not changed:
+            return
+        by_id = {slot.get("id"): slot for slot in snapshot["document"].get("slots") or [] if isinstance(slot, dict)}
+        refs = snapshot.get("refs") or []
+        for index, ref in enumerate(refs):
+            slot = by_id.get(ref.get("slotId"))
+            if ref.get("slotId") not in changed or not isinstance(slot, dict):
+                continue
+            refs[index] = _ref_from_url(slot, str(slot.get("sourceUrl") or ""), workspace)
+
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))
         uploads_root = Path(self.uploads_dir())
@@ -796,6 +811,7 @@ class World3DExportService:
         try:
             frozen = self.freeze(command)
             workspace = frozen["effective"]["input"]["workspace"]
+            self._bind_library(frozen, workspace)
             self._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], workspace)
             registry = self._registry(workspace)
             previous = registry.command_admission(command["intent_id"])

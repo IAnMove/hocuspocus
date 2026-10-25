@@ -3,15 +3,20 @@
 The GLB bytes are not in git. ``app/resources/cc0_props.json`` names each file,
 its SHA-256 and its real size. The asset library installs them as one optional
 collection, ``cc0-furniture``. A mold keeps its boxes until that collection is
-installed and the set asks for library furniture.
+installed and the set asks for library furniture. Opening or instantiating a
+stage in a workspace copies each GLB to ``cc0/<sha>.glb`` and stores that file's
+URL, so the scene still exports after the pack is removed. Export does the same
+copy for a document that still names ``/api/v1/library/files/``.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import math
+import re
 from datetime import date
 from pathlib import Path
+from urllib.parse import quote
 
 APP_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = APP_ROOT / "resources" / "cc0_props.json"
@@ -179,6 +184,89 @@ def fit_block(model: dict, box: list) -> dict:
 
 def library_url(model: dict) -> str:
     return f"/api/v1/library/files/{model['sha256']}.glb"
+
+
+# The content-addressed name the library route serves: ``<sha256>.glb``.
+_LIBRARY_KEY = re.compile(r"/api/v1/library/files/([0-9a-f]{64}\.[a-z0-9]{1,8})(?:\?|#|$)")
+
+
+def library_key(url: str) -> str | None:
+    """The ``<sha256>.ext`` of a library file URL, or None when ``url`` is not one."""
+    if not isinstance(url, str):
+        return None
+    found = _LIBRARY_KEY.search(url.strip())
+    return found.group(1) if found else None
+
+
+def workspace_file_url(relative: str, workspace: str) -> str:
+    """The same workspace file URL ``scene3d.item.add`` stores for a copied GLB."""
+    return f"/api/v1/file/{quote(relative, safe='/')}?workspace={quote(workspace, safe='')}"
+
+
+def _library_file(key: str) -> Path | None:
+    """The installed library file for ``key``, or None when that collection is absent."""
+    from services.asset_library import asset_library
+    from services.example_assets import ExampleUnavailable
+    name = asset_library.file_for(key)
+    if not name:
+        return None
+    try:
+        return asset_library.resolve(name)
+    except (ExampleUnavailable, KeyError, OSError):
+        return None
+
+
+def ensure_workspace_copy(key: str, root: Path) -> str | None:
+    """Copy ``cc0/<key>`` once into ``root``. None when the library file is not installed."""
+    source = _library_file(key)
+    if source is None:
+        return None
+    relative = f"cc0/{key}"
+    target = Path(root) / relative
+    try:
+        size = source.stat().st_size
+        if target.is_file() and target.stat().st_size == size:
+            return relative
+        data = source.read_bytes()
+    except OSError:
+        return None
+    if not data or len(data) != size:
+        return None
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temporary = target.with_name(target.name + ".part")
+    temporary.write_bytes(data)
+    temporary.replace(target)
+    return relative
+
+
+def bind_library_url(url: str, root: Path, workspace: str) -> str:
+    """A library file URL rewritten to the workspace copy. Anything else, including a missing file, stays."""
+    key = library_key(url)
+    if key is None:
+        return url
+    relative = ensure_workspace_copy(key, Path(root))
+    if relative is None:
+        return url
+    return workspace_file_url(relative, workspace)
+
+
+def bind_document(document: dict, root: Path, workspace: str) -> list:
+    """Point dressed furniture at the workspace copy. Returns the slot ids that changed."""
+    changed = []
+    if not isinstance(document, dict):
+        return changed
+    for slot in document.get("slots") or []:
+        if not isinstance(slot, dict):
+            continue
+        url = str(slot.get("sourceUrl") or "").strip()
+        if library_key(url) is None:
+            continue
+        bound = bind_library_url(url, root, workspace)
+        if bound == url:
+            continue
+        slot["sourceUrl"] = bound
+        changed.append(slot.get("id"))
+    return changed
 
 
 def choice_of(value) -> str:
@@ -379,7 +467,8 @@ def collection_fragment(manifest: dict | None = None) -> tuple[dict, dict]:
 
 __all__ = [
     "MANIFEST_PATH", "NOT_INSTALLED", "PACK", "PropManifestError", "choice_of", "collection_fragment",
-    "copy_into", "dress_room", "fit_block", "furniture_objects", "library_item", "library_url",
+    "bind_document", "bind_library_url", "copy_into", "dress_room", "ensure_workspace_copy",
+    "fit_block", "furniture_objects", "library_item", "library_key", "library_url",
     "list_library", "load_manifest", "model_for", "models_by_id", "pack_ready", "placements",
-    "stage_cast", "validate_manifest",
+    "stage_cast", "validate_manifest", "workspace_file_url",
 ]
