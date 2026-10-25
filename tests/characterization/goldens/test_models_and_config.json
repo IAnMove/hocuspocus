@@ -3605,6 +3605,19 @@
         {
           "id": "hunyuan3d",
           "label": "Hunyuan3D",
+          "licenceRecords": [
+            {
+              "commercial": true,
+              "id": "hunyuan3d",
+              "note": "Tencent Hunyuan 3D 2.0 Community License. Hunyuan3D 2.1 and Hunyuan3D-2mini use the same territory sentence. Commercial use is allowed below 1 million monthly active users.",
+              "territoryExcluded": [
+                "EU",
+                "UK",
+                "KR"
+              ],
+              "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE"
+            }
+          ],
           "order": 350
         }
       ],
@@ -3743,6 +3756,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mini-turbo",
           "name": "Hunyuan3D 2 Mini Turbo",
           "nsfw_only": false,
@@ -3762,6 +3776,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mini-fast",
           "name": "Hunyuan3D 2 Mini Fast",
           "nsfw_only": false,
@@ -3781,6 +3796,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mini",
           "name": "Hunyuan3D 2 Mini",
           "nsfw_only": false,
@@ -3800,6 +3816,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2-turbo",
           "name": "Hunyuan3D 2 Turbo",
           "nsfw_only": false,
@@ -3819,6 +3836,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2-fast",
           "name": "Hunyuan3D 2 Fast",
           "nsfw_only": false,
@@ -3838,6 +3856,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2",
           "name": "Hunyuan3D 2",
           "nsfw_only": false,
@@ -3857,6 +3876,7 @@
           "is_downloaded": false,
           "is_i2v": true,
           "is_t2v": false,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mv-turbo",
           "name": "Hunyuan3D 2 Multi-view Turbo",
           "nsfw_only": false,
@@ -3876,6 +3896,7 @@
           "is_downloaded": false,
           "is_i2v": true,
           "is_t2v": false,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mv-fast",
           "name": "Hunyuan3D 2 Multi-view Fast",
           "nsfw_only": false,
@@ -3895,6 +3916,7 @@
           "is_downloaded": false,
           "is_i2v": true,
           "is_t2v": false,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mv",
           "name": "Hunyuan3D 2 Multi-view",
           "nsfw_only": false,
@@ -3914,6 +3936,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2.1",
           "name": "Hunyuan3D 2.1 + PBR",
           "nsfw_only": false,
@@ -4017,6 +4040,19 @@
           },
           "description": "Hunyuan3D",
           "id": "hunyuan3d",
+          "licenceRecords": [
+            {
+              "commercial": true,
+              "id": "hunyuan3d",
+              "note": "Tencent Hunyuan 3D 2.0 Community License. Hunyuan3D 2.1 and Hunyuan3D-2mini use the same territory sentence. Commercial use is allowed below 1 million monthly active users.",
+              "territoryExcluded": [
+                "EU",
+                "UK",
+                "KR"
+              ],
+              "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE"
+            }
+          ],
           "name": "Hunyuan3D"
         }
       ],
@@ -4043,6 +4079,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mini-turbo",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Mini Turbo"
         },
         {
@@ -4051,6 +4088,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mini-fast",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Mini Fast"
         },
         {
@@ -4059,6 +4097,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mini",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Mini"
         },
         {
@@ -4067,6 +4106,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2-turbo",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Turbo"
         },
         {
@@ -4075,6 +4115,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2-fast",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Fast"
         },
         {
@@ -4083,6 +4124,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2"
         },
         {
@@ -4091,6 +4133,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mv-turbo",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Multi-view Turbo"
         },
         {
@@ -4099,6 +4142,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mv-fast",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Multi-view Fast"
         },
         {
@@ -4107,6 +4151,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mv",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Multi-view"
         },
         {
@@ -4115,6 +4160,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2.1",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2.1 + PBR"
         },
         {
