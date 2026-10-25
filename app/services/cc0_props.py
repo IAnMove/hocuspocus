@@ -40,6 +40,8 @@ _REQUIRED_IDS = frozenset({
     "kitchen-counter", "stove", "fridge", "lamp", "plant", "tv", "bench", "cabinet", "rug",
 })
 _AXES = ("x", "y", "z")
+# Furniture shares ``scene3d.cast`` with the people. Stay at production_scene3d.CAST_MEMBERS.
+STAGE_CAST_LIMIT = 16
 
 
 class PropManifestError(ValueError):
@@ -345,6 +347,18 @@ def dress_room(document: dict, *, ready=None, models: dict | None = None, limit:
     return document
 
 
+def cast_load(cast) -> int:
+    """How many models a production cast already occupies. Groups count by member."""
+    if not isinstance(cast, dict):
+        return 0
+    total = 0
+    for value in cast.values():
+        entry = value if isinstance(value, dict) else {}
+        sources = entry.get("sources")
+        total += len(sources) if isinstance(sources, list) and sources else 1
+    return total
+
+
 def stage_cast(config: dict, *, ready=None, models: dict | None = None) -> dict:
     """The same replacement, as cast entries the production compiler already binds."""
     background = config.get("background") if isinstance(config, dict) else None
@@ -357,11 +371,14 @@ def stage_cast(config: dict, *, ready=None, models: dict | None = None) -> dict:
     if not use:
         return config
     table = models if models is not None else models_by_id()
-    placed = placements(room["mold"], models=table, limit=24, taken=2)
+    cast = config.setdefault("cast", {})
+    if not isinstance(cast, dict):
+        cast = {}
+        config["cast"] = cast
+    placed = placements(room["mold"], models=table, limit=STAGE_CAST_LIMIT, taken=cast_load(cast))
     if not placed:
         return config
     room["libraryBlocks"] = [row["block_id"] for row in placed]
-    cast = config.setdefault("cast", {})
     for row in placed:
         cast.setdefault(f"furniture-{row['block_id']}", {
             "source": library_url(row["model"]), "position": row["position"], "rotationY": row["rotationY"],
@@ -466,9 +483,9 @@ def collection_fragment(manifest: dict | None = None) -> tuple[dict, dict]:
 
 
 __all__ = [
-    "MANIFEST_PATH", "NOT_INSTALLED", "PACK", "PropManifestError", "choice_of", "collection_fragment",
-    "bind_document", "bind_library_url", "copy_into", "dress_room", "ensure_workspace_copy",
-    "fit_block", "furniture_objects", "library_item", "library_key", "library_url",
-    "list_library", "load_manifest", "model_for", "models_by_id", "pack_ready", "placements",
-    "stage_cast", "validate_manifest", "workspace_file_url",
+    "MANIFEST_PATH", "NOT_INSTALLED", "PACK", "PropManifestError", "STAGE_CAST_LIMIT", "cast_load",
+    "choice_of", "collection_fragment", "bind_document", "bind_library_url", "copy_into", "dress_room",
+    "ensure_workspace_copy", "fit_block", "furniture_objects", "library_item", "library_key",
+    "library_url", "list_library", "load_manifest", "model_for", "models_by_id", "pack_ready",
+    "placements", "stage_cast", "validate_manifest", "workspace_file_url",
 ]
