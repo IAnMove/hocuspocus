@@ -40,7 +40,7 @@ SHARE = {"arm": 0.06, "leg": 0.085}     # reach of a limb, as a share of the fig
 BLEND = 0.04             # half the length of a soft joint, as a share of the figure's height
 MESH = 8                 # pixels between the vertices of a limb's mesh
 ROOT = {"arm": 0.3, "leg": 0.15}  # how far down a limb its root joint still pulls, as a share of its first bone
-PELVIS = (0.75, 0.25)     # trousers: the hips stay with the torso down to this share of the thigh, fading out over this much more
+PELVIS = (0.55, 0.3)     # trousers: the hips stay with the torso down to this share of the thigh, then fade into the legs over this much more
 LAYER_NAMES = ("bottomwear", "legwear", "topwear", "neck", "neckwear", "handwear", "footwear")   # back to front
 HAND, FOOT = 0.45, 0.6   # a hand reaches this far past the wrist, a foot past the ankle (shares of the bone)
 MIN_BONE = 0.03          # a bone that is shorter than this share of the figure in the mould's picture does not scale or turn
@@ -444,6 +444,20 @@ def _strip(size: tuple[int, int], a: np.ndarray, b: np.ndarray, width: float, co
     return canvas
 
 
+def steady_joints(joints: dict[str, np.ndarray], ref: dict[str, np.ndarray], pairs: dict[str, dict[str, str]], mirror: bool, k: float, direction: str) -> dict[str, np.ndarray]:
+    """The pose model puts the two hips (and shoulders) of a profile apart by a guess: set them as the mould has them, so the legs swing
+    about the same pelvis. From the front or the back the model sees them truly and its points are kept."""
+    if direction in FRONT:
+        return joints
+    steady = dict(joints)
+    for part, group in (("hip", "legs"), ("shoulder", "arms")):
+        mid = (joints[f"r_{part}"] + joints[f"l_{part}"]) / 2
+        for side in SIDES:
+            offset = ref[f"{side}_{part}"][:2] - (ref["pelvis"][:2] if part == "hip" else ref["neck"][:2])
+            steady[f"{pairs[group][side]}_{part}"] = mid + k * np.array([-offset[0] if mirror else offset[0], offset[1]])
+    return steady
+
+
 def build(rgba: np.ndarray, direction: str = "side", frames: int = 12, layers: dict[str, np.ndarray] | None = None,
           joints: dict[str, np.ndarray] | None = None) -> tuple[list[np.ndarray], dict[str, Any]]:
     """The frames (RGBA, ``UP`` times the drawing's size) of one walk cycle of a drawing of the character as seen from ``direction``."""
@@ -453,9 +467,10 @@ def build(rgba: np.ndarray, direction: str = "side", frames: int = 12, layers: d
     ref = mould(direction, 0.0)
     mirror = _faces_left(joints, direction)
     pairs = pair_sides(joints, {name: np.array([-p[0] if mirror else p[0], p[1], p[2]]) for name, p in ref.items()})
+    k = float(np.linalg.norm(joints["neck"] - _hipmid(joints)) / np.linalg.norm(ref["neck"][:2] - ref["pelvis"][:2]))
+    joints = steady_joints(joints, ref, pairs, mirror, k, direction)
     parts = cut_groups(rgba, joints, layers)
     blend = BLEND * parts["figure"]
-    k = float(np.linalg.norm(joints["neck"] - _hipmid(joints)) / np.linalg.norm(ref["neck"][:2] - ref["pelvis"][:2]))
     meshes, feet, covered, shin_width, whole = {}, {}, {}, {}, {}
     for side in SIDES:
         for kind in ("arm", "leg"):
@@ -480,19 +495,22 @@ def build(rgba: np.ndarray, direction: str = "side", frames: int = 12, layers: d
         shin = float(np.linalg.norm(joints[f"{side}_ankle"] - joints[f"{side}_knee"]))
         covered[side] = int((mesh["along"] < joint - blend).sum()) < 15
         shin_width[side] = max(8.0, float(((mesh["along"] > joint) & (mesh["along"] < joint + shin)).sum()) * MESH * MESH / max(shin, 1.0))
-    pelvis = np.zeros_like(parts["torso"])   # the trousers' hips: the top of both legs is one block that stays with the torso, hiding where the thighs start
+    pelvis, pelvis_fade = np.zeros_like(parts["torso"]), np.zeros_like(parts["torso"])   # the trousers' hips: the top of both legs is one block that stays with the torso, hiding where the thighs start
+    everywhere = np.ones(pelvis.shape[:2], bool)
     for side in SIDES:
         if covered[side]:
             continue
         leg = whole[side]
         ys, xs = np.nonzero(leg[..., 3] > 0)
         chain = [joints[f"{side}_{part}"] for part in ("hip", "knee", "ankle")]
-        reach = PELVIS[0] * float(np.linalg.norm(chain[1] - chain[0]))
-        fade = PELVIS[1] * float(np.linalg.norm(chain[1] - chain[0]))
+        thigh = float(np.linalg.norm(chain[1] - chain[0]))
         along = _chain(np.column_stack([xs, ys]).astype(float), chain, push=1.0)[1]
-        piece = leg.copy()
-        piece[ys, xs, 3] = (leg[ys, xs, 3] * (1 - _smooth((along - (reach - fade)) / fade))).astype(np.uint8)
-        _paint(pelvis, piece, np.ones(pelvis.shape[:2], bool))
+        solid_part, fade_part = leg.copy(), leg.copy()
+        edge = (PELVIS[0] - PELVIS[1]) * thigh
+        solid_part[ys, xs, 3] = (leg[ys, xs, 3] * (along <= edge)).astype(np.uint8)
+        fade_part[ys, xs, 3] = (leg[ys, xs, 3] * (1 - _smooth((along - edge) / (PELVIS[1] * thigh))) * (along > edge)).astype(np.uint8)
+        _paint(pelvis, solid_part, everywhere)
+        _paint(pelvis_fade, fade_part, everywhere)
     ground = float(np.nonzero(rgba[..., 3] > 40)[0].max())
     frames_out, info = [], {"feet": [], "ground": ground, "k": k, "mirror": mirror, "pairs": pairs, "covered": covered}
     for index in range(frames):
@@ -533,8 +551,10 @@ def build(rgba: np.ndarray, direction: str = "side", frames: int = 12, layers: d
                 canvas = _over(canvas, cv2.warpAffine(strip, shift, (width * UP, height * UP)) * skirt_span)
             if f"foot_{side}" in drawn:
                 canvas = _over(canvas, drawn[f"foot_{side}"])
-        if pelvis[..., 3].any():
-            canvas = _over(canvas, cv2.warpAffine(_warp(pelvis, *maps["torso"], size), shift, (width * UP, height * UP)))
+        if pelvis[..., 3].any():   # the block's soft lower edge shows only over the legs, not as a smudge on the background
+            reach = cv2.dilate(np.maximum(drawn["leg_r"][..., 3], drawn["leg_l"][..., 3]), np.ones((9, 9), np.uint8))[..., None]
+            for block, keep in ((pelvis_fade, reach), (pelvis, 1.0)):
+                canvas = _over(canvas, cv2.warpAffine(_warp(block, *maps["torso"], size), shift, (width * UP, height * UP)) * keep)
         canvas = _over(_over(canvas, drawn["torso"]), drawn["head"])
         for depth, side in arms:
             if depth <= torso_depth:
