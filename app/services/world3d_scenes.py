@@ -63,6 +63,8 @@ class World3DSceneError(ValueError):
 def instantiate_template(workspace: str, template_id: str, workspace_dir) -> dict:
     card = require_card(template_id, workspace_dir=workspace_dir, workspace=workspace)
     document = user_template_document(template_id, workspace_dir, workspace) if card.get("source") == "workspace" else compile_template_document(template_id)
+    from services.cc0_props import bind_document
+    bind_document(document, Path(workspace_dir(workspace)), workspace)
     scene_id = "w3d-" + uuid.uuid4().hex[:12]
     record = {"revision": 1, "templateId": document.get("templateId") or template_id, "document": document, "warnings": []}
     _write(workspace, scene_id, record, workspace_dir)

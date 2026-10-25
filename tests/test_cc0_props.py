@@ -212,6 +212,153 @@ def test_the_merged_catalog_validates_and_is_not_installed():
     assert "archive" not in asset_library.collections[PACK]
 
 
+def _library_bytes(tmp_path, monkeypatch):
+    """One installed library GLB, addressed by its real SHA-256."""
+    from services.asset_library import asset_library
+    body = _tiny_glb()
+    digest = hashlib.sha256(body).hexdigest()
+    key = digest + ".glb"
+    source = tmp_path / "library" / key
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_bytes(body)
+    library = asset_library
+    real_for, real_resolve = library.file_for, library.resolve
+
+    def file_for(asked):
+        return "cc0-test" if asked == key else real_for(asked)
+
+    def resolve(name):
+        return source if name == "cc0-test" else real_resolve(name)
+
+    monkeypatch.setattr(library, "file_for", file_for)
+    monkeypatch.setattr(library, "resolve", resolve)
+    return body, digest, key
+
+
+def _furniture_table(digest):
+    table = {}
+    for ident in ("sofa", "coffee", "tv", "chair"):
+        table[ident] = _model(ident, ident)
+        table[ident]["sha256"] = digest
+        table[ident]["bytes"] = 1
+        table[ident]["file"] = "cc0-furniture/chair.glb"
+    return table
+
+
+def _export_service(tmp_path):
+    from services.task_manager import TaskRegistry
+    from services.world3d_export import World3DExportService
+
+    def workspace_dir(name):
+        path = tmp_path / name
+        path.mkdir(parents=True, exist_ok=True)
+        return str(path)
+
+    def registry_for(name):
+        return TaskRegistry(workspace_dir(name), interrupt_stale=False)
+
+    service = World3DExportService(
+        workspace_dir=workspace_dir, registry_for=registry_for, renderer=lambda *args: [],
+        uploads_dir=lambda: str(tmp_path / "uploads"),
+    )
+    return service, workspace_dir
+
+
+def _export_command(document, intent_id, workspace="studio"):
+    from services.world3d_export import OPERATION
+    return {"version": 1, "operation": OPERATION, "intent_id": intent_id,
+            "input": {"workspace": workspace, "document": document, "refs": []}}
+
+
+def test_an_instantiated_stage_copies_furniture_and_exports(tmp_path, monkeypatch):
+    """A dressed stage-salon stores workspace GLBs, once, and the export check finds them."""
+    from services import world3d_scenes
+    from services.task_manager import forget_task_registry
+    from services.world3d_template_commands import execute_command
+    body, digest, key = _library_bytes(tmp_path, monkeypatch)
+    monkeypatch.setattr("services.cc0_props.pack_ready", lambda: True)
+    monkeypatch.setattr("services.cc0_props.models_by_id", lambda manifest=None: _furniture_table(digest))
+    world3d_scenes._COMPILED.pop("stage-salon", None)
+    service, workspace_dir = _export_service(tmp_path)
+    try:
+        scene = world3d_scenes.instantiate_template("studio", "stage-salon", workspace_dir)
+        document = scene["document"]
+        furniture = [slot for slot in document["slots"] if str(slot["id"]).startswith("furniture-")]
+        url = f"/api/v1/file/cc0/{key}?workspace=studio"
+        assert furniture and {slot["sourceUrl"] for slot in furniture} == {url}
+        copied = tmp_path / "studio" / "cc0" / key
+        assert copied.read_bytes() == body
+        stamped = copied.stat().st_mtime_ns
+        again = world3d_scenes.instantiate_template("studio", "stage-salon", workspace_dir)
+        assert again["document"]["slots"][-1]["sourceUrl"] == url
+        assert copied.stat().st_mtime_ns == stamped and list((tmp_path / "studio" / "cc0").iterdir()) == [copied]
+        cached = world3d_scenes._COMPILED["stage-salon"]["slots"]
+        assert any(str(slot.get("sourceUrl", "")).startswith("/api/v1/library/files/") for slot in cached)
+        opened = execute_command("world3d.templates.get", {"version": 1, "input": {"workspace": "studio", "template_id": "stage-salon"}}, workspace_dir)
+        opened_slots = [slot for slot in opened["result"]["document"]["slots"] if str(slot["id"]).startswith("furniture-")]
+        assert opened_slots and {slot["sourceUrl"] for slot in opened_slots} == {url}
+        receipt = service.submit(_export_command(document, "dressed-stage"))
+        assert receipt["replayed"] is False
+        admitted = service._registry("studio").command_admission("dressed-stage")
+        snapshot = admitted["effective"]["input"]["snapshot"]
+        assert all(not str(ref.get("url", "")).startswith("/api/v1/library/files/") for ref in snapshot["refs"])
+        assert any(ref.get("path") == f"cc0/{key}" for ref in snapshot["refs"])
+        forget_task_registry(service._registry("studio").workspace_dir)
+    finally:
+        world3d_scenes._COMPILED.pop("stage-salon", None)
+
+
+def test_an_old_library_furniture_url_exports(tmp_path, monkeypatch):
+    """A document saved before the copy still exports, and a missing library file still does not."""
+    from services.task_manager import forget_task_registry
+    body, digest, key = _library_bytes(tmp_path, monkeypatch)
+    service, _workspace_dir = _export_service(tmp_path)
+    document = {
+        "version": 1, "units": "meters", "up": "y", "width": 64, "height": 64, "fps": 30, "duration": 2 / 30,
+        "templateId": "stage-salon",
+        "camera": {"family": "establishment", "eye": [0, 1.6, 4.2], "look": [0, 1, 0], "fov": 50},
+        "light": {"kind": "directional", "direction": [-0.35, -1, -0.25], "intensity": 1.15, "color": "#fff4e5"},
+        "slots": [
+            {"id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0, "scale": 1,
+             "sourceUrl": "", "media": "model3d", "clip": None},
+            {"id": "furniture-sofa", "slot": "prop", "media": "model3d", "sourceUrl": f"/api/v1/library/files/{key}",
+             "position": [1, 0, 1], "rotationY": 0, "scale": 1, "clip": None, "grounded": True},
+        ],
+    }
+    receipt = service.submit(_export_command(document, "old-library"))
+    assert receipt["replayed"] is False
+    copied = Path(service.workspace_dir("studio")) / "cc0" / key
+    assert copied.read_bytes() == body
+    stamped = copied.stat().st_mtime_ns
+    service.submit(_export_command(document, "old-library-again"))
+    assert copied.stat().st_mtime_ns == stamped
+    admitted = service._registry("studio").command_admission("old-library")
+    slot = next(item for item in admitted["effective"]["input"]["snapshot"]["document"]["slots"] if item["id"] == "furniture-sofa")
+    assert slot["sourceUrl"] == f"/api/v1/file/cc0/{key}?workspace=studio"
+    missing = json.loads(json.dumps(document))
+    missing["slots"][1]["sourceUrl"] = "/api/v1/library/files/" + "ab" * 32 + ".glb"
+    with pytest.raises(HTTPException) as error:
+        service.submit(_export_command(missing, "missing-library"))
+    assert error.value.status_code == 409 and error.value.detail["code"] == "missing_ref"
+    forget_task_registry(service._registry("studio").workspace_dir)
+
+
+def test_a_production_stage_copies_furniture_into_the_workspace(tmp_path, monkeypatch):
+    from services.production_scene3d import resolve_media
+    _body, digest, key = _library_bytes(tmp_path, monkeypatch)
+    monkeypatch.setattr("services.cc0_props.pack_ready", lambda: True)
+    monkeypatch.setattr("services.cc0_props.models_by_id", lambda manifest=None: _furniture_table(digest))
+    resolved = resolve_media(
+        {"template": "stage-salon", "cast": {"subject_1": "/api/v1/file/hero.glb?workspace=studio"}},
+        stills={}, root=tmp_path, workspace="studio",
+    )
+    furniture = {name: entry for name, entry in resolved["cast"].items() if name.startswith("furniture-")}
+    assert furniture
+    assert {entry["source"] for entry in furniture.values()} == {f"/api/v1/file/cc0/{key}?workspace=studio"}
+    assert (tmp_path / "cc0" / key).is_file()
+    assert resolved["cast"]["subject_1"]["source"] == "/api/v1/file/hero.glb?workspace=studio"
+
+
 def test_furniture_field_is_library_or_box():
     from services.production_rooms import check_room
     assert check_room("salon", {"kind": "room", "mold": "salon", "furniture": "library"}) is None
