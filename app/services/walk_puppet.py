@@ -33,6 +33,7 @@ SIDES = "rl"
 POINTS = {"nose": 0, "neck": 1, "r_shoulder": 2, "r_elbow": 3, "r_wrist": 4, "l_shoulder": 5, "l_elbow": 6, "l_wrist": 7,
           "r_hip": 8, "r_knee": 9, "r_ankle": 10, "l_hip": 11, "l_knee": 12, "l_ankle": 13}
 MIN_SCORE = 0.3
+FIT_PHASES = 48         # moments of the cycle tried when looking for the one a drawing shows
 MOULD = 1000            # the mould is projected at this size; only its ratios and displacements are used
 UP = 2                  # frames are drawn this many times larger and shrunk again: clean edges
 OVERLAP = 3             # pixels each piece reaches into its neighbours, so a turned piece leaves no crack
@@ -89,26 +90,38 @@ def _faces_left(joints: dict[str, np.ndarray], direction: str) -> bool:
     return direction not in FRONT and joints["nose"][0] < joints["neck"][0]
 
 
-def _normal(points: dict[str, np.ndarray], names: tuple[str, ...], origin: np.ndarray, size: float) -> np.ndarray:
-    return np.array([(points[name][:2] - origin) / size for name in names]).ravel()
+def fit_reference(drawn: dict[str, np.ndarray], direction: str, mirror: bool) -> tuple[float, dict[str, dict[str, str]]]:
+    """The moment of the walk the drawing shows, and which drawn limb is the mould's right one.
 
-
-def pair_sides(drawn: dict[str, np.ndarray], ref: dict[str, np.ndarray]) -> dict[str, dict[str, str]]:
-    """Which drawn limb is the mould's right one, for the legs and for the arms. The pose model calls a limb right or left by its
-    look, which in profile is a guess: the pairing is the one that puts the ankles (and wrists) nearest where the mould has them."""
-    d_size = float(np.linalg.norm(drawn["neck"] - _hipmid(drawn)))
-    m_size = float(np.linalg.norm(ref["neck"][:2] - ref["pelvis"][:2]))
-    pairs: dict[str, dict[str, str]] = {}
-    for group, part in (("legs", "ankle"), ("arms", "wrist")):
-        names = tuple(f"{side}_{part}" for side in SIDES)
-        want = _normal(ref, names, ref["neck"][:2], m_size)
-        costs = {}
-        for swap in (False, True):
-            order = names[::-1] if swap else names
-            costs[swap] = float(np.linalg.norm(_normal(drawn, order, drawn["neck"], d_size) - want))
-        swap = costs[True] < costs[False]
-        pairs[group] = {"r": "l" if swap else "r", "l": "r" if swap else "l"}
-    return pairs
+    A drawing is a contact pose of a walk sheet, a character standing, an A-pose: its joints lie where the mould's do at one phase of the
+    cycle. Every phase (and every way to pair the limbs: the pose model calls a limb right or left by its look, which in profile is a
+    guess) is tried; the one whose joints, taken from the neck and in units of the spine, lie nearest the drawing's wins. The cycle then
+    starts at that phase, so the first frame is the drawing itself."""
+    size = float(np.linalg.norm(drawn["neck"] - _hipmid(drawn)))
+    names = {"legs": ("hip", "knee", "ankle"), "arms": ("shoulder", "elbow", "wrist")}
+    best = (np.inf, 0.0, {"legs": {"r": "r", "l": "l"}, "arms": {"r": "r", "l": "l"}})
+    for step in range(FIT_PHASES):
+        phase = step / FIT_PHASES
+        moulded = mould(direction, phase)
+        unit = float(np.linalg.norm(moulded["neck"][:2] - moulded["pelvis"][:2]))
+        costs: dict[str, dict[bool, float]] = {}
+        for group, parts in names.items():
+            costs[group] = {}
+            for swap in (False, True):
+                total = 0.0
+                for side in SIDES:
+                    other = ("l" if side == "r" else "r") if swap else side
+                    for part in parts:
+                        x, y = moulded[f"{side}_{part}"][:2] - moulded["neck"][:2]
+                        wanted = np.array([-x if mirror else x, y]) / unit
+                        total += float(np.sum((wanted - (drawn[f"{other}_{part}"] - drawn["neck"]) / size) ** 2))
+                costs[group][swap] = total
+        cost = min(costs["legs"].values()) + min(costs["arms"].values())
+        if cost < best[0]:
+            legs_swap, arms_swap = min(costs["legs"], key=costs["legs"].get), min(costs["arms"], key=costs["arms"].get)
+            best = (cost, phase, {"legs": {"r": "l" if legs_swap else "r", "l": "r" if legs_swap else "l"},
+                                  "arms": {"r": "l" if arms_swap else "r", "l": "r" if arms_swap else "l"}})
+    return best[1], best[2]
 
 
 def _chain(points: np.ndarray, chain: list[np.ndarray], push: float = 0.0) -> tuple[np.ndarray, np.ndarray]:
@@ -164,14 +177,14 @@ def _components(mask: np.ndarray, want: int) -> list[np.ndarray]:
     count, parts = cv2.connectedComponents(mask.astype(np.uint8), connectivity=8)
     found = sorted((parts == i for i in range(1, count)), key=lambda part: -int(part.sum()))
     found = [part for part in found if int(part.sum()) >= 300]
-    if len(found) >= want or not found:
+    if not found or (len(found) >= want and int(found[want - 1].sum()) >= 0.25 * int(found[0].sum())):
         return found[:want]
     whole = found[0].astype(np.uint8)
     for radius in range(1, 60):
         core = cv2.erode(whole, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2 * radius + 1, 2 * radius + 1)))
         count, seeds = cv2.connectedComponents(core, connectivity=8)
-        if count - 1 >= want:
-            sizes = sorted(range(1, count), key=lambda i: -int((seeds == i).sum()))[:want]
+        sizes = sorted(range(1, count), key=lambda i: -int((seeds == i).sum()))[:want]
+        if len(sizes) == want and int((seeds == sizes[-1]).sum()) >= 0.35 * int((seeds == sizes[0]).sum()):   # two limbs, not a limb and a speck
             markers = np.zeros(mask.shape, np.int32)
             for number, i in enumerate(sizes, 1):
                 markers[seeds == i] = number
@@ -258,7 +271,18 @@ def cut_groups(rgba: np.ndarray, joints: dict[str, np.ndarray], layers: dict[str
             else:
                 sides = by_limb(mask, kind)
             for side, part in sides.items():
-                _paint(groups[f"{group}_{side}"], layer, part)
+                target = group
+                if name == "footwear" and part.any() and np.nonzero(part)[0].min() < joints[f"{side}_ankle"][1] - 0.12 * figure:
+                    target = "leg"   # the layer holds the whole leg, trousers and boot: the foot is cut off below
+                _paint(groups[f"{target}_{side}"], layer, part)
+    for side in SIDES:   # a leg with no boot of its own: what lies past the ankle is the foot
+        leg = groups[f"leg_{side}"]
+        if int((groups[f"foot_{side}"][..., 3] > 0).sum()) < 40 and int((leg[..., 3] > 0).sum()) > 40:
+            ys, xs = np.nonzero(leg[..., 3] > 0)
+            chain = chains[side]["leg"]
+            beyond = _chain(np.column_stack([xs, ys]).astype(float), chain, push=1.0)[1] > float(np.linalg.norm(chain[1] - chain[0]) + np.linalg.norm(chain[2] - chain[1]))
+            groups[f"foot_{side}"][ys[beyond], xs[beyond]] = leg[ys[beyond], xs[beyond]]
+            leg[ys[beyond], xs[beyond], 3] = 0
     # what no layer holds, and every pixel when there are no layers: by the bones
     rest = solid & ~head_zone & ~covered
     ys, xs = np.nonzero(rest)
@@ -374,7 +398,7 @@ def _bone_matrix(v0: np.ndarray, m0: np.ndarray, m1: np.ndarray) -> np.ndarray:
 
 
 def pose_at(joints: dict[str, np.ndarray], feet: dict[str, np.ndarray], pairs: dict[str, dict[str, str]], ref: dict[str, np.ndarray],
-            now: dict[str, np.ndarray], mirror: bool, k: float) -> dict[str, Any]:
+            now: dict[str, np.ndarray], mirror: bool, k: float, flat_feet: bool = False) -> dict[str, Any]:
     """Where every joint of the drawing goes at one phase, and the map of each piece (``(matrix, anchor in the drawing, anchor now)``)."""
     def m(points: dict[str, np.ndarray], name: str) -> np.ndarray:
         x, y = points[name][:2]
@@ -413,7 +437,7 @@ def pose_at(joints: dict[str, np.ndarray], feet: dict[str, np.ndarray], pairs: d
             if group == "leg":
                 toe = f"{side}_toe"
                 foot0 = feet[drawn_side] - joints[names[2]]
-                matrix = _bone_matrix(foot0, bone(ref, moulds[2], toe), bone(now, moulds[2], toe))
+                matrix = np.eye(2) if flat_feet else _bone_matrix(foot0, bone(ref, moulds[2], toe), bone(now, moulds[2], toe))   # seen from the front a foot points at the viewer
                 out["maps"][f"{drawn_side}_foot"] = (matrix, joints[names[2]], anchor)
                 out["depth"][f"{drawn_side}_foot"] = out["depth"][f"{drawn_side}_shin"]
     return out
@@ -464,9 +488,9 @@ def build(rgba: np.ndarray, direction: str = "side", frames: int = 12, layers: d
     height, width = rgba.shape[:2]
     size = (width, height)
     joints = joints or find_joints(rgba)
-    ref = mould(direction, 0.0)
     mirror = _faces_left(joints, direction)
-    pairs = pair_sides(joints, {name: np.array([-p[0] if mirror else p[0], p[1], p[2]]) for name, p in ref.items()})
+    start, pairs = fit_reference(joints, direction, mirror)
+    ref = mould(direction, start)
     k = float(np.linalg.norm(joints["neck"] - _hipmid(joints)) / np.linalg.norm(ref["neck"][:2] - ref["pelvis"][:2]))
     joints = steady_joints(joints, ref, pairs, mirror, k, direction)
     parts = cut_groups(rgba, joints, layers)
@@ -512,9 +536,9 @@ def build(rgba: np.ndarray, direction: str = "side", frames: int = 12, layers: d
         _paint(pelvis, solid_part, everywhere)
         _paint(pelvis_fade, fade_part, everywhere)
     ground = float(np.nonzero(rgba[..., 3] > 40)[0].max())
-    frames_out, info = [], {"feet": [], "ground": ground, "k": k, "mirror": mirror, "pairs": pairs, "covered": covered}
+    frames_out, info = [], {"feet": [], "ground": ground, "k": k, "mirror": mirror, "pairs": pairs, "covered": covered, "start": start}
     for index in range(frames):
-        pose = pose_at(joints, feet, pairs, ref, mould(direction, index / frames), mirror, k)
+        pose = pose_at(joints, feet, pairs, ref, mould(direction, start + index / frames), mirror, k, direction in FRONT)
         maps = pose["maps"]
         drawn: dict[str, np.ndarray] = {"torso": _warp(parts["torso"], *maps["torso"], size), "head": _warp(parts["head"], *maps["head"], size)}
         for side in SIDES:
