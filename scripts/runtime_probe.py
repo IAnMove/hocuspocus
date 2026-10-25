@@ -22,6 +22,8 @@ FEATURES = {
     "rigging": "AI rigging (UniRig)",
     "trellis2": "optional official image-to-3D (TRELLIS.2)",
     "template_semantic": "template semantic search (CPU)",
+    "anime_face": "Anime face landmarks",
+    "see_through": "See-through layers",
 }
 
 

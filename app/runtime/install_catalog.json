@@ -130,6 +130,24 @@
       "remove": [
         "app/services/anime_face/env",
         "app/services/anime_face/cache"
+
+      ]
+    },
+    {
+      "id": "see_through",
+      "engine": "see_through",
+      "script": "see_through_install.js",
+      "title": "See-through",
+      "summary": "Split one illustration into RGBA layers (eyes, mouth, hair) for the flat rig. Linux NVIDIA only, about 8 GB of VRAM with the NF4 pipeline and about 12 GB of disk. Code Apache-2.0, weights OpenRAIL++.",
+      "estimatedGiB": 12,
+      "restartRequired": false,
+      "license": "Apache-2.0 (code); OpenRAIL++ (weights)",
+      "platforms": ["linux"],
+      "menu": {"icon": "fa-solid fa-layer-group", "gate": "nvidia"},
+      "remove": [
+        "app/services/see_through/env",
+        "app/services/see_through/vendor",
+        "app/services/see_through/hf"
       ]
     }
   ]

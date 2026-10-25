@@ -36,7 +36,8 @@ import {
 import { registerGeneratedKitPose, registerWipedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
 import type { FlatRigResult } from '../../api/characters'
 import { FlatRigMouthEditor } from './FlatRigMouthEditor'
-import { mouthLineBusyState, otherFaceRigWork } from '../../lib/flatRigMouth'
+import { SeeThroughLayersButton } from './SeeThroughLayersButton'
+import { mouthLineBusyState, otherFaceRigWork, seeThroughBusyState } from '../../lib/flatRigMouth'
 import { faceRigPlacementSources } from '../../lib/faceRigPlacement'
 import { characterKitNextStep, characterKitPoseLabel } from './characterKitGuide'
 import { FacePatchOptions, FacePatchTextureNotice } from './FacePatchOptions'
@@ -120,8 +121,9 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const [styleId, setStyleId] = useState<typeof FACE_RIG_STYLE_PRESETS[number]['id']>(FACE_RIG_STYLE_PRESETS[0].id)
   const [traits, setTraits] = useState<string[]>([])
   const [extraNotes, setExtraNotes] = useState(kit.lookNotes ?? '')
-  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | 'wipe' | 'mouth-line' | null>(null)
+  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | 'wipe' | 'mouth-line' | 'see-through' | null>(null)
   const onMouthLineBusy = useCallback((busy: boolean) => setBusyState(current => mouthLineBusyState(current, busy)), [])
+  const onSeeThroughBusy = useCallback((busy: boolean) => setBusyState(current => seeThroughBusyState(current, busy)), [])
   const modelActionsDisabled = disabled || !allowModelActions || Boolean(busyState)
   const [holdBlink, setHoldBlink] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -608,6 +610,8 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     <p className="text-xs text-amber-100">{nextStep.title}</p>
     <FlatRigMouthEditor kit={kit} poseId={poseId} workspace={workspace} disabled={disabled} busy={otherFaceRigWork(busyState)}
       onRigged={onRigged} onBusyChange={onMouthLineBusy} />
+    <SeeThroughLayersButton kit={kit} workspace={workspace} disabled={disabled}
+      busy={Boolean(busyState) && busyState !== 'see-through'} onRigged={onRigged} onBusyChange={onSeeThroughBusy} />
     <FacePatchOptions kit={kit} poseId={poseId} state={selectedState} anchor={draftAnchor} workspace={workspace}
       disabled={patchControls.disabled} onChange={onChange} onStatus={onStatus} />
     <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1">
