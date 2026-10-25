@@ -23,7 +23,7 @@ const QWEN = {
 test('MiniMax Image-01 is on by default, and an existing install gets it once', async () => {
   const { DEFAULT_ENABLED_MODELS, DEFAULTS_ADDED_IN, DEFAULTS_VERSION } = await import('../src/stores/modelVisibility')
   assert.ok(DEFAULT_ENABLED_MODELS.has('minimax:image-01'))
-  assert.deepEqual(DEFAULTS_ADDED_IN[DEFAULTS_VERSION], ['minimax:image-01'])
+  assert.deepEqual(DEFAULTS_ADDED_IN[DEFAULTS_VERSION], ['minimax:image-01', 'minimax_h3_fasth3_v2', 'minimax_h3_fasth3_trim'])
   // Every id a version adds is in the curated list, so a fresh install and an updated one end with the same set.
   for (const ids of Object.values(DEFAULTS_ADDED_IN)) for (const id of ids) assert.ok(DEFAULT_ENABLED_MODELS.has(id), id)
 })

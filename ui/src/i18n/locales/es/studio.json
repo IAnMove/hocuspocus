@@ -901,6 +901,7 @@
     "frames": "Fotogramas",
     "references": "Referencias",
     "fastHint": "Fused · Experimental. Genera en 4 pasos; puede perder algo de calidad.",
+    "distilledHint": "Distilled · FastH3 oficial de FastVideo. Texto a vídeo en 8 pasos fijos; aún sin medir en esta GPU.",
     "prunedHint": "Pruned · Modelo recortado. Menor tamaño de pesos que Full; el consumo depende de la configuración.",
     "fullHint": "Full · Modelo completo. Opción avanzada: puede aumentar la presión de RAM sin mejorar necesariamente el resultado.",
     "legacyHint": "Legacy · Implementación anterior para compatibilidad.",

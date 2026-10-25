@@ -2078,6 +2078,10 @@ class family_handler:
                     "minimax_h3_media_sources": True,
                 }
             )
+        if (model_def or {}).get("minimax_h3_fasth3", False):
+            from models.minimax_h3.fasth3 import restrict_to_text_to_video
+
+            restrict_to_text_to_video(result)
         return result
 
     @staticmethod
@@ -2114,6 +2118,7 @@ class family_handler:
         fused_turbo = bool(
             (model_def or {}).get("minimax_h3_fused_turbo", False)
         )
+        fasth3 = bool((model_def or {}).get("minimax_h3_fasth3", False))
         vae_downloads = (
             [
                 {
@@ -2158,9 +2163,18 @@ class family_handler:
                     "fileList": [["LICENSE", "NOTICE"]],
                 }
             ]
-            if fused_turbo
+            if fused_turbo and not fasth3
             else []
         )
+        if fasth3:
+            # Official FastVideo files: the MiniMax H3 licence, not MATLOWAI's.
+            from models.minimax_h3.fasth3 import fasth3_attribution_downloads
+
+            attribution_downloads = fasth3_attribution_downloads(
+                _OFFICIAL_REPO,
+                _OFFICIAL_REVISION,
+                _ASSETS_ROOT,
+            )
         return vae_downloads + attribution_downloads + [
             {
                 "repoId": _OFFICIAL_REPO,
@@ -2421,7 +2435,14 @@ class family_handler:
 
         model_def = apply_h3_duration_override(inputs, model_def or {})
 
-        if (model_def or {}).get("minimax_h3_fused_turbo", False):
+        if (model_def or {}).get("minimax_h3_fasth3", False):
+            from models.minimax_h3.fasth3 import normalize_fasth3_request
+
+            try:
+                normalize_fasth3_request(inputs)
+            except ValueError as error:
+                return str(error)
+        elif (model_def or {}).get("minimax_h3_fused_turbo", False):
             try:
                 inputs["num_inference_steps"] = _normalize_h3_fused_steps(
                     inputs.get("num_inference_steps")

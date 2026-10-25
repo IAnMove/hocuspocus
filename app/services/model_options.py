@@ -166,6 +166,7 @@ def get_model_options(model_type: str):
         "wangp_1272": md.get("wangp_1272", False),
         "wangp_1272_capabilities": md.get("wangp_1272_capabilities", {}),
         "minimax_h3_fused_turbo": md.get("minimax_h3_fused_turbo", False),
+        "minimax_h3_fasth3": md.get("minimax_h3_fasth3", False),
         "omni_reference": md.get("omni_reference", False),
         "omni_reference_limits": md.get("omni_reference_limits"),
         "omni_reference_detail_choices": md.get("omni_reference_detail_choices"),

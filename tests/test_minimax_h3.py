@@ -1237,7 +1237,8 @@ class TestMiniMaxH3RuntimeSource(unittest.TestCase):
     def test_runtime_uses_the_official_dual_scheduler_and_audio_output(self):
         main = _read(_MAIN_PATH)
         self.assertIn("self.scheduler = MiniMaxH3Scheduler(", main)
-        self.assertIn("MiniMaxH3Scheduler(shift=3.0)", main)
+        # Shifts default to the official 12/3 and come from the model definition (fasth3.h3_shifts).
+        self.assertIn("MiniMaxH3Scheduler(shift=audio_shift)", main)
         self.assertIn("audio_sampling_rate\": MINIMAX_H3_AUDIO_SAMPLE_RATE", main)
         self.assertIn("MINIMAX_H3_KEYFRAME_ENCODE_SEED", main)
         self.assertIn("prepare_keyframe_image", main)
