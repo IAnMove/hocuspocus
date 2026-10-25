@@ -2,7 +2,7 @@
   "version": 1,
   "note": "Small animations of one character: a few poses of the same figure joined into an equal-cell sprite sheet (services/character_animations.py, ui/src/lib/characterAnimations.ts). Each pose is one Qwen picture made from the character's own picture as an identity reference, on a plain screen, keyed and cropped. `view` picks the framing sentence, `loop` how the sheet plays (loop | pingpong | once), `template` the Video 2D card that plays it.",
   "sheet": {"feet": 0.96, "figure": 0.86, "cellHeight": 640, "maxPoses": 12, "alphaFloor": 8, "torsoShare": 0.55, "head": 0.18, "faceShare": 0.5, "expressionHold": 2.5, "expressionFade": 0.25, "expressionShort": 1.5,
-    "checks": {"height": 0.03, "repeatRun": 2, "samePoseBits": 4, "mirrorShare": 0.75}},
+    "checks": {"height": 0.03, "repeatRun": 2, "samePoseBits": 4, "mirrorShare": 0.75, "gait": 0.15}},
   "identity": "The same character as the reference image: same face, proportions, colours, outfit and art style. {description}",
   "negative": "photo, photorealistic, 3D render, blurry, text, watermark, speech bubble, panel border, frame, multiple characters, background scenery, floor, cast shadow, turnaround sheet, collage of views",
   "viewNegatives": {
@@ -26,6 +26,15 @@
     "back34": "Three-quarter back view of the whole body, the body turned about forty-five degrees away from the viewer toward the viewer's right, the back and one side visible, the face hidden or only a sliver of the cheek, seen from head to boots, centred, the same size as in the reference picture.",
     "back": "Back view of the whole body, seen from behind, the character facing directly away from the viewer, the back of the head and the back of the outfit visible, no face visible, seen from head to boots, centred, the same size as in the reference picture.",
     "bust": "Close-up portrait: only the head, neck and shoulders of the character, the picture cropped at the chest so no waist, hands, legs or feet are in it, facing the viewer, centred, the face large and filling the upper half of the picture."
+  },
+  "guide": {
+    "note": "A walk (an entry with \"guide\": \"walk\") is drawn pose by pose over the walk of services/walk_guides.py seen from the camera of its direction: the guide is picture 2. A pose whose legs are tolerance (share of the figure's height) wider or narrower than the guide's is drawn again with another seed, tries times in all.",
+    "style": "skeleton", "tries": 3, "tolerance": 0.18,
+    "text": {
+      "skeleton": "Picture 1 is the character. Picture 2 is an OpenPose skeleton of the pose, seen from the same camera: draw the character of picture 1 in exactly the pose of the skeleton in picture 2, with the same direction of the body and the head, the same leg in front, the same bend of each knee and elbow and the same swing of the arms. Do not draw the skeleton, its lines or its dots.",
+      "mannequin": "Picture 1 is the character. Picture 2 is a grey wooden mannequin in the pose, seen from the same camera, its limbs nearer the viewer lighter: draw the character of picture 1 in exactly the pose of the mannequin in picture 2, with the same direction of the body and the head, the same leg in front, the same bend of each knee and elbow and the same swing of the arms. Do not draw the mannequin."
+    },
+    "extra": "The pictures after picture 2 show the same character from other directions: take only the outfit and its details from them, never their pose or their direction."
   },
   "custom": {
     "maxPoses": 12, "maxText": 600, "maxAnimations": 48, "fps": 3, "loop": "once", "template": "character-reaction",
@@ -62,7 +71,7 @@
   ],
   "animations": [
     {
-      "id": "walk", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side",
+      "id": "walk", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 4, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side", "guide": "walk",
       "title": {"es": "Andar", "en": "Walk"},
       "summary": {"es": "Ciclo de paso de perfil en cuatro poses: contacto, paso, contacto, paso. Mira a la derecha.", "en": "Side-view gait in four poses: contact, passing, contact, passing. Looks right."},
       "poses": [
@@ -382,7 +391,7 @@
       ]
     },
     {
-      "id": "walk-12", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "id": "walk-12", "group": "cycle", "view": "side", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "side", "columns": 6, "checks": ["height", "repeats", "mirror", "gait"], "guide": "walk",
       "title": {"es": "Andar completo", "en": "Full walk"},
       "summary": {"es": "Ciclo de andar de doce poses de perfil, mirando a la derecha: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle in side view, looking right: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
       "poses": [
@@ -401,7 +410,7 @@
       ]
     },
     {
-      "id": "walk-front", "group": "cycle", "view": "front", "scaleBy": "height", "facing": "front", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "front", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "id": "walk-front", "group": "cycle", "view": "front", "scaleBy": "height", "facing": "front", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "front", "columns": 6, "checks": ["height", "repeats", "mirror", "gait"], "guide": "walk",
       "title": {"es": "Andar de frente", "en": "Walk, front"},
       "summary": {"es": "Ciclo de andar de doce poses de frente, hacia la cámara: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle from the front, toward the camera: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
       "poses": [
@@ -420,7 +429,7 @@
       ]
     },
     {
-      "id": "walk-front34", "group": "cycle", "view": "front34", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "front34", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "id": "walk-front34", "group": "cycle", "view": "front34", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "front34", "columns": 6, "checks": ["height", "repeats", "mirror", "gait"], "guide": "walk",
       "title": {"es": "Andar de tres cuartos de frente", "en": "Walk, front three-quarter"},
       "summary": {"es": "Ciclo de andar de doce poses de tres cuartos de frente, hacia la cámara y a la derecha: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle in front three-quarter view, toward the camera and to the right: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
       "poses": [
@@ -439,7 +448,7 @@
       ]
     },
     {
-      "id": "walk-back34", "group": "cycle", "view": "back34", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "back34", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "id": "walk-back34", "group": "cycle", "view": "back34", "scaleBy": "height", "facing": "right", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "back34", "columns": 6, "checks": ["height", "repeats", "mirror", "gait"], "guide": "walk",
       "title": {"es": "Andar de tres cuartos de espaldas", "en": "Walk, back three-quarter"},
       "summary": {"es": "Ciclo de andar de doce poses de tres cuartos de espaldas, alejándose hacia la derecha: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle in back three-quarter view, moving away toward the right: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
       "poses": [
@@ -458,7 +467,7 @@
       ]
     },
     {
-      "id": "walk-back", "group": "cycle", "view": "back", "scaleBy": "height", "facing": "front", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "back", "columns": 6, "checks": ["height", "repeats", "mirror"],
+      "id": "walk-back", "group": "cycle", "view": "back", "scaleBy": "height", "facing": "front", "loop": "loop", "fps": 12, "template": "walk-cycle-sheet", "resolution": "896x1152", "motion": "walk", "dir": "back", "columns": 6, "checks": ["height", "repeats", "mirror", "gait"], "guide": "walk",
       "title": {"es": "Andar de espaldas", "en": "Walk, back"},
       "summary": {"es": "Ciclo de andar de doce poses de espaldas, alejándose de la cámara: contacto, descenso, despegue, paso, ascenso y alcance de cada pierna, con los brazos opuestos. A doce dibujos por segundo.", "en": "Twelve-pose walk cycle from behind, moving away from the camera: contact, down, lift, passing, up and reach of each leg, with opposite arms. Twelve drawings a second."},
       "poses": [

@@ -209,8 +209,20 @@ def _frames(raw: Any) -> list[dict[str, str]]:
             text = _text(item.get(key), f"Frame {key}", maximum)
             if text:
                 frame[key] = text
-        frames.append(frame)
+        frames.append({**frame, **_guided(item)})
     return frames
+
+
+def _guided(item: dict[str, Any]) -> dict[str, Any]:
+    """What a pose of a walk keeps of its guide (``services/character_animation_guides.py``): the picture it was drawn over and how wide
+    its legs came out against the guide's."""
+    kept: dict[str, Any] = {}
+    if item.get("guide"):
+        kept["guide"] = _source(item["guide"], "Frame guide")
+    gait = item.get("gait")
+    if isinstance(gait, dict) and all(isinstance(gait.get(key), (int, float)) for key in ("expected", "measured")):
+        kept["gait"] = {"expected": round(float(gait["expected"]), 3), "measured": round(float(gait["measured"]), 3), "ok": bool(gait.get("ok"))}
+    return kept
 
 
 def _contract(raw: dict[str, Any], label: str) -> dict[str, str]:
