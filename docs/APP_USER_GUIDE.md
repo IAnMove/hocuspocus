@@ -38,7 +38,7 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 | **Story Lab** | Historia, personajes, lugares y canción de un proyecto; desde la canción se pasa al videoclip. |
 | **Series Lab** | Serie animada completa: biblia, personajes con voz, capítulos por guion, render en el servidor, versiones de idioma y montaje. |
 | **Cómics** (Comic Studio) | Páginas y viñetas con sus imágenes; un cómic terminado puede convertirse en película o tráiler. |
-| **Character Creator** | Kits de personaje reutilizables: referencias, rig plano de recortable, bocas (26 estilos), voz (VoxCPM2 por defecto) y cara 3D. |
+| **Character Creator** | Kits de personaje reutilizables: referencias, rig plano de recortable, bocas (26 estilos), voz (VoxCPM2 por defecto), cara 3D y andares (pose a pose, un clip o marioneta). |
 | **Lips Creator** | Dibuja bocas y las vincula a sonidos para el lip-sync 2D y 3D. |
 | **Vídeo 2,5D** (Scene Animator) | Escenas de capas e imágenes: cámara, movimientos, rótulos, letra, efectos y exportación MP4. |
 | **Vídeo 3D** | Monta GLB, kits y escenarios procedurales en un mundo 3D; biblioteca de planos, luz, atmósfera, voz y exportación con niveles de calidad. |

@@ -106,7 +106,7 @@ character's ink.
 `characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
 approves it in Characters › Animaciones. `characters.animation.make_set` {character_id, set `walk-directions`} makes the
-twelve-pose walks of five directions (for 3D sets) as one resumable job.
+twelve-pose walks of five directions (for 3D sets) as one resumable job. A walk can use method puppet.
 Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
 `autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
 pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.

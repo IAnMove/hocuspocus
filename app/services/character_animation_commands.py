@@ -55,7 +55,10 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
              "title": {"type": "string", "maxLength": 80}, "view": _CUSTOM_VIEW,
              "poses": {"type": "array", "minItems": 1, "maxItems": MAX_CUSTOM_POSES, "items": {"type": "string", "maxLength": 600}}}},
          "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80},
-         "method": {"enum": ["poses", "video"]}, "autoApprove": {"type": "boolean"}},
+         "method": {"enum": ["poses", "video", "puppet"]},
+         "reference": {"type": "object", "additionalProperties": False, "required": ["animation", "pose"], "properties": {
+             "animation": {"type": "string", "minLength": 1, "maxLength": 64}, "pose": {"type": "string", "minLength": 1, "maxLength": 120}}},
+         "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
         "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo; "
@@ -72,10 +75,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review. "
         "method video (optional; omit it, or pass poses, for the path above) makes a catalog walk from one LTX-2.3 clip guided by the "
         "OpenPose gait video, keys it and samples the same sheet. It needs LTX-2.3 distilled and the union-control LoRA installed, and it "
-        "refuses a single pose or an animation that is not a walk. characters.animation.make_set stays pose by pose.",
+        "refuses a single pose or an animation that is not a walk. method puppet (optional, a catalog walk) cuts one drawing into the same "
+        "sheet: the front walk uses the idle rest pose and the other directions use contact-a. reference {animation, pose} overrides that "
+        "drawing. Without See-through it warns puppet_no_layers. characters.animation.make_set stays pose by pose unless method is passed.",
     ),
     "characters.animation.make_set": (
-        {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
+        {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80},
+         "method": {"enum": ["poses", "video", "puppet"]}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "set"], True,
         "Make several animations of a saved character in turn as ONE server job, for a character that moves in a 3D set: set walk-directions "
         "makes the twelve-pose walks of the five directions (walk-12 side, then walk-front34, walk-front, walk-back34, walk-back; the "
@@ -89,7 +95,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "job (id animset-...): follow it with characters.animation.status (status, done/total, sheets: one entry per sheet with its status "
         "waiting | running | completed | skipped | failed | cancelled, its jobId, reviewState and failed checks) and stop it with "
         "characters.animation.cancel. It is resumable: a failure, a cancel or a restart keeps every sheet and pose made, and calling "
-        "make_set again skips the sheets the character has and continues.",
+        "make_set again skips the sheets the character has and continues. method, when passed, is the method of every sheet (puppet refuses "
+        "a sheet that is not a catalog walk). Omit method and every sheet stays pose by pose.",
     ),
     "characters.animation.review": (
         {"workspace": _WORKSPACE, "character_id": _ID, "animation": {"type": "string", "minLength": 1, "maxLength": 64},
@@ -147,7 +154,7 @@ def _sheet(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 
 def _make(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body = {"workspace": data["workspace"], "kitId": data["character_id"], "animation": data["animation"],
-            **{key: data[key] for key in ("custom", "pose", "model", "method", "autoApprove") if key in data}}
+            **{key: data[key] for key in ("custom", "pose", "model", "method", "reference", "autoApprove") if key in data}}
     return request("POST", f"{_BASE}/make", body=body)
 
 
@@ -158,7 +165,7 @@ def _review(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) ->
 
 
 def _make_set(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    body = {"workspace": data["workspace"], "kitId": data["character_id"], "set": data["set"], **{key: data[key] for key in ("model", "autoApprove") if key in data}}
+    body = {"workspace": data["workspace"], "kitId": data["character_id"], "set": data["set"], **{key: data[key] for key in ("model", "method", "autoApprove") if key in data}}
     return request("POST", f"{_BASE}/make-set", body=body)
 
 

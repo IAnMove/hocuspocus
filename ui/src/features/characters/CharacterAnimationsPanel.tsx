@@ -25,22 +25,29 @@ const BADGE: Record<AnimationState, string> = {
   approved: 'border-emerald-400/40 text-emerald-200', rejected: 'border-red-400/40 text-red-200',
 }
 
-type WalkMethod = 'poses' | 'video'
+type WalkMethod = 'poses' | 'video' | 'puppet'
 type Actions = {
   busy: boolean; runs: Record<string, AnimationJob>
   make: (def: AnimationDef, remake?: string, method?: WalkMethod) => void; cancel: (jobId: string) => void
   review: (id: string, state: CharacterKitReviewState) => void; remove: (id: string) => void
 }
 
-/** Pose by pose is the default. One guided clip is opt-in, and only a catalog walk offers it. */
+/** Pose by pose is the default. A guided clip or a puppet is opt-in, and only a catalog walk offers them. */
+function chosenMethod(value: string): WalkMethod {
+  return value === 'video' || value === 'puppet' ? value : 'poses'
+}
+
 function WalkMethodSelect({ id, value, disabled, onChange }: { id: string; value: WalkMethod; disabled: boolean; onChange: (method: WalkMethod) => void }) {
   const { t } = useUiTranslation('characters')
   return <label className="text-[11px] text-text-secondary">{t('animations.methodLabel')}
     <select data-testid={`walk-method-${id}`} value={value} disabled={disabled} aria-label={t('animations.methodLabel')}
-      onChange={event => onChange(event.target.value === 'video' ? 'video' : 'poses')} className={`${control} mt-1 block`}>
+      onChange={event => onChange(chosenMethod(event.target.value))} className={`${control} mt-1 block`}>
       <option value="poses">{t('animations.methodPoses')}</option>
       <option value="video">{t('animations.methodVideo')}</option>
-    </select></label>
+      <option value="puppet">{t('animations.methodPuppet')}</option>
+    </select>
+    {value === 'puppet' && <p data-testid={`puppet-note-${id}`} className="mt-1 text-[10px] text-text-muted">{t('animations.methodPuppetNote')}</p>}
+  </label>
 }
 
 /** Where a make job is: waiting for the GPU, a pose at a time, joining the sheet, or why it stopped (the poses made stay for the next try). */

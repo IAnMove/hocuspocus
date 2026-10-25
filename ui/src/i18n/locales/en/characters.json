@@ -791,6 +791,8 @@
     "methodLabel": "How to make this walk",
     "methodPoses": "Pose by pose",
     "methodVideo": "One guided clip",
+    "methodPuppet": "Puppet",
+    "methodPuppetNote": "Without clothing layers: only for a character whose legs are apart and who wears no skirt.",
     "guideVideo": "Skeleton guide",
     "clip": "Guided clip",
     "makeAgain": "Make all again",

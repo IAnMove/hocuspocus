@@ -140,6 +140,8 @@ test('the Wizard makes the full walks as one server job through the route of the
     { type: 'make_character_animation_set', kitName: 'heroína', set: 'walk-directions', confirm: true, autoApprove: true })
   assert.deepEqual(make.resolve({ type: 'make_character_animation_set', set: 'walk-12', auto_approve: false, confirm: true }),
     { type: 'make_character_animation_set', kitName: '', set: 'walk-12', confirm: true }, 'approval is asked for, never assumed')
+  assert.deepEqual(make.resolve({ type: 'make_character_animation_set', set: 'walk-12', method: 'puppet', confirm: true }),
+    { type: 'make_character_animation_set', kitName: '', set: 'walk-12', confirm: true, method: 'puppet' })
 
   const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
   let reply: Record<string, unknown> = { jobId: 'animset-1', status: 'running', sheets: [{ animationId: 'walk-12', status: 'running' }, { animationId: 'walk-front34', status: 'waiting' }, { animationId: 'walk-front', status: 'skipped' }] }
@@ -165,6 +167,9 @@ test('the Wizard makes the full walks as one server job through the route of the
     assert.match((await make.execute(make.resolve({ type: 'make_character_animation_set', kit_name: 'heroína', set: 'walk-12', confirm: true })!, context)).message, /ya tiene|already has/)
     reply = { jobId: 'animset-3', status: 'running', autoApprove: false, autoApproveNote: 'autoApprove was ignored: agent_autonomy is review', sheets: [{ animationId: 'walk-12', status: 'running' }] }
     assert.match((await make.execute(action, context)).message, /autoApprove was ignored: agent_autonomy is review/)
+    await make.execute(make.resolve({ type: 'make_character_animation_set', kit_name: 'heroína', set: 'walk-12', method: 'puppet', confirm: true })!, context)
+    assert.deepEqual(calls.filter(call => call.url.includes('/animations/make-set')).at(-1)!.body,
+      { workspace: 'show', kitId: 'hero', set: 'walk-12', method: 'puppet' })
   } finally {
     globalThis.fetch = previousFetch
   }
@@ -172,12 +177,17 @@ test('the Wizard makes the full walks as one server job through the route of the
 
 test('method video is sent only for a whole walk, and poses stays the request the panel already sends', async () => {
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /method "video"/)
+  assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /method "puppet"/)
   const make = getCapability('make_character_animation')!
   assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk-12', method: 'video', confirm: true }),
     { type: 'make_character_animation', kitName: '', animation: 'walk-12', confirm: true, method: 'video' })
   assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk-12', method: 'poses', confirm: true }),
     { type: 'make_character_animation', kitName: '', animation: 'walk-12', confirm: true })
   assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk-12', method: 'video', pose_id: 'contact-a', confirm: true }),
+    { type: 'make_character_animation', kitName: '', animation: 'walk-12', confirm: true, pose: 'contact-a' })
+  assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk-12', method: 'puppet', confirm: true }),
+    { type: 'make_character_animation', kitName: '', animation: 'walk-12', confirm: true, method: 'puppet' })
+  assert.deepEqual(make.resolve({ type: 'make_character_animation', animation_id: 'walk-12', method: 'puppet', pose_id: 'contact-a', confirm: true }),
     { type: 'make_character_animation', kitName: '', animation: 'walk-12', confirm: true, pose: 'contact-a' })
   const calls: Array<{ url: string; body?: Record<string, unknown> }> = []
   const previousFetch = globalThis.fetch
@@ -192,6 +202,9 @@ test('method video is sent only for a whole walk, and poses stays the request th
     await make.execute(make.resolve({ type: 'make_character_animation', kit_name: 'heroína', animation_id: 'walk-12', method: 'video', confirm: true })!, context)
     assert.deepEqual(calls.filter(call => call.url.includes('/animations/make')).at(-1)!.body,
       { workspace: 'show', kitId: 'hero', animation: 'walk-12', method: 'video' })
+    await make.execute(make.resolve({ type: 'make_character_animation', kit_name: 'heroína', animation_id: 'walk-12', method: 'puppet', confirm: true })!, context)
+    assert.deepEqual(calls.filter(call => call.url.includes('/animations/make')).at(-1)!.body,
+      { workspace: 'show', kitId: 'hero', animation: 'walk-12', method: 'puppet' })
   } finally {
     globalThis.fetch = previousFetch
   }

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -30,6 +30,8 @@ class MakeSet(BaseModel):
     kitId: str = Field(min_length=1, max_length=160)
     set: str = Field(min_length=1, max_length=64)
     model: str | None = Field(default=None, max_length=80)
+    # Omitted means every sheet is pose by pose. puppet refuses a sheet that is not a catalog walk.
+    method: Literal["poses", "video", "puppet"] | None = None
     autoApprove: bool = False
 
 
@@ -55,7 +57,7 @@ def create_character_animation_sets_router(sets: CharacterAnimationSets, *, bind
         """Make the sheets of a set that the character does not have, one after another. Each is saved as pending review."""
         if bind_loop is not None:
             bind_loop(asyncio.get_running_loop())  # the job's tool calls run on the server's loop, as an MCP client's would
-        return {"job": await run(sets.start, body.workspace, body.kitId, body.set, model=body.model, auto_approve=body.autoApprove)}
+        return {"job": await run(sets.start, body.workspace, body.kitId, body.set, model=body.model, auto_approve=body.autoApprove, method=body.method)}
 
     @router.get("/sets")
     async def list_sets(workspace: str, kitId: str | None = None):

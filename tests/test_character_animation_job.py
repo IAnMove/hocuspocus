@@ -1049,6 +1049,78 @@ def test_method_video_samples_one_clip_into_the_same_sheet_and_keeps_the_guide(d
     assert gait["ok"], job.get("checks")
 
 
+def _patch_puppet(monkeypatch, *, installed: bool):
+    """The fake picture is one blob. The real cutter would refuse it, and the pose model must not run."""
+    seen = {"decompose": 0, "layers": None}
+
+    def fake_build(rgba, direction, frames, layers, joints):
+        seen["layers"] = layers
+        assert joints == {"nose": (1, 2)} and frames == 12 and direction == "side"
+        picture = np.zeros((rgba.shape[0] * 2, rgba.shape[1] * 2, 4), np.uint8)
+        return [picture.copy() for _ in range(frames)], {"start": 0.25}
+
+    def decompose(image, label):
+        seen["decompose"] += 1
+        assert label == "puppet"
+        return {"images": {}}
+
+    monkeypatch.setattr("services.walk_puppet_method.build", fake_build)
+    monkeypatch.setattr("services.walk_puppet_method.find_joints", lambda _rgba: {"nose": (1, 2)})
+    monkeypatch.setattr("services.walk_puppet_method.installed", lambda: installed)
+    monkeypatch.setattr("services.walk_puppet_method.decompose_image", decompose)
+    return seen
+
+
+def test_method_puppet_cuts_one_drawing_keeps_the_gait_check_and_warns_without_layers(directions, monkeypatch):
+    seen = _patch_puppet(monkeypatch, installed=False)
+    root, server, jobs, _sets = directions
+    _mode(jobs, ONE_SHOT)
+    job = jobs.start(WS, "hero", "walk-12", method="puppet", auto_approve=True)
+    assert job["status"] == "completed", job.get("error")
+    assert job["method"] == "puppet" and server.of("generation.video") == [] and len(server.of("generation.image")) == 1
+    made = _kit(root)["animations"]
+    assert set(made) == {"walk-12"}, "the reference drawing is not saved as a second animation"
+    provenance = made["walk-12"]["provenance"]
+    assert provenance["method"] == "puppet" and provenance["reference"] == {"animation": "walk-12", "pose": "contact-a"}
+    assert provenance["layers"] is False and provenance["start"] == 0.25
+    assert job["result"]["warnings"] == ["puppet_no_layers"] and job["result"]["provenance"]["method"] == "puppet"
+    assert seen["decompose"] == 0 and seen["layers"] is None
+    gait = next(item for item in job["checks"] if item["id"] == "walk_gait")
+    assert gait["ok"], job.get("checks")
+
+
+def test_method_puppet_uses_see_through_layers_and_an_override_reference(directions, monkeypatch):
+    seen = _patch_puppet(monkeypatch, installed=True)
+    root, server, jobs, _sets = directions
+    job = jobs.start(WS, "hero", "walk-12", method="puppet", reference={"animation": "idle", "pose": "rest"})
+    assert job["status"] == "completed", job.get("error")
+    made = _kit(root)["animations"]
+    assert set(made) == {"walk-12"} and "idle" not in made
+    provenance = made["walk-12"]["provenance"]
+    assert provenance["reference"] == {"animation": "idle", "pose": "rest"} and provenance["layers"] is True
+    assert "warnings" not in job["result"] and seen["decompose"] == 1
+    assert server.of("generation.video") == []
+
+
+def test_method_puppet_refuses_a_gesture_and_a_single_pose(world):
+    _root, server, jobs = world
+    with pytest.raises(AnimationJobError) as gesture:
+        jobs.start(WS, "hero", "wave", method="puppet")
+    assert gesture.value.code == "puppet_not_a_walk" and server.calls == []
+    assert jobs.start(WS, "hero", "walk")["status"] == "completed"
+    server.calls = []
+    with pytest.raises(AnimationJobError) as one_pose:
+        jobs.start(WS, "hero", "walk", method="puppet", pose="contact")
+    assert one_pose.value.code == "puppet_is_a_cycle" and server.calls == []
+
+
+def test_a_set_of_breaths_refuses_puppet_before_any_picture(directions):
+    _root, server, _jobs, sets = directions
+    refused = sets.start(WS, "hero", "idle-directions", method="puppet")
+    assert refused["status"] == "failed" and "catalog walk" in refused.get("error", "")
+    assert server.of("generation.image") == []
+
+
 def test_the_make_route_refuses_video_without_weights_and_an_unknown_method(world, monkeypatch):
     monkeypatch.setattr("services.character_animation_job.weights_present", lambda: False)
     _root, server, jobs = world

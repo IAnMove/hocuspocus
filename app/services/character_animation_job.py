@@ -19,7 +19,8 @@ them into a sprite sheet and saves it on the kit as ``animations.<id>`` waiting 
 * ``method`` ``video`` (optional; the default is the pose-by-pose path above) makes a catalog walk from one LTX-2.3 clip
   guided by the gait skeleton (``services/walk_video_method.py``), keys it and samples the same sheet. It needs the distilled
   weights and the union-control LoRA. Without them, or for anything that is not a walk, the request fails and this path is
-  not used. ``make_set`` stays pose by pose.
+  not used. ``method`` ``puppet`` cuts one drawing into the same sheet (``services/walk_puppet_method.py``). ``make_set``
+  stays pose by pose unless ``method`` is passed.
 """
 from __future__ import annotations
 
@@ -46,6 +47,8 @@ from services.character_kit_face_cleanup import resolve_character_kit_image
 from services.character_kit_library import CharacterKitRevisionConflict, patch_character_kit, read_character_kit_library
 from services.local_generation import LocalTools, ToolError, file_url
 from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
+from services.walk_puppet import WalkPuppetError
+from services.walk_puppet_method import PuppetMethodError, accept_puppet, fill_puppet_takes
 from services.walk_video_method import LTX_MODEL, NOT_INSTALLED, WalkVideoError, accept_walk_method, clip_fields, fill_video_takes, weights_present
 
 from services.remote_image_generation import is_remote_image_model
@@ -256,10 +259,11 @@ class CharacterAnimationJobs:
         return definition
 
     def _new_job(self, workspace: str, kit: dict[str, Any], definition: dict[str, Any], pose: str | None, model: str | None,
-                 references: list[str] | None = None, method_name: str = "poses") -> dict[str, Any]:
+                 references: list[str] | None = None, method_name: str = "poses",
+                 puppet_reference: dict[str, Any] | None = None) -> dict[str, Any]:
         ids = [item["id"] for item in definition["poses"]]
         # A guided clip replaces every pose. A pose kept from an earlier pose-by-pose try is not a frame of that clip.
-        kept = {} if method_name == "video" else self._kept(workspace, kit, definition["id"], pose, ids)
+        kept = {} if method_name in ("video", "puppet") else self._kept(workspace, kit, definition["id"], pose, ids)
         takes = [{"id": item, "status": "reused", "keyed": kept[item], "seed": 0} if item in kept else
                  {"id": item, "status": "waiting", "seed": random.randrange(2_000_000_000)} for item in ids]
         job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit["id"], "animationId": definition["id"],
@@ -276,6 +280,10 @@ class CharacterAnimationJobs:
         if method_name == "video":
             job["method"] = "video"
             job["model"] = LTX_MODEL
+        elif method_name == "puppet":
+            job["method"] = "puppet"
+            if puppet_reference:
+                job["puppetReference"] = {"animation": str(puppet_reference["animation"]), "pose": str(puppet_reference["pose"])}
         return job
 
     def _services(self) -> Mapping[str, Any]:
@@ -296,8 +304,10 @@ class CharacterAnimationJobs:
 
     def _accept_method(self, method: str | None, definition: dict[str, Any], pose: str | None) -> str:
         try:
+            if method == "puppet":
+                return accept_puppet(definition, pose)
             return accept_walk_method(method, definition, pose)
-        except WalkVideoError as error:
+        except (WalkVideoError, PuppetMethodError) as error:
             raise AnimationJobError(error.code, str(error)) from error
 
     def _require_video_weights(self) -> None:
@@ -307,7 +317,7 @@ class CharacterAnimationJobs:
 
     def start(self, workspace: str, kit_id: str, animation_id: str, *, custom: dict[str, Any] | None = None, pose: str | None = None,
               model: str | None = None, auto_approve: bool = False, references: list[str] | None = None,
-              method: str | None = None) -> dict[str, Any]:
+              method: str | None = None, reference: dict[str, Any] | None = None) -> dict[str, Any]:
         """Make (or, with ``pose``, make one pose again of) an animation of a saved character. Returns the job; a request for an
         animation that is already being made returns that job. ``auto_approve`` asks the job to approve what it made when the sheet passes
         the automatic checks; it is ignored (the job says so) unless ``agent_autonomy`` is ``one_shot``. ``references`` are extra pictures
@@ -324,7 +334,7 @@ class CharacterAnimationJobs:
                 return running
             if chosen == "video":
                 self._require_video_weights()
-            job = {**self._new_job(workspace, kit, definition, pose, model, extra, chosen), **self._auto_fields(auto_approve)}
+            job = {**self._new_job(workspace, kit, definition, pose, model, extra, chosen, reference), **self._auto_fields(auto_approve)}
             self._store(workspace).save(job)
             thread = threading.Thread(target=self._run, args=(workspace, job["jobId"]), name=f"character-animation-{job['jobId']}", daemon=True)
             self._threads[job["jobId"]] = thread
@@ -442,6 +452,8 @@ class CharacterAnimationJobs:
                 self._update(store, job, status="running")
                 if job.get("method") == "video":
                     self._video_cycle(store, job, tools)
+                elif job.get("method") == "puppet":
+                    self._puppet_cycle(store, job, tools)
                 else:
                     poses = {item["id"]: item for item in job["definition"]["poses"]}
                     for take in job["takes"]:
@@ -462,6 +474,41 @@ class CharacterAnimationJobs:
                          finishedAt=_now(), generationJob=None)
         finally:
             self._tools.pop(job_id, None)
+
+    def _puppet_reference_picture(self, job: dict[str, Any], tools: LocalTools, animation_id: str, pose_id: str) -> str:
+        """Draw the reference pose on a copy of the job. The kit does not gain a second animation."""
+        try:
+            definition = animation_def(animation_id)
+        except CharacterAnimationError as error:
+            raise ToolError("invalid_reference", str(error)) from error
+        pose = next((item for item in definition["poses"] if item["id"] == pose_id), None)
+        if pose is None:
+            raise ToolError("pose_not_found", f"{animation_id} has no pose {pose_id}")
+        built = pose_prompt(definition["id"], pose["id"], job["description"], job.get("style"))
+        root = self.deps.workspace_dir(job["workspace"])
+        guide = guide_for(definition, pose["id"], workspace_root=root,
+                          name=f"{job['kitId']}-{definition['id']}-{pose['id']}-guide-{job['jobId'][-6:]}.png")
+        copy = {**job, "definition": definition, "jobId": f"{job['jobId']}ref"}
+        _name, keyed = self._draw(copy, tools, pose, built, guide, job["takes"][0]["seed"], 0, lambda _drawn: None)
+        if copy.get("refsDropped"):
+            job["refsDropped"] = True
+        return keyed
+
+    def _puppet_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
+        """One drawing, then one keyed frame per pose. A missing limb fails the job and leaves no sheet."""
+        try:
+            try:
+                fill_puppet_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]),
+                                  uploads_root=self.deps.uploads_root(), kit=self._kit(job["workspace"], job["kitId"]),
+                                  draw=lambda animation, pose: self._puppet_reference_picture(job, tools, animation, pose),
+                                  update=lambda **changes: self._update(store, job, **changes))
+            except WalkPuppetError as error:
+                raise ToolError("puppet_failed", str(error)) from error
+        except ToolError as error:
+            for take in job["takes"]:
+                if take["status"] not in ("ready", "reused"):
+                    take.update(status="waiting") if error.code == "cancelled" else take.update(status="failed", error=str(error)[:300])
+            raise
 
     def _video_cycle(self, store: JobStore, job: dict[str, Any], tools: LocalTools) -> None:
         """One guided clip, then one keyed frame per pose. A tool error fails the job the same way a pose does."""
@@ -488,13 +535,16 @@ class CharacterAnimationJobs:
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             **contract_of(definition["id"], definition), **clip_fields(job),
             **({"title": definition["title"]["es"]} if definition.get("custom") else {}), **({"prompt": job["prompt"]} if job.get("prompt") else {}),
+            **({"provenance": job["puppet"]} if job.get("puppet") else {}),
         }
         normalize_kit_animations({definition["id"]: entry})
         self._save_on_kit(workspace, job["kitId"], definition["id"], entry)
         approval = self._auto_approve(job, sheet, definition) if job.get("autoApprove") else {}
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
                   "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
-                  **{key: approval[key] for key in ("autoApproved", "checks") if key in approval}}
+                  **{key: approval[key] for key in ("autoApproved", "checks") if key in approval},
+                  **({"provenance": job["puppet"]} if job.get("puppet") else {}),
+                  **({"warnings": job["warnings"]} if job.get("warnings") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
 

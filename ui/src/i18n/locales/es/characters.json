@@ -791,6 +791,8 @@
     "methodLabel": "Cómo hacer este andar",
     "methodPoses": "Pose a pose",
     "methodVideo": "Un clip guiado",
+    "methodPuppet": "Marioneta",
+    "methodPuppetNote": "Sin capas de ropa: solo para un personaje con las piernas separadas y sin falda.",
     "guideVideo": "Guía del esqueleto",
     "clip": "Clip guiado",
     "makeAgain": "Rehacer todo",
