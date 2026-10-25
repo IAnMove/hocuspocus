@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from services.lipsync_qa import verdict
 from services.production_media_commands import command_catalog, command_handlers
 from services.series_library import create_series_episode, create_series_project, read_series_library, write_series_library
-from services.shot_lipsync_catalog import files_for, stack_bytes
+from services.shot_lipsync_catalog import files_for, stack_bytes, video_length
 import services.shot_lipsync_redo as redo
 import services.studio_generate as studio
 
@@ -166,6 +166,7 @@ def test_a_production_shot_gains_a_take_and_keeps_the_original(tmp_path, monkeyp
     assert body["audio_prompt_type"] == "A" and body["video_prompt_type"] == guide
     assert body["resolution"] == "832x480" and body["num_inference_steps"] == steps
     assert body["model_type"] == engine
+    assert body["video_length"] == video_length(engine, (1.0, 4.0))
     if strength is None:
         assert "denoising_strength" not in body
     else:
@@ -223,7 +224,7 @@ def test_a_series_shot_appends_a_take_and_keeps_the_approval(tmp_path, monkeypat
     episode["script"] = [{"id": "scene1", "locationId": ""}]
     episode["shots"] = [{
         "id": "s1", "sceneId": "scene1", "productionMethod": "generated_video", "order": 1,
-        "durationSeconds": 8, "prompt": "Gorthak sings", "approvedAttemptId": "attempt-1",
+        "durationSeconds": 15, "prompt": "Gorthak sings", "approvedAttemptId": "attempt-1",
         "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"], "model": "infinitetalk"}],
     }]
     series["episodesById"][episode_id] = episode
@@ -232,7 +233,7 @@ def test_a_series_shot_appends_a_take_and_keeps_the_approval(tmp_path, monkeypat
         "ownerType": "attempt", "ownerId": "attempt-1", "isDerivedThumbnail": False, "metadata": {},
     }}
     write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
-    _bind(monkeypatch, tmp_path, "longcat_avatar")
+    seen = _bind(monkeypatch, tmp_path, "longcat_avatar")
     result = _call(tmp_path, {
         "workspace": "film", "engine": "longcat_avatar", "series_id": series_id, "episode_id": episode_id,
         "shot": "s1", "audio": "voice.wav",
@@ -245,6 +246,10 @@ def test_a_series_shot_appends_a_take_and_keeps_the_approval(tmp_path, monkeypat
     assert (folder / relative).read_bytes() == b"approved-take"
     assert (folder / result["asset"]).is_file()
     assert result["verdict"] == "ok" and result["kept_original"] == "original.mp4"
+    assert shot["durationSeconds"] == 15
+    assert seen[0]["video_length"] == video_length("longcat_avatar", None, 15)
+    assert seen[0]["video_length"] == 240
+    assert seen[0]["audio_guide"] == "voice.wav"
 
 
 def test_bad_input_is_refused(tmp_path):
@@ -281,3 +286,11 @@ def test_lipsync_verdict_thresholds():
     assert verdict(0.9, 0.5, 0.0) == "ok"
     assert verdict(0.9, 0.1, 0.0) == "retake"
     assert verdict(0.1, 0.9, 0.0) == "unreliable"
+
+
+def test_video_length_follows_a_series_shot_when_span_is_omitted():
+    assert video_length("infinitetalk", None) == 81
+    assert video_length("infinitetalk", None, 10) == 160
+    assert video_length("infinitetalk", None, 15) == 240
+    assert video_length("longcat_avatar", None, 8) == 128
+    assert video_length("infinitetalk", (1.0, 4.0), 15) == 81

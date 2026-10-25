@@ -176,7 +176,7 @@ def _body(target: dict, workspace: str, guides: dict, folder: str) -> dict[str, 
         "video_prompt_type": spec["video_prompt_type"], "audio_prompt_type": "A",
         "video_guide": guides["video"], "audio_guide": guides["audio"],
         "sliding_window_size": spec["sliding_window_size"], "fps": spec["fps"],
-        "video_length": video_length(target["engine"], guides["span"]),
+        "video_length": video_length(target["engine"], guides["span"], target.get("duration")),
         "output_name": available_name(folder, f"lipsync-{token}-{target['engine']}.mp4"),
     }
     if "denoising_strength" in spec:
@@ -279,7 +279,10 @@ def _series_target(payload, folder, uploads, workspace, engine, span, offset) ->
     audio = _named_audio(payload, workspace, folder, uploads) or _score_file(episode, shot_id, workspace, folder, uploads)
     if audio is None:
         raise MediaToolError("audio_required", "Name the audio file for this shot.")
-    return _target("series", engine, video, audio, span, offset, payload, shot.get("locked") is True)
+    return _target(
+        "series", engine, video, audio, span, offset, payload, shot.get("locked") is True,
+        duration=_shot_duration(shot),
+    )
 
 
 def _dict_rows(value: Any) -> list[dict]:
@@ -360,13 +363,23 @@ def _named_audio(payload, workspace, folder, uploads) -> str | None:
     return resolve_source(payload["audio"], workspace, folder, uploads, ("audio",), "audio")
 
 
-def _target(kind, engine, video, audio, span, offset, payload, locked) -> dict[str, Any]:
+def _target(kind, engine, video, audio, span, offset, payload, locked, duration=None) -> dict[str, Any]:
     return {
         "kind": kind, "engine": engine, "video": video, "audio": audio, "span": span, "offset": offset,
-        "locked": locked, "original_name": os.path.basename(video),
+        "duration": duration, "locked": locked, "original_name": os.path.basename(video),
         "shot": payload.get("shot"), "production_id": payload.get("production_id"),
         "series_id": payload.get("series_id"), "episode_id": payload.get("episode_id"),
     }
+
+
+def _shot_duration(shot: dict) -> float | None:
+    value = shot.get("durationSeconds")
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    seconds = float(value)
+    if 0 < seconds <= 36000:
+        return seconds
+    return None
 
 
 def _locked(folder: str, production_id: str, shot_id: str, row: dict) -> bool:

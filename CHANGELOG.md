@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: Series lip redo no longer cuts a planned shot down to one sliding window.** `shot.lipsync.redo` on a series shot used only the engine window (~5 s) when `span` was omitted. The inspector button and MCP omit `span`, and planning writes 10 s shots (15 s for long dialogue), so the new take dropped the rest of the line. The queue now uses `durationSeconds` for `video_length`. A production shot still uses its `start`/`end` span. The original take stays.
+
 **Added: Meshy can rig a textured humanoid in the cloud (`engine: "meshy"`).** The user's own key spends 5 credits to rig and 3 per library animation; walking and running clips are free. The model must face +Z. Make-It-Animatable stays the local engine for a pose the standard rig refuses.
 
 **Added: an agent can tell a Video 3D scene as beats.** `world3d.scene.beats` takes who does what when (`appear`, `go`, `face`, `do`, `fx`) and turns that into motion, clips, appearance and effects the editor can still change. A move can name a start and an end, and a reply lists the collisions those moves cause.
