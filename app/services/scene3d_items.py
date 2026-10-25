@@ -124,8 +124,11 @@ class ItemService:
     def _item(self, data, *, replacing=False):
         value = data.get('item')
         if value is None: return None
-        if not isinstance(value, dict) or len(value) != 1: raise ValueError('item must name one prop, image or glb')
+        if not isinstance(value, dict) or len(value) != 1: raise ValueError('item must name one prop, image, glb or library model')
         root = Path(self.workspace_dir(data['workspace']))
+        if 'library' in value:
+            from services.cc0_props import library_item
+            return library_item(value['library'], root)
         if 'prop' in value:
             prop = get_prop(root, value['prop'], approved=True)
             return {**prop, 'prop': prop['id'], 'media': 'image'}
@@ -205,7 +208,7 @@ class ItemService:
 
 
 def command_catalog():
-    fields={'workspace':{'type':'string'},'target':{'type':'object','description':'{series_id, episode_id, shot} or {scene_id}'},'item':{'type':'object','description':'One of {prop}, {image}, {glb}'},
+    fields={'workspace':{'type':'string'},'target':{'type':'object','description':'{series_id, episode_id, shot} or {scene_id}'},'item':{'type':'object','description':'One of {prop}, {image}, {glb}, {library}'},
         'at':{'type':'object','description':'One of {mark}, {anchor}, {position: [x,y,z] metres}'},'id':{'type':'string'},'heightM':{'type':'number'},'rotationY':{'type':'number'},
         'billboard':{'type':'boolean'},'shadow':{'type':'boolean'},'base_revision':{'type':'integer'}}
     output=[]

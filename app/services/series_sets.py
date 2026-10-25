@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from starlette.concurrency import run_in_threadpool
 from services.mcp_intent import check_intent_id, intent_digest, load_intent, store_intent, IntentConflict
 from services.prop_library import atomic_json
-from services.production_rooms import prop_objects, validate_props
+from services.production_rooms import check_furniture, prop_objects, validate_props
 from services.set_molds import light_presets, resolve_mold
 from services.set_skins import build_skin, validate_skin
 from services.series_shot_edit import reset_approvals
@@ -141,9 +141,9 @@ class SeriesSets:
         return series,location
 
     def _start(self,data,intent):
-        series,location=self._location(data);entry={key:data[key] for key in ('mold','size','skin','props','light') if key in data}
+        series,location=self._location(data);entry={key:data[key] for key in ('mold','size','skin','props','light','furniture') if key in data}
         entry.setdefault('size','medium');entry.setdefault('skin',{});entry.setdefault('props',[])
-        mold=resolve_mold(entry['mold'],entry['size']);validate_skin(mold,entry['skin']);validate_props(entry,mold);validate_light(entry,mold)
+        mold=resolve_mold(entry['mold'],entry['size']);validate_skin(mold,entry['skin']);validate_props(entry,mold);validate_light(entry,mold);check_furniture(entry)
         digest=intent_digest([entry,series_style(series)])
         def store(project):
             loc=next(l for l in project['locations'] if l['id']==data['location_id'])
@@ -170,8 +170,13 @@ class SeriesSets:
             skin=build_skin(entry['mold'],entry['size'],entry['skin'],series_style(series),root=root,workspace=data['workspace'],call=self.call,location_image=location_image)
             room={'mold':lit_mold(entry),'skin':skin}
             templates=self._templates(room,digest,data['workspace'])
-            built={'room':room,'templates':templates,'objects':prop_objects(entry,root)}
+            objects=prop_objects(entry,root)
+            from services.cc0_props import furniture_objects
+            extra,replaced,warning=furniture_objects(room['mold'],choice=entry.get('furniture'),explicit=entry.get('furniture')=='library',taken=len(objects),limit=12,root=root)
+            if replaced: room['libraryBlocks']=replaced
+            built={'room':room,'templates':templates,'objects':[*objects,*extra]}
             status={'status':'completed','fingerprint':digest}
+            if warning: status['warning']=warning
         except Exception as error:
             built=None;status={'status':'failed','fingerprint':digest,'error':str(error)}
         def finish(project):

@@ -254,6 +254,13 @@ def resolve_media(config, *, stills, root, workspace, models=None, sets=None):
     from services.series_shot3d import glb_clip_names
 
     def url(value):
+        # A stage dressed before this workspace existed still names the library.
+        # Copy that GLB once and point the shot at the workspace file.
+        if isinstance(value, str) and "/api/v1/library/files/" in value:
+            from services.cc0_props import bind_library_url
+            bound = bind_library_url(value, Path(root), workspace)
+            if bound != value:
+                return bound
         if value.startswith(("/api/", "http://", "https://")):
             return value
         if (models or {}).get(value, {}).get("file"):
