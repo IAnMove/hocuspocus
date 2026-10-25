@@ -121,6 +121,8 @@
     "keyMinimaxMusic": "Clave API MiniMax Music",
     "keyGrok": "Clave API Grok (xAI)",
     "keyMeshy": "Clave API Meshy",
+    "meshyCommunityHint": "Los modelos que ha publicado otra gente se bajan en Meshy Discover, con una cuenta de pago y sin créditos de más. Guarda el GLB en el workspace y se usa como cualquier modelo. Buscarlos por API solo está en el plan Enterprise.",
+    "meshyCommunityLink": "Meshy Discover",
     "keyHi3d": "Clave API Hi3D",
     "enhancerTitle": "Mejorador de prompts de Studio",
     "enhancerHint": "El botón de chispa en el modo Studio. Usa guías de prompt específicas del modelo. Define aquí un LLM aparte o déjalo vacío para usar el LLM de Director de arriba.",

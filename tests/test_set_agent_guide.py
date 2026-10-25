@@ -15,6 +15,9 @@ def test_room_workflow_is_discoverable_in_series_profile():
         assert operation['inputSchema']['properties']['input']['type']=='object'
     for name in ('scene3d.sets.catalog','props.create','props.status','props.approve','scene3d.item.add','scene3d.item.update','scene3d.item.remove'):
         assert name in guide
+    assert 'https://www.meshy.ai/discover' in guide and 'Enterprise-only' in guide
+    added = next(item for item in items() if item['name']=='scene3d.item.add')
+    assert 'https://www.meshy.ai/discover' in added['description']
 
 
 def test_bible_exposes_room_anchors_and_legacy_locations_stay_identical():

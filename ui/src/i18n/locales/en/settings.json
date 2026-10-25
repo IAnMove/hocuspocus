@@ -121,6 +121,8 @@
     "keyMinimaxMusic": "MiniMax Music API key",
     "keyGrok": "Grok (xAI) API key",
     "keyMeshy": "Meshy API key",
+    "meshyCommunityHint": "Models other people published are downloaded on Meshy Discover, with a paid account and no extra credits. Save the GLB in the workspace and use it like any model. Searching them through the API is Enterprise only.",
+    "meshyCommunityLink": "Meshy Discover",
     "keyHi3d": "Hi3D API key",
     "enhancerTitle": "Studio Prompt Enhancer",
     "enhancerHint": "The sparkle button in Studio mode. Uses model-specific prompt guides for best results. Set a separate LLM here or leave empty to use the Director LLM above.",

@@ -344,6 +344,12 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   - **Checks:** `from_script` checks each object's model file, clip names, sequence, hold and appearance before
     writing; an unknown or talking carrier fails the render with a clear message.
 
+## Meshy GLBs
+
+When the production profile's 3D provider is `meshy` and Settings has a Meshy API key, `model3d.generate` creates the mesh on Meshy and publishes the GLB in the workspace gallery. Poll `model3d.status`.
+
+Models other people published are downloaded by the user from https://www.meshy.ai/discover (a paid Meshy account, no extra credit on that page). Do not call Meshy's showcase API: it is Enterprise-only and any other plan answers 403. Once the GLB is in the workspace, treat it as a model we made. Place it with `scene3d.item.add` (`item: {glb}`) or a script `objects` entry (`file`). If it already contains clips, play those and do not rig it again. If it has no skeleton and is one standing person, `model3d.rig` with `engine: "humanoid"`.
+
 ## 3D sets: molds, skins and props
 
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
