@@ -131,6 +131,8 @@ export interface RigEngine {
   description: string
   installed: boolean
   install_hint: string | null
+  /** A cloud engine (Meshy): reached through MCP/REST with library animations, not this panel's clip picker. */
+  remote?: boolean
 }
 
 export interface RigAnimation {
@@ -208,7 +210,8 @@ export interface HumanoidRigSummary {
 export async function fetchRigCapabilities(): Promise<RigCapabilities> {
   const res = await fetch(`${BASE}/api/v1/rig/capabilities`)
   if (!res.ok) throw new Error('Failed to fetch rig capabilities')
-  return res.json()
+  const capabilities: RigCapabilities = await res.json()
+  return { ...capabilities, engines: capabilities.engines.filter(engine => !engine.remote) }
 }
 
 export async function startRigJob(params: {

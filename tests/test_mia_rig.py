@@ -58,7 +58,7 @@ def test_mia_stays_absent_until_its_own_install_and_keeps_todays_engines():
     assert mia.installed() is False
     assert mia.weights_ready() is False
     engines = {item["id"]: item for item in rig_service.capabilities()["engines"]}
-    assert list(engines) == ["procedural", "unirig", "humanoid", "mia"]
+    assert list(engines) == ["procedural", "unirig", "humanoid", "mia", "meshy"]
     assert engines["mia"]["installed"] is False
     assert "Install Make-It-Animatable" in engines["mia"]["install_hint"]
     assert engines["humanoid"]["installed"] is True or engines["humanoid"]["install_hint"]
@@ -246,7 +246,7 @@ def test_mia_tasks_take_the_gpu_lane_and_humanoid_stays_on_cpu(monkeypatch):
 def test_mcp_and_the_wizard_share_the_mia_engine():
     submit = command_catalog()[0]
     enum = submit["inputSchema"]["properties"]["input"]["properties"]["engine"]["enum"]
-    assert enum == ["unirig", "procedural", "humanoid", "mia"]
+    assert enum == ["unirig", "procedural", "humanoid", "mia", "meshy"]
     launch = (ROOT / "app/_launch_runtime.py").read_text(encoding="utf-8")
     assert "model3d_rig_catalog" in launch
     assert "suggested_engine" in submit["description"]

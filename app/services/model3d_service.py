@@ -29,6 +29,7 @@ from typing import Any
 from . import execution_mode, resource_scheduler, model3d_external
 from .asset_manifest import publish_generation_job_sidecar
 from .generation_output_name import canonical_file_url
+from .meshy_options import request_options
 from .hunyuan3d.weight_integrity import dit_cache_root, purge_truncated_safetensors, truncated_safetensors
 from .minimax_image_service import MiniMaxImageError, generate_image as generate_minimax_image
 
@@ -679,9 +680,11 @@ def _start_remote_job(
 ) -> dict[str, Any]:
     job_id = uuid.uuid4().hex
     task_id = _canonical_task_id(job_id)
-    prompt = str((body.get("prompt") or body.get("settings", {}).get("prompt") if isinstance(body.get("settings"), dict) else "") or "").strip()
+    settings = body.get("settings") if isinstance(body.get("settings"), dict) else {}
+    prompt = str(body.get("prompt") or settings.get("prompt") or "").strip()   # an MCP/REST caller sends it top-level
     model_id = str(body.get("model_id") or _active_profile().get("model3d_model") or provider)
     image_path = image_paths.get("front") or next(iter(image_paths.values()), None)
+    meshy_options = request_options(body, model_id) if provider == "meshy" else None
     job = {
         "job_id": job_id,
         "task_id": task_id,
@@ -705,6 +708,7 @@ def _start_remote_job(
             "prompt": prompt,
             "image_path": image_path,
             "model": model_id,
+            **({"meshy_options": meshy_options} if meshy_options is not None else {}),
         },
     }
     with _lock:
@@ -751,6 +755,7 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
                 model=str(request_data.get("model") or "latest"),
                 cancelled=cancelled,
                 filename_stem=stem,
+                options=request_data.get("meshy_options"),
             )
         elif provider == "hi3d":
             from .hi3d_service import generate_model as generate_hi3d
@@ -790,6 +795,7 @@ def _run_remote_job(job_id: str, output_dir: str) -> None:
                 "model_type": request_data.get("model"),
                 "provider": provider,
                 "image_path": os.path.basename(str(request_data.get("image_path") or "")) or None,
+                **({"meshy": result["meshy"]} if result.get("meshy") else {}),
             },
         })
         _update_job(

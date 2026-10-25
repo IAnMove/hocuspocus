@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: Meshy can rig a textured humanoid in the cloud (`engine: "meshy"`).** The user's own key spends 5 credits to rig and 3 per library animation; walking and running clips are free. The model must face +Z. Make-It-Animatable stays the local engine for a pose the standard rig refuses.
+
 **Added: an agent can tell a Video 3D scene as beats.** `world3d.scene.beats` takes who does what when (`appear`, `go`, `face`, `do`, `fx`) and turns that into motion, clips, appearance and effects the editor can still change. A move can name a start and an end, and a reply lists the collisions those moves cause.
 
 **Added: an agent building a Video 3D scene can read each object's size in metres and ask for a fit.** `world3d.scene.inspect` and `world3d.scene.patch` reply with the camera, the light and `layout.items` (bounds in metres, capped). A binding can set `fit` to a height, width, depth or the longest side in metres. A document the editor would refuse is warned about and still accepted.

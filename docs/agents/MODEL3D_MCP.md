@@ -119,3 +119,84 @@ inspect Activity rather than inventing another intent. Native in-memory job
 status is not restored by a server restart. Job request/PID files live in
 `app/settings/model3d-jobs`, separate from shared checkpoint directories,
 so one worktree cannot reap another worktree's worker on startup.
+
+## Meshy (cloud generation, rigging and animation)
+
+Meshy is a paid cloud service. It needs the user's own API key in Settings → Services, and every call spends the user's
+credits: ask before you generate, rig or animate, and give the cost. A job whose key is missing fails at once and points
+at Settings. Everything Meshy makes is downloaded into the workspace as a normal asset with a manifest
+(`params.provider: "meshy"`, `params.meshy`: task ids, credits, expiry), so the user can reopen it in the app.
+Meshy deletes API outputs after **3 days**; the files are saved when the task ends and no signed link is kept.
+
+### Generate with options
+
+`model3d.generate` with `provider: "meshy"` (or a production profile whose 3D provider is Meshy) takes an optional
+`meshy` object next to `prompt` / `image_path` (the prompt may be up to 800 characters):
+
+```json
+{"workspace": "my-video", "provider": "meshy", "prompt": "a brass robot, full body",
+ "meshy": {"ai_model": "meshy-6-lite", "pose_mode": "t-pose", "target_polycount": 20000, "enable_pbr": true}}
+```
+
+| option | values |
+| --- | --- |
+| `ai_model` | `meshy-6-lite` (cheapest), `meshy-6`, `meshy-7.1`, `latest` (default); `meshy-t2` / `meshy-t2.5` with `model_type: "smart-topology"` |
+| `pose_mode` | `a-pose`, `t-pose`, `""`. Use `a-pose` or `t-pose` for a character you will rig |
+| `should_remesh`, `topology`, `target_polycount` | default remesh on at 30000 triangles (a dense mesh is too heavy for the Video 3D renderer); `topology` triangle or quad, 100–300000 |
+| `geometry_resolution` | `standard`, `2k`, `4k` (only `meshy-7.1` / `latest`) |
+| `enable_pbr`, `texture_resolution`, `texture_prompt` | texture; `4k` / `8k` need a model other than `meshy-6-lite` |
+| `auto_size`, `origin_at` | Meshy estimates the real height; the origin goes at the `bottom` (default) or `center` |
+
+A contradictory or unknown option is refused (HTTP 400) before any credit is spent. `lowpoly` is retired by Meshy on
+2026-10-30 and is not offered. Cost: `meshy-6` / `meshy-7.1` preview 20 + texture 10 credits, `meshy-6-lite` 5 + 10; an
+image to a textured model 30 (15 with lite). The gallery picture is saved as `<name>.preview.png`.
+
+### Rig and animate (`engine: "meshy"`)
+
+`model3d.rig` with `engine: "meshy"` rigs a workspace GLB in Meshy's cloud: 5 credits. The model must be a **textured
+humanoid**, a `.glb` of at most about 75 MB (Meshy's limit is 100 MB for the base64 upload), upright, **facing +Z**, and not Draco or meshopt compressed. `height_meters`
+(default 1.7) sets its size. The job saves the rigged GLB and, free with the rig, `<name>-walking.glb` and
+`<name>-running.glb` beside it.
+
+`animations` lists Meshy library entries as `action_id` numbers or `key` strings (find them with
+`model3d.meshy.animations`; at most 10, 3 credits each). Then a second Meshy task adds them and the published GLB holds
+the rig and **one clip per animation, in the order given**. Without `animations` the published GLB is the rigged one.
+
+```json
+{"version": 1, "intent_id": "hero-meshy-1", "input": {"workspace": "my-video", "source": "hero.glb",
+ "engine": "meshy", "height_meters": 1.7, "animations": ["walk_forward", 14]}}
+```
+
+A finished job (`model3d.rig.status`) lists `clips: [{index, name, duration, loop: null, action_id, key, library_name}]`
+(Meshy does not say whether a clip loops), `files: [{filename, url, role, clips}]` for the main file and the walking and
+running siblings, and `meshy: {rig_task_id, animation_task_id, consumed_credits, expires_at, height_meters, actions}`.
+`clip: {index, name}` works in a Video 3D slot as for any other rig. If the animation task fails after the rig was
+paid for, the rigged GLB is still saved and `warnings` says so. Cancelling a task Meshy has not started deletes it
+(refunded); one already running cannot be stopped, finishes at Meshy, and nothing is saved here.
+
+| failure | `error_code` / `error_reason` |
+| --- | --- |
+| Meshy cannot find a humanoid pose (HTTP 422) | `not_humanoid` / `meshy_pose_estimation_failed`: generate the model with `pose_mode` `a-pose` or `t-pose` |
+| no credits (402) | `meshy_insufficient_credits` |
+| bad key (401) | `meshy_invalid_key` |
+| over 100 MB, not a GLB, Draco / meshopt | `invalid_input` / `too_large`, `not_glb`, `draco`, `meshopt` |
+| unknown library entry | `invalid_input` / `unknown_animation` (nothing paid) |
+| too many unfinished tasks for the plan | `meshy_busy` (the call waits up to ten minutes first) |
+
+Nothing is written when a job fails. Meshy's rate limit (429) is waited out with its `Retry-After`. Job status is kept
+in memory like every rig job: if the server restarts while Meshy works, the task still finishes (and costs) at Meshy
+but this app loses the job, so wait for a Meshy job to end before you restart.
+
+### The animation library
+
+`model3d.meshy.animations` (and `GET /api/v1/rig/meshy/animations`) reads Meshy's library for free: filters `search`
+(name or key), `category` (`WalkAndRun`, `BodyMovements`, `DailyActions`, `Fighting`, `Dancing`), `sub_category`,
+`limit` (default 100) and `offset`. Each entry has `action_id`, `name`, `key`, `category`, `sub_category` and
+`preview_url`. The list is cached for ten minutes. Never hardcode ids: read them from the library.
+
+### Meshy terms
+
+Each user brings their own Meshy API key; HocusPocus never shares or proxies one (Meshy terms 1.2 and 2.6). On Meshy's
+free plan the outputs are licensed CC BY 4.0, so credit Meshy; paid plans own their outputs. Meshy deletes API outputs
+after 3 days, and for non-Enterprise plans Meshy may use inputs and outputs to improve its service, so do not send
+material the user wants kept private. Every Meshy result is recorded with `provider: meshy` in its manifest.

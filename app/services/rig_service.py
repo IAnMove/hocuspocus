@@ -313,6 +313,7 @@ def capabilities() -> dict[str, Any]:
         active = sum(1 for job in _jobs.values() if job["status"] in _ACTIVE_JOB_STATES)
     status = installation_status()
     unirig_status = unirig_installation_status()
+    from . import meshy_rig_service
     return {
         "engines": [
             {
@@ -337,6 +338,7 @@ def capabilities() -> dict[str, Any]:
                 "install_hint": status["install_hint"],
             },
             mia.capability(),
+            meshy_rig_service.engine_entry(),
         ],
         "animations": ANIMATIONS,
         "humanoid_animations": _humanoid_animation_catalog(),
@@ -437,6 +439,11 @@ def start_job(
     provenance: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """``provenance`` (who asked: actor, tool, capability, command) reaches the task and the GLB sidecar."""
+    if str(body.get("engine") or "") == "meshy":
+        # A cloud job: a polling thread in this registry, with no CPU or GPU lane and no local runtime to gate on.
+        from . import meshy_rig_service
+        return meshy_rig_service.start_job(
+            body=body, source_path=source_path, output_dir=output_dir, workspace=workspace, provenance=provenance)
     # Each engine has its own runtime; gate on the one actually requested.
     if str(body.get("engine") or "procedural") not in {"unirig", mia.ENGINE}:
         runtime = installation_status()

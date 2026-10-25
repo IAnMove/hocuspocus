@@ -25,7 +25,7 @@ def create_rig_router(
     engine_gate: Callable[[dict], None] | None = None,
     filter_engines: Callable[[list], list] | None = None,
 ) -> APIRouter:
-    """The four ``/api/v1/rig`` routes, in the full server's order."""
+    """The ``/api/v1/rig`` routes, in the full server's order."""
     router = APIRouter()
 
     @router.get("/api/v1/rig/capabilities")
@@ -35,6 +35,12 @@ def create_rig_router(
         if filter_engines is not None:
             payload["engines"] = filter_engines(payload["engines"])
         return payload
+
+    @router.get("/api/v1/rig/meshy/animations")
+    def meshy_animation_library(search: str = "", category: str = "", sub_category: str = "", limit: int = 100, offset: int = 0):
+        """Meshy's animation library (free to read; needs the user's Meshy key). Entries go in ``animations`` of an engine ``meshy`` rig."""
+        from services import meshy_rig_service
+        return meshy_rig_service.read_animation_library(search=search, category=category, sub_category=sub_category, limit=limit, offset=offset)
 
     @router.post("/api/v1/rig/generate")
     async def generate_rig(request: Request):
