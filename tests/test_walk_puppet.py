@@ -5,8 +5,10 @@ Joints are passed in, so the pose model is never asked.
 """
 import hashlib
 
-import cv2
 import numpy as np
+import pytest
+
+cv2 = pytest.importorskip("cv2")
 
 from services.walk_puppet import WalkPuppetError, build, cut_groups, limb_mesh
 
