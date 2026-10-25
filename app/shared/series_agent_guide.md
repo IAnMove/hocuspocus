@@ -346,9 +346,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 
 ## Meshy GLBs
 
-When the production profile's 3D provider is `meshy` and Settings has a Meshy API key, `model3d.generate` creates the mesh on Meshy and publishes the GLB in the workspace gallery. Poll `model3d.status`.
-
-Models other people published are downloaded by the user from https://www.meshy.ai/discover (a paid Meshy account, no extra credit on that page). Do not call Meshy's showcase API: it is Enterprise-only and any other plan answers 403. Once the GLB is in the workspace, treat it as a model we made. Place it with `scene3d.item.add` (`item: {glb}`) or a script `objects` entry (`file`). If it already contains clips, play those and do not rig it again. If it has no skeleton and is one standing person, `model3d.rig` with `engine: "humanoid"`.
+With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GLB. Poll `model3d.status`. Models other people published come from https://www.meshy.ai/discover (a paid account, no extra credit on that page). Do not call the showcase API: it is Enterprise-only and any other plan answers 403. A downloaded GLB is a model we made. Place it with `scene3d.item.add` (`item: {glb}`) or a script `objects` entry (`file`). If it already has clips, play those. If it has no skeleton and is one standing person, `model3d.rig` with `engine: "humanoid"`.
 
 ## 3D sets: molds, skins and props
 
