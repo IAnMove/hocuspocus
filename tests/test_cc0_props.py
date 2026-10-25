@@ -9,9 +9,9 @@ import pytest
 from fastapi import HTTPException
 
 from services.cc0_props import (
-    NOT_INSTALLED, PACK, PropManifestError, choice_of, collection_fragment, dress_room, fit_block,
-    furniture_objects, library_item, list_library, load_manifest, model_for, pack_ready, placements,
-    validate_manifest,
+    NOT_INSTALLED, PACK, PropManifestError, STAGE_CAST_LIMIT, choice_of, collection_fragment, dress_room,
+    fit_block, furniture_objects, library_item, list_library, load_manifest, model_for, pack_ready,
+    placements, stage_cast, validate_manifest,
 )
 from services.scene3d_items import ItemService, change_items
 from services.world3d_stage_documents import stage_document
@@ -366,3 +366,62 @@ def test_furniture_field_is_library_or_box():
     assert check_room("salon", {"kind": "room", "mold": "salon"}) is None
     refused = check_room("salon", {"kind": "room", "mold": "salon", "furniture": "cubes"})
     assert refused and "library or box" in refused
+
+
+def _hemiciclo_stage(speakers):
+    from services.world3d_stage_documents import resolve_production_stage
+    src = "/api/v1/file/a.glb?workspace=t"
+    models = {row["id"]: row for row in load_manifest()["models"]}
+    config = resolve_production_stage({
+        "template": "stage-hemiciclo",
+        "cast": {f"subject_{index}": src for index in range(1, speakers + 1)},
+    })
+    return stage_cast(config, ready=True, models=models)
+
+
+def _assert_cast_fits(config):
+    from services.production_scene3d import CAST_MEMBERS, validate_scene3d_shot
+    furniture = [key for key in config["cast"] if str(key).startswith("furniture-")]
+    assert STAGE_CAST_LIMIT == CAST_MEMBERS
+    assert len(config["cast"]) <= CAST_MEMBERS
+    assert set(config["background"]["room"]["libraryBlocks"]) == {key.removeprefix("furniture-") for key in furniture}
+    validate_scene3d_shot({"key": "k", "kind": "scene3d", "scene3d": {
+        "template": "two-shot", "background": config["background"], "cast": config["cast"],
+    }})
+    return furniture
+
+
+def test_a_two_person_hemiciclo_keeps_every_bench():
+    furniture = _assert_cast_fits(_hemiciclo_stage(2))
+    assert len(furniture) == 14
+
+
+def test_a_three_person_hemiciclo_does_not_overflow_the_production_cast():
+    """Installing furniture used to add all 14 benches on top of 3 speakers (17 > 16) and abort the shot."""
+    config = _hemiciclo_stage(3)
+    furniture = _assert_cast_fits(config)
+    assert len(furniture) == 13 and {"subject_1", "subject_2", "subject_3"} <= set(config["cast"])
+
+
+def test_a_built_hemiciclo_set_leaves_cast_room_for_the_speakers():
+    from services.production_rooms import resolve_background
+    from services.production_scene3d import CAST_MEMBERS, validate_scene3d_shot
+    from services.set_molds import resolve_mold
+    objects = [{"objectId": f"furniture-bench_{index}", "file": "cc0/x.glb", "position": [0, 0, 0], "add": True}
+               for index in range(12)]
+    sets = {"chamber": {
+        "room": {"mold": resolve_mold("hemiciclo"), "libraryBlocks": [f"bench_{index}" for index in range(12)]},
+        "objects": objects,
+    }}
+    resolved = {
+        "background": {"source": "chamber"},
+        "cast": {f"subject_{index}": "/api/v1/file/a.glb?workspace=w" for index in range(1, 6)},
+    }
+    assert resolve_background(resolved, sets, "w") is True
+    furniture = [key for key in resolved["cast"] if str(key).startswith("furniture-")]
+    assert len(resolved["cast"]) == CAST_MEMBERS and len(furniture) == 11
+    assert all(f"subject_{index}" in resolved["cast"] for index in range(1, 6))
+    assert set(resolved["background"]["room"]["libraryBlocks"]) == {key.removeprefix("furniture-") for key in furniture}
+    validate_scene3d_shot({"key": "k", "kind": "scene3d", "scene3d": {
+        "template": "two-shot", "background": resolved["background"], "cast": resolved["cast"],
+    }})

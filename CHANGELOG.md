@@ -27,6 +27,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Added: a comic-page chapter transition in Video 3D.** `scene3d.comic.transition` (MCP, Wizard and the Video 3D editor) saves two editable scenes, `comic-panel-exit` and `comic-panel-enter` (plus a portrait pair). The camera pulls out of one panel until the page is in frame, then flies into the next; the panel pictures are the frames of the cut. Filler art is original.
 
+**Fixed: dressing a crowded interior no longer overflows the production cast.** Installing CC0 furniture on `stage-hemiciclo` used to add all 14 benches on top of the speakers. Three people made 17 cast entries, past the 16-model limit, and the shot refused to compile. Furniture now takes only the seats that still fit; the rest stay boxes.
+
 **Fixed: a stage dressed with CC0 furniture can be exported.** Opening or instantiating the stage copies each GLB into the workspace (`cc0/<sha>.glb`) and the scene points at that file, so the export still finds it after the pack is removed. A document that already names `/api/v1/library/files/…` is copied the same way at export time.
 
 **Added: interior molds can use a CC0 low-poly furniture library instead of grey boxes.** The optional `cc0-furniture` collection (Kenney Furniture Kit, CC0, 21 GLBs, about 297 KB) installs through the asset library. When it is installed, a mold block of a known kind becomes that GLB, fitted to the block and standing on the floor; `furniture: "box"` keeps the boxes, and a missing pack keeps them too. `props.list` with `pack: "cc0"` lists the models, and `scene3d.item.add` with `{library}` places one at an anchor.

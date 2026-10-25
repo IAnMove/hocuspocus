@@ -123,11 +123,23 @@ def resolve_background(resolved,sets,workspace):
     if not made.get('room'): return False
     resolved['background']={'room':copy.deepcopy(made['room'])}
     cast=resolved.setdefault('cast',{})
+    if not isinstance(cast,dict):
+        cast={}; resolved['cast']=cast
+    from services.cc0_props import STAGE_CAST_LIMIT, cast_load
+    skipped=set()
     for row in made.get('objects',[]):
         file=row['file']
-        source=file if str(file).startswith('/api/') else f"/api/v1/file/{quote(file)}?workspace={quote(workspace)}"
-        cast.setdefault(row['objectId'],{**{k:v for k,v in row.items() if k not in {'objectId','file','media'}},
-            'source':source})
+        url=file if str(file).startswith('/api/') else f"/api/v1/file/{quote(file)}?workspace={quote(workspace)}"
+        oid=row['objectId']
+        if oid not in cast and str(oid).startswith('furniture-') and cast_load(cast)>=STAGE_CAST_LIMIT:
+            skipped.add(str(oid)[len('furniture-'):])
+            continue
+        cast.setdefault(oid,{**{k:v for k,v in row.items() if k not in {'objectId','file','media'}},
+            'source':url})
+    room=resolved['background']['room']
+    if skipped and isinstance(room,dict) and room.get('libraryBlocks'):
+        room['libraryBlocks']=[block for block in room['libraryBlocks'] if block not in skipped]
+        if not room['libraryBlocks']: room.pop('libraryBlocks')
     return True
 
 
