@@ -100,3 +100,23 @@ def test_a_sheet_splits_one_cycle_and_bad_input_is_refused():
                 lambda: guide_image("side", 0.0, style="sketch")):
         with pytest.raises(WalkGuideError):
             bad()
+
+
+def test_the_control_clip_is_one_cycle_at_the_ltx_rate_and_each_pose_takes_its_own_frame(tmp_path):
+    from services.walk_guide_video import CLIP_FPS, CLIP_FRAMES, CLIP_SIZE, STEPS, render_guide_video, sample_frames, sample_indices
+    from services.walk_video_method import UNION_LORA
+    from services.video_generation_v3 import LTX_UNION_CONTROL_LORA
+
+    assert (CLIP_FPS, CLIP_FRAMES, CLIP_SIZE, STEPS) == (25, 25, (832, 1104), 2)
+    assert UNION_LORA == LTX_UNION_CONTROL_LORA
+    indices = sample_indices(CLIP_FRAMES, 12)
+    assert indices[0] == 0 and len(indices) == len(set(indices)) == 12 and max(indices) < CLIP_FRAMES
+    side = render_guide_video("side", str(tmp_path / "side.mp4"), frames=4, fps=4, size=(64, 96))
+    front = render_guide_video("front", str(tmp_path / "front.mp4"), frames=4, fps=4, size=(64, 96))
+    assert side["frames"] == 4 and side["direction"] == "side" and side["steps"] == 2 and side["phases"][1] == 0.25
+    assert (tmp_path / "side.mp4").read_bytes() != (tmp_path / "front.mp4").read_bytes()
+    names = [f"hero-walk-12-pose-{index}.png" for index in range(4)]
+    assert sample_frames(str(tmp_path / "side.mp4"), str(tmp_path), names) == names
+    assert all((tmp_path / name).is_file() for name in names)
+    with pytest.raises(WalkGuideError):
+        render_guide_video("left", str(tmp_path / "no.mp4"), frames=2, fps=2, size=(64, 96))

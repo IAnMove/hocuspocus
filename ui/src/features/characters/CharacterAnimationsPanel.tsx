@@ -25,10 +25,22 @@ const BADGE: Record<AnimationState, string> = {
   approved: 'border-emerald-400/40 text-emerald-200', rejected: 'border-red-400/40 text-red-200',
 }
 
+type WalkMethod = 'poses' | 'video'
 type Actions = {
   busy: boolean; runs: Record<string, AnimationJob>
-  make: (def: AnimationDef, remake?: string) => void; cancel: (jobId: string) => void
+  make: (def: AnimationDef, remake?: string, method?: WalkMethod) => void; cancel: (jobId: string) => void
   review: (id: string, state: CharacterKitReviewState) => void; remove: (id: string) => void
+}
+
+/** Pose by pose is the default. One guided clip is opt-in, and only a catalog walk offers it. */
+function WalkMethodSelect({ id, value, disabled, onChange }: { id: string; value: WalkMethod; disabled: boolean; onChange: (method: WalkMethod) => void }) {
+  const { t } = useUiTranslation('characters')
+  return <label className="text-[11px] text-text-secondary">{t('animations.methodLabel')}
+    <select data-testid={`walk-method-${id}`} value={value} disabled={disabled} aria-label={t('animations.methodLabel')}
+      onChange={event => onChange(event.target.value === 'video' ? 'video' : 'poses')} className={`${control} mt-1 block`}>
+      <option value="poses">{t('animations.methodPoses')}</option>
+      <option value="video">{t('animations.methodVideo')}</option>
+    </select></label>
 }
 
 /** Where a make job is: waiting for the GPU, a pose at a time, joining the sheet, or why it stopped (the poses made stay for the next try). */
@@ -46,7 +58,7 @@ function RunProgress({ def, run }: { def: AnimationDef; run: AnimationJob }) {
   </div>
 }
 
-function MadeAnimation({ def, made, actions }: { def: AnimationDef; made: KitAnimation; actions: Actions }) {
+function MadeAnimation({ def, made, actions, how }: { def: AnimationDef; made: KitAnimation; actions: Actions; how: WalkMethod }) {
   const { t, i18n } = useUiTranslation('characters')
   const controls = Object.entries(templateControls(made, def.template)).map(([key, value]) => `${key} ${value}`).join(', ')
   return <div className="grid gap-3 sm:grid-cols-[14rem_minmax(0,1fr)]">
@@ -64,7 +76,9 @@ function MadeAnimation({ def, made, actions }: { def: AnimationDef; made: KitAni
       <div className="flex flex-wrap gap-1.5">
         <button type="button" disabled={actions.busy || made.reviewState === 'approved'} className={small} onClick={() => actions.review(def.id, 'approved')}><Check size={12} />{t('animations.approve')}</button>
         <button type="button" disabled={actions.busy || made.reviewState === 'rejected'} className={small} onClick={() => actions.review(def.id, 'rejected')}><X size={12} />{t('animations.reject')}</button>
-        <button type="button" disabled={actions.busy} className={small} onClick={() => actions.make(def)}><RotateCcw size={12} />{t('animations.makeAgain')}</button>
+        <button type="button" disabled={actions.busy} className={small} onClick={() => actions.make(def, undefined, how)}><RotateCcw size={12} />{t('animations.makeAgain')}</button>
+        {made.guideVideo && <a className={small} href={made.guideVideo}>{t('animations.guideVideo')}</a>}
+        {made.clip && <a className={small} href={made.clip}>{t('animations.clip')}</a>}
         <button type="button" disabled={actions.busy} className={small} onClick={() => actions.remove(def.id)}><Trash2 size={12} />{t('animations.delete')}</button>
       </div>
     </div>
@@ -72,11 +86,12 @@ function MadeAnimation({ def, made, actions }: { def: AnimationDef; made: KitAni
 }
 
 /** Crear, or Reintentar after a stop (keeping the poses made), and Cancelar while it runs. */
-function MakeButtons({ def, run, actions, full }: { def: AnimationDef; run?: AnimationJob; actions: Actions; full: boolean }) {
+function MakeButtons({ def, run, actions, full, how }: { def: AnimationDef; run?: AnimationJob; actions: Actions; full: boolean; how: WalkMethod }) {
   const { t } = useUiTranslation('characters')
   const working = run ? isActiveJob(run) : false
+  const again = run?.remake ?? undefined
   return <div className="flex gap-2">
-    <button type="button" disabled={actions.busy || full} className={`${small} text-cyan-200`} onClick={() => actions.make(def, run?.remake ?? undefined)}>
+    <button type="button" disabled={actions.busy || full} className={`${small} text-cyan-200`} onClick={() => actions.make(def, again, again ? undefined : how)}>
       {working ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
       {t(run ? (working ? 'animations.working' : 'animations.tryAgain') : 'animations.make')}</button>
     {run && working && run.status !== 'cancelling' && <button type="button" className={small} onClick={() => actions.cancel(run.jobId)}>{t('animations.cancel')}</button>}
@@ -85,6 +100,7 @@ function MakeButtons({ def, run, actions, full }: { def: AnimationDef; run?: Ani
 
 function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: CharacterKit; actions: Actions }) {
   const { t, i18n } = useUiTranslation('characters')
+  const [how, setHow] = useState<WalkMethod>('poses')
   const state = animationState(kit, def.id)
   const made = kitAnimations(kit)[def.id]
   const run = actions.runs[def.id]
@@ -101,10 +117,11 @@ function AnimationCard({ def, kit, actions }: { def: AnimationDef; kit: Characte
         <span className={`shrink-0 rounded border px-1.5 py-0.5 text-[10px] ${BADGE[state]}`}>{t(`animations.state.${state}`)}</span>
       </div>
     </header>
+    {def.guide === 'walk' && <WalkMethodSelect id={def.id} value={how} disabled={actions.busy} onChange={setHow} />}
     {run && <RunProgress def={def} run={run} />}
-    {made && !(run && isActiveJob(run)) && <MadeAnimation def={def} made={made} actions={actions} />}
+    {made && !(run && isActiveJob(run)) && <MadeAnimation def={def} made={made} actions={actions} how={how} />}
     {!made && !run && <p className="text-[11px] text-text-muted">{t('animations.posesCount', { count: def.poses.length })}</p>}
-    {(!made || run) && <MakeButtons def={def} run={run} actions={actions} full={!made && !canAddAnimation(kit)} />}
+    {(!made || run) && <MakeButtons def={def} run={run} actions={actions} full={!made && !canAddAnimation(kit)} how={how} />}
   </article>
 }
 
@@ -127,7 +144,7 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
   const busy = work.busy || sets.active
   const actions: Actions = {
     busy, runs: work.runs, cancel: id => { void work.cancel(id) },
-    make: (def, remake) => { if (kit && model) void work.start(kit, def, model, remake) },
+    make: (def, remake, method) => { if (kit && model) void work.start(kit, def, model, remake, method) },
     review: (id, state) => { if (kit) void work.review(kit.id, id, state) },
     remove: id => { if (kit) void work.remove(kit.id, id) },
   }

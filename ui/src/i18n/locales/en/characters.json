@@ -788,6 +788,11 @@
       "rejected": "rejected by the agent"
     },
     "make": "Make",
+    "methodLabel": "How to make this walk",
+    "methodPoses": "Pose by pose",
+    "methodVideo": "One guided clip",
+    "guideVideo": "Skeleton guide",
+    "clip": "Guided clip",
     "makeAgain": "Make all again",
     "tryAgain": "Try again",
     "working": "Making…",

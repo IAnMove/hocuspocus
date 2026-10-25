@@ -2,6 +2,7 @@
 
 A fake server answers the tools the job calls (generation.image, jobs.wait, studio.key, jobs.cancel) and writes real pictures, so the
 whole path runs: poses, sheet, and the animation saved on the kit as pending."""
+import subprocess
 import threading
 from pathlib import Path
 
@@ -77,6 +78,14 @@ class FakeServer:
         self.root, self.calls, self.refuse, self.during = root, [], set(), None
         self.spoil = {}  # n-th key (1-based) -> "small" (a pose drawn at half the size) | "box" (a key that left a whole rectangle)
         self.follow_guides, self.wrong_legs = True, set()
+        self.last_output = ""
+
+    def _clip(self, name: str) -> None:
+        """A real 25-frame clip the job can sample. The picture is a flat colour; the legs come from the file name at key time."""
+        subprocess.run(
+            ["ffmpeg", "-v", "error", "-nostdin", "-y", "-f", "lavfi", "-i", "color=c=green:s=64x64:d=1:r=25",
+             "-frames:v", "25", "-c:v", "libx264", "-pix_fmt", "yuv420p", str(self.root / name)],
+            check=True, capture_output=True)
 
     def draw_legs(self, name: str) -> None:
         spread = _guided(Path(name).stem.removesuffix("-key"))
@@ -96,12 +105,17 @@ class FakeServer:
             if any(f"-{pose}-" in name for pose in self.refuse):
                 return {"_is_error": True, "error": {"code": "insufficient_vram", "message": "insufficient VRAM"}}
             _picture(self.root / f"{name}.png", keyed=False)
+            self.last_output = str(self.root / f"{name}.png")
             return {"receipt": {"result": {"job_id": f"gen-{len(self.calls)}", "status": "queued"}}, "output": f"{name}.png"}
+        if tool == "generation.video":
+            name = f"{arguments['intent_id']}.mp4"
+            self._clip(name)
+            self.last_output = str(self.root / name)
+            return {"receipt": {"result": {"job_id": f"gen-{len(self.calls)}", "status": "queued"}}, "output": name}
         if tool == "jobs.wait":
             if self.during:
                 self.during()
-            outputs = [arguments_input["output_name"] + ".png" for arguments_input in self.of("generation.image")]
-            return {"result": {"status": "completed", "output_files": [str(self.root / outputs[-1])]}}
+            return {"result": {"status": "completed", "output_files": [self.last_output]}}
         if tool == "studio.key":
             source = arguments["input"]["source"]
             name = f"{Path(source).stem}-key.png"
@@ -745,6 +759,7 @@ def test_the_twelve_pose_walk_is_made_at_twelve_frames_a_second_with_its_contrac
     _mode(jobs, ONE_SHOT)
     job = jobs.start(WS, "hero", "walk-12", auto_approve=True)
     assert job["status"] == "completed" and job["result"]["count"] == 12 and job["autoApproved"] is True, job.get("checks")
+    assert "method" not in job and server.of("generation.video") == [], "omitting method stays pose by pose"
     made = _kit(root)["animations"]["walk-12"]
     assert (made["motion"], made["dir"], made["facing"], made["fps"], made["loop"], made["view"]) == ("walk", "side", "right", 12, "loop", "side")
     assert (made["sheet"]["count"], made["sheet"]["columns"], made["sheet"]["rows"]) == (12, 6, 2) and made["reviewState"] == "approved"
@@ -975,3 +990,92 @@ def test_a_model_that_refuses_the_guide_draws_the_walk_from_the_words_and_still_
     assert len(sent[0]["params"]["image_refs"]) == 2 and sent[0]["params"]["prompt"].startswith("Picture 1")
     assert all(len(item["params"]["image_refs"]) == 1 and not item["params"]["prompt"].startswith("Picture") for item in sent[1:])
     assert all(take["gait"]["ok"] for take in job["takes"])
+
+
+def test_method_video_needs_the_weights_and_a_catalog_walk_and_the_pose_path_stays(world, monkeypatch):
+    monkeypatch.setattr("services.character_animation_job.weights_present", lambda: False)
+    root, server, jobs = world
+    with pytest.raises(AnimationJobError) as missing:
+        jobs.start(WS, "hero", "walk-12", method="video")
+    assert missing.value.code == "ltx_not_installed" and server.calls == []
+    with pytest.raises(AnimationJobError) as gesture:
+        jobs.start(WS, "hero", "wave", method="video")
+    assert gesture.value.code == "video_not_a_walk" and server.calls == []
+    made = jobs.start(WS, "hero", "walk", method="poses")
+    assert made["status"] == "completed" and "method" not in made and server.of("generation.video") == [] and len(server.of("generation.image")) == 4
+    server.calls = []
+    with pytest.raises(AnimationJobError) as one_pose:
+        jobs.start(WS, "hero", "walk", method="video", pose="contact")
+    assert one_pose.value.code == "video_is_a_cycle" and server.calls == []
+
+
+def test_a_running_pose_job_is_returned_when_video_is_asked_and_the_weights_are_not_asked_again(world):
+    root, server, jobs = world
+    release = threading.Event()
+    server.during = lambda: release.wait(10)
+    jobs.deps.inline = False
+    jobs.deps.walk_video_ready = lambda: False
+    first = jobs.start(WS, "hero", "walk")
+    try:
+        second = jobs.start(WS, "hero", "walk", method="video")
+        assert second["jobId"] == first["jobId"] and "method" not in second
+    finally:
+        release.set()
+        jobs._threads[first["jobId"]].join(10)
+
+
+def test_method_video_samples_one_clip_into_the_same_sheet_and_keeps_the_guide(directions, monkeypatch):
+    monkeypatch.setattr("services.walk_guide_video.CLIP_SIZE", (64, 96))
+    root, server, jobs, _sets = directions
+    jobs.deps.walk_video_ready = lambda: True
+    _mode(jobs, ONE_SHOT)
+    job = jobs.start(WS, "hero", "walk-12", method="video", model="qwen_image_21_turbo", auto_approve=True)
+    assert job["status"] == "completed", job.get("error")
+    assert job["method"] == "video" and job["model"] == "ltx2_22B_distilled"
+    assert len(server.of("generation.video")) == 1 and server.of("generation.image") == [] and len(server.of("studio.key")) == 12
+    params = server.of("generation.video")[0]["params"]
+    assert params["model_type"] == "ltx2_22B_distilled" and params["resolution"] == "832x1104" and params["video_length"] == 25
+    assert params["video_prompt_type"] == "VG" and params["loras_multipliers"] == "1"
+    assert params["activated_loras"] == ["ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"]
+    assert params["image_start"] == f"/api/v1/file/hero-key.png?workspace={WS}" and "walk-guide" in params["video_guide"]
+    assert "right profile" in params["prompt"]
+    made = _kit(root)["animations"]["walk-12"]
+    assert (made["motion"], made["dir"], made["fps"], made["sheet"]["count"], made["sheet"]["columns"]) == ("walk", "side", 12, 12, 6)
+    assert "walk-guide" in made["guideVideo"] and made["clip"]
+    assert (root / made["guideVideo"].split("/")[-1].split("?")[0]).is_file()
+    assert (root / made["clip"].split("/")[-1].split("?")[0]).suffix == ".mp4"
+    assert all(frame["gait"]["ok"] and frame["guide"] for frame in made["frames"])
+    gait = next(item for item in job["checks"] if item["id"] == "walk_gait")
+    assert gait["ok"], job.get("checks")
+
+
+def test_the_make_route_refuses_video_without_weights_and_an_unknown_method(world, monkeypatch):
+    monkeypatch.setattr("services.character_animation_job.weights_present", lambda: False)
+    _root, server, jobs = world
+    app = FastAPI()
+    app.include_router(create_character_animation_jobs_router(jobs), prefix="/api/v1/character-kits")
+    client = TestClient(app)
+    url = "/api/v1/character-kits/animations/make"
+    missing = client.post(url, json={"workspace": WS, "kitId": "hero", "animation": "walk-12", "method": "video"})
+    assert missing.status_code == 400 and missing.json()["detail"]["code"] == "ltx_not_installed"
+    assert client.post(url, json={"workspace": WS, "kitId": "hero", "animation": "walk", "method": "clip"}).status_code == 422
+    poses = client.post(url, json={"workspace": WS, "kitId": "hero", "animation": "nod"})
+    assert poses.status_code == 200 and poses.json()["job"]["status"] == "completed" and "method" not in poses.json()["job"]
+    assert server.of("generation.video") == [] and len(server.of("generation.image")) == 3
+
+
+def test_weights_present_is_both_files_and_the_prompt_names_the_direction(tmp_path, monkeypatch):
+    from services.character_animations import animation
+    from services.walk_video_method import DIFFUSION, UNION_LORA, accept_walk_method, clip_prompt, weights_present
+
+    monkeypatch.setattr("services.walk_video_method.locate_file", lambda name, error_if_none=False: None)
+    monkeypatch.setattr("services.walk_video_method._LORA_DIRS", (str(tmp_path),))
+    assert weights_present() is False
+    (tmp_path / DIFFUSION).write_bytes(b"x")
+    assert weights_present() is False
+    (tmp_path / UNION_LORA).write_bytes(b"x")
+    assert weights_present() is True
+    front = animation("walk-front")
+    assert "toward the camera" in clip_prompt({"definition": front, "description": "Ana", "takes": [{"seed": 1}]})
+    assert accept_walk_method(None, front, None) == "poses"
+    assert accept_walk_method("video", animation("walk-back"), None) == "video"
