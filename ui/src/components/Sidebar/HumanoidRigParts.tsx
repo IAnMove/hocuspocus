@@ -5,7 +5,7 @@ import type { RigAnimation, RigCapabilities, RigJob } from '../../api/model3d'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { HumanoidAnimateSection } from './HumanoidAnimateSection'
-import { clampBpm, clipGroups, refusalKey, rigHelpKey, warningKeys } from './humanoidRig'
+import { clampBpm, clipGroups, refusalKey, rigHelpKey, showsMiaSuggestion, warningKeys } from './humanoidRig'
 
 /** Keys built from ids that the catalogs define; ``defaultValue`` covers anything new. */
 const key = (value: string) => value as ParseKeys<'scene3d'>
@@ -45,11 +45,11 @@ export function HumanoidEngineIntro({ engineId, bpm, onBpm }: { engineId: string
 }
 
 /** The job's error, or the humanoid refusal and result. */
-export function HumanoidJobNotes({ job }: { job: RigJob }) {
+export function HumanoidJobNotes({ job, onSuggestMia }: { job: RigJob; onSuggestMia?: () => void }) {
   return (
     <>
       {job.error && !refusalKey(job) && <p className="mt-2 max-h-24 overflow-y-auto whitespace-pre-wrap text-[10px] text-red-300">{job.error}</p>}
-      <HumanoidRefusal job={job} />
+      <HumanoidRefusal job={job} onSuggestMia={onSuggestMia} />
       {job.status === 'completed' && <HumanoidResult job={job} />}
     </>
   )
@@ -84,7 +84,7 @@ export function HumanoidResult({ job }: { job: RigJob }) {
 }
 
 /** A refused mesh: the reason in plain words and how to fix the model. */
-export function HumanoidRefusal({ job }: { job: RigJob | null }) {
+export function HumanoidRefusal({ job, onSuggestMia }: { job: RigJob | null; onSuggestMia?: () => void }) {
   const { t } = useUiTranslation('scene3d')
   const reason = refusalKey(job)
   if (!reason) return null
@@ -93,6 +93,16 @@ export function HumanoidRefusal({ job }: { job: RigJob | null }) {
       <p className="font-medium">{t('rig.refusalTitle')}</p>
       <p className="mt-0.5 text-amber-100/90">{t(key(reason))}</p>
       <p className="mt-1 text-[9px] text-amber-100/70">{t('rig.refusalFix')}</p>
+      {showsMiaSuggestion(job) && (
+        <>
+          <p className="mt-1 text-[9px] text-amber-100/90">{t('rig.suggestMia')}</p>
+          {onSuggestMia && (
+            <button type="button" onClick={onSuggestMia} className="mt-1.5 rounded border border-amber-300/40 px-2 py-1 text-[10px] text-amber-50 hover:bg-amber-500/20">
+              {t('rig.suggestMiaAction')}
+            </button>
+          )}
+        </>
+      )}
     </div>
   )
 }

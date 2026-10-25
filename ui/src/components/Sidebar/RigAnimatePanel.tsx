@@ -17,7 +17,7 @@ import {
   type RigProfile,
   type RigProfileId,
 } from '../../api/client'
-import { DEFAULT_BPM, clipIsRecommended, clipsForEngine, humanoidClipSelection, isRigSource, previewAsset, recommendedClipIds, rigFooterKey, rigHelpKey, rigJobBody } from './humanoidRig'
+import { DEFAULT_BPM, clipIsRecommended, clipsForEngine, humanoidClipSelection, isRigSource, previewAsset, profileForEngine, recommendedClipIds, rigFooterKey, rigHelpKey, rigJobBody } from './humanoidRig'
 import { useClipText } from './humanoidClipText'
 import { HumanoidAnimateSlot, HumanoidClipGroups, HumanoidEngineIntro, HumanoidJobNotes } from './HumanoidRigParts'
 
@@ -260,7 +260,9 @@ export function RigAnimatePanel() {
       setSelectedClips(new Set(humanoidClipSelection(ids)))
       return
     }
-    const profile = capabilities?.rig_profiles?.find(item => item.id === rigProfileId)
+    const profileId = profileForEngine(id, rigProfileId)
+    if (profileId !== rigProfileId) setRigProfileId(profileId)
+    const profile = capabilities?.rig_profiles?.find(item => item.id === profileId)
     if (profile) setSelectedClips(new Set(profile.recommended_animations))
   }
 
@@ -448,7 +450,7 @@ export function RigAnimatePanel() {
             <div className={`rounded-lg border p-3 ${job.status === 'failed' ? 'border-red-500/30 bg-red-500/10' : 'border-border bg-bg-tertiary'}`}>
               <div className="flex items-center justify-between text-[10px]"><span className="text-text-secondary">{job.message}</span><span className="text-text-muted">{Math.round(job.progress * 100)}%</span></div>
               <div className="h-1.5 bg-bg-primary rounded-full overflow-hidden mt-2"><div className="h-full bg-accent-green transition-all" style={{ width: `${Math.max(2, job.progress * 100)}%` }} /></div>
-              <HumanoidJobNotes job={job} />
+              <HumanoidJobNotes job={job} onSuggestMia={() => chooseEngine('mia')} />
               {job.status === 'completed' && (
                 <div className="mt-3 border-t border-border pt-3 space-y-1.5">
                   <button

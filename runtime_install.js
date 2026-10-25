@@ -242,6 +242,15 @@ function engineSteps(engine, platform) {
         'python -c "from huggingface_hub import snapshot_download; snapshot_download(\'24yearsold/seethroughv0.0.1_marigold_nf4\')"',
       ]}})
   }
+
+  if (engine === 'mia') run.push({method: 'shell.run', params: {
+    ...shell(engine, platform),
+    message: [
+      pip(engine, platform, 'install pytorch3d==0.7.7+pt2.1.2cu121 --extra-index-url https://miropsota.github.io/torch_packages_builder'),
+      pip(engine, platform, 'install torch-cluster -f https://data.pyg.org/whl/torch-2.1.2+cu121.html'),
+      'app/services/mia/env/bin/python app/services/mia/fetch_weights.py',
+    ],
+  }})
   // Corrects the few upstream wheel tags uv's check rejects (decord on Linux). It is a no-op
   // elsewhere and is not hashed: existing installs never needed it, so they stay current.
   run.push({method: 'shell.run', params: {...shell(engine, platform), message: [
@@ -254,7 +263,7 @@ function engineSteps(engine, platform) {
     const v = vendors[id]
     run.push({method: 'fs.write', params: {path: v.marker, text: `repository=${v.url}\nrevision=${v.revision}\n`}})
   }
-  const markers = {hunyuan3d: '.maestro_hunyuan3d_v1.installed', minimax_h3: '.maestro_minimax_h3_v2.installed', rigging: '.maestro_rigging_v1.installed'}
+  const markers = {hunyuan3d: '.maestro_hunyuan3d_v1.installed', minimax_h3: '.maestro_minimax_h3_v2.installed', rigging: '.maestro_rigging_v1.installed', mia: '.maestro_mia_v1.installed'}
   if (markers[engine]) run.push({method: 'fs.write', params: {path: `${spec.env}/${markers[engine]}`, text: catalog.revision}})
   if (engine === 'see_through') run.push({method: 'fs.write', params: {
     path: `${spec.env}/.maestro_see_through_v1.installed`, text: spec.source.revision,

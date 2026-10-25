@@ -50,6 +50,17 @@
       "launch/inference/merge.sh"
     ]
   },
+  "make_it_animatable": {
+    "url": "https://github.com/jasongzy/Make-It-Animatable",
+    "path": "app/services/mia/vendor/Make-It-Animatable",
+    "revision": "8fb51382ff6da556cdb95cc03a48200603f3a493",
+    "marker": "app/services/mia/env/.maestro_make_it_animatable_8fb51382ff6da556cdb95cc03a48200603f3a493.installed",
+    "requiredPaths": [
+      "app.py",
+      "app_blender.py",
+      "model.py"
+    ]
+  },
   "trellis2": {
     "url": "https://github.com/microsoft/TRELLIS.2",
     "path": "app/services/model3d_runtimes/trellis2/vendor/TRELLIS.2",

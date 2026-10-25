@@ -20,6 +20,7 @@ FEATURES = {
     "minimax_h3": "MiniMax H3 Legacy (ComfyUI)",
     "sam": "inpaint masks (SAM 3.1)",
     "rigging": "AI rigging (UniRig)",
+    "mia": "any-pose humanoid rigging (Make-It-Animatable)",
     "trellis2": "optional official image-to-3D (TRELLIS.2)",
     "template_semantic": "template semantic search (CPU)",
     "anime_face": "Anime face landmarks",
