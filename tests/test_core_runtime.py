@@ -61,6 +61,8 @@ class CoreRuntimeTests(unittest.TestCase):
         self.patches = [
             patch("services.platform_capabilities.host_platform", return_value="darwin"),
             patch("services.platform_capabilities.host_machine", return_value="arm64"),
+            # MiniMax Image-01 refuses a request without a key before it is admitted; these tests are about everything else.
+            patch("services.remote_image_generation.api_key", return_value="test-key"),
         ]
         for item in self.patches:
             item.start()
@@ -2329,6 +2331,68 @@ class CoreRuntimeTests(unittest.TestCase):
             self._leave_temp_workspace(folder, previous)
         self.assertEqual(response.status_code, 200, response.text)
         self.assertTrue(captured["subject_reference"].startswith("data:image/png;base64,"))
+
+    def test_studio_image_command_notes_the_references_minimax_does_not_take(self):
+        command = self._studio_image_command("mac-image-notes")
+        command["input"]["params"]["image_refs"] = ["/api/v1/uploads/hero.png", "/api/v1/uploads/other.png"]
+        fake = {"name": "minimax.jpg", "path": "minimax.jpg", "prompt": "a lantern", "aspect_ratio": "1:1"}
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("uploads").mkdir()
+            Path("uploads", "hero.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            Path("uploads", "other.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+            Path("outputs").mkdir()
+            with patch("services.core_remote_image.generate_image", return_value=fake), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_image.threading.Thread", ImmediateThread):
+                first = self.client.post("/api/v1/generation/commands", json=command)
+                replay = self.client.post("/api/v1/generation/commands", json=command)
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(first.status_code, 200, first.text)
+        notes = first.json()["receipt"]["notes"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("image_refs[1]", notes[0])
+        self.assertEqual(replay.json()["receipt"]["notes"], notes)
+
+    def test_studio_image_command_may_leave_out_steps_guidance_and_seed_for_minimax(self):
+        command = self._studio_image_command("mac-image-bare")
+        for key in ("num_inference_steps", "guidance_scale", "seed"):
+            del command["input"]["params"][key]
+        fake = {"name": "minimax.jpg", "path": "minimax.jpg", "prompt": "a lantern", "aspect_ratio": "1:1"}
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.core_remote_image.generate_image", return_value=fake), patch(
+                "services.execution_mode.validate_remote_provider",
+            ), patch("services.core_remote_image.threading.Thread", ImmediateThread):
+                first = self.client.post("/api/v1/generation/commands", json=command)
+                replay = self.client.post("/api/v1/generation/commands", json=command)
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(first.status_code, 200, first.text)
+        self.assertTrue(replay.json()["replayed"])
+
+    def test_minimax_image_without_a_key_is_refused_before_a_job_or_an_admission_exists(self):
+        folder, previous = self._in_temp_workspace()
+        try:
+            Path("outputs").mkdir()
+            with patch("services.remote_image_generation.api_key", return_value=""), patch(
+                "services.execution_mode.validate_remote_provider",
+            ):
+                legacy = self.client.post("/api/v1/generate", json={
+                    "model_type": "minimax:image-01", "generation_mode": "image", "prompt": "a lantern", "workspace": "default"})
+                command = self.client.post("/api/v1/generation/commands", json=self._studio_image_command("mac-no-key"))
+                receipt = self.client.get(
+                    "/api/v1/generation/commands/receipt", params={"workspace": "default", "intent_id": "mac-no-key"})
+        finally:
+            self._leave_temp_workspace(folder, previous)
+        self.assertEqual(legacy.status_code, 409, legacy.text)
+        self.assertIn("Settings → Services", legacy.json()["detail"])
+        self.assertEqual(command.status_code, 409, command.text)
+        self.assertEqual(command.json()["detail"]["code"], "provider_key_missing")
+        self.assertIn("minimax_image_api_key", command.json()["detail"]["message"])
+        self.assertEqual(receipt.status_code, 404, "nothing was admitted, so the same intention can be sent again with a key")
 
     def test_studio_image_command_rejects_oversized_prompt_before_admit(self):
         command = self._studio_image_command("mac-image-long")

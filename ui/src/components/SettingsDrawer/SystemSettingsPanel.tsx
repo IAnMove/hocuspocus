@@ -10,7 +10,7 @@ import { H3ModelName } from '../Sidebar/H3ModelInfo'
 import { ModelCatalogInfo } from '../Sidebar/ModelCatalogInfo'
 import { LicenceNotice } from '../common/LicenceNotice'
 import { licenceForModel } from '../../lib/licenceNotice'
-import { catalogVramGb } from '../../lib/modelCatalog'
+import { catalogVramGb, isRemoteModel } from '../../lib/modelCatalog'
 import { showsCudaControls, usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { MINIMAX_MUSIC_COMMUNITY_MODELS, modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
@@ -216,7 +216,7 @@ function ModelVisibilitySection() {
     description?: string
     selector_help?: string
     shared_cache_group?: string[]
-    resource_requirements?: { vram_gb?: number; ram_gb?: number; storage_gb?: number; platform?: string; backend?: string; note?: string }
+    resource_requirements?: { vram_gb?: number; ram_gb?: number; storage_gb?: number; platform?: string; backend?: string; tier?: 'stable' | 'experimental' | 'remote'; note?: string }
     is_i2v?: boolean
     is_t2v?: boolean
     generates_audio?: boolean
@@ -437,8 +437,8 @@ function ModelVisibilitySection() {
                             </span>
                           )}
                         </label>
-                        {/* Delete button — only for downloaded models */}
-                        {m.is_downloaded && (
+                        {/* Delete button — only for downloaded models; a remote model has no files */}
+                        {m.is_downloaded && !isRemoteModel(m) && (
                           <button
                             onClick={() => handleDelete(m.model_type)}
                             disabled={deleting === m.model_type}

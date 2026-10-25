@@ -48,6 +48,8 @@ from services.local_generation import LocalTools, ToolError, file_url
 from services.production_image_defaults import DEFAULT_IMAGE_MODEL, default_image_steps, model_takes_negative_prompt
 from services.walk_video_method import LTX_MODEL, NOT_INSTALLED, WalkVideoError, accept_walk_method, clip_fields, fill_video_takes, weights_present
 
+from services.remote_image_generation import is_remote_image_model
+
 JOBS_DIR = ".character-animation-jobs-v1"
 ACTIVE = ("queued", "running", "cancelling")
 RESUMABLE = ("failed", "cancelled", "interrupted")
@@ -55,7 +57,7 @@ INTERRUPTED = "The server restarted while this animation was being made; make it
 AUTO_APPROVE_OFF = ("autoApprove was ignored: agent_autonomy is review, so a person approves this animation in Personajes › Animaciones "
                     "(or the owner turns on «Modo un solo disparo» in Ajustes › Servicios).")
 DEFAULT_MODEL = DEFAULT_IMAGE_MODEL
-_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
+_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")  # ``minimax:image-01`` has a provider prefix
 _SAVE_TRIES = 4
 MAX_REFERENCES = 4
 
@@ -243,7 +245,9 @@ class CharacterAnimationJobs:
                "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
                "remake": pose, "createdAt": _now(), "updatedAt": _now(), "definition": definition, "reference": reference_of(kit),
                "description": (kit.get("lookNotes") or "").strip() or kit.get("name") or kit["id"], "style": style_of(kit)}
-        if references:
+        if references and is_remote_image_model(job["model"]):
+            job["refsDropped"] = True  # Image-01 takes one reference: the character's own picture alone
+        elif references:
             job["extraRefs"] = references
         if definition.get("custom"):
             # What the author wrote stays visible on the job, so an animation that is not on the kit yet can be shown and tried again.
