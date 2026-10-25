@@ -213,6 +213,7 @@ def command_catalog():
         props={'version':{'const':1},'input':{'type':'object','properties':fields,'additionalProperties':False,'required':['workspace','target',*(['item','at'] if action=='add' else ['id'] if action!='list' else [])]}}
         if action!='list': props['intent_id']={'type':'string'}
         output.append({'name':f'scene3d.item.{action}','version':1,'domain':'scenes','mutation':action!='list','destructive':False,
-            'description':f'{action.capitalize()} real-sized props in a Series 3D shot or working Video 3D scene. Use marks, anchors or metre positions; Series shots allow at most 12 objects.',
+            'description':f'{action.capitalize()} real-sized props in a Series 3D shot or working Video 3D scene. Use marks, anchors or metre positions; Series shots allow at most 12 objects.'
+            + (' A workspace GLB, including one downloaded from https://www.meshy.ai/discover, is item.glb. Play a file that already has clips. Rig a standing person with no skeleton first with model3d.rig engine humanoid.' if action=='add' else ''),
             'inputSchema':{'type':'object','properties':props,'required':list(props),'additionalProperties':False}})
     return output

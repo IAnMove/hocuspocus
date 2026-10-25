@@ -40,6 +40,8 @@ native job id. Poll `model3d.status`:
 URLs include the workspace query. A generated mesh has no skeleton until
 `model3d.rig` runs.
 
+When the production profile's 3D provider is `meshy`, the same `model3d.generate` call uses the Meshy API key from Settings and publishes that GLB in the workspace gallery. Models other people published are downloaded by the user from https://www.meshy.ai/discover with a paid Meshy account, at no extra credit on that page. Do not call Meshy's showcase search: it is Enterprise-only. A downloaded file is then used like a generated GLB (`scene3d.item.add` with `item.glb`, or a script `objects` entry). A file that already has clips plays those clips. A standing person with no skeleton is rigged with `model3d.rig` and `engine: "humanoid"`.
+
 ## Humanoid rig and clips
 
 `model3d.rig` accepts `engine: "humanoid"` on a GLB of one person standing in

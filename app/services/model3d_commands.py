@@ -44,7 +44,10 @@ def command_catalog() -> list[dict]:
         ("model3d.generate", generate, True,
          "Submit to a selected native 3D generator using the GPU lane and workspace publisher. "
          "TRELLIS.2 and Pixal3D require one front image; Hunyuan text uses the existing "
-         "MiniMax reference-image configuration. Poll model3d.status."),
+         "MiniMax reference-image configuration. Poll model3d.status. "
+         "When the production profile provider is meshy, this call uses the Meshy API key from Settings and publishes the GLB in the workspace gallery. "
+         "Public models other people made are not searched here: a paid account downloads them from https://www.meshy.ai/discover at no extra credit, and the file is then used like a generated GLB. "
+         "Meshy showcase search is Enterprise-only."),
         ("model3d.status", status, False,
          "Read a native Model3D job in its exact workspace, including the published GLB URL."),
     ):
