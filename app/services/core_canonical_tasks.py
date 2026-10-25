@@ -256,7 +256,7 @@ def control_task(task: dict, action: str):
     task_id = str(task.get("id") or "")
     job_id = str(task.get("backend_job_id") or "")
     # The router that owns the adapter registered what Cancel/Resume do for it (services/task_controls.py).
-    handler = task_controls.handler_for(str((task.get("metadata") or {}).get("adapter") or ""), action)
+    handler = task_controls.handler_for_task(task, action)
     if handler is not None:
         return handler(task)
     if action != "cancel":

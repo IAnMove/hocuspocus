@@ -13,7 +13,7 @@ import json
 
 from fastapi import HTTPException
 
-from services import model3d_service
+from services import model3d_service, task_controls
 from services.canonical_task_publishers import (
     _publish_director_task,
     _publish_generation_task,
@@ -245,6 +245,9 @@ def _control_canonical_task(task: dict, action: str):
             legacy_id,
             "discard",
         )
+    handler = task_controls.handler_for_task(task, action)
+    if handler is not None:
+        return handler(task)
     raise HTTPException(status_code=409, detail=f"Task does not support {action}")
 
 def _list_canonical_production_pipelines(workspace: str):

@@ -894,6 +894,16 @@ class World3DExportService:
         task = viewed["task"]
         if not task:
             raise http_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
+        self._cancel_row(workspace, task)
+        return self.receipt(workspace, intent_id)
+
+    def cancel_task(self, task: dict) -> dict:
+        """Cancel from the task row (Activity's Cancel, ``jobs.cancel``): the same registry update as ``cancel``."""
+        workspace = str(task.get("workspace") or "default")
+        self._cancel_row(workspace, task)
+        return self._registry(workspace).get(task["id"])
+
+    def _cancel_row(self, workspace: str, task: dict) -> None:
         if task["status"] == "completed":
             raise http_error(409, "already_completed", "A completed export cannot be cancelled")
         if task["status"] != "cancelled":
@@ -904,7 +914,6 @@ class World3DExportService:
                 )
             except ValueError as error:
                 raise http_error(409, "cannot_cancel", str(error)) from error
-        return self.receipt(workspace, intent_id)
 
     def _run_worker(self, intent_id: str, task_id: str, workspace: str) -> None:
         registry = self.registry_for(workspace)
