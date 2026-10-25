@@ -124,13 +124,13 @@ def build(layers_dir, src_path, frames=12, up=2, log=print):
     # the shoulder gap: paint the blouse colour where the arm's inpainted shoulder is grey
     # ---- frames ----
     out = []
-    ground = max(np.nonzero(l["boot"])[0].max() for l in leg)
+    ground = max(np.nonzero(l["boot"])[0].max() for l in leg); feet = []
     for k in range(frames):
         phi = phase_of(k, frames) if frames == 12 else k / frames
         pm = walk_pose(phi)
         dy = -(pm["pelvis"][1] - mould0["pelvis"][1]) * s_px; dx = 0.0
         Hk = H0 + np.array([dx, dy])
-        feet_low = []
+        feet_low = []; feet_now = {}
         placed = {}
         for l in leg:
             p = (phi + l["p0"]) % 1.0; p0 = l["p0"]
@@ -142,7 +142,7 @@ def build(layers_dir, src_path, frames=12, up=2, log=print):
             thigh = strip_rgba(l["piece"].shape, Hk, Kk, l["up_w"], l["skin"])
             placed[l["side"]] = dict(shin=warp_piece(l["piece"], Ms, (W, H), up), boot=warp_piece(l["boot_piece"], Mb, (W, H), up), thigh=warp_piece(thigh, np.float32([[1, 0, 0], [0, 1, 0]]), (W, H), up), Ak=Ak, Mb=Mb, boot_mask=l["boot"], d_foot=d_foot)
             # lowest boot pixel after the move
-            by, bx = np.nonzero(l["boot"]); pts = np.column_stack([bx, by]).astype(float); q = (Mb[:, :2] @ pts.T).T + Mb[:, 2]; feet_low.append(q[:, 1].max())
+            by, bx = np.nonzero(l["boot"]); pts = np.column_stack([bx, by]).astype(float); q = (Mb[:, :2] @ pts.T).T + Mb[:, 2]; feet_low.append(q[:, 1].max()); feet_now[l["side"]] = (float(q[q[:, 1].argmax(), 0]), float(q[:, 1].max()))
         lift = ground - max(feet_low)    # keep the lowest sole on the ground line
         body_M = np.array([[1, 0, dx], [0, 1, dy + lift], [0, 0, 1]])[:2]
         torso_w = warp_piece(torso, body_M, (W, H), up); skirt_w = warp_piece(skirt, body_M, (W, H), up); head_w = warp_piece(head, body_M, (W, H), up)
@@ -162,8 +162,8 @@ def build(layers_dir, src_path, frames=12, up=2, log=print):
         order = [arms_w[1]] + [im for side in (far_leg, near_leg) for im in (sh(placed[side]["thigh"]) * span, sh(placed[side]["shin"]), sh(placed[side]["boot"]))] + [skirt_w, torso_w, head_w, arms_w[0]]
         for im in order: canvas = over(canvas, im)
         rgb = canvas[..., :3] / np.maximum(canvas[..., 3:4], 1e-6); frame = np.dstack([np.clip(rgb, 0, 1), canvas[..., 3:4]])
-        out.append((frame * 255).astype(np.uint8))
-    return out, dict(waist=H0.tolist(), cut=cut, scale=s_px)
+        out.append((frame * 255).astype(np.uint8)); feet.append({side: (x, y + lift) for side, (x, y) in feet_now.items()})
+    return out, dict(waist=H0.tolist(), cut=cut, scale=s_px, feet=feet, ground=float(ground))
 
 if __name__ == "__main__":
     layers_dir, src_path, out_dir = sys.argv[1:4]; n = int(sys.argv[4]) if len(sys.argv) > 4 else 12
