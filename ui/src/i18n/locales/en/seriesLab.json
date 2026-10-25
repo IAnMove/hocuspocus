@@ -1119,7 +1119,9 @@
     "media": {
       "take": "Take {{number}} of the shot",
       "takes": "Takes of this shot",
-      "planOnly": "Not rendered yet: the plan"
+      "planOnly": "Not rendered yet: the plan",
+      "redoLips": "Redo the lips",
+      "lipsEngine": "Lip-sync engine"
     },
     "regenerate": {
       "stale": "This shot changed after its take.",

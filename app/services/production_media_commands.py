@@ -4,6 +4,7 @@
 - ``media.compose``: a still from image layers over a base image, a video frame or a blank canvas.
 - ``audio.trim``: an exact cut (start + length) of an audio file as a new audio file.
 - ``assets.import_from_workspace``: a file copied from another workspace of this install, with its provenance.
+- ``shot.lipsync.redo``: a new lip-synced take of one shot, keeping the original.
 
 Each one writes its result into the workspace with a ``.meta.json`` sidecar that names
 the tool and its sources, so the file can be found, reused and redone in the app.
@@ -13,10 +14,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from services import audio_trim, media_compose, media_frame, workspace_asset_import
+from services import audio_trim, media_compose, media_frame, shot_lipsync_redo, workspace_asset_import
 from services.production_media_common import handler, workspace_folder
 
-_TOOLS = (media_frame, media_compose, audio_trim, workspace_asset_import)
+_TOOLS = (media_frame, media_compose, audio_trim, workspace_asset_import, shot_lipsync_redo)
 
 
 def command_catalog() -> list[dict[str, Any]]:

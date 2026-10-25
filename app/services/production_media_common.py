@@ -46,11 +46,12 @@ def _lock_for(key: tuple):
 
 
 class MediaToolError(Exception):
-    def __init__(self, code: str, message: str, status: int = 422) -> None:
+    def __init__(self, code: str, message: str, status: int = 422, extra: dict | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.status = status
+        self.extra = extra
 
 
 def operation_schema(name: str, description: str, properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -285,7 +286,13 @@ def handler(operation: str, run: Callable[[dict], dict], folder_for: Callable[[d
             with request_scope(operation, arguments):
                 result = await run_in_threadpool(run_once, arguments, operation, folder_for, lambda: run(arguments))
         except MediaToolError as exc:
-            raise HTTPException(exc.status, {"code": exc.code, "message": exc.message, "retryable": False}) from exc
+            body = {"code": exc.code, "message": exc.message, "retryable": False}
+            extra = getattr(exc, "extra", None)
+            if isinstance(extra, dict):
+                for key, value in extra.items():
+                    if key not in body:
+                        body[key] = value
+            raise HTTPException(exc.status, body) from exc
         return {"version": 1, "status": "completed", "operation": operation, "result": result}
     return handle
 

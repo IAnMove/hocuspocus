@@ -33,7 +33,9 @@
     "undo": "Deshacer",
     "reexport": "Actualizar el export",
     "openScene": "Abrir escena",
-    "regenerate": "Regenerar"
+    "regenerate": "Regenerar",
+    "redoLips": "Rehacer los labios",
+    "lipsEngine": "Motor de lip-sync"
   },
   "reasons": {
     "shot_locked": "Este plano está bloqueado",

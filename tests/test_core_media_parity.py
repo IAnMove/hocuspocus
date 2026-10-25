@@ -14,7 +14,7 @@ def test_core_cpu_media_preserves_wizard_identity_intent_and_activity(tmp_path, 
     catalog = client.get("/api/v1/media/commands")
     assert catalog.status_code == 200
     assert set(catalog.json()["operations"]) == {
-        "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace", "studio.key",
+        "media.frame", "media.compose", "audio.trim", "assets.import_from_workspace", "shot.lipsync.redo", "studio.key",
     }
     folder = Path(core_runtime.core.workspace_dir("show"))
     Image.new("RGBA", (16, 16), "red").save(folder / "source.png")

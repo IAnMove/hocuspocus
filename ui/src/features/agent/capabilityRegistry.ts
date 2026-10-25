@@ -53,6 +53,7 @@ import { registerSeriesStageCapabilities } from './seriesStageCapabilities'
 import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
 import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
+import { registerLipsyncRedoCapabilities } from './lipsyncRedoCapabilities'
 import { registerWorld3DTemplateCapabilities } from './world3dTemplateCapabilities'
 import { registerRoomSetCapabilities } from './roomSetsCapabilities'
 import { registerVideo2DTemplateCapabilities } from './video2dTemplateCapabilities'
@@ -1222,6 +1223,7 @@ registerSeriesStageCapabilities(defineCapability)
 registerCharacterAnimationCapabilities(defineCapability)
 registerVoiceBandCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)
+registerLipsyncRedoCapabilities(defineCapability)
 registerStudioCapabilities(defineCapability)
 registerNavigationQueueCapabilities(defineCapability)
 registerEditorAuxCapabilities(defineCapability)
