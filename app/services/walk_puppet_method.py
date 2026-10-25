@@ -20,7 +20,6 @@ import numpy as np
 from PIL import Image
 
 from services.character_animation_directions import contract_of
-from services.character_animations import pose_prompt
 from services.character_kit_face_cleanup import resolve_character_kit_image
 from services.local_generation import file_url
 from services.see_through_layers import decompose_image, installed, save_layers
@@ -120,26 +119,24 @@ def _store_frames(frames: list[np.ndarray], size: tuple[int, int], root: str, na
         Image.fromarray(small).save(os.path.join(root, name))
 
 
-def _screen(job: dict[str, Any]) -> str:
-    definition = job["definition"]
-    return pose_prompt(definition["id"], definition["poses"][0]["id"], job.get("description") or "", job.get("style"))["screen"]
-
-
-def _key_all(job: dict[str, Any], tools: Any, names: list[str], screen: str, update: Callable[..., None]) -> None:
+def _publish_takes(job: dict[str, Any], names: list[str], update: Callable[..., None]) -> None:
+    """The cut frames already have alpha (warps of a keyed drawing). ``studio.key`` reads RGB only: a transparent
+    background becomes black and stays opaque, and any screen-coloured cloth is punched out."""
+    workspace = job["workspace"]
     for take, name in zip(job["takes"], names):
-        take["status"] = "keying"
-        update()
-        take.update(status="ready", raw=file_url(name, job["workspace"]), keyed=tools.key(f"{job['jobId']}-{take['id']}-key", name, screen))
+        url = file_url(name, workspace)
+        take.update(status="ready", raw=url, keyed=url)
     update()
 
 
-def fill_puppet_takes(job: dict[str, Any], tools: Any, *, workspace_root: str, uploads_root: str, kit: dict[str, Any],
+def fill_puppet_takes(job: dict[str, Any], *, workspace_root: str, uploads_root: str, kit: dict[str, Any],
                       draw: Callable[[str, str], str], installed_fn: Callable[[], bool] | None = None,
                       update: Callable[..., None]) -> None:
-    """Cut the reference drawing into one keyed frame per pose. The caller joins the sheet.
+    """Cut the reference drawing into one alpha frame per pose. The caller joins the sheet.
 
     ``draw(animation, pose)`` returns a keyed picture when the kit does not have that pose yet. It must not save a
-    second animation. ``installed_fn`` defaults to See-through's own probe.
+    second animation. ``installed_fn`` defaults to See-through's own probe. The cut is already keyed: unlike the
+    video path, these frames are not sent through ``studio.key``.
     """
     animation, pose = reference_of(job["definition"], job.get("puppetReference"))
     source = frame_source(kit, animation, pose) or draw(animation, pose)
@@ -152,7 +149,7 @@ def fill_puppet_takes(job: dict[str, Any], tools: Any, *, workspace_root: str, u
     frames, info = build(rgba, direction, len(job["definition"]["poses"]), layers, find_joints(rgba))
     names = _names(job)
     _store_frames(frames, rgba.shape[:2], workspace_root, names)
-    _key_all(job, tools, names, _screen(job), update)
+    _publish_takes(job, names, update)
     record = {"method": "puppet", "reference": {"animation": animation, "pose": pose}, "start": float(info["start"]), "layers": used}
     job["puppet"] = record
     update(puppet=record, **({"warnings": job["warnings"]} if job.get("warnings") else {}))

@@ -1049,6 +1049,33 @@ def test_method_video_samples_one_clip_into_the_same_sheet_and_keeps_the_guide(d
     assert gait["ok"], job.get("checks")
 
 
+def _puppet_cycle_frames(rgba: np.ndarray, direction: str, frames: int) -> list[np.ndarray]:
+    """Keyed-looking walk cells at twice the drawing, so the job test no longer depends on studio.key inventing them."""
+    height, width = rgba.shape[0] * 2, rgba.shape[1] * 2
+    sy, sx = height / 200.0, width / 140.0
+    out = []
+    for index in range(frames):
+        picture = np.zeros((height, width, 4), np.uint8)
+        shift = (index % 5) * 4
+
+        def box(y0: float, y1: float, x0: float, x1: float, color: tuple[int, int, int, int]) -> None:
+            picture[int(y0 * sy):int(y1 * sy), int((x0 + shift) * sx):int((x1 + shift) * sx)] = color
+
+        box(10, 40, 45, 75, (200, 160, 120, 255))
+        box(40, 110, 38, 82, (230, 180, 30, 255))
+        spread = expected_spread(direction, index / frames)
+        fig_h = max(1.0, height - 10 * sy)
+        wide = max(int(16 * sx), round(spread * fig_h))
+        left = max(0, (width - wide) // 2)
+        leg_w = max(4, int(12 * sx))
+        y0 = int(110 * sy)
+        picture[y0:, :] = 0
+        picture[y0:, left:left + leg_w] = (60, 60, 70, 255)
+        picture[y0:, left + wide - leg_w:left + wide] = (60, 60, 70, 255)
+        out.append(picture)
+    return out
+
+
 def _patch_puppet(monkeypatch, *, installed: bool):
     """The fake picture is one blob. The real cutter would refuse it, and the pose model must not run."""
     seen = {"decompose": 0, "layers": None}
@@ -1056,8 +1083,7 @@ def _patch_puppet(monkeypatch, *, installed: bool):
     def fake_build(rgba, direction, frames, layers, joints):
         seen["layers"] = layers
         assert joints == {"nose": (1, 2)} and frames == 12 and direction == "side"
-        picture = np.zeros((rgba.shape[0] * 2, rgba.shape[1] * 2, 4), np.uint8)
-        return [picture.copy() for _ in range(frames)], {"start": 0.25}
+        return _puppet_cycle_frames(rgba, direction, frames), {"start": 0.25}
 
     def decompose(image, label):
         seen["decompose"] += 1
@@ -1078,6 +1104,7 @@ def test_method_puppet_cuts_one_drawing_keeps_the_gait_check_and_warns_without_l
     job = jobs.start(WS, "hero", "walk-12", method="puppet", auto_approve=True)
     assert job["status"] == "completed", job.get("error")
     assert job["method"] == "puppet" and server.of("generation.video") == [] and len(server.of("generation.image")) == 1
+    assert len(server.of("studio.key")) == 1, "only the missing reference pose is keyed; the cut frames already have alpha"
     made = _kit(root)["animations"]
     assert set(made) == {"walk-12"}, "the reference drawing is not saved as a second animation"
     provenance = made["walk-12"]["provenance"]
@@ -1085,6 +1112,7 @@ def test_method_puppet_cuts_one_drawing_keeps_the_gait_check_and_warns_without_l
     assert provenance["layers"] is False and provenance["start"] == 0.25
     assert job["result"]["warnings"] == ["puppet_no_layers"] and job["result"]["provenance"]["method"] == "puppet"
     assert seen["decompose"] == 0 and seen["layers"] is None
+    assert all("-key" not in frame["source"] for frame in made["walk-12"]["frames"])
     gait = next(item for item in job["checks"] if item["id"] == "walk_gait")
     assert gait["ok"], job.get("checks")
 
@@ -1100,6 +1128,7 @@ def test_method_puppet_uses_see_through_layers_and_an_override_reference(directi
     assert provenance["reference"] == {"animation": "idle", "pose": "rest"} and provenance["layers"] is True
     assert "warnings" not in job["result"] and seen["decompose"] == 1
     assert server.of("generation.video") == []
+    assert len(server.of("studio.key")) == 1, "the twelve cut frames are not sent through studio.key"
 
 
 def test_method_puppet_refuses_a_gesture_and_a_single_pose(world):
