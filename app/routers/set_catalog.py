@@ -11,6 +11,9 @@ def create_set_catalog_router(call=None):
 
     @router.post("/api/v1/scene3d/rooms/commands")
     def room_command(body: dict):
+        from services.splat_commands import APPLY, run as splat_run
+        if body.get("operation") == APPLY:
+            return splat_run(APPLY, body)
         from services.room_box_commands import run
         return run(body.get("operation"), body, call)
     return router
