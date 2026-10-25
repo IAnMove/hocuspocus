@@ -17,6 +17,10 @@ from services.scene3d_items import ItemService, change_items
 from services.world3d_stage_documents import stage_document
 
 ROOT = Path(__file__).resolve().parents[1]
+NEEDS_UI = pytest.mark.skipif(
+    not (ROOT / "ui/node_modules/tsx/dist/loader.mjs").is_file(),
+    reason="Video 3D template compilation needs ui/node_modules",
+)
 BASE = {"duration": 4, "slots": [
     {"id": "subject_1", "slot": "subject_1", "position": [0, 0, 0], "rotationY": 0, "media": "model3d"},
     {"id": "subject_2", "slot": "subject_2", "position": [1, 0, 0], "rotationY": 0, "media": "model3d"},
@@ -270,6 +274,7 @@ def _export_command(document, intent_id, workspace="studio"):
             "input": {"workspace": workspace, "document": document, "refs": []}}
 
 
+@NEEDS_UI
 def test_an_instantiated_stage_copies_furniture_and_exports(tmp_path, monkeypatch):
     """A dressed stage-salon stores workspace GLBs, once, and the export check finds them."""
     from services import world3d_scenes
