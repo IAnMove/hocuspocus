@@ -2565,7 +2565,12 @@ attention_modes_supported = get_supported_attention_modes()
 args = _parse_args()
 migrate_loras_layout()
 
-gpu_major, gpu_minor = torch.cuda.get_device_capability(args.gpu if len(args.gpu) > 0 else None)
+# A CPU render server hides the GPU (CUDA_VISIBLE_DEVICES empty). Capability is
+# only a kernel choice; generation still needs a device when one is present.
+if torch.cuda.is_available():
+    gpu_major, gpu_minor = torch.cuda.get_device_capability(args.gpu if len(args.gpu) > 0 else None)
+else:
+    gpu_major, gpu_minor = 0, 0
 if  gpu_major < 8:
     print("Switching to FP16 models when possible as GPU architecture doesn't support optimed BF16 Kernels")
     bfloat16_supported = False

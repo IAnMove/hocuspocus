@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import PurePosixPath
 
+from services.model_licences import for_id as licence_for_id
 from services.runtime_profiles import APP_DIR, catalog as profile_catalog
 
 ROOT = APP_DIR.parent
@@ -33,6 +34,10 @@ class Component:
     estimated_bytes: int
     restart_required: bool
     remove: tuple[str, ...]
+    licence: str | None = None
+    license: str = ""
+    ready_file: str = ""
+    platforms: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         for relative in self.remove:
@@ -46,10 +51,19 @@ class Component:
         return profile_catalog()["engines"][self.engine]["env"]
 
     def as_dict(self) -> dict:
-        return {
+        payload = {
             "id": self.id, "engine": self.engine, "title": self.title, "summary": self.summary,
             "estimatedBytes": self.estimated_bytes, "restartRequired": self.restart_required,
         }
+        # Only components that declare these carry them, so the existing rows stay the same shape.
+        record = licence_for_id(self.licence)
+        if record:
+            payload["licence"] = record
+        if self.license:
+            payload["license"] = self.license
+        if self.platforms:
+            payload["platforms"] = list(self.platforms)
+        return payload
 
 
 @lru_cache(maxsize=1)
@@ -70,6 +84,9 @@ def components() -> tuple[Component, ...]:
             id=entry["id"], engine=entry["engine"], script=entry["script"], title=entry["title"],
             summary=entry["summary"], estimated_bytes=int(entry["estimatedGiB"] * GIB),
             restart_required=bool(entry.get("restartRequired")), remove=tuple(entry["remove"]),
+            licence=entry.get("licence") if isinstance(entry.get("licence"), str) else None,
+            license=str(entry.get("license") or ""), ready_file=str(entry.get("readyFile") or ""),
+            platforms=tuple(entry.get("platforms") or ()),
         )
         for entry in _load()["components"]
     )

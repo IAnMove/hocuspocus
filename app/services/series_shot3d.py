@@ -179,7 +179,16 @@ def _motion(value: Any) -> dict[str, Any] | None:
             motion[key] = _number(value[key], low, high)
     if value.get("easing") in ("linear", "smooth"):
         motion["easing"] = value["easing"]
+    motion.update(_motion_window(value))
     return motion
+
+
+def _motion_window(value: dict[str, Any]) -> dict[str, float]:
+    """``start`` and/or ``end`` of a move, in scene seconds: either alone is fine, both must come in order."""
+    start, end = _number(value.get("start"), 0, 600), _number(value.get("end"), 0, 600)
+    if start is not None and end is not None and start >= end:
+        return {}
+    return {key: item for key, item in (("start", start), ("end", end)) if item is not None}
 
 
 def _object_entry(entry: Any) -> dict[str, Any] | None:
@@ -422,7 +431,8 @@ def _setup(workspace: str, root: str | None, config: dict[str, Any], sound: list
     setup.update({key: config[key] for key in ("renderLook", "toon") if key in config})
     from services.world3d_stage_documents import stage_camera
     if config.get("roomBox"):
-        from services.series_room_box import box_camera
+        from services.series_room_box import box_camera, refresh_box_room
+        config = refresh_box_room(config, root)
         setup["camera"] = box_camera(config["roomBox"], config.get("camera"))
         if config["roomBox"].get("plate"):
             setup["look"] = {"toneMapping": "none", "exposure": 0}   # the plate carries its own light: no grade may repaint it

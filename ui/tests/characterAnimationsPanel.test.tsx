@@ -333,3 +333,67 @@ test('the set buttons are off when the character has every sheet, and a set an a
     cleanup()
   }
 })
+
+test('a catalog walk offers one guided clip and Crear still omits method', async () => {
+  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const api = server({ library: kitOf() })
+  const original = globalThis.fetch
+  globalThis.fetch = api.fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.ok(screen.getByTestId('walk-method-walk-12')))
+    assert.equal(screen.queryByTestId('walk-method-angry'), null, 'a gesture stays pose by pose')
+    fireEvent.click(screen.getByTestId('animation-walk-12').querySelector('button') as HTMLButtonElement)
+    await waitFor(() => assert.equal(api.state.posts!.length, 1))
+    assert.deepEqual(api.state.posts![0].body, { workspace: 'w', kitId: 'ana', animation: 'walk-12', model: 'qwen_image_21' })
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})
+
+test('remaking one pose of a guided walk stays pose by pose and the clip stays openable', async () => {
+  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const guided = { ...walk, guideVideo: '/api/v1/file/ana-walk-guide.mp4?workspace=w', clip: '/api/v1/file/ana-walk-clip.mp4?workspace=w' }
+  const api = server({ library: kitOf({ walk: guided }) })
+  const original = globalThis.fetch
+  globalThis.fetch = api.fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    const made = await waitFor(() => screen.getByTestId('animation-walk'))
+    assert.ok(made.querySelector('a[href*="walk-guide"]') && made.querySelector('a[href*="walk-clip"]'))
+    fireEvent.change(screen.getByTestId('walk-method-walk'), { target: { value: 'video' } })
+    const redo = [...screen.getByTestId('animation-walk').querySelectorAll('button')].find(button => /Rehacer|Redo/.test(button.textContent ?? ''))!
+    fireEvent.click(redo)
+    await waitFor(() => assert.equal(api.state.posts!.length, 1))
+    assert.equal(api.state.posts![0].body.pose, 'contact')
+    assert.equal(api.state.posts![0].body.method, undefined)
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})
+
+test('choosing one guided clip sends method video', async () => {
+  const { render, screen, cleanup, waitFor, fireEvent } = await import('@testing-library/react')
+  const { CharacterAnimationsPanel } = await import('../src/features/characters/CharacterAnimationsPanel.tsx')
+  await withModel()
+  const api = server({ library: kitOf() })
+  const original = globalThis.fetch
+  globalThis.fetch = api.fetch
+  try {
+    render(<CharacterAnimationsPanel workspace="w" />)
+    await waitFor(() => assert.ok(screen.getByTestId('walk-method-walk-front')))
+    fireEvent.change(screen.getByTestId('walk-method-walk-front'), { target: { value: 'video' } })
+    fireEvent.click(screen.getByTestId('animation-walk-front').querySelector('button') as HTMLButtonElement)
+    await waitFor(() => assert.equal(api.state.posts!.length, 1))
+    assert.deepEqual(api.state.posts![0].body, { workspace: 'w', kitId: 'ana', animation: 'walk-front', model: 'qwen_image_21', method: 'video' })
+  } finally {
+    globalThis.fetch = original
+    cleanup()
+  }
+})

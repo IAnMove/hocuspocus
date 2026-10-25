@@ -1,4 +1,5 @@
 import { rejectedWizardAction, type WizardActionRejection } from './wizardTurnReport'
+import { withLicenceNotice } from '../../lib/licenceNotice'
 import { getModelsForFamily, getFamiliesForMode, useStore } from '../../stores/useStore'
 import { comicArtworkInventory } from '../comics/generateArtwork'
 import { buildWizardContextSnapshot, buildWizardLabSnapshots, comicLabSnapshot, type BuildWizardContextOptions, type WizardContextSnapshot } from './wizardContext'
@@ -28,6 +29,7 @@ import type { AgentEditSeriesShotAction, AgentRecordSeriesLineAction, AgentReren
 import type { AgentApplySeriesShotCardAction } from './seriesShotCardCapabilities'
 import type { AgentCheckSeriesLocationStageAction, AgentSetSeriesLocationStageAction } from './seriesStageCapabilities'
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
+import type { AgentLipsyncRedoAction } from './lipsyncRedoCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentMakeCharacterAnimationSetAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
@@ -658,6 +660,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentReviewCharacterAnimationAction
   | AgentSetVoiceBandAction
   | AgentMediaToolAction
+  | AgentLipsyncRedoAction
   | AgentPrepareProgrammaticVideoAction
   | AgentOpenStorySectionAction
   | AgentOpenSeriesSectionAction
@@ -776,6 +779,8 @@ export interface AgentAppSnapshot {
     installed: boolean
     enabled: boolean
     text_to_video: boolean
+    /** English sentence plus the licence URL, when that family's licence excludes territories. */
+    licence_notice?: string
   }>
   available_image_models: Array<{
     model_type: string
@@ -786,6 +791,7 @@ export interface AgentAppSnapshot {
     unified_edit?: boolean
     max_image_refs?: number
     native_2k?: boolean
+    licence_notice?: string
   }>
   available_audio_models: Array<{
     model_type: string
@@ -796,6 +802,7 @@ export interface AgentAppSnapshot {
     music: boolean
     speech: boolean
     sfx: boolean
+    licence_notice?: string
   }>
   recent_image_outputs: Array<{ name: string }>
   recent_scene_outputs: Array<{ name: string; title: string }>
@@ -2998,14 +3005,14 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
     available_video_models: state.models
       .filter(model => model.is_t2v && !model.tool_only)
       .slice(0, 80)
-      .map(model => ({
+      .map(model => withLicenceNotice({
         model_type: model.model_type,
         name: model.name,
         family: model.family,
         installed: model.is_downloaded === true,
         enabled: state.enabledModels.has(model.model_type),
         text_to_video: model.is_t2v,
-      })),
+      }, state.families)),
     available_image_models: getFamiliesForMode('image', state.families)
       .flatMap(family => getModelsForFamily(family.id, state.models, 'image'))
       .filter(model => !model.tool_only)
@@ -3013,7 +3020,7 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
       .map(model => {
         const qwen21 = model.model_type.startsWith('qwen_image_21')
           || (model.architecture || '').startsWith('qwen_image_21')
-        return {
+        return withLicenceNotice({
           model_type: model.model_type,
           name: model.name,
           family: model.family,
@@ -3021,12 +3028,12 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
           enabled: state.enabledModels.has(model.model_type),
           unified_edit: qwen21 || /edit/i.test(model.model_type),
           ...(qwen21 ? { max_image_refs: 10, native_2k: true } : {}),
-        }
+        }, state.families)
       }),
     available_audio_models: state.models
       .filter(model => model.family === 'tts' && !model.tool_only)
       .slice(0, 80)
-      .map(model => ({
+      .map(model => withLicenceNotice({
         model_type: model.model_type,
         name: model.name,
         family: model.family,
@@ -3035,7 +3042,7 @@ export function buildAgentAppSnapshot(contextOptions: BuildWizardContextOptions 
         music: /ace_step|minimax_music3|music[-_]/i.test(model.model_type),
         speech: /qwen|voxcpm|chatterbox|kugelaudio|heartmula|yue|index_tts/i.test(model.model_type),
         sfx: /^mmaudio/i.test(model.model_type),
-      })),
+      }, state.families)),
     recent_image_outputs: state.outputs
       .filter(output => output.type === 'image')
       .slice(0, 40)

@@ -12,6 +12,8 @@ export function H3PromptControls() {
   const omni = useStore(s => s.modelOptions?.omni_reference === true)
   const attention = useStore(s => s.params.override_attention ?? '')
   const fused = useStore(s => s.modelOptions?.minimax_h3_fused_turbo === true)
+  // FastH3 reuses the fused plumbing but runs dense attention by default.
+  const denseDefault = useStore(s => s.modelOptions?.minimax_h3_fasth3 === true)
   const busy = useStore(s => s.isEnhancing)
   const setParam = useStore(s => s.setParam)
   const clearPlan = useStore(s => s.clearH3WindowPlan)
@@ -47,9 +49,9 @@ export function H3PromptControls() {
     </label>}
     <label className="flex items-center justify-between gap-2">
       {t('h3Adoption.attention')}
-      <select aria-label={t('h3Adoption.attention')} value={fused && !attention ? 'sla' : attention}
+      <select aria-label={t('h3Adoption.attention')} value={fused && !denseDefault && !attention ? 'sla' : attention}
         onChange={e => setParam('override_attention', e.target.value)} className="rounded bg-bg-tertiary p-1">
-        {!fused && <option value="">{t('h3Adoption.denseAuto')}</option>}
+        {(!fused || denseDefault) && <option value="">{t('h3Adoption.denseAuto')}</option>}
         <option value="sdpa">SDPA</option>
         {fused && <option value="sla">SLA</option>}
         {!fused && <option value="sol">Sol-Attn</option>}

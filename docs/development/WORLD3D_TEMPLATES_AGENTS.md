@@ -1,6 +1,6 @@
 # Video 3D templates for agents
 
-The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 801 cards of `app/shared/world3d_templates.json` plus the 28 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 829 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
+The editor's shot library is the only library. MCP, Ask the Wizard, the production planner and a Series `kind: "3d"` shot search the same short cards: the 805 cards of `app/shared/world3d_templates.json` plus the 28 `stage-*` cards that `app/services/world3d_stage_cards.py` builds from the room molds, 833 in all. A card has the exact id, both titles, format, duration, playback speed, roles, one line and the derived traits below. The full scene document is loaded only for the id that was chosen.
 
 Regenerate the cards from the UI with `node --import ./node_modules/tsx/dist/loader.mjs scripts/export-world3d-catalog.mjs` inside `ui`. `--check` fails when the JSON drifts from the editor. The contract behind every field, filter and warning is [TEMPLATE_LIBRARY_MODEL.md](TEMPLATE_LIBRARY_MODEL.md).
 
@@ -10,13 +10,23 @@ A shot is chosen on axes, never from a flat list. The two shelves: a **signature
 
 | axis | field | values (cards that carry each one) |
 | --- | --- | --- |
-| kind | `kind` | `scene` 362, `camera` 263, `look` 161, `stage` 28, `transition` 11, `title` 4 |
-| intent | `uses` | `figure` 455, `establishing` 283, `talk` 269, `look` 161, `action` 91, `reaction` 81, `dialogue` 74, `plate` 74, `speed` 51, `title` 47, `reveal` 41, `impact` 40, `product` 17, `drive` 17, `music` 15, `transition` 12 |
+| kind | `kind` | `scene` 362, `camera` 263, `look` 161, `stage` 28, `transition` 15, `title` 4 |
+| intent | `uses` | `figure` 455, `establishing` 287, `talk` 269, `look` 161, `action` 91, `reaction` 81, `dialogue` 74, `plate` 78, `speed` 51, `title` 47, `reveal` 41, `impact` 40, `product` 17, `drive` 17, `music` 15, `transition` 16 |
 | place | `place` | 133 ids: a dressing (`citadel`, `chase-street`, `treadmill`, `retro-lab`), an `atmos-*` or `pixel-*` world, a `motion-*` set, a mold (`cocina`, `plaza`) |
 | camera | `shot`, `distance`, `moves` | see the table below |
 | cast | `subjects`, `props`, `screens`, `travel`, `authoredFor` | counts, whether a subject crosses the set, the media the slots were authored with |
 
-Every value is derived from the built document (`ui/src/features/scene3d/templateTraits.ts`) or from the mold; nothing is hand-written per card. `kind` is read like this: `look` for the lighting, colour, lens, genre, viral and atmosphere families; `camera` for a technique of the generic citadel set (`camera-movement`, `framing`, `camera-angles`, `composition`, `editing`, `time-and-motion`, `effects`); `transition` for a cut piece of 3 s or less carried by its effects, or any `transition-*` id; `title` for a `title-*` id, or no subject slot and kinetic texts; `stage` for a `stage-*` card; `scene` for everything else. In `uses`, `speed` means the drive category, a chase, pursuit, hood or wing camera, a treadmill or `drive-*` dressing, a subject that travels while the camera tracks, rides or slides, or a `speed-*` id; `impact` a camera shake or an explosive world effect (`action` keeps it too); `dialogue` two subject slots that are not `far`, not a product, not a chase family and without an impact beat; `reaction` one subject, `close`, with a push, an arc or a still frame that is not a look.
+Every value is derived from the built document (`ui/src/features/scene3d/templateTraits.ts`) or from the mold; nothing is hand-written per card. `kind` is read like this: `look` for the lighting, colour, lens, genre, viral and atmosphere families; `camera` for a technique of the generic citadel set (`camera-movement`, `framing`, `camera-angles`, `composition`, `editing`, `time-and-motion`, `effects`); `transition` for a cut piece of 3 s or less carried by its effects, any `transition-*` id, or a `comic-panel-*` chapter change; `title` for a `title-*` id, or no subject slot and kinetic texts; `stage` for a `stage-*` card; `scene` for everything else. In `uses`, `speed` means the drive category, a chase, pursuit, hood or wing camera, a treadmill or `drive-*` dressing, a subject that travels while the camera tracks, rides or slides, or a `speed-*` id; `impact` a camera shake or an explosive world effect (`action` keeps it too); `dialogue` two subject slots that are not `far`, not a product, not a chase family and without an impact beat; `reaction` one subject, `close`, with a push, an arc or a still frame that is not a look.
+
+## Comic chapter transition
+
+Use this when a video changes chapter and the cut should be invisible. `scene3d.comic.transition` (MCP, Wizard and the Video 3D editor; same `POST /api/v1/world3d/templates/commands`) builds two editable scenes that share one page and one wide camera pose:
+
+- `comic-panel-exit` starts with panel P filling the frame and pulls out to the page. `comic-panel-enter` starts on that same wide frame and flies into panel Q. The portrait pair is `comic-panel-exit-portrait` and `comic-panel-enter-portrait` (authored for 9:16, not the generic portrait adapter).
+- `panels` is four images, or `{video, at}` frames. `from_panel` and `to_panel` (0–3) are the frames of the cut, so both cuts can be invisible. A keyed `cutout` may sit 2.5 cm in front of a panel for parallax; leave it off those two panels or the cut will show.
+- `format` is `landscape` or `portrait`. `export: true` renders both clips when the Video 3D exporter is available. The page stands upright and fills the wide frame; it is not a book on a table.
+
+The panel pictures are unlit and ungraded, so they keep the colours of the source frames. The four catalogue cards use licence-free filler art and are in the template library under Transitions.
 
 ## Search
 
@@ -41,7 +51,7 @@ Real replies (`search_report` in `app/services/world3d_template_catalog.py`, the
 | `órbita` | `pixel-orbit` 94 (its exact Spanish title), `dance-orbit` 40, `vehicle-roof-orbit` 40 |
 | `girar alrededor` | `cine-orbit-360`, `face-reaction-arc`, `reaction-orbit-face`, all 25: a tie |
 | `{"kind": "stage"}` (list, no query) | 28 cards in id order, `stage-aula` first |
-| `{"kind": "transition"}` | 11 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom` and the eight `transition-*` |
+| `{"kind": "transition"}` | 15 cards: `anime-eyecatch`, `anime-impact-frame`, `anime-snap-zoom`, the eight `transition-*`, and the four `comic-panel-*` |
 | `{"place": "cocina"}` | 1 card; `{"travel": true}` 65 cards |
 
 `world3d.scene.apply_query` instantiates a scene only when the top card is a full match and its score is strictly higher than the second. A tie or a partial match returns `needs_choice` with the cards and creates nothing; the reply carries `unknown_words` as well. The same `intent_id` with the same payload returns the stored result. A different payload is a conflict. `world3d.receipt` reads that stored result.
@@ -313,6 +323,15 @@ the editor and `world3d.scene.patch`; see
 ## Personal templates
 
 `world3d.templates.user.put` stores `world3d-user-templates.json` in the workspace. Ids start with `user-`. Browser `localStorage` is left untouched and stays invisible until a template is copied into that file.
+
+**Building a scene without a template.** Register a blank stage as a personal template (camera, a `kind: "directional"` light and `slots: []`; the recipe and the editor's stricter shape rules are in [HOWUSEIT, Agent-built scenes](../3d-video-compositor/HOWUSEIT.md#agent-built-scenes-layout-bounds-fit-and-a-blank-start)), instantiate it, and add each model with `world3d.scene.patch` (`{"object_id": "tower", "add": true, "source_url": "/api/v1/file/tower.glb?workspace=<ws>", "fit": {"heightM": 30}, "position": [0, 0, -10]}`). A model is drawn 1.7 m x `scale` tall whatever its length, so size it with `fit` (`heightM`, `widthM`, `depthM`, `longestM` or `"native"`) rather than a guessed `scale`. After each patch read `layout.items[].boundsM` in the reply (the object's real size and place in metres, from the workspace GLB's rest pose) and `camera` to see what is where; `boundsReason` says why an object has no bounds. `world3d.scene.publish` makes the scene open in the Video 3D editor, and until then it is listed in the editor's Open dialog.
+
+**Telling the story.** Four things beyond placing objects (the details are in [HOWUSEIT, timed moves, collisions, 3D effects and beats](../3d-video-compositor/HOWUSEIT.md#agent-built-scenes-timed-moves-collisions-3d-effects-and-beats)):
+- `motion.start` / `motion.end` (scene seconds, default 0 and the end) time a move: `{"to": [24, 11, -4], "start": 1, "end": 3}` flies from 1 s to 3 s. Refused: a window with a baked `motion.walk` (`motion_window_with_walk`).
+- `layout.collisions` and `collision: <a> passes through <b> (part n) at 1.4-1.9 s near [x, y, z]` warnings in every inspect and patch reply, from one box per mesh node of the other model; `collide: false` on a binding exempts a ghost; flat low parts (the ground) are not obstacles; a fixed camera inside a part warns `camera_inside_geometry`. Never refused.
+- `worldFx: [{id?, kind, start, end?, at, scale?, color?, intensity?, sound?, volume?, to?}]` in a patch places 3D effects (explosion, shockwave, sparks, smoke, fire...). `at` is `[x, y, z]`, `{object_id, offset?}` (follows the object) or `{collision: n}`. Ids `fx-*` are replaced by the next `worldFx`, the template's stay.
+- `world3d.scene.beats {scene_id, base_revision, beats: [{t, who, verb, ...}]}` with the verbs `appear {at?}`, `go {to, via?, duration? | speed_mps?, face?}`, `face {toward}`, `do {action}` and `fx {kind, at?}`. `do` resolves the word to a clip the model's GLB really has (`wave`, `talk`, `nod`, `point`, `bow`, `hit`, `crouch`, `jump`, `hover`, `bounce`, `wobble` or the exact clip name); a rigid model gets the warning `no_clip_for_verb`, never an error. `go` walks a model that has a walk clip and puts its idle clip around the move. The reply is the inspect view plus `resolved: [{beat, who, verb, set, notes?}]`; send all of one object's moves and actions in one call (one move per object per call). Warnings: `implied_speed` (above 15 m/s), `collision`, `no_clip_for_verb`, `go_cut_short`, `face_after_go_ignored`, `no_collision_for_fx`, and `actor_out_of_frame` for a fixed camera.
+A film in one shot: `put` a blank stage, `instantiate`, `patch` the models in with `fit`, `world3d.scene.beats` for who does what when (read `layout.collisions` and the warnings in its reply), then `preview`, `publish` and `scenes.world3d.export`.
 
 ## Honest limits
 

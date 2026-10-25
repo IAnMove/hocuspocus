@@ -164,6 +164,30 @@ class LocalTools:
             raise ToolError("empty_output", "the generation finished without a picture")
         return self.relative(files[0])
 
+    def video(self, intent_id: str, params: dict[str, Any]) -> str:
+        """One clip made with ``generation.video`` version 3: the workspace file of the first output."""
+        self._check()
+        submitted = self.call("generation.video", {"version": 3, "intent_id": intent_id, "input": {
+            "workspace": self.workspace, "params": params}})
+        try:
+            job_id = job_id_of(submitted)
+        except ToolError as error:
+            if error.code not in NOT_STARTED:
+                raise
+            self.call("jobs.discard", {"version": 1, "input": {"intent_id": intent_id}})
+            raise ToolError(error.code, NOT_STARTED_MESSAGE) from error
+        self.on_job(job_id)
+        try:
+            payload = self._wait(job_id, intent_id)
+        finally:
+            self.on_job(None)
+        if str(payload.get("status") or "") in FAILED:
+            raise ToolError(str(payload.get("status")), str(payload.get("error") or payload.get("message") or payload.get("status"))[:300])
+        files = files_of(payload)
+        if not files:
+            raise ToolError("empty_output", "the generation finished without a clip")
+        return self.relative(files[0])
+
     def relative(self, path: str) -> str:
         """A tool's output as a name inside the workspace folder."""
         if path.startswith("/api/") or not os.path.isabs(path):

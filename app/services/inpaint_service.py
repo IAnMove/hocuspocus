@@ -115,6 +115,11 @@ def unload_sam():
         print(f"[SAM] Failed to unload: {e}")
 
 
+def is_runtime_running() -> bool:
+    """Whether this process still holds the SAM sidecar (its environment is open)."""
+    return _sam_process is not None and _sam_process.poll() is None
+
+
 def shutdown_sam():
     """Shut down the SAM service completely to free all VRAM including CUDA context."""
     global _sam_process

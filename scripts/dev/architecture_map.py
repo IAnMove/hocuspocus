@@ -356,7 +356,8 @@ def _fit(sections: list[tuple[str, list[Row]]]) -> list[str]:
             biggest = max(convertible, key=lambda title: _row_count(sections, title))
             modes[biggest] = "index"
             continue
-        if width < 240:
+        # Index rows wrap at `width`. 240 left this tree at 414 lines, over MAX_LINES.
+        if width < 400:
             width += 40
             continue
         return lines

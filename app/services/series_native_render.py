@@ -68,6 +68,13 @@ from services.series_voice_rooms import RoomError, apply_room, roomed
 KIND = "native"
 STAGES = ("voices", "scene", "export", "foley", "import", "done")
 ACTIVE = ("queued", "running", "cancelling")
+
+
+def recording_episode(jobs: list[dict[str, Any]], episode_id: str) -> bool:
+    """True when a job in ``jobs`` is still active for ``episode_id`` (a line recording or a render)."""
+    return any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in jobs)
+
+
 MAX_TAKES = 3
 # An export the server lost (interrupted by a restart, discarded, forgotten) is asked for again under a new intent.
 EXPORT_RETRIES = 3
@@ -126,6 +133,9 @@ class NativeRenderDeps:
     check_speech: bool = True
     # The cleanliness of a raw take (noise floor, SNR, rumble), measured before the trim removes its pauses.
     cleanliness: Callable[[str], dict | None] = measure_file
+    # Live series.shot.voice jobs of a workspace (SeriesLineVoice.jobs). A render of the same episode is
+    # refused while one is recording: both write ln-<episode>-<beat>-<key>.wav.
+    voice_jobs: Callable[[str], list[dict[str, Any]]] | None = None
     # Sets shot.durationSeconds to the rendered length; a take shorter than its shot is refused on import.
     set_shot_duration: Callable[[str, str, str, str, float], None] | None = None
     # Approves a take in a language version: (workspace, series, episode, language, shot, attempt).
@@ -369,6 +379,7 @@ class SeriesNativeRender:
             if not shot_ids:
                 raise NativeRenderError("up_to_date", "Every shot already has an up-to-date approved take", 409)
         raw_series, language, planned, review = self._preflight(workspace, series_id, episode_id, shot_ids, language, explicit)
+        self._refuse_voice(workspace, episode_id)
         for job in self.jobs(workspace):
             if job.get("episodeId") == episode_id and job.get("language") == language and job.get("status") in ACTIVE:
                 raise NativeRenderError("already_running", "This episode is already rendering on the server")
@@ -461,6 +472,12 @@ class SeriesNativeRender:
         lost = lost_pins(self.deps.read_kits(workspace), episode, self.deps.workspace_dir(workspace), kit_ids)
         return ", ".join(f"{kit_id} revision {revision}" for kit_id, revision in lost.items())
 
+    def _refuse_voice(self, workspace: str, episode_id: str) -> None:
+        """A line recording of this episode writes the same ln-*.wav the render reuses; they must not overlap."""
+        if self.deps.voice_jobs and recording_episode(self.deps.voice_jobs(workspace), episode_id):
+            raise NativeRenderError("voice_running", "A line of this episode is being recorded; start the render when it ends "
+                                    "(or stop the recording)", 409)
+
     def _launch(self, workspace: str, job: dict) -> None:
         """Save the job and run it on a thread; the thread is registered before the save so a reader never sees an orphan."""
         job_id = job["jobId"]
@@ -537,6 +554,7 @@ class SeriesNativeRender:
         job = self.status(workspace, job_id)
         if job["status"] in ACTIVE:
             return job
+        self._refuse_voice(workspace, job["episodeId"])
         for item in job["items"]:
             if item["status"] != "done":
                 item.update(status="queued", error=None)

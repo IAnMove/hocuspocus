@@ -36,7 +36,9 @@ import {
 import { registerGeneratedKitPose, registerWipedKitPose, type CharacterFaceAnchor, type CharacterKit, type CharacterKitAsset, type CharacterMouthState } from '../../lib/characterKit'
 import type { FlatRigResult } from '../../api/characters'
 import { FlatRigMouthEditor } from './FlatRigMouthEditor'
-import { mouthLineBusyState, otherFaceRigWork } from '../../lib/flatRigMouth'
+import { SeeThroughLayersButton } from './SeeThroughLayersButton'
+import { mouthLineBusyState, otherFaceRigWork, seeThroughBusyState } from '../../lib/flatRigMouth'
+import { faceRigPlacementSources } from '../../lib/faceRigPlacement'
 import { characterKitNextStep, characterKitPoseLabel } from './characterKitGuide'
 import { FacePatchOptions, FacePatchTextureNotice } from './FacePatchOptions'
 import { useFaceRigOperationGuard } from './useFaceRigOperationGuard'
@@ -119,8 +121,9 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const [styleId, setStyleId] = useState<typeof FACE_RIG_STYLE_PRESETS[number]['id']>(FACE_RIG_STYLE_PRESETS[0].id)
   const [traits, setTraits] = useState<string[]>([])
   const [extraNotes, setExtraNotes] = useState(kit.lookNotes ?? '')
-  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | 'wipe' | 'mouth-line' | null>(null)
+  const [busyState, setBusyState] = useState<CharacterKitFaceRigState | 'pack' | 'cleanup' | 'dialogue' | 'pose' | 'wipe' | 'mouth-line' | 'see-through' | null>(null)
   const onMouthLineBusy = useCallback((busy: boolean) => setBusyState(current => mouthLineBusyState(current, busy)), [])
+  const onSeeThroughBusy = useCallback((busy: boolean) => setBusyState(current => seeThroughBusyState(current, busy)), [])
   const modelActionsDisabled = disabled || !allowModelActions || Boolean(busyState)
   const [holdBlink, setHoldBlink] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -143,6 +146,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
   const sampleStopRef = useRef<(() => void) | null>(null)
   const dialoguePreviewRef = useRef<FaceRigDialoguePreview | null>(null)
   const savedAnchor = useMemo(() => faceRigAnchorFor(kit, poseId, selectedState), [kit, poseId, selectedState])
+  const placedBy = faceRigPlacementSources(kit, poseId)
   const poseSource = poseId === 'base' ? kit.base?.source : kit.poses[poseId]?.source
   const selectedAsset = assetFor(kit, selectedState)
   const stylePrompt = FACE_RIG_STYLE_PRESETS.find(item => item.id === styleId)?.prompt ?? ''
@@ -606,6 +610,8 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     <p className="text-xs text-amber-100">{nextStep.title}</p>
     <FlatRigMouthEditor kit={kit} poseId={poseId} workspace={workspace} disabled={disabled} busy={otherFaceRigWork(busyState)}
       onRigged={onRigged} onBusyChange={onMouthLineBusy} />
+    <SeeThroughLayersButton kit={kit} workspace={workspace} disabled={disabled}
+      busy={Boolean(busyState) && busyState !== 'see-through'} onRigged={onRigged} onBusyChange={onSeeThroughBusy} />
     <FacePatchOptions kit={kit} poseId={poseId} state={selectedState} anchor={draftAnchor} workspace={workspace}
       disabled={patchControls.disabled} onChange={onChange} onStatus={onStatus} />
     <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1">
@@ -661,6 +667,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
         </div>
       </div>
       <p className="text-xs text-text-secondary">{t('faceRig.dragBoxHint')}</p>
+      {placedBy && <p className="text-xs text-text-muted">{t('faceRig.placementSource', { eyes: t(`faceRig.sources.${placedBy.eyes}`), mouth: t(`faceRig.sources.${placedBy.mouth}`) })}</p>}
       <div className="grid grid-cols-2 gap-1">
         <button type="button" disabled={patchControls.wipeDisabled} onClick={() => void wipeMouthZone()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1.5 text-xs text-amber-100 disabled:opacity-40">{busyState === 'wipe' ? t('faceRig.wiping') : t('faceRig.wipeMouth')}</button>
         <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1.5 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.lockMouths')}</button>

@@ -27,7 +27,7 @@ DESCRIPTIONS = {
     'status': 'Read a prop-generation job and its candidate ids.',
     'approve': 'Approve a prop candidate for use in a scene.',
     'reject': 'Reject a prop candidate without removing its image.',
-    'list': 'List workspace props, optionally filtered by style and text.',
+    'list': 'List workspace props, optionally filtered by style and text. pack "cc0" lists the optional CC0 furniture library, installed or not.',
     'get': 'Read one prop including real height, image and provenance.',
     'delete': 'Remove a prop record from the library; existing scene images remain available.',
 }
@@ -37,7 +37,8 @@ def command_catalog():
     properties = {'workspace': {'type': 'string'}, 'name': {'type': 'string'}, 'description': {'type': 'string'},
         'heightM': {'type': 'number', 'minimum': .01, 'maximum': 30}, 'style': {'type': 'string'}, 'refs': {'type': 'array', 'items': {'type': 'string'}, 'maxItems': 3},
         'candidates': {'type': 'integer', 'minimum': 1, 'maximum': 8}, 'id': {'type': 'string'}, 'job_id': {'type': 'string'},
-        'source': {'type': 'string'}, 'query': {'type': 'string'}, 'base_revision': {'type': 'integer', 'minimum': 0}, 'approved': {'type': 'boolean'}}
+        'source': {'type': 'string'}, 'query': {'type': 'string'}, 'base_revision': {'type': 'integer', 'minimum': 0}, 'approved': {'type': 'boolean'},
+        'pack': {'type': 'string', 'enum': ['cc0'], 'description': 'cc0 lists the Kenney CC0 furniture library'}}
     required = {'create': ['name', 'description', 'heightM'], 'import': ['name', 'source', 'heightM'], 'status': ['job_id'], 'list': []}
     output = []
     for action, description in DESCRIPTIONS.items():
@@ -149,6 +150,18 @@ class PropService:
         finally:
             job['seconds'] = round(time.monotonic()-started, 3); atomic_json(path, job); self.active.discard(job['job_id'])
 
+    def _listed(self, data, root):
+        if data.get('pack') == 'cc0':
+            from services.cc0_props import list_library
+            return list_library(data.get('query', ''))
+        if 'pack' in data:
+            raise ValueError('unknown prop pack')
+        library = read_library(root)
+        rows = [row for row in library['props'] if (not data.get('style') or row['style'] == data['style'])
+            and data.get('query', '').lower() in (row['name']+' '+row['description']).lower()
+            and ('approved' not in data or row['approved'] == data['approved'])]
+        return {**library, 'props': rows}
+
     def _effect(self, operation, data):
         root = self._root(data)
         if operation == 'props.create': return self._start(data)
@@ -159,12 +172,9 @@ class PropService:
             if job['status'] in {'queued', 'running'} and job['job_id'] not in self.active:
                 job.update(status='failed', error='Server restarted during prop generation')
             return job
-        library = read_library(root)
         if operation == 'props.list':
-            rows = [row for row in library['props'] if (not data.get('style') or row['style'] == data['style'])
-                and data.get('query', '').lower() in (row['name']+' '+row['description']).lower()
-                and ('approved' not in data or row['approved'] == data['approved'])]
-            return {**library, 'props': rows}
+            return self._listed(data, root)
+        library = read_library(root)
         row = get_prop(root, data['id'])
         if operation == 'props.get': return {'prop': row, 'revision': library['revision']}
         def change(rows):

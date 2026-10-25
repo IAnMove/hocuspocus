@@ -2,6 +2,7 @@ import { campaignCard } from './campaignTemplates'
 import { actionCard } from './actionTemplates'
 import { animeCard } from './animeTemplates'
 import { transitionCard } from './transitionTemplates'
+import { comicCard } from './comicPage'
 import { speedCard } from './speedTemplates'
 import { titleCard } from './titleTemplates'
 import { dialogueCard } from './dialogueTemplates'
@@ -81,7 +82,7 @@ function templateSearchText(item: Scene3DTemplate, input: {
   titleOf: (id: Scene3DTemplateId) => string
 }) {
   const card = campaignCard(item.id, input.locale) ?? actionCard(item.id, input.locale) ?? animeCard(item.id, input.locale)
-    ?? transitionCard(item.id, input.locale) ?? speedCard(item.id, input.locale) ?? titleCard(item.id, input.locale)
+    ?? transitionCard(item.id, input.locale) ?? comicCard(item.id, input.locale) ?? speedCard(item.id, input.locale) ?? titleCard(item.id, input.locale)
     ?? dialogueCard(item.id, input.locale) ?? reactionCard(item.id, input.locale) ?? groupCard(item.id, input.locale)
   const place = templatePlaceOf(item.id)?.replaceAll('-', ' ') ?? ''
   return `${input.titleOf(item.id)} ${card?.description ?? ''} ${card?.requirements.join(' ') ?? ''} ${item.id} ${item.tags?.join(' ').replaceAll('-', ' ') ?? ''} ${templateSetting(item.id)} ${place} ${templateTraitWords(templateTraitsOf(item.id)).join(' ')}`

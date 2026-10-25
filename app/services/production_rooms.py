@@ -10,16 +10,23 @@ from services.prop_library import get_prop
 from services.scene3d_items import change_items
 from services.set_generation import image_model
 
-FIELDS = {'kind','mold','size','skin','props','camera'}
+FIELDS = {'kind','mold','size','skin','props','camera','furniture'}
 
 
 def is_room(value):
     return isinstance(value,dict) and value.get('kind')=='room'
 
 
+def check_furniture(entry):
+    """``library`` (the default, once the pack is installed) or ``box``. Omitted is valid."""
+    if 'furniture' in entry and entry['furniture'] not in ('library','box'):
+        raise ValueError('furniture must be library or box')
+
+
 def check_room(name, entry, text=None):
     try:
         if set(entry)-FIELDS: raise ValueError('unknown room fields')
+        check_furniture(entry)
         mold=resolve_mold(entry.get('mold'),entry.get('size','medium'))
         validate_skin(mold,entry.get('skin',{}),allow_location=False)
         validate_props(entry,mold)
@@ -72,6 +79,11 @@ def build(production,name,record):
     record.update(room={'mold':resolve_mold(entry['mold'],entry.get('size','medium')),'skin':skin,'camera':entry.get('camera','two_shot')},objects=prop_objects(entry,production.root))
     record.pop('pictures',None)
     record['warnings']=skin_warnings(skin)
+    from services.cc0_props import furniture_objects
+    extra,replaced,warning=furniture_objects(record['room']['mold'],choice=entry.get('furniture'),explicit=entry.get('furniture')=='library',taken=len(record['objects']),limit=12,root=Path(production.root))
+    if extra: record['objects']=[*record['objects'],*extra]
+    if replaced: record['room']['libraryBlocks']=replaced
+    if warning: record['warnings'].append({'code':'furniture_unavailable','message':warning})
     if not record['warnings']: record.pop('warnings')
     production.log(f'set {name}: room {entry["mold"]}')
     for warning in record.get('warnings',[]):
@@ -103,6 +115,28 @@ def check_background(config):
     return True
 
 
+def _stage_cast(cast, made, workspace):
+    """Furniture rows copied onto the cast. Ids past the cast cap are returned so the stage can drop them."""
+    from services.cc0_props import STAGE_CAST_LIMIT, cast_load
+    skipped=set()
+    for row in made.get('objects',[]):
+        file=row['file']
+        url=file if str(file).startswith('/api/') else f"/api/v1/file/{quote(file)}?workspace={quote(workspace)}"
+        oid=row['objectId']
+        if oid not in cast and str(oid).startswith('furniture-') and cast_load(cast)>=STAGE_CAST_LIMIT:
+            skipped.add(str(oid)[len('furniture-'):])
+            continue
+        cast.setdefault(oid,{**{k:v for k,v in row.items() if k not in {'objectId','file','media'}},
+            'source':url})
+    return skipped
+
+
+def _drop_skipped_blocks(room, skipped):
+    if not skipped or not isinstance(room,dict) or not room.get('libraryBlocks'): return
+    room['libraryBlocks']=[block for block in room['libraryBlocks'] if block not in skipped]
+    if not room['libraryBlocks']: room.pop('libraryBlocks')
+
+
 def resolve_background(resolved,sets,workspace):
     background=resolved.get('background')
     if has_room(resolved): return True
@@ -111,9 +145,9 @@ def resolve_background(resolved,sets,workspace):
     if not made.get('room'): return False
     resolved['background']={'room':copy.deepcopy(made['room'])}
     cast=resolved.setdefault('cast',{})
-    for row in made.get('objects',[]):
-        cast.setdefault(row['objectId'],{**{k:v for k,v in row.items() if k not in {'objectId','file','media'}},
-            'source':f"/api/v1/file/{quote(row['file'])}?workspace={quote(workspace)}"})
+    if not isinstance(cast,dict):
+        cast={}; resolved['cast']=cast
+    _drop_skipped_blocks(resolved['background']['room'], _stage_cast(cast, made, workspace))
     return True
 
 

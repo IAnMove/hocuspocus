@@ -92,12 +92,13 @@ class SizeMeter:
             self._pending.discard(path)
 
 
-def _state(component: Component, engine: dict, env_exists: bool, job: dict | None) -> str:
+def _state(component: Component, engine: dict, env_exists: bool, job: dict | None, ready: bool = False) -> str:
     if job and job["state"] == "running":
         return RUNNING
     if not engine["supported"]:
         return UNSUPPORTED
-    if engine["installed"]:
+    # A weights-only component has no venv receipt. Its READY file is the installed mark.
+    if engine["installed"] or ready:
         return INSTALLED
     return NEEDS_UPDATE if env_exists else NOT_INSTALLED
 
@@ -111,7 +112,8 @@ def _reclaimable(component: Component, root: Path, meter: SizeMeter) -> int | No
 def _component_row(component: Component, engine: dict, root: Path, meter: SizeMeter, job: dict | None) -> dict:
     env = root / component.env
     env_exists = env.exists()
-    state = _state(component, engine, env_exists, job)
+    ready = bool(component.ready_file) and (root / component.ready_file).is_file()
+    state = _state(component, engine, env_exists, job, ready)
     footprint = meter.get(env) if env_exists else Footprint(0, 0)
     return {
         **component.as_dict(),

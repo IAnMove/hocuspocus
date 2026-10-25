@@ -10,7 +10,7 @@ import json
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
-from services import workspace_busy
+from services import task_controls, workspace_busy
 from services.world3d_export import (
     CANCEL_OPERATION,
     OPERATION,
@@ -24,6 +24,8 @@ from services.world3d_export import (
 def create_world3d_export_router(service) -> APIRouter:
     router = APIRouter()
     workspace_busy.register("world3d-export", lambda _workspace, _folder: service.live_jobs())
+    # Activity's Cancel and jobs.cancel find an export by its operation (its task row names no adapter)
+    task_controls.register(service.operation, "cancel", service.cancel_task)
 
     @router.get("/api/v1/scenes/world3d/export/commands")
     def commands():
@@ -62,6 +64,11 @@ def create_world3d_export_router(service) -> APIRouter:
 
 
 def bind_world3d_renderer_origin(api, service) -> None:
+    # Launch already calls this for the world3d exporter. Remember that service so a comic
+    # transition can export without a new launch binding. The scene2d exporter is ignored.
+    from services.scene3d_comic import bind_live_exporter
+    bind_live_exporter(service)
+
     @api.middleware("http")
     async def bind_renderer_origin(request: Request, call_next):
         # Use the listening socket, never a client-controlled Host header.

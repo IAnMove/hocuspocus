@@ -11,7 +11,7 @@ _EXTERNAL = {
     "image.remove_background", "studio.key", "qa.accent",
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
     "characters.list", "characters.get", "characters.save", "characters.rig.check",
-    "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate",
+    "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate", "model3d.meshy.animations",
     "media.options", "scenes.assets.inspect",
 }
 

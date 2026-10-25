@@ -1,7 +1,7 @@
 """The look of a flat rig (``characters.rig.flat`` ``style``) and the look a kit keeps between rigs.
 
 ``rig_style`` checks a look: the paper mouths' ``smile``, ``smirk``, ``width`` and ``mouth_scale``, ``screen`` for a
-face that is a screen and ``mouthStyle``. ``kit_look`` is the look a rig of a kit uses: the keys the call gives over
+face that is a screen, ``mouthStyle`` and, only when it is ``layers``, ``faceSource``. ``kit_look`` is the look a rig of a kit uses: the keys the call gives over
 the kit's own look, its last rig's, else the rig defaults of the character style preset it was made in
 (``character_styles``), so a re-rig (a pose added, a mouth line placed, an agent's call with no style) keeps a warp
 kit warp unless ``style.mouthStyle`` says otherwise.
@@ -18,11 +18,21 @@ STYLE_LIMITS = {"smile": (-1.0, 1.0, 0.15), "smirk": (0.0, 1.0, 0.0), "width": (
 # paper: the painted mouth is wiped and nine paper mouths are drawn. ink: it is kept as the rest shape and the open
 # shapes are dark openings in its own ink. warp: the pose's own lower face moves (flat_rig_warp), per pose.
 MOUTH_STYLES = ("paper", "ink", "warp")
+FACE_SOURCES = ("detect", "layers")
+
+
+def _face_source(raw: dict[str, Any]) -> dict[str, str]:
+    """``layers`` is stored. ``detect`` (the default) is omitted so a normal rig's style bytes stay as they were."""
+    source = raw.get("faceSource", "detect")
+    if source not in FACE_SOURCES:
+        raise FlatRigError("invalid_style", "style.faceSource must be detect or layers")
+    return {"faceSource": "layers"} if source == "layers" else {}
 
 
 def rig_style(value: Any) -> dict[str, Any]:
     """Mouth look: ``smile`` -1..1, ``smirk`` 0..1, ``width`` and ``mouth_scale`` (paper mouths); ``screen`` for a
-    screen face; ``mouthStyle`` ``paper`` (default), ``ink`` or ``warp``."""
+    screen face; ``mouthStyle`` ``paper`` (default), ``ink`` or ``warp``; ``faceSource`` ``detect`` (default) or
+    ``layers``."""
     raw = value if isinstance(value, dict) else {}
     style: dict[str, Any] = {"screen": raw.get("screen") is True}
     for key, (low, high, default) in STYLE_LIMITS.items():
@@ -34,10 +44,11 @@ def rig_style(value: Any) -> dict[str, Any]:
     if mouth_style not in MOUTH_STYLES:
         raise FlatRigError("invalid_style", "style.mouthStyle must be paper, ink or warp")
     style["mouthStyle"] = mouth_style
+    style.update(_face_source(raw))
     return style
 
 
-LOOK_KEYS = ("screen", *STYLE_LIMITS, "mouthStyle")
+LOOK_KEYS = ("screen", *STYLE_LIMITS, "mouthStyle", "faceSource")
 
 
 def _saved_look(kit: dict[str, Any]) -> dict[str, Any]:

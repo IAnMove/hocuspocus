@@ -29,7 +29,7 @@ from typing import Any
 from services.character_animation_job import ACTIVE, DEFAULT_MODEL, AnimationJobError, CharacterAnimationJobs, JobStore, reference_of
 from services.character_animations import MAX_ANIMATIONS, catalog
 
-_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
+_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")  # ``minimax:image-01`` has a provider prefix
 
 SETS_DIR = ".character-animation-set-jobs-v1"
 PREFIX = "animset-"

@@ -10,19 +10,23 @@ export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.scene.instantiate',
   'world3d.scene.inspect',
   'world3d.scene.patch',
+  'world3d.scene.beats',
   'world3d.scene.talk',
   'world3d.scene.preview',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
+  'scene3d.comic.transition',
 ] as const
 
 export const WORLD3D_TEMPLATE_MUTATIONS = [
   'world3d.templates.user.put',
   'world3d.scene.instantiate',
   'world3d.scene.patch',
+  'world3d.scene.beats',
   'world3d.scene.talk',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
+  'scene3d.comic.transition',
 ] as const
 
 export type World3DTemplateOperation = typeof WORLD3D_TEMPLATE_OPERATIONS[number]
@@ -33,6 +37,7 @@ const MOUNT_SCENE_OPERATIONS = new Set<string>([
   'world3d.scene.instantiate',
   'world3d.scene.apply_query',
   'world3d.scene.patch',
+  'world3d.scene.beats',
   'world3d.scene.talk',
 ])
 
@@ -75,6 +80,8 @@ export function world3dTemplateMessage(body: { status?: string; result?: Record<
   if (body.status === 'not_found' || result.status === 'not_found') return i18n.t('wizard:replies.world3dNone')
   if (chosen) return i18n.t('wizard:replies.world3dChosen', { id: chosen, scene: scene?.sceneId || '', revision: scene?.revision ?? '', lines })
   if (lines) return lines
+  const scenes = (Array.isArray(result.scenes) ? result.scenes : []) as Array<Record<string, unknown>>
+  if (scenes.length) return scenes.map(item => `${item.role ?? ''} ${item.sceneId ?? ''} ${item.file ?? ''}`.trim()).join('\n')
   return i18n.t('wizard:replies.world3dReady', { label: scene?.sceneId || body.status || i18n.t('wizard:replies.world3dReadyWord') })
 }
 

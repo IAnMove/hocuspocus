@@ -8,6 +8,7 @@ from PIL import Image
 
 from services import character_animations as animations
 from services.character_animations import CharacterAnimationError, build_sheet, catalog, normalize_kit_animations, pose_prompt
+from services.walk_guides import expected_spread
 
 
 def _figure(path: Path, *, legs: tuple[int, int], torso_at: int = 60, height: int = 200, width: int = 140) -> Path:
@@ -73,6 +74,31 @@ def test_a_pose_prompt_keeps_the_character_and_asks_for_one_pose_on_a_screen():
         pose_prompt("walk", "moonwalk")
     with pytest.raises(KeyError):
         pose_prompt("dance", "a")
+
+
+def test_a_walk_that_is_not_a_profile_holds_its_view_in_words_and_nothing_else_does():
+    """Qwen turns the body to draw a stride, and the default Turbo gets no negative prompt: the walks of front, front34, back34 and back say in
+    words that the body keeps its turn. A side walk, an idle and the author's own animations are asked as before."""
+    held = catalog()["walkViews"]
+    walks = [item for item in catalog()["animations"] if item.get("motion") == "walk" and item["view"] != "side"]
+    assert {item["view"] for item in walks} == {"front", "front34", "back34", "back"} == set(held) - {"note"}
+    for item in walks:
+        text = pose_prompt(item["id"], item["poses"][0]["id"], "a pilot")["prompt"]
+        assert held[item["view"]] in text
+        assert text.index(catalog()["views"][item["view"]]) < text.index(held[item["view"]]) < text.index(item["poses"][0]["prompt"]), item["id"]
+    assert "stays square to the viewer" in pose_prompt("walk-back", "passing-a")["prompt"] and "never turns to a profile" in pose_prompt("walk-back", "up-b")["prompt"]
+    assert not any(words in pose_prompt("walk-12", "contact-a")["prompt"] for words in (held["front"], held["back"], held["front34"], held["back34"]))
+    idle = next(item for item in catalog()["animations"] if item["id"] == "idle")
+    assert not any(words in pose_prompt("idle", idle["poses"][0]["id"])["prompt"] for words in held.values())
+    custom = pose_prompt("my-walk", "pose-1", "a pilot", custom={"view": "back", "text": "Walking away with a heavy bag"})
+    assert held["back"] not in custom["prompt"]
+
+
+def test_the_views_that_can_drift_have_their_own_negative_for_the_models_that_take_one():
+    negatives = catalog()["viewNegatives"]
+    assert "three-quarter view" in negatives["front"] and "exact side profile" in negatives["back34"] and "three-quarter view" in negatives["back"]
+    assert "three-quarter view" in pose_prompt("walk-front", "contact-a")["negative"] and "head turned" in pose_prompt("walk-back", "contact-a")["negative"]
+    assert "three-quarter" not in pose_prompt("walk-12", "contact-a")["negative"]
 
 
 def test_an_animation_the_author_describes_is_built_like_a_catalog_one():
@@ -347,14 +373,17 @@ def test_the_catalog_file_is_plain_json_for_the_ui():
 # ----- five directions, the twelve-pose walk and the data contract (services/character_animation_directions.py) -----
 
 def _walker(path: Path, phase: int, *, height: int = 200, flip: bool = False) -> Path:
-    """A keyed walker whose two legs and one arm are different in each of the twelve phases (the legs swing like sin and cos)."""
+    """A keyed walker whose two legs and one arm are different in each of the twelve phases: the legs are as far apart as the profile
+    walk of ``services/walk_guides.py`` has them at that phase, the dark one on the near side in the first half of the cycle."""
     pixels = np.zeros((height, 150, 4), dtype=np.uint8)
-    left, right = round(30 * np.sin(phase * np.pi / 6)), round(30 * np.cos(phase * np.pi / 6))
+    wide = round(expected_spread("side", phase / 12) * (height - 10))
+    start = (150 - wide) // 2
+    near, far = (start, start + wide - 12) if phase < 6 else (start + wide - 12, start)
     pixels[10:40, 55:85] = (20 + 18 * phase, 160, 120, 255)  # the head's red says which pose it is
     pixels[40:110, 48:92] = (230, 180, 30, 255)
-    pixels[110:height - 4 * (phase % 6), 64 + left:76 + left] = (30, 30, 40, 255)  # a dark leg, lifted a little more in each phase
-    pixels[110:height, 64 + right:76 + right] = (235, 235, 245, 255)  # and a light one
-    pixels[45:60 + 3 * phase, 94:104] = (200, 160, 120, 255)
+    pixels[110:height - 4 * (phase % 6), near:near + 12] = (30, 30, 40, 255)  # a dark leg, lifted a little more in each phase
+    pixels[110:height, far:far + 12] = (235, 235, 245, 255)  # and a light one
+    pixels[45:50 + 8 * phase, 94:108] = (200, 160, 120, 255)  # an arm that reaches lower in each phase
     image = Image.fromarray(pixels)
     (image.transpose(Image.Transpose.FLIP_LEFT_RIGHT) if flip else image).save(path)
     return path
@@ -377,11 +406,13 @@ def test_the_catalog_has_five_directions_each_with_a_twelve_pose_walk_at_twelve_
     assert {direction: item["id"] for direction, item in walks.items()} == {"side": "walk-12", "front": "walk-front", "front34": "walk-front34", "back34": "walk-back34", "back": "walk-back"}
     for direction, item in walks.items():
         assert item["group"] == "cycle" and item["fps"] == 12 and item["loop"] == "loop" and item["template"] == "walk-cycle-sheet" and item["scaleBy"] == "height"
-        assert item["view"] == direction and item["columns"] == 6 and set(item["checks"]) == {"height", "repeats", "mirror"}
+        assert item["view"] == direction and item["columns"] == 6 and set(item["checks"]) == {"height", "repeats", "mirror", "gait"}
+        assert item["guide"] == "walk", "every pose of a walk is drawn over its guide"
         assert len({pose["id"] for pose in item["poses"]}) == 12 == len({pose["prompt"] for pose in item["poses"]}), "twelve different drawings"
     # The old four-pose walk stays as it was, and says what it is.
     walk = next(item for item in data["animations"] if item["id"] == "walk")
     assert len(walk["poses"]) == 4 and walk["fps"] == 4 and (walk["motion"], walk["dir"]) == ("walk", "side") and "checks" not in walk
+    assert walk["guide"] == "walk" and data["guide"]["style"] in data["guide"]["text"]
     idles = {item["dir"] for item in data["animations"] if item.get("motion") == "idle"}
     assert idles == {"front", "side", "front34", "back34", "back"}
     assert all(len(item["poses"]) == 2 for item in data["animations"] if item.get("motion") == "idle")
@@ -527,6 +558,15 @@ def test_the_same_drawing_in_more_than_two_cells_in_a_row_fails_and_two_in_a_row
     assert not thrice["repeated_poses"]["ok"] and thrice["repeated_poses"]["value"] == 3 and "3 cells" in thrice["repeated_poses"]["detail"]
     apart = _checks(_walk_sheet(folder, "apart", same={6: 0, 7: 1}))
     assert apart["repeated_poses"]["ok"], "the same drawing far apart in the cycle is allowed"
+
+
+def test_a_walk_whose_poses_have_the_legs_of_another_moment_or_another_side_fails_the_gait_check(folder):
+    good = _checks(_walk_sheet(folder, "gait-good"))["walk_gait"]
+    assert good["ok"] and good["limit"] == 0.15
+    shuffled = _checks(_walk_sheet(folder, "gait-shuffled", same={3: 0, 9: 6}))["walk_gait"]
+    assert not shuffled["ok"] and "cell(s) 4, 10" in shuffled["detail"], "a passing pose drawn as a full stride is the wrong moment"
+    turned = _checks(_walk_sheet(folder, "gait-turned"), "walk-back")["walk_gait"]
+    assert not turned["ok"], "the strides of a profile are not a walk seen from behind"
 
 
 def test_the_mirror_of_one_direction_is_not_another_direction_of_the_same_kit(folder):

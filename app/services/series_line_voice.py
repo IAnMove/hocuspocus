@@ -14,8 +14,9 @@ shot's latest take is listed with ``newerThanTake``, so the inspector can say th
 
 A recording is a GPU job that can wait for the speech model, so it runs as a small job
 (``.series-jobs-v1/voice``) that a caller follows with ``status``; one line records once at a time, and
-nothing records while the episode renders on the server (the render could take that line's recording
-in the middle of a take).
+nothing records while the episode renders on the server, and a render or produce of the episode is
+refused while a line is recording (both write the same ``ln-*.wav``; the render could take that
+line's recording in the middle of a take).
 """
 from __future__ import annotations
 
@@ -31,7 +32,7 @@ from urllib.parse import quote
 from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_kit_pins import kits_for_episode
 from services.series_language_versions import LANGUAGES, localized_view
-from services.series_native_render import ACTIVE, NativeRenderError, SeriesNativeRender
+from services.series_native_render import ACTIVE, NativeRenderError, SeriesNativeRender, recording_episode
 from services.series_shot_edit import find_shot
 from services.series_shot_plan import language_key
 from services.series_voice_rooms import line_rooms, room_filename
@@ -186,10 +187,9 @@ class SeriesLineVoice:
         series, episode, shot, language = self._shot(workspace, series_id, episode_id, shot_ref, language)
         beat = find_line(shot, line_ref)
         self.render.line_voice(series, beat, self._kits(workspace, episode), language)  # no voice: refused now, not in the job
-        for job in self.render.jobs(workspace):
-            if job.get("episodeId") == episode_id and job.get("status") in ACTIVE:
-                raise LineVoiceError("render_running", "The episode is rendering on the server; record the line when it ends "
-                                     "(or stop the render)", 409)
+        if recording_episode(self.render.jobs(workspace), episode_id):
+            raise LineVoiceError("render_running", "The episode is rendering on the server; record the line when it ends "
+                                 "(or stop the render)", 409)
         with self._lock:
             for job in self.jobs(workspace):
                 if job.get("episodeId") == episode_id and job.get("beatId") == beat["id"] and job.get("language") == language \

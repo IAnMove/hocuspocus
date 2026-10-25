@@ -36,13 +36,28 @@ def _detect(inspect_engines: set[str] | None = None) -> dict:
 
 
 def _engine_in_use(engine: str) -> bool:
-    """Whether a running sidecar holds this engine's environment open."""
-    if engine == "minimax_h3":
-        try:
+    """Whether a running sidecar or worker holds this engine's environment open."""
+    try:
+        if engine == "minimax_h3":
             from services import minimax_h3_service
-        except ImportError:
-            return False  # the core runtime ships without its websocket client, and runs no sidecar
-        return minimax_h3_service.is_runtime_running()
+            return minimax_h3_service.is_runtime_running()
+        if engine == "creation_models":
+            from services import creation_model_service
+            return bool(creation_model_service.runtime_status().get("warm"))
+        if engine == "sam":
+            from services import inpaint_service
+            return inpaint_service.is_runtime_running()
+        if engine == "hunyuan3d":
+            from services import model3d_service
+            return model3d_service.has_active_jobs()
+        if engine == "trellis2":
+            from services import model3d_service
+            return model3d_service.has_active_jobs("trellis2")
+        if engine == "rigging":
+            from services import rig_service
+            return rig_service.has_active_unirig_jobs()
+    except ImportError:
+        return False  # the core runtime ships without some of these, and runs no sidecar
     return False
 
 

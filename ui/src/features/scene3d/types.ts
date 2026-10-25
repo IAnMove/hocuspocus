@@ -10,6 +10,7 @@ import { TECHNIQUE_TEMPLATE_IDS } from './techniqueTemplateIds'
 import { ANIME_TEMPLATE_IDS } from './animeTemplateIds'
 import { MOTION_LAB_IDS, type MotionLabId } from './motionlab/types'
 import { TRANSITION_TEMPLATE_IDS } from './transitionTemplateIds'
+import { COMIC_TEMPLATE_IDS } from './comicTemplateIds'
 import { SPEED_TEMPLATE_IDS } from './speedTemplateIds'
 import { TITLE_TEMPLATE_IDS } from './titleTemplateIds'
 import { DIALOGUE_TEMPLATE_IDS } from './dialogueTemplateIds'
@@ -139,6 +140,7 @@ export const SCENE3D_TEMPLATE_IDS = [
   ...ANIME_TEMPLATE_IDS,
   ...MOTION_LAB_IDS,
   ...TRANSITION_TEMPLATE_IDS,
+  ...COMIC_TEMPLATE_IDS,
   ...SPEED_TEMPLATE_IDS,
   ...TITLE_TEMPLATE_IDS,
   ...DIALOGUE_TEMPLATE_IDS,
@@ -169,11 +171,15 @@ export type Scene3DMotion = {
   headingOffset?: number
   turnTo?: number
   easing?: 'linear' | 'smooth'
+  /** Scene seconds the move starts and ends: before `start` the object sits at its slot position, after `end` it stays at `to`.
+   * Absent: `start` is 0 and `end` is the end of the scene, so a document without them moves over the whole shot. */
+  start?: number
+  end?: number
   /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
   walk?: import('./walkPath').Scene3DMotionWalk
 }
 
-export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen'
+export type Scene3DSlotMedia = 'model3d' | 'image' | 'screen' | 'splat'
 
 export type Scene3DLoop = {
   cylinder: boolean
@@ -223,7 +229,11 @@ export type Scene3DSlot = {
   /** This prop is carried in another slot's whole hand. Absent means the slot stays where it was placed. */
   hold?: import('./handHold').Scene3DHold
   motion?: Scene3DMotion
+  /** `false` exempts this object from the agent's collision warnings (a ghost, a spirit). Absent: it collides. */
+  collide?: false
   loop?: Scene3DLoop
+  /** Floor of a Gaussian-splat set, in metres. The invisible plane the cast stands on. */
+  splat?: { floorY: number }
 }
 
 export type Scene3DCamera = {

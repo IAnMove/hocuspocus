@@ -1,3 +1,4 @@
+import type { ModelLicence } from '../types'
 import { BASE, HttpError } from './http'
 
 export type InstallState = 'unsupported' | 'not_installed' | 'installed' | 'needs_update' | 'running'
@@ -29,6 +30,8 @@ export interface InstallComponent {
   /** What removing it frees: uv links packages from Pinokio's shared cache, which stays. null while measuring. */
   reclaimableBytes: number | null
   job: InstallJob | null
+  /** Set when this component's weights use a licence that excludes territories. */
+  licence?: ModelLicence | null
 }
 
 export interface InstallStatus {

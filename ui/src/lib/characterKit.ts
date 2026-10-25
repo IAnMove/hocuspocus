@@ -71,9 +71,16 @@ export interface CharacterKit {
     blink?: boolean
     /** This pose's own closed eyes (flat rig); without it the kit blink is scaled onto the pose. */
     blinkSource?: string
+    /** How the last flat rig placed the eyes and the mouth: white-eye search, anime landmarks, or a user hint. */
+    eyesSource?: 'whites' | 'landmarks' | 'hint'
+    mouthSource?: 'whites' | 'landmarks' | 'hint'
+    /** Brow boxes from the anime landmarks, in pose pixels. The editor does not draw them. */
+    brows?: [[number, number, number, number], [number, number, number, number]]
     /** This pose's own mouth drawings (flat-rig warp mouths, cut from its drawing), placed at `mouth`; they share
      * the review of the kit's mouth for the same state. See characterKitMouthSource. */
     mouthSources?: Partial<Record<CharacterMouthState, string>>
+    /** See-through class PNGs for this pose (eyewhite, mouth, …), saved with the rig. */
+    layers?: Record<string, string>
   }>
   provenance: Array<Record<string, unknown>>
   /** Small animations (walk, wave, anime expressions): a sprite sheet of poses of this character, by animation id. */

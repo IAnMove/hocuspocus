@@ -474,6 +474,38 @@ def test_a_shot_that_moves_the_camera_past_the_range_is_warned_and_the_move_is_r
     assert setup["camera"]["eye"][0] == pytest.approx(0.3)
 
 
+def test_a_render_after_paint_uses_the_new_plate_not_the_compile_snapshot(workspace):
+    """from_script stores roomBox and the room-box scale; paint changes the plate and invalidates the take.
+    The render must read the stored room again, or the camera and slot scale stay the old plate's."""
+    from services.room_box_commands import PAINT, get_room, run
+    from services.series_room_box import box_camera, dress_shot, look_digest, place, spec_of
+    from services.series_shot3d import _setup, normalize_scene3d
+    first = _put()
+    dressed = dress_shot(_series_shot(cast=[{"characterId": "ana", "at": "mid"}]), None, str(workspace), {})
+    snapshot = dressed["roomBox"]
+    old_mid = place(snapshot, "mid")
+    old_scale = next(item["scale"] for item in dressed["objects"] if item["objectId"] == "room-box")
+    painted = run(PAINT, {"version": 1, "intent_id": "p-refresh", "input": {
+        "workspace": "default", "name": "office", "walls": {"file": "other.png"},
+        "stage": {**OFFICE, "horizon": 0.3, "floorTop": 0.85}}})["result"]
+    live = spec_of({"spec": get_room("default", "office")["room"]})
+    assert look_digest({"scene3d": dressed}, str(workspace)) == painted["look"] != first["paint"]["look"]
+    assert live["plate"]["camera"]["lensShift"] != snapshot["plate"]["camera"]["lensShift"]
+    assert live["size"]["h"] != snapshot["size"]["h"]
+    assert place(live, "mid") != old_mid
+    setup = _setup("w", str(workspace), normalize_scene3d({**dressed, "template": "two-shot"}), [],
+                   lambda *_args: RuntimeError("unused"), [])
+    assert setup["camera"] == box_camera(live)
+    assert setup["camera"]["lensShift"] == pytest.approx(0.2)
+    room = next(item for item in setup["bindings"] if item["object_id"] == "room-box")
+    assert room["scale"] == round(live["size"]["h"] / 1.7, 4) != old_scale
+    person = next(item for item in setup["bindings"] if item["object_id"] == "subject_1")
+    assert person["position"][2] == place(live, "mid")[1]
+    stale = _setup("w", None, normalize_scene3d({**dressed, "template": "two-shot"}), [],
+                   lambda *_args: RuntimeError("unused"), [])
+    assert stale["camera"]["lensShift"] == pytest.approx(snapshot["plate"]["camera"]["lensShift"])
+
+
 def test_an_ordinary_room_keeps_every_camera_and_zone_it_had():
     from services.series_room_box import box_camera, place
     spec = normalize({"kind": "room", "prompt": "a kitchen", "size": {"w": 4, "d": 5}, "floor": "oak", "walls": "plaster"})

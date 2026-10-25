@@ -48,7 +48,7 @@ RECEIPT_OPERATION = "scenes.world3d.export.receipt"
 CANCEL_OPERATION = "scenes.world3d.export.cancel"
 WORKSPACE_RE = re.compile(r"(?:default|[A-Za-z0-9][A-Za-z0-9_-]{0,119})")
 BLOCKED_URLS = ("blob:", "file:", "javascript:", "filesystem:")
-MEDIA_KINDS = frozenset({"model3d", "image", "screen"})
+MEDIA_KINDS = frozenset({"model3d", "image", "screen", "splat"})
 COMMAND_KEYS = frozenset({"version", "operation", "intent_id", "input"})
 INPUT_KEYS = frozenset({"workspace", "document", "refs", "quality", "shutter", "prores", "output_name"})
 INTENT_RE = re.compile(r"[A-Za-z0-9._-]{1,160}")
@@ -449,11 +449,15 @@ def _validated_document(raw) -> dict:
     return document
 
 
+# The editor's parsers (sceneFx/types.ts, sceneFx/world.ts) give a cue that says ``sound`` and no ``volume`` this one.
+DEFAULT_CUE_VOLUME = 0.25
+
+
 def _cue_sounds(cue) -> bool:
     if not isinstance(cue, dict) or not cue.get("sound"):
         return False
     try:
-        return float(cue.get("volume") or 0) > 0
+        return float(DEFAULT_CUE_VOLUME if cue.get("volume") is None else cue["volume"]) > 0
     except (TypeError, ValueError):
         return False
 
@@ -773,6 +777,21 @@ class World3DExportService:
             raise http_error(422, "invalid_workspace", "Use an explicit valid output workspace")
         return self.registry_for(workspace)
 
+    def _bind_library(self, frozen: dict, workspace: str) -> None:
+        """Old documents still name ``/api/v1/library/files/…``. Copy each GLB once and retarget the snapshot."""
+        from services.cc0_props import bind_document
+        snapshot = frozen["effective"]["input"]["snapshot"]
+        changed = set(bind_document(snapshot["document"], Path(self.workspace_dir(workspace)), workspace))
+        if not changed:
+            return
+        by_id = {slot.get("id"): slot for slot in snapshot["document"].get("slots") or [] if isinstance(slot, dict)}
+        refs = snapshot.get("refs") or []
+        for index, ref in enumerate(refs):
+            slot = by_id.get(ref.get("slotId"))
+            if ref.get("slotId") not in changed or not isinstance(slot, dict):
+                continue
+            refs[index] = _ref_from_url(slot, str(slot.get("sourceUrl") or ""), workspace)
+
     def _assert_refs(self, refs: list[dict], workspace: str) -> None:
         workspace_root = Path(self.workspace_dir(workspace))
         uploads_root = Path(self.uploads_dir())
@@ -796,6 +815,7 @@ class World3DExportService:
         try:
             frozen = self.freeze(command)
             workspace = frozen["effective"]["input"]["workspace"]
+            self._bind_library(frozen, workspace)
             self._assert_refs(frozen["effective"]["input"]["snapshot"]["refs"], workspace)
             registry = self._registry(workspace)
             previous = registry.command_admission(command["intent_id"])
@@ -894,6 +914,16 @@ class World3DExportService:
         task = viewed["task"]
         if not task:
             raise http_error(404, "receipt_not_found", "No admission exists for this intention in this workspace")
+        self._cancel_row(workspace, task)
+        return self.receipt(workspace, intent_id)
+
+    def cancel_task(self, task: dict) -> dict:
+        """Cancel from the task row (Activity's Cancel, ``jobs.cancel``): the same registry update as ``cancel``."""
+        workspace = str(task.get("workspace") or "default")
+        self._cancel_row(workspace, task)
+        return self._registry(workspace).get(task["id"])
+
+    def _cancel_row(self, workspace: str, task: dict) -> None:
         if task["status"] == "completed":
             raise http_error(409, "already_completed", "A completed export cannot be cancelled")
         if task["status"] != "cancelled":
@@ -904,7 +934,6 @@ class World3DExportService:
                 )
             except ValueError as error:
                 raise http_error(409, "cannot_cancel", str(error)) from error
-        return self.receipt(workspace, intent_id)
 
     def _run_worker(self, intent_id: str, task_id: str, workspace: str) -> None:
         registry = self.registry_for(workspace)

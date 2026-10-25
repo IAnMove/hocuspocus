@@ -62,6 +62,7 @@ const EXPENSIVE_ACTIONS = new Set([
   'export_video_editor',
   'mount_videoclip_alternative_song',
   'remove_background',
+  'lipsync_redo',
 ])
 
 const QUEUED_ACTIONS = new Set(['start_generation', 'queue_sfx_pack', 'render_series_shots', 'export_video_editor', 'mount_videoclip_alternative_song', 'remove_background'])

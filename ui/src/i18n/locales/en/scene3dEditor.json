@@ -343,7 +343,8 @@
     "hint": "Select any object, even when another is in front.",
     "image": "Image",
     "model3d": "3D model",
-    "screen": "Image / video"
+    "screen": "Image / video",
+    "splat": "Gaussian splat"
   },
   "translate": "Move",
   "rotate": "Rotate Y",
@@ -3523,6 +3524,22 @@
       "title": "Rise off",
       "description": "The camera lifts off the figure into a blank backdrop with soft light from above; the next shot can start on anything."
     },
+    "comic-panel-exit": {
+      "title": "Comic panel exit",
+      "description": "The last frame fills one panel, then the camera pulls out until the whole comic page is in frame."
+    },
+    "comic-panel-enter": {
+      "title": "Comic panel enter",
+      "description": "The camera starts on the whole comic page and flies into the next panel until that frame fills the picture."
+    },
+    "comic-panel-exit-portrait": {
+      "title": "Comic panel exit (portrait)",
+      "description": "A vertical chapter change: the last frame fills one panel, then the camera pulls out to the whole page."
+    },
+    "comic-panel-enter-portrait": {
+      "title": "Comic panel enter (portrait)",
+      "description": "A vertical chapter change: the camera starts on the whole page and flies into the next panel until it fills the frame."
+    },
     "speed-run-toward": {
       "title": "Run toward camera",
       "description": "A low lens creeps in on a figure running on the spot over faint radial speed lines. The template brings no clip: bind a GLB with a run clip (clip: run)."
@@ -3823,7 +3840,11 @@
     "walkReady": "Baked walk: the clip moves the character and each foot stays planted.",
     "walkStale": "The path or the character's placement changed: bake the walk again.",
     "walkNeedsSaved": "Load the character from the workspace (a saved, rigged GLB) to bake a walk.",
-    "walkFailed": "Could not bake the walk"
+    "walkFailed": "Could not bake the walk",
+    "start": "Starts at (s)",
+    "end": "Ends at (s)",
+    "window": "Seconds in the scene. Empty: the move starts at 0 and ends with the shot. Before the start the object sits at its position; after the end it stays at the destination.",
+    "walkTimed": "A walk cannot be baked on a move with a start or an end: clear them, or bake the walk over the whole shot."
   },
   "framing": {
     "title": "Subject framing",
@@ -4253,5 +4274,22 @@
     "generate": "Generate candidates",
     "generating": "Generating prop candidates…",
     "remove": "Remove"
+  },
+  "comicTransition": {
+    "title": "Comic transition",
+    "help": "Pull out of one panel and into the next. Use the frames of the two chapters so both cuts stay invisible. A cutout on the exit or enter panel will show.",
+    "format": "Format",
+    "landscape": "Landscape",
+    "portrait": "Portrait",
+    "from": "Exit panel",
+    "to": "Enter panel",
+    "panel": "Panel",
+    "image": "Image or video",
+    "at": "At (s)",
+    "export": "Export both clips",
+    "run": "Build transition",
+    "working": "Building…",
+    "done": "Saved",
+    "failed": "The transition could not be built"
   }
 }

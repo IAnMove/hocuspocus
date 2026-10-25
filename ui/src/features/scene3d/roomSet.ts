@@ -18,7 +18,7 @@ export type RoomMold = {
   cameras: { id: string; position: Vec3; lookAt: Vec3; fov: number }[]
   defaultSkin: Record<string, RoomMaterial>; lights: string
 }
-export type RoomSet = { mold: RoomMold; skin?: Record<string, RoomMaterial>; camera?: string }
+export type RoomSet = { mold: RoomMold; skin?: Record<string, RoomMaterial>; camera?: string; libraryBlocks?: string[] }
 /** A view sits this far behind its wall and overlaps the hole by this margin, so oblique cameras never see past its edge. */
 export const OPENING_DEPTH = 0.015, OPENING_MARGIN = 0.08
 const FALLBACK: RoomMaterial = { color: '#d8d2c4' }
@@ -122,7 +122,9 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     }
     for (const o of rects) add(o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], [o.width+2*OPENING_MARGIN, o.height+2*OPENING_MARGIN])
   }
+  const replaced = new Set(Array.isArray(room.libraryBlocks) ? room.libraryBlocks : [])
   for (const block of mold.blocks) {
+    if (replaced.has(block.id)) continue
     const [x, y, z, bw, bh, bd] = block.box
     const front = block.surfaces.find(s => s.endsWith('_front')) ?? block.surfaces[0]
     const top = block.surfaces.find(s => s.endsWith('_top')) ?? front

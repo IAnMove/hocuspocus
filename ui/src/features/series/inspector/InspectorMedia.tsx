@@ -1,5 +1,6 @@
 import { useUiTranslation } from '../../../i18n'
 import type { CharacterKitLibrary } from '../../../lib/characterKit'
+import { LipsyncRedoButton } from '../../lipsync-redo/LipsyncRedoButton'
 import type { SeriesProject, SeriesShot } from '../types'
 import { planBackground, planCast, type TakeEntry } from './model'
 
@@ -19,9 +20,11 @@ export function PlanSketch({ series, shot, kits, className = '' }: { series: Ser
 
 /** The shot's picture on top of the inspector: the chosen take playing (with its scrub bar), the other takes to switch
  * to, or the plan sketched when nothing is rendered yet. */
-export function InspectorMedia({ series, shot, takes, selected, onSelect, kits }: {
+export function InspectorMedia({ series, shot, takes, selected, onSelect, kits, workspace, episodeId }: {
   series: SeriesProject; shot: SeriesShot; takes: TakeEntry[]; selected?: string; onSelect: (attemptId: string) => void
   kits: CharacterKitLibrary | null
+  workspace?: string
+  episodeId?: string
 }) {
   const { t } = useUiTranslation('seriesLab')
   const take = takes.find(item => item.attempt.id === selected) || takes[0]
@@ -33,6 +36,7 @@ export function InspectorMedia({ series, shot, takes, selected, onSelect, kits }
         aria-label={t('inspector.media.take', { number: take.number })} />
       : <div className="relative"><PlanSketch series={series} shot={shot} kits={kits} className={frame} />
         <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] text-white">{t('inspector.media.planOnly')}</span></div>}
+    {workspace && episodeId && takes.length > 0 ? <LipsyncRedoButton workspace={workspace} namespace="seriesLab" labelKey="inspector.media.redoLips" engineKey="inspector.media.lipsEngine" target={{ series_id: series.id, episode_id: episodeId, shot: shot.id }} /> : null}
     {takes.length > 1 && <div role="radiogroup" aria-label={t('inspector.media.takes')} className="flex gap-1.5 overflow-x-auto pb-1">
       {takes.map(item => {
         const approved = item.attempt.id === shot.approvedAttemptId

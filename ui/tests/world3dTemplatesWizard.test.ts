@@ -43,10 +43,18 @@ test('inspect and publish do not remount the open editor', () => {
   assert.equal(shouldMountWorld3DScene('world3d.scene.instantiate'), true)
   assert.equal(shouldMountWorld3DScene('world3d.scene.apply_query'), true)
   assert.equal(shouldMountWorld3DScene('world3d.scene.patch'), true)
+  assert.equal(shouldMountWorld3DScene('world3d.scene.beats'), true)
   assert.equal(shouldMountWorld3DScene('world3d.scene.inspect'), false)
   assert.equal(shouldMountWorld3DScene('world3d.scene.publish'), false)
   assert.equal(shouldMountWorld3DScene('world3d.scene.preview'), false)
   assert.equal(shouldMountWorld3DScene('world3d.templates.get'), false)
+  assert.equal(shouldMountWorld3DScene('scene3d.comic.transition'), false)
+  const comic = world3dTemplateMessage({ status: 'completed', result: { scenes: [
+    { role: 'exit', sceneId: 'w3d-aaaaaaaaaaaa', file: 'a.world3d.scene.json' },
+    { role: 'enter', sceneId: 'w3d-bbbbbbbbbbbb', file: 'b.world3d.scene.json' },
+  ] } })
+  assert.match(comic, /exit w3d-aaaaaaaaaaaa/)
+  assert.match(comic, /enter w3d-bbbbbbbbbbbb/)
 })
 
 test('wizard mutations mint an intent_id and searches stay read-only', () => {
@@ -61,6 +69,7 @@ test('wizard mutations mint an intent_id and searches stay read-only', () => {
     world3dTemplateCommandIntent('world3d.scene.patch', { intent_id: 'kept-intent', scene_id: 'w3d-abc' }, 'ignored'),
     'kept-intent',
   )
+  assert.match(String(world3dTemplateCommandIntent('world3d.scene.beats', { scene_id: 'w3d-abc' })), /^wizard-world3d-/, 'a beat sheet is a mutation')
   const minted = world3dTemplateCommandIntent('world3d.scene.instantiate', { template_id: 'cine-dolly-zoom' })
   assert.match(String(minted), /^wizard-world3d-[A-Za-z0-9._:-]+$/)
   assert.equal(world3dTemplateCommandIntent('world3d.scene.publish', { intent_id: 'bad id' }, 'fallback-id'), 'fallback-id')

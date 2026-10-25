@@ -5,6 +5,7 @@ import { prepareWorldSfxMedia, worldSfxMediaReady } from '../sceneFx/worldRuntim
 import { worldSfxAtTime } from '../sceneFx/worldMotion'
 import { namedSceneMeshes, namedSceneNodes } from './screenPlane'
 import { slotMountKey } from './backdrop'
+import { SPLAT_CLOUD_NAME, createSplatMount, ensureSparkRenderer, loadSplatCloud, poseSplatMount } from './splatItem.ts'
 import { createTransformGizmo, type TransformMode, type TransformPatch } from './transformGizmo.ts'
 import { Box3, Frustum, Matrix4, TextureLoader } from 'three'
 import { estimateFace, manualFace, FACE_PROFILES, type PlacementMode } from './speech/calibration'
@@ -146,6 +147,33 @@ function loadSlotGltf(
     undefined,
     () => undefined,
   )
+}
+
+function loadSplatSlot(
+  world: GpuWorld,
+  slot: Scene3DSlot,
+  cancelled: () => boolean,
+  liveSlot: () => Scene3DSlot | undefined,
+  repaint: () => void,
+) {
+  const url = slot.sourceUrl
+  if (!url) return
+  void ensureSparkRenderer(world).then(() => loadSplatCloud(url)).then(mesh => {
+    if (cancelled()) {
+      disposeObject(mesh)
+      return
+    }
+    const live = liveSlot()
+    if (!live || slotMountKey(live) !== slotMountKey(slot) || live.media !== 'splat') {
+      disposeObject(mesh)
+      return
+    }
+    const root = createSplatMount()
+    root.getObjectByName(SPLAT_CLOUD_NAME)?.add(mesh)
+    poseSplatMount(root, live)
+    placeSlot(world, live, root, [], 1, true)
+    repaint()
+  }).catch(() => undefined)
 }
 
 function loadSlotImage(
@@ -370,6 +398,10 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       if (slot.media === 'screen') { bindScreen(slot); continue }
       const live = () => documentRef.current.slots.find(item => item.id === slot.id)
       const gone = () => worldRef.current !== world
+      if (slot.media === 'splat') {
+        loadSplatSlot(world, slot, gone, live, repaint)
+        continue
+      }
       if (slot.media === 'image') {
         loadSlotImage(world, slot, gone, live, () => { bindScreen(live() ?? slot); repaint() })
         continue

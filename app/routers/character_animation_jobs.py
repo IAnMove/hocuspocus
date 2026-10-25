@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -39,6 +39,8 @@ class MakeAnimation(BaseModel):
     custom: CustomAnimation | None = None
     pose: str | None = Field(default=None, min_length=1, max_length=120)
     model: str | None = Field(default=None, max_length=80)
+    # poses (the default, and what an omitted method means) draws each pose. video makes a catalog walk from one guided clip.
+    method: Literal["poses", "video"] | None = None
     # «Modo un solo disparo»: approve what the job made when the sheet passes the automatic checks. Ignored (the job says so) in review mode.
     autoApprove: bool = False
 
@@ -68,7 +70,7 @@ def create_character_animation_jobs_router(jobs: CharacterAnimationJobs, *, bind
             bind_loop(asyncio.get_running_loop())  # the job's tool calls run on the server's loop, as an MCP client's would
         custom = body.custom.model_dump() if body.custom else None
         return {"job": await run(jobs.start, body.workspace, body.kitId, body.animation, custom=custom, pose=body.pose, model=body.model,
-                                  auto_approve=body.autoApprove)}
+                                  auto_approve=body.autoApprove, method=body.method)}
 
     @router.get("/jobs")
     async def list_jobs(workspace: str, kitId: str | None = None):

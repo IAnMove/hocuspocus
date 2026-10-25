@@ -1,4 +1,4 @@
-import { DoubleSide, Mesh, MeshBasicMaterial, MeshStandardMaterial, MirroredRepeatWrapping, type Object3D, type Texture } from 'three'
+import { DoubleSide, LinearFilter, Mesh, MeshBasicMaterial, MeshStandardMaterial, MirroredRepeatWrapping, type Object3D, type Texture } from 'three'
 import { applyPsxImageMaterial } from './imageLook'
 import { applyImageColorKey } from './imageColorKey'
 import { imageWindowGeometry } from './imageWindows'
@@ -34,6 +34,12 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
   }
   const aspect = hasSheets(slot) ? spriteFrame(slot.screen!.directional!).aspect : cutoutAspect(texture)
   const tiles = slot.imageLook?.tiles ?? 1
+  if (texture && slot.imageLook?.sharp) {
+    texture.minFilter = LinearFilter
+    texture.magFilter = LinearFilter
+    texture.generateMipmaps = false
+    texture.needsUpdate = true
+  }
   const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
   if (texture && slot.drift) {         // a scrolled picture repeats mirrored instead of smearing its last column
     texture.wrapS = MirroredRepeatWrapping

@@ -42,6 +42,8 @@ export const postBody = (body: unknown): RequestInit => ({ method: 'POST', heade
 
 export async function startAnimationJob(details: {
   workspace: string; kitId: string; animation: string; model?: string; pose?: string; custom?: CustomAnimationRequest; autoApprove?: boolean
+  /** poses is the default and is omitted. video asks for one pose-guided clip, only for a catalog walk. */
+  method?: 'poses' | 'video'
 }): Promise<AnimationJob> {
   return (await animationRequest<{ job: AnimationJob }>('/make', postBody(details), 'Could not start the animation')).job
 }

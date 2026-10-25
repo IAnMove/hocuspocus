@@ -32,6 +32,7 @@ import { MotionLabControls } from './motionlab/controls'
 import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
 import { Scene3DFramingControls } from './Scene3DFramingControls'
+import { ComicTransitionPanel } from './ComicTransitionPanel'
 import { Scene3DRoomCameraPicker } from './Scene3DRoomCameraPicker'
 import { withRoomCamera } from './roomCamera'
 import { AtmosClearingControls } from './AtmosClearingControls.tsx'
@@ -166,7 +167,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   }, [])
   const workspaceRef = useRef('')
   const stageRef = useRef<Scene3DStageHandle>(null)
-  const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed') })
+  const walkBake = useWalkBake(stageRef, sceneDoc, applyScene, { needsSaved: editorT('travel.walkNeedsSaved'), failed: editorT('travel.walkFailed'), timed: editorT('travel.walkTimed') })
   const exportAbortRef = useRef<AbortController | null>(null)
   const renderChoiceRef = useRef<RenderChoice>({ level: 'draft', shutter: 0 })
   const fps = sceneDoc.fps
@@ -479,6 +480,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
       {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
       <AtmosClearingControls document={sceneDoc} disabled={exporting} label={key => editorT(key as 'atmos.time')} onChange={atmos => applyScene(current => ({ ...current, atmos }))} />
       <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
+      <ComicTransitionPanel workspace={workspace || undefined} disabled={editingLocked} />
       <RenderQualityPicker
         width={sceneDoc.width}
         height={sceneDoc.height}

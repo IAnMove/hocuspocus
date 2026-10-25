@@ -1,0 +1,1 @@
+# Weights only. The studio environment already pins transformers. MIT model.

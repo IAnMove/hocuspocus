@@ -54,6 +54,7 @@ import { executeMakeCharacterAnimation, executeMakeCharacterAnimationSet, execut
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
+import { executeLipsyncRedo } from './lipsyncRedoCapabilities'
 import { executeVideo2DTemplates } from './video2dTemplateCapabilities'
 import { shouldMountWorld3DScene, world3dTemplateCommandIntent, world3dTemplateMessage } from './world3dTemplateCapabilities'
 import { roomSetMessage } from './roomSetsCapabilities'
@@ -215,6 +216,7 @@ export interface WizardApplicationAdapters {
     review(action: import('./characterAnimationCapabilities').AgentReviewCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
   }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
+  lipsyncRedo: { command(action: import('./lipsyncRedoCapabilities').AgentLipsyncRedoAction, context: import('./capabilityRegistry').CapabilityExecutionContext): Promise<AdapterOutcome> }
   queue: QueueAdapter
   workspace: WorkspaceAdapter
   videoclips: VideoclipAdapter
@@ -780,13 +782,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
       const body = await response.json() as { status?: string; result?: Record<string, unknown>; detail?: { message?: string } }
       if (!response.ok) throw new Error(body.detail?.message || 'Video 3D template command failed')
       const scene = body.result?.scene as { document?: unknown; sceneId?: string; templateId?: string } | undefined
+      const scenes = Array.isArray(body.result?.scenes) ? body.result.scenes as Array<{ sceneId?: string; templateId?: string }> : []
       if (scene?.document && shouldMountWorld3DScene(action.operation)) {
         const { requestWorld3DDocument } = await import('../scene3d/world3dAgent')
         await navigate('video_3d')
         await requestWorld3DDocument({ document: scene.document, sceneId: scene.sceneId || 'world3d' })
       }
       const message = world3dTemplateMessage(body)
-      return { message, metadata: body as Record<string, unknown>, sceneId: scene?.sceneId, target: { kind: 'video_3d_scene', id: scene?.sceneId || 'world3d', title: scene?.templateId || action.operation } }
+      const opened = scene?.sceneId || scenes[0]?.sceneId
+      return { message, metadata: body as Record<string, unknown>, sceneId: opened, target: { kind: 'video_3d_scene', id: opened || 'world3d', title: scene?.templateId || scenes[0]?.templateId || action.operation } }
     },
   }
   adapters.video2dTemplates = {
@@ -812,6 +816,15 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   }
   adapters.mediaTools = {
     async command(action, workspace, commandId) { return executeMediaTool(action, workspace, commandId) },
+  }
+  adapters.lipsyncRedo = {
+    async command(action, context) {
+      const outcome = await executeLipsyncRedo(action, context)
+      return {
+        ...outcome,
+        target: outcome.target ?? { kind: 'output', id: action.engine, title: 'shot.lipsync.redo' },
+      }
+    },
   }
   adapters.lipsCreator = {
     async command(action, workspace) {

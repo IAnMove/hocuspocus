@@ -392,3 +392,23 @@ def test_export_error_includes_phase_and_output_facts(tmp_path: Path):
     assert error.output
     assert error.phase in str(error)
     assert not output.exists() or output.stat().st_size == 0
+
+
+def test_frame_count_timeout_grows_with_the_file(tmp_path: Path, monkeypatch):
+    """A 2 GB delivery gets far more than 120 s to decode-count: a fixed 120 s failed a 6-minute export at 98 %."""
+    small = tmp_path / "small.mp4"
+    small.write_bytes(b"0" * 1000)
+    assert video_editor_frames.count_timeout(str(small)) == pytest.approx(120, abs=0.01)
+    monkeypatch.setattr(video_editor_frames.os.path, "getsize", lambda _path: 2_000_000_000)
+    assert video_editor_frames.count_timeout(str(small)) == pytest.approx(480)
+    seen = {}
+
+    def fake_run(*args, **kwargs):
+        seen["timeout"] = kwargs["timeout"]
+        return subprocess.CompletedProcess(args, 0, stdout='{"streams": [{"nb_read_frames": "7"}]}', stderr="")
+
+    monkeypatch.setattr(video_editor_frames.subprocess, "run", fake_run)
+    assert video_editor_frames.count_decoded_video_frames(str(small)) == 7
+    assert seen["timeout"] == pytest.approx(480)
+    assert video_editor_frames.count_decoded_video_frames(str(small), timeout=5) == 7
+    assert seen["timeout"] == 5

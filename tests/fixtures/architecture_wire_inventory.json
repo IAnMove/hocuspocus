@@ -116,6 +116,12 @@
       "reason": "Parses launch wiring intentionally; preserve the rule while changing its source location."
     },
     {
+      "file": "tests/test_mia_rig.py",
+      "target": "app/_launch_runtime.py",
+      "classification": "fragile_source",
+      "reason": "Reads launch text directly and may need conversion when the referenced domain is extracted."
+    },
+    {
       "file": "tests/test_minimax_h3.py",
       "target": "app/_launch_runtime.py",
       "classification": "symbol_importable",
@@ -512,6 +518,12 @@
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
     },
     {
+      "file": "ui/tests/licenceNotice.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
       "file": "ui/tests/lipsCreatorWizard.test.ts",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
@@ -597,6 +609,12 @@
     },
     {
       "file": "ui/tests/recoverabilityLast.test.tsx",
+      "target": "ui/src/stores/useStore.ts",
+      "classification": "behavior",
+      "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."
+    },
+    {
+      "file": "ui/tests/remoteImageModel.test.tsx",
       "target": "ui/src/stores/useStore.ts",
       "classification": "behavior",
       "reason": "Imports the public Zustand facade; it should survive slice extraction unchanged."

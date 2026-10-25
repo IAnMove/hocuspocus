@@ -21,6 +21,11 @@ export const CYCLE_STEPS: number = spec.cycleSteps
 export const CYCLE_METERS = STEP_METERS * CYCLE_STEPS
 export const DEFAULT_WALK_SPEED: number = spec.walkSpeed
 export const HYSTERESIS_DEGREES: number = spec.hysteresisDeg
+/** While a figure walks, its three-quarter sheets reach this far from 45 degrees (and from 135): the larger part of the movement decides
+ * the sheet, and only a really diagonal walk uses a three-quarter one. 22.5 is the width a standing figure's sectors have. */
+export const WALK_DIAGONAL_DEGREES: number = spec.walkDiagonalDeg
+/** How far past an edge a walking figure keeps its sheet. */
+export const WALK_HYSTERESIS_DEGREES: number = spec.walkHysteresisDeg
 const RESET_SECONDS: number = spec.resetSeconds
 /** Seconds a change of drawing takes to fade from the old sheet to the new one. */
 export const CROSSFADE_SECONDS: number = spec.crossfadeSeconds
@@ -97,35 +102,58 @@ export function normalizeDegrees(value: number): number {
   return wrapped === -180 ? 180 : wrapped
 }
 
-function plainSector(theta: number): Sector {
+/** The directions of the sheets a figure will draw from. */
+export type DirectionSet = ReadonlySet<Direction>
+
+/** The four angles off the line to the camera where `front` gives way to `front34`, `front34` to `side`, `side` to `back34` and `back34` to
+ * `back`. A standing figure has equal sectors (22.5, 67.5, 112.5, 157.5); a walking one has its three-quarter band `walkDiagonalDeg` either
+ * side of 45 and 135, so front, side and back take what the larger part of its movement says. A diagonal that `drawn` lacks has no band: its
+ * edges meet at 45 (or 135) degrees, where the larger part of the movement changes. */
+export function sectorEdges(walking = false, drawn?: DirectionSet): readonly [number, number, number, number] {
+  const reach = walking ? clamp(WALK_DIAGONAL_DEGREES, 0, HALF_SECTOR) : HALF_SECTOR
+  const front34 = drawn ? (drawn.has('front34') ? reach : 0) : reach
+  const back34 = drawn ? (drawn.has('back34') ? reach : 0) : reach
+  return [SECTOR_DEGREES - front34, SECTOR_DEGREES + front34, 3 * SECTOR_DEGREES - back34, 3 * SECTOR_DEGREES + back34]
+}
+
+function plainSector(theta: number, edges: readonly number[]): Sector {
   const angle = normalizeDegrees(theta)
   const reach = Math.abs(angle)
-  const index = reach <= HALF_SECTOR ? 0 : Math.min(4, Math.ceil((reach - HALF_SECTOR) / SECTOR_DEGREES))
+  const index = edges.filter(edge => reach > edge).length
   return { index, dir: DIRECTIONS[index], negative: angle < 0 }
 }
 
+/** True while `angle` is still in the sector held before, or within `margin` degrees of it. A band with no width is never held. */
+function holds(previous: Sector, angle: number, edges: readonly number[], margin: number): boolean {
+  const low = previous.index === 0 ? 0 : edges[previous.index - 1]
+  const high = previous.index === DIRECTIONS.length - 1 ? 180 : edges[previous.index]
+  const lateral = previous.index > 0 && previous.index < DIRECTIONS.length - 1
+  if (high <= low || (lateral && (angle < 0) !== previous.negative)) return false
+  const reach = Math.abs(angle)
+  return reach >= low - margin && reach <= high + margin
+}
+
 /** The sector of an angle (0 front, 45 front34, 90 side, 135 back34, 180 back; the negative angles are the same sectors
- * seen from the left). With the sector held before, it stays until the angle is `hysteresisDeg` past its edge. */
-export function sectorOf(theta: number, previous?: Sector | null): Sector {
-  if (previous) {
-    const lateral = previous.index > 0 && previous.index < 4
-    const center = previous.index * SECTOR_DEGREES * (lateral && previous.negative ? -1 : 1)
-    if (Math.abs(normalizeDegrees(theta - center)) <= HALF_SECTOR + HYSTERESIS_DEGREES) return previous
-  }
-  return plainSector(theta)
+ * seen from the left). With the sector held before, it stays until the angle is `hysteresisDeg` past its edge. `walking` is for a figure
+ * that faces where it goes (`sectorEdges`); `drawn` the directions its sheets have (all five when absent). */
+export function sectorOf(theta: number, previous?: Sector | null, walking = false, drawn?: DirectionSet): Sector {
+  const edges = sectorEdges(walking, drawn)
+  if (previous && holds(previous, normalizeDegrees(theta), edges, walking ? WALK_HYSTERESIS_DEGREES : HYSTERESIS_DEGREES)) return previous
+  return plainSector(theta, edges)
 }
 
 const lookKey = (look: Look) => look.kind === 'sheet' ? `s${look.sheet}${look.mirror ? 'm' : ''}${look.speaking ? 'v' : ''}` : `p${look.talking ? 't' : ''}`
 
 /** What each figure holds from one frame to the next: its sector, and the drawing it is fading from. It forgets after a jump in time. */
 export class DirectionMemory {
-  private readonly held = new Map<string, { sector: Sector; t: number }>()
+  private readonly held = new Map<string, { sector: Sector; t: number; walking: boolean }>()
   private readonly looks = new Map<string, { look: Look; t: number; from?: Look; since: number }>()
 
-  choose(id: string, t: number, theta: number): Sector {
+  /** A figure that starts or stops walking takes the sector of its angle afresh: what it held belonged to the other edges. */
+  choose(id: string, t: number, theta: number, walking = false, drawn?: DirectionSet): Sector {
     const last = this.held.get(id)
-    const sector = sectorOf(theta, last && Math.abs(t - last.t) <= RESET_SECONDS ? last.sector : null)
-    this.held.set(id, { sector, t })
+    const sector = sectorOf(theta, last && last.walking === walking && Math.abs(t - last.t) <= RESET_SECONDS ? last.sector : null, walking, drawn)
+    this.held.set(id, { sector, t, walking })
     return sector
   }
 
@@ -276,15 +304,36 @@ export function directionalPosition(sprite: DirectionalSprite, start: readonly [
   return [state.x, start[1], state.z]
 }
 
-function facingOf(sprite: DirectionalSprite, state: WalkState | null, context: ViewContext): V2 {
-  if (state?.travel && (state.phase === 'walking' || state.phase === 'paused')) return state.travel
-  if (sprite.heading !== undefined) return headingFacing(sprite.heading, context.start, context.eye0)
-  return state?.travel ?? headingFacing(0, context.start, context.eye0)
+/** The way a figure goes while it walks or waits for its own voice in the middle of a walk, else null. */
+function travelling(state: WalkState | null): V2 | null {
+  return state?.travel && (state.phase === 'walking' || state.phase === 'paused') ? state.travel : null
 }
 
-function chooseLook(sprite: DirectionalSprite, state: WalkState | null, sector: Sector, t: number): Look {
+/** Where the figure looks, and whether it looks the way it goes (on its walk, or before and after it with no heading to stand by): a figure
+ * that does has the sectors of a walk (`sectorEdges`), so it does not change drawing when it stops. */
+function facingOf(sprite: DirectionalSprite, state: WalkState | null, context: ViewContext): { facing: V2; byTravel: boolean } {
+  const travel = travelling(state)
+  if (travel) return { facing: travel, byTravel: true }
+  if (sprite.heading !== undefined) return { facing: headingFacing(sprite.heading, context.start, context.eye0), byTravel: false }
+  return state?.travel ? { facing: state.travel, byTravel: true } : { facing: headingFacing(0, context.start, context.eye0), byTravel: false }
+}
+
+function motionOf(sprite: DirectionalSprite, state: WalkState | null, t: number): Motion {
+  return !inWindow(sprite.speech, t) && state?.phase === 'walking' ? 'walk' : 'idle'
+}
+
+/** The directions of the sheets that draw a motion: those of its own, else (a walk with no walk sheet) the idle's. */
+export function drawnDirections(sheets: readonly DirectionalSheet[], motion: Motion): DirectionSet {
+  for (const wanted of motion === 'walk' ? ['walk', 'idle'] as const : ['idle'] as const) {
+    const found = sheets.filter(sheet => sheet.motion === wanted)
+    if (found.length) return new Set(found.map(sheet => sheet.dir))
+  }
+  return new Set()
+}
+
+function chooseLook(sprite: DirectionalSprite, sector: Sector, t: number, motion: Motion): Look {
   const speaking = inWindow(sprite.speech, t)
-  const picked = pickSheet(sprite.sheets, !speaking && state?.phase === 'walking' ? 'walk' : 'idle', sector)
+  const picked = pickSheet(sprite.sheets, motion, sector)
   // A figure that speaks never shows a walk sheet: a sheet with a mouth, else the pose that has one.
   if (picked.index < 0 || (speaking && !sprite.sheets[picked.index].mouth)) return { kind: 'pose', talking: speaking }
   return { kind: 'sheet', sheet: picked.index, mirror: picked.mirror, speaking }
@@ -302,9 +351,11 @@ function drawn(sprite: DirectionalSprite, look: Look, state: WalkState | null, t
 export function directionalView(sprite: DirectionalSprite, context: ViewContext): { view: DirectionalView; theta: number | null; sector: Sector } {
   const state = sprite.walk ? walkState(context.start, sprite.walk, sprite.speech, context.t) : null
   const at: V2 = state ? [state.x, state.z] : context.start
-  const theta = faceAngle(facingOf(sprite, state, context), at, context.eye)
-  const sector = context.memory.choose(context.id, context.t, theta ?? 0)
-  const look = chooseLook(sprite, state, sector, context.t)
+  const { facing, byTravel } = facingOf(sprite, state, context)
+  const theta = faceAngle(facing, at, context.eye)
+  const motion = motionOf(sprite, state, context.t)
+  const sector = context.memory.choose(context.id, context.t, theta ?? 0, byTravel, drawnDirections(sprite.sheets, motion))
+  const look = chooseLook(sprite, sector, context.t, motion)
   const fade = context.memory.fade(context.id, context.t, look)
   const view: DirectionalView = { ...drawn(sprite, look, state, context.t), ...(fade ? { blend: { from: drawn(sprite, fade.from, state, context.t), mix: fade.mix } } : {}) }
   return { view, theta, sector }

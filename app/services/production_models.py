@@ -50,6 +50,9 @@ from services.production_room_box import (
     build as build_room_box, check_room_box, is_built as box_built, picture_jobs as box_jobs, recipe as box_recipe,
 )
 from services.room_box import is_box_room
+from services.production_splat import (
+    check_splat, is_built as splat_built, is_splat, picture_jobs as splat_jobs, recipe as splat_recipe, refusal_error,
+)
 
 RIGS = ("humanoid", "prop", "vehicle", "quadruped", "flying", "serpentine", "none")
 FIELDS = {"from", "prompt", "glb", "rig", "fallback", "animations", "seed", "height"}
@@ -107,20 +110,22 @@ def check_sets(spec: dict) -> None:
     if not isinstance(sets, dict) or len(sets) > 12:
         raise ModelError("spec.sets maps up to 12 names to {prompt, seed}")
     for name, entry in sets.items():
-        built = is_diorama(entry) or is_parallax(entry) or is_box_room(entry) or rooms.is_room(entry)
+        built = is_diorama(entry) or is_parallax(entry) or is_box_room(entry) or rooms.is_room(entry) or is_splat(entry)
         if built and isinstance(name, str) and _NAME.match(name):
             if is_box_room(entry):
                 why = check_room_box(name, entry, _text)
             elif rooms.is_room(entry):
                 why = rooms.check_room(name, entry, _text)
+            elif is_splat(entry):
+                why = check_splat(name, entry, _text)
             else:
                 why = (check_diorama if is_diorama(entry) else check_parallax)(name, entry, _text)
             if why:
                 raise ModelError(why)
         elif not (isinstance(name, str) and _NAME.match(name)) or not isinstance(entry, dict) \
                 or set(entry) - {"prompt", "seed", "staging"} or not _text(entry.get("prompt")):
-            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed, staging}}, a diorama {{kind: \"diorama\", ...}} "
-                             f"or a parallax set {{kind: \"parallax\", ...}}")
+            raise ModelError(f"sets.{name}: a lower-case name and {{prompt, seed, staging}}, a diorama {{kind: \"diorama\", ...}}, "
+                             f"a parallax set {{kind: \"parallax\", ...}} or a splat set {{kind: \"splat\", file}}")
         elif entry.get("staging", "floor") not in STAGINGS:
             raise ModelError(f"sets.{name}.staging must be one of {', '.join(STAGINGS)}")
 
@@ -321,6 +326,7 @@ SET_KINDS = (
     {"name": "room", "is": rooms.is_room, "recipe": rooms.recipe, "jobs": rooms.picture_jobs, "built": rooms.is_built},
     {"name": "diorama", "is": is_diorama, "recipe": diorama_recipe, "jobs": diorama_jobs, "built": diorama_built},
     {"name": "parallax", "is": is_parallax, "recipe": parallax_recipe, "jobs": parallax_jobs, "built": parallax_built},
+    {"name": "splat", "is": is_splat, "recipe": splat_recipe, "jobs": splat_jobs, "built": splat_built},
 )
 
 
@@ -525,8 +531,15 @@ def _outcome(model: dict) -> str:
 def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
     from services.series_shot3d import glb_clip_names
 
+    before_sets = json.dumps(production.state.get("sets") or {}, sort_keys=True, default=str)
     set_jobs = _set_jobs(production, spec)
+    sets = production.state.setdefault("sets", {})
     if not spec.get("models") and not set_jobs:
+        if json.dumps(sets, sort_keys=True, default=str) != before_sets:
+            production.save()
+        blocked = refusal_error(spec, sets)
+        if blocked:
+            raise ModelError(blocked)
         return
     made = production.state.setdefault("models", {})
     sets = production.state.setdefault("sets", {})
@@ -543,5 +556,8 @@ def make_models(production: Any, spec: dict, *, sleep=time.sleep) -> None:
     production.save()
     asked = {key[4:].partition(":")[0] for key in set_jobs}
     failed = [name for name in todo if made[name].get("error")] + [f"set {name}" for name in sorted(asked) if sets[name].get("error")]
+    blocked = refusal_error(spec, sets)
     if failed:
         raise ModelError(f"models failed: {', '.join(failed)}")
+    if blocked:
+        raise ModelError(blocked)

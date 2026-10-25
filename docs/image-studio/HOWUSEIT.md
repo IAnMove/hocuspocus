@@ -68,7 +68,15 @@ image-studio draft (`resetImageStudio`). It does not cancel a queued job.
    `qwen_image_21_uncensored_gguf_q4_k_m` / `_q5_k_m` / `_q6_k` are local
    image weights, not the Wizard LLM. Q8_0 from that pack is **not** shipped
    (upstream shape mismatch). License still follows Qwen Research License.
-7. **Fit-to-model is optional.** Edit → **Fit size to the model** crops,
+7. **MiniMax Image-01 is the model for a busy GPU.** `minimax:image-01` appears in the
+   same pickers as Qwen Turbo (family MiniMax, badge `API`, no VRAM) and runs on MiniMax's
+   servers, so it never waits in the local queue. It needs the MiniMax Image API key in
+   Settings → Services; without it the request is refused with `provider_key_missing` and
+   nothing is admitted. It takes **one** character reference (the face is kept, the outfit is
+   invented, the pose is ignored); extra references, a negative prompt and LoRAs are not sent
+   and the receipt lists them in `notes`. Steps, guidance and seed do not apply. See
+   `docs/development/IMAGE_COMMANDS.md`.
+8. **Fit-to-model is optional.** Edit → **Fit size to the model** crops,
    letterboxes, or stretches the source to a size the selected model admits.
    It writes another local-edit token; it does not generate.
 

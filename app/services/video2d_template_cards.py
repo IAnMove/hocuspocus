@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from services import template_semantic
 from services.template_search import match
 from services.world3d_template_vocabulary import QUERY_STOP, expand
 
@@ -343,15 +344,16 @@ def reason(row: dict) -> str:
     return f"{text}; {'; '.join(tail)}" if tail else text
 
 
-def rank(pool: list[dict], wanted: list[str], fields: Callable[[dict], dict]) -> tuple[list[tuple[dict, int, str]], list[str]]:
-    """``[(entry, points, match)]`` best first and the unknown words, scored like ``scenes.catalog`` but over the pool.
+def rank(pool: list[dict], wanted: list[str], fields: Callable[[dict], dict], *, query: str = "") -> tuple[list[tuple[dict, int, str]], list[str], bool]:
+    """``[(entry, points, match)]`` best first, the unknown words, and whether embeddings ran.
 
     A word no card of the pool knows is unknown and does not count. Cards with every other word come first (match
     full); when none has them all, those with at least half come back as partial. A card that moves outranks a still
-    one at the same points. No words keep the pool in catalog order, moving cards first."""
+    one at the same points. No words keep the pool in catalog order, moving cards first. The optional embedder
+    rescores the chosen cards, or fills from the pool when none matched."""
     if not wanted:
         ordered = sorted(enumerate(pool), key=lambda item: (bool(traits_of(item[1].get("id")).get("still")), item[0]))
-        return [(entry, 0, "full") for _index, entry in ordered], []
+        return [(entry, 0, "full") for _index, entry in ordered], [], False
     scored, known = [], set()
     for order, entry in enumerate(pool):
         found, points = match(wanted, **fields(entry), synonyms=expand2d)
@@ -364,7 +366,40 @@ def rank(pool: list[dict], wanted: list[str], fields: Callable[[dict], dict]) ->
     full = [row for row in rows if row[0] == len(needed)]
     chosen = full or [row for row in rows if row[0] * 2 >= len(needed)]
     label = "full" if full else "partial"
-    return [(entry, points, label) for _hits, points, _order, entry in chosen], [word for word in wanted if word not in known]
+    picked = [(entry, points, label) for _hits, points, _order, entry in chosen]
+    unknown = [word for word in wanted if word not in known]
+    return _semantic_choice(query, pool, picked, unknown, fields, wanted)
+
+
+def _card_row(order: int, entry: dict, points: int, fields: Callable[[dict], dict]) -> template_semantic.Row:
+    found = fields(entry)
+    return template_semantic.Row(points, template_semantic.passage(found["title"], found["description"], found.get("tags")),
+                                 order, f"{order}:{entry.get('id')}")
+
+
+def _semantic_choice(query: str, pool: list[dict], chosen: list, unknown: list[str], fields: Callable[[dict], dict], wanted: list[str]):
+    if template_semantic.active() is None:
+        return chosen, unknown, False
+    text = query if query else " ".join(wanted)
+    if chosen:
+        return _rescore_cards(text, chosen, unknown, fields)
+    return _fill_cards(text, pool, unknown, fields)
+
+
+def _rescore_cards(query: str, chosen: list, unknown: list[str], fields: Callable[[dict], dict]):
+    rows = [_card_row(order, entry, points, fields) for order, (entry, points, _label) in enumerate(chosen)]
+    ranked, used = template_semantic.rank_rows(query, rows)
+    if not used:
+        return chosen, unknown, False
+    return [(chosen[order][0], score, chosen[order][2]) for order, score in ranked], unknown, True
+
+
+def _fill_cards(query: str, pool: list[dict], unknown: list[str], fields: Callable[[dict], dict]):
+    rows = [_card_row(order, entry, 0, fields) for order, entry in enumerate(pool)]
+    ranked, used = template_semantic.rank_rows(query, [], pool=rows)
+    if not used:
+        return [], unknown, False
+    return [(pool[order], score, "partial") for order, score in ranked], unknown, used
 
 
 __all__ = [

@@ -188,6 +188,14 @@
   },
   "faceRig": {
     "mouthsOnPose": "Bocas sobre “{{pose}}”",
+    "seeThrough": {
+      "button": "Colocar ojos y boca desde capas",
+      "busy": "Separando capas…",
+      "done": "El parpadeo y la boca siguen las capas de See-through.",
+      "hint": "Linux con una GPU NVIDIA. Instala See-through en Ajustes > Instalación. Riggea todas las poses y puede tardar unos minutos cada una.",
+      "missing": "Guarda el personaje antes de colocar las capas.",
+      "failed": "No se han podido colocar las capas."
+    },
     "steps": {
       "box": "Arrastra la caja amarilla hasta tapar los labios. Al soltar se guarda sola.",
       "wipe": "Si el dibujo todavía tiene boca pintada, pulsa Limpiar zona de la boca.",
@@ -231,6 +239,12 @@
     "poseAlt": "Pose de {{name}}",
     "overlayAlt": "Superposición {{state}} de {{name}}",
     "dragBoxHint": "Arrastra el rectángulo sobre la boca original. Mueve su esquina en horizontal y vertical para ajustar ancho y alto por separado. Se borra esa zona; la boca nueva conserva sus proporciones.",
+    "placementSource": "Ojos por {{eyes}}, boca por {{mouth}}.",
+    "sources": {
+      "whites": "el blanco de los ojos",
+      "landmarks": "puntos del anime",
+      "hint": "tu marca"
+    },
     "wiping": "Limpiando…",
     "wipeMouth": "Limpiar zona de la boca",
     "lockMouths": "Aplicar posición a todas las bocas",
@@ -774,6 +788,11 @@
       "rejected": "rechazada por el agente"
     },
     "make": "Crear",
+    "methodLabel": "Cómo hacer este andar",
+    "methodPoses": "Pose a pose",
+    "methodVideo": "Un clip guiado",
+    "guideVideo": "Guía del esqueleto",
+    "clip": "Clip guiado",
     "makeAgain": "Rehacer todo",
     "tryAgain": "Reintentar",
     "working": "Creando…",
