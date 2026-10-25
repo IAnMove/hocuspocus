@@ -4,7 +4,15 @@ import { createAtlas, faceMaterial } from './mouths'
 import { MouthAtlasMorph } from './mouthMorph'
 import { faceMeshes } from './calibration'
 import { expressionAt, mouthAt } from './track'
-import type { Scene3DSpeech } from './types'
+import type { FacePlacement, Scene3DSpeech } from './types'
+
+/** Where the overlay draws: the calibrated face, else the humanoid estimate the stage keeps on the model (needs a Head bone). It lets
+ *  a scene written without the browser (an agent, a headless export) speak, since nobody is there to press Add lips. */
+export function speechFace(root: Object3D, speech: Scene3DSpeech | undefined): FacePlacement | undefined {
+  if (!speech?.enabled) return undefined
+  const estimates = root.userData.speechPlacements as { generic?: FacePlacement } | undefined
+  return speech.face ?? estimates?.generic
+}
 
 export class SpeechFaceRuntime {
   private key = ''
@@ -29,12 +37,13 @@ export class SpeechFaceRuntime {
     this.ready = true; this.error = undefined
   }
   sync(root: Object3D, speech: Scene3DSpeech | undefined, seconds: number) {
-    const active = speech?.enabled && speech.face
-    const key = active ? JSON.stringify([speech.face?.meshIndex, speech.style, speech.lip, speech.atlas?.url]) : ''
+    const face = speechFace(root, speech)
+    const active = speech?.enabled && face
+    const key = active ? JSON.stringify([face.meshIndex, speech.style, speech.lip, speech.atlas?.url]) : ''
     if (key !== this.key) {
       this.clear(); this.key = key
       if (active) {
-        const mesh = faceMeshes(root)[speech.face!.meshIndex]
+        const mesh = faceMeshes(root)[face!.meshIndex]
         if (!mesh || Array.isArray(mesh.material) || !(mesh.material instanceof MeshStandardMaterial)) {
           this.error = new Error('Face placement needs a supported mesh/material.'); return
         }
@@ -57,8 +66,8 @@ export class SpeechFaceRuntime {
         }
       }
     }
-    if (!this.binding || !speech?.face) return
-    const u = this.binding.uniforms, f = speech.face, m = mouthAt(speech, seconds), e = EXPRESSIONS[expressionAt(speech, seconds)]
+    if (!this.binding || !speech || !face) return
+    const u = this.binding.uniforms, f = face, m = mouthAt(speech, seconds), e = EXPRESSIONS[expressionAt(speech, seconds)]
     u.faceCenter.value.fromArray(f.center); u.faceSize.value.fromArray(f.size); u.skinColor.value.fromArray(f.skin)
     u.cleanSkin.value = speech.clean ? 1 : 0; u.mouthStrength.value = speech.strength
     this.sampleMouth(speech, m)

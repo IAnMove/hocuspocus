@@ -6,7 +6,7 @@ import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
 import { framingFov, framingPose } from './framing'
 import { shakeCamera } from './cameraShake.ts'
-import { SpeechFaceRuntime } from './speech/runtime'
+import { SpeechFaceRuntime, speechFace } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
@@ -408,7 +408,10 @@ function speechAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean
     if (gpu?.facePack?.error) throw gpu.facePack.error
     return Boolean(gpu?.facePack?.ready)
   }
-  if (!slot.speech.face) throw new Error('Calibrate the face before exporting a speech scene.')
+  if (!slot.speech.face) {
+    if (!gpu?.loaded) return false
+    if (!speechFace(gpu.root, slot.speech)) throw new Error('Calibrate the face before exporting a speech scene: the model has no Head bone to place it on.')
+  }
   if (gpu?.speechFace?.error) throw gpu.speechFace.error
   return Boolean(gpu?.speechFace?.ready)
 }
@@ -450,10 +453,11 @@ function groundLoadedSlot(gpu: SlotGpu, slot: Scene3DSlot) {
 }
 
 function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number) {
-  if (gpu.loaded && gpu.kind === 'model' && slot.speech?.face) {
+  const face = gpu.loaded && gpu.kind === 'model' ? speechFace(gpu.root, slot.speech) : undefined
+  if (face) {
     gpu.speechFace ??= new SpeechFaceRuntime(() => renderWorld(world))
     gpu.speechFace.sync(gpu.root, slot.speech, sceneSeconds)
-  } else if (gpu.speechFace && !slot.speech?.face) {
+  } else if (gpu.speechFace) {
     gpu.speechFace.sync(gpu.root, undefined, sceneSeconds)
   }
   if (gpu.loaded && gpu.kind === 'model' && (slot.speech?.facePack || gpu.facePack)) {

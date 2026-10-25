@@ -75,6 +75,7 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   const clips = next.media === 'model3d' ? parseClipCues(slot.clips) : undefined
   if (clips) next.clips = clips
   else delete next.clips
+  if (next.collide !== false) delete next.collide
   const hold = holdable(next) ? parseHold(slot.hold, slot.id) : undefined
   if (hold) next.hold = hold
   else delete next.hold

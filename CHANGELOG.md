@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: an agent can tell a Video 3D scene as beats.** `world3d.scene.beats` takes who does what when (`appear`, `go`, `face`, `do`, `fx`) and turns that into motion, clips, appearance and effects the editor can still change. A move can name a start and an end, and a reply lists the collisions those moves cause.
+
 **Added: an agent building a Video 3D scene can read each object's size in metres and ask for a fit.** `world3d.scene.inspect` and `world3d.scene.patch` reply with the camera, the light and `layout.items` (bounds in metres, capped). A binding can set `fit` to a height, width, depth or the longest side in metres. A document the editor would refuse is warned about and still accepted.
 
 **Añadido: los modelos cuya licencia no rige en la UE, el Reino Unido o Corea del Sur lo dicen al elegirlos o instalarlos.** Hunyuan Video (Avatar y Custom incluidos), Hunyuan Video 1.5, Hunyuan3D y MiniMax H3 (también Estados Unidos) muestran una línea y un enlace en el selector de modelo, Ajustes, el selector del Director, la pestaña Instalación, el texto de modelos del Asistente y el listado MCP. No se bloquea nada.

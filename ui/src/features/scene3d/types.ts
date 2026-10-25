@@ -171,6 +171,10 @@ export type Scene3DMotion = {
   headingOffset?: number
   turnTo?: number
   easing?: 'linear' | 'smooth'
+  /** Scene seconds the move starts and ends: before `start` the object sits at its slot position, after `end` it stays at `to`.
+   * Absent: `start` is 0 and `end` is the end of the scene, so a document without them moves over the whole shot. */
+  start?: number
+  end?: number
   /** A baked humanoid walk of this path with planted feet; while it matches, the clip moves the model. */
   walk?: import('./walkPath').Scene3DMotionWalk
 }
@@ -225,6 +229,8 @@ export type Scene3DSlot = {
   /** This prop is carried in another slot's whole hand. Absent means the slot stays where it was placed. */
   hold?: import('./handHold').Scene3DHold
   motion?: Scene3DMotion
+  /** `false` exempts this object from the agent's collision warnings (a ghost, a spirit). Absent: it collides. */
+  collide?: false
   loop?: Scene3DLoop
   /** Floor of a Gaussian-splat set, in metres. The invisible plane the cast stands on. */
   splat?: { floorY: number }
