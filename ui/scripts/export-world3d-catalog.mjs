@@ -10,6 +10,7 @@ import { actionCard } from '../src/features/scene3d/actionTemplates.ts'
 import { campaignCard } from '../src/features/scene3d/campaignTemplates.ts'
 import { animeCard } from '../src/features/scene3d/animeTemplates.ts'
 import { transitionCard } from '../src/features/scene3d/transitionTemplates.ts'
+import { comicCard } from '../src/features/scene3d/comicPage.ts'
 import { speedCard } from '../src/features/scene3d/speedTemplates.ts'
 import { titleCard } from '../src/features/scene3d/titleTemplates.ts'
 import { dialogueCard } from '../src/features/scene3d/dialogueTemplates.ts'
@@ -40,7 +41,7 @@ function line(text, fallback) {
 /** The authored requirement list of every pack with requirement notes, joined for the card. */
 function notes(id, locale) {
   const copy = actionCard(id, locale) ?? campaignCard(id, locale) ?? animeCard(id, locale)
-    ?? transitionCard(id, locale) ?? speedCard(id, locale) ?? titleCard(id, locale)
+    ?? transitionCard(id, locale) ?? comicCard(id, locale) ?? speedCard(id, locale) ?? titleCard(id, locale)
     ?? dialogueCard(id, locale) ?? reactionCard(id, locale) ?? groupCard(id, locale)
   return copy?.requirements?.length ? copy.requirements.join('; ') : ''
 }

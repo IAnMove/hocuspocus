@@ -47342,6 +47342,242 @@
       "source": "builtin"
     },
     {
+      "id": "comic-panel-exit",
+      "titleEs": "Salida de viñeta",
+      "titleEn": "Comic panel exit",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 1.6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "El último fotograma llena una viñeta y la cámara se retira hasta encuadrar la página entera.",
+      "lineEn": "The last frame fills one panel, then the camera pulls out until the whole comic page is in frame.",
+      "notesEs": "Cuatro imágenes de viñeta con el aspecto del fotograma; Página de papel (incluida); Recorte calado opcional a 2,5 cm de una viñeta que no sea la de salida ni la de entrada",
+      "notesEn": "Four panel images with the video frame's aspect; Paper page (included); Optional keyed cutout 2.5 cm in front of a panel that is not the exit or the entrance",
+      "preview": null,
+      "roles": [
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop"
+      ],
+      "required": [],
+      "dependencies": [],
+      "tags": [
+        "transition"
+      ],
+      "shot": "plate",
+      "distance": null,
+      "moves": [
+        "pull",
+        "slide",
+        "descend"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 0,
+      "props": 6,
+      "screens": 0,
+      "authoredFor": "none",
+      "floor": "tiles",
+      "uses": [
+        "plate",
+        "establishing",
+        "transition"
+      ],
+      "kind": "transition",
+      "place": null,
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
+    },
+    {
+      "id": "comic-panel-enter",
+      "titleEs": "Entrada de viñeta",
+      "titleEn": "Comic panel enter",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "landscape",
+      "width": 1920,
+      "height": 1080,
+      "duration": 1.6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "La cámara empieza en la página entera y entra en la viñeta siguiente hasta que ese fotograma llena la imagen.",
+      "lineEn": "The camera starts on the whole comic page and flies into the next panel until that frame fills the picture.",
+      "notesEs": "Cuatro imágenes de viñeta con el aspecto del fotograma; Página de papel (incluida); Recorte calado opcional a 2,5 cm de una viñeta que no sea la de salida ni la de entrada",
+      "notesEn": "Four panel images with the video frame's aspect; Paper page (included); Optional keyed cutout 2.5 cm in front of a panel that is not the exit or the entrance",
+      "preview": null,
+      "roles": [
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop"
+      ],
+      "required": [],
+      "dependencies": [],
+      "tags": [
+        "transition"
+      ],
+      "shot": "plate",
+      "distance": null,
+      "moves": [
+        "push",
+        "slide",
+        "descend"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 0,
+      "props": 6,
+      "screens": 0,
+      "authoredFor": "none",
+      "floor": "tiles",
+      "uses": [
+        "plate",
+        "establishing",
+        "transition"
+      ],
+      "kind": "transition",
+      "place": null,
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
+    },
+    {
+      "id": "comic-panel-exit-portrait",
+      "titleEs": "Salida de viñeta (vertical)",
+      "titleEn": "Comic panel exit (portrait)",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "portrait",
+      "width": 1080,
+      "height": 1920,
+      "duration": 1.6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Cambio de capítulo vertical: el último fotograma llena una viñeta y la cámara se retira hasta la página entera.",
+      "lineEn": "A vertical chapter change: the last frame fills one panel, then the camera pulls out to the whole page.",
+      "notesEs": "Cuatro imágenes de viñeta con el aspecto del fotograma; Página de papel (incluida); Recorte calado opcional a 2,5 cm de una viñeta que no sea la de salida ni la de entrada",
+      "notesEn": "Four panel images with the video frame's aspect; Paper page (included); Optional keyed cutout 2.5 cm in front of a panel that is not the exit or the entrance",
+      "preview": null,
+      "roles": [
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop"
+      ],
+      "required": [],
+      "dependencies": [],
+      "tags": [
+        "transition"
+      ],
+      "shot": "plate",
+      "distance": null,
+      "moves": [
+        "pull",
+        "slide",
+        "descend"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 0,
+      "props": 6,
+      "screens": 0,
+      "authoredFor": "none",
+      "floor": "tiles",
+      "uses": [
+        "plate",
+        "establishing",
+        "transition"
+      ],
+      "kind": "transition",
+      "place": null,
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
+    },
+    {
+      "id": "comic-panel-enter-portrait",
+      "titleEs": "Entrada de viñeta (vertical)",
+      "titleEn": "Comic panel enter (portrait)",
+      "category": "cinema",
+      "family": "establishment",
+      "variantOf": null,
+      "format": "portrait",
+      "width": 1080,
+      "height": 1920,
+      "duration": 1.6,
+      "playbackSpeed": 1,
+      "dressing": null,
+      "setting": "studio",
+      "lineEs": "Cambio de capítulo vertical: la cámara empieza en la página entera y entra en la viñeta siguiente hasta llenar el cuadro.",
+      "lineEn": "A vertical chapter change: the camera starts on the whole page and flies into the next panel until it fills the frame.",
+      "notesEs": "Cuatro imágenes de viñeta con el aspecto del fotograma; Página de papel (incluida); Recorte calado opcional a 2,5 cm de una viñeta que no sea la de salida ni la de entrada",
+      "notesEn": "Four panel images with the video frame's aspect; Paper page (included); Optional keyed cutout 2.5 cm in front of a panel that is not the exit or the entrance",
+      "preview": null,
+      "roles": [
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop",
+        "prop"
+      ],
+      "required": [],
+      "dependencies": [],
+      "tags": [
+        "transition"
+      ],
+      "shot": "plate",
+      "distance": null,
+      "moves": [
+        "push",
+        "slide",
+        "descend"
+      ],
+      "moving": [
+        "camera"
+      ],
+      "still": false,
+      "subjects": 0,
+      "props": 6,
+      "screens": 0,
+      "authoredFor": "none",
+      "floor": "tiles",
+      "uses": [
+        "plate",
+        "establishing",
+        "transition"
+      ],
+      "kind": "transition",
+      "place": null,
+      "travel": false,
+      "reference": null,
+      "source": "builtin"
+    },
+    {
       "id": "speed-run-toward",
       "titleEs": "Carrera hacia cámara",
       "titleEn": "Run toward camera",

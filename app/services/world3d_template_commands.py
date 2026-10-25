@@ -14,6 +14,7 @@ from services.scene_documents import WORKSPACE_RE
 from services.world3d_grades import GRADE_NAMES
 from services.world3d_look import RENDER_LOOKS
 from services.world3d_modifiers import LENS_NAMES, LIGHT_NAMES
+from services.scene3d_comic import comic_transition
 from services.world3d_scenes import (
     World3DSceneError, compile_template_document, inspect_scene, instantiate_template, patch_scene, preview_scene,
     publish_scene, put_user_template, talk_scene,
@@ -49,6 +50,7 @@ _MOTION_LAB = {"type": "object", "additionalProperties": False,
 _MUTATIONS = {
     "world3d.scene.instantiate", "world3d.scene.patch", "world3d.scene.publish",
     "world3d.scene.apply_query", "world3d.templates.user.put", "world3d.scene.talk",
+    "scene3d.comic.transition",
 }
 _ROLES = {"type": "array", "maxItems": 4, "items": {"enum": ["subject_1", "subject_2", "background", "prop"]}}
 _CARD_TRAITS = ("Each card also says what the built shot does: shot (close, medium, wide, far, plate), distance (m), moves (the camera: "
@@ -90,6 +92,19 @@ _OPERATIONS = {
     "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document.", {"scene_id": _ID}, ["scene_id"]),
     "world3d.scene.apply_query": (True, "Search and instantiate only when the top card has every known query word and strictly outranks the next. A tie or a partial match returns the cards as needs_choice and creates nothing; unknown_words lists the query words no card knows; the trait filters (shot, use, move, kind, place, travel, subjects, format) narrow the search first.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, ["query"]),
     "world3d.receipt": (False, "Recover a stored Video 3D mutation after a lost response. Reuse the original intent_id.", {"operation": {"enum": sorted(_MUTATIONS)}, "intent_id": {"type": "string"}}, ["operation", "intent_id"]),
+    "scene3d.comic.transition": (True, "Chapter change on a comic page. Builds comic-panel-exit and comic-panel-enter (or the portrait pair) as two editable Video 3D scenes that share one wide pose, so they join invisibly. panels is four images or {video, at} frames; from_panel and to_panel are indexes 0-3 and must be the frames of the cut. format is landscape or portrait. An optional cutout on a panel sits 2.5 cm in front; leave it off the exit and enter panels or that cut will show. export true renders both clips when the Video 3D exporter is available. A 2x2 page is the only layout.", {
+        "format": {"enum": ["landscape", "portrait"]},
+        "panels": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"anyOf": [
+            {"type": "string"},
+            {"type": "object", "additionalProperties": False, "properties": {
+                "image": {"type": "string"}, "video": {"type": "string"},
+                "at": {"type": "number", "minimum": 0}, "cutout": {"type": "string"},
+            }},
+        ]}},
+        "from_panel": {"type": "integer", "minimum": 0, "maximum": 3},
+        "to_panel": {"type": "integer", "minimum": 0, "maximum": 3},
+        "export": {"type": "boolean"},
+    }, ["panels", "format"]),
 }
 
 
@@ -160,6 +175,8 @@ def _effect(name, data, workspace_dir):
     if name == "world3d.templates.user.put":
         stored = put_user_template(data["workspace"], workspace_dir, data)
         return {"status": "completed", "template": stored}
+    if name == "scene3d.comic.transition":
+        return comic_transition(data, workspace_dir)
     raise World3DSceneError("unknown_operation", f"unknown_operation:{name}")
 
 

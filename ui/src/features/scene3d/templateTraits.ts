@@ -244,7 +244,7 @@ const USE_RULES: ReadonlyArray<[TemplateUse, (ctx: UseContext) => boolean]> = [
   ['product', ctx => ctx.hints.category === 'product'],
   ['music', ctx => ctx.hints.category === 'music' || Boolean(ctx.doc.rhythm)],
   ['drive', ctx => ctx.hints.category === 'drive'],
-  ['transition', ctx => ctx.doc.duration <= 3 && ctx.moving.includes('effects')],
+  ['transition', ctx => (ctx.doc.duration <= 3 && ctx.moving.includes('effects')) || ctx.doc.templateId.startsWith('comic-panel-')],
   ['title', ctx => ctx.moving.includes('texts')],
   ['look', ctx => ctx.look],
 ]
@@ -265,7 +265,7 @@ function kindOf(doc: Scene3DDocument, measured: Measured, uses: TemplateUse[], h
   const family = hints.family ?? ''
   if (LOOK_FAMILIES.has(family)) return 'look'
   if (CAMERA_FAMILIES.has(family)) return 'camera'
-  if (uses.includes('transition') || doc.templateId.startsWith('transition-')) return 'transition'
+  if (uses.includes('transition') || doc.templateId.startsWith('transition-') || doc.templateId.startsWith('comic-panel-')) return 'transition'
   if (doc.templateId.startsWith('title-') || (measured.subjects === 0 && measured.moving.includes('texts'))) return 'title'
   if (doc.room) return 'stage'
   return 'scene'

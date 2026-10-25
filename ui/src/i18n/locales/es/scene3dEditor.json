@@ -3524,6 +3524,22 @@
       "title": "Elevación de salida",
       "description": "La cámara se eleva desde la figura hacia un fondo vacío con luz suave desde arriba; el siguiente plano puede empezar en cualquier cosa."
     },
+    "comic-panel-exit": {
+      "title": "Salida de viñeta",
+      "description": "El último fotograma llena una viñeta y la cámara se retira hasta encuadrar la página entera."
+    },
+    "comic-panel-enter": {
+      "title": "Entrada de viñeta",
+      "description": "La cámara empieza en la página entera y entra en la viñeta siguiente hasta que ese fotograma llena la imagen."
+    },
+    "comic-panel-exit-portrait": {
+      "title": "Salida de viñeta (vertical)",
+      "description": "Cambio de capítulo vertical: el último fotograma llena una viñeta y la cámara se retira hasta la página entera."
+    },
+    "comic-panel-enter-portrait": {
+      "title": "Entrada de viñeta (vertical)",
+      "description": "Cambio de capítulo vertical: la cámara empieza en la página entera y entra en la viñeta siguiente hasta llenar el cuadro."
+    },
     "speed-run-toward": {
       "title": "Carrera hacia cámara",
       "description": "Un objetivo bajo avanza despacio hacia una figura que corre sin desplazarse sobre líneas de velocidad tenues. La plantilla no trae clip: asigna un GLB con clip de carrera (clip: run)."
@@ -4254,5 +4270,22 @@
     "generate": "Generar candidatos",
     "generating": "Generando candidatos de atrezo…",
     "remove": "Quitar"
+  },
+  "comicTransition": {
+    "title": "Transición de cómic",
+    "help": "Sale de una viñeta y entra en la siguiente. Usa los fotogramas de los dos capítulos para que los dos cortes no se vean. Un recorte en la viñeta de salida o de entrada sí se verá.",
+    "format": "Formato",
+    "landscape": "Horizontal",
+    "portrait": "Vertical",
+    "from": "Viñeta de salida",
+    "to": "Viñeta de entrada",
+    "panel": "Viñeta",
+    "image": "Imagen o vídeo",
+    "at": "En (s)",
+    "export": "Exportar los dos clips",
+    "run": "Crear transición",
+    "working": "Creando…",
+    "done": "Guardado",
+    "failed": "No se pudo crear la transición"
   }
 }
