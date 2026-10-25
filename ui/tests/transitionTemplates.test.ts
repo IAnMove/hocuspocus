@@ -18,6 +18,7 @@ import { filterScene3DTemplates } from '../src/features/scene3d/templateFilters.
 import { templateTraits, type TemplateCameraMove } from '../src/features/scene3d/templateTraits.ts'
 import { slotPoseAtTime } from '../src/features/scene3d/performance.ts'
 import { SCENE3D_TEMPLATE_IDS } from '../src/features/scene3d/types.ts'
+import { COMIC_TEMPLATE_IDS } from '../src/features/scene3d/comicTemplateIds.ts'
 import { FX_CATALOG } from '../src/features/sceneFx/types.ts'
 import { WORLD_SFX_KINDS } from '../src/features/sceneFx/world.ts'
 
@@ -51,7 +52,7 @@ test('eight transitions are registered under cinema with the transition tag, tra
   assert.equal(es.category.transition, 'Transiciones')
   assert.equal(applyTransitionTemplate('two-shot'), null)
   const found = filterScene3DTemplates({ category: 'transition', setting: 'all', query: '', locale: 'en', titleOf: id => id })
-  assert.deepEqual(found.map(item => item.id), [...TRANSITION_TEMPLATE_IDS])
+  assert.deepEqual(found.map(item => item.id), [...TRANSITION_TEMPLATE_IDS, ...COMIC_TEMPLATE_IDS])
 })
 
 test('every transition is a short 16:9 cut piece on a flat backdrop with one optional cutout and no background slot', () => {

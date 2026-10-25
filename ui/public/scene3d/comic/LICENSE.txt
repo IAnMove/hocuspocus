@@ -1,0 +1,3 @@
+These pictures are original filler art for the comic-page Video 3D templates.
+They were drawn by ui/scripts/generate-comic-fillers.py in this repository.
+No third-party asset was copied. You may use them with Hocuspocus, including commercially.

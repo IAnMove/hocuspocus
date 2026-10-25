@@ -69,6 +69,16 @@ def instantiate_template(workspace: str, template_id: str, workspace_dir) -> dic
     return _view(scene_id, record)
 
 
+def store_working_scene(workspace: str, document: dict, workspace_dir, template_id: str | None = None) -> dict:
+    """Save a built document as a reopenable working scene (``w3d-`` + 12 hex), the same record as instantiate."""
+    if not isinstance(document, dict):
+        raise World3DSceneError("invalid_world3d_document", "invalid_world3d_document")
+    scene_id = "w3d-" + uuid.uuid4().hex[:12]
+    record = {"revision": 1, "templateId": template_id or document.get("templateId"), "document": document, "warnings": []}
+    _write(workspace, scene_id, record, workspace_dir)
+    return _view(scene_id, record)
+
+
 def inspect_scene(workspace: str, scene_id: str, workspace_dir) -> dict:
     return _view(scene_id, _read(workspace, scene_id, workspace_dir))
 
@@ -893,6 +903,11 @@ def _atomic(path: Path, value: dict) -> None:
     temporary = path.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
     temporary.replace(path)
+
+
+def run_template_tool(command: str, payload: str | None = None, template_id: str | None = None) -> dict:
+    """Run ``ui/scripts/world3d-template-tool.mjs``. stdout is one JSON object."""
+    return _run_tool(command, payload, template_id)
 
 
 def _run_tool(command: str, payload: str | None, template_id: str | None = None) -> dict:

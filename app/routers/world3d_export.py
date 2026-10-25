@@ -64,6 +64,11 @@ def create_world3d_export_router(service) -> APIRouter:
 
 
 def bind_world3d_renderer_origin(api, service) -> None:
+    # Launch already calls this for the world3d exporter. Remember that service so a comic
+    # transition can export without a new launch binding. The scene2d exporter is ignored.
+    from services.scene3d_comic import bind_live_exporter
+    bind_live_exporter(service)
+
     @api.middleware("http")
     async def bind_renderer_origin(request: Request, call_next):
         # Use the listening socket, never a client-controlled Host header.
