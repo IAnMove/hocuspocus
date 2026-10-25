@@ -9,6 +9,7 @@ from __future__ import annotations
 import subprocess
 import sys
 import tempfile
+import threading
 from pathlib import Path
 
 import cv2
@@ -25,6 +26,14 @@ EYE_CLASSES = ("eyewhite", "irides", "eyelash")
 MARKER = Path("app/services/see_through/env/.maestro_see_through_v1.installed")
 VENDOR_SCRIPT = Path("app/services/see_through/vendor/see-through/inference/scripts/inference_psd_quantized.py")
 ALPHA_MIN = 16
+_busy_lock = threading.Lock()
+_busy = 0
+
+
+def is_running() -> bool:
+    """True while ``prepare_face_layers`` holds the See-through environment open."""
+    with _busy_lock:
+        return _busy > 0
 
 
 def installed() -> bool:
@@ -89,13 +98,20 @@ def prepare_face_layers(kit, look, workspace: str, workspace_dir: str, pose_ids,
     """Decompose each pose when ``faceSource`` is ``layers``. Otherwise return the hints unchanged."""
     if look.get("faceSource") != "layers":
         return hints, {}
-    ensure_available()
-    poses = _pose_list(kit, pose_ids)
-    from services import resource_scheduler
-    lane = resource_scheduler.local_gpu_lane(0)
-    task = f"see-through-{kit.get('id') or 'rig'}"
-    with resource_scheduler.coordinator.acquire(lane, task_id=task, description="See-through layers"):
-        return _decompose_all(kit, workspace, workspace_dir, poses, hints)
+    global _busy
+    with _busy_lock:
+        _busy += 1
+    try:
+        ensure_available()
+        poses = _pose_list(kit, pose_ids)
+        from services import resource_scheduler
+        lane = resource_scheduler.local_gpu_lane(0)
+        task = f"see-through-{kit.get('id') or 'rig'}"
+        with resource_scheduler.coordinator.acquire(lane, task_id=task, description="See-through layers"):
+            return _decompose_all(kit, workspace, workspace_dir, poses, hints)
+    finally:
+        with _busy_lock:
+            _busy -= 1
 
 
 def _decompose_all(kit, workspace: str, workspace_dir: str, poses: list[str], hints: dict) -> tuple[dict, dict]:
