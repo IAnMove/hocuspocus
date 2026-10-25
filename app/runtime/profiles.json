@@ -369,5 +369,36 @@
       "constraints": {},
       "defaultInstall": false
     }
+,
+    "anime_face": {
+      "label": "Anime face landmarks",
+      "installStepsVersion": 1,
+      "env": "app/services/anime_face/env",
+      "environment": "venv",
+      "python": "3.12",
+      "required": false,
+      "platforms": [
+        "linux",
+        "win32",
+        "darwin"
+      ],
+      "architectures": {
+        "linux": [
+          "x64"
+        ],
+        "win32": [
+          "x64"
+        ],
+        "darwin": [
+          "arm64"
+        ]
+      },
+      "torchIndex": "cpu",
+      "torch": "2.7.0",
+      "torchvision": "0.22.0",
+      "requirements": "app/services/anime_face/requirements.txt",
+      "constraints": {},
+      "defaultInstall": false
+    }
   }
 }

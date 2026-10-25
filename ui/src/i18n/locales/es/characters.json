@@ -231,6 +231,12 @@
     "poseAlt": "Pose de {{name}}",
     "overlayAlt": "Superposición {{state}} de {{name}}",
     "dragBoxHint": "Arrastra el rectángulo sobre la boca original. Mueve su esquina en horizontal y vertical para ajustar ancho y alto por separado. Se borra esa zona; la boca nueva conserva sus proporciones.",
+    "placementSource": "Ojos por {{eyes}}, boca por {{mouth}}.",
+    "sources": {
+      "whites": "el blanco de los ojos",
+      "landmarks": "puntos del anime",
+      "hint": "tu marca"
+    },
     "wiping": "Limpiando…",
     "wipeMouth": "Limpiar zona de la boca",
     "lockMouths": "Aplicar posición a todas las bocas",

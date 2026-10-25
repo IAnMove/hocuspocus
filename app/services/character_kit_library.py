@@ -186,6 +186,30 @@ def _pose_mouth_sources(value: Any, pose_id: str) -> dict[str, str]:
     return sources
 
 
+def _placement_record(raw_group: dict[str, Any], pose_id: str) -> dict[str, Any]:
+    """Where the flat rig placed the eyes and mouth, plus brow boxes. Absent keys stay absent."""
+    found: dict[str, Any] = {}
+    allowed = {"whites", "landmarks", "hint"}
+    for key in ("eyesSource", "mouthSource"):
+        value = raw_group.get(key)
+        if value is None:
+            continue
+        if value not in allowed:
+            raise ValueError(f"{pose_id} {key} must be whites, landmarks or hint")
+        found[key] = value
+    brows = raw_group.get("brows")
+    if brows is None:
+        return found
+    if (not isinstance(brows, list) or len(brows) != 2
+            or any(not isinstance(box, (list, tuple)) or len(box) != 4 for box in brows)):
+        raise ValueError(f"{pose_id} brows must be two boxes")
+    try:
+        found["brows"] = [[int(round(float(value))) for value in box] for box in brows]
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{pose_id} brows must be numeric") from error
+    return found
+
+
 def _pose_anchors(anchors_raw: Any) -> dict[str, dict[str, Any]]:
     """Mouth, eye and blink anchors for each pose. Missing input is an empty set."""
     if not anchors_raw:
@@ -219,6 +243,7 @@ def _pose_anchors(anchors_raw: Any) -> dict[str, dict[str, Any]]:
             if source.startswith("blob:"):
                 raise ValueError(f"{pose_id} blink source must be persistent, not a browser blob URL")
             group["blinkSource"] = source
+        group.update(_placement_record(raw_group, pose_id))
         anchors[pose_id] = group
     return anchors
 

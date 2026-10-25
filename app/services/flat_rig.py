@@ -19,7 +19,13 @@ stroke nearest the row where such a mouth sits. Hints (a point per pose) narrow
 the eye or mouth search for anything else. Where no hint is given, DWPose face
 landmarks (``face_landmarks``, when its models are installed) place the search:
 the mark search alone takes a nose stroke or a socket shadow for a graphic-novel
-mouth and misses a bust's shaded eyes. With ``mouthStyle: "ink"`` the painted
+mouth and misses a bust's shaded eyes. When the optional anime-face component is
+installed, its 28 points place the eyes, blink, brows and mouth where that white
+search fails or disagrees (``anime_face_landmarks``). The mouth is replaced only
+when the landmark mouth is plausible (wide enough, below the eyes, scores above
+the floor); otherwise a painted mouth stays, with ``mouth_landmarks_implausible``.
+A hint still wins, and the pose records ``eyesSource`` and ``mouthSource``.
+Without the component nothing changes. With ``mouthStyle: "ink"`` the painted
 mouth is kept as the rest shape and the open shapes are drawn in its own ink;
 with ``"warp"`` each pose talks with its own drawing (``flat_rig_warp``): the
 lower lip and jaw move down and the gap is inked, one set of patches per pose.
@@ -45,7 +51,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw
 
-from services import face_landmarks, flat_rig_hints, flat_rig_warp, pose_facing
+from services import anime_face_landmarks, face_landmarks, flat_rig_hints, flat_rig_warp, pose_facing
+from services.flat_rig_anime import anime_eyes, anime_mouth, pose_warnings, read_anime
 from services.character_kit_library import patch_character_kit, read_character_kit_library
 from services.face_enlarge import face_caption
 from services.flat_rig_base import INK, SPRITE, STATES, FlatRigError, _anchor, _paste_inside
@@ -708,19 +715,6 @@ def draw_mouth(state: str, style: dict[str, Any]) -> Image.Image:
     return image.resize(SPRITE, Image.LANCZOS)
 
 
-def _guided_eyes(rgb: np.ndarray, alpha: np.ndarray, near, guide: dict[str, Any]):
-    """The eyes at a hint as before; else at the landmarks' eyes, then by the search, then from their outlines."""
-    if near is not None or "eyes" not in guide:
-        return find_eyes(rgb, alpha, near=near)
-    for attempt in (lambda: find_eyes(rgb, alpha, near=guide["eyes"]), lambda: find_eyes(rgb, alpha)):
-        try:
-            return attempt()
-        except FlatRigError as error:
-            if error.code != "eyes_not_found":
-                raise
-    return _outlined_eyes(rgb, alpha, guide["eye_outlines"])
-
-
 def _pose_guides(image: Image.Image, crop, size, hint, landmarks) -> tuple[dict[str, Any], dict[str, Any]]:
     """The pose's hints and what the landmarks give that no hint does, in pixels of the cropped figure."""
     def inside(x, y):
@@ -780,10 +774,12 @@ def _rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, mouth_near, 
 
 
 def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[float]] | None = None,
-             landmarks: dict[str, Any] | None = None) -> dict[str, Any]:
+             landmarks: dict[str, Any] | None = None, *, anime=None) -> dict[str, Any]:
     """Crop, find the face, wipe the painted mouth (paper mouths) and measure anchors for one keyed pose. ``hint``
     holds the pose's ``eyes`` and ``mouth`` points in % of ``image`` (``rig_hints``); ``landmarks`` are the face points
-    ``face_landmarks.detect`` found on ``image``, used for what no hint gives."""
+    ``face_landmarks.detect`` found on ``image``, used for what no hint gives. ``anime`` is the optional 28-point
+    detector: ``None`` runs it when its environment is installed, ``False`` keeps today's search, and a keypoints
+    array is used as given."""
     if image.width * image.height > MAX_PIXELS:
         raise FlatRigError("image_too_large", "Use a pose image up to 16 megapixels")
     cleaned, crop = _figure_box(image)
@@ -791,8 +787,11 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     pixels = np.array(figure)
     rgb, alpha = pixels[..., :3], pixels[..., 3]
     near, guide = _pose_guides(image, crop, figure.size, hint, landmarks)
+    geom, anime_failed = read_anime(image, crop, figure.size, anime)
     face_size = (landmarks or {}).get("face")
-    eyes_box, eyes_mask = _guided_eyes(rgb, alpha, near.get("eyes"), guide)
+    eyes_box, eyes_mask, eyes_source, eye_warnings, outlines = anime_eyes(rgb, alpha, near.get("eyes"), guide, geom)
+    if outlines is not None:
+        guide = {**guide, "eye_outlines": outlines}
     ex0, ey0, ex1, ey1 = eyes_box
     covered = eyes_covered(rgb, alpha, eyes_box, eyes_mask)
     realistic = not style["screen"] and face_realistic(rgb, alpha, eyes_box, eyes_mask)
@@ -800,18 +799,19 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     face_eyes = eye_extent(rgb, alpha, eyes_box, eyes_mask) if realistic else eyes_box
     # Warp mouths keep the painted mouth too; their line is placed from it, the hints and the landmarks (rig_warp).
     ink = style.get("mouthStyle") in ("ink", "warp")
-    mouth_near = near.get("mouth") or guide.get("mouth")
-    rigged, wiped, found, colour, mouth_box, mx, my, background = _rig_mouth(
-        figure, rgb, alpha, eyes_box, face_eyes, style, ink, mouth_near, realistic)
+    pack, mouth_source, mouth_warnings, guide = anime_mouth(
+        figure, rgb, alpha, eyes_box, face_eyes, style, ink, near.get("mouth"), guide, geom, realistic,
+        _rig_mouth, find_mouth)
+    rigged, wiped, found, colour, mouth_box, mx, my, background = pack
     width, height = rigged.size
-    warnings = ["eyes_low"] if ey0 / height > 0.4 else []
-    if not found:
-        warnings.append("mouth_not_found")
-    if (guide.get("hint_ignored") or {}).get("far"):
-        warnings.append("mouth_hint_ignored")
-    elif wiped and stray_marks(np.array(rigged)[..., :3], alpha, face_eyes, mouth_box):
-        warnings.append("stray_mark")
-    sprite_width = _ink_sprite_width(mouth_box, guide, eyes_box) if ink else (ex1 - ex0) * style["mouth_scale"]
+    warnings = pose_warnings(height, ey0, found, guide, wiped, rigged, alpha, face_eyes, mouth_box,
+                             eye_warnings, mouth_warnings, anime_failed, stray_marks)
+    if ink:
+        sprite_width = _ink_sprite_width(mouth_box, guide, eyes_box)
+    elif mouth_source == "landmarks":
+        sprite_width = float(guide.get("mouth_width") or (ex1 - ex0) * style["mouth_scale"])
+    else:
+        sprite_width = (ex1 - ex0) * style["mouth_scale"]
     lids = background if style["screen"] else _eye_skin(rgb, alpha, eyes_box, background)
     openings = add_outlined_irises(eye_openings(rgb, alpha, eyes_mask, lids, style["screen"]), rgb, alpha,
                                    guide.get("eye_outlines"), lids, style["screen"])
@@ -824,7 +824,8 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
         "image": rigged, "before": figure, "width": width, "height": height, "wiped": wiped, "found": found,
         "realistic": realistic, "ink": colour, "skin": tuple(int(v) for v in background),
         "blinks": not covered and (hint or {}).get("blink") is not False,
-        "warnings": warnings,
+        "warnings": warnings, "eyesSource": eyes_source, "mouthSource": mouth_source,
+        **({"brows": anime_face_landmarks.brow_boxes(geom)} if anime_face_landmarks.brow_boxes(geom) else {}),
         "mouth": _anchor(mx, my, sprite_width * SPRITE[1] / SPRITE[0], width, height),
         "eyes": _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, width, height),
         "blink": blink_sprite(rgb[by0:by1, bx0:bx1], openings[by0:by1, bx0:bx1], lids, style["screen"],
@@ -1071,6 +1072,9 @@ def _pose_reports(rigs: dict[str, dict[str, Any]], placed: dict) -> dict[str, di
                    "landmarks": rig["guided"], **({"mouthLine": rig["line"]} if "line" in rig else {}),
                    **({"faceSize": rig["face_size"]} if rig.get("face_size") else {}),
                    **({"facing": rig["facing"]} if rig.get("facing") else {}),
+                   **({"eyesSource": rig["eyesSource"]} if rig.get("eyesSource") else {}),
+                   **({"mouthSource": rig["mouthSource"]} if rig.get("mouthSource") else {}),
+                   **({"brows": rig["brows"]} if rig.get("brows") else {}),
                    **({"hintIgnored": rig["seeds"]["hint_ignored"]} if (rig.get("seeds") or {}).get("hint_ignored") else {}),
                    **({"hints": placed[pose]} if pose in placed else {})}
             for pose, rig in rigs.items()}
@@ -1109,7 +1113,11 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         if pose in own_mouths:
             # Warp mouths are cut from this pose's own drawing: they are its own, in place of the kit's.
             own["mouthSources"] = {state: _url(file, workspace) for state, file in own_mouths[pose].items()}
-        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **own, **({} if rig["blinks"] else {"blink": False})}
+        placed_by = {"eyesSource": rig["eyesSource"], "mouthSource": rig["mouthSource"]}
+        if rig.get("brows"):
+            placed_by["brows"] = rig["brows"]
+        anchors[pose] = {"mouth": rig["mouth"], "eyes": rig["eyes"], **own,
+                         **({} if rig["blinks"] else {"blink": False}), **placed_by}
     kit["anchors"] = anchors
     kit["style"] = "cutout"
     warnings = _kit_warnings(rigs)

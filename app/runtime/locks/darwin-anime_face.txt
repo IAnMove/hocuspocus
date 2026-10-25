@@ -1,0 +1,30 @@
+# Resolved for darwin arm64 / anime_face, 2026-10-24.
+# Regenerate with scripts/lock_runtime_dependencies.py; native extensions use explicit recipe pins.
+anime-face-detector==0.1.0
+anyio==4.15.1
+click==8.5.0
+filelock==4.2.4
+fsspec==2026.9.0
+h11==0.16.0
+hf-xet==1.7.0
+httpcore2==2.16.0
+httpx2==2.16.0
+huggingface-hub==2.3.0
+idna==3.20
+jinja2==3.1.6
+markupsafe==3.0.4
+mpmath==1.3.0
+networkx==3.7
+numpy==2.5.4
+opencv-python-headless==5.0.0.93
+packaging==26.3
+pillow==13.0.0
+pyyaml==6.0.3
+safetensors==0.8.0
+setuptools==84.2.1
+sympy==1.14.0
+torch==2.7.0
+torchvision==0.22.0
+tqdm==4.70.1
+truststore==0.10.5
+typing-extensions==4.16.0

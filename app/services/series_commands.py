@@ -123,7 +123,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
-        "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
+        "each pose's mouth reports openPx and openRatio), eyes_disagree or mouth_disagree (the optional anime-face "
+        "landmarks, 28 points, disagreed with the white-eye search beyond 0.30 of the eye-pair width or 0.50 of the "
+        "mouth width, or a white box over 1.5 times the landmark eyes, so the landmarks were used; a hint still wins). "
+        "mouth_landmarks_implausible means a painted mouth was kept because the landmark mouth was shorter than 0.35 of "
+        "the eye-pair width, not below the eyes, or its five mouth-point scores averaged under 0.35. "
+        "Each pose reports eyesSource and mouthSource (whites, landmarks or hint) and anchors keep those plus brow "
+        "boxes when the anime points were read. Without that component the rig is unchanged. A pose whose eyes are covered (sunglasses) "
         "is saved with anchors.<pose>.blink false and never blinks; so is one hinted blink: false (clear spectacles, "
         "whose frames a closed lid would paint over), and like other hints it is kept for later rigs.",
     ),
