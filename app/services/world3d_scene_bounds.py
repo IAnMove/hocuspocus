@@ -30,6 +30,14 @@ _CACHE: dict = {}
 _CACHE_LIMIT = 256
 
 
+def _workspace_file(name: str, workspace: str, workspace_dir):
+    """The path inside the workspace, or ``(None, "missing_file")`` when the workspace itself cannot be opened."""
+    try:
+        return safe_join(str(workspace_dir(workspace)), *[part for part in name.split("/") if part]), None
+    except Exception:  # noqa: BLE001 - an unknown workspace is a missing file here, never a failed inspect
+        return None, "missing_file"
+
+
 def resolve_workspace_glb(url, workspace: str, workspace_dir) -> tuple[Path | None, str | None]:
     """The workspace file a slot's ``sourceUrl`` names, or ``(None, reason)``. Uploads, example media, other
     workspaces, remote URLs and anything that climbs out of the workspace folder are not resolved."""
@@ -47,10 +55,9 @@ def resolve_workspace_glb(url, workspace: str, workspace_dir) -> tuple[Path | No
         return None, "outside_workspace"
     if not name.lower().endswith(".glb"):
         return None, "not_glb"
-    try:
-        path = safe_join(str(workspace_dir(workspace)), *[part for part in name.split("/") if part])
-    except Exception:  # noqa: BLE001 - an unknown workspace is a missing file here, never a failed inspect
-        return None, "missing_file"
+    path, failed = _workspace_file(name, workspace, workspace_dir)
+    if failed:
+        return None, failed
     if path is None:
         return None, "outside_workspace"
     return (Path(path), None) if os.path.isfile(path) else (None, "missing_file")

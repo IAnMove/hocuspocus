@@ -93,6 +93,15 @@ def _whites_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, near, rea
     return pack, "whites", warnings, None
 
 
+def _guided_or_white_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, hinted, guide, geom, realistic, rig_mouth):
+    """A hint, or the white-pixel mouth when there is no landmark mouth. None when landmarks should be tried."""
+    if hinted is not None or not geom or not geom.get("mouth"):
+        near = hinted if hinted is not None else guide.get("mouth")
+        pack = rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, near, realistic)
+        return pack, "hint" if hinted is not None else "whites", [], guide
+    return None
+
+
 def anime_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, hinted, guide, geom, realistic, rig_mouth, find_mouth):
     """Whites when they agree, or when the landmark mouth is not plausible.
 
@@ -100,10 +109,10 @@ def anime_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, hinted, gui
     ``mouth_plausible`` is true. A hint still wins. An implausible landmark mouth
     leaves a found white mouth in place and warns ``mouth_landmarks_implausible``.
     """
-    if hinted is not None or not geom or not geom.get("mouth"):
-        near = hinted if hinted is not None else guide.get("mouth")
-        pack = rig_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, near, realistic)
-        return pack, "hint" if hinted is not None else "whites", [], guide
+    early = _guided_or_white_mouth(
+        figure, rgb, alpha, eyes_box, face_eyes, style, ink, hinted, guide, geom, realistic, rig_mouth)
+    if early is not None:
+        return early
     screen = style["screen"]
     probe = _probe_mouth(find_mouth, rgb, alpha, face_eyes, screen, realistic, None)
     plausible = anime_face_landmarks.mouth_plausible(geom)

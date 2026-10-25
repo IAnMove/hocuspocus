@@ -115,16 +115,8 @@ def check_background(config):
     return True
 
 
-def resolve_background(resolved,sets,workspace):
-    background=resolved.get('background')
-    if has_room(resolved): return True
-    source=background.get('source') if isinstance(background,dict) else background
-    made=(sets or {}).get(source,{})
-    if not made.get('room'): return False
-    resolved['background']={'room':copy.deepcopy(made['room'])}
-    cast=resolved.setdefault('cast',{})
-    if not isinstance(cast,dict):
-        cast={}; resolved['cast']=cast
+def _stage_cast(cast, made, workspace):
+    """Furniture rows copied onto the cast. Ids past the cast cap are returned so the stage can drop them."""
     from services.cc0_props import STAGE_CAST_LIMIT, cast_load
     skipped=set()
     for row in made.get('objects',[]):
@@ -136,10 +128,26 @@ def resolve_background(resolved,sets,workspace):
             continue
         cast.setdefault(oid,{**{k:v for k,v in row.items() if k not in {'objectId','file','media'}},
             'source':url})
-    room=resolved['background']['room']
-    if skipped and isinstance(room,dict) and room.get('libraryBlocks'):
-        room['libraryBlocks']=[block for block in room['libraryBlocks'] if block not in skipped]
-        if not room['libraryBlocks']: room.pop('libraryBlocks')
+    return skipped
+
+
+def _drop_skipped_blocks(room, skipped):
+    if not skipped or not isinstance(room,dict) or not room.get('libraryBlocks'): return
+    room['libraryBlocks']=[block for block in room['libraryBlocks'] if block not in skipped]
+    if not room['libraryBlocks']: room.pop('libraryBlocks')
+
+
+def resolve_background(resolved,sets,workspace):
+    background=resolved.get('background')
+    if has_room(resolved): return True
+    source=background.get('source') if isinstance(background,dict) else background
+    made=(sets or {}).get(source,{})
+    if not made.get('room'): return False
+    resolved['background']={'room':copy.deepcopy(made['room'])}
+    cast=resolved.setdefault('cast',{})
+    if not isinstance(cast,dict):
+        cast={}; resolved['cast']=cast
+    _drop_skipped_blocks(resolved['background']['room'], _stage_cast(cast, made, workspace))
     return True
 
 

@@ -100,9 +100,8 @@ def refusal_error(spec: dict, sets: dict) -> str | None:
     return "models failed: " + "; ".join(bits)
 
 
-def background_of(entry: Any, made: Any, url) -> dict | None:
-    """The resolved scene3d background for a splat set, or None when this is another kind."""
-    made = made if isinstance(made, dict) else {}
+def _splat_file(entry: Any, made: dict, url):
+    """The workspace file for a splat background, or None when this entry is another kind."""
     if isinstance(entry, dict) and "splat" in entry and entry.get("splat") is not True:
         raise ValueError("scene3d.background for a splat is {source, splat: true, floorY?, scale?}")
     inline = isinstance(entry, dict) and entry.get("splat") is True
@@ -113,6 +112,15 @@ def background_of(entry: Any, made: Any, url) -> dict | None:
     source = made.get("url") or (url(entry["source"]) if isinstance(entry, dict) and entry.get("source") else None)
     if not source:
         raise ValueError("scene3d.background splat has no file")
+    return source
+
+
+def background_of(entry: Any, made: Any, url) -> dict | None:
+    """The resolved scene3d background for a splat set, or None when this is another kind."""
+    made = made if isinstance(made, dict) else {}
+    source = _splat_file(entry, made, url)
+    if source is None:
+        return None
     floor = _taken(made, entry, "floorY", 0)
     scale = _taken(made, entry, "scale", 1)
     return {"source": source, "splat": True, "floorY": float(floor), "scale": float(scale)}

@@ -223,6 +223,16 @@ def _page_argument(name: str, value: Any, low: int, high: int) -> int:
     return value
 
 
+def _library_match(item: dict[str, Any], needle: str, category: str, sub_category: str) -> bool:
+    if needle and needle not in item["name"].lower() and needle not in item["key"].lower():
+        return False
+    if category and item["category"] != category:
+        return False
+    if sub_category and item["sub_category"] != sub_category:
+        return False
+    return True
+
+
 def animation_library(
     *, search: str = "", category: str = "", sub_category: str = "", limit: int = LIBRARY_PAGE, offset: int = 0,
 ) -> dict[str, Any]:
@@ -236,12 +246,7 @@ def animation_library(
     offset = _page_argument("offset", offset, 0, 1_000_000)
     items, cached = library_items(key)
     needle = str(search or "").strip().lower()
-    chosen = [
-        item for item in items
-        if (not needle or needle in item["name"].lower() or needle in item["key"].lower())
-        and (not category or item["category"] == category)
-        and (not sub_category or item["sub_category"] == sub_category)
-    ]
+    chosen = [item for item in items if _library_match(item, needle, category, sub_category)]
     return {
         "provider": "meshy", "total": len(chosen), "offset": offset, "count": len(chosen[offset:offset + limit]),
         "animations": chosen[offset:offset + limit],
@@ -250,6 +255,26 @@ def animation_library(
         "note": f"Reading the library is free; each animation added to a rig costs {ACTION_CREDITS} credits. "
                 "Pass action_id or key values in model3d.rig animations (engine meshy), up to 10.",
     }
+
+
+_LIBRARY_FIELDS = {"search", "category", "sub_category", "limit", "offset"}
+
+
+def mcp_library_input(arguments: Any) -> dict[str, Any]:
+    """The input object of model3d.meshy.animations. A call that is not version 1 fails before any request."""
+    payload = arguments.get("input") if isinstance(arguments, dict) else None
+    if (
+        not isinstance(arguments, dict)
+        or arguments.get("version") != 1
+        or set(arguments) - {"version", "input"}
+        or not isinstance(payload or {}, dict)
+    ):
+        raise ValueError("Use version 1 and an input object")
+    payload = payload or {}
+    unknown = sorted(set(payload) - _LIBRARY_FIELDS)
+    if unknown:
+        raise ValueError(f"Unknown input: {', '.join(unknown)}")
+    return payload
 
 
 def read_animation_library(**filters: Any) -> dict[str, Any]:

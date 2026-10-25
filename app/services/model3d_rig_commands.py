@@ -68,13 +68,8 @@ def _library_route():
 
 def _library_handler(library=None):
     async def read(arguments: dict) -> dict:
-        payload = arguments.get("input") if isinstance(arguments, dict) else None
-        if not isinstance(arguments, dict) or arguments.get("version") != 1 or set(arguments) - {"version", "input"} or not isinstance(payload or {}, dict):
-            raise ValueError("Use version 1 and an input object")
-        payload = payload or {}
-        unknown = sorted(set(payload) - {"search", "category", "sub_category", "limit", "offset"})
-        if unknown:
-            raise ValueError(f"Unknown input: {', '.join(unknown)}")
+        from services.meshy_rig_service import mcp_library_input
+        payload = mcp_library_input(arguments)
         route = library or _library_route()
         result = await run_in_threadpool(lambda: route(**payload))
         return {"version": 1, "operation": LIBRARY_OPERATION, "status": "completed", "result": result}

@@ -87,6 +87,27 @@ def _now() -> float:
     return time.time()
 
 
+def _job_description(kit: dict[str, Any]) -> str:
+    notes = (kit.get("lookNotes") or "").strip()
+    return notes or kit.get("name") or kit["id"]
+
+
+def _saved_frames(job: dict[str, Any], definition: dict[str, Any]) -> list[dict[str, Any]]:
+    """One saved frame per take. A custom animation keeps the prompt the author wrote."""
+    frames: list[dict[str, Any]] = []
+    custom = bool(definition.get("custom"))
+    for take, pose in zip(job["takes"], definition["poses"]):
+        frame: dict[str, Any] = {"id": take["id"], "source": take["keyed"]}
+        if custom:
+            frame["prompt"] = pose["prompt"]
+            frame["label"] = pose["label"]["en"]
+        for key in ("guide", "gait"):
+            if take.get(key):
+                frame[key] = take[key]
+        frames.append(frame)
+    return frames
+
+
 def reference_of(kit: dict[str, Any]) -> str | None:
     """The picture every pose is made from: the character's own identity, never a pose of one of its animations."""
     source = ((kit.get("identityReference") or kit.get("base") or {}).get("source") or "")
@@ -244,7 +265,7 @@ class CharacterAnimationJobs:
         job = {"jobId": f"anim-{uuid.uuid4().hex[:12]}", "workspace": workspace, "kitId": kit["id"], "animationId": definition["id"],
                "title": definition["title"]["en"], "model": model or DEFAULT_MODEL, "status": "queued", "stage": "poses", "takes": takes,
                "remake": pose, "createdAt": _now(), "updatedAt": _now(), "definition": definition, "reference": reference_of(kit),
-               "description": (kit.get("lookNotes") or "").strip() or kit.get("name") or kit["id"], "style": style_of(kit)}
+               "description": _job_description(kit), "style": style_of(kit)}
         if references and is_remote_image_model(job["model"]):
             job["refsDropped"] = True  # Image-01 takes one reference: the character's own picture alone
         elif references:
@@ -462,10 +483,7 @@ class CharacterAnimationJobs:
         entry: dict[str, Any] = {
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
-            "frames": [{"id": take["id"], "source": take["keyed"],
-                        **({"prompt": pose["prompt"], "label": pose["label"]["en"]} if definition.get("custom") else {}),
-                        **{key: take[key] for key in ("guide", "gait") if take.get(key)}}
-                       for take, pose in zip(job["takes"], definition["poses"])],
+            "frames": _saved_frames(job, definition),
             "fps": definition["fps"], "loop": definition["loop"], "facing": definition["facing"], "view": definition["view"],
             "scaleBy": definition["scaleBy"], "model": job["model"], "reviewState": "pending", "createdAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             **contract_of(definition["id"], definition), **clip_fields(job),

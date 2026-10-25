@@ -92,6 +92,14 @@ def _pose_source(animation_id: str, pose_id: str, custom: dict[str, Any] | None)
     return item, pose
 
 
+def _joined_prompt(*parts: str | None) -> str:
+    return " ".join(part for part in parts if part)
+
+
+def _joined_negative(*parts: str | None) -> str:
+    return ", ".join(part for part in parts if part)
+
+
 def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id: str | None = None,
                 screen: str | None = None, custom: dict[str, Any] | None = None) -> dict[str, str]:
     """Prompt, negative prompt, screen colour and resolution to generate one pose with the character as its reference."""
@@ -104,8 +112,8 @@ def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id
     identity = (fragment.get("identity") or catalog()["identity"]).replace("{description}", words).strip()
     identity += "" if identity.endswith((".", "!", "?", ":", ";")) else "."
     held = catalog().get("walkViews", {}).get(item["view"]) if item.get("motion") == "walk" else None
-    prompt = " ".join(part for part in (identity, catalog()["views"][item["view"]], held, pose["prompt"], background) if part)
-    negative = ", ".join(part for part in (fragment.get("negative") or catalog()["negative"], catalog().get("viewNegatives", {}).get(item["view"])) if part)
+    prompt = _joined_prompt(identity, catalog()["views"][item["view"]], held, pose["prompt"], background)
+    negative = _joined_negative(fragment.get("negative") or catalog()["negative"], catalog().get("viewNegatives", {}).get(item["view"]))
     return {"prompt": prompt, "negative": negative, "screen": screen, "resolution": item["resolution"]}
 
 

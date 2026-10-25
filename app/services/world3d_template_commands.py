@@ -189,6 +189,10 @@ def _effect(name, data, workspace_dir):
         return {"status": "completed", "scene": publish_scene(data["workspace"], data["scene_id"], workspace_dir)}
     if name == "world3d.scene.apply_query":
         return _apply_query(data, workspace_dir)
+    return _stored_effect(name, data, workspace_dir)
+
+
+def _stored_effect(name, data, workspace_dir):
     if name == "world3d.templates.user.put":
         stored = put_user_template(data["workspace"], workspace_dir, data)
         return {"status": "completed", "template": stored}
