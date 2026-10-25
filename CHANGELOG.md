@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: an agent building a Video 3D scene can read each object's size in metres and ask for a fit.** `world3d.scene.inspect` and `world3d.scene.patch` reply with the camera, the light and `layout.items` (bounds in metres, capped). A binding can set `fit` to a height, width, depth or the longest side in metres. A document the editor would refuse is warned about and still accepted.
+
 **Añadido: los modelos cuya licencia no rige en la UE, el Reino Unido o Corea del Sur lo dicen al elegirlos o instalarlos.** Hunyuan Video (Avatar y Custom incluidos), Hunyuan Video 1.5, Hunyuan3D y MiniMax H3 (también Estados Unidos) muestran una línea y un enlace en el selector de modelo, Ajustes, el selector del Director, la pestaña Instalación, el texto de modelos del Asistente y el listado MCP. No se bloquea nada.
 
 **Added: optional multilingual template search on CPU.** When the Template semantic search extra is installed (`intfloat/multilingual-e5-small`, MIT, about 0.5 GB, via the existing Installation catalog), Video 3D and Video 2D search, suggest and the Wizard share one hybrid score: the lexical points plus up to 24 from the cosine, which breaks ties. A query whose words no card knows is filled only when a few cards stand clearly above the rest; a flat neighbourhood stays empty. The report gains `semantic: true`. Without the weights the scores, order, unknown words and partial flag stay as they were (`semantic: false`; a Video 2D response that was not a text search does not grow the field). Card vectors are cached by catalogue fingerprint and model id.
