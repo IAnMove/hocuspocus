@@ -35,6 +35,8 @@ class Component:
     restart_required: bool
     remove: tuple[str, ...]
     licence: str | None = None
+    license: str = ""
+    ready_file: str = ""
 
     def __post_init__(self) -> None:
         for relative in self.remove:
@@ -55,6 +57,8 @@ class Component:
         record = licence_for_id(self.licence)
         if record:
             payload["licence"] = record
+        if self.license:
+            payload["license"] = self.license
         return payload
 
 
@@ -77,6 +81,7 @@ def components() -> tuple[Component, ...]:
             summary=entry["summary"], estimated_bytes=int(entry["estimatedGiB"] * GIB),
             restart_required=bool(entry.get("restartRequired")), remove=tuple(entry["remove"]),
             licence=entry.get("licence") if isinstance(entry.get("licence"), str) else None,
+            license=str(entry.get("license") or ""), ready_file=str(entry.get("readyFile") or ""),
         )
         for entry in _load()["components"]
     )

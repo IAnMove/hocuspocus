@@ -823,7 +823,9 @@ def test_install_summary_names_missing_features_and_why():
 
     amd = summary("linux", "x64", "amd")
     assert "editing studio" in amd[0]
-    assert len(amd) == 2 and "NVIDIA" in amd[1] and "(WanGP)" in amd[1] and "(UniRig)" in amd[1]
+    blocked = next(line for line in amd if "NVIDIA" in line)
+    assert "(WanGP)" in blocked and "(UniRig)" in blocked
+    assert any("template semantic search" in line for line in amd)
     old_driver = summary("win32", "x64", "nvidia", "470.1")
     # Engines blocked by the same driver floor share one line.
     assert any("(WanGP)" in line and "(Hunyuan3D)" in line and "528.33" in line for line in old_driver)

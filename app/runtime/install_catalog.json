@@ -94,6 +94,21 @@
         "app/services/minimax_h3/env",
         "app/services/minimax_h3/vendor"
       ]
+    },
+    {
+      "id": "template_semantic",
+      "engine": "template_semantic",
+      "script": "template_semantic_install.js",
+      "title": "Template semantic search",
+      "summary": "Spanish and English template search on CPU. Downloads intfloat/multilingual-e5-small (MIT, about 0.5 GB) and uses the studio's transformers. Without it, search stays lexical.",
+      "estimatedGiB": 0.5,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-language", "gate": "always"},
+      "license": "MIT",
+      "readyFile": "app/services/template_semantic_model/READY",
+      "remove": [
+        "app/services/template_semantic_model"
+      ]
     }
   ]
 }
