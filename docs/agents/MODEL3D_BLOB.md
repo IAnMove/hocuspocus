@@ -42,8 +42,11 @@ the requested number. A blob head stays wider than its chest. An anime body is
 about 7 heads tall, with shoulders wider than the small head and a narrower
 neck between them. A chibi is about 2.5–3 heads tall. Blob and chibi arms are
 drawn no longer than 0.30 and 0.26 of the height: a longer arm's wave meets
-the wide head. The stored trait keeps the requested length. Pieces overlap,
-the arms are a T, and the feet sit on y = 0.
+the wide head; anime arms no longer than 0.42, and they are one smooth tube
+(the elbow sphere and the forearm keep the upper arm's diameter, the shoulder
+sphere stays inside the sleeve) so no ink ring marks the elbow. The stored
+trait keeps the requested length. Pieces overlap, the arms are a T, and the
+feet sit on y = 0.
 
 Accessories, each at most once, up to six: `cap`, `sailor_cap`, `top_hat`,
 `beanie`, `bucket_hat`, `apron`, `tie`, `collar`, `belt`, `backpack`, `scarf`,
