@@ -51,6 +51,7 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 - [agents/VIDEO2D_MCP_GUIDE.md](agents/VIDEO2D_MCP_GUIDE.md) — guía · montar una escena Video 2D por MCP.
 - [agents/MODEL3D_MCP.md](agents/MODEL3D_MCP.md) — guía · Model3D por MCP.
 - [agents/MODEL3D_COMPOSE.md](agents/MODEL3D_COMPOSE.md) — guía · componer un modelo low-poly en CPU.
+- [agents/MODEL3D_BLOB.md](agents/MODEL3D_BLOB.md) — guía · un cuerpo de cabeza redonda ya riggeado.
 - [agents/HUMANOID_RIG.md](agents/HUMANOID_RIG.md) — guía · rig humanoide para mallas reales.
 
 ## Contratos de producto

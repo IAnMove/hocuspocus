@@ -641,8 +641,20 @@ export interface AgentUpdateWorkspaceCollectionAction {
 
 export interface AgentSpeechAnalysisEngineAction { type: 'speech_analysis_engine'; install: boolean }
 
+export interface AgentBlobMakeAction {
+  type: 'blob_make'
+  name: string
+  preset: string
+  height: number
+  build: string
+  headWidth: number
+  hands: string
+  feet: string
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentSpeechAnalysisEngineAction
+  | AgentBlobMakeAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction

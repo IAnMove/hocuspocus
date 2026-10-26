@@ -62,6 +62,7 @@ import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
 import { setupSpeechAnalysis } from './speechAnalysisAdapter'
+import { executeBlobMake } from './blobBodyAdapter'
 
 export interface AdapterOutcome {
   commandResult?: CommandResult
@@ -210,6 +211,7 @@ export interface WizardApplicationAdapters {
     setStage(action: import('./seriesStageCapabilities').AgentSetSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
     checkStage(action: import('./seriesStageCapabilities').AgentCheckSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
   }
+  blobBody: { make(action: import('./agentActions').AgentBlobMakeAction, workspace?: string): Promise<AdapterOutcome> }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
     makeSet(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationSetAction, workspace?: string): Promise<AdapterOutcome>
@@ -808,6 +810,9 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async applyCard(action, workspace) { return executeApplySeriesShotCard(action, workspace) },
     async setStage(action, workspace) { return executeSetSeriesLocationStage(action, workspace) },
     async checkStage(action, workspace) { return executeCheckSeriesLocationStage(action, workspace) },
+  }
+  adapters.blobBody = {
+    async make(action, workspace) { return executeBlobMake(action, workspace) },
   }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },
