@@ -134,3 +134,28 @@ def test_garment_layers_take_the_local_gpu_lane(tmp_path, monkeypatch):
         rgba, str(tmp_path), "hero", "cast", installed_fn=lambda: True, decompose=decompose)
     assert acquired == ["local_gpu:0"]
     assert used is True
+
+
+def test_a_half_written_layer_folder_is_not_a_cache(tmp_path):
+    from PIL import Image
+    from services.walk_puppet_method import _cached_layers
+    folder = tmp_path / "layers"
+    folder.mkdir()
+    Image.new("RGBA", (4, 4), (1, 2, 3, 255)).save(folder / "topwear.png")
+    assert _cached_layers(str(folder)) is None
+
+
+def test_finished_garment_layers_are_marked_complete(tmp_path):
+    from PIL import Image
+    from services.walk_puppet_method import _cached_layers, garment_layers
+    image = Image.new("RGBA", (4, 4), (9, 8, 7, 255))
+
+    def decompose(_image, label):
+        assert label == "puppet"
+        return {"images": {"topwear": image}}
+
+    garment_layers(np.array(image), str(tmp_path), "hero", "cast", installed_fn=lambda: True, decompose=decompose)
+    folder = next((tmp_path / "puppet-layers").iterdir())
+    assert (folder / ".complete").is_file()
+    cached = _cached_layers(str(folder))
+    assert cached is not None and "topwear" in cached

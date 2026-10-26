@@ -72,7 +72,8 @@ def _rgba_of(source: str, uploads_root: str, workspace_root: str) -> np.ndarray:
 
 
 def _cached_layers(folder: str) -> dict[str, np.ndarray] | None:
-    if not os.path.isdir(folder):
+    """Layers from a finished write. A folder without ``.complete`` is still being written."""
+    if not os.path.isdir(folder) or not os.path.isfile(os.path.join(folder, ".complete")):
         return None
     return load_layers(folder) or None
 
@@ -85,6 +86,8 @@ def _write_layers(images: dict[str, Image.Image], folder: str) -> dict[str, np.n
             continue
         image.convert("RGBA").save(os.path.join(folder, f"{name}.png"))
         arrays[name] = np.array(Image.open(os.path.join(folder, f"{name}.png")).convert("RGBA"))
+    with open(os.path.join(folder, ".complete"), "w", encoding="utf-8") as marker:
+        marker.write("ok\n")
     return arrays
 
 
