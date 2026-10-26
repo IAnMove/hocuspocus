@@ -76,7 +76,7 @@ def create_montages_router(commands: MontageCommands) -> APIRouter:
     @router.post("/api/v1/montages/{file}/comic/panels")
     async def comic_panels(file: str, request: Request):
         payload = await body(request)
-        allowed = {"workspace", "clip_ids", "frames"}
+        allowed = {"workspace", "clip_ids", "frames", "clips"}
         return await run("montages.comic.panels",
                          {"file": file, **{key: value for key, value in payload.items() if key in allowed}})
 

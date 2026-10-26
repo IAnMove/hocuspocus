@@ -68,11 +68,17 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "montages.comic.panels": ({"workspace": WORKSPACE, "file": FILE,
                                "clip_ids": {"type": "array", "maxItems": 24, "items": CLIP_ID},
                                "frames": {"type": "object", "maxProperties": 24,
-                                          "description": "clip id to seconds inside the trimmed clip"}},
+                                          "description": "clip id to seconds inside the trimmed clip"},
+                               "clips": {"type": "array", "minItems": 1, "maxItems": 24,
+                                         "description": "unsaved clips {id, source, trimStart, trimEnd, comic}; "
+                                                        "replaces clip_ids",
+                                         "items": {"type": "object"}}},
                               ["workspace", "file"], False,
                               "Comic view of a montage: one raw frame and one printed frame per clip, cached in the "
                               "workspace. clip_ids selects at most 24 clips; omit it for the first 24. frames overrides "
-                              "the instant inside the trimmed clip. This does not create a comic document. Edits of the "
+                              "the instant inside the trimmed clip. clips draws unsaved editor clips instead. A clip "
+                              "whose media cannot be read comes back with error. This does not create a comic "
+                              "document. Edits of the "
                               "montage, including comic.frame and comic.text, are montages.save. Export ignores comic."),
     "montages.export.status": ({"job_id": {"type": "string", "minLength": 1, "maxLength": 80}, "workspace": WORKSPACE},
                                ["job_id"], False,
@@ -156,7 +162,7 @@ class MontageCommands:
         elif name == "montages.comic.panels":
             from services.montage_comic import comic_panels
             result = comic_panels(self.store, payload["workspace"], payload["file"], clip_ids=payload.get("clip_ids"),
-                                  frames=payload.get("frames"))
+                                  frames=payload.get("frames"), clips=payload.get("clips"))
         elif name == "montages.shot.regenerate":
             raise MontageError("montages.shot.regenerate is asynchronous; use execute_async", code="invalid_command")
         elif name == "montages.export":

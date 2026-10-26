@@ -37,6 +37,7 @@ import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
 import { ComicView } from './ComicView'
 import { duplicateClipState, moveClip, patchClipExtra, type ComicExtraPatch } from './comicEdits'
+import { handOffClip, reusableMetadata, useComicOpen, type ClipRemake } from './comicRemake'
 import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
@@ -748,7 +749,7 @@ export function VideoEditorPanel() {
   const [soundtrack, setSoundtrack] = useState<EditorSoundtrack | null>(draft.soundtrack)
   const [montage, setMontage] = useState<{ layers: MontageLayers; ref: MontageRef | null }>(() => loadMontageState(activeWorkspace))
   const [shotBoardOpen, setShotBoardOpen] = useState(false)
-  const [comicOpen, setComicOpen] = useState(false)
+  const [comicOpen, setComicOpen] = useComicOpen()
   const applyMontage = (state: MontageEditorState, layers: MontageLayers, ref: MontageRef) => {
     setClips(state.clips); setProjectName(state.projectName); setResolution(state.resolution); setFps(state.fps); setSoundtrack(state.soundtrack)
     persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
@@ -1048,17 +1049,17 @@ export function VideoEditorPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const openSelectedInVideoCreation = async () => {
-    if (!selected || selectedIndex < 0 || preparingReplacement) return
+  const openSelectedInVideoCreation = async (clip = selected, index = selectedIndex, candidates: string[] = []) => {
+    if (!clip || index < 0 || preparingReplacement) return
     setPreparingReplacement(true)
     setError(null)
     setSequencePlaying(false)
     videoRef.current?.pause()
 
-    const outputName = outputNameFromEditorClip(selected.source, selected.name)
+    const outputName = outputNameFromEditorClip(clip.source, clip.name)
     try {
-      const metadata = await api.fetchOutputMetadata(outputName, activeWorkspace)
-      if (!metadata.params) throw new Error(t('remake.noReusable'))
+      const metadata = await reusableMetadata([...candidates, outputName], activeWorkspace)
+      if (!metadata?.params) throw new Error(t('remake.noReusable'))
 
       const store = useStore.getState()
       store.setSidebarMode('studio')
@@ -1070,9 +1071,9 @@ export function VideoEditorPanel() {
 
       persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
       writeVideoEditorReplacementTarget({
-        clipId: selected.id,
-        clipIndex: selectedIndex,
-        originalName: selected.name,
+        clipId: clip.id,
+        clipIndex: index,
+        originalName: clip.name,
         outputName,
         requestedAt: Date.now(),
       })
@@ -1169,6 +1170,15 @@ export function VideoEditorPanel() {
     })
     if (copied.extra) patchComicExtra(copied.clip.id, { lyric: copied.extra.lyric ?? null, comic: copied.extra.comic ?? { text: null, frame: null } })
     setSelectedId(copied.clip.id)
+  }
+
+  const remakeClip = (id: string, request: ClipRemake) => {
+    const index = clips.findIndex(clip => clip.id === id)
+    if (index < 0) return
+    if (request.kind === 'creation') return void openSelectedInVideoCreation(clips[index], index, request.outputs)
+    persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
+    void handOffClip(clips[index], index, request, activeWorkspace)
+      .catch(reason => setError(t('remake.openFailed', { message: (reason as Error).message })))
   }
 
   const reloadOpenMontage = async () => {
@@ -2196,9 +2206,9 @@ export function VideoEditorPanel() {
             )}
             <ComicView open={comicOpen} workspace={activeWorkspace} file={montage.ref?.file} clips={clips}
               soundtrack={soundtrack} extras={montage.ref?.extras ?? {}} selectedId={selectedId}
-              revision={montage.ref?.revision ?? 0} onSelect={selectTimelineClip} onMove={dropAtIndex}
+              onSelect={selectTimelineClip} onMove={dropAtIndex}
               onDelete={removeClip} onDuplicate={duplicateComicClip} onExtra={patchComicExtra}
-              onChanged={reloadOpenMontage} onError={setError} />
+              onRemake={remakeClip} onChanged={reloadOpenMontage} onError={setError} />
           </div>
 
           <div className="px-3 py-3 border-t border-border bg-bg-tertiary/30">

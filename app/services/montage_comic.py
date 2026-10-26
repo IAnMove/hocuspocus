@@ -51,17 +51,50 @@ def laplacian_variance(path: Path) -> float:
 
 
 def comic_panels(store: MontageStore, workspace: str, file: str, *, clip_ids: list | None = None,
-                 frames: dict | None = None, extract: Callable | None = None, score: Callable | None = None,
-                 printer: Callable | None = None, duration_of: Callable | None = None) -> dict[str, Any]:
-    """One raw frame and one print per clip. At most 24 clips. A second call is a cache hit."""
+                 frames: dict | None = None, clips: list | None = None, extract: Callable | None = None,
+                 score: Callable | None = None, printer: Callable | None = None,
+                 duration_of: Callable | None = None) -> dict[str, Any]:
+    """One raw frame and one print per clip. At most 24 clips. A second call is a cache hit.
+
+    ``clips`` are the editor's unsaved clips (id, source, trims, comic): a duplicated or replaced clip has
+    its panel before the montage is saved. A clip whose media cannot be read gets ``error``, not a failed batch."""
     saved = store.get(workspace, file)
-    clips = saved["montage"]["clips"]
-    chosen = _selected(clips, clip_ids)
-    offsets = _offsets(frames, {clip["id"] for clip in clips})
+    chosen = _drafted(clips) if clips is not None else _selected(saved["montage"]["clips"], clip_ids)
+    offsets = _offsets(frames, {clip["id"] for clip in chosen})
     root = Path(store.workspace_dir(workspace))
+    tools = _tools(extract, score, printer, duration_of)
     with _LOCK:
-        panels = [_panel(clip, root, workspace, offsets, _tools(extract, score, printer, duration_of)) for clip in chosen]
+        panels = [_safe_panel(clip, root, workspace, offsets, tools) for clip in chosen]
     return {"file": saved["file"], "panels": panels}
+
+
+def _safe_panel(clip: dict, root: Path, workspace: str, offsets: dict[str, float], tools: dict) -> dict[str, Any]:
+    try:
+        return _panel(clip, root, workspace, offsets, tools)
+    except MontageError as error:
+        return {"clip_id": clip["id"], "error": str(error)}
+
+
+def _drafted(clips: Any) -> list[dict]:
+    """Validate the editor's clips: the fields a panel needs, nothing else."""
+    if not isinstance(clips, list) or not 1 <= len(clips) <= MAX_BATCH:
+        raise MontageError("clips must list between 1 and 24 clips", code="invalid_command")
+    drafted: list[dict] = []
+    for raw in clips:
+        if not isinstance(raw, dict) or not isinstance(raw.get("id"), str) or not raw["id"]:
+            raise MontageError("each clip needs an id", code="invalid_command")
+        if not isinstance(raw.get("source"), str) or not raw["source"].strip():
+            raise MontageError(f"clip {raw['id']} needs a source", code="invalid_command")
+        clip = {"id": raw["id"][:160], "source": raw["source"][:2000],
+                "trimStart": _seconds(raw.get("trimStart", 0), "trimStart"),
+                "trimEnd": _seconds(raw.get("trimEnd", 0), "trimEnd")}
+        frame = (raw.get("comic") or {}).get("frame") if isinstance(raw.get("comic"), dict) else None
+        if frame is not None:
+            clip["comic"] = {"frame": _seconds(frame, "comic frame")}
+        drafted.append(clip)
+    if len({clip["id"] for clip in drafted}) != len(drafted):
+        raise MontageError("clips must have unique ids", code="invalid_command")
+    return drafted
 
 
 def _tools(extract, score, printer, duration_of) -> dict[str, Callable]:
