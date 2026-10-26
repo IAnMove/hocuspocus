@@ -28,6 +28,10 @@ The viewer section **Cara 2D** sets the kit and the expression. It keeps a cente
 
 The cap is a child of `Head`, flat (no toon ink, no cel shading). From ±30° it still meets the head.
 
+## Egg head and a projected picture
+
+`taper` (0–0.6) narrows the cap toward the chin with the lofted head's jaw formula (0.35 for `mesh: "loft"`), so it hugs the egg instead of floating off the chin at three quarters. `fit: [cu, cv, ru, rv]` projects a whole painted head (hair included) from the front: the drawn skull's centre and half-size as fractions of the picture; each cap vertex takes the pixel in front of it (`u = cu + x·ru`), the cap covers 200 x 180 degrees, pixels outside the picture are transparent and the hair geometry of the body carries the sides and the back. Choose `ru = rv · rx / ry` so the drawing keeps its proportions on the egg (`rx`, `ry` from `faceAnchor.radii`). Mouths and blinks are painted in picture space, so they land where they were drawn. Both are stored only when given; the default cap is unchanged.
+
 ## Plane face (a painted head)
 
 `shape: "plane"` on `world3d.scene.face` hangs the kit as a flat picture on the Head bone instead of the cap: a whole painted head with its hair (a Qwen drawing keyed with `image.remove_background`, rigged with `characters.save` + `characters.rig.flat`), on a body made with `hair.style: "none"` so the skull stays behind the picture. `plane: [width, height, lift]` (which alone also selects the plane) sizes it in head radii (default `3.3 x 3.3`, lift `-0.5`: a square picture with hair above and a neck below is wider than the skull and its centre lower). `size` is how far in front of the head centre it sits. The plane follows the bone (nods turn it) and does not turn toward the camera: keep the camera within about 30° of the face. The default cap and its documents are unchanged.

@@ -48,6 +48,17 @@ sphere stays inside the sleeve) so no ink ring marks the elbow. The stored
 trait keeps the requested length. Pieces overlap, the arms are a T, and the
 feet sit on y = 0.
 
+`mesh: "loft"` (anime family only) replaces the primitives with one smooth
+lofted mesh in the spirit of a PS2 humanoid: elliptical rings strung along
+each limb, so an elbow or a knee is a run of rings the rig blends, a torso that
+tapers to the waist and out at the hips, a real neck, an egg head with a jaw
+(`blob_loft.egg_scale`, the same formula as the face cap's `taper`), mittens
+with a thumb, shoes with a sole, and hair as geometry in `hair.color` (a helmet
+round the crown and back, bangs, side locks for `long`, spikes for `spiky`).
+Accessories become colour regions of that mesh: `skirt` (two thin pleated
+sheets, knee socks), `school_collar` (a collar and a ribbon, or the shirt V of a
+`jacket`), `tie`. About 3–4k triangles. The default body is unchanged.
+
 Accessories, each at most once, up to six: `cap`, `sailor_cap`, `top_hat`,
 `beanie`, `bucket_hat`, `apron`, `tie`, `collar`, `belt`, `backpack`, `scarf`,
 `skirt`, `jacket`, `sleeves_long`, `shorts`, `school_collar`, `cape`. A skirt
