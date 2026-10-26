@@ -40,6 +40,7 @@ export function ComicView(props: Props) {
 function ComicPages(props: Props & { file: string }) {
   const { t } = useUiTranslation('videoEditor')
   const [printed, setPrinted] = useState(true)
+  const [armedId, setArmedId] = useState<string | null>(null)
   const { imageFor, observe } = useComicPanels(props)
   const pages = layoutComic(props.clips.map(clip => ({
     id: clip.id,
@@ -67,6 +68,7 @@ function ComicPages(props: Props & { file: string }) {
             if (!clip) return null
             return <ComicPanel key={panel.id} panel={panel} clip={clip} index={index} printed={printed}
               image={imageFor(panel.id)} extra={props.extras[panel.id]} selected={props.selectedId === panel.id}
+              editing={armedId === panel.id} onArm={setArmedId}
               hasSong={Boolean(props.soundtrack)} observe={observe} {...props} />
           })}
         </div>
@@ -83,6 +85,8 @@ function ComicPanel(props: {
   image: { frame: string; print: string; at: number } | undefined
   extra: ClipExtra | undefined
   selected: boolean
+  editing: boolean
+  onArm: (id: string) => void
   hasSong: boolean
   observe: (id: string, element: Element | null) => void
 } & Pick<Props, 'workspace' | 'file' | 'onSelect' | 'onMove' | 'onDelete' | 'onDuplicate' | 'onExtra' | 'onChanged' | 'onError'>) {
@@ -99,15 +103,15 @@ function ComicPanel(props: {
     onDragStart={event => startPanelDrag(event, props.clip.id)}
     onDragOver={event => event.preventDefault()}
     onDrop={event => dropPanel(event, props.index, props.onMove)}
-    onClick={() => props.onSelect(props.index)}
+    onClick={() => { props.onArm(props.clip.id); props.onSelect(props.index) }}
     className="absolute" style={{ ...box, outline: props.selected ? '2px solid #1d4e89' : undefined, outlineOffset: '1px' }}>
     <div className="absolute inset-0 overflow-hidden" style={{ border: `3px solid ${INK}`, background: '#e4dcc8' }}>
       {url ? <img src={url} alt="" draggable={false} className="h-full w-full" style={{ objectFit: 'cover', objectPosition: `${props.panel.focusX}% ${props.panel.focusY}%` }} />
         : <div className="flex h-full items-center justify-center text-[10px]" style={{ color: INK }}>{t('comic.loading')}</div>}
     </div>
     <ComicLettering clipId={props.clip.id} lyric={props.extra?.lyric} style={props.extra?.comic?.text ?? 'caption'}
-      hasSong={props.hasSong} selected={props.selected} onCommit={lyric => props.onExtra(props.clip.id, { lyric })} />
-    {props.selected && <ComicTools {...props} />}
+      hasSong={props.hasSong} selected={props.editing} onCommit={lyric => props.onExtra(props.clip.id, { lyric })} />
+    {props.editing && <ComicTools {...props} />}
   </article>
 }
 
@@ -152,19 +156,20 @@ function ComicLettering(props: {
   if (props.style === 'none' && !props.selected) return null
   const shown = displayLine(props.lyric, props.style, props.hasSong)
   const caption = props.style !== 'bubble'
-  return <div className={`absolute z-[1] max-w-[86%] ${caption ? 'left-1 top-1' : 'bottom-2 left-2 right-2'}`}
+  const place = caption ? 'left-1 top-1 max-w-[86%]' : props.selected ? 'bottom-12 left-2 right-2' : 'bottom-2 left-2 right-2'
+  return <div className={`absolute z-[1] ${place}`}
     onClick={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()}>
-    {props.selected ? <textarea data-testid="comic-lyric" value={draft} rows={3} maxLength={500}
-      aria-label={t('comic.editText')}
+    {props.selected ? <textarea data-testid="comic-lyric" value={draft} rows={draft.trim() ? 3 : 1} maxLength={500}
+      placeholder={t('comic.editText')} aria-label={t('comic.editText')}
       onChange={event => setDraft(event.target.value)}
       onBlur={() => { if (draft.trim() !== (props.lyric ?? '').trim()) props.onCommit(draft) }}
       className="w-full resize-none rounded px-1.5 py-1 text-[11px] leading-snug"
       style={{ fontFamily: LETTER, color: INK, background: caption ? '#fff2a8' : '#fff' }} />
-      : shown ? <p className={`relative px-1.5 py-1 text-[11px] leading-snug ${caption ? '' : 'rounded-2xl'}`}
-        style={{ fontFamily: LETTER, color: INK, background: caption ? '#fff2a8' : '#fff' }}>
-        {shown}
+      : shown ? <>
+        <p className={`line-clamp-3 overflow-hidden px-1.5 py-1 text-[11px] leading-snug ${caption ? '' : 'rounded-2xl'}`}
+          style={{ fontFamily: LETTER, color: INK, background: caption ? '#fff2a8' : '#fff' }}>{shown}</p>
         {!caption && <span className="absolute left-4 top-full border-x-8 border-x-transparent border-t-8 border-t-white" />}
-      </p> : null}
+      </> : null}
   </div>
 }
 
