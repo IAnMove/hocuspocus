@@ -165,8 +165,13 @@ test('a fitted cap projects the picture from the front, keeps rows under the chi
   assert.ok(front >= 0 && right >= 0 && lowest >= 0)
   assert.ok(Math.abs(uv.getX(front) - 0.5) < 1e-6 && Math.abs(uv.getY(front) - 0.65) < 1e-6, 'centre pixel in front')
   assert.ok(Math.abs(uv.getX(right) - 0.8) < 0.01, 'the right of the skull at cu + ru')
-  // under the chin: the transparent corner, not a smear of the picture's last row
-  assert.ok(uv.getX(lowest) === 0 && uv.getY(lowest) === 1, `${uv.getX(lowest)},${uv.getY(lowest)}`)
+  // the chin is the picture's chin row (cv + rv); a picture narrower than the head leaves the sides transparent
+  assert.ok(Math.abs(uv.getY(lowest) - (1 - 0.68)) < 1e-6, `${uv.getX(lowest)},${uv.getY(lowest)}`)
+  const narrow = faceCapGeometry(undefined, 0, [0.5, 0.35, 0.6, 0.33])
+  const narrowPos = narrow.getAttribute('position'), narrowUv = narrow.getAttribute('uv')
+  let side = -1
+  for (let index = 0; index < narrowPos.count; index += 1) if (Math.abs(narrowPos.getY(index)) < 1e-6 && narrowPos.getX(index) > 0.99) { side = index; break }
+  assert.ok(side >= 0 && narrowUv.getX(side) === 0 && narrowUv.getY(side) === 1, 'outside the picture: the transparent corner')
   // the jaw: narrower below the equator than above, by the egg formula
   assert.ok(chinWidth < browWidth * 0.95, `${chinWidth} vs ${browWidth}`)
   assert.ok(Math.abs(eggScale(-1, 0.35) - 0.65) < 1e-9 && eggScale(0.5, 0.35) === 1)
