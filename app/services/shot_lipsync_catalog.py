@@ -46,18 +46,15 @@ WEIGHTS: dict[str, tuple[dict[str, Any], ...]] = {
 }
 
 # ``steps`` is the 24 GB choice. InfiniteTalk's JSON has no step field (20 is
-# this operation's choice). LongCat's JSON default is 50; 30 is the choice.
-# ``fps`` is not in the InfiniteTalk JSON; 16 matches the LongCat handler.
+# this operation's choice). ``longcat_avatar`` stays in ``WEIGHTS`` (the model
+# catalog) and is not an engine here: its ``generate`` declares ``input_frames``
+# and ``image_start`` and never reads them, so a control video does not keep
+# the person in the shot.
 ENGINES: dict[str, dict[str, Any]] = {
     "infinitetalk": {
         "model_type": "infinitetalk", "license": "Apache-2.0", "source": "MeiGen-AI/InfiniteTalk",
         "resolution": "832x480", "steps": 20, "guidance_scale": 1, "audio_guidance_scale": 1,
         "denoising_strength": 0.7, "video_prompt_type": "GUV", "sliding_window_size": 81, "fps": 16,
-    },
-    "longcat_avatar": {
-        "model_type": "longcat_avatar", "license": "MIT", "source": "meituan-longcat/LongCat-Video",
-        "resolution": "832x480", "steps": 30, "guidance_scale": 4, "audio_guidance_scale": 4,
-        "video_prompt_type": "V", "sliding_window_size": 93, "fps": 16,
     },
 }
 

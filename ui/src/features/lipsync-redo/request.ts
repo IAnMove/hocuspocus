@@ -3,7 +3,7 @@ import { downloadModel } from '../../api/generation'
 /** The one operation the clip button, the Wizard and MCP all call. */
 export const LIPSYNC_REDO = 'shot.lipsync.redo'
 
-export const LIPSYNC_ENGINES = ['infinitetalk', 'longcat_avatar'] as const
+export const LIPSYNC_ENGINES = ['infinitetalk'] as const
 
 export type LipsyncEngine = typeof LIPSYNC_ENGINES[number]
 

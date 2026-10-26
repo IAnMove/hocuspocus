@@ -90,22 +90,19 @@ def test_missing_weights_report_disk_size_and_leave_other_tools_alone(tmp_path, 
     assert set(framed.value.detail) == {"code", "message", "retryable"}
 
 
-def test_a_file_that_is_present_drops_out_of_the_size_and_a_bare_bin_does_not(tmp_path, monkeypatch):
-    folder = tmp_path / "film"
-    _production(folder)
+def test_a_file_that_is_present_drops_out_of_the_size_and_a_bare_bin_does_not(tmp_path):
     root = tmp_path / "weights"
     present = "Wan2.1_VAE_bf16.safetensors"
     skip = {item["path"] for item in files_for("longcat_avatar") if item["path"] != present}
     _plant(root, "longcat_avatar", skip=skip)
     (root / "pytorch_model.bin").write_bytes(b"other")
-    monkeypatch.setattr(redo, "weights_root", lambda: root)
-    with pytest.raises(HTTPException) as denied:
-        _call(tmp_path, {"workspace": "film", "engine": "longcat_avatar", "production_id": "mv", "shot": "o05"})
-    paths = {item["path"] for item in denied.value.detail["files"]}
+    from services.shot_lipsync_catalog import missing_files
+    gap = missing_files("longcat_avatar", root)
+    paths = {item["path"] for item in gap}
     assert "Wan2.1_VAE_bf16.safetensors" not in paths
     assert "chinese-wav2vec2-base/pytorch_model.bin" in paths
-    assert denied.value.detail["license"] == "MIT"
-    assert denied.value.detail["bytes"] == stack_bytes("longcat_avatar") - 253_808_213
+    assert next(item["license"] for item in gap if str(item["path"]).startswith("longcat_avatar")) == "MIT"
+    assert sum(int(item["bytes"]) for item in gap) == stack_bytes("longcat_avatar") - 253_808_213
 
 
 def test_confirm_download_starts_the_existing_download_and_does_not_wait(tmp_path, monkeypatch):
@@ -141,7 +138,6 @@ def test_an_unbound_generation_server_does_not_invent_a_take(tmp_path, monkeypat
 
 @pytest.mark.parametrize("engine,steps,guide,strength", [
     ("infinitetalk", 20, "GUV", 0.7),
-    ("longcat_avatar", 30, "V", None),
 ])
 def test_a_production_shot_gains_a_take_and_keeps_the_original(tmp_path, monkeypatch, engine, steps, guide, strength):
     folder = tmp_path / "film"
@@ -234,9 +230,9 @@ def test_a_series_shot_appends_a_take_and_keeps_the_approval(tmp_path, monkeypat
         "ownerType": "attempt", "ownerId": "attempt-1", "isDerivedThumbnail": False, "metadata": {},
     }}
     write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
-    _bind(monkeypatch, tmp_path, "longcat_avatar")
+    _bind(monkeypatch, tmp_path)
     result = _call(tmp_path, {
-        "workspace": "film", "engine": "longcat_avatar", "series_id": series_id, "episode_id": episode_id,
+        "workspace": "film", "engine": "infinitetalk", "series_id": series_id, "episode_id": episode_id,
         "shot": "s1", "audio": "voice.wav",
     })["result"]
     saved = read_series_library(str(folder), "film")["seriesById"][series_id]
@@ -283,6 +279,20 @@ def test_lipsync_verdict_thresholds():
     assert verdict(0.9, 0.5, 0.0) == "ok"
     assert verdict(0.9, 0.1, 0.0) == "retake"
     assert verdict(0.1, 0.9, 0.0) == "unreliable"
+
+
+def test_longcat_avatar_is_not_a_redo_engine(tmp_path, monkeypatch):
+    """LongCat generate() declares input_frames and never reads it, so video_prompt_type V does not follow the shot."""
+    folder = tmp_path / "film"
+    _production(folder)
+    _bind(monkeypatch, tmp_path, "longcat_avatar")
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    with pytest.raises(HTTPException) as denied:
+        _call(tmp_path, {"workspace": "film", "engine": "longcat_avatar", "production_id": "mv", "shot": "o05"})
+    assert denied.value.detail["code"] == "invalid_command"
+    assert "longcat_avatar" in denied.value.detail["message"]
+    assert not list(folder.glob("lipsync*"))
+    assert any(item["path"].startswith("longcat_avatar") for item in files_for("longcat_avatar"))
 
 
 def test_guides_stay_files_after_the_real_infinitetalk_prepare(tmp_path, monkeypatch):

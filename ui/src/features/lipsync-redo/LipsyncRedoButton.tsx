@@ -57,9 +57,8 @@ export function LipsyncRedoButton({ workspace, target, namespace, labelKey, engi
 
   return <span className="flex flex-wrap items-center gap-1">
     <select data-action="lipsync-engine" aria-label={label(engineKey)} value={engine} disabled={busy}
-      onChange={event => setEngine(event.target.value === 'longcat_avatar' ? 'longcat_avatar' : 'infinitetalk')}>
+      onChange={() => setEngine('infinitetalk')}>
       <option value="infinitetalk">infinitetalk</option>
-      <option value="longcat_avatar">longcat_avatar</option>
     </select>
     <button type="button" data-action="lipsync-redo" disabled={busy} onClick={() => { void redo() }}>{label(labelKey)}</button>
     {pending ? <button type="button" data-action="lipsync-download" disabled={busy} onClick={() => { void download() }}>{wizardLine('replies.lipsDownload')}</button> : null}

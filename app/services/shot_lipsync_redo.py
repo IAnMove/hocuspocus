@@ -33,7 +33,8 @@ worker: Callable[[dict, str], str] | None = None
 def catalog() -> dict[str, Any]:
     return operation_schema(OPERATION, (
         "Redo the lips of one finished shot as a new take, keeping the original. engine is infinitetalk "
-        "(video-to-video, Apache-2.0) or longcat_avatar (anime and stylized, MIT). Name one target: "
+        "(video-to-video, Apache-2.0). longcat_avatar stays in the model catalog and is not offered: "
+        "it does not read the shot video. Name one target: "
         "production_id + shot, series_id + episode_id + shot, or clip. audio is the driving sound "
         "(a production uses its song when audio is omitted; a series uses the score cue that covers the shot). "
         "span is [start, end] seconds of that sound. The result is a new take; the selected clip and any "
@@ -42,7 +43,7 @@ def catalog() -> dict[str, Any]:
         "Returns file, kept_original, verdict (qa.lipsync: ok, retake or unreliable) and qa."
     ), {
         "workspace": WORKSPACE,
-        "engine": {"type": "string", "enum": ["infinitetalk", "longcat_avatar"]},
+        "engine": {"type": "string", "enum": ["infinitetalk"]},
         "production_id": {"type": "string", "minLength": 1, "maxLength": _ID_MAX},
         "series_id": {"type": "string", "minLength": 1, "maxLength": 120},
         "episode_id": {"type": "string", "minLength": 1, "maxLength": 120},
@@ -419,7 +420,11 @@ def _one_target(payload: dict) -> None:
 
 def _engine(value: Any) -> str:
     if value not in ENGINES:
-        raise MediaToolError("invalid_command", "engine must be infinitetalk or longcat_avatar.")
+        raise MediaToolError(
+            "invalid_command",
+            "engine must be infinitetalk. longcat_avatar does not read the shot video "
+            "(input_frames and image_start are unused), so it is not a lip redo engine.",
+        )
     return str(value)
 
 

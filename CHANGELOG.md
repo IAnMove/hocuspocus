@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a lip redo no longer offers LongCat Avatar.** `longcat_avatar` stays in the model catalog. Its generator declares `input_frames` and `image_start` and never reads them, so a control video does not keep the person in the shot. The redo engine is InfiniteTalk.
+
 **Fixed: a lip redo sends the shot's video and audio as absolute paths.** InfiniteTalk and LongCat are not `wangp_1272` models, so a workspace-relative name was looked up in the process directory and dropped, and the job failed as "Generation failed." The queue now gets the resolved file, and a failed job reports `error`.
 
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).
