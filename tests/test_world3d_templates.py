@@ -475,7 +475,7 @@ def test_the_patch_tool_documents_the_render_look():
     patch = next(item for item in command_catalog() if item["name"] == "world3d.scene.patch")
     fields = patch["inputSchema"]["properties"]["input"]["properties"]
     assert fields["renderLook"]["enum"] == ["none", "n64", "toon"]
-    assert set(fields["toon"]["properties"]) == {"steps", "outline", "ink"}
+    assert set(fields["toon"]["properties"]) == {"steps", "outline", "ink", "shade"}
     assert fields["toon"]["additionalProperties"] is False
 
 

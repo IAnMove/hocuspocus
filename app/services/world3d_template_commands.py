@@ -37,7 +37,8 @@ _RENDER_LOOK = {"enum": ["none", *RENDER_LOOKS], "description": "Whole-frame loo
 _TOON = {"type": "object", "additionalProperties": False, "description": "Settings of renderLook toon, merged into the stored ones.", "properties": {
     "steps": {"type": "integer", "minimum": 2, "maximum": 4, "description": "Light bands (default 3)"},
     "outline": {"type": "number", "minimum": 0, "maximum": 8, "description": "Ink width in pixels of a 1080p frame (default 3; 0 = no ink)"},
-    "ink": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "Ink colour (default #141018)"}}}
+    "ink": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$", "description": "Ink colour (default #141018)"},
+    "shade": {"enum": ["classic", "anime"], "description": "classic: bands of one hue (default). anime: cool-tinted shadow close to the lit colour, no smooth ambient gradient, thin rim of light"}}}
 _MOTION_LAB = {"type": "object", "additionalProperties": False,
                "description": "Native procedural scene controls. A partial patch merges into the stored settings; omitted fields retain their values.",
                "properties": {

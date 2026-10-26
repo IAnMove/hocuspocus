@@ -301,6 +301,8 @@ export type Scene3DToon = {
   outline?: number
   /** Ink colour, `#rrggbb`. */
   ink?: string
+  /** `classic` bands of one hue, or `anime`: tinted shadows, no smooth ambient gradient and a thin rim of light. */
+  shade?: 'classic' | 'anime'
 }
 
 export type Scene3DDocument = {

@@ -8,6 +8,7 @@ import {
   MeshToonMaterial,
   NearestFilter,
   RedFormat,
+  ShaderChunk,
   ShaderMaterial,
   SkinnedMesh,
   UniformsLib,
@@ -31,12 +32,17 @@ and an inverted-hull ink outline, renders, and puts the authored materials back.
 switching the look off leaves the scene exactly as authored. A 2D face cap stays flat: no cel shader and no ink hull.
 */
 
-export type ToonSettings = { steps: number; outline: number; ink: string }
+export type ToonShade = 'classic' | 'anime'
+export type ToonSettings = { steps: number; outline: number; ink: string; shade: ToonShade }
 export type ToonTarget = { root: Object3D; outline: boolean }
 
-export const DEFAULT_TOON: ToonSettings = { steps: 3, outline: 3, ink: '#141018' }
+export const DEFAULT_TOON: ToonSettings = { steps: 3, outline: 3, ink: '#141018', shade: 'classic' }
 /** Light of the darkest band; the others are spread evenly up to full light. */
 const SHADOW_BAND = 0.3
+/** The anime shade keeps its shadow close to the lit colour and gives it a cool tint, as cel shadows are painted. */
+const ANIME_SHADOW_BAND = 0.74
+const ANIME_SHADOW_TINT = 'vec3( 0.80, 0.72, 0.95 )'
+const ANIME_RIM = 0.32
 /** Ink widths are pixels of a 1080-pixel-high frame, so preview and any export size match. */
 const REFERENCE_HALF_HEIGHT = 540
 /** Lines keep their full width up to this distance in metres and thin out beyond it, down to INK_FLOOR. */
@@ -61,10 +67,12 @@ export function parseToon(raw: unknown): Scene3DToon | undefined {
   const steps = bounded(value.steps, 2, 4)
   const outline = bounded(value.outline, 0, 8)
   const ink = typeof value.ink === 'string' && HEX.test(value.ink) ? value.ink.toLowerCase() : undefined
+  const shade = value.shade === 'anime' || value.shade === 'classic' ? value.shade : undefined
   return {
     ...(steps !== undefined ? { steps: Math.round(steps) } : {}),
     ...(outline !== undefined ? { outline: Math.round(outline * 100) / 100 } : {}),
     ...(ink ? { ink } : {}),
+    ...(shade ? { shade } : {}),
   }
 }
 
@@ -79,9 +87,9 @@ export function resolveToon(document: Pick<Scene3DDocument, 'renderLook' | 'toon
 }
 
 /** `steps` flat bands of light, sampled without filtering so the terminator stays a hard edge. */
-export function toonGradient(steps: number): DataTexture {
+export function toonGradient(steps: number, band = SHADOW_BAND): DataTexture {
   const data = new Uint8Array(steps)
-  for (let i = 0; i < steps; i += 1) data[i] = Math.round(255 * (SHADOW_BAND + (1 - SHADOW_BAND) * i / (steps - 1)))
+  for (let i = 0; i < steps; i += 1) data[i] = Math.round(255 * (band + (1 - band) * i / (steps - 1)))
   const texture = new DataTexture(data, steps, 1, RedFormat)
   texture.minFilter = NearestFilter
   texture.magFilter = NearestFilter
@@ -152,14 +160,38 @@ export function withEnvironmentFill(shader: { uniforms: Record<string, unknown>;
     .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse += toonFill * BRDF_Lambert( material.diffuseColor );')
 }
 
+/** The anime shade, patched into three's toon shader:
+ * - the hemisphere light is dropped (it adds a smooth gradient that blurs the bands; the flat fill replaces it);
+ * - a shadow band is tinted cool instead of only darker;
+ * - a thin hard rim of light shows on the edge turned towards the key light. */
+export function withAnimeShade(shader: { fragmentShader: string }) {
+  const hemisphere = 'irradiance += getHemisphereLightIrradiance( hemisphereLights[ i ], geometryNormal );'
+  const gradient = 'return vec3( texture2D( gradientMap, coord ).r );'
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <lights_fragment_begin>', ShaderChunk.lights_fragment_begin.replace(hemisphere, ''))
+    .replace('#include <gradientmap_pars_fragment>', ShaderChunk.gradientmap_pars_fragment.replace(gradient,
+      `float g = texture2D( gradientMap, coord ).r;
+		float lit = clamp( ( g - ${ANIME_SHADOW_BAND.toFixed(2)} ) / ${(1 - ANIME_SHADOW_BAND).toFixed(2)}, 0.0, 1.0 );
+		return vec3( g ) * mix( ${ANIME_SHADOW_TINT}, vec3( 1.0 ), lit );`))
+    .replace('#include <opaque_fragment>', `#if NUM_DIR_LIGHTS > 0
+	float rimFacing = clamp( dot( geometryNormal, directionalLights[ 0 ].direction ) + 0.3, 0.0, 1.0 );
+	#else
+	float rimFacing = 1.0;
+	#endif
+	float rimEdge = smoothstep( 0.62, 0.68, 1.0 - clamp( dot( geometryNormal, geometryViewDir ), 0.0, 1.0 ) );
+	outgoingLight += vec3( 1.0, 0.97, 0.92 ) * rimEdge * rimFacing * ${ANIME_RIM.toFixed(2)};
+	#include <opaque_fragment>`)
+}
+
 /** A toon copy that also runs the authored material's shader patches (speech faces, materialization). */
-export function toonMaterialFor(source: LitMaterial, fill: ToonFill = { value: new Color(0) }): MeshToonMaterial {
+export function toonMaterialFor(source: LitMaterial, fill: ToonFill = { value: new Color(0) }, shade: ToonShade = 'classic'): MeshToonMaterial {
   const toon = new MeshToonMaterial()
   toon.onBeforeCompile = (shader, renderer) => {
     source.onBeforeCompile(shader, renderer)
     withEnvironmentFill(shader, fill)
+    if (shade === 'anime') withAnimeShade(shader)
   }
-  toon.customProgramCacheKey = () => `toon-fill:${source.customProgramCacheKey()}`
+  toon.customProgramCacheKey = () => `toon-${shade}-fill:${source.customProgramCacheKey()}`
   mirror(source, toon)
   return toon
 }
@@ -327,13 +359,13 @@ function lendNormals(geometry: BufferGeometry): BufferGeometry | undefined {
   return geometry
 }
 
-type Converted = { toon: MeshToonMaterial; key: string; pass: number }
+type Converted = { toon: MeshToonMaterial; key: string; pass: number; shade: ToonShade }
 type Swap = { mesh: Mesh; material: Mesh['material']; hull?: Mesh; normals?: BufferGeometry }
 
 export class ToonLook {
   private settings: ToonSettings | null = null
   private targets: readonly ToonTarget[] = []
-  private gradient?: { steps: number; texture: DataTexture }
+  private gradient?: { steps: number; shade: ToonShade; texture: DataTexture }
   private converted = new Map<Material, Converted>()
   private hulls = new Map<Mesh, { hull: Mesh; pass: number }>()
   private ink?: ShaderMaterial
@@ -400,14 +432,15 @@ export class ToonLook {
   private convert(source: Material, settings: ToonSettings): Material {
     if (!isLitMaterial(source)) return source
     let entry = this.converted.get(source)
+    if (entry && entry.shade !== settings.shade) { entry.toon.dispose(); this.converted.delete(source); entry = undefined }
     if (!entry) {
-      entry = { toon: toonMaterialFor(source, this.fill), key: programKey(source), pass: 0 }
+      entry = { toon: toonMaterialFor(source, this.fill, settings.shade), key: programKey(source), pass: 0, shade: settings.shade }
       this.converted.set(source, entry)
     }
     if (entry.pass !== this.pass) {
       entry.pass = this.pass
       mirror(source, entry.toon)
-      entry.toon.gradientMap = this.gradientFor(settings.steps)
+      entry.toon.gradientMap = this.gradientFor(settings.steps, settings.shade)
       const key = programKey(source)
       if (key !== entry.key) { entry.key = key; entry.toon.needsUpdate = true }
     }
@@ -445,10 +478,10 @@ export class ToonLook {
     return this.hidden
   }
 
-  private gradientFor(steps: number): DataTexture {
-    if (this.gradient?.steps !== steps) {
+  private gradientFor(steps: number, shade: ToonShade): DataTexture {
+    if (this.gradient?.steps !== steps || this.gradient.shade !== shade) {
       this.gradient?.texture.dispose()
-      this.gradient = { steps, texture: toonGradient(steps) }
+      this.gradient = { steps, shade, texture: toonGradient(steps, shade === 'anime' ? ANIME_SHADOW_BAND : SHADOW_BAND) }
     }
     return this.gradient.texture
   }
