@@ -148,8 +148,8 @@ def _score_offset(guides: dict) -> float:
 def score_take(video: str, audio: str, offset: float, span: tuple[float, float] | None) -> dict[str, Any]:
     try:
         result = measure_lips(video, audio, offset, span)
-    except Exception:
-        return {"verdict": "unreliable", "reason": "qa_unavailable"}
+    except Exception as exc:
+        return {"verdict": "unreliable", "reason": f"qa_error:{type(exc).__name__}"}
     if not isinstance(result, dict) or not result.get("verdict"):
         return {"verdict": "unreliable", "reason": "qa_unavailable"}
     return result

@@ -47,7 +47,7 @@ def verdict(face_conf: float, best_r: float, lag_s: float) -> str:
 class _Pose:
     def __init__(self) -> None:
         import onnxruntime as ort
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        providers = ["CPUExecutionProvider"]
         self.det = ort.InferenceSession(str(POSE / "yolox_l.onnx"), providers=providers)
         self.pose = ort.InferenceSession(str(POSE / "dw-ll_ucoco_384.onnx"), providers=providers)
 

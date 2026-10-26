@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a lip-sync QA failure names the exception, and DWPose stays on CPU.** `score_take` used to hide every error as `qa_unavailable`. It now returns `qa_error:<class>`. The pose session asks only for `CPUExecutionProvider`.
+
 **Fixed: a lip redo deletes the temporary audio it cut.** The span cut and the placed series line (`lipsync-audio*.wav`) are removed when the call ends.
 
 **Fixed: a lip redo saves with the same locks as the other writers.** A production take now holds the music/Director edit slot, bumps `shots.json` revision, and refuses a stale `expected_revision`. A series take uses the series library lock, and it checks that the shot exists before copying the file.

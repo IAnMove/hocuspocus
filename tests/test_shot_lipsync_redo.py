@@ -271,7 +271,7 @@ def test_a_qa_failure_still_keeps_the_take_and_says_unreliable(tmp_path, monkeyp
 
     monkeypatch.setattr(redo, "measure_lips", explode)
     result = _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "clip": "closeup.mp4", "audio": "voice.wav"})["result"]
-    assert result["verdict"] == "unreliable" and result["qa"]["reason"] == "qa_unavailable"
+    assert result["verdict"] == "unreliable" and result["qa"]["reason"] == "qa_error:RuntimeError"
     assert (folder / result["file"]).is_file() and (folder / "closeup.mp4").read_bytes() == original
 
 
@@ -639,6 +639,35 @@ def test_a_series_save_uses_the_library_lock(tmp_path, monkeypatch):
         "series_id": series_id, "episode_id": episode_id, "shot": "s1", "original_name": "original.mp4", "video": "original.mp4",
     }, str(folder / "out.mp4"), {"verdict": "ok"}, "infinitetalk")
     assert held == [True]
+
+
+def test_a_qa_error_names_the_exception(tmp_path, monkeypatch):
+    """Any pose failure used to collapse to qa_unavailable, with no class name."""
+    folder = tmp_path / "film"
+    _movie(folder, "closeup.mp4", 1)
+    (folder / "voice.wav").write_bytes(b"wav")
+    _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "measure_lips", lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("pose model missing")))
+    result = _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "clip": "closeup.mp4", "audio": "voice.wav"})["result"]
+    assert result["qa"]["reason"] == "qa_error:RuntimeError"
+
+
+def test_dwpose_asks_for_the_cpu_provider():
+    import onnxruntime as ort
+    from services.lipsync_qa import _Pose
+    seen = []
+
+    def session(_path, providers):
+        seen.append(tuple(providers))
+        return object()
+
+    original = ort.InferenceSession
+    ort.InferenceSession = session
+    try:
+        _Pose()
+    finally:
+        ort.InferenceSession = original
+    assert seen == [("CPUExecutionProvider",), ("CPUExecutionProvider",)]
 
 
 def test_the_trimmed_span_wav_is_removed(tmp_path, monkeypatch):
