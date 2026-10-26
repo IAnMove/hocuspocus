@@ -12,6 +12,7 @@ export const WORLD3D_TEMPLATE_OPERATIONS = [
   'world3d.scene.patch',
   'world3d.scene.beats',
   'world3d.scene.talk',
+  'world3d.scene.face',
   'world3d.scene.preview',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
@@ -24,6 +25,7 @@ export const WORLD3D_TEMPLATE_MUTATIONS = [
   'world3d.scene.patch',
   'world3d.scene.beats',
   'world3d.scene.talk',
+  'world3d.scene.face',
   'world3d.scene.publish',
   'world3d.scene.apply_query',
   'scene3d.comic.transition',
@@ -39,6 +41,7 @@ const MOUNT_SCENE_OPERATIONS = new Set<string>([
   'world3d.scene.patch',
   'world3d.scene.beats',
   'world3d.scene.talk',
+  'world3d.scene.face',
 ])
 
 export function shouldMountWorld3DScene(operation: string): boolean {

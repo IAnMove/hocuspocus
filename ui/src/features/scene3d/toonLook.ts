@@ -21,13 +21,14 @@ import {
   type Object3D,
 } from 'three'
 import type { Scene3DDocument, Scene3DToon } from './types'
+import { isFaceDecal } from './faceDecal'
 
 /** Cel shading and ink outlines for model slots (`renderLook: 'toon'`).
 
 The look is swapped in only around a draw: `ToonLook.draw` gives every mesh under the model roots a `MeshToonMaterial`
 and an inverted-hull ink outline, renders, and puts the authored materials back. Code that runs between frames
 (speech faces, materialization, picking, bounds, shadows) never sees a toon material or an outline mesh, and
-switching the look off leaves the scene exactly as authored.
+switching the look off leaves the scene exactly as authored. A 2D face cap stays flat: no cel shader and no ink hull.
 */
 
 export type ToonSettings = { steps: number; outline: number; ink: string }
@@ -380,7 +381,7 @@ export class ToonLook {
     const meshes: { mesh: Mesh; outline: boolean }[] = []
     for (const target of this.targets) {
       target.root.traverse(object => {
-        if ((object as Mesh).isMesh && !HULLS.has(object)) meshes.push({ mesh: object as Mesh, outline: target.outline && settings.outline > 0 })
+        if ((object as Mesh).isMesh && !HULLS.has(object) && !isFaceDecal(object)) meshes.push({ mesh: object as Mesh, outline: target.outline && settings.outline > 0 })
       })
     }
     const swaps: Swap[] = []

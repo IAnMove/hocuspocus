@@ -51,6 +51,7 @@ import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities
 import { registerSeriesShotCardCapabilities } from './seriesShotCardCapabilities'
 import { registerSeriesStageCapabilities } from './seriesStageCapabilities'
 import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
+import { registerCharacterFaceCapabilities } from './characterFaceCapabilities'
 import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerLipsyncRedoCapabilities } from './lipsyncRedoCapabilities'
@@ -1222,6 +1223,7 @@ registerSeriesShotEditCapabilities(defineCapability)
 registerSeriesShotCardCapabilities(defineCapability)
 registerSeriesStageCapabilities(defineCapability)
 registerCharacterAnimationCapabilities(defineCapability)
+registerCharacterFaceCapabilities(defineCapability)
 registerVoiceBandCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)
 registerLipsyncRedoCapabilities(defineCapability)

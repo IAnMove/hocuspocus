@@ -24,6 +24,7 @@ export const AGENT_ACTION_TYPES = [
   'check_series_location_stage',
   'make_character_animation',
   'make_character_animation_set',
+  'make_character_face',
   'review_character_animation',
   'set_voice_band',
   'media_tool',

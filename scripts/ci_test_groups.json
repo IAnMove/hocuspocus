@@ -664,6 +664,8 @@
         "tests/test_world3d_scene_collisions.py",
         "tests/test_world3d_world_fx.py",
         "tests/test_minimax_h3_fasth3.py",
+        "tests/test_blob_face.py",
+        "tests/test_blob_face_scene.py",
         "tests/test_cc0_props.py"
       ]
     }
@@ -848,7 +850,8 @@
       "prefix": "app/routers/character_kit_library.py",
       "paths": [
         "tests/test_flat_rig.py",
-        "tests/test_character_kit_library_router.py"
+        "tests/test_character_kit_library_router.py",
+        "tests/test_blob_face_scene.py"
       ]
     },
     {
@@ -1505,7 +1508,8 @@
       "paths": [
         "tests/test_world3d_motionlab.py",
         "tests/test_world3d_templates.py",
-        "tests/test_cc0_props.py"
+        "tests/test_cc0_props.py",
+        "tests/test_blob_face_scene.py"
       ]
     },
     {
@@ -2601,7 +2605,8 @@
       "paths": [
         "tests/test_game_profile.py",
         "tests/test_series_agent_fixes.py",
-        "tests/test_blob_body.py"
+        "tests/test_blob_body.py",
+        "tests/test_blob_face_scene.py"
       ]
     },
     {
@@ -3244,6 +3249,38 @@
       "prefix": "tests/fixtures/fasth3_checkpoint_headers.json",
       "paths": [
         "tests/test_minimax_h3_fasth3.py"
+      ]
+    },
+    {
+      "prefix": "app/services/blob_face.py",
+      "paths": [
+        "tests/test_blob_face.py",
+        "tests/test_blob_face_scene.py"
+      ]
+    },
+    {
+      "prefix": "app/services/blob_face_place.py",
+      "paths": [
+        "tests/test_blob_face_scene.py"
+      ]
+    },
+    {
+      "prefix": "app/services/blob_face_scene.py",
+      "paths": [
+        "tests/test_blob_face_scene.py"
+      ]
+    },
+    {
+      "prefix": "app/services/blob_face_commands.py",
+      "paths": [
+        "tests/test_blob_face_scene.py"
+      ]
+    },
+    {
+      "prefix": "app/services/world3d_talk.py",
+      "paths": [
+        "tests/test_world3d_talk.py",
+        "tests/test_blob_face_scene.py"
       ]
     }
   ]
