@@ -4,6 +4,7 @@ import { deflateSync } from 'node:zlib'
 import { createHash } from 'node:crypto'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
 import { buildComicPair } from '../src/features/scene3d/comicPage.ts'
+import { chooseComicLayout, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
 import { renderScene3DSoftware } from '../src/features/scene3d/softwareRender.ts'
 import { turnPicturesToCamera } from '../src/features/scene3d/pictureStandIn.ts'
@@ -13,7 +14,8 @@ if (command === 'document') write(compileDocument(process.argv[3]))
 else if (command === 'preview') write(preview(JSON.parse(readFileSync(0, 'utf8'))))
 else if (command === 'turn-pictures') write(turnPictures(JSON.parse(readFileSync(0, 'utf8'))))
 else if (command === 'comic') write(compileComic(JSON.parse(readFileSync(0, 'utf8'))))
-else throw new Error('use document <id>, preview, turn-pictures or comic')
+else if (command === 'comic-layout') write(compileLayout(JSON.parse(readFileSync(0, 'utf8'))))
+else throw new Error('use document <id>, preview, turn-pictures, comic or comic-layout')
 
 function compileDocument(id) {
   let document
@@ -26,6 +28,15 @@ function compileDocument(id) {
   const parsed = parseScene3DDocument(document)
   if (!parsed || parsed.templateId !== id) throw new Error(`unknown_template:${id}`)
   return parsed
+}
+
+function compileLayout(body) {
+  const layout = chooseComicLayout(body.format, body.count, body.seed ?? 0, body.fromPanel, body.toPanel)
+  const pixels = paintComicPage(layout)
+  return {
+    pageW: layout.pageW, pageH: layout.pageH, cells: layout.cells,
+    png: encodePng(layout.pageW, layout.pageH, pixels).toString('base64'),
+  }
 }
 
 function compileComic(body) {

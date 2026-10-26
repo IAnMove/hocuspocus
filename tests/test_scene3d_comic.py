@@ -14,10 +14,6 @@ from services.scene3d_comic import bind_comic_exporter
 from services.scene3d_comic_cutout import bind_comic_cutout
 from services.world3d_template_commands import command_catalog, execute_command
 
-ROOT = Path(__file__).resolve().parents[1]
-FILLER = ROOT / "ui" / "public" / "scene3d" / "comic"
-
-
 def _paint_cutout(source, dest):
     image = Image.open(source).convert("RGBA")
     pixels = image.load()
@@ -47,14 +43,23 @@ class _FakeExport:
         return {"name": f"{output_name}.mp4", "url": f"/api/v1/file/{output_name}.mp4?workspace={workspace}"}
 
 
-def _panels(cutout=False):
+def _panels(tmp_path, count=4, cutout=False):
+    folder = tmp_path / "sources"
+    folder.mkdir(exist_ok=True)
     panels = []
-    for index in range(4):
-        image = str(FILLER / f"panel-landscape-{index}.png")
+    for index in range(count):
+        path = folder / f"frame-{index}.png"
+        Image.new("RGB", (64, 36), (40 + index * 30, 80, 120)).save(path)
         if cutout and index == 1:
-            panels.append({"image": image, "cutout": str(FILLER / "cutout-landscape.png")})
+            mask = folder / "hero-cutout.png"
+            image = Image.new("RGBA", (64, 36), (0, 0, 0, 0))
+            for y in range(8, 28):
+                for x in range(12, 52):
+                    image.putpixel((x, y), (196, 90, 74, 255))
+            image.save(mask)
+            panels.append({"image": str(path), "cutout": str(mask)})
         else:
-            panels.append(image)
+            panels.append(str(path))
     return panels
 
 
@@ -114,7 +119,7 @@ def test_the_operation_is_in_the_shared_catalog():
 
 def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_exporter(tmp_path):
     bind_comic_exporter(_FakeExport())
-    reply = _call(tmp_path, _panels(cutout=True), export=True)
+    reply = _call(tmp_path, _panels(tmp_path, cutout=True), export=True)
     assert reply["status"] == "completed"
     scenes = reply["result"]["scenes"]
     assert [scene["role"] for scene in scenes] == ["exit", "enter"]
@@ -142,7 +147,7 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
 
 
 def test_the_wide_pose_is_shared_and_the_durations_are_parameters(tmp_path):
-    reply = _call(tmp_path, _panels(), intent="comic-arc", exit_duration=2.2, enter_duration=2.0, hold=0.5)
+    reply = _call(tmp_path, _panels(tmp_path), intent="comic-arc", exit_duration=2.2, enter_duration=2.0, hold=0.5)
     exit_doc, enter_doc = _documents(tmp_path, reply["result"]["scenes"])
     assert exit_doc["duration"] == pytest.approx(2.2)
     assert enter_doc["duration"] == pytest.approx(2.0)
@@ -159,35 +164,51 @@ def test_the_wide_pose_is_shared_and_the_durations_are_parameters(tmp_path):
 
 def test_a_hold_that_eats_the_move_is_rejected(tmp_path):
     with pytest.raises(HTTPException) as eaten:
-        _call(tmp_path, _panels(), intent="comic-hold", hold=1.8)
+        _call(tmp_path, _panels(tmp_path), intent="comic-hold", hold=1.8)
     assert eaten.value.status_code == 422 and eaten.value.detail["code"] == "invalid_duration"
     assert _written(tmp_path) == []
 
 
 def test_a_missing_source_and_a_missing_exporter_write_nothing(tmp_path):
-    broken = _panels()
+    broken = _panels(tmp_path)
     broken[0] = {"video": str(tmp_path / "missing.mp4"), "at": 60}
     with pytest.raises(HTTPException) as missing:
         _call(tmp_path, broken, export=False, intent="comic-missing")
     assert missing.value.status_code == 422 and missing.value.detail["code"] == "missing_source"
     assert _written(tmp_path) == []
     with pytest.raises(HTTPException) as offline:
-        _call(tmp_path, _panels(), export=True, intent="comic-offline")
+        _call(tmp_path, _panels(tmp_path), export=True, intent="comic-offline")
     assert offline.value.status_code == 503 and offline.value.detail["code"] == "export_unavailable"
     assert _written(tmp_path) == []
 
 
 def test_an_empty_cutout_leaves_the_panel_flat_and_warns(tmp_path):
     bind_comic_cutout(lambda _source, _dest: None)
-    reply = _call(tmp_path, _panels(), export=False, intent="comic-empty")
+    reply = _call(tmp_path, _panels(tmp_path), export=False, intent="comic-empty")
     assert reply["result"]["warnings"]
     assert all("cutout unavailable" in warning for warning in reply["result"]["warnings"])
     stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
     assert [slot["id"] for slot in stored["document"]["slots"] if slot["id"].startswith("cutout")] == []
 
 
-def test_five_panels_are_rejected(tmp_path):
-    with pytest.raises(HTTPException) as counted:
-        _call(tmp_path, _panels() + [_panels()[0]], intent="comic-five")
-    assert counted.value.status_code == 422 and counted.value.detail["code"] == "panel_count"
+def test_two_or_seven_panels_are_rejected(tmp_path):
+    with pytest.raises(HTTPException) as few:
+        _call(tmp_path, _panels(tmp_path, 3)[:2], intent="comic-two")
+    assert few.value.status_code == 422 and few.value.detail["code"] == "panel_count"
+    with pytest.raises(HTTPException) as many:
+        _call(tmp_path, _panels(tmp_path, 6) + _panels(tmp_path, 1), intent="comic-seven")
+    assert many.value.status_code == 422 and many.value.detail["code"] == "panel_count"
     assert _written(tmp_path) == []
+
+
+def test_five_panels_keep_the_cut_aspect_and_crop_the_rest(tmp_path):
+    reply = _call(tmp_path, _panels(tmp_path, 5), intent="comic-five", seed=1, to_panel=4)
+    cells = reply["result"]["layout"]["cells"]
+    assert [index for index, cell in enumerate(cells) if cell["hero"]] == [0, 4]
+    for index, cell in enumerate(cells):
+        image = Image.open(tmp_path / "studio" / f"comic-panel-{index}.png")
+        assert image.size == (cell["w"], cell["h"])
+        assert (image.size[0] * 9 == image.size[1] * 16) is bool(cell["hero"])
+    stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
+    panel = next(slot for slot in stored["document"]["slots"] if slot["id"] == "panel-0")
+    assert panel["scale"] == pytest.approx(cells[0]["h"] * 0.00125 / 2)

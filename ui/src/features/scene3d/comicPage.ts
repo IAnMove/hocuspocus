@@ -1,5 +1,6 @@
 import { createDefaultScene3DDocument } from './document.ts'
 import { framingFov, framingPose, framingProgress } from './framing.ts'
+import { chooseComicLayout } from './comicLayout.ts'
 import { COMIC_TEMPLATE_IDS, type ComicTemplateId } from './comicTemplateIds.ts'
 import type { Scene3DCamera, Scene3DDocument, Scene3DFraming, Scene3DSlot, Vec3 } from './types.ts'
 
@@ -16,6 +17,7 @@ export type ComicPairInput = {
   panels?: ComicPanelInput[]
   fromPanel?: number
   toPanel?: number
+  seed?: number
   exitDuration?: number
   enterDuration?: number
   hold?: number
@@ -24,12 +26,7 @@ export type ComicPairInput = {
 }
 export type ComicCardCopy = { title: string; description: string; requirements: string[] }
 
-/** 2×2 page. A uniform gutter cannot keep every panel at the frame aspect and the page at 16:9, so the page is a few percent off and the wide pose fits it inside the frame. */
-const GRID = {
-  landscape: { panelW: 640, panelH: 360, gutter: 16, margin: 28 },
-  portrait: { panelW: 360, panelH: 640, gutter: 16, margin: 28 },
-} as const
-
+/** Catalogue page: four panels, seed 0, the first and last panels are the cut. */
 export const COMIC_PANEL_COUNT = 4
 /** Metres per filler pixel. A landscape panel is 0.8 × 0.45 m. */
 export const COMIC_METERS_PER_PIXEL = 0.00125
@@ -52,15 +49,14 @@ export const COMIC_POP_SHIFT = 0.16
 
 const PAPER_PAGE = { en: 'Paper page (included)', es: 'Página de papel (incluida)' }
 const FOUR_PANELS = {
-  en: 'Four panel images with the video frame\'s aspect',
-  es: 'Cuatro imágenes de viñeta con el aspecto del fotograma',
+  en: 'Three to six panel images; the two cut frames keep the video\'s aspect',
+  es: 'De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo',
 }
 const CUTOUT_NOTE = {
   en: 'A subject cutout 4 cm in front of each panel, scaled so the fill frame still matches',
   es: 'Un recorte del sujeto a 4 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo',
 }
 
-type Grid = { panelW: number; panelH: number; gutter: number; margin: number; pageW: number; pageH: number }
 type Placed = { x: number; y: number; z: number; scale: number; aspect: number }
 type PageLayout = { pageW: number; pageH: number; pageScale: number; panels: Placed[] }
 type Pose = { eye: Vec3; look: Vec3; fov: number }
@@ -77,14 +73,10 @@ export function comicRoleOf(id: string): ComicRole {
   return id.includes('enter') ? 'enter' : 'exit'
 }
 
-/** Pixel size of the authored page. Panel pixels are exactly 16:9 or 9:16, so a panel can fill the frame. */
-export function comicPagePixels(format: ComicFormat): Grid {
-  const grid = GRID[format]
-  return {
-    ...grid,
-    pageW: grid.margin * 2 + grid.panelW * 2 + grid.gutter,
-    pageH: grid.margin * 2 + grid.panelH * 2 + grid.gutter,
-  }
+/** Pixel size of the catalogue page (four panels, seed 0, cut on the first and last). */
+export function comicPagePixels(format: ComicFormat) {
+  const layout = chooseComicLayout(format, COMIC_PANEL_COUNT, 0, 0, COMIC_PANEL_COUNT - 1)
+  return { pageW: layout.pageW, pageH: layout.pageH, cells: layout.cells }
 }
 
 export function comicCatalogueSize(format: ComicFormat): { width: number; height: number } {
@@ -128,21 +120,18 @@ function meters(pixels: number): number {
   return pixels * COMIC_METERS_PER_PIXEL
 }
 
-function layoutOf(format: ComicFormat): PageLayout {
-  const px = comicPagePixels(format)
+function layoutOf(format: ComicFormat, count = COMIC_PANEL_COUNT, seed = 0, from = 0, to = count - 1): PageLayout {
+  const px = chooseComicLayout(format, count, seed, from, to)
   const pageW = meters(px.pageW)
   const pageH = meters(px.pageH)
-  const panelW = meters(px.panelW)
-  const panelH = meters(px.panelH)
-  const gutter = meters(px.gutter)
-  const margin = meters(px.margin)
-  const left = -pageW / 2
-  const panels = [0, 1, 2, 3].map(index => {
-    const col = index % 2
-    const row = Math.floor(index / 2)
-    const x = left + margin + panelW / 2 + col * (panelW + gutter)
-    const top = pageH - margin - row * (panelH + gutter)
-    return { x, y: top - panelH, z: COMIC_PANEL_Z, scale: panelH / 2, aspect: panelW / panelH }
+  const panels = px.cells.map(cell => {
+    const panelW = meters(cell.w)
+    const panelH = meters(cell.h)
+    return {
+      x: -pageW / 2 + meters(cell.x) + panelW / 2,
+      y: meters(px.pageH - cell.y - cell.h),
+      z: COMIC_PANEL_Z, scale: panelH / 2, aspect: cell.w / cell.h,
+    }
   })
   return { pageW, pageH, pageScale: pageH / 2, panels }
 }
@@ -174,23 +163,25 @@ export function comicSlotCenter(slot: Scene3DSlot): Vec3 {
   return [slot.position[0], slot.position[1] + slot.scale, slot.position[2]]
 }
 
-function filler(format: ComicFormat) {
+function pagePicture(format: ComicFormat): string {
+  return `/scene3d/comic/page-${format === 'portrait' ? 'portrait' : 'landscape'}.png`
+}
+
+function filler(format: ComicFormat): ComicPanelInput[] {
   const tag = format === 'portrait' ? 'portrait' : 'landscape'
-  return {
-    page: `/scene3d/comic/page-${tag}.png`,
-    panels: [0, 1, 2, 3].map(index => `/scene3d/comic/panel-${tag}-${index}.png`),
-    cutout: `/scene3d/comic/cutout-${tag}.png`,
-  }
+  return [0, 1, 2, 3].map(index => ({
+    url: `/scene3d/comic/panel-${tag}-${index}.png`,
+    cutout: `/scene3d/comic/cutout-${tag}-${index}.png`,
+  }))
 }
 
-function panelSources(input: ComicPairInput, format: ComicFormat): ComicPanelInput[] {
-  if (input.panels && input.panels.length === COMIC_PANEL_COUNT) return input.panels
-  const stock = filler(format)
-  return stock.panels.map(url => ({ url, cutout: stock.cutout }))
+function panelSources(input: ComicPairInput, format: ComicFormat, count: number): ComicPanelInput[] {
+  if (input.panels && input.panels.length === count) return input.panels
+  return filler(format)
 }
 
-function requireIndex(value: number): number {
-  if (!Number.isInteger(value) || value < 0 || value >= COMIC_PANEL_COUNT) throw new Error('panel_index')
+function requireIndex(value: number, count: number): number {
+  if (!Number.isInteger(value) || value < 0 || value >= count) throw new Error('panel_index')
   return value
 }
 
@@ -274,13 +265,15 @@ export function comicTemplateId(role: ComicRole, format: ComicFormat): ComicTemp
 /** Exit starts filling `fromPanel` and ends on the wide page. Enter starts on that same wide pose and ends filling `toPanel`. */
 export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; enter: Scene3DDocument } {
   const format: ComicFormat = input.format === 'portrait' ? 'portrait' : 'landscape'
-  const fromPanel = requireIndex(input.fromPanel ?? 0)
-  const toPanel = requireIndex(input.toPanel ?? 3)
+  const count = input.panels ? input.panels.length : COMIC_PANEL_COUNT
+  const fromPanel = requireIndex(input.fromPanel ?? 0, count)
+  const toPanel = requireIndex(input.toPanel ?? count - 1, count)
   if (fromPanel === toPanel) throw new Error('same_panel')
+  const seed = input.seed ?? 0
   const size = input.width && input.height ? { width: input.width, height: input.height } : comicCatalogueSize(format)
-  const layout = layoutOf(format)
-  const sources = panelSources(input, format)
-  const pageUrl = input.pageUrl || filler(format).page
+  const layout = layoutOf(format, count, seed, fromPanel, toPanel)
+  const sources = panelSources(input, format, count)
+  const pageUrl = input.pageUrl || pagePicture(format)
   const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel)
   const yawDeg = input.yawDeg ?? COMIC_YAW_DEG
   const yawArc = input.yawArc ?? COMIC_YAW_ARC

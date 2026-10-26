@@ -4,6 +4,7 @@ import { LinearFilter, LinearMipmapLinearFilter, Texture } from 'three'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
+import { chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
 import {
   COMIC_DURATION,
   COMIC_FOV,
@@ -49,27 +50,47 @@ function pngSize(name: string): [number, number, number] {
   return [buf.readUInt32BE(16), buf.readUInt32BE(20), buf[25]]
 }
 
-test('the page is 2×2 and every panel has the frame aspect', () => {
-  const land = comicPagePixels('landscape')
-  const port = comicPagePixels('portrait')
-  assert.deepEqual([land.pageW, land.pageH], [1352, 792])
-  assert.deepEqual([port.pageW, port.pageH], [792, 1352])
-  assert.equal(land.panelW / land.panelH, 16 / 9)
-  assert.equal(port.panelW / port.panelH, 9 / 16)
+test('the layout keeps the cut panels at the frame aspect', () => {
+  for (const format of ['landscape', 'portrait'] as const) {
+    for (const count of [3, 4, 5, 6]) {
+      const first = chooseComicLayout(format, count, 0, 0, count - 1)
+      const second = chooseComicLayout(format, count, 1, 0, count - 1)
+      assert.notDeepEqual(first.cells.map(cell => [cell.w, cell.h]), second.cells.map(cell => [cell.w, cell.h]), `${format} ${count}`)
+      assert.deepEqual(first, chooseComicLayout(format, count, 2, 0, count - 1))
+      for (const layout of [first, second]) {
+        const heroes = layout.cells.flatMap((cell, index) => cell.hero ? [index] : [])
+        assert.deepEqual(heroes, [0, count - 1])
+        layout.cells.forEach(cell => assert.equal(isFrameAspect(format, cell.w, cell.h), cell.hero))
+        assert.equal(overlaps(layout.cells), false, `${format} ${count}`)
+      }
+    }
+  }
+  const moved = chooseComicLayout('landscape', 5, 0, 2, 4)
+  assert.deepEqual(moved.cells.flatMap((cell, index) => cell.hero ? [index] : []), [2, 4])
+  assert.throws(() => chooseComicLayout('landscape', 2, 0, 0, 1), /panel_count/)
+  assert.throws(() => chooseComicLayout('landscape', 7, 0, 0, 1), /panel_count/)
+  const painted = paintComicPage(chooseComicLayout('landscape', 4, 0, 0, 3))
+  assert.ok(painted[0] < 40, 'the page rim is a dark vignette')
+  assert.ok(painted.length > 1000)
   assert.equal(fillFrameOffset(COMIC_FOV), 1 / Math.tan((COMIC_FOV * Math.PI) / 360))
 })
 
-test('filler pictures match the page pixels and the cutout keeps an alpha channel', () => {
+function overlaps(cells: { x: number; y: number; w: number; h: number }[]) {
+  return cells.some((cell, index) => cells.slice(index + 1).some(other =>
+    cell.x < other.x + other.w && other.x < cell.x + cell.w && cell.y < other.y + other.h && other.y < cell.y + cell.h))
+}
+
+test('filler pictures match the catalogue page and each cutout keeps an alpha channel', () => {
   for (const format of ['landscape', 'portrait'] as const) {
     const px = comicPagePixels(format)
     assert.deepEqual(pngSize(`page-${format}.png`).slice(0, 2), [px.pageW, px.pageH])
-    for (let index = 0; index < 4; index += 1) {
+    px.cells.forEach((cell, index) => {
       const [w, h, kind] = pngSize(`panel-${format}-${index}.png`)
-      assert.deepEqual([w, h, kind], [px.panelW, px.panelH, 6])
-    }
-    const cutout = pngSize(`cutout-${format}.png`)
-    assert.deepEqual(cutout.slice(0, 2), [px.panelW, px.panelH])
-    assert.equal(cutout[2], 6)
+      assert.deepEqual([w, h, kind], [cell.w, cell.h, 6])
+      const cutout = pngSize(`cutout-${format}-${index}.png`)
+      assert.deepEqual(cutout.slice(0, 2), [cell.w, cell.h])
+      assert.equal(cutout[2], 6)
+    })
   }
 })
 
@@ -133,7 +154,7 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     close(enterFill.look, [to.position[0], to.position[1] + to.scale, to.position[2]], 'enter fill look')
     const distance = from.scale * fillFrameOffset(COMIC_FOV)
     assert.ok(Math.abs(exitFill.eye[2] - exitFill.look[2] - distance) < 1e-6)
-    assert.ok(Math.abs(enterFill.eye[2] - enterFill.look[2] - distance) < 1e-9)
+    assert.ok(Math.abs(enterFill.eye[2] - enterFill.look[2] - to.scale * fillFrameOffset(COMIC_FOV)) < 1e-9)
     assert.deepEqual(pair.exit.slots.filter(slot => slot.id.startsWith('cutout')).map(slot => slot.id), ['cutout-0', 'cutout-1', 'cutout-2', 'cutout-3'])
     const matched = pair.exit.slots.find(slot => slot.id === 'cutout-0')!
     const popped = pair.exit.slots.find(slot => slot.id === 'cutout-1')!
@@ -145,7 +166,12 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     assert.ok(Math.abs(factor - (1 - 0.04 / distance)) < 1e-9, 'scale is (D - d) / D')
     assert.ok(Math.abs(matched.scale - from.scale * factor) < 1e-9)
     close(matched.position, placed.position, `${format} compensated cutout`)
-    assert.ok(popped.scale > matched.scale, 'one filler cutout breaks the border')
+    const host = pair.exit.slots.find(slot => slot.id === 'panel-1')!
+    const hostCell = comicPagePixels(format).cells[1]
+    const body = { x: host.position[0], y: host.position[1], z: host.position[2], scale: host.scale, aspect: hostCell.w / hostCell.h }
+    const poppedPlace = comicCutoutPlacement(body, true)
+    assert.ok(popped.scale > comicCutoutPlacement(body, false).scale, 'one filler cutout breaks the border')
+    close(popped.position, poppedPlace.position, `${format} popped cutout`)
     assert.equal(matched.position[2], from.position[2] + 0.04)
     const centerY = from.position[1] + from.scale
     assert.ok(Math.abs(matched.position[1] + matched.scale - centerY) < 1e-9, 'scaled about the fill axis')
