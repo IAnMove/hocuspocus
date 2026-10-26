@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a second lip redo of the same take does not queue another job.** The button and the Wizard send one `intent_id` per shot, take and engine. While that redo is still waiting on the generation job, the server returns `already_running`. The media handler has no queued reply, so the first call still waits until the job finishes.
+
 **Fixed: the lip redo button sends the take it sits on.** A production take row and the series inspector sent only the shot id, so the server redid the current clip. They now send `source` as that take's file. The Wizard is told to pass the same field.
 
 **Fixed: a series lip redo uses the recorded line, not the score.** The score cue is background music and was read from the start of the cue. The redo now places each `ln-<episode>-<beat>-<key>.wav` at the line's start. A shot with no recorded line asks for `audio` instead of guessing.

@@ -131,6 +131,28 @@ test('the Wizard calls shot.lipsync.redo and shows the disk size without downloa
   }
 })
 
+test('the same take repeats one intent id', async () => {
+  const previous = globalThis.fetch
+  const sent: Array<Record<string, unknown>> = []
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    sent.push(JSON.parse(init?.body || '{}'))
+    return { ok: true, status: 200, json: async () => ({ result: { file: 'lipsync.mp4', verdict: 'ok' } }) }
+  }) as typeof fetch
+  try {
+    const input = { workspace: 'film', engine: 'infinitetalk' as const, production_id: 'mv', shot: 'o05', source: 'take-b.mp4' }
+    await runLipsyncRedo(input, () => 'ok')
+    await runLipsyncRedo(input, () => 'ok')
+    await runLipsyncRedo({ ...input, source: 'take-a.mp4' }, () => 'ok')
+    assert.equal(typeof sent[0].intent_id, 'string')
+    assert.equal(sent[0].intent_id, sent[1].intent_id)
+    assert.notEqual(sent[0].intent_id, sent[2].intent_id)
+    assert.match(String(sent[0].intent_id), /take-b\.mp4/)
+    assert.match(String(sent[2].intent_id), /take-a\.mp4/)
+  } finally {
+    globalThis.fetch = previous
+  }
+})
+
 test('confirming the download uses the existing model download', async () => {
   const previous = globalThis.fetch
   const sent: string[] = []

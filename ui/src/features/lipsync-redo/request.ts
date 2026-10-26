@@ -39,6 +39,15 @@ export type LipsyncRead = {
 
 type Note = (key: string, options?: Record<string, unknown>) => string
 
+/** Stable for one workspace, shot, take and engine, so a repeat does not queue a second 14B job. */
+export function lipsyncIntentId(input: LipsyncRedoInput): string {
+  const shot = input.shot || input.clip || 'clip'
+  const take = input.source || input.clip || 'current'
+  const safe = `lipsync.${input.workspace}.${shot}.${take}.${input.engine}`.replace(/[^A-Za-z0-9._:-]+/g, '-')
+  const id = /^[A-Za-z0-9]/.test(safe) ? safe : `lipsync${safe}`
+  return id.slice(0, 160)
+}
+
 export function lipsyncRedoEnvelope(input: LipsyncRedoInput, intentId?: string) {
   return { operation: LIPSYNC_REDO, version: 1 as const, ...(intentId ? { intent_id: intentId } : {}), input }
 }
@@ -100,7 +109,7 @@ export async function postLipsyncRedo(
 }
 
 export async function runLipsyncRedo(input: LipsyncRedoInput, t: Note) {
-  const posted = await postLipsyncRedo(input)
+  const posted = await postLipsyncRedo(input, { intentId: lipsyncIntentId(input) })
   const read = interpretLipsyncReply(posted.status, posted.body)
   const pending = read.kind === 'download' && read.modelType ? { model: read.modelType, bytes: read.bytes || 0 } : null
   return { note: lipsyncNote(read, t), pending, read }

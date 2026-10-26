@@ -501,6 +501,37 @@ def test_a_series_shot_without_a_line_asks_for_audio(tmp_path, monkeypatch):
     assert denied.value.detail["code"] == "audio_required"
 
 
+def test_a_second_redo_of_the_same_take_is_already_running(tmp_path, monkeypatch):
+    """A second click while the first generation is in flight must not queue another 14B job."""
+    import threading
+    folder = tmp_path / "film"
+    _production(folder)
+    started = threading.Event()
+    entered = []
+
+    def _worker(body, dest):
+        entered.append(body["output_name"])
+        started.set()
+        threading.Event().wait(0.3)
+        path = os.path.join(dest, body["output_name"])
+        with open(path, "wb") as handle:
+            handle.write(b"new-lips")
+        return path
+
+    _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "worker", _worker)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    payload = {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05", "source": "gorthak.mp4"}
+    first = threading.Thread(target=lambda: _call(tmp_path, payload))
+    first.start()
+    assert started.wait(5)
+    with pytest.raises(HTTPException) as denied:
+        _call(tmp_path, payload)
+    assert denied.value.status_code == 409 and denied.value.detail["code"] == "already_running"
+    first.join(5)
+    assert len(entered) == 1
+
+
 def test_a_failed_generation_names_the_job_error(tmp_path, monkeypatch):
     folder = tmp_path / "film"
     folder.mkdir()

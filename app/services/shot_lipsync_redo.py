@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -39,7 +40,8 @@ def catalog() -> dict[str, Any]:
         "(a production uses its song when audio is omitted; a series uses its recorded line, "
         "placed at the line's start, and does not use the score cue). "
         "span is [start, end] seconds of that sound. The result is a new take; the selected clip and any "
-        "series approval stay. When the int8 weights are missing the call returns their disk size and does "
+        "series approval stay. The call waits until the job finishes; a second call for the same take while "
+        "that one is running returns already_running and does not queue another. When the int8 weights are missing the call returns their disk size and does "
         "not download; confirm_download true starts the existing model download and does not wait for it. "
         "Returns file, kept_original, verdict (qa.lipsync: ok, retake or unreliable) and qa."
     ), {
@@ -250,6 +252,8 @@ def _server_queue(body: dict, folder: str) -> str:
 
 
 def _wait_job(jobs: dict, job_id: str) -> dict:
+    """Blocks until the job ends. The media handler cannot reply ``queued``, so the request stays open.
+    A second redo of the same take is refused before this wait."""
     while True:
         job = jobs.get(job_id) if isinstance(jobs, dict) else None
         if not isinstance(job, dict):
@@ -565,6 +569,38 @@ def _text(value: Any, field: str) -> str:
 def _safe_token(value: str) -> str:
     safe = "".join(char if char.isalnum() or char in "-_" else "-" for char in value).strip("-")
     return (safe or "shot")[:60]
+
+
+_FLIGHT: set[str] = set()
+_FLIGHT_GUARD = threading.Lock()
+
+
+def flight_key(arguments: Any) -> str | None:
+    """One redo in flight per workspace, shot (or clip), take and engine."""
+    if not isinstance(arguments, dict):
+        return None
+    payload = arguments.get("input")
+    if not isinstance(payload, dict):
+        return None
+    engine, workspace = payload.get("engine"), payload.get("workspace")
+    shot = payload.get("shot") or payload.get("clip")
+    if not isinstance(engine, str) or not isinstance(workspace, str) or not isinstance(shot, str):
+        return None
+    source = payload.get("source") if isinstance(payload.get("source"), str) else ""
+    return f"{workspace}\0{shot}\0{source}\0{engine}"
+
+
+def claim_flight(key: str) -> bool:
+    with _FLIGHT_GUARD:
+        if key in _FLIGHT:
+            return False
+        _FLIGHT.add(key)
+        return True
+
+
+def release_flight(key: str) -> None:
+    with _FLIGHT_GUARD:
+        _FLIGHT.discard(key)
 
 
 class _Request:
