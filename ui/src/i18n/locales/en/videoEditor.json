@@ -280,6 +280,25 @@
       "production": "Director production"
     }
   },
+  "comic": {
+    "toggle": "Comic view",
+    "toggleTitle": "See this montage as comic pages. Edits change the same timeline.",
+    "printed": "Printed",
+    "original": "Original",
+    "loading": "Printing…",
+    "page": "Page {{n}}",
+    "caption": "Caption",
+    "bubble": "Bubble",
+    "none": "No text",
+    "textStyle": "Text",
+    "editText": "Line",
+    "changeTake": "Change take",
+    "pickFrame": "Pick panel",
+    "delete": "Delete",
+    "duplicate": "Duplicate",
+    "empty": "This montage has no clips yet.",
+    "frameAt": "{{time}} s"
+  },
   "actionErrors": {
     "onlyOneDraft": "There is only one Video Editor draft per workspace: “{{name}}”. Ask explicitly to create another project if you want to replace the current draft.",
     "outputMissing": "Output “{{name}}” does not exist in this workspace.",

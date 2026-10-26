@@ -53,10 +53,12 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 | **Director** | Planifica y supervisa producciones de varios planos a partir de una historia o canción. |
 | **Producciones** / **Obras** | Todas las obras del workspace (videoclip, tráiler, capítulo, historia) con su progreso y **Revisar planos**. |
 | **Producciones musicales** | Planos, tomas y montaje de un videoclip; otra toma, usar toma, abrir escena. |
-| **Video Editor** | Recorta, divide y reordena clips existentes; la exportación es una tarea FFmpeg en cola. |
+| **Video Editor** | Recorta, divide y reordena clips existentes; la exportación es una tarea FFmpeg en cola. **Vista cómic** es el mismo montaje en páginas. |
 
 Si algo se interrumpe a mitad, entra en **Producciones** y reanuda: no hace falta
 empezar de cero.
+
+see a montage as a comic with `montages.comic.panels`; edits are `montages.save`.
 
 ## Agentes y MCP
 

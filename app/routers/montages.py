@@ -73,6 +73,13 @@ def create_montages_router(commands: MontageCommands) -> APIRouter:
         return await run("montages.shot.select",
                          {"file": file, "clip_id": clip_id, **{key: value for key, value in payload.items() if key in allowed}})
 
+    @router.post("/api/v1/montages/{file}/comic/panels")
+    async def comic_panels(file: str, request: Request):
+        payload = await body(request)
+        allowed = {"workspace", "clip_ids", "frames"}
+        return await run("montages.comic.panels",
+                         {"file": file, **{key: value for key, value in payload.items() if key in allowed}})
+
     @router.post("/api/v1/montages/{file}/export", status_code=202)
     async def export_montage(file: str, workspace: str):
         return await run("montages.export", {"workspace": workspace, "file": file})

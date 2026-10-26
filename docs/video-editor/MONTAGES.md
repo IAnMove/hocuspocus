@@ -87,6 +87,7 @@ and `duck`.
 | `montages.export.status` | `GET /api/v1/video-editor/export/{job_id}` |
 | `montages.preview` | MCP only. One contact sheet of up to 8 instants across the whole montage. `{workspace, file, times?, count?}`. The PNG is saved in the workspace; the reply is `{file, url, sha256, times}` and never the PNG bytes. |
 | `montages.shots.get`, `montages.shot.regenerate`, `montages.shot.select` | see §5 |
+| `montages.comic.panels` | `POST /api/v1/montages/{file}/comic/panels` `{workspace, clip_ids?, frames?}`. One raw frame and one printed frame per clip (at most 24). Cached in the workspace. This is a view, not a new comic. Edits, including `comic.frame` and `comic.text`, are `montages.save`. Export ignores `comic`. |
 | `scenes.document.save` / `.get` | — (MCP; the UI keeps its existing save routes) |
 | `scenes.video2d.export` (+ `.receipt`, `.cancel`) | `POST /api/v1/scenes/video2d/export`, `GET .../receipt`, `POST .../cancel`, `GET .../capabilities` |
 
