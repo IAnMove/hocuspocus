@@ -4,12 +4,14 @@ import { LinearFilter, LinearMipmapLinearFilter, Texture } from 'three'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
+import { COMIC_PAGE_RIM, chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
+import { projectPoint } from '../src/features/scene3d/camera.ts'
 import {
   COMIC_DURATION,
   COMIC_FOV,
   COMIC_FPS,
   COMIC_HOLD,
+  COMIC_METERS_PER_PIXEL,
   COMIC_TEMPLATE_IDS,
   COMIC_YAW_ARC,
   COMIC_YAW_DEG,
@@ -74,6 +76,56 @@ test('the layout keeps the cut panels at the frame aspect', () => {
   assert.ok(painted.length > 1000)
   assert.equal(fillFrameOffset(COMIC_FOV), 1 / Math.tan((COMIC_FOV * Math.PI) / 360))
 })
+
+test('every page has the frame shape and the wide hold keeps the paper in frame', () => {
+  for (const format of ['landscape', 'portrait'] as const) {
+    const aspect = format === 'portrait' ? 9 / 16 : 16 / 9
+    for (const count of [3, 4, 5, 6]) {
+      for (const seed of [0, 1]) {
+        const layout = chooseComicLayout(format, count, seed, 0, count - 1)
+        const err = Math.abs(layout.pageW / layout.pageH / aspect - 1)
+        assert.ok(err <= 0.06, `${format} ${count} seed ${seed} aspect ${layout.pageW}x${layout.pageH}`)
+        for (const cell of layout.cells) assert.equal(isFrameAspect(format, cell.w, cell.h), cell.hero, `${format} ${count}`)
+        const varied = layout.cells.filter(cell => !cell.hero).map(cell => cell.w / cell.h)
+        assert.equal(new Set(varied.map(value => value.toFixed(2))).size, varied.length, `${format} ${count} repeats a cell`)
+        const pair = buildComicPair({
+          format, seed, fromPanel: 0, toPanel: count - 1,
+          panels: Array.from({ length: count }, () => ({ url: 'panel.png' })),
+        })
+        const pose = comicCameraAt(pair.exit, comicFrameSeconds(comicFrameCount() - 1))
+        const pageW = layout.pageW * COMIC_METERS_PER_PIXEL
+        const pageH = layout.pageH * COMIC_METERS_PER_PIXEL
+        const frame = pair.exit.width / pair.exit.height
+        assertPaper(format, pose, pageW, pageH, frame, `${format} ${count} seed ${seed}`)
+      }
+    }
+  }
+})
+
+function assertPaper(
+  format: 'landscape' | 'portrait',
+  pose: { eye: [number, number, number]; look: [number, number, number]; fov: number },
+  pageW: number, pageH: number, frame: number, label: string,
+) {
+  const hit = (x: number, y: number) => {
+    const point = projectPoint([x, y, 0], pose.eye, pose.look, pose.fov, frame)
+    assert.ok(point, label)
+    return point
+  }
+  for (const [x, y] of [[-pageW / 2, 0], [pageW / 2, 0], [-pageW / 2, pageH], [pageW / 2, pageH]] as const) {
+    const point = hit(x, y)
+    assert.ok(point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1, `${label} clips`)
+  }
+  const rim = COMIC_PAGE_RIM * COMIC_METERS_PER_PIXEL
+  const paper = [
+    hit(-pageW / 2 + rim, rim), hit(pageW / 2 - rim, rim),
+    hit(-pageW / 2 + rim, pageH - rim), hit(pageW / 2 - rim, pageH - rim),
+  ]
+  const span = format === 'landscape'
+    ? Math.max(...paper.map(point => point.x)) - Math.min(...paper.map(point => point.x))
+    : Math.max(...paper.map(point => point.y)) - Math.min(...paper.map(point => point.y))
+  assert.ok(span >= 0.85, `${label} covers ${span}`)
+}
 
 function overlaps(cells: { x: number; y: number; w: number; h: number }[]) {
   return cells.some((cell, index) => cells.slice(index + 1).some(other =>

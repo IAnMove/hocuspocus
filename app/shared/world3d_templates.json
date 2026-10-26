@@ -47443,7 +47443,7 @@
       "moves": [
         "push",
         "slide",
-        "descend"
+        "rise"
       ],
       "moving": [
         "camera"
@@ -47457,6 +47457,7 @@
       "uses": [
         "plate",
         "establishing",
+        "reveal",
         "transition"
       ],
       "kind": "transition",
@@ -47504,7 +47505,8 @@
       "distance": null,
       "moves": [
         "pull",
-        "slide"
+        "slide",
+        "descend"
       ],
       "moving": [
         "camera"
@@ -47566,7 +47568,7 @@
       "moves": [
         "push",
         "slide",
-        "rise"
+        "descend"
       ],
       "moving": [
         "camera"

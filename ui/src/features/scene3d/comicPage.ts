@@ -38,7 +38,9 @@ export const COMIC_HOLD = 0.4
 /** Wide pose yaw, and the extra mid-move yaw that is zero at both endpoints. */
 export const COMIC_YAW_DEG = 8
 export const COMIC_YAW_ARC = 8
-export const COMIC_FIT_MARGIN = 0.02
+/** Pulls the wide camera back so an 8° yaw keeps the page inside the frame.
+ * At 0.09 the paper still covers at least 85% of the frame's longer side. */
+export const COMIC_FIT_MARGIN = 0.09
 /** Panels sit a few millimetres in front of the paper. A cutout sits 4 cm in front of its panel. */
 export const COMIC_PANEL_Z = 0.004
 export const COMIC_CUTOUT_AHEAD = 0.04
@@ -137,9 +139,10 @@ function layoutOf(format: ComicFormat, count = COMIC_PANEL_COUNT, seed = 0, from
 }
 
 /** One wide pose, in metres, shared by the exit's last frame and the enter's first frame.
- * The eye orbits the page centre by `yawDeg`, so the held view is not a straight zoom. */
-export function comicWidePose(format: ComicFormat, frameAspect?: number, yawDeg = COMIC_YAW_DEG): Pose {
-  const layout = layoutOf(format)
+ * The eye orbits the page centre by `yawDeg`, so the held view is not a straight zoom.
+ * `page` is that pair's page in metres; omitted, it is the catalogue page. */
+export function comicWidePose(format: ComicFormat, frameAspect?: number, yawDeg = COMIC_YAW_DEG, page?: { pageW: number; pageH: number }): Pose {
+  const layout = page ?? layoutOf(format)
   const aspect = frameAspect ?? (format === 'portrait' ? 9 / 16 : 16 / 9)
   const lookY = layout.pageH / 2
   const distance = fitDistance(layout.pageW, layout.pageH, aspect)
@@ -280,7 +283,7 @@ export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; 
   const hold = input.hold ?? COMIC_HOLD
   const exitDuration = input.exitDuration ?? COMIC_DURATION
   const enterDuration = input.enterDuration ?? COMIC_DURATION
-  const wide = comicWidePose(format, size.width / size.height, yawDeg)
+  const wide = comicWidePose(format, size.width / size.height, yawDeg, layout)
   const leave = fillPose(layout.panels[fromPanel])
   const arrive = fillPose(layout.panels[toPanel])
   return {
