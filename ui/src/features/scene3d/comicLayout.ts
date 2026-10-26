@@ -1,55 +1,27 @@
 import type { ComicFormat } from './comicPage.ts'
 
-/** Dark rim around the paper, then the paper's own padding. Cells are authored inside the padding. */
+/** Dark rim around the paper, then the paper's own padding. Cells tile the rectangle inside that padding. */
 export const COMIC_PAGE_RIM = 32
-const PAD = 28
-const INSET = COMIC_PAGE_RIM + PAD
-
-type Rect = [number, number, number, number, 0 | 1]
+export const COMIC_PAD = 28
+/** One gutter width between every pair of cells. Nothing else is left on the paper. */
+export const COMIC_GUTTER = 18
+const INSET = COMIC_PAGE_RIM + COMIC_PAD
 
 export type ComicCell = { x: number; y: number; w: number; h: number; hero: boolean }
 export type ComicLayout = { pageW: number; pageH: number; cells: ComicCell[] }
 
-/** Two hand-authored pages per count. The padded page stays within 6% of the frame.
- * A hero is an exact 16:9 or 9:16 cell. The others are tall strips, wide strips or an inset. */
-const PAGES: Record<ComicFormat, Record<number, Rect[][]>> = {
-  landscape: {
-    3: [
-      [[0, 0, 960, 540, 1], [976, 0, 640, 360, 1], [0, 556, 900, 289, 0]],
-      [[0, 0, 800, 450, 1], [816, 0, 640, 360, 1], [1472, 0, 200, 877, 0]],
-    ],
-    4: [
-      [[0, 0, 720, 405, 1], [736, 0, 160, 405, 0], [912, 0, 640, 360, 1], [0, 421, 1552, 389, 0]],
-      [[0, 0, 800, 450, 1], [816, 80, 180, 500, 0], [1012, 0, 640, 360, 1], [0, 596, 1652, 269, 0]],
-    ],
-    5: [
-      [[0, 0, 800, 450, 1], [816, 0, 726, 160, 0], [816, 176, 180, 500, 0], [1100, 280, 280, 140, 0], [0, 466, 640, 360, 1]],
-      [[0, 40, 720, 405, 1], [736, 0, 800, 180, 0], [1280, 196, 200, 605, 0], [0, 461, 560, 315, 1], [600, 520, 400, 160, 0]],
-    ],
-    6: [
-      [[0, 0, 640, 360, 1], [656, 0, 500, 150, 0], [1172, 0, 230, 460, 0], [700, 220, 280, 140, 0], [0, 476, 480, 270, 1], [496, 520, 600, 160, 0]],
-      [[0, 0, 800, 450, 1], [816, 0, 560, 150, 0], [816, 166, 170, 450, 0], [1100, 240, 260, 140, 0], [0, 466, 560, 315, 1], [1002, 632, 516, 180, 0]],
-    ],
-  },
-  portrait: {
-    3: [
-      [[0, 0, 405, 720, 1], [0, 736, 315, 560, 1], [200, 1312, 565, 160, 0]],
-      [[0, 0, 360, 640, 1], [0, 656, 405, 720, 1], [421, 0, 291, 1200, 0]],
-    ],
-    4: [
-      [[0, 0, 405, 720, 1], [421, 0, 280, 180, 0], [560, 196, 160, 900, 0], [40, 816, 315, 560, 1]],
-      [[0, 0, 495, 880, 1], [511, 0, 232, 1100, 0], [60, 896, 220, 120, 0], [0, 1032, 225, 400, 1]],
-    ],
-    5: [
-      [[0, 0, 405, 720, 1], [421, 0, 280, 160, 0], [560, 176, 199, 1000, 0], [40, 736, 220, 130, 0], [80, 900, 315, 560, 1]],
-      [[40, 0, 315, 560, 1], [371, 280, 140, 110, 0], [527, 0, 200, 200, 0], [0, 576, 360, 640, 1], [380, 700, 280, 700, 0]],
-    ],
-    6: [
-      [[0, 0, 405, 720, 1], [421, 0, 280, 160, 0], [560, 176, 199, 1000, 0], [40, 736, 200, 120, 0], [420, 736, 124, 140, 0], [80, 900, 315, 560, 1]],
-      [[0, 0, 405, 720, 1], [421, 0, 300, 150, 0], [421, 166, 140, 480, 0], [577, 166, 166, 1100, 0], [200, 736, 180, 110, 0], [40, 872, 315, 560, 1]],
-    ],
-  },
-}
+type Raw = { x: number; y: number; w: number; h: number; hero: boolean }
+type Sheet = { w: number; h: number; cells: Raw[] }
+
+/** Two sizes per count. `side` is the first piece when a strip is split for a fifth or sixth panel. */
+const ROWS = [
+  { kA: 52, kB: 40, width: 1600, side: [300, 400] },
+  { kA: 60, kB: 44, width: 1800, side: [340, 460] },
+]
+const THREES = [
+  { kBig: 100, kSmall: 10, bigLeft: true },
+  { kBig: 92, kSmall: 10, bigLeft: false },
+]
 
 export function isFrameAspect(format: ComicFormat, width: number, height: number): boolean {
   return format === 'portrait' ? width * 16 === height * 9 : width * 9 === height * 16
@@ -57,17 +29,69 @@ export function isFrameAspect(format: ComicFormat, width: number, height: number
 
 /** `seed` picks the variant. The two hero rects are swapped onto `from` and `to`, so those panels keep the frame. */
 export function chooseComicLayout(format: ComicFormat, count: number, seed: number, from: number, to: number): ComicLayout {
-  const variants = PAGES[format]?.[count]
-  if (!variants) throw new Error('panel_count')
+  if (!Number.isInteger(count) || count < 3 || count > 6) throw new Error('panel_count')
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= count || to >= count) throw new Error('panel_index')
   if (from === to) throw new Error('same_panel')
   if (!Number.isInteger(seed)) throw new Error('invalid_seed')
-  const rects = variants[Math.abs(seed) % variants.length]
-  const contentW = Math.max(...rects.map(rect => rect[0] + rect[2]))
-  const contentH = Math.max(...rects.map(rect => rect[1] + rect[3]))
-  const cells = rects.map(([x, y, w, h, hero]) => ({ x: x + INSET, y: y + INSET, w, h, hero: hero === 1 }))
+  const sheet = orient(format, count === 3 ? threeLayout(Math.abs(seed) % 2) : rowLayout(count, Math.abs(seed) % 2))
+  const cells = sheet.cells.map(cell => ({ ...cell, x: cell.x + INSET, y: cell.y + INSET }))
   assignHeroes(cells, from, to)
-  return { pageW: contentW + INSET * 2, pageH: contentH + INSET * 2, cells }
+  return { pageW: sheet.w + INSET * 2, pageH: sheet.h + INSET * 2, cells }
+}
+
+function heroBox(k: number) {
+  return { w: 16 * k, h: 9 * k }
+}
+
+/** Landscape content. Portrait swaps the axes, which turns each 16:9 hero into 9:16. */
+function orient(format: ComicFormat, sheet: Sheet): Sheet {
+  if (format !== 'portrait') return sheet
+  return {
+    w: sheet.h, h: sheet.w,
+    cells: sheet.cells.map(cell => ({ x: cell.y, y: cell.x, w: cell.h, h: cell.w, hero: cell.hero })),
+  }
+}
+
+function threeLayout(variant: number): Sheet {
+  const spec = THREES[variant]
+  const big = heroBox(spec.kBig)
+  const small = heroBox(spec.kSmall)
+  const stripH = big.h - small.h - COMIC_GUTTER
+  const xSide = spec.bigLeft ? big.w + COMIC_GUTTER : 0
+  const xBig = spec.bigLeft ? 0 : small.w + COMIC_GUTTER
+  return {
+    w: big.w + COMIC_GUTTER + small.w, h: big.h,
+    cells: [
+      { x: xBig, y: 0, w: big.w, h: big.h, hero: true },
+      { x: xSide, y: spec.bigLeft ? small.h + COMIC_GUTTER : 0, w: small.w, h: stripH, hero: false },
+      { x: xSide, y: spec.bigLeft ? 0 : stripH + COMIC_GUTTER, w: small.w, h: small.h, hero: true },
+    ],
+  }
+}
+
+function rowLayout(count: number, variant: number): Sheet {
+  const spec = ROWS[variant]
+  const top = heroBox(spec.kA)
+  const bottom = heroBox(spec.kB)
+  const yBottom = top.h + COMIC_GUTTER
+  const cells: Raw[] = [{ x: 0, y: 0, w: top.w, h: top.h, hero: true }]
+  lay(cells, top.w + COMIC_GUTTER, 0, top.h, pieces(spec.width - top.w - COMIC_GUTTER, count >= 5 ? spec.side[0] : 0))
+  lay(cells, 0, yBottom, bottom.h, pieces(spec.width - bottom.w - COMIC_GUTTER, count >= 6 ? spec.side[1] : 0))
+  cells.push({ x: spec.width - bottom.w, y: yBottom, w: bottom.w, h: bottom.h, hero: true })
+  return { w: spec.width, h: top.h + COMIC_GUTTER + bottom.h, cells }
+}
+
+function pieces(total: number, left: number): number[] {
+  if (!(left > 0)) return [total]
+  return [left, total - COMIC_GUTTER - left]
+}
+
+function lay(cells: Raw[], x: number, y: number, height: number, widths: number[]) {
+  let cursor = x
+  for (const width of widths) {
+    cells.push({ x: cursor, y, w: width, h: height, hero: false })
+    cursor += width + COMIC_GUTTER
+  }
 }
 
 function assignHeroes(cells: ComicCell[], from: number, to: number) {

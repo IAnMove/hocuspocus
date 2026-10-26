@@ -4,7 +4,7 @@ import { LinearFilter, LinearMipmapLinearFilter, Texture } from 'three'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { COMIC_PAGE_RIM, chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
+import { COMIC_GUTTER, COMIC_PAD, COMIC_PAGE_RIM, chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
 import { projectPoint } from '../src/features/scene3d/camera.ts'
 import {
   COMIC_CUTOUT_AHEAD,
@@ -133,6 +133,72 @@ function assertPaper(
 function overlaps(cells: { x: number; y: number; w: number; h: number }[]) {
   return cells.some((cell, index) => cells.slice(index + 1).some(other =>
     cell.x < other.x + other.w && other.x < cell.x + cell.w && cell.y < other.y + other.h && other.y < cell.y + cell.h))
+}
+
+test('cells and gutters cover the padded paper and nothing larger than a gutter is empty', () => {
+  for (const format of ['landscape', 'portrait'] as const) {
+    for (const count of [3, 4, 5, 6]) {
+      for (const seed of [0, 1]) {
+        assertTiled(chooseComicLayout(format, count, seed, 0, count - 1), `${format} ${count} seed ${seed}`)
+      }
+    }
+  }
+})
+
+function assertTiled(layout: ReturnType<typeof chooseComicLayout>, label: string) {
+  const origin = COMIC_PAGE_RIM + COMIC_PAD
+  const width = layout.pageW - origin * 2
+  const height = layout.pageH - origin * 2
+  const mask = new Uint8Array(width * height)
+  for (const cell of layout.cells) {
+    const x0 = cell.x - origin
+    const y0 = cell.y - origin
+    assert.ok(x0 >= 0 && y0 >= 0 && x0 + cell.w <= width && y0 + cell.h <= height, `${label} outside`)
+    for (let y = 0; y < cell.h; y += 1) {
+      const row = (y0 + y) * width + x0
+      for (let x = 0; x < cell.w; x += 1) {
+        assert.equal(mask[row + x], 0, `${label} overlap`)
+        mask[row + x] = 1
+      }
+    }
+  }
+  const dist = chebyshev(mask, width, height, true)
+  const half = COMIC_GUTTER / 2
+  const spine = new Uint8Array(mask.length)
+  for (let i = 0; i < mask.length; i += 1) {
+    if (mask[i]) continue
+    assert.ok(dist[i] <= half, `${label} gap ${dist[i]}`)
+    if (dist[i] >= half) spine[i] = 1
+  }
+  const spineDist = chebyshev(spine, width, height, false)
+  for (let i = 0; i < mask.length; i += 1) {
+    if (!mask[i]) assert.ok(spineDist[i] <= half, `${label} hairline`)
+  }
+}
+
+function chebyshev(source: Uint8Array, width: number, height: number, zerosAreNear: boolean): Int16Array {
+  const dist = new Int16Array(source.length)
+  dist.fill(width + height)
+  for (let i = 0; i < source.length; i += 1) if (zerosAreNear ? source[i] : source[i]) dist[i] = 0
+  for (let y = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1) {
+      const i = y * width + x
+      let best = dist[i]
+      if (x > 0) best = Math.min(best, dist[i - 1] + 1)
+      if (y > 0) best = Math.min(best, dist[i - width] + 1, x > 0 ? dist[i - width - 1] + 1 : best, x + 1 < width ? dist[i - width + 1] + 1 : best)
+      dist[i] = best
+    }
+  }
+  for (let y = height - 1; y >= 0; y -= 1) {
+    for (let x = width - 1; x >= 0; x -= 1) {
+      const i = y * width + x
+      let best = dist[i]
+      if (x + 1 < width) best = Math.min(best, dist[i + 1] + 1)
+      if (y + 1 < height) best = Math.min(best, dist[i + width] + 1, x > 0 ? dist[i + width - 1] + 1 : best, x + 1 < width ? dist[i + width + 1] + 1 : best)
+      dist[i] = best
+    }
+  }
+  return dist
 }
 
 test('filler pictures match the catalogue page and each cutout keeps an alpha channel', () => {

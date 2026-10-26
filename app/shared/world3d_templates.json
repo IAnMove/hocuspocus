@@ -47443,7 +47443,7 @@
       "moves": [
         "push",
         "slide",
-        "rise"
+        "descend"
       ],
       "moving": [
         "camera"
@@ -47457,7 +47457,6 @@
       "uses": [
         "plate",
         "establishing",
-        "reveal",
         "transition"
       ],
       "kind": "transition",
