@@ -64,18 +64,21 @@ def _names(kit: dict) -> set[str]:
     return names
 
 
-def _pose_name(changes: dict, kit: dict) -> str:
+def _pose_name(changes: dict, kit: dict, kept: dict | None = None) -> str:
     names = _names(kit)
     pose = changes.get("pose")
     if isinstance(pose, str) and pose in names:
         return pose
+    previous = (kept or {}).get("pose")
+    if isinstance(previous, str) and previous in names:
+        return previous
     if "neutral" in names:
         return "neutral"
     return "base" if "base" in names else sorted(names)[0]
 
 
-def _expressions(changes: dict, kit: dict) -> list[dict[str, Any]]:
-    raw = changes.get("expressions") or []
+def _expressions(changes: dict, kit: dict, kept: dict | None = None) -> list[dict[str, Any]]:
+    raw = changes["expressions"] if "expressions" in changes else (kept or {}).get("expressions")
     if raw is None:
         return []
     if not isinstance(raw, list) or len(raw) > 32:
@@ -109,6 +112,11 @@ def _explicit(changes: dict) -> dict[str, Any] | None:
     return found
 
 
+def _stored(slot: dict) -> dict[str, Any] | None:
+    kept = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
+    return anchor_radii({"center": kept.get("center"), "radii": kept.get("radii")})
+
+
 def _placement(changes: dict, slot: dict, workspace: str, folder: str) -> dict[str, Any]:
     explicit = _explicit(changes)
     if explicit:
@@ -117,6 +125,9 @@ def _placement(changes: dict, slot: dict, workspace: str, folder: str) -> dict[s
     declared = anchor_radii(raw) if isinstance(raw, dict) else None
     if declared:
         return declared
+    reused = _stored(slot)
+    if reused:
+        return reused
     source = changes.get("source_url") or slot.get("sourceUrl") or ""
     if not isinstance(source, str) or not source.startswith("/"):
         raise World3DSceneError("head_not_found", "Pass center and radii, face_anchor, or a model file with a Head bone")
@@ -160,9 +171,9 @@ def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_
     placement = _placement(changes, slot, workspace, str(workspace_dir(workspace)))
     kept = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
     art = _carry(face_art(kit), kept)
-    slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
+    slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit, kept), "bone": _bone(changes, kept),
                          "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
-                         "expressions": _expressions(changes, kit), "art": art}
+                         "expressions": _expressions(changes, kit, kept), "art": art}
     character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
     slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
     record["revision"] += 1
