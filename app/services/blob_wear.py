@@ -135,7 +135,8 @@ def _sleeves_long(layout, color):
     thick = layout["arm_d"] * 1.16
     upper = _piece("capsule", (layout["upper_x"], y, 0), (thick, layout["upper_len"], thick), color, turn, _LIMB)
     fore = _piece("capsule", (layout["fore_x"], y, 0), (thick * 0.88, layout["fore_len"], thick * 0.88), color, turn, _LIMB)
-    return _pair(upper) + _pair(fore)
+    elbow = _piece("sphere", (layout["elbow_x"], y, 0), (thick * 0.82, thick * 0.82, thick * 0.82), color, segments=_LIMB)
+    return _pair(upper) + _pair(elbow) + _pair(fore)
 
 
 def _shorts(layout, color):

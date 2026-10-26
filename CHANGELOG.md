@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: hat brims and elbows read as one piece.** Top-hat and bucket-hat cylinders use the head's 32 segments, so the brim is not a 12-sided coin. A sleeve-coloured sphere sits where the upper arm meets the forearm. Blob shoulders stay low on the torso: higher, and a wave puts lanky's hand through the egg.
+
 **Added: blob bodies come in three families that share one rig.** `family` is `blob`, `anime` or `chibi` (omit it for a blob). Nine presets join the original six: `blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`, `anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`. Hair (`none`, `short`, `bangs`, `spiky`, `long`, `ponytail`, `twin_tails`, `bun`) and clothes (`skirt`, `jacket`, `sleeves_long`, `shorts`, `school_collar`, `cape`) are smooth pieces on that same Mixamo skeleton. A hollow skirt is `covered_legs` when the feet show. See [MODEL3D_BLOB.md](docs/agents/MODEL3D_BLOB.md).
 
 **Added: `model3d.compose` can build a capsule or a frustum, and can shade rounds with smooth normals.** `smooth: true` on a piece or on the input uses radial normals and keeps flat caps axial. Omit it and the old box, sphere, cylinder and cone meshes stay byte for byte the same. A capsule's scale is diameter × length × diameter. A frustum takes `taper` from 0.2 to 1. See [MODEL3D_COMPOSE.md](docs/agents/MODEL3D_COMPOSE.md).

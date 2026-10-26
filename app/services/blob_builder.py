@@ -51,6 +51,11 @@ _FAMILY = {
 _ANIME_SHOULDER = {"slim": 0.21, "average": 0.24, "round": 0.27, "pear": 0.23}
 _ANIME_WAIST = {"slim": 0.58, "average": 0.66, "round": 0.84, "pear": 0.72}
 _CHIBI_SHOULDER = {"slim": 0.62, "average": 0.70, "round": 0.78, "pear": 0.74}
+# Fraction of the torso height, measured from the hip. Blob and chibi stay low:
+# 0.46 already swings lanky's wave through the egg. Anime sits up at the shoulder.
+_SHOULDER_AT = {"blob": 0.40, "anime": 0.74, "chibi": 0.46}
+# Drawn reach as a fraction of height. The stored trait can be longer; a wave folds that reach up.
+_ARM_CAP = {"blob": 0.30, "anime": 0.50, "chibi": 0.26}
 _COLOR_DEFAULT = {
     "head": "#F2C7A0", "top": "#3A6EA5", "sleeves": "#F2C7A0",
     "bottom": "#2C3340", "shoes": "#201A18", "hands": "#F2C7A0",
@@ -390,11 +395,11 @@ def _layout(spec: dict) -> dict:
     torso_h = stack["torso_top"] - stack["torso_bottom"]
     arm_d = min(spec["arms"]["thickness"] * height, torso_w * 0.45)
     # A wave folds the forearm up by about a third of the reach. A wide head meets a longer arm.
-    arm_len = min(spec["arms"]["length"], {"blob": 0.30, "anime": 0.50, "chibi": 0.26}[spec["family"]]) * height
+    arm_len = min(spec["arms"]["length"], _ARM_CAP[spec["family"]]) * height
     upper_x, fore_x, upper_len, fore_len, wrist_x, tip_x = _arm_centers(torso_w / 2, torso_w, arm_len)
     gap = max(0.045 * height, leg_d * 0.55)
-    # Low enough that a bent wave clears a tall egg head as well as a round one.
-    shoulder_at = {"blob": 0.40, "anime": 0.74, "chibi": 0.46}[spec["family"]]
+    # Above the belly. Higher than about half the torso swings a bent wave into the head.
+    shoulder_at = _SHOULDER_AT[spec["family"]]
     return {
         "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"],
         "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
@@ -408,7 +413,7 @@ def _layout(spec: dict) -> dict:
         "belly": belly, "forward": forward, "drop": drop,
         "arm_len": arm_len, "arm_d": arm_d,
         "upper_x": upper_x, "fore_x": fore_x, "upper_len": upper_len, "fore_len": fore_len,
-        "wrist_x": wrist_x, "tip_x": tip_x,
+        "elbow_x": upper_x + upper_len / 2, "wrist_x": wrist_x, "tip_x": tip_x,
     }
 
 
@@ -558,8 +563,10 @@ def _arms(spec: dict, layout: dict) -> list:
     sleeve, skin = spec["colors"]["sleeves"], spec["colors"]["hands"]
     diameter, y = layout["arm_d"], layout["shoulder_y"]
     turn = (0.0, 0.0, _HALF_TURN)
+    elbow = (diameter * 0.82, diameter * 0.82, diameter * 0.82)
     arm = [
         *_pair(_p("capsule", (layout["upper_x"], y, 0), (diameter, layout["upper_len"], diameter), sleeve, turn, LIMB_SEGMENTS)),
+        *_pair(_p("sphere", (layout["elbow_x"], y, 0), elbow, sleeve, segments=LIMB_SEGMENTS)),
         *_pair(_p("capsule", (layout["fore_x"], y, 0), (diameter * 0.86, layout["fore_len"], diameter * 0.86), sleeve, turn, LIMB_SEGMENTS)),
     ]
     return arm + _hands(spec, layout, skin, diameter, y, turn)
@@ -650,8 +657,8 @@ def _top_hat(layout, color):
     crown_h = 0.11 * layout["h"]
     brim_h = 0.016 * layout["h"]
     return [
-        _p("cylinder", (0, brim_y, 0), (layout["sx"] * 1.12, brim_h, layout["sz"] * 1.12), color, segments=LIMB_SEGMENTS),
-        _p("cylinder", (0, brim_y + crown_h / 2, 0), (layout["sx"] * 0.62, crown_h, layout["sz"] * 0.62), color, segments=LIMB_SEGMENTS),
+        _p("cylinder", (0, brim_y, 0), (layout["sx"] * 1.12, brim_h, layout["sz"] * 1.12), color, segments=HEAD_SEGMENTS),
+        _p("cylinder", (0, brim_y + crown_h / 2, 0), (layout["sx"] * 0.62, crown_h, layout["sz"] * 0.62), color, segments=HEAD_SEGMENTS),
     ]
 
 
@@ -665,8 +672,8 @@ def _bucket_hat(layout, color):
     brim_y = layout["head_y"] + layout["sy"] * 0.37
     crown_h = max(0.05 * layout["h"], layout["sy"] * 0.14)
     return [
-        _p("cylinder", (0, brim_y + crown_h * 0.45, 0), (layout["sx"] * 0.84, crown_h, layout["sz"] * 0.84), color, segments=LIMB_SEGMENTS),
-        _p("cylinder", (0, brim_y, 0), (layout["sx"] * 1.16, 0.014 * layout["h"], layout["sz"] * 1.16), color, segments=LIMB_SEGMENTS),
+        _p("cylinder", (0, brim_y + crown_h * 0.45, 0), (layout["sx"] * 0.84, crown_h, layout["sz"] * 0.84), color, segments=HEAD_SEGMENTS),
+        _p("cylinder", (0, brim_y, 0), (layout["sx"] * 1.16, 0.014 * layout["h"], layout["sz"] * 1.16), color, segments=HEAD_SEGMENTS),
     ]
 
 

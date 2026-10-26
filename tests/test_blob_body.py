@@ -297,6 +297,32 @@ def _bone_distance(points, dominant, worlds, bones):
     return found
 
 
+def _arm_capsules(pieces):
+    return [piece for piece in pieces if piece["type"] == "capsule" and abs(piece["rotation"][2]) > 1.0]
+
+
+def test_an_elbow_sphere_joins_the_upper_arm_to_the_forearm():
+    """A walk bends the elbow. Two bare capsules open a gap there."""
+    for name in ("blob_scout", "anime_girl", "chibi_kid"):
+        pieces = blob_pieces({**PRESETS[name], "accessories": []})["pieces"]
+        rights = sorted((piece for piece in _arm_capsules(pieces) if piece["position"][0] > 0), key=lambda piece: piece["scale"][1], reverse=True)
+        upper, fore = rights[0], rights[1]
+        half = lambda piece: piece["scale"][1] / 2
+        overlap_lo = max(upper["position"][0] - half(upper), fore["position"][0] - half(fore))
+        overlap_hi = min(upper["position"][0] + half(upper), fore["position"][0] + half(fore))
+        spheres = [piece for piece in pieces if piece["type"] == "sphere" and abs(piece["position"][1] - upper["position"][1]) < 1e-4]
+        assert any(overlap_lo - 0.01 <= piece["position"][0] <= overlap_hi + 0.01 for piece in spheres), name
+
+
+def test_hat_brims_keep_enough_sides_to_read_as_round():
+    for name in ("blob_chef", "chibi_mage", "chibi_knight"):
+        pieces = blob_pieces(PRESETS[name])["pieces"]
+        head_y = pieces[0]["position"][1]
+        brims = [piece for piece in pieces if piece["type"] == "cylinder" and piece["position"][1] > head_y]
+        assert brims, name
+        assert min(piece["segments"] for piece in brims) >= 24, name
+
+
 def test_fifteen_presets_share_one_rig_and_keep_their_shape():
     """One Mixamo skeleton. A walk or a wave must not tear a vertex off its bone, sink a foot, or put an arm through the head."""
     from services.blob_make import build_body
