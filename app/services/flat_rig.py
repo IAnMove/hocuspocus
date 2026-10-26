@@ -805,7 +805,7 @@ def rig_pose(image: Image.Image, style: dict[str, Any], hint: dict[str, list[flo
     rigged, wiped, found, colour, mouth_box, mx, my, background = pack
     width, height = rigged.size
     warnings = pose_warnings(height, ey0, found, guide, wiped, rigged, alpha, face_eyes, mouth_box,
-                             eye_warnings, mouth_warnings, anime_failed, stray_marks)
+                             eye_warnings, mouth_warnings, anime_failed, stray_marks, mouth_source)
     if ink:
         sprite_width = _ink_sprite_width(mouth_box, guide, eyes_box)
     elif mouth_source == "landmarks":
