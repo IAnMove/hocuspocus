@@ -66,24 +66,29 @@ def _parents(nodes: list[dict]) -> list[int | None]:
     return parents
 
 
+def _triple(value: Any) -> list[float] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != 3:
+        return None
+    try:
+        return [float(item) for item in value]
+    except (TypeError, ValueError):
+        return None
+
+
+def _halves(anchor: dict[str, Any]) -> list[float] | None:
+    radii = _triple(anchor.get("radii"))
+    if radii is not None:
+        return radii
+    size = _triple(anchor.get("size"))
+    return [value / 2 for value in size] if size is not None else None
+
+
 def anchor_radii(anchor: dict[str, Any]) -> dict[str, list[float]] | None:
     """``center`` plus ``radii``, or ``size`` as a diameter (each axis halved)."""
-    center = anchor.get("center") if isinstance(anchor, dict) else None
-    if not isinstance(center, (list, tuple)) or len(center) != 3:
+    if not isinstance(anchor, dict):
         return None
-    try:
-        origin = [float(value) for value in center]
-    except (TypeError, ValueError):
-        return None
-    radii = anchor.get("radii")
-    if not (isinstance(radii, (list, tuple)) and len(radii) == 3):
-        size = anchor.get("size")
-        if not (isinstance(size, (list, tuple)) and len(size) == 3):
-            return None
-        radii = [float(value) / 2 for value in size]
-    try:
-        halves = [float(value) for value in radii]
-    except (TypeError, ValueError):
+    origin, halves = _triple(anchor.get("center")), _halves(anchor)
+    if origin is None or halves is None:
         return None
     if any(value <= 0 or value > 5 for value in halves) or any(abs(value) > 50 for value in origin):
         return None

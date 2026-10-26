@@ -126,6 +126,23 @@ def _placement(changes: dict, slot: dict, workspace: str, folder: str) -> dict[s
         raise World3DSceneError(error.code, str(error), error.status) from error
 
 
+def _carry(art: dict, kept: dict) -> dict:
+    previous = kept.get("art") if isinstance(kept.get("art"), dict) else {}
+    for key in ("cues", "blinks"):
+        if key in previous:
+            art[key] = previous[key]
+    if previous.get("rest") in art["mouths"]:
+        art["rest"] = previous["rest"]
+    return art
+
+
+def _bone(changes: dict, kept: dict) -> str:
+    bone = changes.get("bone") or kept.get("bone") or "Head"
+    if not isinstance(bone, str) or not bone.strip():
+        raise World3DSceneError("invalid_face", "bone must name a bone, usually Head")
+    return bone.strip()[:80]
+
+
 def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     """Write ``slot.faceDecal`` on a model. The slot stays a model."""
     record = _read(workspace, scene_id, workspace_dir)
@@ -142,17 +159,8 @@ def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_
     slot["media"] = "model3d"
     placement = _placement(changes, slot, workspace, str(workspace_dir(workspace)))
     kept = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
-    art = face_art(kit)
-    previous = kept.get("art") if isinstance(kept.get("art"), dict) else {}
-    for key in ("cues", "blinks"):
-        if key in previous:
-            art[key] = previous[key]
-    if previous.get("rest") in art["mouths"]:
-        art["rest"] = previous["rest"]
-    bone = changes.get("bone") or kept.get("bone") or "Head"
-    if not isinstance(bone, str) or not bone.strip():
-        raise World3DSceneError("invalid_face", "bone must name a bone, usually Head")
-    slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": bone.strip()[:80],
+    art = _carry(face_art(kit), kept)
+    slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
                          "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
                          "expressions": _expressions(changes, kit), "art": art}
     character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
