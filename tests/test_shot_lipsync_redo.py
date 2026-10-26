@@ -532,6 +532,101 @@ def test_a_second_redo_of_the_same_take_is_already_running(tmp_path, monkeypatch
     assert len(entered) == 1
 
 
+def _series_film(folder):
+    folder.mkdir(parents=True, exist_ok=True)
+    series = create_series_project("film", title="Show")
+    episode = create_series_episode(series)
+    series_id, episode_id = series["id"], episode["id"]
+    relative = f"assets/{series_id}/original.mp4"
+    (folder / relative).parent.mkdir(parents=True, exist_ok=True)
+    (folder / relative).write_bytes(b"approved-take")
+    episode["script"] = [{"id": "scene1", "locationId": ""}]
+    episode["shots"] = [{
+        "id": "s1", "sceneId": "scene1", "productionMethod": "generated_video", "order": 1,
+        "durationSeconds": 8, "prompt": "Gorthak sings", "approvedAttemptId": "attempt-1",
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"], "model": "infinitetalk"}],
+    }]
+    series["episodesById"][episode_id] = episode
+    series["assets"] = {"asset-1": {
+        "id": "asset-1", "workspaceId": "film", "kind": "video", "uri": relative,
+        "ownerType": "attempt", "ownerId": "attempt-1", "isDerivedThumbnail": False, "metadata": {},
+    }}
+    write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
+    return series_id, episode_id
+
+
+def test_a_running_production_is_not_rewritten(tmp_path, monkeypatch):
+    """Music and Director occupy the edit slot. A lip redo must not write shots.json over them."""
+    folder = tmp_path / "film"
+    _production(folder)
+    _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    monkeypatch.setattr("services.director.pipeline_locks.director_holds_production", lambda _production_id: True)
+    with pytest.raises(HTTPException) as denied:
+        _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05"})
+    assert denied.value.detail["code"] == "already_running"
+    shots = json.loads((folder / "mv.shots.json").read_text())
+    assert len(shots["shots"][0]["takes"]) == 1 and "revision" not in shots
+
+
+def test_a_stale_shot_revision_is_refused(tmp_path, monkeypatch):
+    folder = tmp_path / "film"
+    _production(folder)
+    _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    with pytest.raises(HTTPException) as denied:
+        _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05", "expected_revision": 4})
+    assert denied.value.detail["code"] == "stale_revision"
+
+
+def test_a_saved_take_bumps_the_shot_revision(tmp_path, monkeypatch):
+    folder = tmp_path / "film"
+    _production(folder)
+    _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05"})
+    assert json.loads((folder / "mv.shots.json").read_text())["revision"] == 1
+
+
+def test_a_missing_series_shot_is_refused_before_the_copy(tmp_path):
+    folder = tmp_path / "film"
+    series_id, episode_id = _series_film(folder)
+    (folder / "out.mp4").write_bytes(b"new")
+    before = {path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file()}
+    from services.production_media_common import MediaToolError
+    from services.shot_lipsync_save import save_series
+    with pytest.raises(MediaToolError) as denied:
+        save_series(str(folder), "film", {
+            "series_id": series_id, "episode_id": episode_id, "shot": "missing", "original_name": "original.mp4",
+        }, str(folder / "out.mp4"), {"verdict": "ok"}, "infinitetalk")
+    assert denied.value.code == "shot_not_found"
+    after = {path.relative_to(folder).as_posix() for path in folder.rglob("*") if path.is_file()}
+    assert after == before
+
+
+def test_a_series_save_uses_the_library_lock(tmp_path, monkeypatch):
+    folder = tmp_path / "film"
+    series_id, episode_id = _series_film(folder)
+    (folder / "out.mp4").write_bytes(b"new")
+    held = []
+
+    class _Lock:
+        def __enter__(self):
+            held.append(True)
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    from routers import series_library as routes
+    monkeypatch.setattr(routes, "_library_lock", _Lock(), raising=False)
+    from services.shot_lipsync_save import save_series
+    save_series(str(folder), "film", {
+        "series_id": series_id, "episode_id": episode_id, "shot": "s1", "original_name": "original.mp4", "video": "original.mp4",
+    }, str(folder / "out.mp4"), {"verdict": "ok"}, "infinitetalk")
+    assert held == [True]
+
+
 def test_a_failed_generation_names_the_job_error(tmp_path, monkeypatch):
     folder = tmp_path / "film"
     folder.mkdir()

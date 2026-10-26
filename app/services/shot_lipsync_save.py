@@ -5,8 +5,9 @@ import json
 import os
 import shutil
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from services.production_media_common import MediaToolError, publish_sidecar, source_ref
 from services.workspace_store_lock import workspace_store_lock
@@ -67,23 +68,47 @@ def _next_number(rows: list) -> int:
     return max(numbers or [0]) + 1
 
 
+@contextmanager
+def _production_edit(workspace: str, production_id: str):
+    """The slot ``production.run`` and music shot edits already hold."""
+    from services.production_shot_actions import ActionError, _hold_edit
+    try:
+        with _hold_edit(workspace, production_id):
+            yield
+    except ActionError as exc:
+        raise MediaToolError(exc.code, str(exc) or exc.code, 409) from exc
+
+
+def _revise(document: dict, expected: Any) -> None:
+    """Bump the shots revision. Check it only when the caller sent one."""
+    from services.production_shot_actions import ActionError, _bump, _expect
+    if expected is not None:
+        try:
+            _expect(document, expected)
+        except ActionError as exc:
+            raise MediaToolError(exc.code, str(exc) or exc.code, 409) from exc
+    _bump(document)
+
+
 def save_production(folder: str, workspace: str, target: dict, video: str, qa: dict, engine: str) -> dict[str, Any]:
     """Append one take on ``<id>.shots.json`` and, when present, ``<id>.production.json``."""
     production_id, shot_id = target["production_id"], target["shot"]
     name = os.path.basename(video)
     manifest = os.path.join(folder, f"{production_id}.shots.json")
-    with workspace_store_lock(Path(manifest)):
-        body = _read_json(manifest)
-        if body is None:
-            raise MediaToolError("shot_not_found", "Production shots were not found.", 404)
-        row = _production_row(body, shot_id)
-        original = row.get("clip") if isinstance(row.get("clip"), str) else target["original_name"]
-        takes = _append_unique(list(row.get("takes") or []), original if isinstance(original, str) else None)
-        record = _take_row(name, _next_number(takes), qa, engine)
-        takes.append(record)
-        row["takes"] = takes
-        _write_json(manifest, body)
-        _append_state_take(folder, production_id, shot_id, record, original if isinstance(original, str) else None)
+    with _production_edit(workspace, production_id):
+        with workspace_store_lock(Path(manifest)):
+            body = _read_json(manifest)
+            if body is None:
+                raise MediaToolError("shot_not_found", "Production shots were not found.", 404)
+            row = _production_row(body, shot_id)
+            original = row.get("clip") if isinstance(row.get("clip"), str) else target["original_name"]
+            takes = _append_unique(list(row.get("takes") or []), original if isinstance(original, str) else None)
+            record = _take_row(name, _next_number(takes), qa, engine)
+            takes.append(record)
+            row["takes"] = takes
+            _revise(body, target.get("expected_revision"))
+            _write_json(manifest, body)
+            _append_state_take(folder, production_id, shot_id, record, original if isinstance(original, str) else None)
     _sidecar(video, workspace, {"engine": engine, "shot": shot_id, "production_id": production_id}, [target["video"]])
     return {"file": name, "kept_original": original, "take": record, "target": "production"}
 
@@ -133,6 +158,16 @@ def save_clip(folder: str, workspace: str, target: dict, video: str, qa: dict, e
     return {"file": name, "kept_original": original, "take": record, "target": "clip", "takes": os.path.basename(path)}
 
 
+def _with_library_lock(action: Callable[[], Any]) -> Any:
+    """The series library RLock launch binds. Tests that leave it unset still write."""
+    from routers import series_library as routes
+    lock = getattr(routes, "_library_lock", None)
+    if lock is None:
+        return action()
+    with lock:
+        return action()
+
+
 def save_series(folder: str, workspace: str, target: dict, video: str, qa: dict, engine: str) -> dict[str, Any]:
     """Append a completed attempt. ``approvedAttemptId`` stays on the original take."""
     from services.series_library import (
@@ -140,14 +175,15 @@ def save_series(folder: str, workspace: str, target: dict, video: str, qa: dict,
     )
 
     series_id, episode_id, shot_id = target["series_id"], target["episode_id"], target["shot"]
-    asset_id = f"asset_{uuid.uuid4().hex[:12]}"
-    relative = f"assets/{series_id}/{asset_id}.mp4"
-    destination = os.path.join(folder, *relative.split("/"))
-    os.makedirs(os.path.dirname(destination), exist_ok=True)
-    shutil.copy2(video, destination)
-    with workspace_store_lock(Path(folder) / ".series-library-v1.json"):
+
+    def store() -> dict[str, Any]:
         library = read_series_library(folder, workspace)
         series, episode, index, shot = _series_shot(library, series_id, episode_id, shot_id)
+        asset_id = f"asset_{uuid.uuid4().hex[:12]}"
+        relative = f"assets/{series_id}/{asset_id}.mp4"
+        destination = os.path.join(folder, *relative.split("/"))
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        shutil.copy2(video, destination)
         approved = shot.get("approvedAttemptId")
         from services.shot_lipsync_catalog import PROMPT
         updated, attempt = append_shot_render_attempt(
@@ -171,11 +207,16 @@ def save_series(folder: str, workspace: str, target: dict, video: str, qa: dict,
         try:
             write_series_library(folder, library, workspace)
         except ValueError as exc:
+            if os.path.isfile(destination):
+                os.remove(destination)
             raise MediaToolError("save_failed", str(exc), 500) from exc
-    _sidecar(destination, workspace, {"engine": engine, "shot": shot_id, "series_id": series_id}, [target["video"]])
+        return {"destination": destination, "relative": relative, "attempt_id": attempt["id"]}
+
+    saved = _with_library_lock(store)
+    _sidecar(saved["destination"], workspace, {"engine": engine, "shot": shot_id, "series_id": series_id}, [target["video"]])
     return {
-        "file": os.path.basename(video), "asset": relative, "attempt_id": attempt["id"],
-        "kept_original": target["original_name"], "take": {"file": relative, "verdict": qa.get("verdict")},
+        "file": os.path.basename(video), "asset": saved["relative"], "attempt_id": saved["attempt_id"],
+        "kept_original": target["original_name"], "take": {"file": saved["relative"], "verdict": qa.get("verdict")},
         "target": "series",
     }
 

@@ -23,7 +23,7 @@ from services.shot_lipsync_save import save_clip, save_production, save_series
 OPERATION = "shot.lipsync.redo"
 _KEYS = frozenset({
     "workspace", "engine", "series_id", "episode_id", "shot", "production_id",
-    "clip", "source", "audio", "span", "offset", "confirm_download",
+    "clip", "source", "audio", "span", "offset", "confirm_download", "expected_revision",
 })
 _ID_MAX = 80
 
@@ -60,6 +60,8 @@ def catalog() -> dict[str, Any]:
         "offset": {"type": "number", "minimum": 0, "maximum": 36000,
                    "description": "Seconds into the audio where the clip starts. When span is set, the take starts at span start and the score uses that offset."},
         "confirm_download": {"type": "boolean"},
+        "expected_revision": {"type": "integer", "minimum": 0,
+                              "description": "The shots.json revision this edit was read from. Omit it to write anyway. A mismatch is stale_revision."},
     }, ["workspace", "engine"])
 
 
@@ -472,6 +474,7 @@ def _target(kind, engine, video, audio, span, offset, payload, locked, placed=Fa
         "locked": locked, "placed": placed, "original_name": os.path.basename(video),
         "shot": payload.get("shot"), "production_id": payload.get("production_id"),
         "series_id": payload.get("series_id"), "episode_id": payload.get("episode_id"),
+        "expected_revision": payload.get("expected_revision"),
     }
 
 
