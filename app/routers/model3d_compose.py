@@ -24,10 +24,15 @@ def command_catalog():
     piece = {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
         "type": {"enum": list(KINDS)}, "position": transform, "scale": transform, "rotation": transform,
         "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
+        "segments": {"type": "integer", "minimum": 6, "maximum": 48,
+                     "description": "Radial segments. Omit it for the original 8 (a sphere keeps 6 rings). "
+                                    "A sphere then uses segments//2 rings."},
     }}
     return [{"name": OPERATION, "version": 1, "domain": "model3d", "mutation": True,
              "description": "Build a low-poly GLB from 1..128 box/sphere/cylinder/cone pieces on CPU. "
                             "Metres, Y-up, Euler radians, positive scales, #RRGGBB colors. "
+                            "Optional segments (integer 6..48) smooth rounds; omit it and the mesh is byte-identical "
+                            "to the 8-segment, 6-ring sphere. "
                             "Flat triangle normals and linear vertex colors; no AI or GPU. Returns file and workspace URL.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"},

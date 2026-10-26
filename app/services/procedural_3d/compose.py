@@ -42,15 +42,25 @@ def normalized_pieces(pieces):
     for piece in pieces:
         if not isinstance(piece, dict) or piece.get("type") not in KINDS:
             raise ValueError("Each piece needs type box|sphere|cylinder|cone")
-        if set(piece) - {"type", "position", "scale", "rotation", "color"}:
+        if set(piece) - {"type", "position", "scale", "rotation", "color", "segments"}:
             raise ValueError("Unknown piece field")
         normalized.append({
             "type": piece["type"], "position": vector(piece.get("position"), [0, 0, 0]),
             "scale": vector(piece.get("scale"), [1, 1, 1], positive=True),
             "rotation": vector(piece.get("rotation"), [0, 0, 0]),
             "color": linear_color(piece.get("color", "#FFFFFF")),
+            "segments": _segments(piece.get("segments")),
         })
     return normalized
+
+
+def _segments(value):
+    """Optional radial count. ``None`` keeps today's 8 segments and, for a sphere, 6 rings."""
+    if value is None:
+        return None
+    if type(value) is not int or isinstance(value, bool) or not 6 <= value <= 48:
+        raise ValueError("segments must be an integer from 6 to 48")
+    return value
 
 
 def _box():
@@ -89,6 +99,45 @@ def _sphere():
                 yield b, d, c
 
 
+def _radial_n(kind, segments):
+    for i in range(segments):
+        angles = [i * math.tau / segments, (i + 1) * math.tau / segments]
+        a, b = [(math.cos(t) * .5, -.5, math.sin(t) * .5) for t in angles]
+        yield (0, -.5, 0), a, b
+        if kind == "cone":
+            yield a, (0, .5, 0), b
+        else:
+            c, d = [(v[0], .5, v[2]) for v in (a, b)]
+            yield a, c, d
+            yield a, d, b
+            yield (0, .5, 0), d, c
+
+
+def _sphere_n(segments):
+    rings = segments // 2
+
+    def point(lat, lon):
+        theta, phi = lat * math.pi / rings, lon * math.tau / segments
+        return .5 * math.sin(theta) * math.cos(phi), .5 * math.cos(theta), .5 * math.sin(theta) * math.sin(phi)
+
+    for lat in range(rings):
+        for lon in range(segments):
+            a, b, c, d = point(lat, lon), point(lat, lon + 1), point(lat + 1, lon), point(lat + 1, lon + 1)
+            if lat > 0:
+                yield a, b, c
+            if lat < rings - 1:
+                yield b, d, c
+
+
+def _faces(piece):
+    kind, segments = piece["type"], piece["segments"]
+    if kind == "box":
+        return _box()
+    if segments is None:
+        return _sphere() if kind == "sphere" else _radial(kind)
+    return _sphere_n(segments) if kind == "sphere" else _radial_n(kind, segments)
+
+
 def _transform(v, piece):
     x, y, z = [v[i] * piece["scale"][i] for i in range(3)]
     rx, ry, rz = piece["rotation"]
@@ -110,9 +159,7 @@ def _normal(a, b, c):
 def compose_glb(pieces, name="Composed model") -> bytes:
     vertices, normals, colors = [], [], []
     for piece in normalized_pieces(pieces):
-        kind = piece["type"]
-        faces = _box() if kind == "box" else _sphere() if kind == "sphere" else _radial(kind)
-        for face in faces:
+        for face in _faces(piece):
             points = [_transform(p, piece) for p in face]
             normal = _normal(*points)
             vertices.extend(points)
