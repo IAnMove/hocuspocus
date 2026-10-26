@@ -7,11 +7,13 @@ import test from 'node:test'
 import { COMIC_PAGE_RIM, chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
 import { projectPoint } from '../src/features/scene3d/camera.ts'
 import {
+  COMIC_CUTOUT_AHEAD,
   COMIC_DURATION,
   COMIC_FOV,
   COMIC_FPS,
   COMIC_HOLD,
   COMIC_METERS_PER_PIXEL,
+  COMIC_POP,
   COMIC_TEMPLATE_IDS,
   COMIC_YAW_ARC,
   COMIC_YAW_DEG,
@@ -25,6 +27,7 @@ import {
   comicFramingProgress,
   comicMoveWindow,
   comicCutoutPlacement,
+  comicCutoutSlide,
   comicPagePixels,
   comicWidePose,
   cutoutFactor,
@@ -215,18 +218,50 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
       x: from.position[0], y: from.position[1], z: from.position[2], scale: from.scale,
       aspect: format === 'portrait' ? 9 / 16 : 16 / 9,
     }, false)
-    assert.ok(Math.abs(factor - (1 - 0.04 / distance)) < 1e-9, 'scale is (D - d) / D')
+    assert.ok(Math.abs(factor - (1 - COMIC_CUTOUT_AHEAD / distance)) < 1e-9, 'scale is (D - d) / D')
     assert.ok(Math.abs(matched.scale - from.scale * factor) < 1e-9)
     close(matched.position, placed.position, `${format} compensated cutout`)
     const host = pair.exit.slots.find(slot => slot.id === 'panel-1')!
     const hostCell = comicPagePixels(format).cells[1]
     const body = { x: host.position[0], y: host.position[1], z: host.position[2], scale: host.scale, aspect: hostCell.w / hostCell.h }
-    const poppedPlace = comicCutoutPlacement(body, true)
+    const poppedPlace = comicCutoutPlacement(body, true, { pose: exitWide, aspect: size.width / size.height })
     assert.ok(popped.scale > comicCutoutPlacement(body, false).scale, 'one filler cutout breaks the border')
     close(popped.position, poppedPlace.position, `${format} popped cutout`)
-    assert.equal(matched.position[2], from.position[2] + 0.04)
+    assert.equal(matched.position[2], from.position[2] + COMIC_CUTOUT_AHEAD)
     const centerY = from.position[1] + from.scale
     assert.ok(Math.abs(matched.position[1] + matched.scale - centerY) < 1e-9, 'scaled about the fill axis')
+  }
+})
+
+function projectedSpan(x: number, y: number, z: number, halfW: number, pose: { eye: readonly number[]; look: readonly number[]; fov: number }, aspect: number) {
+  const left = projectPoint([x - halfW, y, z], pose.eye as [number, number, number], pose.look as [number, number, number], pose.fov, aspect)
+  const right = projectPoint([x + halfW, y, z], pose.eye as [number, number, number], pose.look as [number, number, number], pose.fov, aspect)
+  assert.ok(left && right, 'panel edges project')
+  return Math.hypot(right.x - left.x, right.y - left.y)
+}
+
+test('a cutout slides four to six percent of its panel and the pop still reads larger', () => {
+  for (const format of ['landscape', 'portrait'] as const) {
+    const pair = buildComicPair({ format })
+    const frame = comicCatalogueSize(format)
+    const aspect = frame.width / frame.height
+    const last = comicFrameSeconds(comicFrameCount() - 1)
+    const fill = comicCameraAt(pair.exit, 0)
+    const wide = comicCameraAt(pair.exit, last)
+    const panelSlot = pair.exit.slots.find(slot => slot.id === 'panel-0')!
+    const cell = comicPagePixels(format).cells[0]
+    const panel = {
+      x: panelSlot.position[0], y: panelSlot.position[1], z: panelSlot.position[2],
+      scale: panelSlot.scale, aspect: cell.w / cell.h,
+    }
+    const slide = comicCutoutSlide(panel, fill, wide, aspect)
+    assert.ok(slide >= 0.04 && slide <= 0.06, `${format} slide ${slide}`)
+    const host = pair.exit.slots.find(slot => slot.id === 'panel-1')!
+    const popped = pair.exit.slots.find(slot => slot.id === 'cutout-1')!
+    const hostAspect = comicPagePixels(format).cells[1].w / comicPagePixels(format).cells[1].h
+    const base = projectedSpan(host.position[0], host.position[1] + host.scale, host.position[2], host.scale * hostAspect, wide, aspect)
+    const grown = projectedSpan(popped.position[0], popped.position[1] + popped.scale, popped.position[2], popped.scale * hostAspect, wide, aspect)
+    assert.ok(Math.abs(grown / base - COMIC_POP) < 1e-3, `${format} pop ${grown / base}`)
   }
 })
 

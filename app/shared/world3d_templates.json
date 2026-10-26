@@ -47357,8 +47357,8 @@
       "setting": "studio",
       "lineEs": "El último fotograma llena una viñeta y la cámara se retira hasta encuadrar la página entera.",
       "lineEn": "The last frame fills one panel, then the camera pulls out until the whole comic page is in frame.",
-      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 4 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
-      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 4 cm in front of each panel, scaled so the fill frame still matches",
+      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 10,8 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
+      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 10.8 cm in front of each panel, scaled so the fill frame still matches",
       "preview": null,
       "roles": [
         "prop",
@@ -47419,8 +47419,8 @@
       "setting": "studio",
       "lineEs": "La cámara empieza en la página entera y entra en la viñeta siguiente hasta que ese fotograma llena la imagen.",
       "lineEn": "The camera starts on the whole comic page and flies into the next panel until that frame fills the picture.",
-      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 4 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
-      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 4 cm in front of each panel, scaled so the fill frame still matches",
+      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 10,8 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
+      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 10.8 cm in front of each panel, scaled so the fill frame still matches",
       "preview": null,
       "roles": [
         "prop",
@@ -47482,8 +47482,8 @@
       "setting": "studio",
       "lineEs": "Cambio de capítulo vertical: el último fotograma llena una viñeta y la cámara se retira hasta la página entera.",
       "lineEn": "A vertical chapter change: the last frame fills one panel, then the camera pulls out to the whole page.",
-      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 4 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
-      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 4 cm in front of each panel, scaled so the fill frame still matches",
+      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 10,8 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
+      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 10.8 cm in front of each panel, scaled so the fill frame still matches",
       "preview": null,
       "roles": [
         "prop",
@@ -47544,8 +47544,8 @@
       "setting": "studio",
       "lineEs": "Cambio de capítulo vertical: la cámara empieza en la página entera y entra en la viñeta siguiente hasta llenar el cuadro.",
       "lineEn": "A vertical chapter change: the camera starts on the whole page and flies into the next panel until it fills the frame.",
-      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 4 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
-      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 4 cm in front of each panel, scaled so the fill frame still matches",
+      "notesEs": "De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo; Página de papel (incluida); Un recorte del sujeto a 10,8 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo",
+      "notesEn": "Three to six panel images; the two cut frames keep the video's aspect; Paper page (included); A subject cutout 10.8 cm in front of each panel, scaled so the fill frame still matches",
       "preview": null,
       "roles": [
         "prop",

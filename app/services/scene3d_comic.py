@@ -16,7 +16,7 @@ from urllib.parse import quote, unquote, urlsplit
 from fastapi import HTTPException
 from PIL import Image
 
-from services.scene3d_comic_cutout import cutout_is_empty, cutout_panel
+from services.scene3d_comic_cutout import cutout_is_empty, cutout_panel, finish_cutout
 from services.video_editor import extract_frame
 from services.world3d_scenes import World3DSceneError, publish_scene, run_template_tool, store_working_scene
 
@@ -287,7 +287,12 @@ def _stage_panel(item: dict, index: int, size: tuple[int, int], workspace: str, 
         cutout_dest = root / cutout_name
         _cover(Path(cutout_src), cutout_dest, size)
         _keep_picture_color(cutout_dest, dest)
-        staged["cutout"] = _url(cutout_name, workspace)
+        try:
+            finish_cutout(dest, cutout_dest)
+        except Exception as exc:
+            warning = f"{dest.name}: cutout unavailable ({exc})"
+        else:
+            staged["cutout"] = _url(cutout_name, workspace)
     return staged, warning
 
 

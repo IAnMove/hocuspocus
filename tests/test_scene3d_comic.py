@@ -139,9 +139,9 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
     panel = next(slot for slot in slots if slot["id"] == "panel-0")
     cutout = next(slot for slot in slots if slot["id"] == "cutout-0")
     distance = panel["scale"] / math.tan(math.radians(36) / 2)
-    factor = (distance - 0.04) / distance
+    factor = (distance - 0.108) / distance
     assert cutout["scale"] == pytest.approx(panel["scale"] * factor)
-    assert cutout["position"][2] == pytest.approx(panel["position"][2] + 0.04)
+    assert cutout["position"][2] == pytest.approx(panel["position"][2] + 0.108)
     assert cutout["position"][1] + cutout["scale"] == pytest.approx(panel["position"][1] + panel["scale"])
     assert stored["document"]["duration"] == pytest.approx(1.8)
     assert stored["document"]["camera"]["framing"]["yawArc"] == 8
@@ -232,6 +232,76 @@ def test_a_recolored_cutout_keeps_the_picture_on_a_full_size_cut_panel(tmp_path)
     assert cutout.getpixel((4, 4))[:3] == panel.getpixel((4, 4))[:3]
     assert cutout.getpixel((4, 4))[3] == 180
     assert filler.size == (cells[1]["w"], cells[1]["h"]) and filler.size != panel.size
+
+
+def test_inpaint_keeps_every_pixel_the_cutout_does_not_fully_cover(tmp_path):
+    import numpy as np
+
+    from services.scene3d_comic_cutout import finish_cutout
+
+    height, width = 60, 80
+    rgb = np.zeros((height, width, 3), np.uint8)
+    rgb[..., 0] = np.arange(width, dtype=np.uint8)[None, :]
+    rgb[..., 1] = np.arange(height, dtype=np.uint8)[:, None]
+    rgb[..., 2] = 40
+    rgb[28:36, 36:48] = (255, 0, 128)
+    original = np.dstack([rgb, np.full((height, width), 255, np.uint8)])
+    picture = tmp_path / "panel.png"
+    cutout = tmp_path / "cut.png"
+    alpha = np.zeros((height, width), np.uint8)
+    alpha[15:45, 20:60] = 255
+    Image.fromarray(original).save(picture)
+    Image.fromarray(np.dstack([rgb, alpha])).save(cutout)
+    finish_cutout(picture, cutout)
+    base = np.asarray(Image.open(picture).convert("RGBA"))
+    matte = np.asarray(Image.open(cutout).convert("RGBA"))
+    assert matte[30, 40, 3] == 255 and matte[16, 21, 3] == 255 and matte[0, 0, 3] == 0
+    assert np.array_equal(matte[..., :3], original[..., :3])
+    soft = matte[..., 3] < 255
+    assert np.array_equal(base[soft], original[soft])
+    assert np.array_equal(base[16, 21], original[16, 21])
+    assert not np.array_equal(base[30, 40, :3], original[30, 40, :3])
+    weight = matte[..., 3:4].astype(np.float64) / 255.0
+    composite = weight * original[..., :3] + (1.0 - weight) * base[..., :3]
+    assert float(np.max(np.abs(composite - original[..., :3]))) < 1e-6
+
+
+def test_a_full_matte_fades_over_the_outer_three_percent(tmp_path):
+    import numpy as np
+
+    from services.scene3d_comic_cutout import finish_cutout
+
+    height, width = 60, 80
+    rgb = np.zeros((height, width, 3), np.uint8)
+    rgb[..., 0] = 20
+    rgb[..., 1] = np.arange(width, dtype=np.uint8)[None, :]
+    original = np.dstack([rgb, np.full((height, width), 255, np.uint8)])
+    picture = tmp_path / "panel.png"
+    cutout = tmp_path / "cut.png"
+    Image.fromarray(original).save(picture)
+    Image.fromarray(original).save(cutout)
+    finish_cutout(picture, cutout)
+    base = np.asarray(Image.open(picture).convert("RGBA"))
+    matte = np.asarray(Image.open(cutout).convert("RGBA"))
+    assert matte[0, 0, 3] == 0
+    assert matte[height // 2, width // 2, 3] == 255
+    assert 0 < int(matte[height // 2, 1, 3]) < 255
+    assert np.array_equal(base[0, 0], original[0, 0])
+    assert np.array_equal(base[height // 2, 1], original[height // 2, 1])
+
+
+def test_a_failed_inpaint_leaves_the_panel_flat_and_warns(tmp_path, monkeypatch):
+    import cv2
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("inpaint broke")
+
+    monkeypatch.setattr(cv2, "inpaint", _boom)
+    reply = _call(tmp_path, _panels(tmp_path), export=False, intent="comic-inpaint")
+    assert reply["result"]["warnings"]
+    assert all("inpaint broke" in warning for warning in reply["result"]["warnings"])
+    stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
+    assert [slot["id"] for slot in stored["document"]["slots"] if slot["id"].startswith("cutout")] == []
 
 
 def _movie(tmp_path, name="clip.mp4", seconds=4):
