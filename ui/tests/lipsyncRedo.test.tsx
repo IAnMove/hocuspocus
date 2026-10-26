@@ -131,23 +131,20 @@ test('the Wizard calls shot.lipsync.redo and shows the disk size without downloa
   }
 })
 
-test('the same take repeats one intent id', async () => {
+test('a second redo of the same take is sent as a new request, not an old intent', async () => {
   const previous = globalThis.fetch
   const sent: Array<Record<string, unknown>> = []
   globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
     sent.push(JSON.parse(init?.body || '{}'))
-    return { ok: true, status: 200, json: async () => ({ result: { file: 'lipsync.mp4', verdict: 'ok' } }) }
+    return { ok: true, status: 200, json: async () => ({ result: { file: 'lipsync.mp4', verdict: 'retake' } }) }
   }) as typeof fetch
   try {
     const input = { workspace: 'film', engine: 'infinitetalk' as const, production_id: 'mv', shot: 'o05', source: 'take-b.mp4' }
     await runLipsyncRedo(input, () => 'ok')
     await runLipsyncRedo(input, () => 'ok')
-    await runLipsyncRedo({ ...input, source: 'take-a.mp4' }, () => 'ok')
-    assert.equal(typeof sent[0].intent_id, 'string')
-    assert.equal(sent[0].intent_id, sent[1].intent_id)
-    assert.notEqual(sent[0].intent_id, sent[2].intent_id)
-    assert.match(String(sent[0].intent_id), /take-b\.mp4/)
-    assert.match(String(sent[2].intent_id), /take-a\.mp4/)
+    // run_once replays a stored result for the same intent_id: a retake of the same take must not carry one.
+    assert.equal(sent[0].intent_id, undefined)
+    assert.equal(sent[1].intent_id, undefined)
   } finally {
     globalThis.fetch = previous
   }

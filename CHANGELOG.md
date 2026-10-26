@@ -32,7 +32,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a lip redo saves with the same locks as the other writers.** A production take now holds the music/Director edit slot, bumps `shots.json` revision, and refuses a stale `expected_revision`. A series take uses the series library lock, and it checks that the shot exists before copying the file.
 
-**Fixed: a second lip redo of the same take does not queue another job.** The button and the Wizard send one `intent_id` per shot, take and engine. While that redo is still waiting on the generation job, the server returns `already_running`. The media handler has no queued reply, so the first call still waits until the job finishes.
+**Fixed: a second lip redo of the same take does not queue another job.** While that redo is still waiting on the generation job (same workspace, production or series and episode, shot, take and engine), the server returns `already_running`. No fixed `intent_id` is sent: it would replay the stored result on every later redo of the take. The media handler has no queued reply, so the first call still waits until the job finishes.
 
 **Fixed: the lip redo button sends the take it sits on.** A production take row and the series inspector sent only the shot id, so the server redid the current clip. They now send `source` as that take's file. The Wizard is told to pass the same field.
 

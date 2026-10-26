@@ -1,7 +1,7 @@
 import i18n from '../../i18n'
 import type { CapabilityDefinition, CapabilityExecutionContext, CapabilityExecutionOutcome, defineCapability } from './capabilityRegistry'
 import {
-  interpretLipsyncReply, lipsyncInput, lipsyncIntentId, lipsyncNote, postLipsyncRedo, type LipsyncEngine,
+  interpretLipsyncReply, lipsyncInput, lipsyncNote, postLipsyncRedo, type LipsyncEngine,
 } from '../lipsync-redo/request'
 
 export interface AgentLipsyncRedoAction {
@@ -34,8 +34,9 @@ function guardedInput(action: AgentLipsyncRedoAction, workspace: string | undefi
 }
 
 export async function executeLipsyncRedo(action: AgentLipsyncRedoAction, context: CapabilityExecutionContext): Promise<CapabilityExecutionOutcome> {
-  const input = guardedInput(action, context.workspace)
-  const posted = await postLipsyncRedo(input, { surface: 'wizard', intentId: lipsyncIntentId(input) })
+  const posted = await postLipsyncRedo(guardedInput(action, context.workspace), {
+    surface: 'wizard', intentId: context.generationContext?.commandId,
+  })
   const read = interpretLipsyncReply(posted.status, posted.body)
   if (read.kind === 'error') throw new Error(read.message || wizardText('replies.lipsFailed'))
   return {

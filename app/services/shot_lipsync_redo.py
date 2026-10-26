@@ -605,7 +605,8 @@ def flight_key(arguments: Any) -> str | None:
     if not isinstance(engine, str) or not isinstance(workspace, str) or not isinstance(shot, str):
         return None
     source = payload.get("source") if isinstance(payload.get("source"), str) else ""
-    return f"{workspace}\0{shot}\0{source}\0{engine}"
+    owner = "\0".join(str(payload.get(key) or "") for key in ("production_id", "series_id", "episode_id"))
+    return f"{workspace}\0{owner}\0{shot}\0{source}\0{engine}"
 
 
 def claim_flight(key: str) -> bool:

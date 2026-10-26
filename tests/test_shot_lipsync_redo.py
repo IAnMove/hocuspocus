@@ -546,6 +546,18 @@ def test_a_second_redo_of_the_same_take_is_already_running(tmp_path, monkeypatch
     assert len(entered) == 1
 
 
+def test_the_flight_key_tells_a_production_shot_from_a_series_shot_of_the_same_id():
+    """Shot ids repeat (s1, o05). A redo of one target must not refuse a redo of another in the same workspace."""
+    base = {"workspace": "film", "engine": "infinitetalk", "shot": "s1"}
+    keys = {
+        redo.flight_key({"input": {**base, "production_id": "mv"}}),
+        redo.flight_key({"input": {**base, "production_id": "other"}}),
+        redo.flight_key({"input": {**base, "series_id": "show", "episode_id": "e1"}}),
+        redo.flight_key({"input": {**base, "series_id": "show", "episode_id": "e2"}}),
+    }
+    assert None not in keys and len(keys) == 4
+
+
 def _series_film(folder):
     folder.mkdir(parents=True, exist_ok=True)
     series = create_series_project("film", title="Show")
