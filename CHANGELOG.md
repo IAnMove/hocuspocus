@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a lip redo takes the series library lock without importing the router.** The save used to import `routers.series_library` to reach that lock. The series library bind now hands the same lock to the save.
+
 **Fixed: a puppet does not reuse a half-written layer folder.** The cache is read only when `.complete` is present. That marker is written after the layer files.
 
 **Fixed: a puppet's See-through pass takes the GPU lane.** Cutting the clothes used to run the worker with no lane. It now takes `local_gpu:0`, the same lane as the flat-rig layers.

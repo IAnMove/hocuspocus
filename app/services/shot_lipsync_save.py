@@ -13,6 +13,9 @@ from services.production_media_common import MediaToolError, publish_sidecar, so
 from services.workspace_store_lock import workspace_store_lock
 
 OPERATION = "shot.lipsync.redo"
+# The series library RLock. ``routers.series_library._bind_series_library_runtime`` sets this
+# to the same object the series routes hold. None until that bind: a unit test still writes.
+_library_lock = None
 
 
 def _write_json(path: str, body: dict) -> None:
@@ -160,8 +163,7 @@ def save_clip(folder: str, workspace: str, target: dict, video: str, qa: dict, e
 
 def _with_library_lock(action: Callable[[], Any]) -> Any:
     """The series library RLock launch binds. Tests that leave it unset still write."""
-    from routers import series_library as routes
-    lock = getattr(routes, "_library_lock", None)
+    lock = _library_lock
     if lock is None:
         return action()
     with lock:

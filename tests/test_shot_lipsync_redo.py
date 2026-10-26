@@ -632,13 +632,43 @@ def test_a_series_save_uses_the_library_lock(tmp_path, monkeypatch):
         def __exit__(self, *_args):
             return False
 
-    from routers import series_library as routes
-    monkeypatch.setattr(routes, "_library_lock", _Lock(), raising=False)
-    from services.shot_lipsync_save import save_series
-    save_series(str(folder), "film", {
+    from services import shot_lipsync_save as save_mod
+    monkeypatch.setattr(save_mod, "_library_lock", _Lock())
+    save_mod.save_series(str(folder), "film", {
         "series_id": series_id, "episode_id": episode_id, "shot": "s1", "original_name": "original.mp4", "video": "original.mp4",
     }, str(folder / "out.mp4"), {"verdict": "ok"}, "infinitetalk")
     assert held == [True]
+
+
+def test_the_series_library_bind_hands_its_lock_to_the_lip_redo():
+    """Launch and core already call this bind. The lip redo must see that same lock."""
+    import routers.series_library as routes
+    from services import shot_lipsync_save as save_mod
+
+    names = (
+        "_resolve_workspace", "_library_lock", "_read_library", "_write_library", "_project_or_404",
+        "_series_library_workspace", "_series_library_lock", "_read_series_workspace",
+        "_write_series_workspace", "_series_project_or_404", "_workspace_dir", "_safe_join",
+    )
+    before = {name: getattr(routes, name, None) for name in names}
+    previous = save_mod._library_lock
+    lock = object()
+    try:
+        routes._bind_series_library_runtime(
+            resolve_workspace=lambda value: value or "default", library_lock=lock,
+            read_library=lambda _workspace: {}, write_library=lambda _workspace, value: value,
+            project_or_404=lambda library, _series_id: library,
+        )
+        assert save_mod._library_lock is lock
+        assert routes._library_lock is lock
+    finally:
+        routes._bind_series_library_runtime(
+            resolve_workspace=before["_resolve_workspace"], library_lock=before["_library_lock"],
+            read_library=before["_read_library"], write_library=before["_write_library"],
+            project_or_404=before["_project_or_404"], workspace_dir=before["_workspace_dir"],
+            safe_join=before["_safe_join"],
+        )
+        save_mod._library_lock = previous
 
 
 def test_a_qa_error_names_the_exception(tmp_path, monkeypatch):
