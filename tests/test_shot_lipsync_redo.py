@@ -412,6 +412,95 @@ def test_guides_stay_files_after_the_real_infinitetalk_prepare(tmp_path, monkeyp
     assert os.path.isabs(body["audio_guide"]) and os.path.isfile(body["audio_guide"])
 
 
+def _tone(folder, name: str, seconds: float) -> None:
+    import subprocess
+    folder.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+         "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", str(folder / name)],
+        check=True, capture_output=True,
+    )
+
+
+def _rms(path: str, start: float, dur: float) -> float:
+    import struct
+    import wave
+    with wave.open(path) as handle:
+        handle.setpos(int(start * handle.getframerate()))
+        raw = handle.readframes(int(dur * handle.getframerate()))
+    samples = struct.unpack("<" + "h" * (len(raw) // 2), raw)
+    return (sum(value * value for value in samples) / len(samples)) ** 0.5
+
+
+def test_a_series_shot_uses_the_recorded_line_not_the_score(tmp_path, monkeypatch):
+    """The score cue is background music from t=0. The mouth follows the line, delayed by its intro."""
+    folder = tmp_path / "film"
+    folder.mkdir()
+    series = create_series_project("film", title="Show")
+    episode = create_series_episode(series)
+    series_id, episode_id = series["id"], episode["id"]
+    relative = f"assets/{series_id}/original.mp4"
+    _movie((folder / relative).parent, "original.mp4", 4)
+    _tone(folder, "mus-theme.wav", 1)
+    _tone(folder, f"ln-{episode_id}-b0-k.wav", 1)
+    episode["script"] = [{"id": "scene1", "locationId": ""}]
+    episode["shots"] = [{
+        "id": "s1", "sceneId": "scene1", "productionMethod": "generated_video", "order": 1,
+        "durationSeconds": 8, "prompt": "Gorthak speaks", "approvedAttemptId": "attempt-1",
+        "dialogueBeats": [{"id": "b0", "characterId": "gorthak", "text": "Hello."}],
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"], "model": "infinitetalk"}],
+    }]
+    episode["score"] = [{"fromShotId": "s1", "toShotId": "s1", "file": "mus-theme.wav", "volume": 0.18}]
+    series["characters"] = [{"id": "gorthak", "name": "Gorthak"}]
+    series["episodesById"][episode_id] = episode
+    series["assets"] = {"asset-1": {
+        "id": "asset-1", "workspaceId": "film", "kind": "video", "uri": relative,
+        "ownerType": "attempt", "ownerId": "attempt-1", "isDerivedThumbnail": False, "metadata": {},
+    }}
+    write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
+    seen = _bind(monkeypatch, tmp_path)
+    _call(tmp_path, {
+        "workspace": "film", "engine": "infinitetalk", "series_id": series_id, "episode_id": episode_id, "shot": "s1",
+    })
+    guide = seen[0]["audio_guide"]
+    assert os.path.basename(guide) != "mus-theme.wav"
+    assert _rms(guide, 0.0, 0.2) < 200
+    assert _rms(guide, 0.5, 0.2) > 1000
+
+
+def test_a_series_shot_without_a_line_asks_for_audio(tmp_path, monkeypatch):
+    """No recorded line: do not drive the mouth with the score cue."""
+    folder = tmp_path / "film"
+    folder.mkdir()
+    series = create_series_project("film", title="Show")
+    episode = create_series_episode(series)
+    series_id, episode_id = series["id"], episode["id"]
+    relative = f"assets/{series_id}/original.mp4"
+    _movie((folder / relative).parent, "original.mp4", 1)
+    _tone(folder, "mus-theme.wav", 1)
+    episode["script"] = [{"id": "scene1", "locationId": ""}]
+    episode["shots"] = [{
+        "id": "s1", "sceneId": "scene1", "productionMethod": "generated_video", "order": 1,
+        "durationSeconds": 8, "prompt": "Gorthak speaks", "approvedAttemptId": "attempt-1",
+        "dialogueBeats": [{"id": "b0", "characterId": "gorthak", "text": "Hello."}],
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"], "model": "infinitetalk"}],
+    }]
+    episode["score"] = [{"fromShotId": "s1", "toShotId": "s1", "file": "mus-theme.wav", "volume": 0.18}]
+    series["characters"] = [{"id": "gorthak", "name": "Gorthak"}]
+    series["episodesById"][episode_id] = episode
+    series["assets"] = {"asset-1": {
+        "id": "asset-1", "workspaceId": "film", "kind": "video", "uri": relative,
+        "ownerType": "attempt", "ownerId": "attempt-1", "isDerivedThumbnail": False, "metadata": {},
+    }}
+    write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
+    _bind(monkeypatch, tmp_path)
+    with pytest.raises(HTTPException) as denied:
+        _call(tmp_path, {
+            "workspace": "film", "engine": "infinitetalk", "series_id": series_id, "episode_id": episode_id, "shot": "s1",
+        })
+    assert denied.value.detail["code"] == "audio_required"
+
+
 def test_a_failed_generation_names_the_job_error(tmp_path, monkeypatch):
     folder = tmp_path / "film"
     folder.mkdir()

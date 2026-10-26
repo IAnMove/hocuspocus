@@ -36,7 +36,8 @@ def catalog() -> dict[str, Any]:
         "(video-to-video, Apache-2.0). longcat_avatar stays in the model catalog and is not offered: "
         "it does not read the shot video. Name one target: "
         "production_id + shot, series_id + episode_id + shot, or clip. audio is the driving sound "
-        "(a production uses its song when audio is omitted; a series uses the score cue that covers the shot). "
+        "(a production uses its song when audio is omitted; a series uses its recorded line, "
+        "placed at the line's start, and does not use the score cue). "
         "span is [start, end] seconds of that sound. The result is a new take; the selected clip and any "
         "series approval stay. When the int8 weights are missing the call returns their disk size and does "
         "not download; confirm_download true starts the existing model download and does not wait for it. "
@@ -98,11 +99,16 @@ def prepare_guides(target: dict, folder: str) -> dict[str, Any]:
     """Absolute paths. InfiniteTalk and LongCat are not ``wangp_1272``, so the queue
     never resolves a workspace-relative name and drops the file."""
     span = target["span"]
+    owned: list[str] = []
+    if target.get("placed"):
+        owned.append(os.path.abspath(target["audio"]))
     audio = trim_span(target["audio"], folder, span[0], span[1]) if span else target["audio"]
+    if span:
+        owned.append(os.path.abspath(audio))
     return {
         "video": os.path.abspath(target["video"]), "audio": os.path.abspath(audio),
         "audio_path": target["audio"], "span": span, "offset": target["offset"],
-        "trimmed": os.path.abspath(audio) if span else None,
+        "trimmed": owned[-1] if owned else None, "owned": owned,
     }
 
 
@@ -307,12 +313,13 @@ def _series_target(payload, folder, uploads, workspace, engine, span, offset) ->
     episode_id = _text(payload.get("episode_id"), "episode_id")
     shot_id = _token(payload.get("shot"), "shot")
     library = read_series_library(folder, workspace)
-    _series, episode, _index, shot = _series_shot(library, series_id, episode_id, shot_id)
+    _series, _episode, _index, shot = _series_shot(library, series_id, episode_id, shot_id)
     video = _video_file(payload, _series_clip(library, shot, series_id), workspace, folder, uploads)
-    audio = _named_audio(payload, workspace, folder, uploads) or _score_file(episode, shot_id, workspace, folder, uploads)
+    audio = _named_audio(payload, workspace, folder, uploads)
+    placed = False
     if audio is None:
-        raise MediaToolError("audio_required", "Name the audio file for this shot.")
-    return _target("series", engine, video, audio, span, offset, payload, shot.get("locked") is True)
+        audio, placed = _line_drive(episode_id, shot, folder), True
+    return _target("series", engine, video, audio, span, offset, payload, shot.get("locked") is True, placed)
 
 
 def _dict_rows(value: Any) -> list[dict]:
@@ -348,25 +355,87 @@ def _series_clip(library: dict, shot: dict, series_id: str) -> str | None:
     return None
 
 
-def _score_file(episode: dict, shot_id: str, workspace: str, folder: str, uploads: str) -> str | None:
-    ids = [item.get("id") for item in episode.get("shots") or [] if isinstance(item, dict)]
-    if shot_id not in ids:
+def _spoken(shot: dict) -> list[dict]:
+    beats = shot.get("dialogueBeats")
+    if not isinstance(beats, list):
+        return []
+    return [beat for beat in beats if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+
+
+def _recorded_line(folder: str, episode_id: str, beat_id: str) -> str | None:
+    """The dry ``ln-<episode>-<beat>-<key>.wav``. A room copy is what the mix plays; the mouth uses the dry take.
+    Several keys means the line was re-recorded: the newest file is the one the shot would reuse."""
+    if not beat_id or "/" in beat_id or "\\" in beat_id:
         return None
-    index = ids.index(shot_id)
-    for cue in episode.get("score") or []:
-        if not isinstance(cue, dict) or not isinstance(cue.get("file"), str):
+    prefix = f"ln-{episode_id}-{beat_id}-"
+    found: list[str] = []
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return None
+    for name in names:
+        if not name.startswith(prefix) or not name.endswith(".wav"):
             continue
-        if _cue_covers(ids, cue, index):
-            return resolve_source(cue["file"], workspace, folder, uploads, ("audio",), "audio")
-    return None
+        if ".room-" in name or "-raw" in name or ".best." in name or "-take" in name:
+            continue
+        found.append(os.path.join(folder, name))
+    if not found:
+        return None
+    return max(found, key=lambda path: os.path.getmtime(path) if os.path.isfile(path) else 0)
 
 
-def _cue_covers(ids: list, cue: dict, index: int) -> bool:
-    start, end = cue.get("fromShotId"), cue.get("toShotId")
-    if start not in ids or end not in ids:
-        return False
-    low, high = sorted((ids.index(start), ids.index(end)))
-    return low <= index <= high
+def _line_drive(episode_id: str, shot: dict, folder: str) -> str:
+    """The shot's recorded lines, each delayed to the start ``plan_timing`` gives them. The score cue is music."""
+    beats = _spoken(shot)
+    if not beats:
+        raise MediaToolError("audio_required", "This shot has no recorded line. Name the audio file.")
+    files, missing = [], []
+    for number, beat in enumerate(beats, start=1):
+        path = _recorded_line(folder, episode_id, str(beat.get("id") or ""))
+        (files if path else missing).append(path or str(number))
+    if missing:
+        verb = "is" if len(missing) == 1 else "are"
+        raise MediaToolError(
+            "audio_required",
+            f"Line {', '.join(missing)} of the shot {verb} not recorded. Name the audio file or record the line.",
+        )
+    from services.series_shot_extras import pauses, timing_args
+    from services.series_shot_plan import plan_timing
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    timing, _length = plan_timing([source_seconds(path) for path in files], **timing_args(layout), pauses=pauses(beats))
+    return _place_lines(folder, [(start, path) for (start, _end), path in zip(timing, files)])
+
+
+def _place_graph(starts: list[float]) -> str:
+    parts, labels = [], []
+    for index, start in enumerate(starts):
+        delay = max(0, int(round(float(start) * 1000)))
+        label = "out" if len(starts) == 1 else f"a{index}"
+        parts.append(f"[{index}]adelay={delay}:all=1[{label}]")
+        labels.append(f"[{label}]")
+    if len(starts) == 1:
+        return parts[0]
+    return ";".join(parts) + f";{''.join(labels)}amix=inputs={len(starts)}:normalize=0:duration=longest[out]"
+
+
+def _place_lines(folder: str, lines: list[tuple[float, str]]) -> str:
+    import subprocess
+    from services.production_media_common import available_name
+    dest = os.path.join(folder, available_name(folder, "lipsync-audio.wav"))
+    command = ["ffmpeg", "-v", "error", "-nostdin", "-y"]
+    for _start, path in lines:
+        command.extend(["-i", path])
+    command.extend([
+        "-filter_complex", _place_graph([start for start, _path in lines]),
+        "-map", "[out]", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", dest,
+    ])
+    try:
+        result = subprocess.run(command, capture_output=True, check=False)
+    except OSError as exc:
+        raise MediaToolError("audio_trim_failed", "ffmpeg could not place the line audio.") from exc
+    if result.returncode != 0 or not os.path.isfile(dest):
+        raise MediaToolError("audio_trim_failed", "ffmpeg could not place the line audio.")
+    return dest
 
 
 def _song_file(folder: str, production_id: str, workspace: str, uploads: str) -> str | None:
@@ -393,10 +462,10 @@ def _named_audio(payload, workspace, folder, uploads) -> str | None:
     return resolve_source(payload["audio"], workspace, folder, uploads, ("audio",), "audio")
 
 
-def _target(kind, engine, video, audio, span, offset, payload, locked) -> dict[str, Any]:
+def _target(kind, engine, video, audio, span, offset, payload, locked, placed=False) -> dict[str, Any]:
     return {
         "kind": kind, "engine": engine, "video": video, "audio": audio, "span": span, "offset": offset,
-        "locked": locked, "original_name": os.path.basename(video),
+        "locked": locked, "placed": placed, "original_name": os.path.basename(video),
         "shot": payload.get("shot"), "production_id": payload.get("production_id"),
         "series_id": payload.get("series_id"), "episode_id": payload.get("episode_id"),
     }

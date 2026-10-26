@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a series lip redo uses the recorded line, not the score.** The score cue is background music and was read from the start of the cue. The redo now places each `ln-<episode>-<beat>-<key>.wav` at the line's start. A shot with no recorded line asks for `audio` instead of guessing.
+
 **Fixed: a series or clip lip redo without a span lasts as long as the source take.** `video_length` used the 81-frame window whenever `span` was omitted. Series and clip now take the source duration from ffprobe and count it at 25 fps. A production shot with no start and end still uses the window.
 
 **Fixed: lip-sync QA scores a spanned take from the span start.** A clip that begins at 45 s was measured with offset 0, so the window held no frames and the verdict was unreliable. `offset` is now described on `shot.lipsync.redo` and `qa.lipsync`.
