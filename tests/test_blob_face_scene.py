@@ -120,3 +120,30 @@ def test_characters_face_make_posts_and_replays(tmp_path):
     assert second["result"]["replayed"] is True or second.get("replayed") is True or second["result"].get("replayed") is True
     assert calls == ["http://127.0.0.1:9/api/v1/character-kits/face"]
     assert "characters.face.make" in INTENT_OPERATIONS
+
+
+def test_a_plane_face_is_opt_in_and_sized_in_head_radii(tmp_path):
+    from services.blob_face_scene import PLANE_DEFAULT
+
+    root = lambda workspace: str(tmp_path / workspace)
+    (tmp_path / "studio").mkdir()
+    write_character_kit_library(root("studio"), {"version": 1, "activeId": "blob", "kits": {"blob": kit()}}, base_revision=0)
+    _write("studio", "w3d-face00000002", {"revision": 1, "templateId": "t", "warnings": [], "document": {
+        "duration": 4, "camera": {}, "soundtrack": [],
+        "slots": [{"id": "hero", "slot": "subject_1", "media": "model3d", "sourceUrl": ""}]}}, root)
+    base = {"workspace": "studio", "scene_id": "w3d-face00000002", "object_id": "hero", "kit_id": "blob",
+            "face_anchor": {"center": [0, 1.5, 0], "size": [0.62, 0.58, 0.55]}}
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "cap", "input": {**base, "base_revision": 1}}, root)
+    decal = inspect_scene("studio", "w3d-face00000002", root)["document"]["slots"][0]["faceDecal"]
+    assert "shape" not in decal and "plane" not in decal
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "plane", "input": {**base, "base_revision": 2, "shape": "plane"}}, root)
+    decal = inspect_scene("studio", "w3d-face00000002", root)["document"]["slots"][0]["faceDecal"]
+    assert decal["shape"] == "plane" and decal["plane"] == PLANE_DEFAULT
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "sized", "input": {**base, "base_revision": 3, "plane": [3, 4]}}, root)
+    decal = inspect_scene("studio", "w3d-face00000002", root)["document"]["slots"][0]["faceDecal"]
+    assert decal["shape"] == "plane" and decal["plane"] == [3.0, 4.0, PLANE_DEFAULT[2]]
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "cap-again", "input": {**base, "base_revision": 4, "shape": "cap"}}, root)
+    assert "shape" not in inspect_scene("studio", "w3d-face00000002", root)["document"]["slots"][0]["faceDecal"]
+    with pytest.raises(HTTPException) as bad:
+        execute_command("world3d.scene.face", {"version": 1, "intent_id": "bad", "input": {**base, "base_revision": 5, "shape": "plane", "plane": [0.5, 4]}}, root)
+    assert bad.value.detail["code"] == "invalid_face"

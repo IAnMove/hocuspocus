@@ -28,6 +28,10 @@ The viewer section **Cara 2D** sets the kit and the expression. It keeps a cente
 
 The cap is a child of `Head`, flat (no toon ink, no cel shading). From ±30° it still meets the head.
 
+## Plane face (a painted head)
+
+`shape: "plane"` on `world3d.scene.face` hangs the kit as a flat picture on the Head bone instead of the cap: a whole painted head with its hair (a Qwen drawing keyed with `image.remove_background`, rigged with `characters.save` + `characters.rig.flat`), on a body made with `hair.style: "none"` so the skull stays behind the picture. `plane: [width, height, lift]` sizes it in head radii (default `3.3 x 3.3`, lift `-0.5`: a square picture with hair above and a neck below is wider than the skull and its centre lower). `size` is how far in front of the head centre it sits. The plane follows the bone (nods turn it) and does not turn toward the camera: keep the camera within about 30° of the face. The default cap and its documents are unchanged.
+
 ## Anime style
 
 `traits.style: "anime"` draws the same kit (8 poses, 9 mouths, blink, exact anchors) with big shaded eyes (iris bands, highlights, lashes), thin brows, a tiny nose, small mouths and an optional blush. `eye_color` (`#rrggbb`) colours the iris, `blush` (bool) adds the cheeks. The mouths are drawn 1.8x so they still read at video size. `skin` should equal the head colour of the body (`traits.colors.head` from `model3d.blob.make`): the blink patch is painted in that colour and a different one shows as a pale oval.

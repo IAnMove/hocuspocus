@@ -117,6 +117,27 @@ def _span(changes: dict, kept: dict, kit: dict) -> list[float] | None:
     return [round(float(raw[0]), 2), round(float(raw[1]), 2)]
 
 
+PLANE_DEFAULT = [3.3, 3.3, -0.5]
+
+
+def _plane(changes: dict, kept: dict) -> dict[str, Any]:
+    """``shape: "plane"`` hangs a flat picture (a painted head with its hair) on the Head bone instead of the cap.
+    ``plane`` is [width, height, lift] in head radii. Nothing is stored for the default cap."""
+    shape = changes.get("shape", kept.get("shape"))
+    if shape not in (None, "cap", "plane"):
+        raise World3DSceneError("invalid_face", "shape is cap or plane")
+    if shape != "plane":
+        return {}
+    raw = changes.get("plane", kept.get("plane"))
+    if raw is None:
+        return {"shape": "plane", "plane": list(PLANE_DEFAULT)}
+    numbers = isinstance(raw, (list, tuple)) and 2 <= len(raw) <= 3 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in raw)
+    if not numbers or not all(1 <= v <= 8 for v in raw[:2]) or (len(raw) == 3 and not -3 <= raw[2] <= 3):
+        raise World3DSceneError("invalid_face", "plane is [width, height, lift] in head radii: width and height from 1 to 8, lift from -3 to 3")
+    lift = raw[2] if len(raw) == 3 else PLANE_DEFAULT[2]
+    return {"shape": "plane", "plane": [round(float(raw[0]), 3), round(float(raw[1]), 3), round(float(lift), 3)]}
+
+
 def _explicit(changes: dict) -> dict[str, Any] | None:
     if "center" not in changes and "radii" not in changes:
         return None
@@ -180,7 +201,7 @@ def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_
     span = _span(changes, kept, kit)
     slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
                          "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
-                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {})}
+                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {}), **_plane(changes, kept)}
     character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
     slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
     record["revision"] += 1

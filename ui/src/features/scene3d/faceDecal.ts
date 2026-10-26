@@ -11,6 +11,7 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  PlaneGeometry,
   Quaternion,
   SphereGeometry,
   SRGBColorSpace,
@@ -34,6 +35,9 @@ import {
 export const FACE_CAP_SPAN = 80 * Math.PI / 180
 /** The same sweep upwards and downwards, centred on the equator, unless the decal gives its own `span`. */
 export const FACE_DECAL_OUTSET = 1.04
+/** A plane face: width and height in head radii, then how far up its centre sits from the head centre, also in radii.
+A painted head fills its square picture with hair above and a neck below, so the picture is wider than the skull and its centre lower. */
+export const FACE_PLANE_DEFAULT: readonly [number, number, number] = [3.3, 3.3, -0.5]
 const CANVAS = 1024
 const MOUTH_FALLBACK: CutoutAnchor = { offsetX: 0, offsetY: 0, scale: 0.16, rotation: 0 }
 const EYE_FALLBACK: CutoutAnchor = { offsetX: 0, offsetY: 0, scale: 1, rotation: 0 }
@@ -67,6 +71,10 @@ export type Scene3DFaceDecal = {
   size?: number
   /** Degrees of head the face covers, horizontal then vertical (default 80 x 80). */
   span?: [number, number]
+  /** `plane`: a flat picture on the head (a painted head with its hair) instead of the cap. Default `cap`. */
+  shape?: 'cap' | 'plane'
+  /** The plane's width, height and lift in head radii (default `FACE_PLANE_DEFAULT`). */
+  plane?: [number, number, number]
   bone: string
   expressions?: FaceExpressionCue[]
   art?: FaceDecalArt
@@ -137,6 +145,23 @@ export function faceCapGeometry(span?: readonly [number, number]): SphereGeometr
   }
   uv.needsUpdate = true
   return geometry
+}
+
+/** Unit square facing +Z. Its UVs already cover the whole picture. */
+export function facePlaneGeometry(): PlaneGeometry {
+  return new PlaneGeometry(1, 1)
+}
+
+/** The plane sits `outset` head radii in front of the head centre, lifted by `plane[2]` radii, `plane[0]` x `plane[1]` radii big. */
+export function placeFacePlane(mesh: Object3D, boneInverse: Matrix4, center: readonly number[], radii: readonly number[], outset = FACE_DECAL_OUTSET, plane: readonly [number, number, number] = FACE_PLANE_DEFAULT) {
+  const inverse = boneInverse.clone()
+  const position = new Vector3(center[0], center[1] + radii[1] * plane[2], center[2] + radii[2] * outset).applyMatrix4(inverse)
+  const quaternion = new Quaternion()
+  const scale = new Vector3()
+  inverse.decompose(new Vector3(), quaternion, scale)
+  mesh.position.copy(position)
+  mesh.quaternion.copy(quaternion)
+  mesh.scale.set(radii[0] * plane[0] * scale.x, radii[1] * plane[1] * scale.y, scale.z)
 }
 
 /** `boneInverse` maps model space into the bone. The mesh is then parented to that bone. */
@@ -246,6 +271,15 @@ function spanOf(raw: unknown): [number, number] | undefined {
   return ok(wide) && ok(tall) ? [Math.round(wide * 100) / 100, Math.round(tall * 100) / 100] : undefined
 }
 
+function planeOf(raw: unknown): [number, number, number] | undefined {
+  if (!Array.isArray(raw) || raw.length < 2 || raw.length > 3) return undefined
+  const [wide, tall, lift = FACE_PLANE_DEFAULT[2]] = raw
+  const size = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 1 && v <= 8
+  const ok = size(wide) && size(tall) && typeof lift === 'number' && Number.isFinite(lift) && lift >= -3 && lift <= 3
+  const round = (v: number) => Math.round(v * 1000) / 1000
+  return ok ? [round(wide), round(tall), round(lift)] : undefined
+}
+
 export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Record<string, unknown>
@@ -257,11 +291,14 @@ export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   const radii = finiteTriple(value.radii, true)
   const size = typeof value.size === 'number' && value.size >= 1 && value.size <= 1.2 ? Math.round(value.size * 1000) / 1000 : undefined
   const span = spanOf(value.span)
+  const shape = value.shape === 'plane' ? 'plane' : undefined
+  const plane = shape ? planeOf(value.plane) ?? [...FACE_PLANE_DEFAULT] as [number, number, number] : undefined
   const expressions = expressionsOf(value.expressions)
   const art = artOf(value.art)
   return {
     kitId, bone, ...(pose ? { pose } : {}), ...(center ? { center } : {}), ...(radii ? { radii } : {}),
-    ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
+    ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(shape ? { shape, plane } : {}),
+    ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
   }
 }
 
@@ -306,23 +343,28 @@ export class FaceDecalRuntime {
   }
 
   private mount(root: Object3D, bone: Bone, decal: Scene3DFaceDecal) {
-    const key = `${bone.uuid}|${decal.center!.join()}|${decal.radii!.join()}|${decal.size ?? FACE_DECAL_OUTSET}`
-    if (!this.mesh) this.mesh = this.createMesh(decal.span)
+    const plane = decal.shape === 'plane'
+    const key = `${bone.uuid}|${decal.center!.join()}|${decal.radii!.join()}|${decal.size ?? FACE_DECAL_OUTSET}|${plane ? (decal.plane ?? FACE_PLANE_DEFAULT).join() : ''}`
+    if (!this.mesh) this.mesh = this.createMesh(decal)
     if (!this.mesh) return
-    const spanKey = (decal.span ?? []).join()
+    const spanKey = plane ? 'plane' : (decal.span ?? []).join()
     if (spanKey !== this.spanKey) {
       this.spanKey = spanKey
       this.mesh.geometry.dispose()
-      this.mesh.geometry = faceCapGeometry(decal.span)
+      this.mesh.geometry = plane ? facePlaneGeometry() : faceCapGeometry(decal.span)
+      const material = this.mesh.material as MeshBasicMaterial
+      material.color.set(plane ? 0xffffff : 0xfff6f0)
     }
     if (this.placeKey === key && this.mesh.parent === bone) return
     const inverse = bindInverse(root, bone)
     this.placeKey = key
-    placeFaceCap(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET)
+    if (plane) placeFacePlane(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET, decal.plane ?? FACE_PLANE_DEFAULT)
+    else placeFaceCap(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET)
     bone.add(this.mesh)
   }
 
-  private createMesh(span?: readonly [number, number]): Mesh | undefined {
+  private createMesh(decal: Scene3DFaceDecal): Mesh | undefined {
+    const plane = decal.shape === 'plane'
     const canvas = document.createElement('canvas')
     canvas.width = CANVAS
     canvas.height = CANVAS
@@ -331,11 +373,13 @@ export class FaceDecalRuntime {
     this.context = context
     this.texture = new CanvasTexture(canvas)
     this.texture.colorSpace = SRGBColorSpace
+    // The cap takes a slight warm tint on a flat drawing. A painted head keeps its own colours.
     const material = new MeshBasicMaterial({
-      map: this.texture, color: 0xfff6f0, transparent: true, alphaTest: 0.04, side: FrontSide, toneMapped: false,
+      map: this.texture, color: plane ? 0xffffff : 0xfff6f0, transparent: true, alphaTest: 0.04, side: FrontSide, toneMapped: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     })
-    const mesh = new Mesh(faceCapGeometry(span), material)
+    this.spanKey = plane ? 'plane' : (decal.span ?? []).join()
+    const mesh = new Mesh(plane ? facePlaneGeometry() : faceCapGeometry(decal.span), material)
     mesh.name = 'blob-face'
     mesh.frustumCulled = false
     mesh.renderOrder = 2
