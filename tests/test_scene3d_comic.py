@@ -136,23 +136,13 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
     ids = [slot["id"] for slot in slots]
     assert ids == ["page", "panel-0", "panel-1", "panel-2", "panel-3", "cutout-0", "cutout-1", "cutout-2", "cutout-3"]
     assert slots[0]["sourceUrl"].startswith("/api/v1/file/comic-page-landscape.png")
-    page = next(slot for slot in slots if slot["id"] == "page")
     panel = next(slot for slot in slots if slot["id"] == "panel-0")
     cutout = next(slot for slot in slots if slot["id"] == "cutout-0")
-    assert page["position"][2] == pytest.approx(0)
-    assert panel["position"][2] < cutout["position"][2] < 0
-    # scale = cellScale + depth / tan(fov/2), and position z is -depth.
-    focal = math.tan(math.radians(36) / 2)
-    cell_scale = panel["scale"] + panel["position"][2] * focal
-    assert cell_scale > 0
-    assert cutout["scale"] == pytest.approx(cell_scale - cutout["position"][2] * focal)
+    distance = panel["scale"] / math.tan(math.radians(36) / 2)
+    factor = (distance - 0.108) / distance
+    assert cutout["scale"] == pytest.approx(panel["scale"] * factor)
+    assert cutout["position"][2] == pytest.approx(panel["position"][2] + 0.108)
     assert cutout["position"][1] + cutout["scale"] == pytest.approx(panel["position"][1] + panel["scale"])
-    assert all(slot["position"][2] == pytest.approx(cutout["position"][2]) for slot in slots if str(slot["id"]).startswith("cutout"))
-    assert panel["imageLook"]["overscan"] > 0
-    picture = Image.open(tmp_path / "studio" / "comic-panel-0.png")
-    pad_x, pad_y = _pad(64, 36, panel["imageLook"]["overscan"])
-    assert picture.size == (64 + 2 * pad_x, 36 + 2 * pad_y)
-    assert picture.getpixel((0, pad_y))[:3] == picture.getpixel((pad_x, pad_y))[:3]
     assert stored["document"]["duration"] == pytest.approx(1.8)
     assert stored["document"]["camera"]["framing"]["yawArc"] == 8
     assert reply["result"]["warnings"] == []
@@ -218,19 +208,12 @@ def test_five_panels_keep_the_cut_aspect_and_crop_the_rest(tmp_path):
     cells = reply["result"]["layout"]["cells"]
     assert [index for index, cell in enumerate(cells) if cell["hero"]] == [0, 4]
     for index, cell in enumerate(cells):
-        content = (64, 36) if cell["hero"] else (cell["w"], cell["h"])
-        assert (content[0] * 9 == content[1] * 16) is bool(cell["hero"])
+        image = Image.open(tmp_path / "studio" / f"comic-panel-{index}.png")
+        assert image.size == ((64, 36) if cell["hero"] else (cell["w"], cell["h"]))
+        assert (image.size[0] * 9 == image.size[1] * 16) is bool(cell["hero"])
     stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
     panel = next(slot for slot in stored["document"]["slots"] if slot["id"] == "panel-0")
-    cell_scale = cells[0]["h"] * 0.00125 / 2
-    focal = math.tan(math.radians(36) / 2)
-    assert panel["scale"] == pytest.approx(cell_scale - panel["position"][2] * focal)
-    for index, cell in enumerate(cells):
-        image = Image.open(tmp_path / "studio" / f"comic-panel-{index}.png")
-        content = (64, 36) if cell["hero"] else (cell["w"], cell["h"])
-        slot = next(item for item in stored["document"]["slots"] if item["id"] == f"panel-{index}")
-        pad_x, pad_y = _pad(*content, slot["imageLook"]["overscan"])
-        assert image.size == (content[0] + 2 * pad_x, content[1] + 2 * pad_y)
+    assert panel["scale"] == pytest.approx(cells[0]["h"] * 0.00125 / 2)
 
 
 def test_a_recolored_cutout_keeps_the_picture_on_a_full_size_cut_panel(tmp_path):
@@ -242,21 +225,14 @@ def test_a_recolored_cutout_keeps_the_picture_on_a_full_size_cut_panel(tmp_path)
     bind_comic_cutout(recolor)
     reply = _call(tmp_path, _panels(tmp_path, 5), intent="comic-color", seed=1, to_panel=4)
     cells = reply["result"]["layout"]["cells"]
-    stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
-    fraction = next(slot["imageLook"]["overscan"] for slot in stored["document"]["slots"] if slot["id"] == "panel-0")
-    pad_x, pad_y = _pad(64, 36, fraction)
     panel = Image.open(tmp_path / "studio" / "comic-panel-0.png").convert("RGBA")
     cutout = Image.open(tmp_path / "studio" / "comic-cutout-0.png").convert("RGBA")
     filler = Image.open(tmp_path / "studio" / "comic-panel-1.png")
-    assert cutout.size == (64, 36)
-    assert panel.size == (64 + 2 * pad_x, 36 + 2 * pad_y)
+    assert panel.size == (64, 36) and cutout.size == panel.size
     assert cutout.getpixel((4, 4))[:3] == (40, 80, 120)
     assert cutout.getpixel((4, 4))[3] == 255
-    assert panel.getpixel((pad_x + 4, pad_y + 4))[:3] == (40, 80, 120)
-    filler_fraction = next(slot["imageLook"]["overscan"] for slot in stored["document"]["slots"] if slot["id"] == "panel-1")
-    filler_pad_x, filler_pad_y = _pad(cells[1]["w"], cells[1]["h"], filler_fraction)
-    assert filler.size == (cells[1]["w"] + 2 * filler_pad_x, cells[1]["h"] + 2 * filler_pad_y)
-    assert filler.size != panel.size
+    assert cutout.getpixel((0, 0))[3] == 0
+    assert filler.size == (cells[1]["w"], cells[1]["h"]) and filler.size != panel.size
 
 
 def test_a_sticker_leaves_no_subject_in_the_base_outside_the_ring(tmp_path):
@@ -312,8 +288,7 @@ def test_a_sticker_leaves_no_subject_in_the_base_outside_the_ring(tmp_path):
         assert opaque[y0:y1, x0:x1].any() and clear[y0:y1, x0:x1].any()
 
 
-def test_a_full_matte_stays_opaque_to_the_frame_edge(tmp_path):
-    """The page hides the spill, so the sticker is not faded at the panel edge."""
+def test_a_full_matte_fades_over_the_outer_three_percent(tmp_path):
     import numpy as np
 
     from services.scene3d_comic_cutout import finish_cutout
@@ -328,10 +303,13 @@ def test_a_full_matte_stays_opaque_to_the_frame_edge(tmp_path):
     Image.fromarray(original).save(picture)
     Image.fromarray(original).save(cutout)
     finish_cutout(picture, cutout)
+    base = np.asarray(Image.open(picture).convert("RGBA"))
     matte = np.asarray(Image.open(cutout).convert("RGBA"))
-    assert matte[0, 0, 3] == 255
+    assert matte[0, 0, 3] == 0
     assert matte[height // 2, width // 2, 3] == 255
-    assert np.array_equal(matte[..., :3], original[..., :3])
+    assert 0 < int(matte[height // 2, 1, 3]) < 255
+    assert np.array_equal(base[0, 0], original[0, 0])
+    assert np.array_equal(base[height // 2, 1], original[height // 2, 1])
 
 
 def test_a_failed_inpaint_leaves_the_panel_flat_and_warns(tmp_path, monkeypatch):
@@ -346,10 +324,6 @@ def test_a_failed_inpaint_leaves_the_panel_flat_and_warns(tmp_path, monkeypatch)
     assert all("inpaint broke" in warning for warning in reply["result"]["warnings"])
     stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
     assert [slot["id"] for slot in stored["document"]["slots"] if slot["id"].startswith("cutout")] == []
-
-
-def _pad(width: int, height: int, fraction: float) -> tuple[int, int]:
-    return math.ceil(fraction * width - 1e-9), math.ceil(fraction * height - 1e-9)
 
 
 def _movie(tmp_path, name="clip.mp4", seconds=4):

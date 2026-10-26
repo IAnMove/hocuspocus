@@ -6,7 +6,6 @@ in the workspace. Export uses the Video 3D exporter when launch has bound it.
 from __future__ import annotations
 
 import base64
-import math
 import struct
 import subprocess
 import time
@@ -87,7 +86,6 @@ def comic_transition(data: dict, workspace_dir) -> dict:
     built = run_template_tool("comic", _payload(
         fmt, width, height, page_url, panels, from_panel, to_panel, seed, exit_duration, enter_duration, hold,
     ))
-    _replicate_bases(built, root)
     documents = [("exit", built.get("exit")), ("enter", built.get("enter"))]
     scenes = [_save(workspace, workspace_dir, role, document) for role, document in documents]
     clips = [_clip(workspace, role, document, scene) for (role, document), scene in zip(documents, scenes)] if exporting else []
@@ -326,49 +324,6 @@ def _keep_picture_color(cutout: Path, picture: Path) -> None:
     painted = base.copy()
     painted.putalpha(mask.getchannel("A"))
     painted.save(cutout)
-
-
-def _replicate_bases(built: dict, root: Path) -> None:
-    """Extend each picture by the overscan the page recorded, copying the edge rather than mirroring a subtitle."""
-    import cv2
-
-    seen: set[str] = set()
-    for role in ("exit", "enter"):
-        document = built.get(role)
-        if not isinstance(document, dict):
-            continue
-        for slot in document.get("slots") or []:
-            if not isinstance(slot, dict) or not str(slot.get("id") or "").startswith("panel-"):
-                continue
-            look = slot.get("imageLook") if isinstance(slot.get("imageLook"), dict) else {}
-            fraction = look.get("overscan") if isinstance(look, dict) else None
-            name = _file_name(str(slot.get("sourceUrl") or ""))
-            if not isinstance(fraction, (int, float)) or fraction <= 0 or not name or name in seen:
-                continue
-            seen.add(name)
-            _replicate_border(root / name, float(fraction), cv2)
-
-
-def _file_name(url: str) -> str:
-    if not url.startswith("/api/v1/file/"):
-        return ""
-    name = unquote(urlsplit(url).path[len("/api/v1/file/"):])
-    return name if _basename(name) else ""
-
-
-def _replicate_border(path: Path, fraction: float, cv2) -> None:
-    if not path.is_file():
-        return
-    image = cv2.imread(str(path), cv2.IMREAD_UNCHANGED)
-    if image is None:
-        return
-    height, width = image.shape[:2]
-    pad_x = math.ceil(fraction * width - 1e-9)
-    pad_y = math.ceil(fraction * height - 1e-9)
-    if pad_x <= 0 and pad_y <= 0:
-        return
-    padded = cv2.copyMakeBorder(image, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_REPLICATE)
-    cv2.imwrite(str(path), padded)
 
 
 def _url(name: str, workspace: str) -> str:

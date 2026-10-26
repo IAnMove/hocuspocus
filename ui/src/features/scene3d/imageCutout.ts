@@ -40,7 +40,7 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
     texture.generateMipmaps = false
     texture.needsUpdate = true
   }
-  const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : overscanGeometry(slot, texture, aspect), cutoutMaterial(slot, texture))
+  const mesh = new Mesh(tiles > 1 ? tiledGeometry(aspect, tiles, texture) : imageWindowGeometry(aspect, slot.imageLook?.windows), cutoutMaterial(slot, texture))
   if (texture && slot.drift) {         // a scrolled picture repeats mirrored instead of smearing its last column
     texture.wrapS = MirroredRepeatWrapping
     texture.needsUpdate = true
@@ -48,26 +48,6 @@ export function imageCutoutMesh(slot: Scene3DSlot, texture: Texture | null) {
   groundImageCutout(mesh, slot, texture, aspect)
   poseImageCutout(mesh, slot)
   return mesh
-}
-
-/** A padded picture grows past the content plane. An unpadded file keeps the content aspect, so a catalogue filler still fills. */
-function overscanGeometry(slot: Scene3DSlot, texture: Texture | null, aspect: number) {
-  const fraction = slot.imageLook?.overscan
-  const image = texture?.image as { width?: number; height?: number } | undefined
-  const width = fraction && image?.width ? contentLength(image.width, fraction) : null
-  const height = fraction && image?.height ? contentLength(image.height, fraction) : null
-  if (!width || !height || !image?.width || !image.height) return imageWindowGeometry(aspect, slot.imageLook?.windows)
-  const geometry = imageWindowGeometry(width / height, slot.imageLook?.windows)
-  geometry.scale(image.width / width, image.height / height, 1)
-  return geometry
-}
-
-function contentLength(tex: number, fraction: number): number | null {
-  const guess = Math.round(tex / (1 + 2 * fraction))
-  for (let size = Math.max(1, guess - 4); size <= guess + 4; size += 1) {
-    if (size + 2 * Math.ceil(fraction * size - 1e-9) === tex) return size
-  }
-  return null
 }
 
 /** The picture repeated side by side, every other copy mirrored so the seams join: a layer wide enough for a camera

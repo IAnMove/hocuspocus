@@ -5,8 +5,6 @@ export const COMIC_PAGE_RIM = 32
 export const COMIC_PAD = 28
 /** One gutter width between every pair of cells. Nothing else is left on the paper. */
 export const COMIC_GUTTER = 18
-/** Each window is this many pixels larger than its cell, so the cut frame shows picture rather than ink. */
-export const COMIC_HOLE = 3
 const INSET = COMIC_PAGE_RIM + COMIC_PAD
 
 export type ComicCell = { x: number; y: number; w: number; h: number; hero: boolean }
@@ -116,21 +114,7 @@ export function paintComicPage(layout: ComicLayout): Uint8Array {
   fillPage(pixels, pageW, pageH)
   paintShadows(pixels, pageW, pageH, cells)
   paintBorders(pixels, pageW, pageH, cells)
-  punchHoles(pixels, pageW, pageH, cells)
   return pixels
-}
-
-/** Clear a window a few pixels larger than the cell. The ink border stays on the paper around it. */
-function punchHoles(pixels: Uint8Array, pageW: number, pageH: number, cells: ComicCell[]) {
-  for (const cell of cells) {
-    const x0 = Math.max(0, cell.x - COMIC_HOLE)
-    const y0 = Math.max(0, cell.y - COMIC_HOLE)
-    const x1 = Math.min(pageW, cell.x + cell.w + COMIC_HOLE)
-    const y1 = Math.min(pageH, cell.y + cell.h + COMIC_HOLE)
-    for (let y = y0; y < y1; y += 1) {
-      for (let x = x0; x < x1; x += 1) pixels[(y * pageW + x) * 4 + 3] = 0
-    }
-  }
 }
 
 function fillPage(pixels: Uint8Array, pageW: number, pageH: number) {

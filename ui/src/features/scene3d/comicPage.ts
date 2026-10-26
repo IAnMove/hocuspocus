@@ -1,7 +1,7 @@
 import { projectPoint } from './camera.ts'
 import { createDefaultScene3DDocument } from './document.ts'
 import { framingFov, framingPose, framingProgress } from './framing.ts'
-import { COMIC_HOLE, chooseComicLayout } from './comicLayout.ts'
+import { chooseComicLayout } from './comicLayout.ts'
 import { COMIC_TEMPLATE_IDS, type ComicTemplateId } from './comicTemplateIds.ts'
 import type { Scene3DCamera, Scene3DDocument, Scene3DFraming, Scene3DSlot, Vec3 } from './types.ts'
 
@@ -42,9 +42,13 @@ export const COMIC_YAW_ARC = 8
 /** Pulls the wide camera back so an 8° yaw keeps the page inside the frame.
  * At 0.09 the paper still covers at least 85% of the frame's longer side. */
 export const COMIC_FIT_MARGIN = 0.09
-/** Cutout and picture sit behind the page. The picture is further back, so the sticker slides across it. */
-export const COMIC_CUTOUT_DEPTH = 0.02
-export const COMIC_BASE_DEPTH = 0.15
+/** Panels sit a few millimetres in front of the paper. A cutout sits 10.8 cm in front of its panel. */
+export const COMIC_PANEL_Z = 0.004
+export const COMIC_CUTOUT_AHEAD = 0.108
+/** Apparent width of one filler cutout at the wide pose, relative to its panel. The mesh is larger than this: the cutout is closer to the camera. */
+export const COMIC_POP = 1.12
+/** Fraction of the panel's half-width the popped cutout slides away from the page centre. */
+export const COMIC_POP_SHIFT = 0.16
 
 const PAPER_PAGE = { en: 'Paper page (included)', es: 'Página de papel (incluida)' }
 const FOUR_PANELS = {
@@ -52,8 +56,8 @@ const FOUR_PANELS = {
   es: 'De tres a seis imágenes; los dos fotogramas del corte conservan el aspecto del vídeo',
 }
 const CUTOUT_NOTE = {
-  en: 'A window per panel: the sticker sits behind the page and the picture further behind, scaled so the fill frame still matches',
-  es: 'Una ventana por viñeta: el recorte queda detrás de la página y la foto más atrás, escalados para que el plano lleno coincida',
+  en: 'A subject cutout 10.8 cm in front of each panel, scaled so the fill frame still matches',
+  es: 'Un recorte del sujeto a 10,8 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo',
 }
 
 type Placed = { x: number; y: number; z: number; scale: number; aspect: number }
@@ -90,13 +94,13 @@ export function fillFrameOffset(fovDeg: number): number {
   return 1 / Math.tan((fovDeg * Math.PI) / 360)
 }
 
-/** Scale that puts a layer `depth` metres behind the page and still covers the same pixels from the fill camera.
- * The fill camera sits `D = scale / tan(fov/2)` metres in front of the page. A plane `d` metres further is smaller
- * on screen by `D / (D + d)`, so the layer is scaled by `(D + d) / D` about that camera's axis (the panel centre). */
-export function behindFactor(panelScale: number, depth: number, fovDeg = COMIC_FOV): number {
+/** Scale that puts a cutout `ahead` metres in front of a panel and still covers the same pixels from the fill camera.
+ * The fill camera sits `D = scale / tan(fov/2)` metres in front of the panel. A plane `d` metres closer is larger
+ * on screen by `D / (D - d)`, so the cutout is scaled by `(D - d) / D` about that camera's axis (the panel centre). */
+export function cutoutFactor(panelScale: number, ahead = COMIC_CUTOUT_AHEAD, fovDeg = COMIC_FOV): number {
   const distance = panelScale * fillFrameOffset(fovDeg)
-  if (!(depth >= 0) || !(distance > 0)) throw new Error('layer_depth')
-  return (distance + depth) / distance
+  if (!(distance > ahead)) throw new Error('cutout_ahead')
+  return (distance - ahead) / distance
 }
 
 /** Distance at which the whole page fits in the frame, with a margin, at a constant fov. */
@@ -129,7 +133,7 @@ function layoutOf(format: ComicFormat, count = COMIC_PANEL_COUNT, seed = 0, from
     return {
       x: -pageW / 2 + meters(cell.x) + panelW / 2,
       y: meters(px.pageH - cell.y - cell.h),
-      z: 0, scale: panelH / 2, aspect: cell.w / cell.h,
+      z: COMIC_PANEL_Z, scale: panelH / 2, aspect: cell.w / cell.h,
     }
   })
   return { pageW, pageH, pageScale: pageH / 2, panels }
@@ -192,20 +196,17 @@ function imageSlot(id: string, position: Vec3, scale: number, url: string): Scen
   }
 }
 
-/** A layer behind the page, scaled about the fill axis. Depth 0 is the cell on the page. */
-export function comicLayerPlacement(panel: Placed, depth: number): { position: Vec3; scale: number } {
-  const scale = panel.scale * (depth > 0 ? behindFactor(panel.scale, depth) : 1)
-  return { position: [panel.x, panel.y + panel.scale - scale, -depth], scale }
+function popPanel(panels: ComicPanelInput[], fromPanel: number, toPanel: number): number | null {
+  const found = panels.findIndex((panel, index) => Boolean(panel.cutout) && index !== fromPanel && index !== toPanel)
+  return found < 0 ? null : found
 }
 
-function layerPoint(panel: Placed, u: number, v: number, depth: number): Vec3 {
-  const placed = comicLayerPlacement(panel, depth)
-  const height = placed.scale * 2
-  const centerY = placed.position[1] + placed.scale
+function layerPoint(panel: Placed, u: number, v: number, ahead: number, factor: number): Vec3 {
+  const height = panel.scale * 2 * factor
   return [
     panel.x + (u - 0.5) * height * panel.aspect,
-    centerY + (0.5 - v) * height,
-    placed.position[2],
+    panel.y + panel.scale + (0.5 - v) * height,
+    panel.z + ahead,
   ]
 }
 
@@ -217,83 +218,64 @@ function screenDelta(pose: Pose, aspect: number, a: Vec3, b: Vec3): [number, num
 }
 
 function panelScreenWidth(panel: Placed, pose: Pose, aspect: number): number {
-  const delta = screenDelta(pose, aspect, layerPoint(panel, 0, 0.5, 0), layerPoint(panel, 1, 0.5, 0))
+  const delta = screenDelta(pose, aspect, layerPoint(panel, 0, 0.5, 0, 1), layerPoint(panel, 1, 0.5, 0, 1))
   return Math.hypot(delta[0], delta[1])
 }
 
-/** Screen gap between one UV on the page and the same UV on a layer behind it. Zero at an exact fill. */
-export function comicFillGap(panel: Placed, pose: Pose, frameAspect: number, depth: number, uv: { u: number; v: number } = { u: 0, v: 0 }): number {
-  const delta = screenDelta(pose, frameAspect, layerPoint(panel, uv.u, uv.v, 0), layerPoint(panel, uv.u, uv.v, depth))
-  return Math.hypot(delta[0], delta[1])
-}
-
-/** Screen slide between two depths, from the fill pose to the wide hold, as a fraction of the panel width. */
-export function comicPlaneSlide(panel: Placed, fill: Pose, wide: Pose, frameAspect: number, depthA: number, depthB: number, uv: { u: number; v: number } = { u: 0.5, v: 0.5 }): number {
-  const from = screenDelta(fill, frameAspect, layerPoint(panel, uv.u, uv.v, depthA), layerPoint(panel, uv.u, uv.v, depthB))
-  const to = screenDelta(wide, frameAspect, layerPoint(panel, uv.u, uv.v, depthA), layerPoint(panel, uv.u, uv.v, depthB))
+/** Screen slide of one panel UV from the fill pose to the wide hold, as a fraction of that panel's width at the wide hold. */
+export function comicCutoutSlide(panel: Placed, fill: Pose, wide: Pose, frameAspect: number, ahead = COMIC_CUTOUT_AHEAD, uv: { u: number; v: number } = { u: 0.5, v: 0.5 }): number {
+  const factor = cutoutFactor(panel.scale, ahead)
+  const base = layerPoint(panel, uv.u, uv.v, 0, 1)
+  const cut = layerPoint(panel, uv.u, uv.v, ahead, factor)
+  const from = screenDelta(fill, frameAspect, base, cut)
+  const to = screenDelta(wide, frameAspect, base, cut)
   const width = panelScreenWidth(panel, wide, frameAspect)
   if (!(width > 0)) return 0
   return Math.hypot(to[0] - from[0], to[1] - from[1]) / width
 }
 
-/** Slide of the sticker against the picture. Both sit behind the page. */
-export function comicCutoutSlide(panel: Placed, fill: Pose, wide: Pose, frameAspect: number, uv: { u: number; v: number } = { u: 0.5, v: 0.5 }): number {
-  return comicPlaneSlide(panel, fill, wide, frameAspect, COMIC_CUTOUT_DEPTH, COMIC_BASE_DEPTH, uv)
+function popShift(panel: Placed): number {
+  return Math.sign(panel.x || 1) * panel.scale * panel.aspect * COMIC_POP_SHIFT
 }
 
-function holePoints(panel: Placed): Vec3[] {
-  const grow = COMIC_HOLE * COMIC_METERS_PER_PIXEL
-  const halfW = panel.scale * panel.aspect + grow
-  const halfH = panel.scale + grow
-  const y = panel.y + panel.scale
-  return [
-    [panel.x - halfW, y - halfH, 0], [panel.x + halfW, y - halfH, 0],
-    [panel.x - halfW, y + halfH, 0], [panel.x + halfW, y + halfH, 0],
-    [panel.x - halfW, y, 0], [panel.x + halfW, y, 0],
-    [panel.x, y - halfH, 0], [panel.x, y + halfH, 0],
-  ]
+function cutoutScreenWidth(panel: Placed, scale: number, pose: Pose, aspect: number, ahead: number): number {
+  const centerY = panel.y + panel.scale
+  const half = scale * panel.aspect
+  const z = panel.z + ahead
+  const delta = screenDelta(pose, aspect, [panel.x + popShift(panel) - half, centerY, z], [panel.x + popShift(panel) + half, centerY, z])
+  return Math.hypot(delta[0], delta[1])
 }
 
-function planeHit(eye: Vec3, point: Vec3, depth: number): Vec3 | null {
-  const dz = point[2] - eye[2]
-  if (!(Math.abs(dz) > 1e-8)) return null
-  const t = (-depth - eye[2]) / dz
-  if (!(t > 0)) return null
-  return [eye[0] + t * (point[0] - eye[0]), eye[1] + t * (point[1] - eye[1]), -depth]
-}
-
-function outsideFraction(panel: Placed, hit: Vec3, depth: number): number {
-  const placed = comicLayerPlacement(panel, depth)
-  const halfW = placed.scale * panel.aspect
-  const halfH = placed.scale
-  if (!(halfW > 0) || !(halfH > 0)) return 0
-  const u = (hit[0] - panel.x) / (2 * halfW) + 0.5
-  const v = (placed.position[1] + placed.scale - hit[1]) / (2 * halfH) + 0.5
-  return Math.max(0, -u, u - 1, -v, v - 1)
-}
-
-/** Largest share of the picture, on any side, that the camera path can reveal past the window. */
-export function comicOverscanFraction(panel: Placed, poses: Pose[], depth = COMIC_BASE_DEPTH): number {
-  let worst = 0
-  for (const pose of poses) {
-    for (const point of holePoints(panel)) {
-      const hit = planeHit(pose.eye, point, depth)
-      if (hit) worst = Math.max(worst, outsideFraction(panel, hit, depth))
-    }
+/** Mesh scale whose projected width at the wide pose is `COMIC_POP` times the panel. */
+export function comicPopScale(panel: Placed, wide: Pose, frameAspect: number, ahead = COMIC_CUTOUT_AHEAD): number {
+  const base = panelScreenWidth(panel, wide, frameAspect)
+  let scale = panel.scale * cutoutFactor(panel.scale, ahead) * COMIC_POP
+  for (let step = 0; step < 6; step += 1) {
+    const width = cutoutScreenWidth(panel, scale, wide, frameAspect, ahead)
+    if (!(width > 0) || !(base > 0)) return scale
+    const ratio = width / base
+    if (Math.abs(ratio - COMIC_POP) < 1e-6) return scale
+    scale *= COMIC_POP / ratio
   }
-  return worst
+  return scale
 }
 
-function slotsOf(layout: PageLayout, pageUrl: string, panels: ComicPanelInput[]): Scene3DSlot[] {
+/** Centre stays on the fill axis. A popped filler is sized for the wide pose and slid outward. Without that pose the old `COMIC_POP` mesh factor is kept. */
+export function comicCutoutPlacement(panel: Placed, popped = false, view?: { pose: Pose; aspect: number }): { position: Vec3; scale: number } {
+  const shift = popped ? popShift(panel) : 0
+  const scale = popped && view ? comicPopScale(panel, view.pose, view.aspect) : panel.scale * cutoutFactor(panel.scale) * (popped ? COMIC_POP : 1)
+  return { position: [panel.x + shift, panel.y + panel.scale - scale, panel.z + COMIC_CUTOUT_AHEAD], scale }
+}
+
+function slotsOf(layout: PageLayout, pageUrl: string, panels: ComicPanelInput[], fromPanel: number, toPanel: number, wide: Pose, frameAspect: number): Scene3DSlot[] {
   const page = imageSlot('page', [0, 0, 0], layout.pageScale, pageUrl)
-  const pictures = layout.panels.map((panel, index) => {
-    const placed = comicLayerPlacement(panel, COMIC_BASE_DEPTH)
-    return imageSlot(`panel-${index}`, placed.position, placed.scale, panels[index]?.url || '')
-  })
+  const pictures = layout.panels.map((panel, index) => imageSlot(`panel-${index}`, [panel.x, panel.y, panel.z], panel.scale, panels[index]?.url || ''))
+  const popped = popPanel(panels, fromPanel, toPanel)
+  const view = { pose: wide, aspect: frameAspect }
   const cutouts = layout.panels.flatMap((panel, index) => {
     const url = panels[index]?.cutout
     if (!url) return []
-    const placed = comicLayerPlacement(panel, COMIC_CUTOUT_DEPTH)
+    const placed = comicCutoutPlacement(panel, index === popped, view)
     return [imageSlot(`cutout-${index}`, placed.position, placed.scale, url)]
   })
   return [page, ...pictures, ...cutouts]
@@ -304,18 +286,17 @@ function divide(world: Vec3, center: Vec3, scale: number): Vec3 {
 }
 
 function fillPose(panel: Placed): Pose {
-  const center: Vec3 = [panel.x, panel.y + panel.scale, 0]
+  const center: Vec3 = [panel.x, panel.y + panel.scale, panel.z]
   const distance = panel.scale * fillFrameOffset(COMIC_FOV)
   return { eye: [center[0], center[1], center[2] + distance], look: center, fov: COMIC_FOV }
 }
 
 function framingOf(panel: Placed, index: number, start: Pose, end: Pose, move: { moveStart: number; moveEnd: number }, yawArc: number): Scene3DFraming {
-  const base = comicLayerPlacement(panel, COMIC_BASE_DEPTH)
-  const center: Vec3 = [base.position[0], base.position[1] + base.scale, base.position[2]]
+  const center: Vec3 = [panel.x, panel.y + panel.scale, panel.z]
   return {
     targetSlot: `panel-${index}`, anchor: 'center', relativeToFacing: false,
-    from: divide(start.eye, center, base.scale), to: divide(end.eye, center, base.scale),
-    lookFrom: divide(start.look, center, base.scale), lookTo: divide(end.look, center, base.scale),
+    from: divide(start.eye, center, panel.scale), to: divide(end.eye, center, panel.scale),
+    lookFrom: divide(start.look, center, panel.scale), lookTo: divide(end.look, center, panel.scale),
     fovFrom: COMIC_FOV, fovTo: COMIC_FOV, moveStart: move.moveStart, moveEnd: move.moveEnd, ease: 'smooth',
     yawArc,
   }
@@ -359,34 +340,17 @@ export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; 
   const pageUrl = input.pageUrl || pagePicture(format)
   const yawDeg = input.yawDeg ?? COMIC_YAW_DEG
   const wide = comicWidePose(format, size.width / size.height, yawDeg, layout)
-  const slots = slotsOf(layout, pageUrl, sources)
+  const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel, wide, size.width / size.height)
   const yawArc = input.yawArc ?? COMIC_YAW_ARC
   const hold = input.hold ?? COMIC_HOLD
   const exitDuration = input.exitDuration ?? COMIC_DURATION
   const enterDuration = input.enterDuration ?? COMIC_DURATION
   const leave = fillPose(layout.panels[fromPanel])
   const arrive = fillPose(layout.panels[toPanel])
-  const exit = documentOf(comicTemplateId('exit', format), format, size, slots, layout.panels[fromPanel], fromPanel, leave, wide, exitDuration, comicMoveWindow('exit', exitDuration, hold), yawArc)
-  const enter = documentOf(comicTemplateId('enter', format), format, size, slots, layout.panels[toPanel], toPanel, wide, arrive, enterDuration, comicMoveWindow('enter', enterDuration, hold), yawArc)
-  stampOverscan(slots, [exit, enter], layout)
-  return { exit, enter }
-}
-
-/** Every frame of both halves. The yaw arc peaks between the sampled endpoints, so the bound has to walk the path. */
-export function comicSamplePoses(doc: Scene3DDocument): Pose[] {
-  const frames = comicFrameCount(doc.duration, doc.fps)
-  const poses: Pose[] = []
-  for (let index = 0; index < frames; index += 1) poses.push(comicCameraAt(doc, comicFrameSeconds(index, doc.duration, doc.fps)))
-  return poses
-}
-
-function stampOverscan(slots: Scene3DSlot[], docs: Scene3DDocument[], layout: PageLayout) {
-  const poses = docs.flatMap(comicSamplePoses)
-  layout.panels.forEach((panel, index) => {
-    const slot = slots.find(item => item.id === `panel-${index}`)
-    const fraction = comicOverscanFraction(panel, poses)
-    if (slot?.imageLook && fraction > 1e-4) slot.imageLook.overscan = Math.min(1, fraction)
-  })
+  return {
+    exit: documentOf(comicTemplateId('exit', format), format, size, slots, layout.panels[fromPanel], fromPanel, leave, wide, exitDuration, comicMoveWindow('exit', exitDuration, hold), yawArc),
+    enter: documentOf(comicTemplateId('enter', format), format, size, slots, layout.panels[toPanel], toPanel, wide, arrive, enterDuration, comicMoveWindow('enter', enterDuration, hold), yawArc),
+  }
 }
 
 export function applyComicTemplate(id: string): Scene3DDocument | null {
