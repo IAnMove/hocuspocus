@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: See-through accepts two eyes only when they are a real pair.** A speck next to one eye, or one blob cut in half, is no longer two eyes. A pose whose eyes are covered still does not blink.
+
 **Fixed: an ink mouth from See-through layers hangs from the painted line.** The openings used the box centre and the raw width. They now use the median ink row and `_ink_sprite_width`, the same measurement as the other ink mouths.
 
 **Fixed: a mouth measured from See-through layers is not saved as the user's hint.** The point places that rig. It is not stored with `exact: true`, so a later rig and the anime landmarks can move it. A mouth the caller placed stays.

@@ -23,6 +23,10 @@ from services.runtime_profiles import APP_DIR, managed_ready
 from services.see_through.worker import REQUIRED
 
 EYE_CLASSES = ("eyewhite", "irides", "eyelash")
+# The smaller eye must be at least this share of the larger. A profile speck is far under it; a turned eye is not.
+EYE_PAIR_RATIO = 0.4
+# One component is two eyes only when it is this wide compared with its height (eyes joined by a lash). A round eye is not cut in half.
+EYE_PAIR_ASPECT = 1.6
 MARKER = Path("app/services/see_through/env/.maestro_see_through_v1.installed")
 VENDOR_SCRIPT = Path("app/services/see_through/vendor/see-through/inference/scripts/inference_psd_quantized.py")
 ALPHA_MIN = 16
@@ -196,7 +200,7 @@ def _apply_one(rig: dict, layer: dict, look: dict, hint: dict) -> None:
     for name in layer.get("missing") or []:
         _warn(rig, f"layer_missing_{name.replace(' ', '_')}")
     labelled = _eye_labels(layer.get("images") or {}, rig)
-    if labelled is not None:
+    if labelled is not None and labelled.any():
         _place_blink(rig, labelled, look, hint.get("blink") is not False)
     if look.get("mouthStyle") != "warp" and layer.get("mouth_box"):
         _set_mouth(rig, layer["mouth_box"], (layer.get("images") or {}).get("mouth"), ink=look.get("mouthStyle") == "ink")
@@ -232,21 +236,35 @@ def _figure_alpha(image: Image.Image | None, rig: dict):
     return mask[y0:y0 + rig["height"], x0:x0 + rig["width"]]
 
 
-def _label_pair(mask: np.ndarray) -> np.ndarray:
+def _label_pair(mask: np.ndarray) -> np.ndarray | None:
+    """Two eyes, or nothing. One round component stays one eye. A wide one is a pair joined by a lash."""
     count, labels, stats, centroids = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
     parts = _largest(stats, centroids, count)
-    if len(parts) == 1:
+    if len(parts) >= 2:
+        return _paint_two(labels, parts)
+    if len(parts) == 1 and _wide_pair(labels, parts[0][1]):
         return _split_one(labels, parts[0][1])
-    return _paint_two(labels, parts)
+    return None
+
+
+def _wide_pair(labels: np.ndarray, label: int) -> bool:
+    region = labels == label
+    ys, xs = np.nonzero(region)
+    if not len(xs):
+        return False
+    return int(xs.max() - xs.min() + 1) >= int(ys.max() - ys.min() + 1) * EYE_PAIR_ASPECT
 
 
 def _largest(stats, centroids, count: int) -> list:
+    """The two largest components when the smaller is a real eye, else the one large component."""
     found = []
     for label in range(1, count):
         area = int(stats[label, cv2.CC_STAT_AREA])
         if area > 0:
             found.append((area, label, float(centroids[label][0])))
     found.sort(reverse=True)
+    if len(found) >= 2 and found[1][0] < found[0][0] * EYE_PAIR_RATIO:
+        return found[:1]
     return found[:2]
 
 
@@ -283,7 +301,8 @@ def _place_blink(rig: dict, labelled: np.ndarray, look: dict, blink_ok: bool) ->
         rgb[by0:by1, bx0:bx1], labelled[by0:by1, bx0:bx1], lids, look.get("screen") is True, alpha[by0:by1, bx0:bx1])
     rig["eyes"] = _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, rig["width"], rig["height"])
     rig["eyes_box"] = [ox0, oy0, ox1, oy1]
-    if blink_ok:
+    # ``eyes_covered`` (glasses, fringe) already set ``blinks`` false. Layers must not turn it back on.
+    if blink_ok and rig.get("blinks") is not False:
         rig["blinks"] = True
 
 

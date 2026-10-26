@@ -179,6 +179,50 @@ def test_a_user_mouth_hint_is_not_replaced_by_the_layer(tmp_path, monkeypatch):
     assert saved["mouth"] == [12, 12] and saved["mouthWidth"] == 8 and saved["exact"] is True
 
 
+def _blink_rig(blinks: bool = True) -> dict:
+    return {
+        "warnings": [], "blink": "keep", "eyes": {"offsetY": -10}, "blinks": blinks,
+        "width": 80, "height": 40, "frame": (0, 0, 80, 40),
+        "mouth": {"offsetX": 0, "offsetY": 0, "scale": 0.1, "rotation": 0},
+        "skin": (200, 160, 130), "before": Image.new("RGBA", (80, 40), (230, 190, 160, 255)),
+    }
+
+
+def _eye_layer(kind: str) -> Image.Image:
+    image = Image.new("RGBA", (80, 40), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((8, 8, 28, 28), fill=(255, 255, 255, 255))
+    if kind == "pair":
+        draw.ellipse((48, 8, 68, 28), fill=(255, 255, 255, 255))
+    elif kind == "speck":
+        draw.rectangle((70, 2, 72, 4), fill=(255, 255, 255, 255))
+    return image
+
+
+def _apply_eyes(kind: str, blinks: bool = True) -> dict:
+    rig = _blink_rig(blinks)
+    apply_face_layers(
+        {"base": rig},
+        {"base": {"images": {"eyewhite": _eye_layer(kind)}, "missing": ["mouth"], "mouth_box": None}},
+        {"mouthStyle": "paper", "screen": False}, {})
+    return rig
+
+
+def test_a_speck_beside_one_eye_is_not_a_second_eye():
+    rig = _apply_eyes("speck")
+    assert rig["blink"] == "keep"
+
+
+def test_one_eye_component_is_not_split_into_two():
+    rig = _apply_eyes("one")
+    assert rig["blink"] == "keep"
+
+
+def test_layers_do_not_turn_blinks_on_when_the_rig_said_no():
+    rig = _apply_eyes("pair", blinks=False)
+    assert rig["blinks"] is False
+
+
 def test_an_ink_layer_mouth_hangs_from_the_median_row():
     """The ink openings hang from the painted line, and the sprite holds that line in INK_SPAN of its width."""
     from services.flat_rig_base import SPRITE
