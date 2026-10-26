@@ -244,7 +244,9 @@ def _hair(mesh: Mesh, L: dict, hair: dict) -> None:
     if style == "spiky":
         _spikes(mesh, L, color)
         return
-    _bangs(mesh, L, color)
+    # A painted front already draws its fringe; strands over it read as teeth. Only the bangs style adds them.
+    if style == "bangs":
+        _bangs(mesh, L, color)
     if style in ("long", "twin_tails", "ponytail"):
         _side_locks(mesh, L, color, long=True)
     elif style == "bangs":
