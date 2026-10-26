@@ -64,16 +64,22 @@ def _live(source: Path, dest: Path, workspace: str, workspace_dir) -> Path:
 
 
 _FEATHER = 0.03
-_ERODE = 3
+_DILATE = 3
+_HALO = 2.0
+_AA = 1.5
+_SPECK = 0.005
 _INPAINT_RADIUS = 3
 
 
 def finish_cutout(picture: Path, cutout: Path) -> None:
-    """Feather the matte at the panel edge, then fill the picture behind the opaque subject.
+    """Turn a soft matte into a paper sticker and fill the picture behind it.
 
-    The picture keeps every pixel whose final alpha is below 255. Inpaint runs only where that
-    alpha is 255, after eroding the mask by a few pixels. The cutout is saved first, so a failed
-    fill leaves the picture untouched and the caller can drop the layer.
+    The matte is binarized at one half, holes are filled and specks below half a percent of the
+    panel are dropped. A 3 px dilation carries a halo of the original background, then 2 px more
+    so the fill under that halo is covered, and the edge falls off over 1.5 px. The cutout's
+    colour is the picture. Telea runs under that whole sticker. The outer 3 percent of the panel
+    keeps the original picture, so a subject that touches the frame can ghost only inside that
+    band. The cutout is saved first: a failed fill leaves the picture untouched.
     """
     import numpy as np
     from PIL import Image
@@ -84,35 +90,76 @@ def finish_cutout(picture: Path, cutout: Path) -> None:
         mask = np.asarray(opened.convert("RGBA"))
     if mask.shape != original.shape:
         return
-    alpha = _feather_alpha(mask[..., 3])
+    sticker, support = _sticker(mask[..., 3])
+    edge = _edge_ramp(sticker.shape[0], sticker.shape[1])
     painted = original.copy()
-    painted[..., 3] = alpha
+    painted[..., 3] = np.rint(np.clip(sticker * edge, 0, 1) * 255).astype(np.uint8)
     Image.fromarray(painted).save(cutout)
-    _inpaint_base(picture, original, alpha)
+    _inpaint_base(picture, original, support, edge)
 
 
-def _feather_alpha(alpha):
+def _sticker(alpha):
+    """Float coverage of the sticker, and the pixels Telea must replace (before the edge ramp)."""
+    import cv2
     import numpy as np
 
-    height, width = alpha.shape
+    core = _components(_fill_holes(np.where(alpha >= 128, np.uint8(255), np.uint8(0))))
+    if int(core.max()) == 0:
+        return np.zeros(alpha.shape, np.float32), np.zeros(alpha.shape, np.bool_)
+    dilated = cv2.dilate(core, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (_DILATE * 2 + 1, _DILATE * 2 + 1)))
+    outside = np.where(dilated > 0, np.uint8(0), np.uint8(255))
+    dist = cv2.distanceTransform(outside, cv2.DIST_L2, 5)
+    cover = np.clip((_HALO + _AA - dist) / _AA, 0, 1).astype(np.float32)
+    kept = np.rint(np.clip(cover, 0, 1) * 255).astype(np.uint8) > 0
+    return cover, kept
+
+
+def _fill_holes(mask):
+    import cv2
+    import numpy as np
+
+    height, width = mask.shape
+    padded = np.pad(np.where(mask > 0, np.uint8(0), np.uint8(255)), 1, constant_values=255)
+    cv2.floodFill(padded, np.zeros((height + 4, width + 4), np.uint8), (0, 0), 0, flags=8)
+    holes = padded[1:-1, 1:-1] > 0
+    filled = mask.copy()
+    filled[holes] = 255
+    return filled
+
+
+def _components(mask):
+    import cv2
+    import numpy as np
+
+    count, labels, stats, _centroids = cv2.connectedComponentsWithStats((mask > 0).astype(np.uint8), connectivity=8)
+    if count <= 1:
+        return mask
+    limit = max(1, int(round(mask.size * _SPECK)))
+    kept = np.zeros(mask.shape, np.uint8)
+    for label in range(1, count):
+        if int(stats[label, cv2.CC_STAT_AREA]) >= limit:
+            kept[labels == label] = 255
+    return kept
+
+
+def _edge_ramp(height: int, width: int):
+    import numpy as np
+
     band_x = max(1.0, _FEATHER * width)
     band_y = max(1.0, _FEATHER * height)
     xs = np.arange(width, dtype=np.float32)
     ys = np.arange(height, dtype=np.float32)
     ramp_x = np.clip(np.minimum(xs, (width - 1) - xs) / band_x, 0, 1)
     ramp_y = np.clip(np.minimum(ys, (height - 1) - ys) / band_y, 0, 1)
-    ramp = np.minimum(ramp_x[None, :], ramp_y[:, None])
-    return np.rint(alpha.astype(np.float32) * ramp).astype(np.uint8)
+    return np.minimum(ramp_x[None, :], ramp_y[:, None])
 
 
-def _inpaint_base(picture: Path, original, alpha) -> None:
+def _inpaint_base(picture: Path, original, support, edge) -> None:
     import cv2
     import numpy as np
     from PIL import Image
 
-    opaque = np.where(alpha == 255, np.uint8(255), np.uint8(0))
-    kernel = np.ones((_ERODE * 2 + 1, _ERODE * 2 + 1), np.uint8)
-    mask = cv2.erode(opaque, kernel)
+    mask = np.where(support, np.uint8(255), np.uint8(0))
     if int(mask.max()) == 0:
         return
     bgr = cv2.cvtColor(original[..., :3], cv2.COLOR_RGB2BGR)
@@ -120,6 +167,8 @@ def _inpaint_base(picture: Path, original, alpha) -> None:
     out = original.copy()
     paint = mask > 0
     out[paint, :3] = filled[paint]
+    keep = edge < 1
+    out[keep] = original[keep]
     Image.fromarray(out).save(picture)
 
 

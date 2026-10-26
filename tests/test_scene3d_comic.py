@@ -229,41 +229,63 @@ def test_a_recolored_cutout_keeps_the_picture_on_a_full_size_cut_panel(tmp_path)
     cutout = Image.open(tmp_path / "studio" / "comic-cutout-0.png").convert("RGBA")
     filler = Image.open(tmp_path / "studio" / "comic-panel-1.png")
     assert panel.size == (64, 36) and cutout.size == panel.size
-    assert cutout.getpixel((4, 4))[:3] == panel.getpixel((4, 4))[:3]
-    assert cutout.getpixel((4, 4))[3] == 180
+    assert cutout.getpixel((4, 4))[:3] == (40, 80, 120)
+    assert cutout.getpixel((4, 4))[3] == 255
+    assert cutout.getpixel((0, 0))[3] == 0
     assert filler.size == (cells[1]["w"], cells[1]["h"]) and filler.size != panel.size
 
 
-def test_inpaint_keeps_every_pixel_the_cutout_does_not_fully_cover(tmp_path):
+def test_a_sticker_leaves_no_subject_in_the_base_outside_the_ring(tmp_path):
+    """Soft U2Net values, a hole and a second figure are one sticker. A speck stays put."""
     import numpy as np
 
     from services.scene3d_comic_cutout import finish_cutout
 
-    height, width = 60, 80
+    height, width = 120, 160
     rgb = np.zeros((height, width, 3), np.uint8)
     rgb[..., 0] = np.arange(width, dtype=np.uint8)[None, :]
     rgb[..., 1] = np.arange(height, dtype=np.uint8)[:, None]
     rgb[..., 2] = 40
-    rgb[28:36, 36:48] = (255, 0, 128)
+    subject = (255, 0, 128)
+    alpha = np.zeros((height, width), np.uint8)
+    alpha[40:80, 50:110] = 255
+    rgb[40:80, 50:110] = subject
+    alpha[55:65, 70:90] = 0
+    alpha[40:80, 48:50] = 100
+    rgb[40:80, 48:50] = subject
+    alpha[40:80, 110:112] = 90
+    rgb[40:80, 110:112] = subject
+    alpha[90:110, 120:140] = 200
+    rgb[90:110, 120:140] = subject
+    alpha[2:6, 2:6] = 255
+    rgb[2:6, 2:6] = (0, 0, 255)
     original = np.dstack([rgb, np.full((height, width), 255, np.uint8)])
     picture = tmp_path / "panel.png"
     cutout = tmp_path / "cut.png"
-    alpha = np.zeros((height, width), np.uint8)
-    alpha[15:45, 20:60] = 255
     Image.fromarray(original).save(picture)
     Image.fromarray(np.dstack([rgb, alpha])).save(cutout)
     finish_cutout(picture, cutout)
     base = np.asarray(Image.open(picture).convert("RGBA"))
     matte = np.asarray(Image.open(cutout).convert("RGBA"))
-    assert matte[30, 40, 3] == 255 and matte[16, 21, 3] == 255 and matte[0, 0, 3] == 0
     assert np.array_equal(matte[..., :3], original[..., :3])
-    soft = matte[..., 3] < 255
-    assert np.array_equal(base[soft], original[soft])
-    assert np.array_equal(base[16, 21], original[16, 21])
-    assert not np.array_equal(base[30, 40, :3], original[30, 40, :3])
+    assert matte[60, 80, 3] == 255 and matte[60, 75, 3] == 255
+    assert matte[100, 130, 3] == 255
+    assert matte[4, 4, 3] == 0 and tuple(base[4, 4, :3]) == (0, 0, 255)
+    assert tuple(base[0, 0]) == tuple(original[0, 0])
+    painted = (base[..., 0] == 255) & (base[..., 1] == 0) & (base[..., 2] == 128)
+    assert not painted.any()
+    solid = (matte[..., 3] == 0) | (matte[..., 3] == 255)
     weight = matte[..., 3:4].astype(np.float64) / 255.0
     composite = weight * original[..., :3] + (1.0 - weight) * base[..., :3]
-    assert float(np.max(np.abs(composite - original[..., :3]))) < 1e-6
+    assert np.array_equal(np.rint(composite[solid]), original[..., :3][solid])
+    partial = np.argwhere((matte[..., 3] > 0) & (matte[..., 3] < 255))
+    assert len(partial) > 0
+    opaque = matte[..., 3] == 255
+    clear = matte[..., 3] == 0
+    for y, x in partial:
+        y0, y1 = max(0, y - 2), min(height, y + 3)
+        x0, x1 = max(0, x - 2), min(width, x + 3)
+        assert opaque[y0:y1, x0:x1].any() and clear[y0:y1, x0:x1].any()
 
 
 def test_a_full_matte_fades_over_the_outer_three_percent(tmp_path):
