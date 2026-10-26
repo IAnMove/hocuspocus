@@ -193,7 +193,7 @@ def _cape(layout, color):
 
 _HAIR_BUILDERS = {
     "short": _short, "bangs": _bangs, "spiky": _spiky, "long": _long,
-    "ponytail": _ponytail, "twin_tails": _twin_tails, "bun": _bun,
+    "ponytail": _ponytail, "twin_tails": _twin_tails, "bun": _bun, "bob": _bangs,
 }
 
 CLOTHES = {

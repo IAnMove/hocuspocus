@@ -42,7 +42,7 @@ NOSES = ("none", "dot", "line", "bulb")
 MOUSTACHES = ("none", "walrus", "pencil", "handlebar")
 GLASSES = ("none", "round", "square")
 MOUTH_LOOKS = ("paper", "ink")
-STYLES = ("blob", "anime")
+STYLES = ("blob", "anime", "anime_head")
 FRECKLES = ((-70, 28), (-54, 44), (-86, 48), (62, 30), (78, 46), (48, 52), (-40, 60), (36, 64))
 STUBBLE = tuple((x, y) for x in range(-40, 41, 10) for y in (8, 20, 32))
 WHITE = (250, 248, 242, 255)
@@ -115,7 +115,8 @@ def face_traits(value: Any) -> dict[str, Any]:
         "skin": _color(raw.get("skin"), "skin", SKIN),
         "style": _choice(raw.get("style", "blob"), STYLES, "style"),
         "eye_color": _color(raw.get("eyeColor"), "eyeColor", (74, 128, 214, 255)),
-        "blush": raw.get("blush") is True if "blush" in raw else raw.get("style") == "anime",
+        "blush": raw.get("blush") is True if "blush" in raw else raw.get("style") in ("anime", "anime_head"),
+        "lash": _color(raw.get("lashColor"), "lashColor", _color(raw.get("ink"), "ink", INK)),
     }
 
 
@@ -134,6 +135,7 @@ def public_traits(traits: dict[str, Any]) -> dict[str, Any]:
         "glasses": look["glasses"], "freckles": look["freckles"], "stubble": look["stubble"],
         "ink": _hex(look["ink"]), "line": look["line"], "mouth": look["mouth"], "skin": _hex(look["skin"]),
         "style": look["style"], "eyeColor": _hex(look["eye_color"]), "blush": look["blush"],
+        **({"lashColor": _hex(look["lash"])} if look.get("lash") and look["lash"] != look["ink"] else {}),
     }
 
 
@@ -365,6 +367,9 @@ def face_kit(traits: Any) -> dict[str, Any]:
     if look["style"] == "anime":
         from services.blob_face_anime import anime_kit
         return anime_kit(look)
+    if look["style"] == "anime_head":
+        from services.blob_face_head import head_kit
+        return head_kit(look)
     poses = {pose: _draw_pose(look, pose) for pose in POSES}
     blinks = {pose: _draw_pose(look, pose, lids_only=True) for pose in POSES}
     mouths = _mouths(look)
@@ -414,8 +419,8 @@ def save_face_kit(workspace_dir: str, workspace: str, traits: Any, *, name: str 
              for state, image in made["mouths"].items()}
     kit = {"version": 1, "id": token, "name": title, "style": "cutout", "base": poses["neutral"], "poses": poses,
            "mouth": mouth, "eyes": {"blink": blink_neutral}, "anchors": anchors, "mouthMapping": dict(MAPPING),
-           "provenance": [{"method": "blob-face", "traits": public_traits(look)}]}
+           "provenance": [{"method": "blob-face", "traits": public_traits(look), **({"face": made["face"]} if made.get("face") else {})}]}
     saved = patch_character_kit(workspace_dir, token, kit, base_revision=base_revision)
     preview = _url(_save(made["preview"], workspace_dir, f"kit-{token}-preview"), workspace)
-    return {"kit_id": token, "poses": list(POSES), "preview": preview, "revision": saved["revision"],
-            "character": saved["kits"][token]}
+    return {"kit_id": token, "poses": list(made["poses"]), "preview": preview, "revision": saved["revision"],
+            "character": saved["kits"][token], **({"face": made["face"]} if made.get("face") else {})}

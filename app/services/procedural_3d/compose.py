@@ -233,6 +233,36 @@ def pack_mesh(name, vertices, normals, colors) -> bytes:
     return _pack(name, vertices, normals, colors)
 
 
+def pack_parts(name, parts) -> bytes:
+    """One mesh with a primitive per part ``(vertices, normals, colors, material_name)``: the body and its hair."""
+    blobs, accessors, views, primitives, materials = [], [], [], [], []
+    offset = 0
+    for index, (vertices, normals, colors, material) in enumerate(parts):
+        count = len(vertices)
+        for array in (vertices, normals, colors):
+            packed = struct.pack(f"<{count * 3}f", *(v for row in array for v in row))
+            views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(packed), "target": 34962})
+            accessors.append({"bufferView": len(views) - 1, "componentType": 5126, "count": count, "type": "VEC3"})
+            blobs.append(packed)
+            offset += len(packed)
+        first = index * 3
+        accessors[first].update(min=[min(v[i] for v in vertices) for i in range(3)], max=[max(v[i] for v in vertices) for i in range(3)])
+        materials.append({"name": material, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}})
+        primitives.append({"attributes": {"POSITION": first, "NORMAL": first + 1, "COLOR_0": first + 2}, "material": index, "mode": 4})
+    doc = {
+        "asset": {"version": "2.0", "generator": "HocusPocus model3d.compose"},
+        "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"name": name, "mesh": 0}],
+        "meshes": [{"name": name, "primitives": primitives}], "materials": materials,
+        "buffers": [{"byteLength": offset}], "bufferViews": views, "accessors": accessors,
+    }
+    encoded = json.dumps(doc, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    binary = b"".join(blobs)
+    return (struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(binary))
+            + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+            + struct.pack("<II", len(binary), 0x004E4942) + binary)
+
+
 def _pack(name, vertices, normals, colors):
     count = len(vertices)
     blobs = [struct.pack(f"<{count * 3}f", *(v for row in array for v in row)) for array in (vertices, normals, colors)]

@@ -183,15 +183,25 @@ export function withAnimeShade(shader: { fragmentShader: string }) {
 	#include <opaque_fragment>`)
 }
 
+/** The anime hair gloss: a light band where the surface tilts up in view space, the "angel ring" of anime hair, on a
+ * material named `hair` (the lofted body writes its hair as that primitive). It follows the camera, not the lamp. */
+export function withHairGloss(shader: { fragmentShader: string }) {
+  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float hairBand = smoothstep( 0.42, 0.56, geometryNormal.y ) * ( 1.0 - smoothstep( 0.72, 0.86, geometryNormal.y ) );
+	outgoingLight += ( diffuseColor.rgb * 0.9 + vec3( 0.38 ) ) * hairBand * 0.55;
+	#include <opaque_fragment>`)
+}
+
 /** A toon copy that also runs the authored material's shader patches (speech faces, materialization). */
 export function toonMaterialFor(source: LitMaterial, fill: ToonFill = { value: new Color(0) }, shade: ToonShade = 'classic'): MeshToonMaterial {
   const toon = new MeshToonMaterial()
+  const hair = shade === 'anime' && source.name === 'hair'
   toon.onBeforeCompile = (shader, renderer) => {
     source.onBeforeCompile(shader, renderer)
     withEnvironmentFill(shader, fill)
     if (shade === 'anime') withAnimeShade(shader)
+    if (hair) withHairGloss(shader)
   }
-  toon.customProgramCacheKey = () => `toon-${shade}-fill:${source.customProgramCacheKey()}`
+  toon.customProgramCacheKey = () => `toon-${shade}${hair ? '-hair' : ''}-fill:${source.customProgramCacheKey()}`
   mirror(source, toon)
   return toon
 }

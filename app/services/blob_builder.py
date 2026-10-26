@@ -14,14 +14,15 @@ LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh"}
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit"}
 _MESHES = ("pieces", "loft")
+_OUTFITS = ("school", "casual", "sport")
 _BUILDS = ("slim", "average", "round", "pear")
 _FAMILIES = ("blob", "anime", "chibi")
 _HANDS = ("ball", "mitten")
 _FEET = ("shoe", "ball", "boot")
 _SHAPES = ("sphere", "egg", "anime", "chibi")
-_HAIR_STYLES = ("none", "short", "bangs", "spiky", "long", "ponytail", "twin_tails", "bun")
+_HAIR_STYLES = ("none", "short", "bangs", "spiky", "long", "ponytail", "twin_tails", "bun", "bob")
 _HAIR_COLOR = "#2A211C"
 # Torso width and depth, and the belly, as fractions of the head. The torso stays
 # narrower than the head. The belly carries the round and pear silhouettes.
@@ -208,6 +209,7 @@ def trait_catalog() -> dict:
         "hands": list(_HANDS), "feet": list(_FEET),
         "hair": {"style": list(_HAIR_STYLES), "default": {"style": "none", "color": _HAIR_COLOR}},
         "mesh": {"choices": list(_MESHES), "default": "pieces", "note": "loft (anime only) is one smooth lofted body: tapered limbs, a jaw, hair geometry, clothes as colour regions."},
+        "outfit": {"choices": list(_OUTFITS), "default": "school", "note": "With mesh loft: school (collar, bow or tie, skirt or trousers), casual (short sleeves, shorts or skirt, sneakers), sport (tracksuit, sneakers)."},
         "colors": {"fields": list(_COLOR_DEFAULT), "default": dict(_COLOR_DEFAULT), "format": "#RRGGBB"},
         "accessories": {"kinds": list(_ACCESSORY_KINDS), "max": _MAX_ACCESSORIES, "defaultColor": dict(_ACCESSORY_COLOR),
                         "notHere": ["moustache", "glasses", "eyebrows", "freckles"]},
@@ -249,8 +251,12 @@ def _normalize(traits: dict) -> dict:
     mesh = _choice(traits.get("mesh", "pieces"), _MESHES, "invalid_mesh", "mesh")
     if mesh == "loft" and family != "anime":
         _fail("invalid_mesh", "mesh loft is for the anime family")
+    outfit = _choice(traits.get("outfit", "school"), _OUTFITS, "invalid_outfit", "outfit")
+    if "outfit" in traits and mesh != "loft":
+        _fail("invalid_outfit", "outfit is for a lofted body (mesh loft)")
     return {
         **({"mesh": mesh} if "mesh" in traits else {}),
+        **({"outfit": outfit} if "outfit" in traits else {}),
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
         "family": family,

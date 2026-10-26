@@ -1,0 +1,178 @@
+"""Hair for the lofted anime head: a helmet plus curved clumps, from the ``hair`` trait.
+
+Styles: ``short``, ``bangs``, ``bob``, ``long``, ``twin_tails``, ``spiky``, ``ponytail``,
+``bun``; ``none`` adds nothing. Every clump is a quadratic curve from a root on the
+helmet, through a pull point, to a tip, lofted as a flattened tube that thins to the
+tip (``blob_loft.curve_tube``), so the silhouette is hair from every angle and the
+toon ink outlines each clump. The mesh is written as its own ``hair`` primitive so
+the toon look can put a gloss band on it. Head space: the egg's centre and radii from
+the layout, +Z the face; roots are given as (yaw degrees from the face, latitude
+degrees) on the helmet surface.
+"""
+from __future__ import annotations
+
+import math
+
+from services.blob_loft import Mesh, _st, _tube, _egg_radius, bezier, curve_tube
+
+HELMET = 1.07
+_SAMPLES = 7
+
+
+def hair_mesh(L: dict, hair: dict) -> Mesh:
+    mesh = Mesh()
+    style, color = hair["style"], hair["color"]
+    if style == "none":
+        return mesh
+    head = _Head(L)
+    _helmet(mesh, head, color, hairline=42 if style in ("short", "spiky", "bun") else 36)
+    _STYLES[style](mesh, head, color)
+    return mesh
+
+
+class _Head:
+    def __init__(self, L: dict) -> None:
+        self.cx, self.cy, self.cz = 0.0, L["head_y"], 0.0
+        self.rx, self.ry, self.rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
+        self.h = L["h"]
+        self.chin = L["head_y"] - self.ry
+        self.chest = L["torso_top"] - L["torso_h"] * 0.25
+        self.back_z = -L["torso_d"] / 2
+
+    def at(self, yaw: float, lat: float, out: float = HELMET):
+        """A point ``out`` times the egg radius from the centre, at yaw degrees from the face and lat degrees up."""
+        a, b = math.radians(yaw), math.radians(lat)
+        r = _egg_radius(b) * out
+        return (self.cx + self.rx * r * math.sin(a), self.cy + self.ry * math.sin(b) * out, self.cz + self.rz * r * math.cos(a))
+
+    def off(self, point, dx: float = 0.0, dy: float = 0.0, dz: float = 0.0):
+        return (point[0] + self.rx * dx, point[1] + self.ry * dy, point[2] + self.rz * dz)
+
+
+def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
+    """Hair round the crown and the back: full rings above the hairline, back arcs below it, just outside the face cap."""
+    rx, ry, rz = head.rx * HELMET, head.ry * HELMET, head.rz * HELMET
+    line = math.radians(hairline)
+    top, back = [], []
+    for k in range(9):
+        phi = line + (math.pi / 2 - line) * k / 8
+        r = _egg_radius(phi)
+        top.append(_st((0, head.cy + ry * math.sin(phi), -rz * 0.04), max(rx * r, 1e-4), max(rz * r, 1e-4), color))
+    for k in range(8):
+        phi = math.radians(-30) + (line - math.radians(-30)) * k / 7
+        r = _egg_radius(phi)
+        back.append(_st((0, head.cy + ry * math.sin(phi), -rz * 0.04), rx * r, rz * r, color))
+    _tube(mesh, back, "y", arc=(160.0, 380.0), caps=False)
+    _tube(mesh, top, "y", caps=True)
+
+
+def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.45, ring: int = 8) -> None:
+    """A lofted strand: radii in head-width units from the root to the tip."""
+    points = bezier(root, pull, tip, _SAMPLES)
+    radii = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
+    radii[-1] = max(radii[-1], head.rx * 0.012)
+    curve_tube(mesh, points, radii, color, ring=ring, flat=flat)
+
+
+def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 5, length: float = 0.55) -> None:
+    """Strands from the hairline down over the forehead, parted a little toward the sides."""
+    for i in range(count):
+        u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
+        yaw = u * 38
+        root = head.at(yaw, 44)
+        pull = head.off(head.at(yaw * 1.1, 20, 1.12), dy=0.05)
+        tip = head.off(head.at(yaw * 1.25, 44 - length * 90, 1.08), dx=u * 0.06)
+        _clump(mesh, head, color, root, pull, tip, 0.17, 0.03, flat=0.4)
+
+
+def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
+    """One lock in front of each ear. ``length`` is in head heights below the chin (0 ends at the jaw)."""
+    for sign in (-1, 1):
+        root = head.at(sign * 62, 30)
+        pull = head.off(head.at(sign * 72, -20, 1.14), dz=0.12)
+        tip = (root[0] + sign * head.rx * 0.08, head.chin - head.ry * length, head.cz + head.rz * 0.2)
+        _clump(mesh, head, color, root, pull, tip, 0.2, 0.06, flat=0.6)
+
+
+def _short(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=5, length=0.42)
+    for i in range(8):
+        yaw = 60 + i * 30
+        root = head.at(yaw, 22)
+        pull = head.at(yaw, -2, 1.16)
+        tip = head.at(yaw, -22, 1.08)
+        _clump(mesh, head, color, root, pull, tip, 0.2, 0.05, flat=0.5)
+
+
+def _bangs(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=6, length=0.6)
+    _side_locks(mesh, head, color, 0.1)
+
+
+def _bob(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=5, length=0.55)
+    for i in range(12):
+        yaw = 45 + i * 27
+        root = head.at(yaw, 26)
+        pull = head.at(yaw, -10, 1.2)
+        tip = head.off(head.at(yaw, -42, 1.0), dy=-0.35)
+        _clump(mesh, head, color, root, pull, tip, 0.22, 0.08, flat=0.5)
+
+
+def _long(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=5, length=0.55)
+    _side_locks(mesh, head, color, 1.4)
+    for i in range(7):
+        yaw = 120 + i * 20
+        root = head.at(yaw, 12)
+        pull = head.off(head.at(yaw, -25, 1.18), dy=-0.2)
+        tip = (root[0] * 0.9, head.chest, head.back_z * 1.1 + (head.rz * 0.1 if abs(yaw - 180) > 40 else 0.0))
+        _clump(mesh, head, color, root, pull, tip, 0.24, 0.1, flat=0.42)
+
+
+def _twin_tails(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=6, length=0.6)
+    _side_locks(mesh, head, color, 0.15)
+    for sign in (-1, 1):
+        knot = head.at(sign * 105, 28)
+        _clump(mesh, head, color, head.at(sign * 100, 40, 1.0), head.off(knot, dx=sign * 0.12, dy=0.1), head.off(knot, dx=sign * 0.16), 0.2, 0.2, flat=1.0, ring=10)
+        for k, (dx, dz) in enumerate(((0.0, 0.0), (0.12, 0.1), (0.06, -0.12))):
+            root = head.off(knot, dx=sign * (0.1 + dx * 0.5), dz=dz * 0.5)
+            pull = head.off(knot, dx=sign * (0.55 + dx), dy=-0.3, dz=dz)
+            tip = (knot[0] + sign * head.rx * (0.45 + dx), head.chest + head.ry * 0.2 - k * head.ry * 0.1, knot[2] + head.rz * dz)
+            _clump(mesh, head, color, root, pull, tip, 0.2, 0.06, flat=0.6)
+
+
+def _spiky(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=5, length=0.4)
+    for i in range(10):
+        yaw = i * 36 + 18
+        lat = 38 if i % 2 else 58
+        root = head.at(yaw, lat)
+        pull = head.at(yaw, lat + 18, 1.3)
+        tip = head.at(yaw * 1.05, lat + 30, 1.62)
+        _clump(mesh, head, color, root, pull, tip, 0.18, 0.02, flat=0.7)
+
+
+def _ponytail(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=5, length=0.5)
+    _side_locks(mesh, head, color, 0.05)
+    knot = head.at(180, 30)
+    for k, (dx, dz) in enumerate(((0.0, 0.0), (0.16, -0.05), (-0.16, -0.05), (0.0, -0.12))):
+        root = head.off(knot, dx=dx * 0.5, dz=dz * 0.5)
+        pull = head.off(knot, dx=dx, dy=0.35, dz=-0.7 + dz)
+        tip = (knot[0] + head.rx * dx * 1.2, head.chest + head.ry * 0.1 - k * head.ry * 0.08, head.back_z * 1.15 + head.rz * dz)
+        _clump(mesh, head, color, root, pull, tip, 0.2, 0.05, flat=0.6)
+
+
+def _bun(mesh: Mesh, head: _Head, color: str) -> None:
+    _fringe(mesh, head, color, count=5, length=0.5)
+    top = head.at(170, 62, 1.0)
+    bun = [_st((top[0], top[1] + head.ry * 0.05, top[2]), head.rx * 0.2, head.rz * 0.2, color),
+           _st((top[0], top[1] + head.ry * 0.3, top[2] - head.rz * 0.05), head.rx * 0.34, head.rz * 0.34, color),
+           _st((top[0], top[1] + head.ry * 0.52, top[2] - head.rz * 0.08), head.rx * 0.2, head.rz * 0.2, color)]
+    _tube(mesh, bun, "y", ring=12)
+
+
+_STYLES = {"short": _short, "bangs": _bangs, "bob": _bob, "long": _long, "twin_tails": _twin_tails,
+           "spiky": _spiky, "ponytail": _ponytail, "bun": _bun}
