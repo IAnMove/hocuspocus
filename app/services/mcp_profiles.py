@@ -27,7 +27,7 @@ SERIES_TOOLS = frozenset({
     # Characters: one-click kits and voices.
     "characters.list", "characters.get", "characters.save", "characters.styles", "characters.animations", "characters.animation.make", "characters.animation.make_set", "characters.animation.review", "characters.animation.status",
     "characters.animation.cancel", "characters.animation.sheet", "characters.voice.band",
-    "characters.rig.flat", "characters.rig.flat.preview", "characters.rig.check",
+    "characters.rig.flat", "characters.rig.flat.preview", "characters.rig.check", "characters.face.make",
     # Generation and checks.
     "generation.image", "generation.speech", "generation.music", "generation.sfx", "generation.receipt", "jobs.wait",
     "jobs.cancel",

@@ -2805,6 +2805,8 @@ export function SceneAnimatorPanel() {
         onSave={() => void persistCharacterKit()}
         onPutOnScene={mountCharacterKit}
         onDelete={() => void removeCharacterKit()}
+        workspace={workspace}
+        onLibrary={setCharacterKitLibrary}
         onCommit={kit => { setCharacterKitDraft(kit); void persistCharacterKitDraft(kit) }}
         onClose={() => { setCharacterKitDraft(null); setCharacterKitError(null) }}
         onStatus={setMessage}

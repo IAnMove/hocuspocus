@@ -663,6 +663,7 @@
         "tests/test_world3d_scene_collisions.py",
         "tests/test_world3d_world_fx.py",
         "tests/test_minimax_h3_fasth3.py",
+        "tests/test_blob_face.py",
         "tests/test_cc0_props.py"
       ]
     }
@@ -3204,6 +3205,12 @@
       "prefix": "tests/fixtures/fasth3_checkpoint_headers.json",
       "paths": [
         "tests/test_minimax_h3_fasth3.py"
+      ]
+    },
+    {
+      "prefix": "app/services/blob_face.py",
+      "paths": [
+        "tests/test_blob_face.py"
       ]
     }
   ]

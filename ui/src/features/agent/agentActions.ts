@@ -31,6 +31,7 @@ import type { AgentCheckSeriesLocationStageAction, AgentSetSeriesLocationStageAc
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentLipsyncRedoAction } from './lipsyncRedoCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentMakeCharacterAnimationSetAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
+import type { AgentMakeCharacterFaceAction } from './characterFaceCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type { AgentRoomSetsAction } from './roomSetsCapabilities'
@@ -657,6 +658,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCheckSeriesLocationStageAction
   | AgentMakeCharacterAnimationAction
   | AgentMakeCharacterAnimationSetAction
+  | AgentMakeCharacterFaceAction
   | AgentReviewCharacterAnimationAction
   | AgentSetVoiceBandAction
   | AgentMediaToolAction
