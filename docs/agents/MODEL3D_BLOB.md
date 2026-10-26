@@ -54,7 +54,8 @@ each limb, so an elbow or a knee is a run of rings the rig blends, a torso that
 tapers to the waist and out at the hips, a real neck, an egg head with a jaw
 (`blob_loft.egg_scale`, the same formula as the face cap's `taper`), mittens
 with a thumb, shoes with a sole, and hair as geometry in `hair.color` (a helmet
-round the crown and back, bangs, side locks for `long`, spikes for `spiky`).
+round the crown and back, side locks and a fall for `long`, spikes for `spiky`,
+flat strands on the forehead only for `bangs`: a painted fringe draws its own).
 Accessories become colour regions of that mesh: `skirt` (two thin pleated
 sheets, knee socks), `school_collar` (a collar and a ribbon, or the shirt V of a
 `jacket`), `tie`. About 3–4k triangles. The default body is unchanged.
