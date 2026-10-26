@@ -54,7 +54,8 @@ def catalog() -> dict[str, Any]:
         "audio": {"type": "string", "minLength": 1, "maxLength": 2000},
         "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"},
                  "description": "Seconds [start, end] of the audio to drive and to score."},
-        "offset": {"type": "number", "minimum": 0, "maximum": 36000},
+        "offset": {"type": "number", "minimum": 0, "maximum": 36000,
+                   "description": "Seconds into the audio where the clip starts. When span is set, the take starts at span start and the score uses that offset."},
         "confirm_download": {"type": "boolean"},
     }, ["workspace", "engine"])
 
@@ -75,7 +76,7 @@ def run(arguments: Any, *, workspace_dir, uploads_dir) -> dict[str, Any]:
         return _weights(payload, target["engine"], gap)
     guides = prepare_guides(target, folder)
     video = _adopt(folder, enqueue(_body(target, workspace, guides, folder), folder))
-    qa = score_take(video, guides["audio_path"], guides["offset"], guides["span"])
+    qa = score_take(video, guides["audio_path"], _score_offset(guides), guides["span"])
     saved = _save(folder, workspace, target, video, qa)
     return {**saved, "engine": target["engine"], "verdict": qa.get("verdict"), "qa": qa}
 
@@ -109,6 +110,14 @@ def enqueue(body: dict, folder: str) -> str:
     if worker is not None:
         return worker(body, folder)
     return _server_queue(body, folder)
+
+
+def _score_offset(guides: dict) -> float:
+    """The take starts at the span, so frame 0 is ``span[0]`` of the original audio."""
+    span = guides.get("span")
+    if span:
+        return float(span[0])
+    return float(guides.get("offset") or 0.0)
 
 
 def score_take(video: str, audio: str, offset: float, span: tuple[float, float] | None) -> dict[str, Any]:

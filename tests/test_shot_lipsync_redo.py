@@ -290,6 +290,30 @@ def _generate_video_params() -> set[str]:
     raise AssertionError("generate_video is missing")
 
 
+def test_a_span_that_starts_late_is_scored_from_that_start(tmp_path, monkeypatch):
+    """The take is the span, so frame 0 is span start. offset 0 scores the song from the beginning."""
+    folder = tmp_path / "film"
+    _production(folder)
+    shots = json.loads((folder / "mv.shots.json").read_text())
+    shots["shots"][0]["start"], shots["shots"][0]["end"] = 45, 50
+    (folder / "mv.shots.json").write_text(json.dumps(shots), encoding="utf-8")
+    scored = {}
+
+    def measure(_video, _audio, offset, span):
+        scored.update(offset=offset, span=span)
+        return {"verdict": "ok", "best_r": 0.8}
+
+    _bind(monkeypatch, tmp_path, measure=measure)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05"})
+    from services.lipsync_qa import _frame_bounds
+    i0, i1 = _frame_bounds(80, 25.0, scored["offset"], scored["span"])
+    assert scored["offset"] == 45.0 and scored["span"] == (45.0, 50.0)
+    assert i0 == 0 and i1 > i0
+    described = redo.catalog()["inputSchema"]["properties"]["input"]["properties"]["offset"]["description"]
+    assert "span" in described
+
+
 def test_infinitetalk_sends_force_fps_and_counts_the_span_at_that_rate(tmp_path, monkeypatch):
     """generate_video has force_fps and no fps. A 5 s span at 16 fps is clamped to the 81-frame window."""
     folder = tmp_path / "film"
