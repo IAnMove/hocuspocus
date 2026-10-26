@@ -31,36 +31,61 @@ const LEGACY_EXECUTE_ALLOWLIST = [
 ]
 
 const AGENT_ACTIONS_IMPORTS = [
-  './wizardTurnReport',
-  './wizardContext',
+  // Translation catalogs for Wizard replies and errors; no store, transport or execution port.
+  '../../i18n',
+  // Pure helper: the content language of new work follows the UI language.
+  '../../lib/contentLanguage',
+  // Pure sentence for a family's territory licence. No store write, transport or execution port.
+  '../../lib/licenceNotice',
+  '../../stores/useStore',
+  '../../types',
+  '../comics/generateArtwork',
+  '../comics/store',
+  '../stories/musicVideoLook',
   './agentContract',
-  './toolCapabilities',
-  './commandContract',
-  './agentContract',
-  './storyWorkflowIdentity',
-  './productionWorkCapabilities',
-  './seriesShotEditCapabilities',
-  './seriesShotCardCapabilities',
-  './seriesStageCapabilities',
-  './mediaToolCapabilities',
-  './lipsyncRedoCapabilities',
+  './agentExamples',
+  './agentUiBus',
+  './alternativeSongActions',
+  './applicationAdapters',
+  './capabilityRegistry',
+  './capabilityRunner',
+  // Action type only. Execution stays on the characterAnimations adapter.
   './characterAnimationCapabilities',
   './characterFaceCapabilities',
-  './voiceBandCapabilities',
-  './world3dTemplateCapabilities',
-  './roomSetsCapabilities',
-  './video2dTemplateCapabilities',
   './characterKitActions',
-  './videoEditorActions',
-  './alternativeSongActions',
-  './agentExamples',
-  './wizardIntent',
-  './agentUiBus',
+  './commandContract',
+  // Action type only. Execution stays on the lipsyncRedo adapter.
+  './lipsyncRedoCapabilities',
+  // Action type only. Execution stays on the mediaTools adapter.
+  './mediaToolCapabilities',
+  // Action type only. Execution stays on the productionWorks adapter.
+  './productionWorkCapabilities',
+  // Action type only. Execution stays on the roomSets adapter.
+  './roomSetsCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesShotCardCapabilities',
+  // Action types only. Execution stays on the seriesShots adapter.
+  './seriesShotEditCapabilities',
+  // Action type only. Execution stays on the seriesShots adapter.
+  './seriesStageCapabilities',
   './sfxPack',
-  './capabilityRegistry',
-  './applicationAdapters',
-  './capabilityRunner',
+  // Pure request filtering; no new UI/API/store-writing port is authorized.
+  './storyVisualRequest',
+  './storyWorkflowIdentity',
   './toolCapabilities',
+  // Action type only. Execution stays on the video2dTemplates adapter.
+  './video2dTemplateCapabilities',
+  './videoEditorActions',
+  // Action type only. Execution stays on the characterKit adapter.
+  './voiceBandCapabilities',
+  './wizardContext',
+  './wizardIntent',
+  // Pure validation/result formatting; no store, transport or execution port.
+  './wizardTurnReport',
+  // Action type only. Execution stays on the world3dTemplates adapter.
+  './world3dTemplateCapabilities',
+  // Type only (ParseKeys for catalog progress keys).
+  'i18next',
 ]
 
 const LAB_ACTIONS_IMPORTS = [
