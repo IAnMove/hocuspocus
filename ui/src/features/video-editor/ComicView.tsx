@@ -59,7 +59,7 @@ function ComicPages(props: Props & { file: string }) {
     </div>
     {!props.clips.length && <p className="px-4 text-sm text-amber-100/80">{t('comic.empty')}</p>}
     <div className="flex flex-col items-center gap-6 px-3 pb-8">
-      {pages.map(page => <section key={page.index} data-testid="comic-page" data-page={page.index} className="w-full max-w-[440px]">
+      {pages.map(page => <section key={page.index} data-testid="comic-page" data-page={page.index} className="w-full max-w-[600px]">
         <p className="mb-1 text-center text-[10px] text-amber-100/70">{t('comic.page', { n: page.index + 1 })}</p>
         <div className="relative shadow-xl" style={{ width: '100%', aspectRatio: `${PAGE_W} / ${PAGE_H}`, background: PAPER }}>
           {page.tiers.flatMap(tier => tier.panels).map(panel => {

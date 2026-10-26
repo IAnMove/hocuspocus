@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { MontageDocument } from '../src/api/montages.ts'
-import { editorFromMontage, exportLayerFields, montageFromEditor, resolutionFor } from '../src/features/video-editor/montage.ts'
+import { editorFromMontage, exportLayerFields, montageFromEditor, playableUrl, resolutionFor } from '../src/features/video-editor/montage.ts'
 
 const montage: MontageDocument = {
   version: 1, name: 'Bird', width: 1920, height: 1080, fps: 24,
@@ -69,4 +69,11 @@ test('a lyric and a comic choice survive save and reload', async () => {
   assert.deepEqual(again.extras.c1, opened.extras.c1)
   const plain = await editorFromMontage(montage, probe, async () => ({ duration: 171 }), source => `thumb:${source}`)
   assert.equal(plain.extras.c1, undefined)
+})
+
+test('a bare montage source plays from the workspace; URLs and paths stay as they are', () => {
+  assert.equal(playableUrl('ol-o01.mp4', 'orcos libres'), '/api/v1/file/ol-o01.mp4?workspace=orcos%20libres')
+  assert.equal(playableUrl('/api/v1/file/a.mp4?workspace=w', 'w'), '/api/v1/file/a.mp4?workspace=w')
+  assert.equal(playableUrl('https://x/a.mp4', 'w'), 'https://x/a.mp4')
+  assert.equal(playableUrl('a.mp4', ''), 'a.mp4')
 })

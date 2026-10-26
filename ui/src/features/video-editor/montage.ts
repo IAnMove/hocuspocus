@@ -7,6 +7,7 @@ import type { ResolutionOption, EditorSoundtrack } from './editorDraft'
 import { RESOLUTIONS } from './editorDraft'
 import type { EditorClip, Transition } from './editorClipNormalization'
 import { editorFrameFields, montageFrameFields } from './clipFrame'
+import { BASE } from '../../api/http'
 
 export interface MontageLayers {
   overlays: MontageOverlay[]
@@ -81,12 +82,14 @@ export function resolutionFor(width: number, height: number): ResolutionOption {
     ?? { label: `${width}×${height}`, width, height }
 }
 
-/** Build editor clips from a montage; `probe` reads real media facts per source. */
+/** Build editor clips from a montage; `probe` reads real media facts per source, `playable` gives the URL the
+ * player loads (a montage written by a production names its clips by bare workspace file name). */
 export async function editorFromMontage(
   montage: MontageDocument,
   probe: (source: string) => Promise<VideoEditorProbe>,
   probeAudio: (source: string) => Promise<{ duration: number }>,
   thumbnail: (source: string) => string,
+  playable: (source: string) => string = source => source,
 ): Promise<{ clips: EditorClip[]; soundtrack: EditorSoundtrack | null; layers: MontageLayers; origins: MontageRef['origins']; extras: NonNullable<MontageRef['extras']> }> {
   const clips: EditorClip[] = []
   const origins: MontageRef['origins'] = {}
@@ -99,7 +102,7 @@ export async function editorFromMontage(
       id: clip.id,
       name: clip.name,
       source: clip.source,
-      previewUrl: clip.source,
+      previewUrl: playable(clip.source),
       thumbnailUrl: thumbnail(clip.source),
       trimStart: clip.trimStart,
       trimEnd,
@@ -175,4 +178,10 @@ export function persistMontageState(workspace: string, layers: MontageLayers, re
   } catch {
     // Browser storage is a convenience; the server montage is the durable copy.
   }
+}
+
+/** A bare file name is a file of the workspace; URLs and paths play as they are. */
+export function playableUrl(source: string, workspace: string): string {
+  if (!/^[^/\\:?#]+$/.test(source) || !workspace) return source
+  return `${BASE}/api/v1/file/${encodeURIComponent(source)}?workspace=${encodeURIComponent(workspace)}`
 }

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { duplicateClipState, frameOffset, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
-import { columnCount, layoutComic, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicView.ts'
+import { columnCount, GUTTER, layoutComic, MARGIN, PAGE_H, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicView.ts'
 
 function clip(id: string, duration: number, width = 1080, height = 1920, focusX?: number, focusY?: number): ComicLayoutClip {
   return { id, duration, width, height, focusX, focusY }
@@ -20,7 +20,7 @@ function assertTiersFill(pages: ComicPage[]) {
 
 test('tiers fill, a long clip spans two columns, and the longest clip is a splash', () => {
   const pages = layoutComic([clip('a', 2), clip('b', 1), clip('c', 1), clip('d', 1), clip('e', 5)])
-  assert.equal(pages.length, 1)
+  assert.equal(pages.length, 2)
   assert.equal(pages[0].columns, 3)
   assertTiersFill(pages)
   const panels = panelsOf(pages)
@@ -30,7 +30,13 @@ test('tiers fill, a long clip spans two columns, and the longest clip is a splas
   const splash = panels.find(panel => panel.splash)
   assert.equal(splash?.id, 'e')
   assert.equal(splash?.span, 3)
-  assert.equal(pages[0].tiers.at(-1)?.panels.length, 1)
+  // Vertical frames: the splash is a whole page, so it keeps most of the frame.
+  assert.equal(pages[1].tiers.length, 1)
+  assert.equal(splash?.h, PAGE_H - 2 * MARGIN)
+  // The page the splash left early stretches its two tiers down to the foot of the paper.
+  const last = pages[0].tiers.at(-1)!
+  assert.equal(pages[0].tiers.length, 2)
+  assert.ok(Math.abs(last.y + last.h - (PAGE_H - MARGIN)) < 0.01)
 })
 
 test('an even median does not mark a merely longer clip as wide', () => {
@@ -43,7 +49,8 @@ test('an even median does not mark a merely longer clip as wide', () => {
 
 test('a splash waits for the next tier and the row it left is filled', () => {
   const pages = layoutComic([clip('a', 1), clip('b', 1), clip('c', 9)])
-  const [first, second] = pages[0].tiers
+  const [first] = pages[0].tiers
+  const [second] = pages[1].tiers
   assert.equal(first.panels.reduce((total, panel) => total + panel.span, 0), 3)
   assert.deepEqual(second.panels.map(panel => panel.id), ['c'])
   assert.equal(second.panels[0].span, 3)
@@ -67,17 +74,18 @@ test('one, seven and a hundred vertical clips', () => {
   assert.equal(one[0].tiers[0].panels[0].splash, true)
 
   const seven = layoutComic(Array.from({ length: 7 }, (_, index) => clip(`c${index}`, 2)))
-  assert.equal(seven.length, 1)
-  assert.equal(seven[0].tiers.length, 3)
+  assert.equal(seven.length, 2)
+  assert.equal(seven[0].tiers.length, 1)
   assert.equal(seven[0].tiers[0].panels[0].id, 'c0')
   assert.equal(seven[0].tiers[0].panels[0].splash, true)
+  assert.equal(seven[1].tiers.length, 2)
   assert.equal(panelsOf(seven).length, 7)
   assertTiersFill(seven)
 
   const hundred = layoutComic(Array.from({ length: 100 }, (_, index) => clip(`c${index}`, 1)))
   assert.equal(hundred.length, 12)
   assert.equal(hundred[0].columns, 3)
-  assert.equal(hundred.at(-1)?.tiers.length, 1)
+  assert.equal(hundred.at(-1)?.tiers.length, 3)
   assert.equal(panelsOf(hundred).length, 100)
   assert.deepEqual(panelsOf(hundred).map(panel => panel.id), Array.from({ length: 100 }, (_, index) => `c${index}`))
   assertTiersFill(hundred)
@@ -88,6 +96,10 @@ test('horizontal frames use two columns and a zero duration is not wide', () => 
   assert.equal(columnCount([clip('s', 1, 100, 100)]), 3)
   assert.equal(horizontal[0].columns, 2)
   assert.equal(horizontal[0].tiers[0].panels[0].span, 2)
+  // Horizontal frames: four tiers a page, and the splash takes two of them.
+  assert.equal(horizontal.length, 1)
+  const [splash, next] = horizontal[0].tiers
+  assert.ok(Math.abs(splash.h - (2 * next.h + GUTTER)) < 0.01)
   const flat = layoutComic([clip('a', 0), clip('b', 0), clip('c', 0), clip('d', 0)])
   const spans = panelsOf(flat).map(panel => panel.span)
   assert.deepEqual(spans, [3, 1, 1, 1])
