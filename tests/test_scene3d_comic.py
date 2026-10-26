@@ -209,11 +209,29 @@ def test_five_panels_keep_the_cut_aspect_and_crop_the_rest(tmp_path):
     assert [index for index, cell in enumerate(cells) if cell["hero"]] == [0, 4]
     for index, cell in enumerate(cells):
         image = Image.open(tmp_path / "studio" / f"comic-panel-{index}.png")
-        assert image.size == (cell["w"], cell["h"])
+        assert image.size == ((64, 36) if cell["hero"] else (cell["w"], cell["h"]))
         assert (image.size[0] * 9 == image.size[1] * 16) is bool(cell["hero"])
     stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
     panel = next(slot for slot in stored["document"]["slots"] if slot["id"] == "panel-0")
     assert panel["scale"] == pytest.approx(cells[0]["h"] * 0.00125 / 2)
+
+
+def test_a_recolored_cutout_keeps_the_picture_on_a_full_size_cut_panel(tmp_path):
+    def recolor(source, dest):
+        image = Image.open(source).convert("RGBA")
+        Image.new("RGBA", image.size, (255, 0, 0, 180)).save(dest)
+        return dest
+
+    bind_comic_cutout(recolor)
+    reply = _call(tmp_path, _panels(tmp_path, 5), intent="comic-color", seed=1, to_panel=4)
+    cells = reply["result"]["layout"]["cells"]
+    panel = Image.open(tmp_path / "studio" / "comic-panel-0.png").convert("RGBA")
+    cutout = Image.open(tmp_path / "studio" / "comic-cutout-0.png").convert("RGBA")
+    filler = Image.open(tmp_path / "studio" / "comic-panel-1.png")
+    assert panel.size == (64, 36) and cutout.size == panel.size
+    assert cutout.getpixel((4, 4))[:3] == panel.getpixel((4, 4))[:3]
+    assert cutout.getpixel((4, 4))[3] == 180
+    assert filler.size == (cells[1]["w"], cells[1]["h"]) and filler.size != panel.size
 
 
 def _movie(tmp_path, name="clip.mp4", seconds=4):

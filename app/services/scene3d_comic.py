@@ -80,7 +80,9 @@ def comic_transition(data: dict, workspace_dir) -> dict:
     cells, page_png = _layout(fmt, len(specs), seed, from_panel, to_panel)
     root.mkdir(parents=True, exist_ok=True)
     page_url = _write_page(page_png, fmt, workspace, root)
-    panels, warnings = _stage_panels(sources, cells, workspace, root, workspace_dir)
+    panels, warnings = _stage_panels(
+        sources, cells, {from_panel, to_panel}, (width, height), workspace, root, workspace_dir,
+    )
     built = run_template_tool("comic", _payload(
         fmt, width, height, page_url, panels, from_panel, to_panel, seed, exit_duration, enter_duration, hold,
     ))
@@ -240,10 +242,12 @@ def _write_page(png: bytes, fmt: str, workspace: str, root: Path) -> str:
     return _url(name, workspace)
 
 
-def _stage_panels(sources: list[dict], cells: list, workspace: str, root: Path, workspace_dir) -> tuple[list[dict], list[str]]:
+def _stage_panels(sources, cells, heroes, frame_size, workspace, root, workspace_dir):
+    """The cut panels stay at the source frame size. The other panels are cover-cropped to the cell."""
     staged, warnings = [], []
     for index, item in enumerate(sources):
-        panel, warning = _stage_panel(item, index, _cell_size(cells[index], index), workspace, root, workspace_dir)
+        size = frame_size if index in heroes else _cell_size(cells[index], index)
+        panel, warning = _stage_panel(item, index, size, workspace, root, workspace_dir)
         staged.append(panel)
         if warning:
             warnings.append(f"panels[{index}]: {warning}")
@@ -280,20 +284,41 @@ def _stage_panel(item: dict, index: int, size: tuple[int, int], workspace: str, 
         cutout_src = made
     if cutout_src is not None:
         cutout_name = f"comic-cutout-{index}.png"
-        _cover(Path(cutout_src), root / cutout_name, size)
+        cutout_dest = root / cutout_name
+        _cover(Path(cutout_src), cutout_dest, size)
+        _keep_picture_color(cutout_dest, dest)
         staged["cutout"] = _url(cutout_name, workspace)
     return staged, warning
 
 
 def _cover(source: Path, dest: Path, size: tuple[int, int]) -> None:
     width, height = size
-    image = Image.open(source).convert("RGBA")
+    with Image.open(source) as opened:
+        image = opened.convert("RGBA")
+    if image.size == (width, height):
+        if Path(source).resolve() != Path(dest).resolve():
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            image.save(dest)
+        return
     scale = max(width / image.width, height / image.height)
     resized = image.resize((max(width, round(image.width * scale)), max(height, round(image.height * scale))), Image.Resampling.LANCZOS)
     left = max(0, (resized.width - width) // 2)
     top = max(0, (resized.height - height) // 2)
     dest.parent.mkdir(parents=True, exist_ok=True)
     resized.crop((left, top, left + width, top + height)).save(dest)
+
+
+def _keep_picture_color(cutout: Path, picture: Path) -> None:
+    """A matte may recolor its edges. The cut matches only when the cutout uses the picture's colour."""
+    with Image.open(picture) as opened:
+        base = opened.convert("RGBA")
+    with Image.open(cutout) as opened:
+        mask = opened.convert("RGBA")
+    if mask.size != base.size:
+        return
+    painted = base.copy()
+    painted.putalpha(mask.getchannel("A"))
+    painted.save(cutout)
 
 
 def _url(name: str, workspace: str) -> str:
