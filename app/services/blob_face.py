@@ -205,7 +205,10 @@ def _moustache(draw: ImageDraw.ImageDraw, traits: dict[str, Any], layout: dict[s
         draw.arc((cx - width, y - _s(8), cx - _s(6), bottom + _s(10)), 200, 20, fill=color, width=pen)
         draw.arc((cx + _s(6), y - _s(8), cx + width, bottom + _s(10)), 160, 340, fill=color, width=pen)
     else:
-        draw.rounded_rectangle((cx - width, y, cx + width, bottom), radius=max(1, int(_s(8))), fill=color)
+        # The mouth sprite is tall, so clamping to its box reduced a walrus to a dash. Draw the walrus itself;
+        # the mouth overlay covers only its own ink.
+        span = _s(160)
+        draw.rounded_rectangle((cx - span, y, cx + span, y + _s(36)), radius=max(1, int(_s(14))), fill=color)
 
 
 def _glasses(draw: ImageDraw.ImageDraw, traits: dict[str, Any], layout: dict[str, Any]) -> None:
