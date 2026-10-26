@@ -350,8 +350,9 @@ def _collar_and_ribbon(mesh: Mesh, L: dict, wear: dict) -> None:
         _tube(mesh, collar, "y")
     if wear.get("ribbon"):
         z = L["torso_d"] / 2 * 0.99
-        knot = [_st((0, top - 0.03 * h, z), 0.02 * h, 0.005 * h, wear["ribbon"]), _st((0, top - 0.045 * h, z), 0.026 * h, 0.005 * h, wear["ribbon"]),
-                _st((0, top - 0.085 * h, z), 0.01 * h, 0.004 * h, wear["ribbon"])]
+        # A small bow: a knot and two short tails, not a bib.
+        knot = [_st((0, top - 0.032 * h, z), 0.013 * h, 0.004 * h, wear["ribbon"]), _st((0, top - 0.042 * h, z), 0.017 * h, 0.004 * h, wear["ribbon"]),
+                _st((0, top - 0.068 * h, z), 0.006 * h, 0.003 * h, wear["ribbon"])]
         _tube(mesh, knot, "y", ring=8)
     if wear.get("tie"):
         z = L["torso_d"] / 2 * 1.0
