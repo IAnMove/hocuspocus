@@ -123,7 +123,7 @@ PLANE_DEFAULT = [3.3, 3.3, -0.5]
 def _plane(changes: dict, kept: dict) -> dict[str, Any]:
     """``shape: "plane"`` hangs a flat picture (a painted head with its hair) on the Head bone instead of the cap.
     ``plane`` is [width, height, lift] in head radii. Nothing is stored for the default cap."""
-    shape = changes.get("shape", kept.get("shape"))
+    shape = changes.get("shape", kept.get("shape") or ("plane" if "plane" in changes else None))
     if shape not in (None, "cap", "plane"):
         raise World3DSceneError("invalid_face", "shape is cap or plane")
     if shape != "plane":

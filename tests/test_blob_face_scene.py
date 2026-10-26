@@ -144,6 +144,10 @@ def test_a_plane_face_is_opt_in_and_sized_in_head_radii(tmp_path):
     assert decal["shape"] == "plane" and decal["plane"] == [3.0, 4.0, PLANE_DEFAULT[2]]
     execute_command("world3d.scene.face", {"version": 1, "intent_id": "cap-again", "input": {**base, "base_revision": 4, "shape": "cap"}}, root)
     assert "shape" not in inspect_scene("studio", "w3d-face00000002", root)["document"]["slots"][0]["faceDecal"]
+    # plane alone, after a cap, selects the plane
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "plane-alone", "input": {**base, "base_revision": 5, "plane": [2, 2, 0.5]}}, root)
+    decal = inspect_scene("studio", "w3d-face00000002", root)["document"]["slots"][0]["faceDecal"]
+    assert decal["shape"] == "plane" and decal["plane"] == [2.0, 2.0, 0.5]
     with pytest.raises(HTTPException) as bad:
-        execute_command("world3d.scene.face", {"version": 1, "intent_id": "bad", "input": {**base, "base_revision": 5, "shape": "plane", "plane": [0.5, 4]}}, root)
+        execute_command("world3d.scene.face", {"version": 1, "intent_id": "bad", "input": {**base, "base_revision": 6, "shape": "plane", "plane": [0.5, 4]}}, root)
     assert bad.value.detail["code"] == "invalid_face"

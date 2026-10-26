@@ -477,3 +477,23 @@ def test_school_collar_hangs_below_the_chin_and_the_jacket_hem_covers_the_body()
     f = (low - (body["position"][1] - body["scale"][1] / 2)) / body["scale"][1]
     body_w = body["scale"][0] * (body["taper"] + (1 - body["taper"]) * f)
     assert coat["scale"][0] * coat["taper"] >= body_w
+
+
+def test_an_anime_arm_is_one_tube_while_blob_and_chibi_keep_their_joints():
+    """Anime: the elbow sphere and the forearm keep the upper arm's diameter and the shoulder sphere stays inside the sleeve,
+    so the toon ink draws no ring at the elbow. Blob and chibi are unchanged: a thinner forearm and a smaller elbow."""
+    for name, elbow_k, fore_k in (("anime_girl", 1.0, 1.0), ("anime_boy", 1.0, 1.0), ("blob_scout", 0.82, 0.86), ("chibi_kid", 0.82, 0.86)):
+        spec = {**PRESETS[name], "accessories": []}
+        pieces = blob_pieces(spec)["pieces"]
+        rights = sorted((piece for piece in _arm_capsules(pieces) if piece["position"][0] > 0), key=lambda piece: piece["scale"][1], reverse=True)
+        upper, fore = rights[0], rights[1]
+        assert fore["scale"][0] == pytest.approx(upper["scale"][0] * fore_k, rel=1e-6), name
+        y = upper["position"][1]
+        spheres = [piece for piece in pieces if piece["type"] == "sphere" and abs(piece["position"][1] - y) < 1e-4 and piece["position"][0] > 0]
+        elbow = min(spheres, key=lambda piece: abs(piece["position"][0] - (upper["position"][0] + upper["scale"][1] / 2)))
+        assert elbow["scale"][0] == pytest.approx(upper["scale"][0] * elbow_k, rel=1e-6), name
+        shoulder = min(spheres, key=lambda piece: piece["position"][0])
+        if spec.get("family") == "anime":
+            assert shoulder["scale"][0] == pytest.approx(upper["scale"][0], rel=1e-6), name
+        else:
+            assert shoulder["scale"][0] > upper["scale"][0], name
