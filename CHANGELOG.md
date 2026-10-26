@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a lip redo counts frames at InfiniteTalk's 25 fps and sends `force_fps`.** `generate_video` drops a `fps` argument. A 5 s span counted at 16 fps was clamped to the 81-frame window, about 3.2 s at the model's 25 fps.
+
 **Fixed: a lip redo no longer offers LongCat Avatar.** `longcat_avatar` stays in the model catalog. Its generator declares `input_frames` and `image_start` and never reads them, so a control video does not keep the person in the shot. The redo engine is InfiniteTalk.
 
 **Fixed: a lip redo sends the shot's video and audio as absolute paths.** InfiniteTalk and LongCat are not `wangp_1272` models, so a workspace-relative name was looked up in the process directory and dropped, and the job failed as "Generation failed." The queue now gets the resolved file, and a failed job reports `error`.

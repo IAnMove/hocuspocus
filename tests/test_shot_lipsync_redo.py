@@ -281,6 +281,32 @@ def test_lipsync_verdict_thresholds():
     assert verdict(0.1, 0.9, 0.0) == "unreliable"
 
 
+def _generate_video_params() -> set[str]:
+    import ast
+    tree = ast.parse((Path(__file__).resolve().parents[1] / "app" / "wgp.py").read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef) and node.name == "generate_video":
+            return {arg.arg for arg in node.args.args} | {arg.arg for arg in node.args.kwonlyargs}
+    raise AssertionError("generate_video is missing")
+
+
+def test_infinitetalk_sends_force_fps_and_counts_the_span_at_that_rate(tmp_path, monkeypatch):
+    """generate_video has force_fps and no fps. A 5 s span at 16 fps is clamped to the 81-frame window."""
+    folder = tmp_path / "film"
+    folder.mkdir()
+    (folder / "closeup.mp4").write_bytes(b"orig")
+    (folder / "voice.wav").write_bytes(b"wav")
+    seen = _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "clip": "closeup.mp4", "audio": "voice.wav", "span": [0, 5]})
+    body = seen[0]
+    accepted = _generate_video_params()
+    assert "force_fps" in accepted and "fps" not in accepted and body.get("fps") not in accepted
+    filtered = {key: value for key, value in body.items() if key in accepted}
+    assert filtered["force_fps"] == "25"
+    assert body["video_length"] == 125
+
+
 def test_longcat_avatar_is_not_a_redo_engine(tmp_path, monkeypatch):
     """LongCat generate() declares input_frames and never reads it, so video_prompt_type V does not follow the shot."""
     folder = tmp_path / "film"

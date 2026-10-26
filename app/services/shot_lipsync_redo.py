@@ -179,7 +179,7 @@ def _body(target: dict, workspace: str, guides: dict, folder: str) -> dict[str, 
         "guidance_scale": spec["guidance_scale"], "audio_guidance_scale": spec["audio_guidance_scale"],
         "video_prompt_type": spec["video_prompt_type"], "audio_prompt_type": "A",
         "video_guide": guides["video"], "audio_guide": guides["audio"],
-        "sliding_window_size": spec["sliding_window_size"], "fps": spec["fps"],
+        "sliding_window_size": spec["sliding_window_size"], "force_fps": str(int(spec["fps"])),
         "video_length": video_length(target["engine"], guides["span"]),
         "output_name": available_name(folder, f"lipsync-{token}-{target['engine']}.mp4"),
     }
