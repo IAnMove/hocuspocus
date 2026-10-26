@@ -4,7 +4,8 @@
 face that is a screen, ``mouthStyle`` and, only when it is ``layers``, ``faceSource``. ``kit_look`` is the look a rig of a kit uses: the keys the call gives over
 the kit's own look, its last rig's, else the rig defaults of the character style preset it was made in
 (``character_styles``), so a re-rig (a pose added, a mouth line placed, an agent's call with no style) keeps a warp
-kit warp unless ``style.mouthStyle`` says otherwise.
+kit warp unless ``style.mouthStyle`` says otherwise. ``faceSource`` is not one of those keys: a later rig runs
+See-through only when that call sends ``layers``.
 """
 from __future__ import annotations
 
@@ -22,7 +23,7 @@ FACE_SOURCES = ("detect", "layers")
 
 
 def _face_source(raw: dict[str, Any]) -> dict[str, str]:
-    """``layers`` is stored. ``detect`` (the default) is omitted so a normal rig's style bytes stay as they were."""
+    """``layers`` is returned for this call. ``detect`` (the default) is omitted so a normal rig's style bytes stay as they were. A later rig does not reuse it (``LOOK_KEYS``)."""
     source = raw.get("faceSource", "detect")
     if source not in FACE_SOURCES:
         raise FlatRigError("invalid_style", "style.faceSource must be detect or layers")
@@ -48,7 +49,9 @@ def rig_style(value: Any) -> dict[str, Any]:
     return style
 
 
-LOOK_KEYS = ("screen", *STYLE_LIMITS, "mouthStyle", "faceSource")
+# ``faceSource`` is a request for this call, not a look the next rig repeats. Leaving it here made every
+# re-rig run See-through again, and fail off Linux.
+LOOK_KEYS = ("screen", *STYLE_LIMITS, "mouthStyle")
 
 
 def _saved_look(kit: dict[str, Any]) -> dict[str, Any]:

@@ -1129,8 +1129,10 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
     sheet = _save(review_sheet(rigs, mouths), workspace_dir, f"kit-{kit_id}-rig-review")
     # Poses whose painted mouth was not found (with ink mouths nothing is wiped on purpose).
     unwiped = sorted(pose for pose, rig in rigs.items() if not rig["found"])
+    # ``faceSource`` asked for See-through on this call. It is not stored, so a later rig does not repeat it.
+    kept_look = {key: value for key, value in look.items() if key != "faceSource"}
     kit["provenance"] = [*(kit.get("provenance") or []), {
-        "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": look, "hints": placed,
+        "method": "flat-rig", "sources": {**_original_sources(kit), **sources}, "style": kept_look, "hints": placed,
         "facings": {pose: facing for pose, facing in facings.items() if facing},
         "unwipedPoses": unwiped, "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         **({"mouthLines": {pose: rig["line"] for pose, rig in rigs.items()}} if look["mouthStyle"] == "warp" else {}),

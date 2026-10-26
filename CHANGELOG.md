@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a flat rig does not keep `faceSource: layers`.** Asking for See-through layers runs it for that call. A later rig that leaves `faceSource` out keeps the mouth style and does not run See-through again. A missing install or a machine that is not Linux still refuses the call and leaves the kit unchanged.
+
 **Fixed: an InfiniteTalk lip redo uses guidance 5 and audio guidance 4.** The Wan handler sets those defaults and does not ask for a distillation LoRA. Guidance 1 forced the audio term off.
 
 **Fixed: a lip-sync QA failure names the exception, and DWPose stays on CPU.** `score_take` used to hide every error as `qa_unavailable`. It now returns `qa_error:<class>`. The pose session asks only for `CPUExecutionProvider`.

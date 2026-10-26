@@ -129,8 +129,21 @@ def test_layers_place_the_blink_and_the_mouth_and_a_rerig_keeps_them(tmp_path, m
     assert (folder / name).is_file()
     assert json.loads((folder / name).with_suffix(".meta.json").read_text())["params"]["role"].endswith("eyewhite")
     again = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=rigged["revision"])
-    assert again["style"]["faceSource"] == "layers"
-    assert calls == ["base", "shrug", "base", "shrug"]
+    assert "faceSource" not in again["style"]
+    assert "faceSource" not in again["character"]["provenance"][-1]["style"]
+    assert calls == ["base", "shrug"]
+
+
+def test_a_rerig_without_style_does_not_keep_layers_or_call_see_through(tmp_path, monkeypatch):
+    """A click asks for layers once. The next rig, with no style, must not run See-through again."""
+    calls = _patch_worker(monkeypatch)
+    folder = _workspace(tmp_path, shrug=False)
+    rigged = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=1,
+                           style={"mouthStyle": "warp", "faceSource": "layers"})
+    assert calls == ["base"]
+    again = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=rigged["revision"])
+    assert "faceSource" not in again["style"]
+    assert calls == ["base"]
 
 
 def _assert_blink_covers_layer_eyes(folder: Path, rigged: dict) -> None:
