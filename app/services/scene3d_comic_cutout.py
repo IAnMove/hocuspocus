@@ -74,6 +74,8 @@ _INPAINT_RADIUS = 3
 # Unsure U2Net pixels per sure one. Busy scenes (small figures, furniture) come out around 2.7
 # and smear or leave a head behind; clean subjects stay near 0.1-1.0.
 _UNSURE_LIMIT = 1.5
+# A subject under this share of the panel gives little depth, and its matte tends to split (head vs body).
+_MIN_SUBJECT = 0.03
 
 
 def finish_cutout(picture: Path, cutout: Path) -> None:
@@ -110,6 +112,8 @@ def _require_sure_matte(alpha) -> None:
     unsure = int(((alpha > 25) & (alpha < 230)).sum())
     if unsure > _UNSURE_LIMIT * max(sure, 1):
         raise ValueError("uncertain matte")
+    if int((alpha >= 128).sum()) < _MIN_SUBJECT * alpha.size:
+        raise ValueError("subject too small")
 
 
 def _sticker(alpha):

@@ -298,8 +298,8 @@ def test_a_small_head_next_to_its_body_travels_with_the_sticker(tmp_path):
     rgb = np.full((height, width, 3), 60, np.uint8)
     alpha = np.zeros((height, width), np.uint8)
     head = (200, 150, 100)
-    alpha[100:160, 150:166] = 255
-    rgb[100:160, 150:166] = (180, 120, 40)
+    alpha[100:160, 130:190] = 255
+    rgb[100:160, 130:190] = (180, 120, 40)
     alpha[90:98, 154:162] = 255
     rgb[90:98, 154:162] = head
     original = np.dstack([rgb, np.full((height, width), 255, np.uint8)])
@@ -334,6 +334,24 @@ def test_an_uncertain_matte_raises_and_leaves_both_files_alone(tmp_path):
     with pytest.raises(ValueError, match="uncertain matte"):
         finish_cutout(picture, cutout)
     assert (picture.read_bytes(), cutout.read_bytes()) == before
+
+
+def test_a_tiny_subject_stays_flat(tmp_path):
+    import numpy as np
+    import pytest
+
+    from services.scene3d_comic_cutout import finish_cutout
+
+    height, width = 100, 200
+    rgb = np.full((height, width, 3), 70, np.uint8)
+    alpha = np.zeros((height, width), np.uint8)
+    alpha[40:60, 90:110] = 255
+    picture = tmp_path / "panel.png"
+    cutout = tmp_path / "cut.png"
+    Image.fromarray(np.dstack([rgb, np.full((height, width), 255, np.uint8)])).save(picture)
+    Image.fromarray(np.dstack([rgb, alpha])).save(cutout)
+    with pytest.raises(ValueError, match="subject too small"):
+        finish_cutout(picture, cutout)
 
 
 def test_a_full_matte_fades_over_the_outer_three_percent(tmp_path):
