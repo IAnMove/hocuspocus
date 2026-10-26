@@ -70,6 +70,35 @@ def test_binding_a_face_and_talking_keeps_the_model(tmp_path):
     assert again["document"]["soundtrack"][0]["id"] == "talk-hero-0"
 
 
+def test_rebinding_a_face_keeps_the_expression_timeline(tmp_path):
+    root = lambda workspace: str(tmp_path / workspace)
+    (tmp_path / "studio").mkdir()
+    write_character_kit_library(root("studio"), {"version": 1, "activeId": "blob", "kits": {"blob": kit()}}, base_revision=0)
+    _write("studio", "w3d-face00000003", {"revision": 1, "templateId": "t", "warnings": [], "document": {
+        "duration": 4, "camera": {}, "soundtrack": [],
+        "slots": [{"id": "hero", "slot": "subject_1", "media": "model3d", "sourceUrl": ""}]}}, root)
+    first = {"version": 1, "intent_id": "face-keep-1", "input": {
+        "workspace": "studio", "scene_id": "w3d-face00000003", "base_revision": 1, "object_id": "hero", "kit_id": "blob",
+        "pose": "angry", "face_anchor": {"center": [0, 1.5, 0], "size": [0.62, 0.58, 0.55]},
+        "expressions": [{"start": 2, "pose": "happy"}]}}
+    execute_command("world3d.scene.face", first, root)
+    again = {"version": 1, "intent_id": "face-keep-2", "input": {
+        "workspace": "studio", "scene_id": "w3d-face00000003", "base_revision": 2, "object_id": "hero", "kit_id": "blob",
+        "size": 1.08}}
+    execute_command("world3d.scene.face", again, root)
+    slot = inspect_scene("studio", "w3d-face00000003", root)["document"]["slots"][0]
+    assert slot["faceDecal"]["pose"] == "angry"
+    assert slot["faceDecal"]["expressions"] == [{"start": 2.0, "pose": "happy"}]
+    assert slot["faceDecal"]["size"] == 1.08
+    cleared = {"version": 1, "intent_id": "face-keep-3", "input": {
+        "workspace": "studio", "scene_id": "w3d-face00000003", "base_revision": 3, "object_id": "hero", "kit_id": "blob",
+        "expressions": []}}
+    execute_command("world3d.scene.face", cleared, root)
+    empty = inspect_scene("studio", "w3d-face00000003", root)["document"]["slots"][0]
+    assert empty["faceDecal"]["expressions"] == []
+    assert empty["faceDecal"]["pose"] == "angry"
+
+
 def test_a_model_without_a_face_and_a_kit_without_nine_mouths_are_refused(tmp_path):
     root = lambda workspace: str(tmp_path / workspace)
     (tmp_path / "studio").mkdir()

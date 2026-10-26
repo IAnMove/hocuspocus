@@ -962,6 +962,8 @@ def _save(image: Image.Image, directory: str, stem: str) -> str:
     image.save(buffer, format="PNG")
     data = buffer.getvalue()
     name = f"{stem}-{hashlib.sha256(data).hexdigest()[:8]}.png"
+    if os.path.basename(name) != name:
+        raise ValueError("file stem must stay inside the workspace")
     with open(os.path.join(directory, name), "wb") as handle:
         handle.write(data)
     return name
