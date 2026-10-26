@@ -51,7 +51,7 @@ export function registerLipsyncRedoCapabilities(register: typeof defineCapabilit
   const definition: CapabilityDefinition<AgentLipsyncRedoAction> = {
     name: 'lipsync_redo',
     title: 'Redo the lips of a finished shot',
-    description: 'Redo the lips of one finished shot as a new take. The original clip and any series approval stay. engine is infinitetalk (follow the source camera, Apache-2.0). longcat_avatar is a catalog model and is not a redo engine: it does not read the shot video. input names one target: production_id and shot, or series_id, episode_id and shot, or clip plus audio. Optional audio, source, span [start, end] seconds and offset. If the reply says the weights are missing, tell the user the disk size in bytes and call download_model with that model_type and confirm true. Do not put confirm_download in this action.',
+    description: 'Redo the lips of one finished shot as a new take. The original clip and any series approval stay. engine is infinitetalk (follow the source camera, Apache-2.0). longcat_avatar is a catalog model and is not a redo engine: it does not read the shot video. input names one target: production_id and shot, or series_id, episode_id and shot, or clip plus audio. Pass source as the file of the take to redo. Optional audio, span [start, end] seconds and offset. If the reply says the weights are missing, tell the user the disk size in bytes and call download_model with that model_type and confirm true. Do not put confirm_download in this action.',
     useWhen: 'The user asks to redo, fix or resync the lips or mouth of a finished video shot or clip, including an anime or stylized character.',
     parameters: ['engine', 'input', 'confirm'],
     inputSchema: {

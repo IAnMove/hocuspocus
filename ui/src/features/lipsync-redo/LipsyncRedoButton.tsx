@@ -60,7 +60,7 @@ export function LipsyncRedoButton({ workspace, target, namespace, labelKey, engi
       onChange={() => setEngine('infinitetalk')}>
       <option value="infinitetalk">infinitetalk</option>
     </select>
-    <button type="button" data-action="lipsync-redo" disabled={busy} onClick={() => { void redo() }}>{label(labelKey)}</button>
+    <button type="button" data-action="lipsync-redo" data-lipsync-source={target.source} disabled={busy} onClick={() => { void redo() }}>{label(labelKey)}</button>
     {pending ? <button type="button" data-action="lipsync-download" disabled={busy} onClick={() => { void download() }}>{wizardLine('replies.lipsDownload')}</button> : null}
     {note ? <span role="status">{note}</span> : null}
   </span>

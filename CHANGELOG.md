@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the lip redo button sends the take it sits on.** A production take row and the series inspector sent only the shot id, so the server redid the current clip. They now send `source` as that take's file. The Wizard is told to pass the same field.
+
 **Fixed: a series lip redo uses the recorded line, not the score.** The score cue is background music and was read from the start of the cue. The redo now places each `ln-<episode>-<beat>-<key>.wav` at the line's start. A shot with no recorded line asks for `audio` instead of guessing.
 
 **Fixed: a series or clip lip redo without a span lasts as long as the source take.** `video_length` used the 81-frame window whenever `span` was omitted. Series and clip now take the source duration from ffprobe and count it at 25 fps. A production shot with no start and end still uses the window.

@@ -63,6 +63,21 @@ test('a video take offers the lip redo and a still does not', async () => {
   assert.match(spanish, /Rehacer los labios/)
 })
 
+test('the lip redo button names the take it sits on', async () => {
+  await setUiLanguage('en')
+  const html = renderToStaticMarkup(<ProductionShotsPanel view={view()} workspace="film" onClose={() => {}} />)
+  assert.match(html, /data-lipsync-source="take-b.mp4"/)
+  assert.doesNotMatch(html, /data-lipsync-source="still.png"/)
+  const series = { id: 'show', locations: [] } as unknown as SeriesProject
+  const shot = { id: 'o05', productionMethod: 'generated_video' } as SeriesShot
+  const takes = [{
+    url: '/v.mp4', thumbnail: '', number: 2, attempt: { id: 'a2' },
+    asset: { uri: 'outputs/shown.mp4', kind: 'video' },
+  }] as TakeEntry[]
+  const shown = renderToStaticMarkup(<InspectorMedia series={series} shot={shot} takes={takes} selected="a2" onSelect={() => {}} kits={null} workspace="film" episodeId="ep1" />)
+  assert.match(shown, /data-lipsync-source="shown.mp4"/)
+})
+
 test('the series inspector shows the same control only when the shot has a take', async () => {
   await setUiLanguage('en')
   const series = { id: 'show', locations: [] } as unknown as SeriesProject
