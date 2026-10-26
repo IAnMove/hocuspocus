@@ -1091,9 +1091,10 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         raise FlatRigError("character_not_found", "Character not found", 404)
     look = kit_look(kit, style)
     placed = _kit_hints(kit, hints)
-    from services.see_through_layers import apply_face_layers, prepare_face_layers, save_layers
+    from services.see_through_layers import apply_face_layers, drop_derived_hints, prepare_face_layers, save_layers
     placed, pack = prepare_face_layers(kit, look, workspace, workspace_dir, pose_ids, placed)
     rigs, sources = _rig_poses(kit, look, workspace, workspace_dir, pose_ids, placed)
+    placed = drop_derived_hints(placed, pack)
     apply_face_layers(rigs, pack, look, placed)
     layer_urls, layer_missing = save_layers(pack, kit_id, workspace_dir, workspace)
     mouths = _kit_mouths(rigs, look)

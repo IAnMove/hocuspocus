@@ -158,6 +158,17 @@ def _assert_blink_covers_layer_eyes(folder: Path, rigged: dict) -> None:
     assert cy > 220
 
 
+def test_a_layer_mouth_is_not_stored_as_a_user_hint(tmp_path, monkeypatch):
+    """The mouth See-through measured is for this rig. It is not an exact hint the next rig must obey."""
+    _patch_worker(monkeypatch)
+    folder = _workspace(tmp_path, shrug=False)
+    rigged = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=1,
+                           style={"mouthStyle": "warp", "faceSource": "layers"})
+    saved = (rigged["character"]["provenance"][-1]["hints"] or {}).get("base") or {}
+    assert saved.get("exact") is not True
+    assert "mouth" not in saved and "mouthWidth" not in saved
+
+
 def test_a_user_mouth_hint_is_not_replaced_by_the_layer(tmp_path, monkeypatch):
     _patch_worker(monkeypatch)
     folder = _workspace(tmp_path, shrug=False)

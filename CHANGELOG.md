@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a mouth measured from See-through layers is not saved as the user's hint.** The point places that rig. It is not stored with `exact: true`, so a later rig and the anime landmarks can move it. A mouth the caller placed stays.
+
 **Fixed: a flat rig does not keep `faceSource: layers`.** Asking for See-through layers runs it for that call. A later rig that leaves `faceSource` out keeps the mouth style and does not run See-through again. A missing install or a machine that is not Linux still refuses the call and leaves the kit unchanged.
 
 **Fixed: an InfiniteTalk lip redo uses guidance 5 and audio guidance 4.** The Wan handler sets those defaults and does not ask for a distillation LoRA. Guidance 1 forced the audio term off.

@@ -119,7 +119,8 @@ def _one_pose(kit, workspace: str, workspace_dir: str, pose: str, hint: dict) ->
     missing = _required_missing(images, layer.get("missing") or [])
     if box is None and "mouth" not in missing:
         missing = sorted({*missing, "mouth"})
-    return (_merge_mouth(hint, box, width, height) if box else hint), {"images": images, "missing": missing, "mouth_box": box}
+    merged, derived = _merge_mouth(hint, box, width, height) if box else (hint, set())
+    return merged, {"images": images, "missing": missing, "mouth_box": box, "derived": derived}
 
 
 def _required_missing(images: dict, missing) -> list[str]:
@@ -147,16 +148,35 @@ def _mouth_box(image: Image.Image | None):
     return None if image is None else _bbox(_alpha(image))
 
 
-def _merge_mouth(hint: dict, box, width: int, height: int) -> dict:
-    """Fill mouth keys the caller did not set. A point the user gave stays where they put it."""
+def _merge_mouth(hint: dict, box, width: int, height: int) -> tuple[dict, set[str]]:
+    """Fill mouth keys the caller did not set, and name the keys this call filled.
+
+    A point the user gave stays. The filled keys place this rig only. They are not an ``exact`` user hint:
+    a later rig, a new pose and the anime landmarks may move the mouth.
+    """
     merged = dict(hint)
+    derived: set[str] = set()
     x0, y0, x1, y1 = box
     if "mouth" not in merged:
         merged["mouth"] = [round((x0 + x1) / 2 / width * 100, 3), round((y0 + y1) / 2 / height * 100, 3)]
-        merged.setdefault("exact", True)
+        derived.add("mouth")
     if "mouthWidth" not in merged:
         merged["mouthWidth"] = round(min(100.0, max(0.5, (x1 - x0) / width * 100)), 3)
-    return merged
+        derived.add("mouthWidth")
+    return merged, derived
+
+
+def drop_derived_hints(placed: dict, pack: dict) -> dict:
+    """The hints to save: a mouth See-through filled is left out. A hint the caller sent stays."""
+    cleaned = {}
+    for pose, hint in placed.items():
+        if not isinstance(hint, dict):
+            continue
+        drop = set((pack.get(pose) or {}).get("derived") or ())
+        kept = {key: value for key, value in hint.items() if key not in drop}
+        if kept:
+            cleaned[pose] = kept
+    return cleaned
 
 
 def apply_face_layers(rigs: dict, pack: dict, look: dict, hints: dict) -> None:
