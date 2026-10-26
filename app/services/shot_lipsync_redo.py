@@ -80,10 +80,25 @@ def run(arguments: Any, *, workspace_dir, uploads_dir) -> dict[str, Any]:
     if gap:
         return _weights(payload, target["engine"], gap)
     guides = prepare_guides(target, folder)
-    video = _adopt(folder, enqueue(_body(target, workspace, guides, folder), folder))
-    qa = score_take(video, guides["audio_path"], _score_offset(guides), guides["span"])
-    saved = _save(folder, workspace, target, video, qa)
-    return {**saved, "engine": target["engine"], "verdict": qa.get("verdict"), "qa": qa}
+    try:
+        video = _adopt(folder, enqueue(_body(target, workspace, guides, folder), folder))
+        qa = score_take(video, guides["audio_path"], _score_offset(guides), guides["span"])
+        saved = _save(folder, workspace, target, video, qa)
+        return {**saved, "engine": target["engine"], "verdict": qa.get("verdict"), "qa": qa}
+    finally:
+        _drop_owned(guides)
+
+
+def _drop_owned(guides: dict) -> None:
+    """Delete the span cut and the placed line. A caller's own file is not ``lipsync-audio*``."""
+    for path in guides.get("owned") or []:
+        if not isinstance(path, str) or not os.path.basename(path).startswith("lipsync-audio"):
+            continue
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 def resolve_target(payload: dict, folder: str, uploads: str, workspace: str) -> dict[str, Any]:

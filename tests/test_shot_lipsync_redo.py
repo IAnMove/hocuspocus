@@ -459,13 +459,27 @@ def test_a_series_shot_uses_the_recorded_line_not_the_score(tmp_path, monkeypatc
     }}
     write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
     seen = _bind(monkeypatch, tmp_path)
+    heard = {}
+
+    def _worker(body, dest):
+        heard["audio"] = Path(body["audio_guide"]).read_bytes()
+        seen.append(body)
+        path = os.path.join(dest, body["output_name"])
+        with open(path, "wb") as handle:
+            handle.write(b"new-lips")
+        return path
+
+    monkeypatch.setattr(redo, "worker", _worker)
     _call(tmp_path, {
         "workspace": "film", "engine": "infinitetalk", "series_id": series_id, "episode_id": episode_id, "shot": "s1",
     })
     guide = seen[0]["audio_guide"]
+    kept = folder / "heard.wav"
+    kept.write_bytes(heard["audio"])
     assert os.path.basename(guide) != "mus-theme.wav"
-    assert _rms(guide, 0.0, 0.2) < 200
-    assert _rms(guide, 0.5, 0.2) > 1000
+    assert _rms(str(kept), 0.0, 0.2) < 200
+    assert _rms(str(kept), 0.5, 0.2) > 1000
+    assert not guide.endswith("mus-theme.wav")
 
 
 def test_a_series_shot_without_a_line_asks_for_audio(tmp_path, monkeypatch):
@@ -625,6 +639,16 @@ def test_a_series_save_uses_the_library_lock(tmp_path, monkeypatch):
         "series_id": series_id, "episode_id": episode_id, "shot": "s1", "original_name": "original.mp4", "video": "original.mp4",
     }, str(folder / "out.mp4"), {"verdict": "ok"}, "infinitetalk")
     assert held == [True]
+
+
+def test_the_trimmed_span_wav_is_removed(tmp_path, monkeypatch):
+    """The cut ``lipsync-audio*.wav`` stays in the workspace after the redo."""
+    folder = tmp_path / "film"
+    _production(folder)
+    _tone(folder, "song.wav", 4)
+    _bind(monkeypatch, tmp_path)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05"})
+    assert list(folder.glob("lipsync-audio*.wav")) == []
 
 
 def test_a_failed_generation_names_the_job_error(tmp_path, monkeypatch):
