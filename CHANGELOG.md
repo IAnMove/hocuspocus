@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: `model3d.compose` can build a capsule or a frustum, and can shade rounds with smooth normals.** `smooth: true` on a piece or on the input uses radial normals and keeps flat caps axial. Omit it and the old box, sphere, cylinder and cone meshes stay byte for byte the same. A capsule's scale is diameter × length × diameter. A frustum takes `taper` from 0.2 to 1. See [MODEL3D_COMPOSE.md](docs/agents/MODEL3D_COMPOSE.md).
+
 **Added: one call builds a round-headed person and rigs it (`model3d.blob.make`).** Traits or a preset (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`) become an overlapped body on CPU. The same call rigs the humanoid clips (`idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point`, `run` by default). MCP, the Wizard action `blob_make` and the Studio 3D panel share that call. A refusal keeps the rig's reason (`hands_stuck` and the rest). The face and set textures are not part of this body. See [MODEL3D_BLOB.md](docs/agents/MODEL3D_BLOB.md).
 
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).

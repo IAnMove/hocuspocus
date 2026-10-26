@@ -20,9 +20,10 @@ for MCP or `POST /api/v1/model3d/compose`.
 ```
 
 A model can be described in a few hundred tokens. There are 1..128 pieces;
-each needs only `type` (`box`, `sphere`, `cylinder`, `cone`). Optional fields
-are `position`, `scale`, `rotation` (three numbers each), and `color`
-(`#RRGGBB`, default white). No unknown piece fields are accepted.
+each needs only `type` (`box`, `sphere`, `cylinder`, `cone`, `capsule`,
+`frustum`). Optional fields are `position`, `scale`, `rotation` (three numbers
+each), `color` (`#RRGGBB`, default white), `segments`, `smooth` and, on a
+frustum, `taper`. No unknown piece fields are accepted.
 
 Primitives fit the unit cube centred at the origin; sphere/cylinder/cone
 radius is 0.5 and their height/diameter is 1. Coordinates are metres, Y-up.
@@ -37,7 +38,21 @@ passing `8` is not the same, because a sphere would then have four rings.
 `MAX_PIECES` stays 128. There is no separate triangle cap. 128 spheres at 48
 segments are about 30 MB, under the 64 MB inspector limit.
 
-The GLB uses split triangle vertices, flat normals, linear vertex colors
+`smooth: true` on a piece, or `smooth: true` on the input, replaces flat normals
+with radial ones on spheres, cylinders, cones, capsules and frustums. A flat cap
+keeps an axial normal, so the lid does not bleed onto the side. A box stays flat.
+Omit `smooth` (or pass false) and a model of the old four types is byte for byte
+the flat mesh, including the gold hash of `fixtures/blob2_pieces.json`. The rig
+keeps those normals: it bakes an identity mesh in place and does not recompute them.
+
+A capsule's `scale` is diameter × length × diameter. The length includes the
+hemispherical caps. When the length is longer than the diameter the middle is a
+cylinder and the caps are hemispheres; a shorter one is an ellipsoid. A frustum
+is a cut cone: `scale` is the bottom diameter × height × bottom diameter, and
+`taper` (0.2 to 1) is the top diameter divided by the bottom. `taper` on any
+other type is refused.
+
+The GLB uses split triangle vertices, flat normals unless `smooth` is set, linear vertex colors
 converted from the input sRGB hex values, and a matte white material. It
 has no textures, external buffers, skeleton or animation. Animate rigid
 models through Video 3D slot motion and the scene camera.

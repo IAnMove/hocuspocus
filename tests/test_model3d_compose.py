@@ -133,3 +133,72 @@ def test_segments_smooth_a_sphere_and_reject_anything_outside_6_to_48():
     for bad in (5, 49, 8.0, True):
         with pytest.raises(ValueError, match="segments"):
             compose_glb([{"type": "cylinder", "segments": bad}])
+
+
+def _normals_of(data):
+    _doc, (_positions, normals, _colors) = unpack(data)
+    return normals
+
+
+def test_smooth_is_opt_in_and_keeps_flat_caps_off_the_side():
+    """Without smooth the gold mesh stays byte-identical; with it, side normals vary and caps stay axial."""
+    plain = compose_glb([{"type": "cylinder", "scale": [1, 2, 1], "segments": 12}])
+    assert compose_glb([{"type": "cylinder", "scale": [1, 2, 1], "segments": 12, "smooth": False}]) == plain
+    smooth = compose_glb([{"type": "cylinder", "scale": [1, 2, 1], "segments": 12, "smooth": True}])
+    assert smooth != plain
+    _doc, (positions, normals, _colors) = unpack(smooth)
+    # The wall and the cap share the rim but not the normal: the cap stays axial.
+    radial = [n for p, n in zip(positions, normals) if math.hypot(p[0], p[2]) > 0.35 and abs(n[1]) < 0.2]
+    axial = [n for p, n in zip(positions, normals) if math.hypot(p[0], p[2]) > 0.35 and abs(n[1]) > 0.9]
+    centers = [n for p, n in zip(positions, normals) if math.hypot(p[0], p[2]) < 1e-3 and abs(abs(p[1]) - 1.0) < 1e-3]
+    assert len({tuple(round(c, 3) for c in n) for n in radial}) > 4
+    assert axial and centers and all(abs(n[1]) > 0.95 for n in centers)
+    sphere = _normals_of(compose_glb([{"type": "sphere", "smooth": True}]))
+    assert any(sphere[i] != sphere[i + 1] for i in range(0, len(sphere), 3))
+    whole = compose_glb([{"type": "sphere"}], smooth=True)
+    assert _normals_of(whole) == _normals_of(compose_glb([{"type": "sphere", "smooth": True}]))
+    for bad in ("yes", 1, 0):
+        with pytest.raises(ValueError, match="smooth"):
+            compose_glb([{"type": "sphere", "smooth": bad}])
+
+
+def test_smooth_normals_survive_the_humanoid_bake():
+    """The rig bakes an identity mesh in place and must not replace radial normals with flat ones."""
+    import numpy as np
+
+    from services.humanoid_rig.gltf_buffers import read_floats
+    from services.humanoid_rig.gltf_export import _iter_primitives, _load
+    from services.humanoid_rig.gltf_world import world_space_primitives
+
+    data = compose_glb([{"type": "sphere", "smooth": True, "segments": 16}])
+    gltf, blob = _load(data)
+    primitive = next(item[2] for item in _iter_primitives(gltf))
+    before = read_floats(gltf, blob, primitive.attributes.NORMAL, 3)
+    assert not np.allclose(before[0], before[1])
+    world_space_primitives(gltf, blob, list(_iter_primitives(gltf)))
+    after = read_floats(gltf, blob, primitive.attributes.NORMAL, 3)
+    assert np.allclose(before, after, atol=1e-6)
+
+
+def test_capsule_and_frustum_are_closed_and_sized_by_scale():
+    capsule = compose_glb([{"type": "capsule", "scale": [1, 2, 1], "segments": 12, "smooth": True}])
+    report = inspect_glb_bytes(capsule)
+    assert report.status == "valid" and not report.issues
+    _doc, (positions, normals, _colors) = unpack(capsule)
+    assert min(p[1] for p in positions) == pytest.approx(-1, abs=1e-4)
+    assert max(p[1] for p in positions) == pytest.approx(1, abs=1e-4)
+    assert max(abs(p[0]) for p in positions) == pytest.approx(0.5, abs=1e-3)
+    assert any(normals[i] != normals[i + 1] for i in range(0, len(normals), 3))
+    frustum = compose_glb([{"type": "frustum", "scale": [1, 2, 1], "taper": 0.5, "segments": 12}])
+    _doc, (positions, normals, _colors) = unpack(frustum)
+    bottom = [p for p in positions if p[1] < -0.99]
+    top = [p for p in positions if p[1] > 0.99]
+    assert max(math.hypot(p[0], p[2]) for p in bottom) == pytest.approx(0.5, abs=1e-3)
+    assert max(math.hypot(p[0], p[2]) for p in top) == pytest.approx(0.25, abs=1e-3)
+    for i in range(0, len(normals), 3):
+        assert normals[i] == normals[i + 1] == normals[i + 2]
+    for bad in (0.19, 1.01, 0, True):
+        with pytest.raises(ValueError, match="taper"):
+            compose_glb([{"type": "frustum", "taper": bad}])
+    with pytest.raises(ValueError, match="Unknown piece field"):
+        compose_glb([{"type": "box", "taper": 0.5}])

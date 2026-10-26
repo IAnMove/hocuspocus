@@ -670,6 +670,12 @@
   ],
   "path_rules": [
     {
+      "prefix": "app/services/procedural_3d/shapes.py",
+      "paths": [
+        "tests/test_model3d_compose.py"
+      ]
+    },
+    {
       "prefix": "docs/agents/MODEL3D_BLOB.md",
       "paths": [
         "tests/test_blob_body.py"
