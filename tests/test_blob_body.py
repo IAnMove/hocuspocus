@@ -530,3 +530,31 @@ def test_a_lofted_anime_body_rigs_with_its_head_in_the_egg_and_leaves_the_defaul
         head = parent.get(head)
     center, radii = plain["faceAnchor"]["center"], plain["faceAnchor"]["radii"]
     assert center[1] - radii[1] < y < center[1] + radii[1]
+
+
+def test_anime_make_builds_a_rigged_body_and_its_head_face_kit_in_one_call(tmp_path):
+    """model3d.anime.make: traits -> lofted body rigged on CPU + an anime_head kit (eleven poses, nine visemes, blink) whose
+    fit and taper world3d.scene.face takes as defaults."""
+    from services.anime_make import resolve_traits
+    from services.blob_face_scene import _cap_fields
+    from services.character_kit_library import read_character_kit_library
+
+    resolved = resolve_traits({"gender": "boy", "body": "tall", "hair_style": "spiky", "hair_color": "#392E21", "outfit": "school", "eye_color": "#3FA66B"})
+    assert resolved["body"]["mesh"] == "loft" and resolved["body"]["family"] == "anime" and resolved["body"]["outfit"] == "school"
+    assert resolved["body"]["height"] > 1.8 and resolved["face"]["style"] == "anime_head" and resolved["face"]["lashColor"] != "#392E21"
+    with pytest.raises(BlobTraitsError) as refused:
+        resolve_traits({"hair_style": "mohawk"})
+    assert refused.value.code == "invalid_hair"
+    handlers = _handlers(tmp_path)
+    reply = asyncio.run(handlers["model3d.anime.make"]({"version": 1, "intent_id": "anime-1", "input": {
+        "workspace": "studio", "name": "Hana", "traits": {"gender": "girl", "hair_style": "long", "hair_color": "#282945", "skin": "#F3CBA4"}}}))
+    result = reply["result"]
+    assert reply["status"] == "completed" and result["rigged_file"].endswith("-rigged.glb") and result["kit_id"].startswith("anime-")
+    assert len(result["poses"]) == 11 and "smug" in result["poses"] and result["face"]["taper"] == 0.35 and len(result["face"]["fit"]) == 4
+    kits = read_character_kit_library(str(tmp_path / "studio"))["kits"]
+    kit = kits[result["kit_id"]]
+    assert len(kit["mouth"]) == 9 and kit["eyes"]["blink"]["source"]
+    assert _cap_fields({}, {}, kit) == {"taper": 0.35, "fit": [round(v, 4) for v in result["face"]["fit"]]}
+    again = asyncio.run(handlers["model3d.anime.make"]({"version": 1, "intent_id": "anime-1", "input": {
+        "workspace": "studio", "name": "Hana", "traits": {"gender": "girl", "hair_style": "long", "hair_color": "#282945", "skin": "#F3CBA4"}}}))
+    assert again["result"]["kit_id"] == result["kit_id"]
