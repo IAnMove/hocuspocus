@@ -23,8 +23,9 @@ Every value is derived from the built document (`ui/src/features/scene3d/templat
 Use this when a video changes chapter and the cut should be invisible. `scene3d.comic.transition` (MCP, Wizard and the Video 3D editor; same `POST /api/v1/world3d/templates/commands`) builds two editable scenes that share one page and one wide camera pose:
 
 - `comic-panel-exit` starts with panel P filling the frame and pulls out to the page. `comic-panel-enter` starts on that same wide frame and flies into panel Q. The portrait pair is `comic-panel-exit-portrait` and `comic-panel-enter-portrait` (authored for 9:16, not the generic portrait adapter).
-- `panels` is four images, or `{video, at}` frames. `from_panel` and `to_panel` (0–3) are the frames of the cut, so both cuts can be invisible. A keyed `cutout` may sit 2.5 cm in front of a panel for parallax; leave it off those two panels or the cut will show.
-- `format` is `landscape` or `portrait`. `export: true` renders both clips when the Video 3D exporter is available. The page stands upright and fills the wide frame; it is not a book on a table.
+- `panels` is four images, or `{video, at}` frames. `from_panel` and `to_panel` (0–3) are the frames of the cut, so both cuts can be invisible. Each panel is cut out with the existing background remover and placed 4 cm in front, scaled by `(D - d) / D` about the fill camera so that frame still matches. A failed or empty cutout leaves the panel flat and adds a warning. One other panel's cutout may break its border.
+- The camera yaws 8° between the fill and one shared wide pose, and holds that pose for `hold` seconds (default 0.4) on each half. `exit_duration` and `enter_duration` default to 1.8 s. The yaw is zero at both ends of each half, so the two scenes still meet on the same wide frame.
+- `format` is `landscape` or `portrait`. `export: true` renders both clips when the Video 3D exporter is available. The page stands upright and fills the wide frame; it is not a book on a table. The only layout is still a 2×2 grid.
 
 The panel pictures are unlit and ungraded, so they keep the colours of the source frames. The four catalogue cards use licence-free filler art and are in the template library under Transitions.
 

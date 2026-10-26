@@ -8,8 +8,10 @@ import {
   COMIC_DURATION,
   COMIC_FOV,
   COMIC_FPS,
-  COMIC_MOVE_END,
+  COMIC_HOLD,
   COMIC_TEMPLATE_IDS,
+  COMIC_YAW_ARC,
+  COMIC_YAW_DEG,
   applyComicTemplate,
   buildComicPair,
   comicCameraAt,
@@ -18,6 +20,7 @@ import {
   comicFrameCount,
   comicFrameSeconds,
   comicFramingProgress,
+  comicMoveWindow,
   comicCutoutPlacement,
   comicPagePixels,
   comicWidePose,
@@ -82,7 +85,10 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
       assert.equal(doc.duration, COMIC_DURATION)
       assert.equal(doc.camera.family, 'establishment')
       assert.equal(doc.camera.framing?.ease, 'smooth')
-      assert.equal(doc.camera.framing?.moveEnd, COMIC_MOVE_END)
+      assert.equal(doc.camera.framing?.yawArc, COMIC_YAW_ARC)
+      const move = comicMoveWindow(doc.templateId.includes('enter') ? 'enter' : 'exit')
+      assert.equal(doc.camera.framing?.moveStart, move.moveStart)
+      assert.equal(doc.camera.framing?.moveEnd, move.moveEnd)
       assert.equal(doc.look?.toneMapping, 'none')
       assert.equal(doc.look?.exposure, 0)
       assert.equal(doc.environment, undefined)
@@ -91,6 +97,7 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
       assert.ok(doc.slots.every(slot => slot.imageLook?.unlit === true && slot.imageLook.sharp === true && !slot.imageLook.tint))
       const parsed = parseScene3DDocument(JSON.parse(JSON.stringify(doc)))
       assert.ok(parsed)
+      assert.equal(parsed!.camera.framing?.yawArc, COMIC_YAW_ARC)
       assert.ok(parsed!.slots.every(slot => slot.imageLook?.sharp === true && slot.imageLook.unlit === true))
     }
     assert.equal(comicFramingProgress(pair.exit, 0), 0)
@@ -103,8 +110,23 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     close(enterWide.eye, wide.eye, `${format} enter wide eye`)
     close(enterWide.look, wide.look, `${format} enter wide look`)
     assert.equal(exitWide.fov, COMIC_FOV)
+    close(exitWide.eye, enterWide.eye, `${format} shared wide eye`)
+    close(exitWide.look, enterWide.look, `${format} shared wide look`)
+    const yaw = (COMIC_YAW_DEG * Math.PI) / 180
+    assert.ok(Math.abs(exitWide.eye[0] - Math.sin(yaw) * exitWide.eye[2] / Math.cos(yaw)) < 1e-6, `${format} wide yaw`)
     const exitFill = comicCameraAt(pair.exit, 0)
     const enterFill = comicCameraAt(pair.enter, last)
+    const exitMove = comicMoveWindow('exit')
+    const midU = (exitMove.moveStart + exitMove.moveEnd) / 2
+    const mid = comicCameraAt(pair.exit, midU * COMIC_DURATION)
+    const straight = exitFill.eye.map((value, index) => value + (exitWide.eye[index] - value) * 0.5)
+    const bowed = Math.hypot(mid.eye[0] - straight[0], mid.eye[1] - straight[1], mid.eye[2] - straight[2])
+    assert.ok(bowed > 0.01, `${format} yaw arc ${bowed}`)
+    const flat = buildComicPair({ format, yawArc: 0 })
+    const flatMid = comicCameraAt(flat.exit, midU * COMIC_DURATION)
+    const flatBow = Math.hypot(flatMid.eye[0] - straight[0], flatMid.eye[1] - straight[1], flatMid.eye[2] - straight[2])
+    assert.ok(flatBow < 1e-6, `${format} a zero arc stays on the straight path`)
+    assert.ok(Math.abs(COMIC_HOLD - 0.4) < 1e-9)
     const from = pair.exit.slots.find(slot => slot.id === 'panel-0')!
     const to = pair.enter.slots.find(slot => slot.id === 'panel-3')!
     close(exitFill.look, [from.position[0], from.position[1] + from.scale, from.position[2]], 'exit fill look')

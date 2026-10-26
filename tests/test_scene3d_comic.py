@@ -58,13 +58,29 @@ def _panels(cutout=False):
     return panels
 
 
-def _call(tmp_path, panels, *, export=False, fmt="landscape", intent="comic-1"):
+def _call(tmp_path, panels, *, export=False, fmt="landscape", intent="comic-1", **extra):
     root = lambda workspace: str(tmp_path / workspace)
     (tmp_path / "studio").mkdir(exist_ok=True)
     return execute_command("scene3d.comic.transition", {
         "version": 1, "intent_id": intent,
-        "input": {"workspace": "studio", "format": fmt, "panels": panels, "from_panel": 0, "to_panel": 3, "export": export},
+        "input": {"workspace": "studio", "format": fmt, "panels": panels, "from_panel": 0, "to_panel": 3, "export": export, **extra},
     }, root)
+
+
+def _documents(tmp_path, scenes):
+    studio = tmp_path / "studio" / "world3d-edits"
+    return [json.loads((studio / f"{scene['sceneId']}.json").read_text())["document"] for scene in scenes]
+
+
+def _endpoint(document, end: bool):
+    framing = document["camera"]["framing"]
+    slot = next(item for item in document["slots"] if item["id"] == framing["targetSlot"])
+    center = [slot["position"][0], slot["position"][1] + slot["scale"], slot["position"][2]]
+    eye_key, look_key = ("to", "lookTo") if end else ("from", "lookFrom")
+    scale = slot["scale"]
+    eye = [center[i] + framing[eye_key][i] * scale for i in range(3)]
+    look = [center[i] + framing[look_key][i] * scale for i in range(3)]
+    return eye, look
 
 
 def _written(tmp_path):
@@ -120,7 +136,32 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
     assert cutout["scale"] == pytest.approx(panel["scale"] * factor)
     assert cutout["position"][2] == pytest.approx(panel["position"][2] + 0.04)
     assert cutout["position"][1] + cutout["scale"] == pytest.approx(panel["position"][1] + panel["scale"])
+    assert stored["document"]["duration"] == pytest.approx(1.8)
+    assert stored["document"]["camera"]["framing"]["yawArc"] == 8
     assert reply["result"]["warnings"] == []
+
+
+def test_the_wide_pose_is_shared_and_the_durations_are_parameters(tmp_path):
+    reply = _call(tmp_path, _panels(), intent="comic-arc", exit_duration=2.2, enter_duration=2.0, hold=0.5)
+    exit_doc, enter_doc = _documents(tmp_path, reply["result"]["scenes"])
+    assert exit_doc["duration"] == pytest.approx(2.2)
+    assert enter_doc["duration"] == pytest.approx(2.0)
+    assert exit_doc["camera"]["framing"]["yawArc"] == enter_doc["camera"]["framing"]["yawArc"] == 8
+    assert exit_doc["camera"]["framing"]["moveStart"] == 0
+    assert 0.5 < exit_doc["camera"]["framing"]["moveEnd"] < 1
+    assert 0 < enter_doc["camera"]["framing"]["moveStart"] < 0.5
+    exit_eye, exit_look = _endpoint(exit_doc, True)
+    enter_eye, enter_look = _endpoint(enter_doc, False)
+    assert exit_eye == pytest.approx(enter_eye)
+    assert exit_look == pytest.approx(enter_look)
+    assert abs(exit_eye[0]) > 0.05
+
+
+def test_a_hold_that_eats_the_move_is_rejected(tmp_path):
+    with pytest.raises(HTTPException) as eaten:
+        _call(tmp_path, _panels(), intent="comic-hold", hold=1.8)
+    assert eaten.value.status_code == 422 and eaten.value.detail["code"] == "invalid_duration"
+    assert _written(tmp_path) == []
 
 
 def test_a_missing_source_and_a_missing_exporter_write_nothing(tmp_path):

@@ -107,7 +107,7 @@ _OPERATIONS = {
     "world3d.scene.publish": (True, "Save the working scene through the editor gallery so export reads the same document. " + WARNING_DOC, {"scene_id": _ID}, ["scene_id"]),
     "world3d.scene.apply_query": (True, "Search and instantiate only when the top card has every known query word and strictly outranks the next. A tie or a partial match returns the cards as needs_choice and creates nothing; unknown_words lists the query words no card knows; the trait filters (shot, use, move, kind, place, travel, subjects, format) narrow the search first.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, ["query"]),
     "world3d.receipt": (False, "Recover a stored Video 3D mutation after a lost response. Reuse the original intent_id.", {"operation": {"enum": sorted(_MUTATIONS)}, "intent_id": {"type": "string"}}, ["operation", "intent_id"]),
-    "scene3d.comic.transition": (True, "Chapter change on a comic page. Builds comic-panel-exit and comic-panel-enter (or the portrait pair) as two editable Video 3D scenes that share one wide pose, so they join invisibly. panels is four images or {video, at} frames; from_panel and to_panel are indexes 0-3 and must be the frames of the cut. format is landscape or portrait. Each panel image is cut out with the existing background remover and placed 4 cm in front, scaled by (D - d) / D about the fill camera so that frame still matches. A failed or empty cutout leaves that panel flat and adds a warning. One other panel's cutout may break its border. export true renders both clips when the Video 3D exporter is available. A 2x2 page is the only layout.", {
+    "scene3d.comic.transition": (True, "Chapter change on a comic page. Builds comic-panel-exit and comic-panel-enter (or the portrait pair) as two editable Video 3D scenes that share one wide pose, so they join invisibly. panels is four images or {video, at} frames; from_panel and to_panel are indexes 0-3 and must be the frames of the cut. format is landscape or portrait. Each panel image is cut out with the existing background remover and placed 4 cm in front, scaled by (D - d) / D about the fill camera so that frame still matches. A failed or empty cutout leaves that panel flat and adds a warning. One other panel's cutout may break its border. The camera yaws 8 degrees between the fill and the wide pose and holds the wide pose (hold, default 0.4 s) on each half. exit_duration and enter_duration default to 1.8 s. export true renders both clips when the Video 3D exporter is available. A 2x2 page is the only layout.", {
         "format": {"enum": ["landscape", "portrait"]},
         "panels": {"type": "array", "minItems": 4, "maxItems": 4, "items": {"anyOf": [
             {"type": "string"},
@@ -118,6 +118,9 @@ _OPERATIONS = {
         ]}},
         "from_panel": {"type": "integer", "minimum": 0, "maximum": 3},
         "to_panel": {"type": "integer", "minimum": 0, "maximum": 3},
+        "exit_duration": {"type": "number", "minimum": 0.8, "maximum": 8},
+        "enter_duration": {"type": "number", "minimum": 0.8, "maximum": 8},
+        "hold": {"type": "number", "minimum": 0, "maximum": 2},
         "export": {"type": "boolean"},
     }, ["panels", "format"]),
 }

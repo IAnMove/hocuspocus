@@ -78,9 +78,10 @@ def comic_transition(data: dict, workspace_dir) -> dict:
     sources = [_locate(spec, root, index) for index, spec in enumerate(specs)]
     width, height = _same_frame(sources, fmt)
     root.mkdir(parents=True, exist_ok=True)
+    exit_duration, enter_duration, hold = _timing(data)
     page_url = _stage_page(fmt, workspace, root)
     panels, warnings = _stage_panels(sources, workspace, root, workspace_dir)
-    built = run_template_tool("comic", _payload(fmt, width, height, page_url, panels, from_panel, to_panel))
+    built = run_template_tool("comic", _payload(fmt, width, height, page_url, panels, from_panel, to_panel, exit_duration, enter_duration, hold))
     documents = [("exit", built.get("exit")), ("enter", built.get("enter"))]
     scenes = [_save(workspace, workspace_dir, role, document) for role, document in documents]
     clips = [_clip(workspace, role, document, scene) for (role, document), scene in zip(documents, scenes)] if exporting else []
@@ -266,11 +267,27 @@ def _url(name: str, workspace: str) -> str:
     return f"/api/v1/file/{quote(name)}?workspace={quote(workspace)}"
 
 
-def _payload(fmt, width, height, page_url, panels, from_panel, to_panel) -> str:
+def _timing(data: dict) -> tuple[float, float, float]:
+    exit_duration = _seconds_between(data.get("exit_duration", 1.8), "exit_duration", 0.8, 8)
+    enter_duration = _seconds_between(data.get("enter_duration", 1.8), "enter_duration", 0.8, 8)
+    hold = _seconds_between(data.get("hold", 0.4), "hold", 0, 2)
+    if hold >= min(exit_duration, enter_duration):
+        raise World3DSceneError("invalid_duration", "hold must be shorter than both halves")
+    return exit_duration, enter_duration, hold
+
+
+def _seconds_between(value, name: str, low: float, high: float) -> float:
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
+        raise World3DSceneError("invalid_duration", f"{name} must be between {low:g} and {high:g} seconds")
+    return float(value)
+
+
+def _payload(fmt, width, height, page_url, panels, from_panel, to_panel, exit_duration, enter_duration, hold) -> str:
     import json
     return json.dumps({
         "format": fmt, "width": width, "height": height, "pageUrl": page_url,
         "panels": panels, "fromPanel": from_panel, "toPanel": to_panel,
+        "exitDuration": exit_duration, "enterDuration": enter_duration, "hold": hold,
     })
 
 

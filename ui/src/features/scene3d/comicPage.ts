@@ -16,6 +16,11 @@ export type ComicPairInput = {
   panels?: ComicPanelInput[]
   fromPanel?: number
   toPanel?: number
+  exitDuration?: number
+  enterDuration?: number
+  hold?: number
+  yawDeg?: number
+  yawArc?: number
 }
 export type ComicCardCopy = { title: string; description: string; requirements: string[] }
 
@@ -29,11 +34,13 @@ export const COMIC_PANEL_COUNT = 4
 /** Metres per filler pixel. A landscape panel is 0.8 × 0.45 m. */
 export const COMIC_METERS_PER_PIXEL = 0.00125
 export const COMIC_FOV = 36
-export const COMIC_DURATION = 1.6
+export const COMIC_DURATION = 1.8
 export const COMIC_FPS = 30
-/** The exporter samples `min(duration, index / fps)` and never `t = duration` (48 frames, last index 47 → 0.979). 0.94 is already settled. */
-export const COMIC_MOVE_END = 0.94
-export const COMIC_DRIFT = 0.12
+/** Seconds the wide pose is held on each half, so the page can be read. */
+export const COMIC_HOLD = 0.4
+/** Wide pose yaw, and the extra mid-move yaw that is zero at both endpoints. */
+export const COMIC_YAW_DEG = 8
+export const COMIC_YAW_ARC = 8
 export const COMIC_FIT_MARGIN = 0.02
 /** Panels sit a few millimetres in front of the paper. A cutout sits 4 cm in front of its panel. */
 export const COMIC_PANEL_Z = 0.004
@@ -140,16 +147,26 @@ function layoutOf(format: ComicFormat): PageLayout {
   return { pageW, pageH, pageScale: pageH / 2, panels }
 }
 
-/** One wide pose, in metres, shared by the exit's last frame and the enter's first frame. */
-export function comicWidePose(format: ComicFormat, frameAspect?: number): Pose {
+/** One wide pose, in metres, shared by the exit's last frame and the enter's first frame.
+ * The eye orbits the page centre by `yawDeg`, so the held view is not a straight zoom. */
+export function comicWidePose(format: ComicFormat, frameAspect?: number, yawDeg = COMIC_YAW_DEG): Pose {
   const layout = layoutOf(format)
   const aspect = frameAspect ?? (format === 'portrait' ? 9 / 16 : 16 / 9)
   const lookY = layout.pageH / 2
+  const distance = fitDistance(layout.pageW, layout.pageH, aspect)
+  const yaw = yawDeg * Math.PI / 180
   return {
-    eye: [COMIC_DRIFT, lookY, fitDistance(layout.pageW, layout.pageH, aspect)],
+    eye: [Math.sin(yaw) * distance, lookY, Math.cos(yaw) * distance],
     look: [0, lookY, 0],
     fov: COMIC_FOV,
   }
+}
+
+/** Hold the wide pose for `hold` seconds. Exit settles before its last frame; enter is already there at frame 0 and reaches the fill on its last frame. */
+export function comicMoveWindow(role: ComicRole, duration = COMIC_DURATION, hold = COMIC_HOLD): { moveStart: number; moveEnd: number } {
+  const last = comicFrameSeconds(comicFrameCount(duration) - 1, duration) / duration
+  if (role === 'exit') return { moveStart: 0, moveEnd: Math.min(last, Math.max(0.05, (duration - hold) / duration)) }
+  return { moveStart: Math.min(Math.max(0, hold / duration), last / 2), moveEnd: last }
 }
 
 /** Centre of a bottom-anchored cutout: the mesh is lifted by its scale (`poseImageCutout`). */
@@ -219,28 +236,29 @@ function fillPose(panel: Placed): Pose {
   return { eye: [center[0], center[1], center[2] + distance], look: center, fov: COMIC_FOV }
 }
 
-function framingOf(panel: Placed, index: number, start: Pose, end: Pose): Scene3DFraming {
+function framingOf(panel: Placed, index: number, start: Pose, end: Pose, move: { moveStart: number; moveEnd: number }, yawArc: number): Scene3DFraming {
   const center: Vec3 = [panel.x, panel.y + panel.scale, panel.z]
   return {
     targetSlot: `panel-${index}`, anchor: 'center', relativeToFacing: false,
     from: divide(start.eye, center, panel.scale), to: divide(end.eye, center, panel.scale),
     lookFrom: divide(start.look, center, panel.scale), lookTo: divide(end.look, center, panel.scale),
-    fovFrom: COMIC_FOV, fovTo: COMIC_FOV, moveStart: 0, moveEnd: COMIC_MOVE_END, ease: 'smooth',
+    fovFrom: COMIC_FOV, fovTo: COMIC_FOV, moveStart: move.moveStart, moveEnd: move.moveEnd, ease: 'smooth',
+    yawArc,
   }
 }
 
-function documentOf(id: ComicTemplateId, format: ComicFormat, size: { width: number; height: number }, slots: Scene3DSlot[], panel: Placed, index: number, start: Pose, end: Pose): Scene3DDocument {
+function documentOf(id: ComicTemplateId, format: ComicFormat, size: { width: number; height: number }, slots: Scene3DSlot[], panel: Placed, index: number, start: Pose, end: Pose, duration: number, move: { moveStart: number; moveEnd: number }, yawArc: number): Scene3DDocument {
   const doc = createDefaultScene3DDocument()
   doc.templateId = id
   doc.width = size.width
   doc.height = size.height
   doc.fps = COMIC_FPS
-  doc.duration = COMIC_DURATION
+  doc.duration = duration
   doc.look = { toneMapping: 'none', exposure: 0 }
   doc.light = { kind: 'directional', direction: [-0.2, -1, -0.3], intensity: 1, color: '#ffffff' }
   const camera: Scene3DCamera = {
     family: 'establishment', eye: start.eye, look: start.look, fov: COMIC_FOV,
-    framing: framingOf(panel, index, start, end),
+    framing: framingOf(panel, index, start, end, move, yawArc),
   }
   if (format === 'portrait') camera.frameFormat = 'portrait'
   doc.camera = camera
@@ -264,12 +282,17 @@ export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; 
   const sources = panelSources(input, format)
   const pageUrl = input.pageUrl || filler(format).page
   const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel)
-  const wide = comicWidePose(format, size.width / size.height)
+  const yawDeg = input.yawDeg ?? COMIC_YAW_DEG
+  const yawArc = input.yawArc ?? COMIC_YAW_ARC
+  const hold = input.hold ?? COMIC_HOLD
+  const exitDuration = input.exitDuration ?? COMIC_DURATION
+  const enterDuration = input.enterDuration ?? COMIC_DURATION
+  const wide = comicWidePose(format, size.width / size.height, yawDeg)
   const leave = fillPose(layout.panels[fromPanel])
   const arrive = fillPose(layout.panels[toPanel])
   return {
-    exit: documentOf(comicTemplateId('exit', format), format, size, slots, layout.panels[fromPanel], fromPanel, leave, wide),
-    enter: documentOf(comicTemplateId('enter', format), format, size, slots, layout.panels[toPanel], toPanel, wide, arrive),
+    exit: documentOf(comicTemplateId('exit', format), format, size, slots, layout.panels[fromPanel], fromPanel, leave, wide, exitDuration, comicMoveWindow('exit', exitDuration, hold), yawArc),
+    enter: documentOf(comicTemplateId('enter', format), format, size, slots, layout.panels[toPanel], toPanel, wide, arrive, enterDuration, comicMoveWindow('enter', enterDuration, hold), yawArc),
   }
 }
 
