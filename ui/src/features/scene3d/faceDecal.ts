@@ -33,6 +33,8 @@ import {
 /** Horizontal sweep of the cap, centred on model +Z. Wide enough that a ±30° orbit still meets the head. */
 export const FACE_CAP_SPAN = 80 * Math.PI / 180
 const PHI_START = Math.PI / 2 - FACE_CAP_SPAN / 2
+/** The same sweep upwards and downwards, centred on the equator: the art keeps its proportions (80° wide, 80° tall). */
+const THETA_START = Math.PI / 2 - FACE_CAP_SPAN / 2
 export const FACE_DECAL_OUTSET = 1.04
 const CANVAS = 1024
 const MOUTH_FALLBACK: CutoutAnchor = { offsetX: 0, offsetY: 0, scale: 0.16, rotation: 0 }
@@ -117,7 +119,7 @@ export function artFromKit(kit: Pick<CharacterKit, 'base' | 'poses' | 'mouth' | 
 
 /** Unit sphere cap. UVs cover the whole face image; default sphere UVs would show only a corner. */
 export function faceCapGeometry(): SphereGeometry {
-  const geometry = new SphereGeometry(1, 48, 24, PHI_START, FACE_CAP_SPAN, 0, Math.PI)
+  const geometry = new SphereGeometry(1, 48, 24, PHI_START, FACE_CAP_SPAN, THETA_START, FACE_CAP_SPAN)
   const position = geometry.getAttribute('position')
   const uv = geometry.getAttribute('uv')
   for (let index = 0; index < position.count; index += 1) {
@@ -127,7 +129,7 @@ export function faceCapGeometry(): SphereGeometry {
       const phi = Math.atan2(position.getZ(index), -position.getX(index))
       u = (phi - PHI_START) / FACE_CAP_SPAN
     }
-    uv.setXY(index, u, 1 - theta / Math.PI)
+    uv.setXY(index, u, 1 - (theta - THETA_START) / FACE_CAP_SPAN)
   }
   uv.needsUpdate = true
   return geometry

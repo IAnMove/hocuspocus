@@ -29,6 +29,10 @@ test('the cap covers the front past ±35° and the whole texture', () => {
   assert.ok(minAngle <= -35 * Math.PI / 180, `left ${minAngle}`)
   assert.ok(maxAngle >= 35 * Math.PI / 180, `right ${maxAngle}`)
   assert.ok(minU < 0.05 && maxU > 0.95 && minV < 0.05 && maxV > 0.95)
+  // 80° up and down like the 80° across, not pole to pole: a square face image must not be stretched 2.25 times.
+  let maxY = 0
+  for (let index = 0; index < position.count; index += 1) maxY = Math.max(maxY, Math.abs(position.getY(index)))
+  assert.ok(Math.abs(maxY - Math.sin(40 * Math.PI / 180)) < 0.02, `vertical reach ${maxY}`)
 })
 
 test('toon look leaves the face cap flat and without an ink hull', () => {
