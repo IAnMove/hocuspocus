@@ -39,7 +39,10 @@ sides (`asymmetry`), a model lying down (`not_upright`) and an empty mesh
 (`degenerate`). A GLB with Draco, meshopt or quantized geometry fails with
 `invalid_input`; export it without compression. Nothing is written when a
 model is refused; regenerate it in a T or A pose, or use the Procedural engine
-for props and creatures.
+for props and creatures. When Make-It-Animatable is installed and the reason
+is `turned`, `hands_stuck` or `not_upright`, the failed job also sets
+`suggested_engine` to `mia`. The panel can select that engine; nothing
+switches by itself. See the install catalog entry `mia` (Linux only).
 
 ## Ask for a T-pose still
 

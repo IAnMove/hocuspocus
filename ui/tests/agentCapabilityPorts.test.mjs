@@ -35,6 +35,8 @@ const AGENT_ACTIONS_IMPORTS = [
   '../../i18n',
   // Pure helper: the content language of new work follows the UI language.
   '../../lib/contentLanguage',
+  // Pure sentence for a family's territory licence. No store write, transport or execution port.
+  '../../lib/licenceNotice',
   '../../stores/useStore',
   '../../types',
   '../comics/generateArtwork',
@@ -51,6 +53,8 @@ const AGENT_ACTIONS_IMPORTS = [
   './characterAnimationCapabilities',
   './characterKitActions',
   './commandContract',
+  // Action type only. Execution stays on the lipsyncRedo adapter.
+  './lipsyncRedoCapabilities',
   // Action type only. Execution stays on the mediaTools adapter.
   './mediaToolCapabilities',
   // Action type only. Execution stays on the productionWorks adapter.
@@ -227,7 +231,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 98) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band and make_character_animation_set use the Character Kit adapter; the two stage actions use the Series stage adapter.
+  assert.equal(registered.length, 99) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band and make_character_animation_set use the Character Kit adapter; the two stage actions use the Series stage adapter; lipsync_redo uses the lipsyncRedo adapter.
   assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })

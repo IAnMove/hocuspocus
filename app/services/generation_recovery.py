@@ -8,6 +8,8 @@ is a forwarder: tests replace that name on the server module after import.
 import threading
 import time
 
+from services.remote_image_generation import is_remote_image_params
+
 # Injected by bind(); None until the full server binds them.
 _cancel_h3_idle_release = None
 _durable_generation_queue = None
@@ -96,12 +98,13 @@ def _queue_recovered_generation(record: dict):
         recovered=True,
         reserve_generation=not isinstance(
             params.get("_h3_window_plan_pending"), dict,
-        ),
+        ) and not is_remote_image_params(params),
         provenance=record.get("provenance") if isinstance(record.get("provenance"), dict) else None,
     )
     _jobs[job_id] = job
     _persist_generation_job(job)
-    _cancel_h3_idle_release()
+    if not is_remote_image_params(params):
+        _cancel_h3_idle_release()
     return job, True
 
 def resume_generation_queue():

@@ -340,7 +340,7 @@ def _uses_from_slot(slot: Any, index: int, doc_id: str, uses: list[dict[str, Any
     if not isinstance(slot, Mapping):
         return
     media = str(slot.get("media") or "model3d")
-    kind = "image" if media in {"image", "screen"} else "model3d"
+    kind = "image" if media in {"image", "screen"} else "other" if media == "splat" else "model3d"
     _add_use(uses, slot.get("sourceRef"), doc_id=doc_id, role=f"slots[{index}]", kind=kind, url=str(slot.get("sourceUrl") or ""))
     screen = slot.get("screen")
     if isinstance(screen, Mapping):

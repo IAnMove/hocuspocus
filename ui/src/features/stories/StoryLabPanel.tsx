@@ -14,7 +14,7 @@ import { generateImageAsset } from '../../lib/imageGeneration'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { characterKitStillSource } from '../../lib/characterKit'
 import { seedTijeralCharacterKits } from '../cutPaper/characterKits.ts'
-import { MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { MINIMAX_IMAGE_API_MODEL, withoutExternalImageModel } from '../../lib/externalModels'
 import { resolveSupportedVideoFormat } from '../../lib/productionProfile'
 import { StoryLabNavigation } from './StoryLabNavigation'
 import { StoryRelationshipsTab } from './StoryRelationshipsTab'
@@ -666,7 +666,7 @@ export function StoryLabPanel() {
     [enabledModels, videoModels],
   )
   const selectableImageModels = useMemo(
-    () => videoModels
+    () => withoutExternalImageModel(videoModels)
       .filter(model => getModelMode(model.model_type, model.family) === 'image' && enabledModels.has(model.model_type) && !model.tool_only)
       .sort((left, right) => left.name.localeCompare(right.name)),
     [enabledModels, videoModels],

@@ -32,7 +32,8 @@ CLOUD = {
 }
 GUIDANCE = ("Choose with the user before creating: if more than one option fits (a local model and a cloud provider that is ready) "
             "and they have not said which, ask once, naming the options and what each costs (local = GPU time and no tokens; "
-            "cloud = provider tokens). If they already said, or only one fits, go. `profile` is what a request with no choice would use. "
+            "cloud = provider tokens; a ready cloud image provider is a model too: MiniMax is model_type minimax:image-01, no GPU). "
+            "If they already said, or only one fits, go. `profile` is what a request with no choice would use. "
             "Music is local only: paid MiniMax music is disabled for assistants.")
 
 
@@ -46,6 +47,8 @@ def _local_images(models: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if model.get("tool_only") or model.get("nsfw_only"):
             continue
         needs = model.get("resource_requirements") or {}
+        if needs.get("tier") == "remote":
+            continue  # a remote model is listed under ``cloud`` by its provider's key, not as a local model
         entry = {"id": model_type, "name": model.get("name") or model_type}
         if isinstance(needs.get("vram_gb"), (int, float)):
             entry["vram_gb"] = needs["vram_gb"]

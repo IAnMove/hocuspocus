@@ -212,7 +212,7 @@ def _publish_generic_legacy_task(record: dict, adapter: str) -> dict | None:
     elif adapter == "rig":
         lane_key = (
             resource_scheduler.local_gpu_lane(0).key
-            if str(record.get("engine") or request_body.get("engine") or "").lower() == "unirig"
+            if str(record.get("engine") or request_body.get("engine") or "").lower() in {"unirig", "mia"}
             else resource_scheduler.cpu_lane("rig").key
         )
     elif adapter in {"story-plan", "comic-plan"}:

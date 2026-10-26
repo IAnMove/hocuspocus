@@ -8,6 +8,11 @@ come back as ``unknown_words`` and do not count against a match.
 Scene template rows also carry the derived traits, aliases, narrative twins and review status of
 ``video2d_template_cards``, and the filters ``use``, ``move``, ``subjects`` and ``format`` narrow them like the Video 3D
 list. ``scenes.templates.suggest`` ranks the music cards for a writer's line.
+
+The same optional CPU embeddings as Video 3D (``template_semantic``) rescore a
+query and fill one whose words no entry knows. With the weights absent the
+rows, scores and unknown words are the lexical ones, and a response that had
+no query does not grow a ``semantic`` field.
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Callable
 
+from services import template_semantic
 from services import video2d_template_cards as cards
 from services.mcp_compact import summarize_entry
 from services.template_search import match, query_words
@@ -289,19 +295,59 @@ def _scored(kinds: tuple[str, ...], scope: Scope, wanted: list[str]) -> tuple[li
     return scored, known
 
 
-def _ranked(kinds: tuple[str, ...], scope: Scope, query: str) -> tuple[list[tuple[str, dict, int]], list[str], bool]:
-    """``[(kind, entry, points)]`` best first, the unknown words, and whether the rows are only partial matches.
+def _ranked(kinds: tuple[str, ...], scope: Scope, query: str) -> tuple[list[tuple[str, dict, int]], list[str], bool, bool]:
+    """``[(kind, entry, points)]`` best first, the unknown words, whether the rows are only partial, and whether
+    embeddings ran.
 
     A word no entry of these kinds knows is unknown and dropped. A word that names the thing searched («plano»,
     «cámara», «shot»: the 3D ``QUERY_STOP``) adds points but is not needed, unless the query has nothing else. Rows
     that have every needed word come first; when none does, the rows with at least half of them come back as partial.
-    An empty query keeps catalogue order."""
+    An empty query keeps catalogue order. The optional embedder rescores those rows, or fills from the pool when
+    none matched."""
     wanted = _query_words(query)
     if not wanted:
-        return [(kind, entry, 0) for kind, entry in _pool(kinds) if scope(kind, entry)], [], False
+        return [(kind, entry, 0) for kind, entry in _pool(kinds) if scope(kind, entry)], [], False, False
     scored, known = _scored(kinds, scope, wanted)
     chosen, partial = _chosen(scored, {word for word in known if word not in QUERY_STOP} or known)
-    return chosen, [word for word in wanted if word not in known], partial
+    unknown = [word for word in wanted if word not in known]
+    chosen, partial, semantic = _with_semantic(query, kinds, scope, chosen, partial)
+    return chosen, unknown, partial, semantic
+
+
+def _with_semantic(query: str, kinds: tuple[str, ...], scope: Scope, chosen: list, partial: bool) -> tuple[list, bool, bool]:
+    if template_semantic.active() is None:
+        return chosen, partial, False
+    if chosen:
+        rescored, used = _rescore_entries(query, chosen)
+        return rescored, partial, used
+    filled, used = _fill_entries(query, kinds, scope)
+    if filled:
+        return filled, True, used
+    return chosen, partial, used
+
+
+def _entry_row(order: int, item: tuple) -> template_semantic.Row:
+    kind, entry, points = item
+    fields = _search_fields(kind, entry)
+    return template_semantic.Row(points, template_semantic.passage(fields["title"], fields["description"], fields["tags"]),
+                                 order, f"{kind}:{entry.get('id')}")
+
+
+def _rescore_entries(query: str, chosen: list) -> tuple[list, bool]:
+    rows = [_entry_row(order, item) for order, item in enumerate(chosen)]
+    ranked, used = template_semantic.rank_rows(query, rows)
+    if not used:
+        return chosen, False
+    return [(chosen[order][0], chosen[order][1], score) for order, score in ranked], True
+
+
+def _fill_entries(query: str, kinds: tuple[str, ...], scope: Scope) -> tuple[list, bool]:
+    pool = [(kind, entry) for kind, entry in _pool(kinds) if scope(kind, entry)]
+    rows = [_entry_row(order, (kind, entry, 0)) for order, (kind, entry) in enumerate(pool)]
+    ranked, used = template_semantic.rank_rows(query, [], pool=rows)
+    if not used:
+        return [], False
+    return [(pool[order][0], pool[order][1], score) for order, score in ranked], True
 
 
 def _chosen(scored: list[tuple[set[str], int, int, str, dict]], needed: set[str]) -> tuple[list[tuple[str, dict, int]], bool]:
@@ -351,16 +397,16 @@ def _query_fields(data: Any) -> tuple[str, Scope, str, bool, str]:
 
 
 def _summary(scope: Scope, query: str) -> dict[str, Any]:
-    rows, unknown, partial = _ranked(KINDS, scope, query)
+    rows, unknown, partial, semantic = _ranked(KINDS, scope, query)
     result: dict[str, Any] = {"kinds": [{"kind": kind, "count": sum(1 for row in rows if row[0] == kind)} for kind in KINDS]}
     if _query_words(query):
         result.update(matches=[{"kind": kind, **summary_row(kind, entry), "score": points} for kind, entry, points in rows[:MATCH_LIMIT]],
-                      unknown_words=unknown, partial=partial)
+                      unknown_words=unknown, partial=partial, semantic=semantic)
     return result
 
 
 def _page(kind: str, scope: Scope, query: str, detail: bool) -> dict[str, Any]:
-    rows, unknown, partial = _ranked((kind,), scope, query)
+    rows, unknown, partial, semantic = _ranked((kind,), scope, query)
     total = len(rows)
     page = rows[:PAGE_LIMIT]
     searched = bool(_query_words(query))
@@ -368,7 +414,7 @@ def _page(kind: str, scope: Scope, query: str, detail: bool) -> dict[str, Any]:
              for _kind, entry, points in page]
     result: dict[str, Any] = {"kind": kind, "entries": shown, "total": total, "truncated": total > PAGE_LIMIT}
     if searched:
-        result.update(unknown_words=unknown, partial=partial)
+        result.update(unknown_words=unknown, partial=partial, semantic=semantic)
     return result
 
 
@@ -467,11 +513,13 @@ def suggest_templates(data: Any) -> dict[str, Any]:
     """Up to ``limit`` music cards for a shot a writer describes (line, speakers, mood, beat, format). Read-only."""
     request = _card_call(cards.suggest_request, data)
     pool, filters, notes = cards.suggest_pool(_entries(_kind_data("templates"), "templates"), request)
-    wanted = _query_words(" ".join(part for part in (request["line"], request["mood"]) if part))
-    ranked, unknown = cards.rank(pool, wanted, lambda entry: _search_fields("templates", entry))
+    text = " ".join(part for part in (request["line"], request["mood"]) if part)
+    wanted = _query_words(text)
+    ranked, unknown, semantic = cards.rank(pool, wanted, lambda entry: _search_fields("templates", entry), query=text)
     rows = [_suggest_row(entry, points, label) for entry, points, label in ranked[:request["limit"]]]
     result: dict[str, Any] = {"templates": rows, "unknown_words": unknown,
-                              "partial": bool(rows) and rows[0]["match"] == "partial", "filters": filters}
+                              "partial": bool(rows) and rows[0]["match"] == "partial", "filters": filters,
+                              "semantic": semantic}
     if notes:
         result["notes"] = notes
     return {"version": 1, "status": "completed", "operation": SUGGEST_OPERATION, "result": result}

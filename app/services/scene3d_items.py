@@ -124,8 +124,11 @@ class ItemService:
     def _item(self, data, *, replacing=False):
         value = data.get('item')
         if value is None: return None
-        if not isinstance(value, dict) or len(value) != 1: raise ValueError('item must name one prop, image or glb')
+        if not isinstance(value, dict) or len(value) != 1: raise ValueError('item must name one prop, image, glb or library model')
         root = Path(self.workspace_dir(data['workspace']))
+        if 'library' in value:
+            from services.cc0_props import library_item
+            return library_item(value['library'], root)
         if 'prop' in value:
             prop = get_prop(root, value['prop'], approved=True)
             return {**prop, 'prop': prop['id'], 'media': 'image'}
@@ -205,7 +208,7 @@ class ItemService:
 
 
 def command_catalog():
-    fields={'workspace':{'type':'string'},'target':{'type':'object','description':'{series_id, episode_id, shot} or {scene_id}'},'item':{'type':'object','description':'One of {prop}, {image}, {glb}'},
+    fields={'workspace':{'type':'string'},'target':{'type':'object','description':'{series_id, episode_id, shot} or {scene_id}'},'item':{'type':'object','description':'One of {prop}, {image}, {glb}, {library}'},
         'at':{'type':'object','description':'One of {mark}, {anchor}, {position: [x,y,z] metres}'},'id':{'type':'string'},'heightM':{'type':'number'},'rotationY':{'type':'number'},
         'billboard':{'type':'boolean'},'shadow':{'type':'boolean'},'base_revision':{'type':'integer'}}
     output=[]
@@ -213,6 +216,7 @@ def command_catalog():
         props={'version':{'const':1},'input':{'type':'object','properties':fields,'additionalProperties':False,'required':['workspace','target',*(['item','at'] if action=='add' else ['id'] if action!='list' else [])]}}
         if action!='list': props['intent_id']={'type':'string'}
         output.append({'name':f'scene3d.item.{action}','version':1,'domain':'scenes','mutation':action!='list','destructive':False,
-            'description':f'{action.capitalize()} real-sized props in a Series 3D shot or working Video 3D scene. Use marks, anchors or metre positions; Series shots allow at most 12 objects.',
+            'description':f'{action.capitalize()} real-sized props in a Series 3D shot or working Video 3D scene. Use marks, anchors or metre positions; Series shots allow at most 12 objects.'
+            + (' A workspace GLB, including one downloaded from https://www.meshy.ai/discover, is item.glb. Play a file that already has clips. Rig a standing person with no skeleton first with model3d.rig engine humanoid.' if action=='add' else ''),
             'inputSchema':{'type':'object','properties':props,'required':list(props),'additionalProperties':False}})
     return output

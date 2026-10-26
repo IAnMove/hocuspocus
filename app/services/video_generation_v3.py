@@ -157,6 +157,14 @@ _Steps = Annotated[StrictInt, Field(ge=1, le=1000)]
 _Seed = Annotated[StrictInt, Field(ge=-(2**63), le=2**63 - 1)]
 _Frames = Annotated[StrictInt, Field(ge=1, le=10_000)]
 _Guidance = Annotated[StrictFloat, Field(ge=0, le=1000, allow_inf_nan=False)]
+_LoraFile = Annotated[
+    StrictStr,
+    StringConstraints(min_length=1, max_length=180, pattern=r"^[A-Za-z0-9][A-Za-z0-9_.-]*$"),
+]
+_LoraScale = Annotated[StrictStr, StringConstraints(min_length=1, max_length=80)]
+# Raw OpenPose control does not auto-load this file (ltx2.py loads it for O/P/D/T/E only). Sending it in
+# activated_loras is how a VG control video reaches the distilled IC-LoRA.
+LTX_UNION_CONTROL_LORA = "ltx-2.3-22b-ic-lora-union-control-ref0.5.safetensors"
 _ModelType = Literal[
     "minimax_h3",
     "minimax_h3_full",
@@ -227,6 +235,11 @@ class VideoV3Params(_ClosedModel):
     image_end: _Reference | None = None
     audio_prompt_type: Literal["", "A"] = ""
     audio_guide: _Reference | None = None
+    # Optional LTX-2.3 pose control. Absent fields are left out of the payload, so an existing shot is unchanged.
+    video_guide: _Reference | None = None
+    video_prompt_type: Literal["", "VG"] = ""
+    activated_loras: list[_LoraFile] | None = Field(default=None, max_length=8)
+    loras_multipliers: _LoraScale | None = None
     references: list[H3Reference] | None = None
     minimax_h3_reference_detail: Literal["match", "max"] | None = None
     minimax_h3_extended_duration: StrictBool = False
@@ -238,7 +251,7 @@ class VideoV3Params(_ClosedModel):
             raise ValueError("input.params.prompt must contain a non-blank value")
         return value
 
-    @field_validator("image_start", "image_end", "audio_guide")
+    @field_validator("image_start", "image_end", "audio_guide", "video_guide")
     @classmethod
     def _media(cls, value: str | None) -> str | None:
         if value is None:
@@ -327,7 +340,45 @@ def _enforce_soundtrack(params: VideoV3Params) -> None:
         raise VideoGenerationV3Error("audio_guide requires audio mode A", code="invalid_selector")
 
 
+def _pose_control_set(params: VideoV3Params) -> bool:
+    return bool(params.video_guide or params.video_prompt_type == "VG" or params.activated_loras or params.loras_multipliers)
+
+
+def _reject_pose_control(params: VideoV3Params) -> None:
+    if _pose_control_set(params):
+        raise VideoGenerationV3Error(
+            "pose control (video_guide, video_prompt_type VG, activated_loras) is only for LTX-2.3",
+            code="invalid_selector",
+        )
+
+
+def _enforce_ltx_control(params: VideoV3Params) -> None:
+    if params.video_prompt_type == "VG" and not params.video_guide:
+        raise VideoGenerationV3Error("video_prompt_type VG requires video_guide", code="invalid_selector")
+    if params.loras_multipliers and not params.activated_loras and not params.video_guide:
+        raise VideoGenerationV3Error(
+            "loras_multipliers requires activated_loras or video_guide",
+            code="invalid_selector",
+        )
+
+
+def _assemble_control(payload: dict[str, Any], params: VideoV3Params) -> None:
+    """Add a raw control video only when one was asked for. ``VG`` plus the union-control LoRA when the caller omits them."""
+    if params.video_guide:
+        payload["video_guide"] = params.video_guide
+        payload["video_prompt_type"] = params.video_prompt_type or "VG"
+    elif params.video_prompt_type:
+        payload["video_prompt_type"] = params.video_prompt_type
+    loras = list(params.activated_loras or ())
+    if params.video_guide and not loras:
+        loras = [LTX_UNION_CONTROL_LORA]
+    if loras:
+        payload["activated_loras"] = loras
+        payload["loras_multipliers"] = params.loras_multipliers or "1"
+
+
 def _enforce_fl2va(params: VideoV3Params) -> None:
+    _reject_pose_control(params)
     _reject_references(params, "FL2VA does not accept Ref2VA references")
     if not params.image_start:
         raise VideoGenerationV3Error("FL2VA requires image_start", code="invalid_selector")
@@ -362,6 +413,7 @@ def _check_reference_limits(references: list[H3Reference]) -> None:
 
 
 def _enforce_ref2va(params: VideoV3Params) -> None:
+    _reject_pose_control(params)
     _reject_frames(params, "Ref2VA uses image, video, and audio references, not image_start or image_end")
     if params.audio_prompt_type == "A" or params.audio_guide:
         raise VideoGenerationV3Error(
@@ -392,6 +444,7 @@ def _enforce_ltx(params: VideoV3Params) -> None:
     window = params.video_length if params.sliding_window_size is None else params.sliding_window_size
     _require_choice("sliding_window_size", window, LTX_WINDOW_LENGTHS, "5+4k through 501")
     _enforce_soundtrack(params)
+    _enforce_ltx_control(params)
 
 
 def _enforce_video_v3(params: VideoV3Params) -> None:
@@ -451,6 +504,7 @@ def _assemble_video_v3_payload(params: VideoV3Params) -> dict[str, Any]:
         payload["minimax_h3_extended_duration"] = True
     if params.audio_guide:
         payload["audio_guide"] = params.audio_guide
+    _assemble_control(payload, params)
     return payload
 
 
@@ -649,6 +703,7 @@ __all__ = [
     "H3_LENGTHS",
     "H3_PRESET_RESOLUTIONS",
     "LTX23_MODEL_TYPES",
+    "LTX_UNION_CONTROL_LORA",
     "LTX_VIDEO_LENGTHS",
     "LTX_WINDOW_LENGTHS",
     "REF2VA_MODEL_TYPES",

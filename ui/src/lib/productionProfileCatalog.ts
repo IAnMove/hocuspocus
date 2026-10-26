@@ -117,6 +117,9 @@ export const HUNYUAN3D_PROFILE_MODELS: CatalogOption[] = [
 
 export const MESHY_PROFILE_MODELS: CatalogOption[] = [
   { id: 'latest', label: 'latest' },
+  { id: 'meshy-7.1', label: 'meshy-7.1' },
+  { id: 'meshy-6', label: 'meshy-6' },
+  { id: 'meshy-6-lite', label: 'meshy-6-lite' },
 ]
 
 export const HI3D_PROFILE_MODELS: CatalogOption[] = [

@@ -1,4 +1,5 @@
 import { getModelMode, useStore } from '../../stores/useStore'
+import { withoutExternalImageModel } from '../../lib/externalModels'
 import { useUiTranslation } from '../../i18n'
 import { button, panel } from './storyLabChrome'
 import { resolveStoryWritingProvider } from './provider'
@@ -23,7 +24,8 @@ export function StoryProviderPanel({
     ? 'minimax' : project.provider.imageProvider
   const effectiveImageModel = project.provider.useGlobalProfile
     ? profile.image.model : project.provider.imageModel
-  const installedImageModels = models.filter(model =>
+  // The MiniMax provider is a choice of its own below; the local list holds the installed models only.
+  const installedImageModels = withoutExternalImageModel(models).filter(model =>
     model.is_downloaded !== false
     && getModelMode(model.model_type, model.family) === 'image')
   const writingReady = provider === 'maestro'

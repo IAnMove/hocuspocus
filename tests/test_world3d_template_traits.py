@@ -153,7 +153,7 @@ def test_unknown_words_never_count_and_half_of_the_known_ones_is_enough(tmp_path
     cheering = search_report("crowd cheering church", limit=8)
     assert cheering["partial"] is True and cheering["unknown_words"] == []
     assert "group-audience" in ids(cheering["templates"]) and "atmos-temple-low" not in ids(cheering["templates"])  # 1 of 3 is not half
-    assert search_report("xyzzy xyzzy plugh") == {"templates": [], "unknown_words": ["xyzzy", "plugh"], "partial": False}
+    assert search_report("xyzzy xyzzy plugh") == {"templates": [], "unknown_words": ["xyzzy", "plugh"], "partial": False, "semantic": False}
     page = page_templates(CHURCH)
     assert page["partial"] is True and page["unknown_words"] == ["tenso"] and page["total"] >= len(church["templates"])
     assert page_templates("dolly zoom")["unknown_words"] == [] and page_templates("")["unknown_words"] == []

@@ -602,6 +602,13 @@ three-quarter back, back; the left is the mirror of the right), with its walk cy
   `walk-back34`, `walk-back`, `idle-<dir>`. With no `dir`, a `side` or `front` view says it; with no `motion`, a cycle whose id starts with `walk` or `idle`
   says it. A sheet drawn looking left says `facing: "left"`. A direction the kit lacks is drawn by the nearest one it has; with no
   walk or idle sheet at all the base pose glides. Nothing is an error: the script check warns `direction_sheet_missing`.
+- **Which sheet:** a standing figure takes the sheet of the angle between where it looks and the line to the camera in equal sectors of 45 degrees (front 0, front34
+  45, side 90, back34 135, back 180). A figure that **walks** (or stands facing where it went, with no `heading`) is drawn by the larger part of its movement: front or back
+  while it goes more toward or away from the camera than across, side while it goes more across, and a three-quarter sheet only for a really diagonal walk
+  (`walkDiagonalDeg`, 12: 33 to 57 degrees off the camera's line, and the same from the back; 22.5 gives the standing sectors, 0 turns the three-quarter sheets off
+  while walking). Perspective counts: a crossing near the edge of a wide room is seen from 55 degrees at its ends. A kit that has no three-quarter sheet of the motion
+  splits that band at 45 and 135 degrees, so the larger part still decides; **un-approving a poor three-quarter sheet in the Character Kit is the way to stop using it**.
+  The server check reads the same table (`directional_sprite.edges`), so a walk across a room no longer asks for sheets it will not draw.
 - **Fade:** when the drawing changes (another sheet, the other side, the pose) the old one fades into the new one over 0.12 s
   (`crossfadeSeconds`), added up so the figure never thins. It starts on the frame of the change and is the same on every export; a jump in
   time (a seek) shows no fade. The 10 degrees of hysteresis still keep it from flickering at a boundary.
@@ -625,7 +632,75 @@ three-quarter back, back; the left is the mirror of the right), with its walk cy
 - **Doors:** the script (`series.episode.from_script`, `series.shot.update`, `edit_series_shot`), the 3D cast part of the shot inspector
   (Looks, Walks to x and z, Speed, Starts at, Light tint) and, for a plain Video 3D scene, the `directional` binding of `world3d.scene.patch`
   (`{sheets, heading?, walk? {to, speed, start}, speech?, lightTint?}` on an image cutout; `null` removes it).
-- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
+- **Numbers:** `app/shared/directional_sprites.json` (sector table, 10 degrees of hysteresis, `walkDiagonalDeg` 12 and `walkHysteresisDeg` 4 for a walking figure, 0.75 m step, 1.2 m/s, 0.12 s fade, 0.6 light tint). The choice of
   drawing is `ui/src/features/scene3d/directionalSprite.ts` (pure); the camera pass of `paintWorld` paints it. The proof is
   `ui/scripts/directional-billboards-proof.ts`: a real Chromium on the CPU renders an orbiting shot, a walk that stops to speak, the frames of a fade and a
   column in front of and behind two figures, with a synthetic five-direction kit, and checks the pixels.
+
+## Agent-built scenes: layout, bounds, fit and a blank start
+
+An agent that builds a Video 3D scene through `world3d.scene.*` cannot see the frame, so the scene tells it where everything is. `world3d.scene.inspect`, and the reply of every `world3d.scene.patch` (the inspect view of the new revision), carry, next to `objects` (unchanged: the ids and roles patches address):
+
+- `camera`: the authored `family`, `eye`, `look`, `fov`, `framing` (target, anchor, from/to, fov move) and a `shake` summary (`windows`, first start, last end, largest amplitude). An orbit, a framing or a shake moves the live eye from these values; they are not a per-frame position.
+- `light`, `duration` and `size` (`width`, `height`, `fps`).
+- `layout.items`: one row per object (at most 32; `layout.omitted` counts the rest) with `id`, `role`, `media`, `position`, `rotationY`, `scale`, `sourceUrl`, `clip` and `boundsM`.
+
+**`boundsM` is in metres and follows the renderer.** A 3D model is drawn **1.7 m x `scale` tall: its bounding-box height, whatever its length** (`fitGltf` in `ui/src/features/scene3d/gpu.ts`; an image cutout is a plane 2 m x `scale` tall). The model is scaled about its own origin and never re-centred, so a whole-environment GLB (a Meshy island, a street) enters as a 1.7 m object until `scale` says otherwise, and x/z stay wherever the GLB put its origin. `boundsM.size` is the model's own width, height and depth after that scaling; `min`, `max` and `center` are the scene coordinates after `position` and `rotationY`; `bottomY` is the lowest point. A `grounded` object is lowered or lifted so that point sits at `position[1]`. The numbers come from the POSITION accessor `min`/`max` of the GLB's JSON chunk (no buffer is read) under the node transforms of the default scene, so they are the **rest pose**: a skinned model is measured in its bind pose and a clip can reach outside the box. A moving object (`motion`) travels from the placed position.
+
+`boundsM` is `null` with a `boundsReason` when the object cannot be measured, and an inspect never fails because of it: `marker` (no model bound yet), `not_a_3d_model`, `outside_workspace` (uploads, example media, other workspaces, remote URLs), `missing_file`, `not_glb` (a `.gltf`, or a file that is not a GLB), `truncated`, `json_too_large`, `missing_min_max`, `no_meshes`, `unmeasurable`. Bind workspace `.glb` files (`/api/v1/file/<name>?workspace=<ws>`) to get bounds.
+
+**`fit` sizes an object in metres instead of guessing `scale`.** In a `world3d.scene.patch` binding, `fit` is exactly one of:
+
+| `fit` | scale is set so that | needs the GLB |
+|---|---|---|
+| `{"heightM": 30}` | the bounding-box height is 30 m (`scale = heightM / 1.7`) | no |
+| `{"widthM": 6}` / `{"depthM": 6}` | the model's own x / z extent, before `rotationY` | yes |
+| `{"longestM": 80}` | the longest of its three extents | yes |
+| `"native"` | the GLB is at its file size taken as metres (`scale = height / 1.7`); a size outside 1 cm to 30 m warns `fit_native_unusual` | yes |
+
+A `source_url` bound in the same binding is measured. A binding with both `fit` and `scale` is refused (`invalid_fit`), as are a bad key, a non-positive or non-finite size, and a model with no extent on that axis; a GLB that cannot be read for `widthM`, `depthM`, `longestM` or `native` is `bounds_unavailable` (use `heightM`). An image cutout accepts `heightM` only. A refused patch writes nothing. The scale is stored on the object like any other, so the editor shows and edits it as usual.
+
+**A blank start.** The built-in cards are compiled from the UI's TypeScript templates, so there is no built-in blank card; a personal template needs none. Register this once per workspace, then instantiate it, patch objects in with `add: true`, and publish:
+
+```json
+{"operation": "world3d.templates.user.put", "input": {"workspace": "default", "id": "user-blank-stage", "title": "Blank stage", "document": {
+  "version": 1, "units": "meters", "up": "y", "templateId": "two-shot", "width": 1280, "height": 720, "fps": 30, "duration": 5,
+  "camera": {"family": "fixed", "eye": [0, 1.6, 6], "look": [0, 1, 0], "fov": 45},
+  "light": {"kind": "directional", "direction": [-0.4, -1, -0.3], "intensity": 1.2, "color": "#ffffff"}, "slots": []}}}
+```
+
+`services.world3d_blank_scene.blank_template_row()` builds the same row (and `markers=[("hero", "subject_1")]` adds empty model objects for a cast). Added objects are always `prop`; give an empty slot another role in the template when you need `subject_1`. The editor is stricter than the save: `light` must be `{kind: "directional", direction, intensity, color}` (a `{"preset": ...}` light saves but the editor shows "Invalid Video3D scene"), `fps` is 24, 30 or 60, and `editor_shape_problems(document)` in the same module lists what the editor would refuse. Nothing is blocked: the replies of `world3d.templates.user.put`, `world3d.scene.inspect`, `world3d.scene.patch` and `world3d.scene.publish` carry each problem as a warning `editor_would_refuse: <problem>` (at most 8, then a count), so an agent sees it before the user opens the scene. Then: `world3d.scene.instantiate` -> `world3d.scene.patch` (`source_url`, `fit`, `position`, `camera`) -> `world3d.scene.inspect` to read `layout.items` -> `world3d.scene.preview` -> `world3d.scene.publish`.
+
+**Opening it.** An unpublished working copy (`world3d-edits/w3d-<id>.json`) is listed in the Video 3D editor's **Open** dialog with the template's title; opening it loads the current revision, with every object, the camera and the light editable. `world3d.scene.publish` saves the same document as an ordinary scene file (`*.world3d.scene.json`) that opens in the same editor, and the working copy then leaves the Open dialog's list of unpublished scenes.
+
+## Agent-built scenes: timed moves, collisions, 3D effects and beats
+
+An agent that builds a scene also has to say *when* things happen and notice what goes wrong. Four additions, all reopenable and editable in the Video 3D editor because each one is ordinary document data.
+
+**Timed moves: `motion.start` and `motion.end`.** `slot.motion` used to span the whole shot. `motion` now takes `start` and `end` in scene seconds (default 0 and the end of the scene). Before `start` the object sits at its `position`; from `start` to `end` it travels the same path (straight, a `via` curve or `points` waypoints) with the same `easing`; after `end` it stays at `to`. "The plane flies from 1 s to 3 s" is `{"to": [24, 11, -4], "faceTravel": true, "start": 1, "end": 3}`. Either one alone is fine. A patch refuses a move that cannot run (`invalid_motion`: not a time of 0 to 600 s, `start` not before `end`, `start` at or after the end of the scene, `to` not three numbers), and a window next to a baked humanoid walk (`motion_window_with_walk`: the baked walk plants the feet along the whole shot, and the editor's "Walk without sliding" says so instead of baking a timed move). `retime: true` stretches the window with the scene. The editor's Travel panel has **Starts at** and **Ends at** (empty means the default). A document without them renders exactly as before (so `RENDER_RECIPE` does not change, as for `camera.lensShift`).
+
+**Collisions: `layout.collisions`.** `boundsM` is one box for the whole GLB (a village is one 42 x 17 x 60 m box). For collisions the server also reads **one box per mesh node** (a house, a tower, the ground slab; `procedural_3d/glb_parts.py`, JSON chunk only, at most 200 parts, the largest if there are more) and, for every object with a `motion`, samples where it is over the seconds it moves with the renderer's own formulas (`world3d_scene_motion.py` is the Python twin of `slotPoseAtTime`; both are pinned by `tests/fixtures/world3d_motion_samples.json`). Where the moving object's box sinks at least 0.1 m into a part of another object, the reply has
+
+```json
+{"a": "avioneta", "b": "village", "part": 33, "partName": "Landmark • Timber watchtower", "from_s": 2.55, "to_s": 2.98, "at": [0.9, 3.05, -13.3], "depth_m": 1.04}
+```
+
+in `layout.collisions` (the deepest four passages of each pair, twelve in all; `layout.collisionsOmitted` counts the rest) and a warning `collision: avioneta passes through village (part 33 "…") at 2.55-2.983 s near [0.9, 3.1, -13.3]…` in `world3d.scene.inspect` and every patch and beats reply. Nothing is refused. What is left out on purpose: two objects that both stand still (the author placed them), flat low parts (a part ten times wider than thick in the lowest quarter of its model: a ground slab, a cobbled lane, so a walker or a low flyer does not "hit the floor"), a graze shallower than 0.1 m (less for a small object), an object with `collide: false` (a ghost, a spirit: set it in a binding; `true` or `null` takes it off), an object held in a hand, and an object before its `appearance` starts. Only the seconds a move runs are checked. A fixed camera whose eye lies inside a part's box also warns `camera_inside_geometry` (an interior shot may be meant). The boxes are the rest pose and axis-aligned per node: a turned or concave part is a little bigger than the thing, and a model built as a single mesh is one part.
+
+**3D effects: `worldFx`.** `world3d.scene.patch` takes `worldFx: [{id?, kind, start, end?, at, scale?, color?, intensity?, sound?, volume?, to?}]` for the effects drawn *in* the scene (`screenFx` is the overlay): `explosion`, `shockwave`, `sparks`, `smoke`, `fire`, `lightning`… (`kind` is one of the world kinds of `scenes.effects.catalog`). `at` is `[x, y, z]` metres (within 50 m of the origin: the editor cannot place a cue farther), `{object_id, offset?}` (a point in that object's own frame, metres from its `position`; stored as the editor's `anchor`, so the effect follows the object when it moves) or `{collision: n}` (the middle of `layout.collisions[n]` as the patch leaves the scene). `end` defaults to a length that suits the kind and never goes past the scene; a beam (`lightning`, `energy_beam`, `laser`, `arcane_missiles`) may give `to` where it ends. Ids start with `fx-` (one is made when absent); a patch with `worldFx` replaces the earlier `fx-*` cues and keeps the template's own, `[]` removes them, like `screenFx`. The reply's `worldFx` lists every world effect of the scene (`own: true` for the caller's). An object that cannot be measured (a marker) gets a fixed effect and the warning `fx_anchor_fixed`.
+
+**Beats: `world3d.scene.beats`.** The higher-level way to say who does what when, validated. `beats: [{t, who, verb, ...}]` with `t` in scene seconds and `who` an object id; every verb resolves into the object's own fields, so the editor opens and edits the result. Same envelope as `world3d.scene.patch` (`scene_id`, `base_revision`, `intent_id`); the reply is the inspect view plus `resolved: [{beat, who, verb, set: {fields}, notes?}]`, with `layout.collisions` and the warnings of what the moves cause.
+
+| verb | fields | becomes |
+|---|---|---|
+| `appear` | `at?: [x, z]`, `duration?`, `color?` | `appearance` (hidden until `t`, then it materializes) and, with `at`, `position` |
+| `go` | `to`: `[x, z]`, `[x, y, z]` or `{near: object_id, distance_m? 1.5}`; `via?`; `duration?` or `speed_mps?`; `face?: true`; `easing?` | `motion` with `start: t` and `end: t + duration`, and, when the model has a walk clip (a run clip from 3 m/s), a `clips` entry over the same seconds with its idle clip before and after |
+| `face` | `toward: object_id` or `[x, z]` | `rotationY` before the object moves, or (with no move) a turn in place over 0.5 s: a `motion` to where it stands with a `turnTo`, the short way round |
+| `do` | `action`, `duration?` | a `clips` entry for the clip the model's GLB has for the word, matched **by name** (see below) |
+| `fx` | `kind`, `at?: object_id \| [x, y, z] \| "collision"` (default `who`), `duration?`, `scale?`, `color?`, `intensity?`, `sound?`, `volume?` | a `worldSfx` cue (as `worldFx`), labelled `beat:<who>`; `"collision"` is the passage of `who` through something nearest `t` |
+
+With no `duration` or `speed_mps`, a model with a walk clip walks at 1.4 m/s and any other object takes until its next beat (or the end of the scene). `do` matches the word to a clip of the model's GLB: the exact clip name ignoring case and spaces (`Dance Bounce` is `dance_bounce`), then the rig's id or label (`wobble` is `Wobble Dance`), then the one clip whose name contains the word. Humanoid clips: Walk, Run, Jump, Sit Down, Hover, Wave, Cheer, Clap, Victory, Talk, Nod, Look Around, Bow, Point, Shrug, Kneel Pray, Dance Bounce / Side / Arms, Idle, Breathe, Punch, Aim, Shoot, Claw, Hit, Crouch; procedural ones: idle, breathe, hover, alert, walk, run, strafe, jump, attack, hit, roll, charge, victory, bounce, spin, wobble. The cue plays once for the clip's own length unless `duration` asks for longer (then it loops); `crouch` and `kneel_pray` hold their last pose. A rigid model with no clips can `appear`, `go` and `fx`; a `do` on it, or a word it has no clip for, gives the warning `no_clip_for_verb` (with the clips it has) and does nothing, never an error.
+
+Refused, with code `invalid_beats`, the beat's position and nothing written: `beats` not a list of 1 to 64, an unknown `who` (the reply lists the objects), a `t` outside 0 to the end of the scene, an unknown verb or world-effect kind, a bad `to`, `at` or `duration`, `duration` together with `speed_mps`, a `near` that is the object itself, a `face` toward its own place. Warnings: `implied_speed` (above 15 m/s), `collision`, `no_clip_for_verb`, `go_cut_short` (the move would end after the scene: it is cut there), `go_nowhere`, `no_collision_for_fx` (an `fx` at `"collision"` for an object that passes through nothing: the beat is ignored), `second_go_ignored` and `second_appear_ignored`, `face_after_go_ignored`, and, for a **fixed** camera, `actor_out_of_frame` (the middle of the object is outside the picture when it appears, acts, turns or has an effect, or never inside it during a `go`; an entrance from outside the frame is fine).
+
+One call is one sheet for the objects it names: their `go`, `face` and `do` beats replace the earlier `motion` and `clips`, `appear` replaces the `appearance`, `fx` beats replace the earlier beat effects of that object; objects it does not name keep what they have. So send all of an object's moves and actions in one call. Limits: an object has **one move per call** (waypoints with `via`, or a second `world3d.scene.patch`, for more), a turn *after* the move cannot be timed (turn along the way with `face: true` instead), and the walk clip plays at its own pace: the feet slide unless the speed is about a walk's (a baked walk with planted feet cannot be timed, see above).

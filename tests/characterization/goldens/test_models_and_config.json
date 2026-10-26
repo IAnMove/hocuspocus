@@ -3605,7 +3605,25 @@
         {
           "id": "hunyuan3d",
           "label": "Hunyuan3D",
+          "licenceRecords": [
+            {
+              "commercial": true,
+              "id": "hunyuan3d",
+              "note": "Tencent Hunyuan 3D 2.0 Community License. Hunyuan3D 2.1 and Hunyuan3D-2mini use the same territory sentence. Commercial use is allowed below 1 million monthly active users.",
+              "territoryExcluded": [
+                "EU",
+                "UK",
+                "KR"
+              ],
+              "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE"
+            }
+          ],
           "order": 350
+        },
+        {
+          "id": "minimax",
+          "label": "MiniMax (remote API)",
+          "order": 1170
         }
       ],
       "models": [
@@ -3743,6 +3761,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mini-turbo",
           "name": "Hunyuan3D 2 Mini Turbo",
           "nsfw_only": false,
@@ -3762,6 +3781,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mini-fast",
           "name": "Hunyuan3D 2 Mini Fast",
           "nsfw_only": false,
@@ -3781,6 +3801,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mini",
           "name": "Hunyuan3D 2 Mini",
           "nsfw_only": false,
@@ -3800,6 +3821,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2-turbo",
           "name": "Hunyuan3D 2 Turbo",
           "nsfw_only": false,
@@ -3819,6 +3841,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2-fast",
           "name": "Hunyuan3D 2 Fast",
           "nsfw_only": false,
@@ -3838,6 +3861,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2",
           "name": "Hunyuan3D 2",
           "nsfw_only": false,
@@ -3857,6 +3881,7 @@
           "is_downloaded": false,
           "is_i2v": true,
           "is_t2v": false,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mv-turbo",
           "name": "Hunyuan3D 2 Multi-view Turbo",
           "nsfw_only": false,
@@ -3876,6 +3901,7 @@
           "is_downloaded": false,
           "is_i2v": true,
           "is_t2v": false,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mv-fast",
           "name": "Hunyuan3D 2 Multi-view Fast",
           "nsfw_only": false,
@@ -3895,6 +3921,7 @@
           "is_downloaded": false,
           "is_i2v": true,
           "is_t2v": false,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2mv",
           "name": "Hunyuan3D 2 Multi-view",
           "nsfw_only": false,
@@ -3914,6 +3941,7 @@
           "is_downloaded": false,
           "is_i2v": false,
           "is_t2v": true,
+          "licenceId": "hunyuan3d",
           "model_type": "hunyuan3d-2.1",
           "name": "Hunyuan3D 2.1 + PBR",
           "nsfw_only": false,
@@ -3977,6 +4005,41 @@
           "supports_ref_images": true
         },
         {
+          "api_key_set": false,
+          "architecture": "minimax_image",
+          "description": "Remote MiniMax Image-01: no GPU, billed to your MiniMax plan. Needs an API key in Settings → Services. Takes one character reference (it keeps the face and invents the outfit).",
+          "director": {
+            "generates_audio": false,
+            "image": {
+              "compatible": true,
+              "reason": ""
+            },
+            "max_image_refs": 1,
+            "supports_audio_input": false,
+            "supports_voice_reference": false,
+            "video": {}
+          },
+          "family": "minimax",
+          "fps": 0,
+          "guidance_max_phases": 1,
+          "is_downloaded": true,
+          "is_i2v": false,
+          "is_t2v": false,
+          "model_type": "minimax:image-01",
+          "name": "MiniMax Image-01 (remote, no GPU)",
+          "nsfw_only": false,
+          "remote": true,
+          "requires_api_key": true,
+          "resource_requirements": {
+            "backend": "minimax",
+            "note": "Remote API, no GPU",
+            "tier": "remote"
+          },
+          "supports_audio": false,
+          "supports_end_frame": false,
+          "supports_ref_images": true
+        },
+        {
           "architecture": "unirig",
           "family": "hunyuan3d",
           "fps": 0,
@@ -3999,8 +4062,8 @@
   "models summary": {
     "body": {
       "counts": {
-        "families": 2,
-        "models": 15
+        "families": 3,
+        "models": 16
       },
       "families": [
         {
@@ -4017,7 +4080,28 @@
           },
           "description": "Hunyuan3D",
           "id": "hunyuan3d",
+          "licenceRecords": [
+            {
+              "commercial": true,
+              "id": "hunyuan3d",
+              "note": "Tencent Hunyuan 3D 2.0 Community License. Hunyuan3D 2.1 and Hunyuan3D-2mini use the same territory sentence. Commercial use is allowed below 1 million monthly active users.",
+              "territoryExcluded": [
+                "EU",
+                "UK",
+                "KR"
+              ],
+              "url": "https://github.com/Tencent-Hunyuan/Hunyuan3D-2/blob/main/LICENSE"
+            }
+          ],
           "name": "Hunyuan3D"
+        },
+        {
+          "counts": {
+            "models": 1
+          },
+          "description": "MiniMax (remote API)",
+          "id": "minimax",
+          "name": "MiniMax (remote API)"
         }
       ],
       "models": [
@@ -4043,6 +4127,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mini-turbo",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Mini Turbo"
         },
         {
@@ -4051,6 +4136,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mini-fast",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Mini Fast"
         },
         {
@@ -4059,6 +4145,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mini",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Mini"
         },
         {
@@ -4067,6 +4154,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2-turbo",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Turbo"
         },
         {
@@ -4075,6 +4163,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2-fast",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Fast"
         },
         {
@@ -4083,6 +4172,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2"
         },
         {
@@ -4091,6 +4181,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mv-turbo",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Multi-view Turbo"
         },
         {
@@ -4099,6 +4190,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mv-fast",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Multi-view Fast"
         },
         {
@@ -4107,6 +4199,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2mv",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2 Multi-view"
         },
         {
@@ -4115,6 +4208,7 @@
           },
           "description": "",
           "id": "hunyuan3d-2.1",
+          "licenceId": "hunyuan3d",
           "name": "Hunyuan3D 2.1 + PBR"
         },
         {
@@ -4133,6 +4227,15 @@
           "description": "",
           "id": "pixal3d",
           "name": "Pixal3D"
+        },
+        {
+          "counts": {
+            "director": 6,
+            "requirements": 3
+          },
+          "description": "Remote MiniMax Image-01: no GPU, billed to your MiniMax plan. Needs an API key in Settings → Services. Takes one character reference (it keeps the face and inve",
+          "id": "minimax:image-01",
+          "name": "MiniMax Image-01 (remote, no GPU)"
         },
         {
           "counts": {},
@@ -4206,6 +4309,7 @@
       "lock_inference_steps": false,
       "max_image_refs": null,
       "max_voice_count": null,
+      "minimax_h3_fasth3": false,
       "minimax_h3_fused_turbo": false,
       "minimax_h3_runtime_advisory": null,
       "minimax_h3_semantic_bridge": false,
@@ -4322,6 +4426,7 @@
       "lock_inference_steps": false,
       "max_image_refs": null,
       "max_voice_count": null,
+      "minimax_h3_fasth3": false,
       "minimax_h3_fused_turbo": false,
       "minimax_h3_runtime_advisory": null,
       "minimax_h3_semantic_bridge": false,
@@ -4430,6 +4535,7 @@
       "lock_inference_steps": false,
       "max_image_refs": null,
       "max_voice_count": null,
+      "minimax_h3_fasth3": false,
       "minimax_h3_fused_turbo": false,
       "minimax_h3_runtime_advisory": null,
       "minimax_h3_semantic_bridge": false,

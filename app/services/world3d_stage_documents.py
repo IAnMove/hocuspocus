@@ -60,7 +60,8 @@ def stage(document: dict, room: dict) -> dict:
         document["worldSfx"] = cues
     else:
         document.pop("worldSfx", None)
-    return document
+    from services.cc0_props import dress_room
+    return dress_room(document)
 
 
 def place_subjects(document: dict, mold: dict) -> None:
@@ -90,6 +91,8 @@ def resolve_production_stage(config):
     if "background" not in resolved:
         resolved["background"] = {"room": room_of(config["template"], config.get("size", "medium"), camera)}
         resolved["roomCamera"] = camera
+        from services.cc0_props import stage_cast
+        stage_cast(resolved)
     return resolved
 
 

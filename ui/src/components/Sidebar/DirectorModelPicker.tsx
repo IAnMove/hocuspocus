@@ -1,9 +1,11 @@
 import { useEffect, useMemo } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
-import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL } from '../../lib/externalModels'
+import { MINIMAX_IMAGE_API_LABEL, MINIMAX_IMAGE_API_MODEL, withoutExternalImageModel } from '../../lib/externalModels'
 import type { DirectorPipelineType, ModelDef, ModelFamily } from '../../types'
 import { InfoTooltip } from './InfoTooltip'
+import { LicenceNotice } from '../common/LicenceNotice'
+import { licenceForModel } from '../../lib/licenceNotice'
 
 /** One compatibility catalog shared by Director and Story production selectors. */
 function directorModelGroups({ mode, families, models, enabledModels, nsfwMode, pipelineType, seamless }: {
@@ -17,7 +19,7 @@ function directorModelGroups({ mode, families, models, enabledModels, nsfwMode, 
 }) {
   return getFamiliesForMode(mode, families).map(family => ({
     family,
-    models: getModelsForFamily(family.id, models, mode)
+    models: withoutExternalImageModel(getModelsForFamily(family.id, models, mode))
       .filter(model => enabledModels.has(model.model_type))
       .filter(model => !model.nsfw_only || nsfwMode)
       .filter(model => mode === 'image'
@@ -89,7 +91,10 @@ export function DirectorModelPicker({ mode, value, onChange, pipeline, allowSeam
       ? t('modelPicker.storyHint')
       : t('modelPicker.soundtrackHint')
 
+  const selectedLicence = licenceForModel(selectedModel, families)
+
   return (
+    <div className="min-w-0">
     <div className="flex items-center gap-1.5">
       {showModeLabel && <span className="text-[10px] text-text-muted uppercase tracking-wider w-11 shrink-0">
         {mode === 'image' ? t('modelPicker.image') : t('modelPicker.video')}
@@ -124,6 +129,8 @@ export function DirectorModelPicker({ mode, value, onChange, pipeline, allowSeam
           label={t('modelPicker.about', { name: selectedModel.name })}
         />
       )}
+    </div>
+    <LicenceNotice licence={selectedLicence} />
     </div>
   )
 }

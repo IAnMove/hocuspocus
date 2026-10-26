@@ -20,7 +20,7 @@ export type AnimationSetJob = {
 
 export const isActiveSet = (job: Pick<AnimationSetJob, 'status'>): boolean => job.status === 'queued' || job.status === 'running' || job.status === 'cancelling'
 
-export async function startAnimationSet(details: { workspace: string; kitId: string; set: AnimationSetName; model?: string; autoApprove?: boolean }): Promise<AnimationSetJob> {
+export async function startAnimationSet(details: { workspace: string; kitId: string; set: AnimationSetName; model?: string; autoApprove?: boolean; method?: 'poses' | 'video' | 'puppet' }): Promise<AnimationSetJob> {
   return (await animationRequest<{ job: AnimationSetJob }>('/make-set', postBody(details), 'Could not start the set of animations')).job
 }
 

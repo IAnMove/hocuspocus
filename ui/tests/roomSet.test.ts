@@ -129,6 +129,12 @@ test('a stage-* template id survives parsing like a personal one', () => {
   assert.equal(parseScene3DDocument({ ...createDefaultScene3DDocument(), templateId: 'nowhere' })?.templateId, 'two-shot')
 })
 
+test('a block listed in libraryBlocks is not also drawn as a box', () => {
+  const panels = roomPanels({ mold, libraryBlocks: ['shelf'] })
+  assert.equal(panels.some(panel => panel.surface === 'shelf_front'), false)
+  assert.ok(panels.some(panel => panel.surface === 'desk_front'))
+})
+
 test('a painted furniture front leaves its ends in the mold colour', () => {
   const panels = roomPanels({ mold, skin: { shelf_front: { image: { asset: '/shelf.png' } }, desk_front: { color: '#112233' } } })
   const shelf = panels.filter(p => p.surface === 'shelf_front'), desk = panels.filter(p => p.surface === 'desk_front')

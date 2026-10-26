@@ -14,7 +14,7 @@ import traceback
 from fastapi import HTTPException
 from fastapi.responses import JSONResponse
 
-from services import minimax_h3_service, model3d_service
+from services import minimax_h3_service, model3d_service, remote_image_generation
 from services.trellis2 import catalog as trellis2_catalog
 
 wgp = None
@@ -125,6 +125,8 @@ def list_models(detail: bool = True):
             continue
         families.append({"id": fid, "label": label, "order": order})
     families.append({"id": "hunyuan3d", "label": "Hunyuan3D", "order": 350})
+    if not any(item["id"] == remote_image_generation.FAMILY["id"] for item in families):
+        families.append(dict(remote_image_generation.FAMILY))
     families.sort(key=lambda f: f["order"])
 
     # Models
@@ -194,6 +196,10 @@ def list_models(detail: bool = True):
             **trellis2_catalog.catalog_extras(model),
         })
 
+    # MiniMax Image-01 is a remote model: chosen like any image model, but it needs a key instead of files.
+    services = wgp.server_config.get("services", {}) if isinstance(getattr(wgp, "server_config", None), dict) else {}
+    models.append(remote_image_generation.catalog_entry(bool(remote_image_generation.api_key(services))))
+
     # UniRig is a generative ML model too (autoregressive skeleton + learned
     # skinning), so its weights are managed from the same catalog. tool_only
     # keeps it out of the generation model selectors: it rigs existing
@@ -217,6 +223,8 @@ def list_models(detail: bool = True):
     })
 
     payload = {"families": families, "models": models}
+    from services.model_licences import annotate_catalog
+    annotate_catalog(payload)
     if detail:
         return payload
     from services.mcp_compact import summarize_model_catalog
@@ -441,6 +449,8 @@ def get_defaults(model_type: str):
     """Get default settings for a model type."""
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.DEFAULTS)
+    if model_type == remote_image_generation.MODEL_ID:
+        return remote_image_generation.defaults()
     if wgp.get_model_def(model_type) is None:
         raise HTTPException(status_code=404, detail=f"Unknown model: {model_type}")
     defaults = wgp.get_default_settings(model_type)

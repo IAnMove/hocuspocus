@@ -77,7 +77,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "style": {"type": "object", "properties": {
              "screen": {"type": "boolean"}, "smile": {"type": "number", "minimum": -1, "maximum": 1},
              "smirk": {"type": "number", "minimum": 0, "maximum": 1}, "width": {"type": "number", "minimum": 0.3, "maximum": 0.9},
-             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]}}},
+             "mouth_scale": {"type": "number", "minimum": 0.4, "maximum": 1.2}, "mouthStyle": {"enum": ["paper", "ink", "warp"]},
+             "faceSource": {"enum": ["detect", "layers"]}}},
          "hints": {"type": "object", "maxProperties": 32, "additionalProperties": {"anyOf": [{"type": "null"}, {
              "type": "object", "additionalProperties": False, "properties": {
                  "mouth": POINT, "eyes": POINT, "mouthWidth": MOUTH_WIDTH, "exact": {"type": "boolean"},
@@ -115,7 +116,12 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "otherwise face landmarks sure of the lips place the mouth instead (warning mouth_hint_ignored when the hint was "
         "far off them; poses.<id>.hintIgnored says where each was), and where they are unsure the hint is snapped onto "
         "the painted lips. Hints are "
-        "kept and reused by later rigs; null clears a pose's. Style keys left out keep the kit's look (its last rig's, "
+        "kept and reused by later rigs; null clears a pose's. faceSource layers (Linux NVIDIA, the See-through component) "
+        "places the blink on the eyewhite, irides and eyelash layers and the mouth on the mouth layer, saves those PNGs "
+        "on the kit (anchors.<pose>.layers) and warns layer_missing_<class> when one is absent; omitted or detect keeps "
+        "today's search and does not call See-through. It is kept on a later rig the way mouthStyle is. Not installed: "
+        "see_through_not_installed and the kit is unchanged. Windows and macOS: see_through_unsupported. "
+        "Style keys left out keep the kit's look (its last rig's, "
         "else the rig of the style preset it was made in): a re-rig after adding a pose or placing a mouth line stays "
         "warp unless mouthStyle says otherwise; style in the result is the look used. poses (optional) limits the rig to those "
         "poses; the base is always rigged with them (the blink and the shared mouths come from it). Returns the saved kit, a review image URL (each pose, and "
@@ -123,7 +129,13 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "mouth found), per pose face (realistic or cartoon) and mouthFound, and warnings per pose to look at before "
         "using the kit: eyes_low or eyes_unlike_base (another light shape, such as a collar, was taken for the eyes), "
         "stray_mark (a dark mark left beside the wiped mouth), mouth_not_found, mouth_small_opening (openRatio under 0.08; "
-        "each pose's mouth reports openPx and openRatio). A pose whose eyes are covered (sunglasses) "
+        "each pose's mouth reports openPx and openRatio), eyes_disagree or mouth_disagree (the optional anime-face "
+        "landmarks, 28 points, disagreed with the white-eye search beyond 0.30 of the eye-pair width or 0.50 of the "
+        "mouth width, or a white box over 1.5 times the landmark eyes, so the landmarks were used; a hint still wins). "
+        "mouth_landmarks_implausible means a painted mouth was kept because the landmark mouth was shorter than 0.35 of "
+        "the eye-pair width, not below the eyes, or its five mouth-point scores averaged under 0.35. "
+        "Each pose reports eyesSource and mouthSource (whites, landmarks or hint) and anchors keep those plus brow "
+        "boxes when the anime points were read. Without that component the rig is unchanged. A pose whose eyes are covered (sunglasses) "
         "is saved with anchors.<pose>.blink false and never blinks; so is one hinted blink: false (clear spectacles, "
         "whose frames a closed lid would paint over), and like other hints it is kept for later rigs.",
     ),
@@ -169,7 +181,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "approved, 3D at its own quality, approved) or promote (an approved 2D or draft-3D preview is the final: "
         "approved, nothing renders); shots waiting for an approval are listed in job.waiting, not failed. shot_ids "
         "render a new preview of a shot whose preview waits for review; only_changed renders just the shots without an "
-        "up-to-date approved take that the review lets through (like produce). Returns the job; poll "
+        "up-to-date approved take that the review lets through (like produce). Refused while a line of the episode is "
+        "being recorded (series.shot.voice). Returns the job; poll "
         "series.episode.render_native.status. Resumable.",
     ),
     "series.episode.render_native.status": (
@@ -183,7 +196,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.render_native.resume": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
-        "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines.",
+        "Resume a stopped or failed server episode render from each shot's last stage, reusing recorded lines. "
+        "Refused while a line of the episode is being recorded (series.shot.voice).",
     ),
     "series.episode.from_script": (
         {"workspace": WORKSPACE, "series_id": ID, "script": OBJECT, "episode_id": ID, "check": {"type": "boolean"},
@@ -245,7 +259,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "location are rendered, so producing again after a fix just renders what changed and recuts; rerender true renders "
         "every shot again. An episode in plan or preview review mode renders what its review lets through and, while "
         "shots wait for an approval, stops before the cut with status waiting and job.waiting [{shotId, order, reason "
-        "plan|preview|final}]; resume after the approvals (previews then get their finals). Poll "
+        "plan|preview|final}]; resume after the approvals (previews then get their finals). Refused while a line of the "
+        "episode is being recorded (series.shot.voice). Poll "
         "series.episode.produce.status every minute or two; chapters lists the files.",
     ),
     "series.episode.produce.status": (
@@ -258,7 +273,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     ),
     "series.episode.produce.resume": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], True,
-        "Resume a stopped or failed production from its first unfinished step; a failed render resumes its own job.",
+        "Resume a stopped or failed production from its first unfinished step; a failed render resumes its own job. "
+        "Refused while a line of the episode is being recorded (series.shot.voice).",
     ),
     "series.location.plate3d": (
         {"workspace": WORKSPACE, "series_id": ID, "location_id": ID, "scene": {"type": "string", "minLength": 1, "maxLength": 200},
@@ -525,7 +541,8 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "(the character's voice for the language, silence trimmed, qa.speech, mouth cues). A line already recorded with "
         "this text and voice is kept unless retake is true: then another take with another seed replaces it once it is "
         "good (a failed retake keeps the old one). The shot's take is not touched: render the shot (series.shot.update "
-        "render) to hear it. Refused while the episode renders on the server. Returns a job: poll series.shot.voice.status.",
+        "render) to hear it. Refused while the episode renders on the server; a render or produce of the episode is "
+        "refused while this recording runs. Returns a job: poll series.shot.voice.status.",
     ),
     "series.shot.voice.status": (
         {"workspace": WORKSPACE, "job_id": ID}, ["workspace", "job_id"], False,

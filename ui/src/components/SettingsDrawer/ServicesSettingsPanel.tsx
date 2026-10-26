@@ -581,6 +581,10 @@ export function ServicesSettingsPanel() {
           isSet={servicesConfig.meshy_api_key_set}
           onSave={value => updateConfig({ meshy_api_key: value })}
         />
+        <p className="text-[10px] text-text-muted">
+          {t('services.meshyCommunityHint')}{' '}
+          <a href="https://www.meshy.ai/discover" target="_blank" rel="noreferrer" className="underline">{t('services.meshyCommunityLink')}</a>
+        </p>
         <ApiKeyField
           label={t('services.keyHi3d')}
           maskedValue={servicesConfig.hi3d_api_key}

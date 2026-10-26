@@ -343,7 +343,8 @@
     "hint": "Selecciona cualquier objeto, aunque esté detrás de otro.",
     "image": "Imagen",
     "model3d": "Modelo 3D",
-    "screen": "Imagen / vídeo"
+    "screen": "Imagen / vídeo",
+    "splat": "Splat gaussiano"
   },
   "translate": "Mover",
   "rotate": "Girar Y",
@@ -3839,7 +3840,11 @@
     "walkReady": "Paseo horneado: el clip mueve al personaje y cada pie se queda apoyado.",
     "walkStale": "Cambió el recorrido o la colocación del personaje: vuelve a hornear el paseo.",
     "walkNeedsSaved": "Carga el personaje desde el espacio de trabajo (un GLB rigueado y guardado) para hornear un paseo.",
-    "walkFailed": "No se pudo hornear el paseo"
+    "walkFailed": "No se pudo hornear el paseo",
+    "start": "Empieza en (s)",
+    "end": "Termina en (s)",
+    "window": "Segundos de la escena. Vacío: el movimiento empieza en 0 y acaba con el plano. Antes del inicio el objeto está en su posición; después del final se queda en el destino.",
+    "walkTimed": "No se puede hornear un paseo en un movimiento con inicio o final: bórralos, o hornea el paseo en todo el plano."
   },
   "framing": {
     "title": "Encuadre del protagonista",

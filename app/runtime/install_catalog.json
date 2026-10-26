@@ -28,6 +28,7 @@
       "engine": "hunyuan3d",
       "script": "hunyuan3d_install.js",
       "title": "3D Generation (Hunyuan3D)",
+      "licence": "hunyuan3d",
       "summary": "Local image-to-3D meshes and textures. On Windows it also needs Visual Studio Build Tools.",
       "estimatedGiB": 10,
       "restartRequired": true,
@@ -80,10 +81,25 @@
       ]
     },
     {
+      "id": "mia",
+      "engine": "mia",
+      "script": "mia_install.js",
+      "title": "Make-It-Animatable",
+      "summary": "Rigs a humanoid in any pose, including meshes the standard humanoid rig refuses (turned, hands against the body, not upright). Linux x64 only. Code is MIT (Zhiyang Guo); the demo weights are Apache-2.0. The Mixamo bones.fbx template has no stated dataset licence and is downloaded at install (about 70 KB), not stored in git. Blender (bpy) writes the skinned file; importing the upstream app also loads that template with bpy. About 8 GB is an estimate: the five demo weight files are 2.33 GB on disk and the environment was not measured. Does not switch engines by itself.",
+      "estimatedGiB": 8,
+      "restartRequired": true,
+      "menu": {"icon": "fa-solid fa-person-walking", "gate": "nvidia"},
+      "remove": [
+        "app/services/mia/env",
+        "app/services/mia/vendor"
+      ]
+    },
+    {
       "id": "minimax_h3",
       "engine": "minimax_h3",
       "script": "minimax_h3_install.js",
       "title": "MiniMax H3 Legacy (ComfyUI)",
+      "licence": "minimax_h3",
       "summary": "The original ComfyUI workflow for MiniMax H3. The native H3 in the base install covers normal use.",
       "estimatedGiB": 6.5,
       "restartRequired": false,
@@ -91,6 +107,61 @@
       "remove": [
         "app/services/minimax_h3/env",
         "app/services/minimax_h3/vendor"
+      ]
+    },
+    {
+      "id": "template_semantic",
+      "engine": "template_semantic",
+      "script": "template_semantic_install.js",
+      "title": "Template semantic search",
+      "summary": "Spanish and English template search on CPU. Downloads intfloat/multilingual-e5-small (MIT, about 0.5 GB) and uses the studio's transformers. Without it, search stays lexical.",
+      "estimatedGiB": 0.5,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-language", "gate": "always"},
+      "license": "MIT",
+      "readyFile": "app/services/template_semantic_model/READY",
+      "remove": [
+        "app/services/template_semantic_model"
+      ]
+    }
+,
+    {
+      "id": "anime_face",
+      "engine": "anime_face",
+      "script": "anime_face_install.js",
+      "title": "Anime face landmarks",
+      "summary": "28-point anime face landmarks for the flat rig, on CPU. The package and the Hugging Face weights are MIT. Vendored mmpose, mmdet and mmcv code is Apache-2.0. Linux x64, Windows x64 and Apple Silicon.",
+      "license": "MIT",
+      "thirdParty": [
+        {"name": "anime-face-detector", "version": "0.1.0", "license": "MIT"},
+        {"name": "hysts/anime-face-detector-yolov3", "license": "MIT"},
+        {"name": "hysts/anime-face-detector-hrnetv2", "license": "MIT"},
+        {"name": "mmpose 0.29.0, mmdet 2.28.2, mmcv 1.7.0 (vendored)", "license": "Apache-2.0"}
+      ],
+      "estimatedGiB": 1,
+      "restartRequired": false,
+      "menu": {"icon": "fa-solid fa-face-smile", "gate": "always"},
+      "remove": [
+        "app/services/anime_face/env",
+        "app/services/anime_face/cache"
+
+      ]
+    },
+    {
+      "id": "see_through",
+      "engine": "see_through",
+      "script": "see_through_install.js",
+      "title": "See-through",
+      "summary": "Split one illustration into RGBA layers (eyes, mouth, hair) for the flat rig. Linux NVIDIA only, about 8 GB of VRAM with the NF4 pipeline and about 12 GB of disk. Code Apache-2.0, weights OpenRAIL++.",
+      "estimatedGiB": 12,
+      "restartRequired": false,
+      "license": "Apache-2.0 (code); OpenRAIL++ (weights)",
+      "platforms": ["linux"],
+      "menu": {"icon": "fa-solid fa-layer-group", "gate": "nvidia"},
+      "remove": [
+        "app/services/see_through/env",
+        "app/services/see_through/vendor",
+        "app/services/see_through/hf"
       ]
     }
   ]

@@ -22,6 +22,17 @@ export function mouthLineBusyState<T>(current: T | 'mouth-line' | null, busy: bo
   return current === 'mouth-line' ? null : current
 }
 
+/** The Face Rig's busy state while See-through splits the poses. It takes the slot when it starts and frees only its own. */
+export function seeThroughBusyState<T>(current: T | 'see-through' | null, busy: boolean): T | 'see-through' | null {
+  if (busy) return 'see-through'
+  return current === 'see-through' ? null : current
+}
+
+/** The last rig's look, plus `faceSource: "layers"`, so a re-rig keeps the mouth style and asks for the layers. */
+export function layerFaceStyle(style: Record<string, number | boolean | string> | undefined) {
+  return { ...(style ?? {}), faceSource: 'layers' as const }
+}
+
 /** Whether other Face Rig work than the mouth line editor's is running. */
 export function otherFaceRigWork(current: string | null): boolean {
   return Boolean(current) && current !== 'mouth-line'

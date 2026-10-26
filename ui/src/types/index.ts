@@ -1,7 +1,20 @@
+/** One licence record for a model family. Variants point at it; they do not copy it. */
+export interface ModelLicence {
+  id: string
+  url: string
+  territoryExcluded: string[]
+  commercial: boolean
+  note: string
+}
+
 export interface ModelFamily {
   id: string
   label: string
   order: number
+  /** Set when every model in this family shares one territory licence. */
+  licence?: ModelLicence | null
+  /** Records used by some models when the family mixes products. */
+  licenceRecords?: ModelLicence[] | null
 }
 
 export type DirectorPipelineType = 'music_video' | 'short_film_audio' | 'short_film_story' | 'comic_movie'
@@ -78,6 +91,8 @@ export interface ModelDef {
   // Weight-managed tool models (e.g. UniRig): shown in the settings
   // catalog for download/delete, but never selectable for generation.
   tool_only?: boolean
+  /** Id of the family licence. The full record lives on ModelFamily.licence. */
+  licenceId?: string
 }
 
 export interface Resolution {
@@ -870,6 +885,7 @@ export interface ModelOptions {
   minimax_h3_text_encoder_default?: string
   minimax_h3_semantic_bridge?: boolean
   minimax_h3_fused_turbo?: boolean
+  minimax_h3_fasth3?: boolean
   minimax_h3_turbo?: {
     preset_id?: string
     presets?: Array<{ id: string; label: string; filename: string; steps: number; weight: number; description: string; runtime: string; workflow: string }>

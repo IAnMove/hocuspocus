@@ -242,6 +242,8 @@ def test_ltx23_uses_its_own_lattice_and_presets():
     assert params["image_prompt_type"] == "SE"
     assert params["audio_prompt_type"] == "A"
     assert params["sliding_window_size"] == 241
+    assert "video_guide" not in params and "activated_loras" not in params and "video_prompt_type" not in params
+    assert "loras_multipliers" not in params
     assert "ltx2_22B_distilled_1_1" in video_generation_v3_schema()["families"]["ltx2_3"]
     with pytest.raises(VideoGenerationSpecError, match="17\\+8k") as error:
         freeze_video_generation_spec(ltx_command(video_length=120))
@@ -268,6 +270,34 @@ def test_missing_typed_model_does_not_enqueue():
         )
     assert rejected.value.status_code == 422
     assert detail(rejected)["code"] == "unsupported_model"
+
+
+def test_an_ltx_control_video_is_raw_pose_control_with_the_union_lora_and_h3_refuses_it():
+    from services.video_generation_v3 import LTX_UNION_CONTROL_LORA
+
+    guided = ltx_command(
+        model_type="ltx2_22B_distilled", resolution="832x1104", video_length=25, sliding_window_size=25,
+        image_end=None, audio_prompt_type="", audio_guide=None,
+        video_guide="/api/v1/file/guide.mp4?workspace=source",
+    )
+    params = freeze_video_generation_spec(guided)["effective"]["input"]["params"]
+    assert params["image_prompt_type"] == "S"
+    assert params["video_prompt_type"] == "VG"
+    assert params["video_guide"] == "/api/v1/file/guide.mp4?workspace=source"
+    assert params["activated_loras"] == [LTX_UNION_CONTROL_LORA]
+    assert params["loras_multipliers"] == "1"
+    assert "audio_guide" not in params
+    kept = ltx_command(video_guide="/api/v1/file/guide.mp4?workspace=source", activated_loras=["kept-lora.safetensors"], loras_multipliers="0.5")
+    kept_params = freeze_video_generation_spec(kept)["effective"]["input"]["params"]
+    assert kept_params["activated_loras"] == ["kept-lora.safetensors"] and kept_params["loras_multipliers"] == "0.5"
+    with pytest.raises(VideoGenerationSpecError, match="video_guide") as missing:
+        freeze_video_generation_spec(ltx_command(video_prompt_type="VG"))
+    assert missing.value.code == "invalid_selector"
+    with pytest.raises(VideoGenerationSpecError, match="pose control") as refused:
+        freeze_video_generation_spec(fl2va_command(video_guide="asset_pose01"))
+    assert refused.value.code == "invalid_selector"
+    with pytest.raises(VideoGenerationSpecError, match="pose control"):
+        freeze_video_generation_spec(ref_command(references("image", 1), video_guide="asset_pose01"))
 
 
 def test_installed_check_failure_stays_before_any_worker():

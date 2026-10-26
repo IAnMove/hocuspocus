@@ -29,7 +29,7 @@ from typing import Any
 from services.character_animation_job import ACTIVE, DEFAULT_MODEL, AnimationJobError, CharacterAnimationJobs, JobStore, reference_of
 from services.character_animations import MAX_ANIMATIONS, catalog
 
-_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$")
+_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$")  # ``minimax:image-01`` has a provider prefix
 
 SETS_DIR = ".character-animation-set-jobs-v1"
 PREFIX = "animset-"
@@ -99,15 +99,20 @@ class CharacterAnimationSets:
             raise AnimationJobError("invalid_set", f"Unknown set {set_name}; one of {', '.join(catalog().get('sets') or {})}")
         return spec
 
-    def _new_job(self, workspace: str, kit: dict[str, Any], set_name: str, spec: dict[str, Any], model: str | None, auto_approve: bool) -> dict[str, Any]:
+    def _new_job(self, workspace: str, kit: dict[str, Any], set_name: str, spec: dict[str, Any], model: str | None, auto_approve: bool,
+                 method: str | None = None) -> dict[str, Any]:
         made = kit.get("animations") or {}
         sheets = [{"animationId": step["animation"], "status": "skipped", "reason": ALREADY_MADE} if step["animation"] in made else
                   {"animationId": step["animation"], "status": "waiting"} for step in spec["sheets"]]
-        return {"jobId": f"{PREFIX}{uuid.uuid4().hex[:12]}", "kind": "set", "workspace": workspace, "kitId": kit["id"], "set": set_name, "title": spec["title"]["en"],
-                "model": model or DEFAULT_MODEL, "status": "queued", "sheets": sheets, "createdAt": _now(), "updatedAt": _now(),
-                **self.animations.auto_fields(auto_approve)}
+        job = {"jobId": f"{PREFIX}{uuid.uuid4().hex[:12]}", "kind": "set", "workspace": workspace, "kitId": kit["id"], "set": set_name, "title": spec["title"]["en"],
+               "model": model or DEFAULT_MODEL, "status": "queued", "sheets": sheets, "createdAt": _now(), "updatedAt": _now(),
+               **self.animations.auto_fields(auto_approve)}
+        if method:
+            job["method"] = method
+        return job
 
-    def start(self, workspace: str, kit_id: str, set_name: str, *, model: str | None = None, auto_approve: bool = False) -> dict[str, Any]:
+    def start(self, workspace: str, kit_id: str, set_name: str, *, model: str | None = None, auto_approve: bool = False,
+              method: str | None = None) -> dict[str, Any]:
         """Make the sheets of ``set_name`` that the character does not have. Returns the job (the running one when this character is already
         making this set). Nothing is asked of the model before the request passes."""
         if model and not _MODEL.fullmatch(model):
@@ -120,7 +125,7 @@ class CharacterAnimationSets:
             running = next((job for job in self.jobs(workspace, kit_id) if job.get("set") == set_name and job.get("status") in ACTIVE), None)
             if running:
                 return running
-            job = self._new_job(workspace, kit, set_name, spec, model, auto_approve)
+            job = self._new_job(workspace, kit, set_name, spec, model, auto_approve, method)
             missing = [sheet for sheet in job["sheets"] if sheet["status"] == "waiting"]
             if len(kit.get("animations") or {}) + len(missing) > MAX_ANIMATIONS:
                 raise AnimationJobError("animation_limit", f"{kit.get('name') or kit['id']} keeps at most {MAX_ANIMATIONS} animations and this set adds {len(missing)}")
@@ -208,7 +213,7 @@ class CharacterAnimationSets:
         named, refs = self._reference(kit, step)
         sheet.update(status="running", **({"reference": named} if named else {}))
         self._update(store, job)
-        child = self.animations.start(workspace, job["kitId"], sheet["animationId"], model=job["model"], auto_approve=bool(job.get("autoApprove")), references=refs)
+        child = self.animations.start(workspace, job["kitId"], sheet["animationId"], model=job["model"], auto_approve=bool(job.get("autoApprove")), references=refs, method=job.get("method"))
         sheet["jobId"] = child["jobId"]
         self._update(store, job)
         self._record(sheet, self._wait(store, job, child))

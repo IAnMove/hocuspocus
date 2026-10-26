@@ -188,6 +188,14 @@
   },
   "faceRig": {
     "mouthsOnPose": "Mouths on “{{pose}}”",
+    "seeThrough": {
+      "button": "Place eyes and mouth from layers",
+      "busy": "Splitting layers…",
+      "done": "Blink and mouth now follow the See-through layers.",
+      "hint": "Linux with an NVIDIA GPU. Install See-through from Settings > Installation. This rigs every pose and can take a few minutes each.",
+      "missing": "Save the character before placing layers.",
+      "failed": "Could not place the layers."
+    },
     "steps": {
       "box": "Drag the yellow box until it covers the lips. It saves when you release.",
       "wipe": "If the drawing still has a painted mouth, press Wipe mouth area.",
@@ -231,6 +239,12 @@
     "poseAlt": "{{name}} pose",
     "overlayAlt": "{{name}} {{state}} overlay",
     "dragBoxHint": "Drag the rectangle over the original mouth. Drag its corner horizontally and vertically to change width and height independently. Wiping affects this rectangle; the new mouth keeps its own proportions.",
+    "placementSource": "Eyes from {{eyes}}, mouth from {{mouth}}.",
+    "sources": {
+      "whites": "the white of the eyes",
+      "landmarks": "anime landmarks",
+      "hint": "your mark"
+    },
     "wiping": "Wiping…",
     "wipeMouth": "Wipe mouth area",
     "lockMouths": "Apply placement to all mouths",
@@ -774,6 +788,13 @@
       "rejected": "rejected by the agent"
     },
     "make": "Make",
+    "methodLabel": "How to make this walk",
+    "methodPoses": "Pose by pose",
+    "methodVideo": "One guided clip",
+    "methodPuppet": "Puppet",
+    "methodPuppetNote": "Without clothing layers: only for a character whose legs are apart and who wears no skirt.",
+    "guideVideo": "Skeleton guide",
+    "clip": "Guided clip",
     "makeAgain": "Make all again",
     "tryAgain": "Try again",
     "working": "Making…",

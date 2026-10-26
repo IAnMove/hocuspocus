@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from fastapi import HTTPException
 
-from services import minimax_h3_service, model3d_service
+from services import minimax_h3_service, model3d_service, remote_image_generation
 
 wgp = None
 _is_legacy_h3_model = None
@@ -41,6 +41,8 @@ def get_model_options(model_type: str):
     from services.model_selectors import selector_catalog
     if _is_legacy_h3_model(model_type):
         return dict(minimax_h3_service.MODEL_OPTIONS)
+    if model_type == remote_image_generation.MODEL_ID:
+        return remote_image_generation.model_options()
     if model_type in model3d_service.MODEL_BY_ID:
         return {
             "model_type": model_type,
@@ -164,6 +166,7 @@ def get_model_options(model_type: str):
         "wangp_1272": md.get("wangp_1272", False),
         "wangp_1272_capabilities": md.get("wangp_1272_capabilities", {}),
         "minimax_h3_fused_turbo": md.get("minimax_h3_fused_turbo", False),
+        "minimax_h3_fasth3": md.get("minimax_h3_fasth3", False),
         "omni_reference": md.get("omni_reference", False),
         "omni_reference_limits": md.get("omni_reference_limits"),
         "omni_reference_detail_choices": md.get("omni_reference_detail_choices"),

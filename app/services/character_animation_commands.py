@@ -54,10 +54,15 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
          "custom": {"type": "object", "additionalProperties": False, "required": ["title", "view", "poses"], "properties": {
              "title": {"type": "string", "maxLength": 80}, "view": _CUSTOM_VIEW,
              "poses": {"type": "array", "minItems": 1, "maxItems": MAX_CUSTOM_POSES, "items": {"type": "string", "maxLength": 600}}}},
-         "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
+         "pose": {"type": "string", "maxLength": 120}, "model": {"type": "string", "maxLength": 80},
+         "method": {"enum": ["poses", "video", "puppet"]},
+         "reference": {"type": "object", "additionalProperties": False, "required": ["animation", "pose"], "properties": {
+             "animation": {"type": "string", "minLength": 1, "maxLength": 64}, "pose": {"type": "string", "minLength": 1, "maxLength": 120}}},
+         "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "animation"], True,
         "Make one animation of a saved character on the server: the job the Character Creator (Characters › Animaciones) and the "
-        "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo), "
+        "Wizard start too. Every pose is made with the character's own picture as the identity reference (default model qwen_image_21_turbo; "
+        "model minimax:image-01 uses no GPU, keeps only the face of that picture and invents the outfit), "
         "keyed on its screen, joined into one sprite sheet that keeps the figure one size, and saved on the kit as animations.<id> "
         "with reviewState pending. animation is an id from characters.animations (walk, wave, angry, cheer...); for one of your own "
         "pass a new slug and custom {title, view bust|front|side|front34|back34|back, poses: one text per pose, up to 12}. pose makes that one pose of an "
@@ -67,24 +72,31 @@ OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
         "characters.animation.review, and only when the owner turned on the one-shot mode (agent_autonomy = one_shot); otherwise that tool "
         "refuses. In that mode autoApprove: true makes the job approve it for you when the sheet passes the automatic checks (cell count "
         "and size, figures filled with clean alpha and not a keyed rectangle, feet on one ground line, figures of one size); a sheet that "
-        "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review.",
+        "fails stays pending and the job lists the failed checks. autoApprove is ignored, with a note, when the mode is review. "
+        "method video (optional; omit it, or pass poses, for the path above) makes a catalog walk from one LTX-2.3 clip guided by the "
+        "OpenPose gait video, keys it and samples the same sheet. It needs LTX-2.3 distilled and the union-control LoRA installed, and it "
+        "refuses a single pose or an animation that is not a walk. method puppet (optional, a catalog walk) cuts one drawing into the same "
+        "sheet: the front walk uses the idle rest pose and the other directions use contact-a. reference {animation, pose} overrides that "
+        "drawing. Without See-through it warns puppet_no_layers. characters.animation.make_set stays pose by pose unless method is passed.",
     ),
     "characters.animation.make_set": (
-        {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80}, "autoApprove": {"type": "boolean"}},
+        {"workspace": _WORKSPACE, "character_id": _ID, "set": _SET, "model": {"type": "string", "maxLength": 80},
+         "method": {"enum": ["poses", "video", "puppet"]}, "autoApprove": {"type": "boolean"}},
         ["workspace", "character_id", "set"], True,
         "Make several animations of a saved character in turn as ONE server job, for a character that moves in a 3D set: set walk-directions "
         "makes the twelve-pose walks of the five directions (walk-12 side, then walk-front34, walk-front, walk-back34, walk-back; the "
         "directions that look left are these mirrored when rendered, never generated), walk-12 only the profile walk, idle-directions the "
         "two-pose breaths. Only the sheets the character does not have yet are made, one after another (the GPU makes one at a time), each "
         "as the job of characters.animation.make with the character's own picture and the first pose of the neighbouring direction as "
-        "identity references (default model qwen_image_21_turbo). Every sheet is saved pending with motion and dir and the same automatic "
+        "identity references (default model qwen_image_21_turbo; model minimax:image-01 takes only the character's own picture). Every sheet is saved pending with motion and dir and the same automatic "
         "checks (and, for a direction, that it is not the copy or the mirror of another direction of the kit); a person plays and approves "
         "them in Characters › Animaciones, or with autoApprove: true and the owner's one-shot mode (agent_autonomy = one_shot) each sheet "
         "that passes the checks is approved for you (ignored with a note in review mode, like characters.animation.make). Returns a set "
         "job (id animset-...): follow it with characters.animation.status (status, done/total, sheets: one entry per sheet with its status "
         "waiting | running | completed | skipped | failed | cancelled, its jobId, reviewState and failed checks) and stop it with "
         "characters.animation.cancel. It is resumable: a failure, a cancel or a restart keeps every sheet and pose made, and calling "
-        "make_set again skips the sheets the character has and continues.",
+        "make_set again skips the sheets the character has and continues. method, when passed, is the method of every sheet (puppet refuses "
+        "a sheet that is not a catalog walk). Omit method and every sheet stays pose by pose.",
     ),
     "characters.animation.review": (
         {"workspace": _WORKSPACE, "character_id": _ID, "animation": {"type": "string", "minLength": 1, "maxLength": 64},
@@ -142,7 +154,7 @@ def _sheet(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> 
 
 def _make(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
     body = {"workspace": data["workspace"], "kitId": data["character_id"], "animation": data["animation"],
-            **{key: data[key] for key in ("custom", "pose", "model", "autoApprove") if key in data}}
+            **{key: data[key] for key in ("custom", "pose", "model", "method", "reference", "autoApprove") if key in data}}
     return request("POST", f"{_BASE}/make", body=body)
 
 
@@ -153,7 +165,7 @@ def _review(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) ->
 
 
 def _make_set(data: dict[str, Any], request: Callable[..., Any], **_extra: Any) -> dict[str, Any]:
-    body = {"workspace": data["workspace"], "kitId": data["character_id"], "set": data["set"], **{key: data[key] for key in ("model", "autoApprove") if key in data}}
+    body = {"workspace": data["workspace"], "kitId": data["character_id"], "set": data["set"], **{key: data[key] for key in ("model", "method", "autoApprove") if key in data}}
     return request("POST", f"{_BASE}/make-set", body=body)
 
 

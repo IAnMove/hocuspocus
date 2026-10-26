@@ -31,10 +31,58 @@ def _download_archive(url: str, archive: Path, pack: dict, cancelled, progress, 
         raise
 
 
+def _download_bytes(pack: dict) -> int:
+    """Zip packs publish an archive size. A per-file pack's download is the sum of its files."""
+    archive = pack.get("archive")
+    if isinstance(archive, dict) and isinstance(archive.get("size"), int):
+        return archive["size"]
+    return pack["size"]
+
+
+def _install_files(assets: ExampleAssets, collection: str, pack: dict, cancelled, progress, opener) -> None:
+    """Download each file from its own https URL. There is no zip to unpack."""
+    assets.cache.mkdir(parents=True, exist_ok=True)
+    try:
+        with tempfile.TemporaryDirectory(prefix=".install-", dir=assets.cache) as directory:
+            staging = Path(directory)
+            names = []
+            for name in pack["files"]:
+                if cancelled():
+                    raise DownloadCancelled()
+                entry = assets.entry(name)
+                url = entry.get("url")
+                if not isinstance(url, str):
+                    raise ExampleUnavailable("Example has no download url")
+                target = staging / assets._target(name).name
+                try:
+                    with (opener or urlopen)(url, timeout=30) as response, target.open("wb") as output:
+                        copy_verified(response, output, size=entry["size"], sha256=entry["sha256"],
+                                      cancelled=cancelled, progress=progress)
+                except DownloadRefused as refused:
+                    if refused.code in _ARCHIVE_ERRORS:
+                        raise ExampleUnavailable(_ARCHIVE_ERRORS[refused.code]) from refused
+                    raise
+                names.append(target.name)
+            if cancelled():
+                raise DownloadCancelled()
+            for name in set(names):
+                os.replace(staging / name, assets.cache / name)
+            receipt = staging / "receipt.json"
+            receipt.write_text(json.dumps({"sha256": pack["digest"]}))
+            os.replace(receipt, assets.cache / (collection + ".installed.json"))
+    except DownloadCancelled:
+        raise
+    except (OSError, ValueError, HTTPClientError, RuntimeError) as error:
+        raise ExampleUnavailable("Collection download failed. Check your connection and retry.") from error
+
+
 def install_collection(assets: ExampleAssets, collection: str, cancelled, progress, opener=None):
     """``opener`` defaults to the module's ``urlopen`` (GitHub release hosts only)."""
     pack = assets.collections[collection]
     if assets.installed(collection):
+        return
+    if "archive" not in pack:
+        _install_files(assets, collection, pack, cancelled, progress, opener)
         return
     assets.cache.mkdir(parents=True, exist_ok=True)
     try:
@@ -93,9 +141,9 @@ class CollectionDownloads:
         for name, pack in self.assets.collections.items():
             required = self.assets.closure([name])
             collections.append({'id': name, 'size': sum(self.assets.collections[n]['size'] for n in required),
-                                'download_size': sum(self.assets.collections[n]['archive']['size'] for n in required if not installed[n]),
+                                'download_size': sum(_download_bytes(self.assets.collections[n]) for n in required if not installed[n]),
                                 'installed': all(installed[n] for n in required), 'cached': installed[name],
-                                'archive_size': pack['archive']['size'], 'gallery': name + '/index.html' in self.assets.files,
+                                'archive_size': _download_bytes(pack), 'gallery': name + '/index.html' in self.assets.files,
                                 'dependencies': required})
         with self.lock:
             job = dict(self.job) if self.job else None
@@ -109,7 +157,7 @@ class CollectionDownloads:
                 raise RuntimeError(self.busy_message)
             self.cancelled = Event()
             self.job = {'id': uuid4().hex, 'collections': required, 'status': 'running', 'received': 0,
-                        'total': sum(self.assets.collections[n]['archive']['size'] for n in pending), 'error': None}
+                        'total': sum(_download_bytes(self.assets.collections[n]) for n in pending), 'error': None}
             result = dict(self.job)
         Thread(target=self._run, args=(pending, self.cancelled), daemon=True).start()
         return result

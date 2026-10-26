@@ -6,7 +6,7 @@ import { CinematicRuntime } from './cinematicRuntime'
 import { MaterializationRuntime } from './materialization'
 import { framingFov, framingPose } from './framing'
 import { shakeCamera } from './cameraShake.ts'
-import { SpeechFaceRuntime } from './speech/runtime'
+import { SpeechFaceRuntime, speechFace } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
@@ -71,6 +71,7 @@ import { findHandBone, followHand, parseHold } from './handHold'
 import { DirectionMemory } from './directionalSprite.ts'
 import { awaitsView, cameraPass, walkedSlot } from './directionalPaint.ts'
 import { tintSprite } from './directionalLight.ts'
+import { createSplatMount, poseSplatMount, releaseSpark, studioFloorHiddenForSplat } from './splatItem.ts'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -87,7 +88,7 @@ export type SlotGpu = {
   baseScale: number
   animations: GLTF['animations']
   mixer: AnimationMixer | null
-  kind: 'model' | 'image'
+  kind: 'model' | 'image' | 'splat'
   loopTexture: Texture | null
   loopSpeed: number
   looping: boolean
@@ -114,6 +115,8 @@ export type GpuWorld = {
   camera: PerspectiveCamera
   dir: DirectionalLight
   floor: Mesh
+  /** Spark's renderer, added once while a splat slot is in the scene. */
+  spark?: Object3D
   dressing: Object3D | null
   dressingReady: boolean
   driveWheels: Mesh[]
@@ -286,6 +289,11 @@ function firstMap(root: Object3D): Texture | null {
 }
 
 export function placeholderMesh(slot: Scene3DSlot) {
+  if (slot.media === 'splat') {
+    const mount = createSplatMount()
+    poseSplatMount(mount, slot)
+    return mount
+  }
   if (slot.media === 'screen') return screenGeometry(slot)
   if (slot.media === 'image') {
     const texture = isCylinderBackdrop(slot) ? makeStripeTexture() : null
@@ -373,6 +381,7 @@ export function placeSlot(
   applyMeshShadows(root, world.renderer.shadowMap.enabled, slot.media === 'model3d')
   applyGlowBlending(root)
   if (contactShadow && world.renderer.shadowMap.enabled) contactShadow.visible = false
+  const kind = slot.media === 'image' ? 'image' : slot.media === 'splat' ? 'splat' : 'model'
   world.slots.set(slot.id, {
     contactShadow,
     sourceUrl: slot.sourceUrl,
@@ -381,8 +390,8 @@ export function placeSlot(
     root,
     baseScale,
     animations,
-    mixer: slot.media === 'image' ? null : bindMixer(root, animations, slot),
-    kind: slot.media === 'image' ? 'image' : 'model',
+    mixer: kind === 'model' ? bindMixer(root, animations, slot) : null,
+    kind,
     loopTexture: firstMap(root),
     loopSpeed: slot.loop?.speed ?? 0,
     looping: isCylinderBackdrop(slot),
@@ -399,7 +408,10 @@ function speechAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean
     if (gpu?.facePack?.error) throw gpu.facePack.error
     return Boolean(gpu?.facePack?.ready)
   }
-  if (!slot.speech.face) throw new Error('Calibrate the face before exporting a speech scene.')
+  if (!slot.speech.face) {
+    if (!gpu?.loaded) return false
+    if (!speechFace(gpu.root, slot.speech)) throw new Error('Calibrate the face before exporting a speech scene: the model has no Head bone to place it on.')
+  }
   if (gpu?.speechFace?.error) throw gpu.speechFace.error
   return Boolean(gpu?.speechFace?.ready)
 }
@@ -441,10 +453,11 @@ function groundLoadedSlot(gpu: SlotGpu, slot: Scene3DSlot) {
 }
 
 function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number) {
-  if (gpu.loaded && gpu.kind === 'model' && slot.speech?.face) {
+  const face = gpu.loaded && gpu.kind === 'model' ? speechFace(gpu.root, slot.speech) : undefined
+  if (face) {
     gpu.speechFace ??= new SpeechFaceRuntime(() => renderWorld(world))
     gpu.speechFace.sync(gpu.root, slot.speech, sceneSeconds)
-  } else if (gpu.speechFace && !slot.speech?.face) {
+  } else if (gpu.speechFace) {
     gpu.speechFace.sync(gpu.root, undefined, sceneSeconds)
   }
   if (gpu.loaded && gpu.kind === 'model' && (slot.speech?.facePack || gpu.facePack)) {
@@ -628,6 +641,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
+  if (!studioFloorHiddenForSplat(document.slots) && world.spark) releaseSpark(world)
   renderFrame(world, document, sceneSeconds)
 }
 
@@ -685,11 +699,13 @@ function renderFrame(world: GpuWorld, document: Scene3DDocument, sceneSeconds: n
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, document.renderLook === 'n64')
     applyLook(world.renderer, document, cinematic)
+    if (studioFloorHiddenForSplat(document.slots)) world.floor.visible = false
     drawWorld(world, () => world.cinema!.render(document))
   } else {
     if (world.dir) world.dir.intensity = rhythmicLightIntensity(world.dir.intensity, sceneSeconds, document.rhythm)
     applyN64Look(world.scene, false)
     applyLook(world.renderer, document, cinematic)
+    if (studioFloorHiddenForSplat(document.slots)) world.floor.visible = false
     drawWorld(world, () => world.renderer.render(world.scene, world.camera))
   }
 }
@@ -855,6 +871,7 @@ export function createWorld(host: HTMLDivElement, light: Scene3DLight, fov: numb
 }
 
 export function disposeWorld(world: GpuWorld) {
+  releaseSpark(world)
   world.room?.dispose()
   world.cinema?.dispose()
   world.lighting?.dispose()
@@ -883,6 +900,10 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
   current.looping = isCylinderBackdrop(slot)
   current.drift = slot.drift ?? 0
   const scale = Math.max(0.05, slot.scale)
+  if (current.kind === 'splat') {
+    poseSplatMount(current.root, slot)
+    return
+  }
   if (current.kind === 'image' && isCylinderBackdrop(slot)) {
     current.root.position.set(0, CYLINDER_HEIGHT * 0.35 * scale, 0)
     current.root.rotation.y = slot.rotationY

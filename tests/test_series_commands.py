@@ -227,7 +227,7 @@ def test_character_animations_and_their_sheet_go_through_the_http_contract(tmp_p
 def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_the_same_routes_as_the_wizard(tmp_path):
     from services.series_commands import _operation_schema
     handlers, calls, _, _ = harness(tmp_path, [{"review": {"reviewState": "approved", "reviewedBy": "agent"}}, {"job": {"jobId": "anim-1", "autoApprove": True}},
-                                               {"job": {"jobId": "anim-2"}}])
+                                               {"job": {"jobId": "anim-2"}}, {"job": {"jobId": "anim-3"}}])
     reviewed = call(handlers, "characters.animation.review", {"workspace": "w", "character_id": "ana", "animation": "walk", "decision": "approve", "note": "ok"})
     assert calls[0] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/review",
                         {"workspace": "w", "kitId": "ana", "animation": "walk", "decision": "approve", "note": "ok"}), "the Wizard posts the same body to this route"
@@ -235,7 +235,10 @@ def test_an_animation_is_reviewed_and_made_with_auto_approve_over_mcp_through_th
     call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "walk", "autoApprove": True})
     assert calls[1] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make", {"workspace": "w", "kitId": "ana", "animation": "walk", "autoApprove": True})
     call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "wave"})
-    assert "autoApprove" not in calls[2][2], "approval is asked for, never assumed"
+    assert "autoApprove" not in calls[2][2] and "method" not in calls[2][2], "approval is asked for, never assumed"
+    call(handlers, "characters.animation.make", {"workspace": "w", "character_id": "ana", "animation": "walk-12", "method": "video"})
+    assert calls[3] == ("POST", "http://127.0.0.1:9/api/v1/character-kits/animations/make",
+                        {"workspace": "w", "kitId": "ana", "animation": "walk-12", "method": "video"})
     review = _operation_schema("characters.animation.review", *OPERATIONS["characters.animation.review"])
     assert review["mutation"] is True and review["inputSchema"]["properties"]["input"]["required"] == ["workspace", "character_id", "animation", "decision"]
     assert review["inputSchema"]["properties"]["input"]["properties"]["decision"] == {"enum": ["approve", "reject"]}
@@ -276,6 +279,7 @@ def test_a_custom_animation_takes_twelve_poses_over_mcp_in_any_direction():
     assert custom["poses"]["maxItems"] == 12 and custom["view"] == {"enum": ["bust", "front", "side", "front34", "back34", "back"]}
     assert listed[0]["custom"]["properties"]["view"] == custom["view"]
     assert "up to 12" in make[3] and "up to 6" not in make[3] and "walk-12" in listed[3] and "motion" in listed[3]
+    assert make[0]["method"] == {"enum": ["poses", "video", "puppet"]} and "method video" in make[3] and "make_set stays pose by pose" in make[3]
 
 
 def test_a_voice_band_is_set_over_mcp_through_the_same_route_as_the_wizard(tmp_path):

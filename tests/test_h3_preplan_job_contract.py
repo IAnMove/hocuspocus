@@ -103,6 +103,8 @@ def _install_h3_fakes(monkeypatch, planner) -> None:
     turbo = _module(
         "models.minimax_h3.turbo",
         normalize_minimax_h3_turbo_request=lambda _body, **_kwargs: False,
+        # fasth3.py imports this name. The package path is real, so the stub must export it.
+        is_minimax_h3_turbo_lora=lambda _path: False,
     )
     handler = _module(
         "models.minimax_h3.minimax_h3_handler",

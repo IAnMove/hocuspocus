@@ -32,6 +32,7 @@ from typing import Any
 
 from services.series_jobs import SeriesJobStore, live_checkpoints, worker_alive
 from services.series_language_versions import LANGUAGES
+from services.series_native_render import recording_episode
 from services.series_shot_plan import language_key
 
 KIND = "produce"
@@ -78,6 +79,9 @@ class ProduceDeps:
     read_kits: Callable[[str], dict] | None = None
     import_take: Callable[[dict], Any] | None = None
     write_library: Callable[[str, dict], Any] | None = None
+    # Live series.shot.voice jobs (SeriesLineVoice.jobs). Produce starts a native render that writes the
+    # same ln-*.wav a recording uses; refused while one is in flight for this episode.
+    voice_jobs: Callable[[str], list[dict[str, Any]]] | None = None
 
 
 def _result(reply: dict, label: str) -> dict:
@@ -115,6 +119,9 @@ class SeriesProduce:
         original, languages = self._languages(workspace, series_id, episode_id, languages)
         if any(job.get("episodeId") == episode_id and job.get("status") in ACTIVE for job in self.jobs(workspace)):
             raise ProduceError("already_running", "This episode is already being produced")
+        if self.deps.voice_jobs and recording_episode(self.deps.voice_jobs(workspace), episode_id):
+            raise ProduceError("voice_running", "A line of this episode is being recorded; start the production when it ends "
+                               "(or stop the recording)", 409)
         steps = [{"kind": kind, "language": lang, "status": "queued"} for kind in ("render", "assemble") for lang in languages]
         if self._has_video(workspace, series_id, episode_id):
             steps.insert(0, {"kind": "video", "language": original, "status": "queued"})
@@ -178,6 +185,9 @@ class SeriesProduce:
         job = self.status(workspace, job_id)
         if job["status"] in ACTIVE:
             return job
+        if self.deps.voice_jobs and recording_episode(self.deps.voice_jobs(workspace), job["episodeId"]):
+            raise ProduceError("voice_running", "A line of this episode is being recorded; resume the production when it ends "
+                               "(or stop the recording)", 409)
         for step in job["steps"]:
             if step["status"] != "done":
                 step.update(status="queued", error=None, retries=0)

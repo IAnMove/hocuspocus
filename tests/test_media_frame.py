@@ -80,7 +80,7 @@ def test_intent_replays_the_same_frame(tmp_path):
 
 def test_catalog_lists_the_four_tools():
     names = [entry["name"] for entry in command_catalog()]
-    assert names == ["media.frame", "media.compose", "audio.trim", "assets.import_from_workspace"]
+    assert names == ["media.frame", "media.compose", "audio.trim", "assets.import_from_workspace", "shot.lipsync.redo"]
     frame = command_catalog()[0]["inputSchema"]
     assert frame["required"] == ["version", "input"] and frame["properties"]["input"]["additionalProperties"] is False
 

@@ -120,6 +120,15 @@ def _run_generation_with_preparation(job_id: str) -> bool:
     job = _jobs.get(job_id)
     if not isinstance(job, dict):
         return False
+    # Imported here so the contract test, which execs this function alone, can see it.
+    from services.remote_image_worker import is_remote_image_job, run_remote_image_job
+    if is_remote_image_job(job):
+        # MiniMax Image-01: an HTTP call, not a model. It never enters the local generation queue.
+        return run_remote_image_job(
+            job, services=lambda: wgp.server_config.get("services", {}),
+            publish_sidecar=_publish_generation_sidecar_for_studio_job,
+            remove_persisted=_remove_persisted_generation_job,
+        )
     try:
         native_worker = _image_generation_commands.native_worker(job)
     except HTTPException as error:

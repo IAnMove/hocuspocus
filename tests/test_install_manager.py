@@ -275,4 +275,54 @@ def test_engine_in_use_answers_even_when_the_service_cannot_be_imported(monkeypa
 
     monkeypatch.setattr(builtins, "__import__", refuse)
     assert install_manager._engine_in_use("minimax_h3") is False
+    assert install_manager._engine_in_use("unknown_engine") is False
+
+
+def test_sam_is_runtime_running_follows_the_sidecar_process(monkeypatch):
+    from services import inpaint_service
+
+    class Live:
+        def poll(self):
+            return None
+
+    class Dead:
+        def poll(self):
+            return 0
+
+    monkeypatch.setattr(inpaint_service, "_sam_process", Live())
+    assert inpaint_service.is_runtime_running() is True
+    monkeypatch.setattr(inpaint_service, "_sam_process", Dead())
+    assert inpaint_service.is_runtime_running() is False
+    monkeypatch.setattr(inpaint_service, "_sam_process", None)
+    assert inpaint_service.is_runtime_running() is False
+
+
+def test_engine_in_use_sees_every_live_sidecar_and_worker(monkeypatch):
+    from services import creation_model_service, inpaint_service, install_manager, minimax_h3_service, model3d_service, rig_service
+
+    monkeypatch.setattr(minimax_h3_service, "is_runtime_running", lambda: True)
+    monkeypatch.setattr(creation_model_service, "runtime_status", lambda: {"warm": True})
+    monkeypatch.setattr(inpaint_service, "is_runtime_running", lambda: True)
+    monkeypatch.setattr(model3d_service, "has_active_jobs", lambda model_id=None: model_id is None)
+    monkeypatch.setattr(rig_service, "has_active_unirig_jobs", lambda: True)
+
+    assert install_manager._engine_in_use("minimax_h3") is True
+    assert install_manager._engine_in_use("creation_models") is True
+    assert install_manager._engine_in_use("sam") is True
+    assert install_manager._engine_in_use("hunyuan3d") is True
+    assert install_manager._engine_in_use("trellis2") is False
+    assert install_manager._engine_in_use("rigging") is True
+
+    monkeypatch.setattr(model3d_service, "has_active_jobs", lambda model_id=None: model_id == "trellis2")
+    assert install_manager._engine_in_use("hunyuan3d") is False
+    assert install_manager._engine_in_use("trellis2") is True
+
+    monkeypatch.setattr(creation_model_service, "runtime_status", lambda: {"warm": False})
+    monkeypatch.setattr(inpaint_service, "is_runtime_running", lambda: False)
+    monkeypatch.setattr(minimax_h3_service, "is_runtime_running", lambda: False)
+    monkeypatch.setattr(rig_service, "has_active_unirig_jobs", lambda: False)
+    monkeypatch.setattr(model3d_service, "has_active_jobs", lambda model_id=None: False)
+    assert install_manager._engine_in_use("creation_models") is False
     assert install_manager._engine_in_use("sam") is False
+    assert install_manager._engine_in_use("minimax_h3") is False
+    assert install_manager._engine_in_use("rigging") is False

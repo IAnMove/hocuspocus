@@ -92,6 +92,14 @@ def _pose_source(animation_id: str, pose_id: str, custom: dict[str, Any] | None)
     return item, pose
 
 
+def _joined_prompt(*parts: str | None) -> str:
+    return " ".join(part for part in parts if part)
+
+
+def _joined_negative(*parts: str | None) -> str:
+    return ", ".join(part for part in parts if part)
+
+
 def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id: str | None = None,
                 screen: str | None = None, custom: dict[str, Any] | None = None) -> dict[str, str]:
     """Prompt, negative prompt, screen colour and resolution to generate one pose with the character as its reference."""
@@ -103,8 +111,9 @@ def pose_prompt(animation_id: str, pose_id: str, description: str = "", style_id
     background = ((style or {}).get("background") or _GENERIC_BACKGROUND).replace("{screen}", style_catalog()["screens"][screen])
     identity = (fragment.get("identity") or catalog()["identity"]).replace("{description}", words).strip()
     identity += "" if identity.endswith((".", "!", "?", ":", ";")) else "."
-    prompt = " ".join((identity, catalog()["views"][item["view"]], pose["prompt"], background))
-    negative = ", ".join(part for part in (fragment.get("negative") or catalog()["negative"], catalog().get("viewNegatives", {}).get(item["view"])) if part)
+    held = catalog().get("walkViews", {}).get(item["view"]) if item.get("motion") == "walk" else None
+    prompt = _joined_prompt(identity, catalog()["views"][item["view"]], held, pose["prompt"], background)
+    negative = _joined_negative(fragment.get("negative") or catalog()["negative"], catalog().get("viewNegatives", {}).get(item["view"]))
     return {"prompt": prompt, "negative": negative, "screen": screen, "resolution": item["resolution"]}
 
 
@@ -208,8 +217,20 @@ def _frames(raw: Any) -> list[dict[str, str]]:
             text = _text(item.get(key), f"Frame {key}", maximum)
             if text:
                 frame[key] = text
-        frames.append(frame)
+        frames.append({**frame, **_guided(item)})
     return frames
+
+
+def _guided(item: dict[str, Any]) -> dict[str, Any]:
+    """What a pose of a walk keeps of its guide (``services/character_animation_guides.py``): the picture it was drawn over and how wide
+    its legs came out against the guide's."""
+    kept: dict[str, Any] = {}
+    if item.get("guide"):
+        kept["guide"] = _source(item["guide"], "Frame guide")
+    gait = item.get("gait")
+    if isinstance(gait, dict) and all(isinstance(gait.get(key), (int, float)) for key in ("expected", "measured")):
+        kept["gait"] = {"expected": round(float(gait["expected"]), 3), "measured": round(float(gait["measured"]), 3), "ok": bool(gait.get("ok"))}
+    return kept
 
 
 def _contract(raw: dict[str, Any], label: str) -> dict[str, str]:
@@ -234,6 +255,25 @@ def _anchor(raw: Any, label: str) -> dict[str, float]:
             raise CharacterAnimationError(f"{label} rotation is a number of degrees")
         found["rotation"] = float(raw["rotation"])
     return found
+
+
+def _puppet_provenance(raw: Any, label: str) -> dict[str, Any] | None:
+    """A puppet walk remembers which drawing it was cut from. Any other provenance is refused."""
+    if raw is None:
+        return None
+    if not isinstance(raw, dict) or raw.get("method") != "puppet":
+        raise CharacterAnimationError(f"{label} provenance is a puppet record")
+    reference = raw.get("reference")
+    if not isinstance(reference, dict):
+        raise CharacterAnimationError(f"{label} provenance names the reference pose")
+    start = raw.get("start")
+    if isinstance(start, bool) or not isinstance(start, (int, float)):
+        raise CharacterAnimationError(f"{label} provenance start is the cycle phase")
+    if not isinstance(raw.get("layers"), bool):
+        raise CharacterAnimationError(f"{label} provenance layers is true or false")
+    return {"method": "puppet", "reference": {"animation": _text(reference.get("animation"), f"{label} reference", 64, required=True),
+                                               "pose": _text(reference.get("pose"), f"{label} reference pose", 120, required=True)},
+            "start": float(start), "layers": raw["layers"]}
 
 
 def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
@@ -261,6 +301,9 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
         if raw["scaleBy"] not in SCALE_BY:
             raise CharacterAnimationError(f"{label} scaleBy is one of {', '.join(SCALE_BY)}")
         result["scaleBy"] = raw["scaleBy"]
+    for key in ("guideVideo", "clip"):
+        if raw.get(key):
+            result[key] = _source(raw[key], f"{label} {key}")
     if raw.get("group") is not None:
         if raw["group"] not in GROUPS:
             raise CharacterAnimationError(f"{label} group is one of {', '.join(GROUPS)}")
@@ -268,6 +311,9 @@ def normalize_animation(raw: Any, label: str = "Animation") -> dict[str, Any]:
     for key in ("mouth", "eyes"):
         if raw.get(key) is not None:
             result[key] = _anchor(raw[key], f"{label} {key}")
+    provenance = _puppet_provenance(raw.get("provenance"), label)
+    if provenance:
+        result["provenance"] = provenance
     return {**result, **_contract(raw, label)}
 
 

@@ -424,13 +424,13 @@ def wangp_capabilities():
 
 
 def _core_rig_gate(body: dict) -> None:
-    if str((body or {}).get("engine") or "procedural") not in {"procedural", "humanoid"}:
+    if str((body or {}).get("engine") or "procedural") not in {"procedural", "humanoid", "meshy"}:
         require_capability_http("unirig_ai")
 
 
 def _core_rig_engines(engines: list) -> list:
-    # The procedural rig is CPU-only; UniRig needs a local NVIDIA engine.
-    return [engine for engine in engines if engine.get("id") in {"procedural", "humanoid"}]
+    # The procedural rig is CPU-only and Meshy runs in the cloud; UniRig needs a local NVIDIA engine.
+    return [engine for engine in engines if engine.get("id") in {"procedural", "humanoid", "meshy"}]
 
 
 def _core_rig_input(value: str, workspace: str | None = None) -> str | None:

@@ -106,7 +106,7 @@ character's ink.
 `characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
 approves it in Characters › Animaciones. `characters.animation.make_set` {character_id, set `walk-directions`} makes the
-twelve-pose walks of five directions (for 3D sets) as one resumable job.
+twelve-pose walks of five directions (for 3D sets) as one resumable job. A walk can use method puppet.
 Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
 `autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
 pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.
@@ -344,6 +344,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   - **Checks:** `from_script` checks each object's model file, clip names, sequence, hold and appearance before
     writing; an unknown or talking carrier fails the render with a clear message.
 
+## Meshy GLBs
+
+With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GLB. Poll `model3d.status`. Models other people published come from https://www.meshy.ai/discover (a paid account, no extra credit on that page). Do not call the showcase API: it is Enterprise-only and any other plan answers 403. A downloaded GLB is a model we made. Place it with `scene3d.item.add` (`item: {glb}`) or a script `objects` entry (`file`). If it already has clips, play those. If it has no skeleton and is one standing person, `model3d.rig` with `engine: "humanoid"`.
+
 ## 3D sets: molds, skins and props
 
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
@@ -392,7 +396,10 @@ closer camera. Packs: `dialogue-*` (`ots-a`/`ots-b` keep the eyelines, `table`, 
 `transitionIn` is the join between two takes and needs no card). Modifiers go on the scene, not on the shot:
 `world3d.scene.instantiate` → `world3d.scene.patch` with `light` (`noon`… `dawn`), `grade` (`natural`… `film`),
 `lens` (`14mm`–`200mm`) or `camera_template` (a `kind: camera` card) → `world3d.scene.publish` → `scene3d:
-{"scene": "<file>"}`. What the production dry run warns ruins a series shot too: `template_still` (a `still` card
+{"scene": "<file>"}`. `world3d.scene.inspect` and every patch reply show the `camera` and, per object, `layout.items[].boundsM` (its real
+size and place in metres); a model is drawn 1.7 m × `scale` tall whatever its length, so size it with a binding's `fit`
+(`{"heightM"|"widthM"|"depthM"|"longestM": metres}` or `"native"`) instead of guessing `scale`. A scene from nothing starts from a blank
+personal template (`docs/3d-video-compositor/HOWUSEIT.md`, "Agent-built scenes"). Time a move with `motion.start`/`motion.end` (scene seconds); `world3d.scene.beats` (`beats: [{t, who, verb}]`, verbs `appear`, `go`, `face`, `do`, `fx`) says who does what when and resolves into the object's own fields, a patch's `worldFx` places 3D effects (explosion, shockwave, sparks, smoke, fire) at a point, on an object or at a collision, and the replies list `layout.collisions` where a moving model passes through another (`collide: false` exempts a ghost). What the production dry run warns ruins a series shot too: `template_still` (a `still` card
 with no clip, motion, camera or world), `stage_unskinned` (a stage in its mold colours: give the location a set
 skin), `looks_samey` (one template and place in more than four shots in a row), `template_reused` (one card in
 more than four shots).

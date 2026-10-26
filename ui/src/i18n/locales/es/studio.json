@@ -261,7 +261,9 @@
     "audioIn": "Audio in",
     "audioInHint": "Acepta audio de entrada; H3 Omni lo usa como referencia de audio ordenada",
     "refs": "Refs",
-    "refsHint": "Acepta una o más imágenes de referencia"
+    "refsHint": "Acepta una o más imágenes de referencia",
+    "remote": "API",
+    "remoteHint": "Se ejecuta en los servidores del proveedor: sin GPU ni descarga. Usa tu plan de MiniMax."
   },
   "h3Turbo": {
     "about": "Acerca del modo H3 Turbo",
@@ -899,6 +901,7 @@
     "frames": "Fotogramas",
     "references": "Referencias",
     "fastHint": "Fused · Experimental. Genera en 4 pasos; puede perder algo de calidad.",
+    "distilledHint": "Distilled · FastH3 oficial de FastVideo. Texto a vídeo en 8 pasos fijos; aún sin medir en esta GPU.",
     "prunedHint": "Pruned · Modelo recortado. Menor tamaño de pesos que Full; el consumo depende de la configuración.",
     "fullHint": "Full · Modelo completo. Opción avanzada: puede aumentar la presión de RAM sin mejorar necesariamente el resultado.",
     "legacyHint": "Legacy · Implementación anterior para compatibilidad.",
@@ -924,6 +927,7 @@
     "standardHint": "Standard · Pesos por defecto de esta familia. El consumo depende de la configuración.",
     "toolHint": "Herramienta · Pesos auxiliares, no un modelo de generación. Se usa para tareas como el rigging.",
     "requirements": "Requisitos mínimos",
+    "remoteHint": "Se ejecuta en los servidores de MiniMax: sin GPU ni descarga. Necesita una clave de MiniMax en Ajustes → Servicios y gasta tu plan de MiniMax. Image-01 acepta una sola referencia de personaje (conserva la cara e inventa la ropa).",
     "vramBadge": "VRAM ~{{vram}} GB",
     "vram": "VRAM ~{{vram}} GB con un perfil de offload de memoria.",
     "vramComfort": "Unos {{vram}} GB de VRAM resultan más cómodos y rápidos.",

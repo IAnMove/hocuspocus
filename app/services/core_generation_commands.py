@@ -12,7 +12,7 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
-from services import core_remote_image, core_workspace as core, execution_mode
+from services import core_remote_image, core_workspace as core, execution_mode, remote_image_generation
 from services.generation_output_name import (
     OutputNameError,
     attach_output_name,
@@ -123,6 +123,7 @@ def _freeze(command: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         require_capability_http("wangp_local")
     if command.get("operation") != "generation.image":
         raise command_error(422, "unsupported_operation", "This runtime admits generation.image only")
+    sent, command = command, remote_image_generation.complete_remote_command(command)
     if type(command.get("version")) is int and command["version"] == 2:
         from services.studio_image_spec import freeze_studio_image_spec
         frozen = freeze_studio_image_spec(command)
@@ -130,9 +131,12 @@ def _freeze(command: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
             **deepcopy(frozen["effective"]["input"]["params"]),
             "workspace": frozen["effective"]["input"]["workspace"],
         }
-        return frozen, params
-    frozen = freeze_image_generation_spec(command)
-    return frozen, deepcopy(frozen["effective"]["input"])
+    else:
+        frozen = freeze_image_generation_spec(command)
+        params = deepcopy(frozen["effective"]["input"])
+    if command is not sent:
+        frozen["original"] = deepcopy(sent)  # steps, guidance and seed may be left out: the caller's spelling stays the original
+    return frozen, params
 
 
 def _require_minimax_image(params: dict[str, Any]) -> None:
@@ -253,6 +257,7 @@ class CoreGenerationCommands:
             _require_minimax_image(params)
             execution_mode.validate_remote_provider(workspace, "minimax-image")
             # Fail closed before admission so a transport retry can reuse intent_id.
+            remote_image_generation.require_api_key(core.services_raw())
             prepare_prompt(str(params.get("prompt") or ""))
             core_remote_image.encode_subject_reference(_subject_reference(params), workspace)
             registry = _registry(workspace)
@@ -265,6 +270,7 @@ class CoreGenerationCommands:
                 effective=frozen["effective"],
                 task_fields=_task_fields(workspace, job_id, params),
                 fingerprint_version=frozen["fingerprint_version"],
+                notes=remote_image_generation.ignored_notes(params),
             )
             result = admitted["receipt"]["result"]
             # A concurrent replay must not mistake claim → job creation for a

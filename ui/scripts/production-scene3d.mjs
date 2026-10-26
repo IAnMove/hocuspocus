@@ -8,6 +8,7 @@ import { scene3dPlaybackSpeed } from '../src/features/scene3d/clock.ts'
 import { adaptAuthoredCameraToFrame, fromPortraitCamera } from '../src/features/scene3d/frameFormat.ts'
 import { cameraEyeAtTime } from '../src/features/scene3d/camera.ts'
 import { stageDioramaSet } from '../src/features/scene3d/dioramaSet.ts'
+import { stageSplatDocument } from '../src/features/scene3d/splatSet.ts'
 import { scrollDirection, stageParallaxSet } from '../src/features/scene3d/parallaxSet.ts'
 import { isGroundStyle } from '../src/features/scene3d/groundStyles.ts'
 import { applyGrade, applyLens, applyNamedLight, copyCamera } from '../src/features/scene3d/modifiers.ts'
@@ -40,6 +41,7 @@ else if (config.background?.roomBox) {
   // resolve_media keeps the GLB on background.file; the spec itself cannot carry file (unknown room field).
   stageRoomBox(document, { ...config.background.roomBox, file: config.background.file })
 }
+else if (config.background?.splat) stageSplatDocument(document, sourced(config.background))
 else if (config.background) bindBackground(document, sourced(config.background))
 if (config.world) takeWorld(document, config)
 if (config.camera_template) takeCamera(document, config.camera_template)
