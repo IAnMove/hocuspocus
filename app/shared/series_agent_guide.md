@@ -350,7 +350,7 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 
 ## A round-headed body
 
-`model3d.blob.make` builds one round-headed person and rigs it in the same call (Wizard `blob_make`, the Studio 3D panel, or `POST /api/v1/model3d/blob`). Pass a `preset` (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`) and optional `traits`. Colors live under `colors`, because `head` is the shape. The default clips are `idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point` and `run`. `model3d.blob.presets` lists the limits. A moustache, glasses and the 2D face are not this body. Put the rigged file on `subject_1` (not `add: true`) and play `Wave`.
+`model3d.blob.make` builds one round-headed person and rigs it in the same call (Wizard `blob_make`, the Studio 3D panel, or `POST /api/v1/model3d/blob`). Pass a `preset` (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`, `blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`, `anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`) and optional `traits`. `family` is `blob` (the default), `anime` or `chibi`. `hair.style` is `none`, `short`, `bangs`, `spiky`, `long`, `ponytail`, `twin_tails` or `bun`. Colors live under `colors`, because `head` is the shape. The default clips are `idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point` and `run`. `model3d.blob.presets` lists the limits. A moustache, glasses and the 2D face are not this body. Put the rigged file on `subject_1` (not `add: true`) and play `Wave`.
 
 ## 3D sets: molds, skins and props
 

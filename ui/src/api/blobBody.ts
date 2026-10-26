@@ -2,11 +2,21 @@ import { randomUuid } from '../lib/uuid'
 import { BASE } from './http'
 
 export interface BlobPresetCatalog {
-  presets: Record<string, { height?: number; build?: string; hands?: string; feet?: string; head?: { width?: number } }>
+  presets: Record<string, {
+    height?: number
+    build?: string
+    hands?: string
+    feet?: string
+    family?: string
+    hair?: { style?: string }
+    head?: { width?: number }
+  }>
   height: { min: number; max: number; default: number }
   build: string[]
+  family: string[]
   hands: string[]
   feet: string[]
+  hair: { style: string[] }
   head: { limits: { width: [number, number] }; default: { width: number } }
 }
 
@@ -23,11 +33,13 @@ export interface BlobMakeInput {
   workspace: string
   name: string
   preset?: string
-  height: number
-  build: string
-  headWidth: number
-  hands: string
-  feet: string
+  height?: number
+  build?: string
+  headWidth?: number
+  hands?: string
+  feet?: string
+  family?: string
+  hairStyle?: string
 }
 
 function detailMessage(body: unknown, fallback: string): string {
@@ -63,11 +75,13 @@ export async function makeBlob(input: BlobMakeInput): Promise<BlobMakeResult> {
         name: input.name,
         ...(input.preset ? { preset: input.preset } : {}),
         traits: {
-          height: input.height,
-          build: input.build,
-          hands: input.hands,
-          feet: input.feet,
-          head: { width: input.headWidth },
+          ...(input.height != null ? { height: input.height } : {}),
+          ...(input.build ? { build: input.build } : {}),
+          ...(input.hands ? { hands: input.hands } : {}),
+          ...(input.feet ? { feet: input.feet } : {}),
+          ...(input.headWidth != null ? { head: { width: input.headWidth } } : {}),
+          ...(input.family ? { family: input.family } : {}),
+          ...(input.hairStyle ? { hair: { style: input.hairStyle } } : {}),
         },
       },
     }),

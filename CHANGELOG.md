@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: blob bodies come in three families that share one rig.** `family` is `blob`, `anime` or `chibi` (omit it for a blob). Nine presets join the original six: `blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`, `anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`. Hair (`none`, `short`, `bangs`, `spiky`, `long`, `ponytail`, `twin_tails`, `bun`) and clothes (`skirt`, `jacket`, `sleeves_long`, `shorts`, `school_collar`, `cape`) are smooth pieces on that same Mixamo skeleton. A hollow skirt is `covered_legs` when the feet show. See [MODEL3D_BLOB.md](docs/agents/MODEL3D_BLOB.md).
+
 **Added: `model3d.compose` can build a capsule or a frustum, and can shade rounds with smooth normals.** `smooth: true` on a piece or on the input uses radial normals and keeps flat caps axial. Omit it and the old box, sphere, cylinder and cone meshes stay byte for byte the same. A capsule's scale is diameter × length × diameter. A frustum takes `taper` from 0.2 to 1. See [MODEL3D_COMPOSE.md](docs/agents/MODEL3D_COMPOSE.md).
 
 **Added: one call builds a round-headed person and rigs it (`model3d.blob.make`).** Traits or a preset (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`) become an overlapped body on CPU. The same call rigs the humanoid clips (`idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point`, `run` by default). MCP, the Wizard action `blob_make` and the Studio 3D panel share that call. A refusal keeps the rig's reason (`hands_stuck` and the rest). The face and set textures are not part of this body. See [MODEL3D_BLOB.md](docs/agents/MODEL3D_BLOB.md).

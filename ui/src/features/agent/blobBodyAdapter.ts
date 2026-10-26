@@ -13,6 +13,8 @@ export async function executeBlobMake(action: AgentBlobMakeAction, workspace?: s
     headWidth: action.headWidth,
     hands: action.hands,
     feet: action.feet,
+    family: action.family,
+    hairStyle: action.hairStyle,
   })
   const store = useStore.getState()
   if (store.mediaFilter !== 'model3d') store.setMediaFilter('model3d')

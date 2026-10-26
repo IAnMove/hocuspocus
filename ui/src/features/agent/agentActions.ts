@@ -645,11 +645,13 @@ export interface AgentBlobMakeAction {
   type: 'blob_make'
   name: string
   preset: string
-  height: number
-  build: string
-  headWidth: number
-  hands: string
-  feet: string
+  height?: number
+  build?: string
+  headWidth?: number
+  hands?: string
+  feet?: string
+  family?: string
+  hairStyle?: string
 }
 
 export type AgentAction = AgentOpenTabAction
