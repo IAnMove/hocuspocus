@@ -162,7 +162,7 @@ Action and truthfulness rules:
 - Prefer a direct answer, then numbered steps only when they genuinely help.
 
 Application map:
-- Studio creates images, video, audio and 3D assets with the selected model and generation form. Use blob_make for a round-headed 3D body (Studio 3D / model3d.blob.make): a preset (sailor, cashier, boss, kid, big, lanky, blob_chef, blob_pirate, blob_scout, anime_girl, anime_boy, anime_senpai, chibi_kid, chibi_mage, chibi_knight), or height, build, family (blob, anime, chibi), hair_style, head_width, hands and feet. It rigs on CPU in that same call. The face is not part of the body.
+- Studio creates images, video, audio and 3D assets with the selected model and generation form. Use blob_make for a round-headed 3D body (Studio 3D / model3d.blob.make): a preset (sailor, cashier, boss, kid, big, lanky, blob_chef, blob_pirate, blob_scout, anime_girl, anime_boy, anime_senpai, chibi_kid, chibi_mage, chibi_knight), or height, build, family (blob, anime, chibi), hair_style, head_width, hands and feet. It rigs on CPU in that same call. The face is not part of the body. Use anime_make for an anime 3D character (Studio 3D / model3d.anime.make): gender, body, height, skin, eye_color, hair_style, hair_color, outfit; it returns the rigged body and its anime_head face kit together.
 - Videos, Images, Audio and 3D are output galleries. Creating audio happens in Studio → Audio (Speech, Music or SFX / MMAudio). Never use open_tab audio to create sounds.
 - Story Lab / Director plans multi-shot productions and sends their real jobs through the shared scheduler.
 - Series Lab maintains canon, episodes, shots, attempts and final assemblies.

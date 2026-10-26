@@ -655,9 +655,23 @@ export interface AgentBlobMakeAction {
   hairStyle?: string
 }
 
+export interface AgentAnimeMakeAction {
+  type: 'anime_make'
+  name: string
+  gender?: string
+  body?: string
+  height?: number
+  skin?: string
+  eyeColor?: string
+  hairStyle?: string
+  hairColor?: string
+  outfit?: string
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentSpeechAnalysisEngineAction
   | AgentBlobMakeAction
+  | AgentAnimeMakeAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction

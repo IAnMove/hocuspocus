@@ -35,6 +35,7 @@ export const AGENT_ACTION_TYPES = [
   'prepare_programmatic_video',
   'speech_analysis_engine',
   'blob_make',
+  'anime_make',
   'prepare_image',
   'prepare_audio',
   'download_model',
