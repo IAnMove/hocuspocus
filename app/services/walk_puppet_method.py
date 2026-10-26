@@ -101,7 +101,11 @@ def garment_layers(rgba: np.ndarray, workspace_root: str, kit_id: str, workspace
         return cached, True
     if not installed_fn():
         return None, False
-    pack = decompose(Image.fromarray(rgba), "puppet")
+    from services import resource_scheduler
+    lane = resource_scheduler.local_gpu_lane(0)
+    task = f"see-through-puppet-{kit_id or 'rig'}"
+    with resource_scheduler.coordinator.acquire(lane, task_id=task, description="See-through layers"):
+        pack = decompose(Image.fromarray(rgba), "puppet")
     arrays = _write_layers(pack.get("images") or {}, folder)
     save_layers({"puppet": pack}, kit_id, workspace_root, workspace)
     return (arrays or None), True

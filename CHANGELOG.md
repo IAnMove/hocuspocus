@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a puppet's See-through pass takes the GPU lane.** Cutting the clothes used to run the worker with no lane. It now takes `local_gpu:0`, the same lane as the flat-rig layers.
+
 **Fixed: a landmark mouth is not reported missing, and a hand-placed mouth is a hint.** `mouth_not_found` was added whenever the painted mouth was absent, including when the anime landmarks had placed one. Locking a mouth by hand used to leave `mouthSource` as `landmarks`.
 
 **Fixed: a Video 3D face pack does not also paint estimated lips.** A model with a Head bone and a face pack used to draw both. The Head-bone estimate is skipped while the pack is on. A face someone calibrated still wins.

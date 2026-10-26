@@ -108,3 +108,29 @@ def test_a_drawing_with_no_separated_arm_is_refused_and_builds_nothing():
         assert "no arm" in str(error)
     else:
         raise AssertionError("a single stroke is not a walk")
+
+
+def test_garment_layers_take_the_local_gpu_lane(tmp_path, monkeypatch):
+    """See-through for the puppet uses the same GPU lane as the face layers."""
+    from PIL import Image
+    from services import resource_scheduler
+    from services.walk_puppet_method import garment_layers
+    acquired: list[str] = []
+    real = resource_scheduler.coordinator.acquire
+
+    def spy(lane, *args, **kwargs):
+        acquired.append(lane.key)
+        return real(lane, *args, **kwargs)
+
+    monkeypatch.setattr(resource_scheduler.coordinator, "acquire", spy)
+    rgba = np.zeros((8, 8, 4), np.uint8)
+    rgba[..., 3] = 255
+
+    def decompose(image, label):
+        assert isinstance(image, Image.Image) and label == "puppet"
+        return {"images": {}}
+
+    _layers, used = garment_layers(
+        rgba, str(tmp_path), "hero", "cast", installed_fn=lambda: True, decompose=decompose)
+    assert acquired == ["local_gpu:0"]
+    assert used is True
