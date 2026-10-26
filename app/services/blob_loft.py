@@ -192,14 +192,15 @@ def _helmet(mesh: Mesh, L: dict, color: str) -> None:
 
 
 def _bangs(mesh: Mesh, L: dict, color: str) -> None:
+    """Flat strands lying on the forehead, just under the helmet's hairline: volume in profile, no teeth from the front."""
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    for x in (-0.58, -0.2, 0.2, 0.58):
+    for x in (-0.6, -0.22, 0.22, 0.6):
         stations = []
         for k in range(4):
-            y = L["head_y"] + ry * (0.62 - 0.42 * k / 3)
-            z = rz * 1.05 * math.sqrt(max(0.0, 1 - ((y - L["head_y"]) / ry) ** 2))
-            r = rx * (0.11 - 0.09 * k / 3)
-            stations.append(_st((rx * x * (1 + 0.1 * k), y, z), r, r * 0.6, color))
+            y = L["head_y"] + ry * (0.66 - 0.3 * k / 3)
+            z = rz * 1.06 * math.sqrt(max(0.0, 1 - ((y - L["head_y"]) / ry) ** 2))
+            r = rx * (0.12 - 0.1 * k / 3)
+            stations.append(_st((rx * x * (1 + 0.06 * k), y, z), r, r * 0.25, color))
         _tube(mesh, stations, "y", ring=8)
 
 
