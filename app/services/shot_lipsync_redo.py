@@ -93,11 +93,14 @@ def resolve_target(payload: dict, folder: str, uploads: str, workspace: str) -> 
 
 
 def prepare_guides(target: dict, folder: str) -> dict[str, Any]:
+    """Absolute paths. InfiniteTalk and LongCat are not ``wangp_1272``, so the queue
+    never resolves a workspace-relative name and drops the file."""
     span = target["span"]
     audio = trim_span(target["audio"], folder, span[0], span[1]) if span else target["audio"]
     return {
-        "video": _relative(folder, target["video"]), "audio": _relative(folder, audio),
+        "video": os.path.abspath(target["video"]), "audio": os.path.abspath(audio),
         "audio_path": target["audio"], "span": span, "offset": target["offset"],
+        "trimmed": os.path.abspath(audio) if span else None,
     }
 
 
@@ -202,7 +205,8 @@ def _server_queue(body: dict, folder: str) -> str:
         raise MediaToolError("generation_failed", "The generation server did not queue a job.", 502)
     job = _wait_job(studio._jobs, job_id)
     if job.get("status") != "completed":
-        raise MediaToolError("generation_failed", f"Generation {job.get('status')}.", 502)
+        reason = job.get("error") or job.get("status") or "failed"
+        raise MediaToolError("generation_failed", f"Generation failed: {reason}.", 502)
     files = job.get("output_files") or []
     if not files:
         raise MediaToolError("generation_failed", "Generation finished without a video.", 502)
@@ -459,13 +463,6 @@ def _text(value: Any, field: str) -> str:
 def _safe_token(value: str) -> str:
     safe = "".join(char if char.isalnum() or char in "-_" else "-" for char in value).strip("-")
     return (safe or "shot")[:60]
-
-
-def _relative(folder: str, path: str) -> str:
-    try:
-        return Path(path).resolve().relative_to(Path(folder).resolve()).as_posix()
-    except ValueError as exc:
-        raise MediaToolError("path_not_allowed", "Media path is not allowed.") from exc
 
 
 class _Request:

@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
@@ -162,7 +163,8 @@ def test_a_production_shot_gains_a_take_and_keeps_the_original(tmp_path, monkeyp
     monkeypatch.setattr(redo, "trim_span", trim)
     result = _call(tmp_path, {"workspace": "film", "engine": engine, "production_id": "mv", "shot": "o05"})["result"]
     body = seen[0]
-    assert body["video_guide"] == "gorthak.mp4" and body["audio_guide"] == "span.wav"
+    assert os.path.basename(body["video_guide"]) == "gorthak.mp4" and os.path.basename(body["audio_guide"]) == "span.wav"
+    assert os.path.isabs(body["video_guide"]) and os.path.isabs(body["audio_guide"])
     assert body["audio_prompt_type"] == "A" and body["video_prompt_type"] == guide
     assert body["resolution"] == "832x480" and body["num_inference_steps"] == steps
     assert body["model_type"] == engine
@@ -281,3 +283,37 @@ def test_lipsync_verdict_thresholds():
     assert verdict(0.9, 0.5, 0.0) == "ok"
     assert verdict(0.9, 0.1, 0.0) == "retake"
     assert verdict(0.1, 0.9, 0.0) == "unreliable"
+
+
+def test_guides_stay_files_after_the_real_infinitetalk_prepare(tmp_path, monkeypatch):
+    """Relative names never reach a model that is not wangp_1272: prepare leaves them, and the worker looks in cwd."""
+    folder = tmp_path / "film"
+    _production(folder)
+    seen = _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05"})
+    body = dict(seen[0])
+    model = json.loads((Path(__file__).resolve().parents[1] / "app" / "defaults" / "infinitetalk.json").read_text())["model"]
+    assert not model.get("wangp_1272")
+    from services.wangp_submission import prepare_generation_inputs
+    prepare_generation_inputs(body, model, "film", uploads_dir=str(tmp_path / "uploads"), workspace_dir=str(folder))
+    assert os.path.isabs(body["video_guide"]) and os.path.isfile(body["video_guide"])
+    assert os.path.isabs(body["audio_guide"]) and os.path.isfile(body["audio_guide"])
+
+
+def test_a_failed_generation_names_the_job_error(tmp_path, monkeypatch):
+    folder = tmp_path / "film"
+    folder.mkdir()
+    jobs = {"job-1": {"status": "failed", "error": "weights missing"}}
+
+    async def generate(_request):
+        return {"job_id": "job-1"}
+
+    monkeypatch.setattr(studio, "generate", generate)
+    monkeypatch.setattr(studio, "_new_generation_job", object())
+    monkeypatch.setattr(studio, "_jobs", jobs)
+    monkeypatch.setattr(redo.time, "sleep", lambda _seconds: None)
+    from services.production_media_common import MediaToolError
+    with pytest.raises(MediaToolError) as denied:
+        redo._server_queue({"model_type": "infinitetalk"}, str(folder))
+    assert "weights missing" in denied.value.message
