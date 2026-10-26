@@ -14,5 +14,3 @@ export async function loadMontageIntoEditor(workspace: string, file: string): Pr
     ref: { file, revision: montage.revision ?? 1, origins: opened.origins, extras: opened.extras, notes: montage.notes },
   }
 }
-
-
