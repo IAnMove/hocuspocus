@@ -63,7 +63,6 @@ def _live(source: Path, dest: Path, workspace: str, workspace_dir) -> Path:
     return made
 
 
-_FEATHER = 0.03
 _DILATE = 3
 _HALO = 2.0
 _AA = 1.5
@@ -77,9 +76,9 @@ def finish_cutout(picture: Path, cutout: Path) -> None:
     The matte is binarized at one half, holes are filled and specks below half a percent of the
     panel are dropped. A 3 px dilation carries a halo of the original background, then 2 px more
     so the fill under that halo is covered, and the edge falls off over 1.5 px. The cutout's
-    colour is the picture. Telea runs under that whole sticker. The outer 3 percent of the panel
-    keeps the original picture, so a subject that touches the frame can ghost only inside that
-    band. The cutout is saved first: a failed fill leaves the picture untouched.
+    colour is the picture. Telea runs under that whole sticker. The page hides anything that
+    spills past the window, so the panel edge is not faded. The cutout is saved first: a failed
+    fill leaves the picture untouched.
     """
     import numpy as np
     from PIL import Image
@@ -91,15 +90,14 @@ def finish_cutout(picture: Path, cutout: Path) -> None:
     if mask.shape != original.shape:
         return
     sticker, support = _sticker(mask[..., 3])
-    edge = _edge_ramp(sticker.shape[0], sticker.shape[1])
     painted = original.copy()
-    painted[..., 3] = np.rint(np.clip(sticker * edge, 0, 1) * 255).astype(np.uint8)
+    painted[..., 3] = np.rint(np.clip(sticker, 0, 1) * 255).astype(np.uint8)
     Image.fromarray(painted).save(cutout)
-    _inpaint_base(picture, original, support, edge)
+    _inpaint_base(picture, original, support)
 
 
 def _sticker(alpha):
-    """Float coverage of the sticker, and the pixels Telea must replace (before the edge ramp)."""
+    """Float coverage of the sticker, and the pixels Telea must replace."""
     import cv2
     import numpy as np
 
@@ -142,19 +140,7 @@ def _components(mask):
     return kept
 
 
-def _edge_ramp(height: int, width: int):
-    import numpy as np
-
-    band_x = max(1.0, _FEATHER * width)
-    band_y = max(1.0, _FEATHER * height)
-    xs = np.arange(width, dtype=np.float32)
-    ys = np.arange(height, dtype=np.float32)
-    ramp_x = np.clip(np.minimum(xs, (width - 1) - xs) / band_x, 0, 1)
-    ramp_y = np.clip(np.minimum(ys, (height - 1) - ys) / band_y, 0, 1)
-    return np.minimum(ramp_x[None, :], ramp_y[:, None])
-
-
-def _inpaint_base(picture: Path, original, support, edge) -> None:
+def _inpaint_base(picture: Path, original, support) -> None:
     import cv2
     import numpy as np
     from PIL import Image
@@ -167,8 +153,6 @@ def _inpaint_base(picture: Path, original, support, edge) -> None:
     out = original.copy()
     paint = mask > 0
     out[paint, :3] = filled[paint]
-    keep = edge < 1
-    out[keep] = original[keep]
     Image.fromarray(out).save(picture)
 
 

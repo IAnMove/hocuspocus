@@ -4,33 +4,36 @@ import { LinearFilter, LinearMipmapLinearFilter, Texture } from 'three'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
-import { COMIC_GUTTER, COMIC_PAD, COMIC_PAGE_RIM, chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
+import { COMIC_GUTTER, COMIC_HOLE, COMIC_PAD, COMIC_PAGE_RIM, chooseComicLayout, isFrameAspect, paintComicPage } from '../src/features/scene3d/comicLayout.ts'
 import { projectPoint } from '../src/features/scene3d/camera.ts'
 import {
-  COMIC_CUTOUT_AHEAD,
+  COMIC_BASE_DEPTH,
+  COMIC_CUTOUT_DEPTH,
   COMIC_DURATION,
   COMIC_FOV,
   COMIC_FPS,
   COMIC_HOLD,
   COMIC_METERS_PER_PIXEL,
-  COMIC_POP,
   COMIC_TEMPLATE_IDS,
   COMIC_YAW_ARC,
   COMIC_YAW_DEG,
   applyComicTemplate,
+  behindFactor,
   buildComicPair,
   comicCameraAt,
   comicCard,
   comicCatalogueSize,
+  comicCutoutSlide,
+  comicFillGap,
   comicFrameCount,
   comicFrameSeconds,
   comicFramingProgress,
   comicMoveWindow,
-  comicCutoutPlacement,
-  comicCutoutSlide,
+  comicOverscanFraction,
   comicPagePixels,
+  comicPlaneSlide,
+  comicSamplePoses,
   comicWidePose,
-  cutoutFactor,
   fillFrameOffset,
 } from '../src/features/scene3d/comicPage.ts'
 import { comicMontageBody, comicTransitionBody } from '../src/features/scene3d/comicTransition.ts'
@@ -271,42 +274,34 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     assert.ok(Math.abs(COMIC_HOLD - 0.4) < 1e-9)
     const from = pair.exit.slots.find(slot => slot.id === 'panel-0')!
     const to = pair.enter.slots.find(slot => slot.id === 'panel-3')!
-    close(exitFill.look, [from.position[0], from.position[1] + from.scale, from.position[2]], 'exit fill look')
-    close(enterFill.look, [to.position[0], to.position[1] + to.scale, to.position[2]], 'enter fill look')
-    const distance = from.scale * fillFrameOffset(COMIC_FOV)
-    assert.ok(Math.abs(exitFill.eye[2] - exitFill.look[2] - distance) < 1e-6)
-    assert.ok(Math.abs(enterFill.eye[2] - enterFill.look[2] - to.scale * fillFrameOffset(COMIC_FOV)) < 1e-9)
+    const fromCell = comicPagePixels(format).cells[0]
+    const toCell = comicPagePixels(format).cells[3]
+    const fromScale = fromCell.h * COMIC_METERS_PER_PIXEL / 2
+    const toScale = toCell.h * COMIC_METERS_PER_PIXEL / 2
+    close(exitFill.look, [from.position[0], from.position[1] + from.scale, 0], 'exit fill look')
+    close(enterFill.look, [to.position[0], to.position[1] + to.scale, 0], 'enter fill look')
+    const distance = fromScale * fillFrameOffset(COMIC_FOV)
+    assert.ok(Math.abs(exitFill.eye[2] - distance) < 1e-6, 'fill distance is measured from the page')
+    assert.ok(Math.abs(enterFill.eye[2] - enterFill.look[2] - toScale * fillFrameOffset(COMIC_FOV)) < 1e-9)
+    assert.equal(pair.exit.slots.find(slot => slot.id === 'page')!.position[2], 0)
+    assert.ok(from.position[2] < pair.exit.slots.find(slot => slot.id === 'cutout-0')!.position[2])
     assert.deepEqual(pair.exit.slots.filter(slot => slot.id.startsWith('cutout')).map(slot => slot.id), ['cutout-0', 'cutout-1', 'cutout-2', 'cutout-3'])
     const matched = pair.exit.slots.find(slot => slot.id === 'cutout-0')!
-    const popped = pair.exit.slots.find(slot => slot.id === 'cutout-1')!
-    const factor = cutoutFactor(from.scale)
-    const placed = comicCutoutPlacement({
-      x: from.position[0], y: from.position[1], z: from.position[2], scale: from.scale,
-      aspect: format === 'portrait' ? 9 / 16 : 16 / 9,
-    }, false)
-    assert.ok(Math.abs(factor - (1 - COMIC_CUTOUT_AHEAD / distance)) < 1e-9, 'scale is (D - d) / D')
-    assert.ok(Math.abs(matched.scale - from.scale * factor) < 1e-9)
-    close(matched.position, placed.position, `${format} compensated cutout`)
-    const host = pair.exit.slots.find(slot => slot.id === 'panel-1')!
-    const hostCell = comicPagePixels(format).cells[1]
-    const body = { x: host.position[0], y: host.position[1], z: host.position[2], scale: host.scale, aspect: hostCell.w / hostCell.h }
-    const poppedPlace = comicCutoutPlacement(body, true, { pose: exitWide, aspect: size.width / size.height })
-    assert.ok(popped.scale > comicCutoutPlacement(body, false).scale, 'one filler cutout breaks the border')
-    close(popped.position, poppedPlace.position, `${format} popped cutout`)
-    assert.equal(matched.position[2], from.position[2] + COMIC_CUTOUT_AHEAD)
+    const factor = behindFactor(fromScale, COMIC_CUTOUT_DEPTH)
+    assert.ok(Math.abs(factor - (1 + COMIC_CUTOUT_DEPTH / distance)) < 1e-9, 'scale is (D + d) / D')
+    assert.ok(Math.abs(matched.scale - fromScale * factor) < 1e-9)
+    assert.equal(matched.position[2], -COMIC_CUTOUT_DEPTH)
+    assert.equal(from.position[2], -COMIC_BASE_DEPTH)
+    assert.ok(pair.exit.slots.filter(slot => slot.id.startsWith('cutout')).every(slot => slot.position[2] === -COMIC_CUTOUT_DEPTH), 'every cutout sits behind the page')
     const centerY = from.position[1] + from.scale
     assert.ok(Math.abs(matched.position[1] + matched.scale - centerY) < 1e-9, 'scaled about the fill axis')
+    assert.ok((from.imageLook?.overscan ?? 0) > 0, 'the picture carries the overscan')
+    assert.equal(pair.exit.slots[0].imageLook?.overscan, undefined)
+    assert.equal(matched.imageLook?.overscan, undefined)
   }
 })
 
-function projectedSpan(x: number, y: number, z: number, halfW: number, pose: { eye: readonly number[]; look: readonly number[]; fov: number }, aspect: number) {
-  const left = projectPoint([x - halfW, y, z], pose.eye as [number, number, number], pose.look as [number, number, number], pose.fov, aspect)
-  const right = projectPoint([x + halfW, y, z], pose.eye as [number, number, number], pose.look as [number, number, number], pose.fov, aspect)
-  assert.ok(left && right, 'panel edges project')
-  return Math.hypot(right.x - left.x, right.y - left.y)
-}
-
-test('a cutout slides four to six percent of its panel and the pop still reads larger', () => {
+test('a cutout slides four to six percent of its panel and the page slides a little against the picture', () => {
   for (const format of ['landscape', 'portrait'] as const) {
     const pair = buildComicPair({ format })
     const frame = comicCatalogueSize(format)
@@ -316,19 +311,49 @@ test('a cutout slides four to six percent of its panel and the pop still reads l
     const wide = comicCameraAt(pair.exit, last)
     const panelSlot = pair.exit.slots.find(slot => slot.id === 'panel-0')!
     const cell = comicPagePixels(format).cells[0]
+    const cellScale = cell.h * COMIC_METERS_PER_PIXEL / 2
     const panel = {
-      x: panelSlot.position[0], y: panelSlot.position[1], z: panelSlot.position[2],
-      scale: panelSlot.scale, aspect: cell.w / cell.h,
+      x: panelSlot.position[0], y: panelSlot.position[1] + panelSlot.scale - cellScale, z: 0,
+      scale: cellScale, aspect: cell.w / cell.h,
     }
     const slide = comicCutoutSlide(panel, fill, wide, aspect)
     assert.ok(slide >= 0.04 && slide <= 0.06, `${format} slide ${slide}`)
-    const host = pair.exit.slots.find(slot => slot.id === 'panel-1')!
-    const popped = pair.exit.slots.find(slot => slot.id === 'cutout-1')!
-    const hostAspect = comicPagePixels(format).cells[1].w / comicPagePixels(format).cells[1].h
-    const base = projectedSpan(host.position[0], host.position[1] + host.scale, host.position[2], host.scale * hostAspect, wide, aspect)
-    const grown = projectedSpan(popped.position[0], popped.position[1] + popped.scale, popped.position[2], popped.scale * hostAspect, wide, aspect)
-    assert.ok(Math.abs(grown / base - COMIC_POP) < 1e-3, `${format} pop ${grown / base}`)
+    const paper = comicPlaneSlide(panel, fill, wide, aspect, 0, COMIC_BASE_DEPTH)
+    assert.ok(paper > 0.02 && paper < 0.08, `${format} paper slide ${paper}`)
+    for (const depth of [COMIC_CUTOUT_DEPTH, COMIC_BASE_DEPTH]) {
+      for (const u of [0, 1]) {
+        for (const v of [0, 1]) {
+          const gap = comicFillGap(panel, fill, aspect, depth, { u, v })
+          assert.ok(gap < 1e-6, `${format} fill gap ${gap}`)
+        }
+      }
+    }
+    const grow = COMIC_HOLE * COMIC_METERS_PER_PIXEL
+    const hole = projectPoint(
+      [panel.x - panel.scale * panel.aspect - grow, panel.y + panel.scale, 0],
+      fill.eye, fill.look, fill.fov, aspect,
+    )
+    assert.ok(hole && hole.x < -1e-4, `${format} hole clears the frame`)
+    const poses = [...comicSamplePoses(pair.exit), ...comicSamplePoses(pair.enter)]
+    const bound = comicOverscanFraction(panel, poses)
+    assert.ok((panelSlot.imageLook?.overscan ?? 0) + 1e-9 >= bound, `${format} overscan covers the path`)
+    assert.ok(bound < 0.5, `${format} overscan ${bound}`)
   }
+})
+
+test('each cell is a window and the ink stays on the paper around it', () => {
+  const layout = chooseComicLayout('landscape', 4, 0, 0, 3)
+  const pixels = paintComicPage(layout)
+  const cell = layout.cells[0]
+  const at = (x: number, y: number) => {
+    const index = (y * layout.pageW + x) * 4
+    return { alpha: pixels[index + 3], ink: pixels[index] }
+  }
+  assert.equal(at(cell.x + 4, cell.y + 4).alpha, 0)
+  assert.equal(at(cell.x - COMIC_HOLE, cell.y + 4).alpha, 0)
+  const border = at(cell.x - COMIC_HOLE - 1, cell.y + 4)
+  assert.equal(border.alpha, 255)
+  assert.equal(border.ink, 22)
 })
 
 test('the four comic templates are in the library, translated, and kind transition', () => {
@@ -384,6 +409,22 @@ test('a sharp panel samples the source texels without mipmaps', () => {
   }
   const sharpMesh = imageCutoutMesh({ ...slot, imageLook: { unlit: true, sharp: true } }, sharp)
   const plainMesh = imageCutoutMesh({ ...slot, id: 'page', imageLook: { unlit: true } }, plain)
+  const grownTex = new Texture({ width: 24, height: 12 })
+  const grown = imageCutoutMesh({ ...slot, id: 'panel-1', imageLook: { unlit: true, sharp: true, overscan: 0.1 } }, grownTex)
+  const plainTex = new Texture({ width: 21, height: 10 })
+  const unpadded = imageCutoutMesh({ ...slot, id: 'panel-2', imageLook: { unlit: true, sharp: true, overscan: 0.5 } }, plainTex)
+  const maxY = (mesh: { geometry: { getAttribute: (name: string) => { count: number; getY: (index: number) => number }; dispose: () => void } }) => {
+    const position = mesh.geometry.getAttribute('position')
+    let peak = 0
+    for (let index = 0; index < position.count; index += 1) peak = Math.max(peak, position.getY(index))
+    return peak
+  }
+  assert.ok(Math.abs(maxY(grown) - 1.2) < 1e-6, 'a padded picture grows by the replicated border')
+  assert.ok(Math.abs(maxY(unpadded) - 1) < 1e-6, 'an unpadded file stays on the content plane')
+  const material = sharpMesh.material as { alphaTest: number; transparent: boolean; depthWrite: boolean }
+  assert.equal(material.alphaTest, 0.05)
+  assert.equal(material.transparent, true)
+  assert.equal(material.depthWrite, true)
   assert.equal(sharp.generateMipmaps, false)
   assert.equal(sharp.minFilter, LinearFilter)
   assert.equal(sharp.magFilter, LinearFilter)
@@ -391,6 +432,10 @@ test('a sharp panel samples the source texels without mipmaps', () => {
   assert.equal(plain.generateMipmaps, true)
   sharpMesh.geometry.dispose()
   plainMesh.geometry.dispose()
+  grown.geometry.dispose()
+  unpadded.geometry.dispose()
   sharp.dispose()
   plain.dispose()
+  grownTex.dispose()
+  plainTex.dispose()
 })
