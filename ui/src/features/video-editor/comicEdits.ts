@@ -1,0 +1,76 @@
+// Montage edits made from the comic view. They change the same clip list and
+// the same per-clip extras the timeline saves.
+
+import type { MontageTake } from '../../api/montages'
+
+export type ComicTextStyle = 'caption' | 'bubble' | 'none'
+
+export interface ComicChoice {
+  frame?: number
+  text?: ComicTextStyle
+}
+
+export interface ClipExtra {
+  takes?: MontageTake[]
+  lyric?: string
+  comic?: ComicChoice
+}
+
+const LYRIC_LIMIT = 500
+
+export function moveClip<T extends { id: string }>(clips: T[], movingId: string, insertionIndex: number): T[] {
+  const sourceIndex = clips.findIndex(clip => clip.id === movingId)
+  if (sourceIndex < 0) return clips
+  const moving = clips[sourceIndex]
+  const without = clips.filter(clip => clip.id !== movingId)
+  const adjusted = insertionIndex > sourceIndex ? insertionIndex - 1 : insertionIndex
+  without.splice(Math.max(0, Math.min(without.length, adjusted)), 0, moving)
+  return without
+}
+
+export function patchClipExtra(current: ClipExtra | undefined, patch: {
+  lyric?: string | null
+  comic?: { frame?: number | null; text?: ComicTextStyle | null }
+}): ClipExtra | undefined {
+  const next: ClipExtra = { ...(current ?? {}) }
+  if (patch.lyric !== undefined) applyLyric(next, patch.lyric)
+  if (patch.comic) applyComic(next, patch.comic)
+  if (!next.lyric && !next.takes?.length && !next.comic) return undefined
+  return next
+}
+
+function applyLyric(next: ClipExtra, lyric: string | null): void {
+  const text = (lyric ?? '').trim().slice(0, LYRIC_LIMIT)
+  if (text) next.lyric = text
+  else delete next.lyric
+}
+
+function applyComic(next: ClipExtra, patch: { frame?: number | null; text?: ComicTextStyle | null }): void {
+  const comic: ComicChoice = { ...(next.comic ?? {}) }
+  if (patch.text !== undefined) {
+    if (patch.text) comic.text = patch.text
+    else delete comic.text
+  }
+  if (patch.frame !== undefined) {
+    if (patch.frame === null || Number.isNaN(patch.frame)) delete comic.frame
+    else comic.frame = Math.min(36000, Math.max(0, patch.frame))
+  }
+  if (comic.frame === undefined && !comic.text) delete next.comic
+  else next.comic = comic
+}
+
+/** A comic duplicate keeps the line and the panel choice. Takes stay on the original. */
+export function duplicateClipState<T extends { id: string; name: string }>(
+  clip: T, extra: ClipExtra | undefined, newId: string,
+): { clip: T; extra?: ClipExtra } {
+  const copied: ClipExtra = {}
+  if (extra?.lyric) copied.lyric = extra.lyric
+  if (extra?.comic) copied.comic = { ...extra.comic }
+  const name = clip.name.endsWith(' (copy)') ? clip.name : `${clip.name} (copy)`
+  return { clip: { ...clip, id: newId, name }, extra: copied.lyric || copied.comic ? copied : undefined }
+}
+
+/** Seconds inside the trimmed clip. `at` from the server is an absolute source time. */
+export function frameOffset(trimStart: number, at: number): number {
+  return Math.max(0, Math.round((at - trimStart) * 1000) / 1000)
+}
