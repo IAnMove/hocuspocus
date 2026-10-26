@@ -35,9 +35,13 @@ export const COMIC_FPS = 30
 export const COMIC_MOVE_END = 0.94
 export const COMIC_DRIFT = 0.12
 export const COMIC_FIT_MARGIN = 0.02
-/** Panels sit a few millimetres in front of the paper. A cutout sits 2.5 cm in front of its panel. */
+/** Panels sit a few millimetres in front of the paper. A cutout sits 4 cm in front of its panel. */
 export const COMIC_PANEL_Z = 0.004
-export const COMIC_CUTOUT_AHEAD = 0.025
+export const COMIC_CUTOUT_AHEAD = 0.04
+/** A filler cutout is drawn this much larger than the compensated size, so it crosses the ink border in the wide view. */
+export const COMIC_POP = 1.12
+/** Fraction of the panel's half-width the popped cutout slides away from the page centre. */
+export const COMIC_POP_SHIFT = 0.16
 
 const PAPER_PAGE = { en: 'Paper page (included)', es: 'Página de papel (incluida)' }
 const FOUR_PANELS = {
@@ -45,12 +49,12 @@ const FOUR_PANELS = {
   es: 'Cuatro imágenes de viñeta con el aspecto del fotograma',
 }
 const CUTOUT_NOTE = {
-  en: 'Optional keyed cutout 2.5 cm in front of a panel that is not the exit or the entrance',
-  es: 'Recorte calado opcional a 2,5 cm de una viñeta que no sea la de salida ni la de entrada',
+  en: 'A subject cutout 4 cm in front of each panel, scaled so the fill frame still matches',
+  es: 'Un recorte del sujeto a 4 cm de cada viñeta, escalado para que el plano lleno siga coincidiendo',
 }
 
 type Grid = { panelW: number; panelH: number; gutter: number; margin: number; pageW: number; pageH: number }
-type Placed = { x: number; y: number; z: number; scale: number }
+type Placed = { x: number; y: number; z: number; scale: number; aspect: number }
 type PageLayout = { pageW: number; pageH: number; pageScale: number; panels: Placed[] }
 type Pose = { eye: Vec3; look: Vec3; fov: number }
 
@@ -88,6 +92,15 @@ export function fillFrameOffset(fovDeg: number): number {
   return 1 / Math.tan((fovDeg * Math.PI) / 360)
 }
 
+/** Scale that puts a cutout `ahead` metres in front of a panel and still covers the same pixels from the fill camera.
+ * The fill camera sits `D = scale / tan(fov/2)` metres in front of the panel. A plane `d` metres closer is larger
+ * on screen by `D / (D - d)`, so the cutout is scaled by `(D - d) / D` about that camera's axis (the panel centre). */
+export function cutoutFactor(panelScale: number, ahead = COMIC_CUTOUT_AHEAD, fovDeg = COMIC_FOV): number {
+  const distance = panelScale * fillFrameOffset(fovDeg)
+  if (!(distance > ahead)) throw new Error('cutout_ahead')
+  return (distance - ahead) / distance
+}
+
 /** Distance at which the whole page fits in the frame, with a margin, at a constant fov. */
 export function fitDistance(pageW: number, pageH: number, frameAspect: number, fovDeg = COMIC_FOV, margin = COMIC_FIT_MARGIN): number {
   const tan = Math.tan((fovDeg * Math.PI) / 360)
@@ -122,7 +135,7 @@ function layoutOf(format: ComicFormat): PageLayout {
     const row = Math.floor(index / 2)
     const x = left + margin + panelW / 2 + col * (panelW + gutter)
     const top = pageH - margin - row * (panelH + gutter)
-    return { x, y: top - panelH, z: COMIC_PANEL_Z, scale: panelH / 2 }
+    return { x, y: top - panelH, z: COMIC_PANEL_Z, scale: panelH / 2, aspect: panelW / panelH }
   })
   return { pageW, pageH, pageScale: pageH / 2, panels }
 }
@@ -156,7 +169,7 @@ function filler(format: ComicFormat) {
 function panelSources(input: ComicPairInput, format: ComicFormat): ComicPanelInput[] {
   if (input.panels && input.panels.length === COMIC_PANEL_COUNT) return input.panels
   const stock = filler(format)
-  return stock.panels.map((url, index) => ({ url, ...(index === 1 ? { cutout: stock.cutout } : {}) }))
+  return stock.panels.map(url => ({ url, cutout: stock.cutout }))
 }
 
 function requireIndex(value: number): number {
@@ -171,12 +184,27 @@ function imageSlot(id: string, position: Vec3, scale: number, url: string): Scen
   }
 }
 
-function slotsOf(layout: PageLayout, pageUrl: string, panels: ComicPanelInput[]): Scene3DSlot[] {
+function popPanel(panels: ComicPanelInput[], fromPanel: number, toPanel: number): number | null {
+  const found = panels.findIndex((panel, index) => Boolean(panel.cutout) && index !== fromPanel && index !== toPanel)
+  return found < 0 ? null : found
+}
+
+/** Centre stays on the fill axis. A popped filler is larger and slid outward so it crosses the border once the camera leaves that axis. */
+export function comicCutoutPlacement(panel: Placed, popped = false): { position: Vec3; scale: number } {
+  const scale = panel.scale * cutoutFactor(panel.scale) * (popped ? COMIC_POP : 1)
+  const shift = popped ? Math.sign(panel.x || 1) * panel.scale * panel.aspect * COMIC_POP_SHIFT : 0
+  return { position: [panel.x + shift, panel.y + panel.scale - scale, panel.z + COMIC_CUTOUT_AHEAD], scale }
+}
+
+function slotsOf(layout: PageLayout, pageUrl: string, panels: ComicPanelInput[], fromPanel: number, toPanel: number): Scene3DSlot[] {
   const page = imageSlot('page', [0, 0, 0], layout.pageScale, pageUrl)
   const pictures = layout.panels.map((panel, index) => imageSlot(`panel-${index}`, [panel.x, panel.y, panel.z], panel.scale, panels[index]?.url || ''))
+  const popped = popPanel(panels, fromPanel, toPanel)
   const cutouts = layout.panels.flatMap((panel, index) => {
     const url = panels[index]?.cutout
-    return url ? [imageSlot(`cutout-${index}`, [panel.x, panel.y, panel.z + COMIC_CUTOUT_AHEAD], panel.scale, url)] : []
+    if (!url) return []
+    const placed = comicCutoutPlacement(panel, index === popped)
+    return [imageSlot(`cutout-${index}`, placed.position, placed.scale, url)]
   })
   return [page, ...pictures, ...cutouts]
 }
@@ -235,7 +263,7 @@ export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; 
   const layout = layoutOf(format)
   const sources = panelSources(input, format)
   const pageUrl = input.pageUrl || filler(format).page
-  const slots = slotsOf(layout, pageUrl, sources)
+  const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel)
   const wide = comicWidePose(format, size.width / size.height)
   const leave = fillPose(layout.panels[fromPanel])
   const arrive = fillPose(layout.panels[toPanel])

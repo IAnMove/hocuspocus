@@ -18,8 +18,10 @@ import {
   comicFrameCount,
   comicFrameSeconds,
   comicFramingProgress,
+  comicCutoutPlacement,
   comicPagePixels,
   comicWidePose,
+  cutoutFactor,
   fillFrameOffset,
 } from '../src/features/scene3d/comicPage.ts'
 import { comicTransitionBody } from '../src/features/scene3d/comicTransition.ts'
@@ -110,8 +112,21 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     const distance = from.scale * fillFrameOffset(COMIC_FOV)
     assert.ok(Math.abs(exitFill.eye[2] - exitFill.look[2] - distance) < 1e-6)
     assert.ok(Math.abs(enterFill.eye[2] - enterFill.look[2] - distance) < 1e-9)
-    assert.deepEqual(pair.exit.slots.filter(slot => slot.id.startsWith('cutout')).map(slot => slot.id), ['cutout-1'])
-    assert.equal(pair.exit.slots.find(slot => slot.id === 'cutout-1')!.position[2], from.position[2] + 0.025)
+    assert.deepEqual(pair.exit.slots.filter(slot => slot.id.startsWith('cutout')).map(slot => slot.id), ['cutout-0', 'cutout-1', 'cutout-2', 'cutout-3'])
+    const matched = pair.exit.slots.find(slot => slot.id === 'cutout-0')!
+    const popped = pair.exit.slots.find(slot => slot.id === 'cutout-1')!
+    const factor = cutoutFactor(from.scale)
+    const placed = comicCutoutPlacement({
+      x: from.position[0], y: from.position[1], z: from.position[2], scale: from.scale,
+      aspect: format === 'portrait' ? 9 / 16 : 16 / 9,
+    }, false)
+    assert.ok(Math.abs(factor - (1 - 0.04 / distance)) < 1e-9, 'scale is (D - d) / D')
+    assert.ok(Math.abs(matched.scale - from.scale * factor) < 1e-9)
+    close(matched.position, placed.position, `${format} compensated cutout`)
+    assert.ok(popped.scale > matched.scale, 'one filler cutout breaks the border')
+    assert.equal(matched.position[2], from.position[2] + 0.04)
+    const centerY = from.position[1] + from.scale
+    assert.ok(Math.abs(matched.position[1] + matched.scale - centerY) < 1e-9, 'scaled about the fill axis')
   }
 })
 

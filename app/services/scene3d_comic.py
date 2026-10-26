@@ -15,6 +15,7 @@ from urllib.parse import quote, unquote, urlsplit
 
 from fastapi import HTTPException
 
+from services.scene3d_comic_cutout import cutout_is_empty, cutout_panel
 from services.video_editor import extract_frame
 from services.world3d_scenes import World3DSceneError, publish_scene, run_template_tool, store_working_scene
 
@@ -78,12 +79,12 @@ def comic_transition(data: dict, workspace_dir) -> dict:
     width, height = _same_frame(sources, fmt)
     root.mkdir(parents=True, exist_ok=True)
     page_url = _stage_page(fmt, workspace, root)
-    panels = [_stage_panel(item, index, workspace, root) for index, item in enumerate(sources)]
+    panels, warnings = _stage_panels(sources, workspace, root, workspace_dir)
     built = run_template_tool("comic", _payload(fmt, width, height, page_url, panels, from_panel, to_panel))
     documents = [("exit", built.get("exit")), ("enter", built.get("enter"))]
     scenes = [_save(workspace, workspace_dir, role, document) for role, document in documents]
     clips = [_clip(workspace, role, document, scene) for (role, document), scene in zip(documents, scenes)] if exporting else []
-    return {"status": "completed", "scenes": scenes, "clips": clips}
+    return {"status": "completed", "scenes": scenes, "clips": clips, "warnings": warnings}
 
 
 def _request(data: dict):
@@ -221,7 +222,17 @@ def _stage_page(fmt: str, workspace: str, root: Path) -> str:
     return _url(name, workspace)
 
 
-def _stage_panel(item: dict, index: int, workspace: str, root: Path) -> dict:
+def _stage_panels(sources: list[dict], workspace: str, root: Path, workspace_dir) -> tuple[list[dict], list[str]]:
+    staged, warnings = [], []
+    for index, item in enumerate(sources):
+        panel, warning = _stage_panel(item, index, workspace, root, workspace_dir)
+        staged.append(panel)
+        if warning:
+            warnings.append(f"panels[{index}]: {warning}")
+    return staged, warnings
+
+
+def _stage_panel(item: dict, index: int, workspace: str, root: Path, workspace_dir) -> tuple[dict, str | None]:
     name = f"comic-panel-{index}.png"
     dest = root / name
     if "video" in item:
@@ -229,11 +240,19 @@ def _stage_panel(item: dict, index: int, workspace: str, root: Path) -> dict:
     else:
         _copy(item["path"], dest)
     staged = {"url": _url(name, workspace)}
-    if item.get("cutout_path"):
+    warning = None
+    cutout_src = item.get("cutout_path") or None
+    if cutout_src is not None and cutout_is_empty(Path(cutout_src)):
+        warning = f"{Path(cutout_src).name}: cutout unavailable (empty)"
+        cutout_src = None
+    elif cutout_src is None:
+        made, warning = cutout_panel(dest, root / f"comic-cutout-src-{index}.png", workspace, workspace_dir)
+        cutout_src = made
+    if cutout_src is not None:
         cutout_name = f"comic-cutout-{index}.png"
-        _copy(item["cutout_path"], root / cutout_name)
+        _copy(Path(cutout_src), root / cutout_name)
         staged["cutout"] = _url(cutout_name, workspace)
-    return staged
+    return staged, warning
 
 
 def _copy(source: Path, dest: Path) -> None:

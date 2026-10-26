@@ -2,23 +2,42 @@
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import pytest
 from fastapi import HTTPException
 
+from PIL import Image
+
 from services.scene3d_comic import bind_comic_exporter
+from services.scene3d_comic_cutout import bind_comic_cutout
 from services.world3d_template_commands import command_catalog, execute_command
 
 ROOT = Path(__file__).resolve().parents[1]
 FILLER = ROOT / "ui" / "public" / "scene3d" / "comic"
 
 
+def _paint_cutout(source, dest):
+    image = Image.open(source).convert("RGBA")
+    pixels = image.load()
+    width, height = image.size
+    for y in range(height):
+        for x in range(width):
+            if min(x, y, width - 1 - x, height - 1 - y) < 8:
+                red, green, blue, _alpha = pixels[x, y]
+                pixels[x, y] = (red, green, blue, 0)
+    image.save(dest)
+    return dest
+
+
 @pytest.fixture(autouse=True)
 def _clear_exporter():
     bind_comic_exporter(None)
+    bind_comic_cutout(_paint_cutout)
     yield
     bind_comic_exporter(None)
+    bind_comic_cutout(None)
 
 
 class _FakeExport:
@@ -90,9 +109,18 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
         assert (tmp_path / "studio" / scene["file"]).is_file()
     assert [clip["name"] for clip in reply["result"]["clips"]] == ["comic-panel-exit.mp4", "comic-panel-enter.mp4"]
     stored = json.loads((tmp_path / "studio" / "world3d-edits" / f"{scenes[0]['sceneId']}.json").read_text())
-    ids = [slot["id"] for slot in stored["document"]["slots"]]
-    assert ids == ["page", "panel-0", "panel-1", "panel-2", "panel-3", "cutout-1"]
-    assert stored["document"]["slots"][0]["sourceUrl"].startswith("/api/v1/file/comic-page-landscape.png")
+    slots = stored["document"]["slots"]
+    ids = [slot["id"] for slot in slots]
+    assert ids == ["page", "panel-0", "panel-1", "panel-2", "panel-3", "cutout-0", "cutout-1", "cutout-2", "cutout-3"]
+    assert slots[0]["sourceUrl"].startswith("/api/v1/file/comic-page-landscape.png")
+    panel = next(slot for slot in slots if slot["id"] == "panel-0")
+    cutout = next(slot for slot in slots if slot["id"] == "cutout-0")
+    distance = panel["scale"] / math.tan(math.radians(36) / 2)
+    factor = (distance - 0.04) / distance
+    assert cutout["scale"] == pytest.approx(panel["scale"] * factor)
+    assert cutout["position"][2] == pytest.approx(panel["position"][2] + 0.04)
+    assert cutout["position"][1] + cutout["scale"] == pytest.approx(panel["position"][1] + panel["scale"])
+    assert reply["result"]["warnings"] == []
 
 
 def test_a_missing_source_and_a_missing_exporter_write_nothing(tmp_path):
@@ -106,6 +134,15 @@ def test_a_missing_source_and_a_missing_exporter_write_nothing(tmp_path):
         _call(tmp_path, _panels(), export=True, intent="comic-offline")
     assert offline.value.status_code == 503 and offline.value.detail["code"] == "export_unavailable"
     assert _written(tmp_path) == []
+
+
+def test_an_empty_cutout_leaves_the_panel_flat_and_warns(tmp_path):
+    bind_comic_cutout(lambda _source, _dest: None)
+    reply = _call(tmp_path, _panels(), export=False, intent="comic-empty")
+    assert reply["result"]["warnings"]
+    assert all("cutout unavailable" in warning for warning in reply["result"]["warnings"])
+    stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
+    assert [slot["id"] for slot in stored["document"]["slots"] if slot["id"].startswith("cutout")] == []
 
 
 def test_five_panels_are_rejected(tmp_path):
