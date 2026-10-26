@@ -23,17 +23,17 @@ POSES = ("neutral", "angry", "surprised", "sad", "happy", "suspicious", "tired",
 # brow dy (px), tilt (inner end; negative pulls it down), eye opening, mouth dy, mouth height scale
 EXPRESSIONS = {
     "neutral": (0, 0.0, 1.0, 0, 1.0),
-    "angry": (-26, -0.9, 0.72, 8, 1.02),
-    "surprised": (-34, 0.35, 1.38, -8, 1.12),
-    "sad": (16, 0.85, 0.78, 14, 0.96),
-    "happy": (-18, 0.55, 0.9, -6, 1.06),
-    "suspicious": (-8, -1.05, 0.66, 6, 0.94),
-    "tired": (20, 0.25, 0.48, 18, 0.92),
-    "shout": (-20, -0.35, 1.22, -12, 1.28),
+    "angry": (-8, -1.5, 0.7, 8, 1.02),
+    "surprised": (-54, 0.35, 1.5, -8, 1.12),
+    "sad": (22, 1.4, 0.8, 14, 0.96),
+    "happy": (-26, 0.7, 0.85, -6, 1.06),
+    "suspicious": (-4, -1.2, 0.5, 6, 0.94),
+    "tired": (26, 0.3, 0.42, 18, 0.92),
+    "shout": (-34, -0.7, 1.3, -12, 1.28),
 }
-EYE_Y, EYE_GAP, EYE_R = 400, 118, 34
+EYE_Y, EYE_GAP, EYE_R = 392, 156, 62
 # Mouth height leaves the medium opening (the hole, not the ink) at least 40 px on a 1024 face, including the smaller expressions.
-NOSE_Y, MOUTH_Y, MOUTH_H = 520, 690, 268
+NOSE_Y, MOUTH_Y, MOUTH_H = 520, 700, 340
 EYE_SHAPES = ("dot", "oval", "halflid", "wide")
 BROW_STYLES = ("thick", "thin", "none")
 NOSES = ("none", "dot", "line", "bulb")
@@ -102,12 +102,12 @@ def face_traits(value: Any) -> dict[str, Any]:
     moustache = _group(raw.get("moustache", "none"), "moustache", MOUSTACHES, "none")
     return {
         "eyes": _eyes_trait(raw.get("eyes", "oval")),
-        "brows": {**brows, "thickness": _number(brows.get("thickness"), "brows.thickness", 1, 24, 8)},
+        "brows": {**brows, "thickness": _number(brows.get("thickness"), "brows.thickness", 1, 32, 20)},
         "nose": _choice(raw.get("nose", "dot"), NOSES, "nose"),
         "moustache": {**moustache, "color": _color(moustache.get("color"), "moustache.color", (58, 36, 24, 255))},
         "glasses": _choice(raw.get("glasses", "none"), GLASSES, "glasses"),
         "freckles": raw.get("freckles") is True, "stubble": raw.get("stubble") is True,
-        "ink": _color(raw.get("ink"), "ink", INK), "line": _number(raw.get("line"), "line", 2, 24, 8),
+        "ink": _color(raw.get("ink"), "ink", INK), "line": _number(raw.get("line"), "line", 2, 28, 14),
         "mouth": _choice(raw.get("mouth", "paper"), MOUTH_LOOKS, "mouth"),
         "skin": _color(raw.get("skin"), "skin", SKIN),
     }
@@ -179,7 +179,7 @@ def _nose(draw: ImageDraw.ImageDraw, traits: dict[str, Any], layout: dict[str, A
     kind = traits["nose"]
     if kind == "none":
         return
-    cx, y, radius = _s(512), _s(layout["nose_y"]), _s(10)
+    cx, y, radius = _s(512), _s(layout["nose_y"]), _s(22)
     line = max(2, int(traits["line"] * SCALE * 0.6))
     if kind == "dot":
         draw.ellipse((cx - radius * 0.45, y - radius * 0.35, cx + radius * 0.45, y + radius * 0.35), fill=traits["ink"])
@@ -207,8 +207,11 @@ def _moustache(draw: ImageDraw.ImageDraw, traits: dict[str, Any], layout: dict[s
     else:
         # The mouth sprite is tall, so clamping to its box reduced a walrus to a dash. Draw the walrus itself;
         # the mouth overlay covers only its own ink.
-        span = _s(160)
-        draw.rounded_rectangle((cx - span, y, cx + span, y + _s(36)), radius=max(1, int(_s(14))), fill=color)
+        # Two fat lobes that droop at the ends, with a notch in the middle: a walrus, not a bar.
+        for sign in (-1, 1):
+            for x0, y0, x1, y1 in ((_s(-4), y, _s(150), y + _s(70)), (_s(118), y + _s(20), _s(168), y + _s(78))):
+                lo, hi = sorted((cx + sign * x0, cx + sign * x1))
+                draw.ellipse((lo, y0, hi, y1), fill=color)
 
 
 def _glasses(draw: ImageDraw.ImageDraw, traits: dict[str, Any], layout: dict[str, Any]) -> None:
@@ -309,12 +312,12 @@ def _recolor(image: Image.Image, ink: tuple[int, int, int, int]) -> Image.Image:
 def _mouths(traits: dict[str, Any]) -> dict[str, Image.Image]:
     paper = traits["mouth"] == "paper"
     style = rig_style({"mouthStyle": traits["mouth"], "smile": 0.2 if paper else 0.0, "width": 0.7 if paper else 0.55})
-    extra = int(traits["line"] - 10) if traits["line"] > 10 else 0
+    extra = max(int(traits["line"] - 10), 8)
     drawn = {}
     for state in STATES:
         image = draw_mouth(state, style)
         if extra:
-            image = _thicken_ink(image, max(1, extra // 4 + 1))
+            image = _thicken_ink(image, max(1, extra // 3 + 1))
         drawn[state] = _recolor(image, traits["ink"])
     return drawn
 
