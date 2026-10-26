@@ -38,7 +38,7 @@ SERIES_TOOLS = frozenset({
     "scenes.document.get", "scenes.document.save", "scenes.effects.catalog", "scenes.effects.apply",
     "scenes.video2d.export", "scenes.video2d.export.receipt", "scenes.video2d.preview",
     "world3d.templates.list", "world3d.templates.suggest", "world3d.templates.get", "world3d.templates.user.put", "world3d.scene.instantiate",
-    "world3d.scene.inspect", "world3d.scene.patch", "world3d.scene.beats", "world3d.scene.talk", "world3d.scene.preview", "world3d.scene.publish",
+    "world3d.scene.inspect", "world3d.scene.patch", "world3d.scene.beats", "world3d.scene.talk", "world3d.scene.face", "world3d.scene.preview", "world3d.scene.publish",
     "scenes.world3d.export", "scenes.world3d.export.receipt",
 })
 

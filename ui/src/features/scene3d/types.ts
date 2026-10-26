@@ -3,6 +3,7 @@ import { DARK_FANTASY_IDS } from './darkFantasyIds'
 import { CREATIVE_TEMPLATE_IDS } from './creativeTemplateIds'
 import { SPEECH_TEMPLATE_IDS } from './speech/templateIds'
 import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
+import type { Scene3DFaceDecal } from './faceDecal'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
@@ -234,6 +235,8 @@ export type Scene3DSlot = {
   loop?: Scene3DLoop
   /** Floor of a Gaussian-splat set, in metres. The invisible plane the cast stands on. */
   splat?: { floorY: number }
+  /** A 2D Character Kit painted on the head. The slot stays a model. */
+  faceDecal?: Scene3DFaceDecal
 }
 
 export type Scene3DCamera = {
