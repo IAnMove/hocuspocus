@@ -18,8 +18,8 @@ export interface MontageRef {
   file: string
   revision: number
   origins: Record<string, MontageClip['origin']>
-  /** Takes and lyric per clip id, kept untouched by editor saves. */
-  extras?: Record<string, Pick<MontageClip, 'takes' | 'lyric'>>
+  /** Takes, lyric and comic-view choice per clip id, kept untouched by editor saves. */
+  extras?: Record<string, Pick<MontageClip, 'takes' | 'lyric' | 'comic'>>
   notes?: string
 }
 
@@ -112,7 +112,8 @@ export async function editorFromMontage(
       transitionTextSize: clip.transitionTextSize,
     })
     if (clip.origin) origins[clip.id] = clip.origin
-    if (clip.takes?.length || clip.lyric) extras[clip.id] = { ...(clip.takes?.length ? { takes: clip.takes } : {}), ...(clip.lyric ? { lyric: clip.lyric } : {}) }
+    const extra = clipExtra(clip)
+    if (extra) extras[clip.id] = extra
   }
   let soundtrack: EditorSoundtrack | null = null
   if (montage.soundtrack) {
@@ -128,6 +129,15 @@ export async function editorFromMontage(
     }
   }
   return { clips, soundtrack, layers: { overlays: montage.overlays ?? [], audioCues: montage.audioCues ?? [], duck: montage.duck ?? 0 }, origins, extras }
+}
+
+function clipExtra(clip: MontageClip): Pick<MontageClip, 'takes' | 'lyric' | 'comic'> | undefined {
+  const extra: Pick<MontageClip, 'takes' | 'lyric' | 'comic'> = {}
+  if (clip.takes?.length) extra.takes = clip.takes
+  if (clip.lyric) extra.lyric = clip.lyric
+  if (clip.comic && (clip.comic.text || clip.comic.frame !== undefined)) extra.comic = { ...clip.comic }
+  if (!extra.takes && !extra.lyric && !extra.comic) return undefined
+  return extra
 }
 
 /** Snake-case layer fields for POST /api/v1/video-editor/export. */

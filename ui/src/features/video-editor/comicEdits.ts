@@ -28,10 +28,12 @@ export function moveClip<T extends { id: string }>(clips: T[], movingId: string,
   return without
 }
 
-export function patchClipExtra(current: ClipExtra | undefined, patch: {
+export interface ComicExtraPatch {
   lyric?: string | null
   comic?: { frame?: number | null; text?: ComicTextStyle | null }
-}): ClipExtra | undefined {
+}
+
+export function patchClipExtra(current: ClipExtra | undefined, patch: ComicExtraPatch): ClipExtra | undefined {
   const next: ClipExtra = { ...(current ?? {}) }
   if (patch.lyric !== undefined) applyLyric(next, patch.lyric)
   if (patch.comic) applyComic(next, patch.comic)

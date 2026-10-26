@@ -6,6 +6,7 @@ import {
   ChevronsRight,
   Copy,
   Download,
+  BookOpen,
   Film,
   FolderOpen,
   GripVertical,
@@ -34,6 +35,8 @@ import { ShortenSongPanel } from './ShortenSongPanel'
 import { PublishPresetBar } from './PublishPresetBar'
 import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
+import { ComicView } from './ComicView'
+import { duplicateClipState, moveClip, patchClipExtra, type ComicExtraPatch } from './comicEdits'
 import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
@@ -693,6 +696,11 @@ function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function viewToggleClass(open: boolean): string {
+  const tone = open ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'
+  return `flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${tone}`
+}
+
 export function VideoEditorPanel() {
   const { t } = useUiTranslation('videoEditor')
   const { t: tCommon } = useUiTranslation('common')
@@ -740,6 +748,7 @@ export function VideoEditorPanel() {
   const [soundtrack, setSoundtrack] = useState<EditorSoundtrack | null>(draft.soundtrack)
   const [montage, setMontage] = useState<{ layers: MontageLayers; ref: MontageRef | null }>(() => loadMontageState(activeWorkspace))
   const [shotBoardOpen, setShotBoardOpen] = useState(false)
+  const [comicOpen, setComicOpen] = useState(false)
   const applyMontage = (state: MontageEditorState, layers: MontageLayers, ref: MontageRef) => {
     setClips(state.clips); setProjectName(state.projectName); setResolution(state.resolution); setFps(state.fps); setSoundtrack(state.soundtrack)
     persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
@@ -1129,18 +1138,43 @@ export function VideoEditorPanel() {
   const dropAtIndex = (insertionIndex: number, transferId?: string) => {
     const movingId = transferId || draggedId
     if (!movingId) return
-    setClips(current => {
-      const sourceIndex = current.findIndex(clip => clip.id === movingId)
-      if (sourceIndex < 0) return current
-      const moving = current[sourceIndex]
-      const without = current.filter(clip => clip.id !== movingId)
-      const adjustedIndex = insertionIndex > sourceIndex ? insertionIndex - 1 : insertionIndex
-      without.splice(Math.max(0, Math.min(without.length, adjustedIndex)), 0, moving)
-      return without
-    })
+    setClips(current => moveClip(current, movingId, insertionIndex))
     setDraggedId(null)
     setDropIndex(null)
     stopTimelineDragScroll()
+  }
+
+  const patchComicExtra = (id: string, patch: ComicExtraPatch) => {
+    setMontage(current => {
+      if (!current.ref) return current
+      const extras = { ...current.ref.extras }
+      const next = patchClipExtra(extras[id], patch)
+      if (next) extras[id] = next
+      else delete extras[id]
+      const ref = { ...current.ref, extras }
+      persistMontageState(activeWorkspace, current.layers, ref)
+      return { ...current, ref }
+    })
+  }
+
+  const duplicateComicClip = (id: string) => {
+    const source = clips.find(clip => clip.id === id)
+    if (!source) return
+    const copied = duplicateClipState(source, montage.ref?.extras?.[id], clipId())
+    setClips(current => {
+      const index = current.findIndex(clip => clip.id === id)
+      const next = [...current]
+      next.splice(index < 0 ? next.length : index + 1, 0, copied.clip)
+      return next
+    })
+    if (copied.extra) patchComicExtra(copied.clip.id, { lyric: copied.extra.lyric ?? null, comic: copied.extra.comic ?? { text: null, frame: null } })
+    setSelectedId(copied.clip.id)
+  }
+
+  const reloadOpenMontage = async () => {
+    if (!montage.ref) return
+    const loaded = await loadMontageIntoEditor(activeWorkspace, montage.ref.file)
+    applyMontage(loaded.state, loaded.layers, loaded.ref)
   }
 
   const stopTimelineDragScroll = () => {
@@ -2013,11 +2047,17 @@ export function VideoEditorPanel() {
           onError={setError}
         />
         {montage.ref && (
-          <button type="button" onClick={() => setShotBoardOpen(open => !open)} aria-pressed={shotBoardOpen}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${shotBoardOpen ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'}`}
-            title={t('shots.toggleTitle')}>
-            <Film size={13} /> {t('shots.toggle')}
-          </button>
+          <>
+            <button type="button" onClick={() => setShotBoardOpen(open => !open)} aria-pressed={shotBoardOpen}
+              className={viewToggleClass(shotBoardOpen)}
+              title={t('shots.toggleTitle')}>
+              <Film size={13} /> {t('shots.toggle')}
+            </button>
+            <button type="button" data-testid="comic-toggle" onClick={() => { setComicOpen(open => !open); setSequencePlaying(false) }}
+              aria-pressed={comicOpen} className={viewToggleClass(comicOpen)} title={t('comic.toggleTitle')}>
+              <BookOpen size={13} /> {t('comic.toggle')}
+            </button>
+          </>
         )}
         <PublishPresetBar
           width={resolution.width}
@@ -2058,11 +2098,7 @@ export function VideoEditorPanel() {
         onChange={layers => { setMontage(current => ({ ...current, layers })); persistMontageState(activeWorkspace, layers, montage.ref) }}
       />
       {shotBoardOpen && montage.ref && (
-        <ShotBoard workspace={activeWorkspace} file={montage.ref.file} onError={setError}
-          onChanged={async () => {
-            const loaded = await loadMontageIntoEditor(activeWorkspace, montage.ref!.file)
-            applyMontage(loaded.state, loaded.layers, loaded.ref)
-          }} />
+        <ShotBoard workspace={activeWorkspace} file={montage.ref.file} onError={setError} onChanged={reloadOpenMontage} />
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -2158,6 +2194,11 @@ export function VideoEditorPanel() {
                 )}
               />
             )}
+            <ComicView open={comicOpen} workspace={activeWorkspace} file={montage.ref?.file} clips={clips}
+              soundtrack={soundtrack} extras={montage.ref?.extras ?? {}} selectedId={selectedId}
+              revision={montage.ref?.revision ?? 0} onSelect={selectTimelineClip} onMove={dropAtIndex}
+              onDelete={removeClip} onDuplicate={duplicateComicClip} onExtra={patchComicExtra}
+              onChanged={reloadOpenMontage} onError={setError} />
           </div>
 
           <div className="px-3 py-3 border-t border-border bg-bg-tertiary/30">

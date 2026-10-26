@@ -21,6 +21,8 @@ export interface MontageClip {
   origin?: MontageOrigin
   takes?: MontageTake[]
   lyric?: string
+  /** Comic view only. Export ignores it. `frame` is seconds inside the trimmed clip. */
+  comic?: { frame?: number; text?: 'caption' | 'bubble' | 'none' }
 }
 
 export interface MontageOrigin {
@@ -196,6 +198,23 @@ export interface MontageShotBoard {
   revision: number
   duration: number
   shots: MontageShot[]
+}
+
+export interface ComicPanelImage {
+  clip_id: string
+  at: number
+  frame: string
+  print: string
+  width: number
+  height: number
+}
+
+export async function getComicPanels(workspace: string, file: string, clipIds: string[], frames: Record<string, number> = {}): Promise<{ file: string; panels: ComicPanelImage[] }> {
+  const res = await fetch(`${BASE}/api/v1/montages/${encodeURIComponent(file)}/comic/panels`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workspace, clip_ids: clipIds, ...(Object.keys(frames).length ? { frames } : {}) }),
+  })
+  return readJson(res, 'Could not read the comic panels')
 }
 
 export async function getMontageShots(workspace: string, file: string): Promise<MontageShotBoard> {

@@ -52,4 +52,21 @@ test('editor saves keep takes, lyric and notes of each clip', () => {
   assert.equal(saved.clips[0].takes?.length, 2)
   assert.equal(saved.clips[0].lyric, 'fly')
   assert.equal(saved.notes, 'rebuilt')
+  assert.equal('comic' in saved.clips[0], false)
+})
+
+test('a lyric and a comic choice survive save and reload', async () => {
+  const probe = async () => ({ duration: 5, width: 1080, height: 1920, fps: 24, has_audio: false, pixel_format: 'yuv420p', has_alpha: false })
+  const withLine = { ...montage, width: 1080, height: 1920, clips: [{ ...montage.clips[0], lyric: ' fly / high ', comic: { frame: 1.25, text: 'bubble' as const } }] }
+  const opened = await editorFromMontage(withLine, probe, async () => ({ duration: 1 }), () => 'thumb')
+  assert.equal(opened.extras.c1.lyric, ' fly / high ')
+  assert.deepEqual(opened.extras.c1.comic, { frame: 1.25, text: 'bubble' })
+  const saved = montageFromEditor({ projectName: 'Bird', resolution: resolutionFor(1080, 1920), fps: 24, clips: opened.clips,
+    soundtrack: null, layers: { overlays: [], audioCues: [], duck: 0 }, origins: opened.origins, extras: opened.extras })
+  assert.equal(saved.clips[0].lyric, ' fly / high ')
+  assert.deepEqual(saved.clips[0].comic, { frame: 1.25, text: 'bubble' })
+  const again = await editorFromMontage(saved, probe, async () => ({ duration: 1 }), () => 'thumb')
+  assert.deepEqual(again.extras.c1, opened.extras.c1)
+  const plain = await editorFromMontage(montage, probe, async () => ({ duration: 171 }), source => `thumb:${source}`)
+  assert.equal(plain.extras.c1, undefined)
 })

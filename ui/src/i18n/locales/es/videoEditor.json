@@ -280,6 +280,25 @@
       "production": "Producción del Director"
     }
   },
+  "comic": {
+    "toggle": "Vista cómic",
+    "toggleTitle": "Ver este montaje como páginas de cómic. Los cambios son los de la línea de tiempo.",
+    "printed": "Impreso",
+    "original": "Original",
+    "loading": "Imprimiendo…",
+    "page": "Página {{n}}",
+    "caption": "Cartela",
+    "bubble": "Bocadillo",
+    "none": "Sin texto",
+    "textStyle": "Texto",
+    "editText": "Verso",
+    "changeTake": "Cambiar toma",
+    "pickFrame": "Elegir viñeta",
+    "delete": "Borrar",
+    "duplicate": "Duplicar",
+    "empty": "Este montaje todavía no tiene clips.",
+    "frameAt": "{{time}} s"
+  },
   "actionErrors": {
     "onlyOneDraft": "Solo existe un borrador de Video Editor por workspace: “{{name}}”. Pide explícitamente crear otro proyecto para reemplazar el borrador actual.",
     "outputMissing": "No existe el output “{{name}}” en este workspace.",
