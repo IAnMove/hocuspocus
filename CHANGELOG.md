@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: an InfiniteTalk lip redo uses guidance 5 and audio guidance 4.** The Wan handler sets those defaults and does not ask for a distillation LoRA. Guidance 1 forced the audio term off.
+
 **Fixed: a lip-sync QA failure names the exception, and DWPose stays on CPU.** `score_take` used to hide every error as `qa_unavailable`. It now returns `qa_error:<class>`. The pose session asks only for `CPUExecutionProvider`.
 
 **Fixed: a lip redo deletes the temporary audio it cut.** The span cut and the placed series line (`lipsync-audio*.wav`) are removed when the call ends.

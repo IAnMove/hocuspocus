@@ -652,6 +652,17 @@ def test_a_qa_error_names_the_exception(tmp_path, monkeypatch):
     assert result["qa"]["reason"] == "qa_error:RuntimeError"
 
 
+def test_infinitetalk_sends_the_handler_guidance(tmp_path, monkeypatch):
+    """Wan sets guidance 5 and, for multitalk models, audio guidance 4. Scale 1 turns the audio term off."""
+    folder = tmp_path / "film"
+    _production(folder)
+    seen = _bind(monkeypatch, tmp_path)
+    monkeypatch.setattr(redo, "trim_span", lambda audio, _dest, _start, _end: audio)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "production_id": "mv", "shot": "o05"})
+    assert seen[0]["guidance_scale"] == 5
+    assert seen[0]["audio_guidance_scale"] == 4
+
+
 def test_dwpose_asks_for_the_cpu_provider():
     import onnxruntime as ort
     from services.lipsync_qa import _Pose
