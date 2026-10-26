@@ -121,7 +121,7 @@ def test_the_operation_is_in_the_shared_catalog():
 
 def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_exporter(tmp_path):
     bind_comic_exporter(_FakeExport())
-    reply = _call(tmp_path, _panels(tmp_path, cutout=True), export=True)
+    reply = _call(tmp_path, _panels(tmp_path, cutout=True), export=True, paper=False)
     assert reply["status"] == "completed"
     scenes = reply["result"]["scenes"]
     assert [scene["role"] for scene in scenes] == ["exit", "enter"]
@@ -511,3 +511,81 @@ def test_a_montage_document_is_saved_only_after_the_clips_exist(tmp_path):
     assert saved["revision"] == 2
     assert reply["result"]["montage"]["backup"] == "Song.r1.montage.json"
     assert json.loads((tmp_path / "studio" / "Song.r1.montage.json").read_text())["revision"] == 1
+
+
+def test_a_printed_twin_keeps_the_size_and_alpha_and_looks_printed(tmp_path):
+    import numpy as np
+
+    from services.scene3d_comic_paper import print_picture
+
+    source = tmp_path / "panel.png"
+    picture = np.zeros((90, 160, 4), np.uint8)
+    picture[..., 0] = np.linspace(0, 255, 160, dtype=np.uint8)[None, :]
+    picture[..., 1] = 90
+    picture[..., 3] = 255
+    Image.fromarray(picture).save(source)
+    print_picture(source, tmp_path / "print.png", 3, (0, 0, 160, 90, 320, 180))
+    printed = np.asarray(Image.open(tmp_path / "print.png").convert("RGBA"))
+    assert printed.shape == picture.shape
+    assert (printed[..., 3] == 255).all()
+    assert tuple(printed[0, 80, :3]) == (20, 17, 16), "an ink line runs inside the edge"
+    assert np.abs(printed[..., :3].astype(int) - picture[..., :3]).mean() > 4
+
+
+def test_a_printed_sticker_gets_a_white_die_cut_edge(tmp_path):
+    import numpy as np
+
+    from services.scene3d_comic_paper import print_sticker, sticker_shadow
+
+    sticker = np.zeros((80, 120, 4), np.uint8)
+    sticker[20:60, 40:80] = (30, 60, 200, 255)
+    Image.fromarray(sticker).save(tmp_path / "sticker.png")
+    print_sticker(tmp_path / "sticker.png", tmp_path / "printed.png", 5)
+    sticker_shadow(tmp_path / "sticker.png", tmp_path / "shadow.png")
+    printed = np.asarray(Image.open(tmp_path / "printed.png").convert("RGBA"))
+    shadow = np.asarray(Image.open(tmp_path / "shadow.png").convert("RGBA"))
+    assert printed[40, 38, 3] > 200 and printed[40, 38, :3].mean() > 180, "white paper just outside the figure"
+    assert printed[5, 5, 3] == 0
+    assert shadow[..., 3].max() > 0 and shadow[62, 82, 3] > shadow[18, 38, 3], "the lamp throws it down and right"
+
+
+def _dressed_documents(tmp_path, panels, **extra):
+    bind_comic_exporter(_FakeExport())
+    reply = _call(tmp_path, panels, export=False, from_panel=1, to_panel=3, **extra)
+    assert reply["status"] == "completed", reply
+    return reply["result"], _documents(tmp_path, reply["result"]["scenes"])
+
+
+def test_paper_prints_the_fillers_and_fades_the_cut_panels(tmp_path):
+    result, (exit_doc, enter_doc) = _dressed_documents(tmp_path, _panels(tmp_path, cutout=True))
+    exit_slots = {slot["id"]: slot for slot in exit_doc["slots"]}
+    enter_slots = {slot["id"]: slot for slot in enter_doc["slots"]}
+    assert exit_doc["slots"][0]["id"] == "desk" and exit_doc["environment"]["floorStyle"] == "none"
+    assert exit_slots["panel-0"]["sourceUrl"].startswith("/api/v1/file/comic-print-0.png")
+    assert exit_slots["panel-1"]["sourceUrl"].startswith("/api/v1/file/comic-panel-1.png")
+    leaving = exit_slots["print-1"]["imageLook"]["fade"]
+    assert leaving["from"] == 0 and leaving["to"] == 1 and leaving["end"] < exit_doc["duration"]
+    assert exit_slots["print-cutout-1"]["imageLook"]["fade"] == leaving and exit_slots["shadow-1"]["imageLook"]["fade"] == leaving
+    assert "fade" not in exit_slots["print-3"]["imageLook"] and "fade" not in enter_slots["print-1"]["imageLook"]
+    arriving = enter_slots["print-3"]["imageLook"]["fade"]
+    assert arriving["from"] == 1 and arriving["to"] == 0 and arriving["start"] > 0
+    assert "screen" not in enter_slots["panel-3"], "a still picture does not play"
+    assert result["warnings"] == []
+
+
+def test_a_video_panel_plays_its_own_frames_up_to_the_cut(tmp_path):
+    clip = _movie(tmp_path, seconds=4)
+    panels = [{"video": clip, "at": at} for at in (0.5, 1.0, 1.5, 3.5)]
+    _result, (exit_doc, enter_doc) = _dressed_documents(tmp_path, panels)
+    screen = next(slot for slot in enter_doc["slots"] if slot["id"] == "panel-3")["screen"]
+    assert screen["media"] == "video" and screen["loop"] is False and screen["lines"] == 120  # 36 rows, raised to the parser floor
+    assert screen["sourceUrl"].startswith("/api/v1/file/comic-live-3.mp4")
+    assert "screen" not in next(slot for slot in exit_doc["slots"] if slot["id"] == "panel-3")
+    live = tmp_path / "studio" / "comic-live-3.mp4"
+    frames = int(subprocess.check_output(
+        ["ffprobe", "-v", "error", "-count_frames", "-select_streams", "v:0", "-show_entries", "stream=nb_read_frames", "-of", "csv=p=0", str(live)],
+    ).strip())
+    assert frames >= round(enter_doc["duration"] * 30)
+    assert not any(slot["id"] in {"cutout-3", "print-cutout-3", "shadow-3"} for slot in enter_doc["slots"])
+    _flat, (_plain_exit, plain_enter) = _dressed_documents(tmp_path, panels, intent="comic-still", live_enter=False)
+    assert "screen" not in next(slot for slot in plain_enter["slots"] if slot["id"] == "panel-3")

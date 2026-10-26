@@ -82,7 +82,7 @@ function prepareScreenSurface(root: Object3D, screen: MediaScreen, standalone: b
   const previous = target.material
   const aspect = screenSurfaceAspect(target, screen, Boolean(imagePlate))
   // A CRT shows few lines; a small picture is both authentic and cheap for a wall of TVs.
-  const lines = screen.style === 'crt' ? 240 : 1080
+  const lines = screen.style === 'crt' ? 240 : screen.lines ?? 1080
   canvas.width = Math.max(2, Math.round(Math.min(1920, lines * aspect))); canvas.height = Math.max(2, Math.round(canvas.width / aspect))
   const context = canvas.getContext('2d')!
   const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace; texture.flipY = imagePlate || standalone || plane ? !screen.flipY : screen.flipY

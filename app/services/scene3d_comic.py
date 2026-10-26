@@ -83,8 +83,17 @@ def comic_transition(data: dict, workspace_dir) -> dict:
     panels, warnings = _stage_panels(
         sources, cells, {from_panel, to_panel}, (width, height), workspace, root, workspace_dir,
     )
+    desk_url = None
+    if data.get("paper", True) is not False:
+        from services.scene3d_comic_dress import dress
+        dressed = dress({
+            "panels": panels, "sources": sources, "cells": cells, "page_png": page_png, "fmt": fmt,
+            "from_panel": from_panel, "to_panel": to_panel, "enter_duration": enter_duration, "hold": hold,
+            "seed": seed, "root": root, "url": lambda name: _url(name, workspace), "live": data.get("live_enter", True) is not False,
+        })
+        panels, page_url, desk_url = dressed["panels"], dressed["pageUrl"], dressed["deskUrl"]
     built = run_template_tool("comic", _payload(
-        fmt, width, height, page_url, panels, from_panel, to_panel, seed, exit_duration, enter_duration, hold,
+        fmt, width, height, page_url, panels, from_panel, to_panel, seed, exit_duration, enter_duration, hold, desk_url,
     ))
     documents = [("exit", built.get("exit")), ("enter", built.get("enter"))]
     scenes = [_save(workspace, workspace_dir, role, document) for role, document in documents]
@@ -345,12 +354,13 @@ def _seconds_between(value, name: str, low: float, high: float) -> float:
     return float(value)
 
 
-def _payload(fmt, width, height, page_url, panels, from_panel, to_panel, seed, exit_duration, enter_duration, hold) -> str:
+def _payload(fmt, width, height, page_url, panels, from_panel, to_panel, seed, exit_duration, enter_duration, hold, desk_url=None) -> str:
     import json
     return json.dumps({
         "format": fmt, "width": width, "height": height, "pageUrl": page_url,
         "panels": panels, "fromPanel": from_panel, "toPanel": to_panel, "seed": seed,
         "exitDuration": exit_duration, "enterDuration": enter_duration, "hold": hold,
+        **({"deskUrl": desk_url} if desk_url else {}),
     })
 
 

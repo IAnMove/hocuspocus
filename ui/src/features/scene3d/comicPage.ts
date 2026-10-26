@@ -3,18 +3,21 @@ import { createDefaultScene3DDocument } from './document.ts'
 import { framingFov, framingPose, framingProgress } from './framing.ts'
 import { chooseComicLayout } from './comicLayout.ts'
 import { COMIC_TEMPLATE_IDS, type ComicTemplateId } from './comicTemplateIds.ts'
+import { dressComicSlots, type ComicDressPanel } from './comicDress.ts'
 import type { Scene3DCamera, Scene3DDocument, Scene3DFraming, Scene3DSlot, Vec3 } from './types.ts'
 
 export { COMIC_TEMPLATE_IDS, type ComicTemplateId }
 
 export type ComicFormat = 'landscape' | 'portrait'
 export type ComicRole = 'exit' | 'enter'
-export type ComicPanelInput = { url: string; cutout?: string }
+export type ComicPanelInput = { url: string; cutout?: string } & ComicDressPanel
 export type ComicPairInput = {
   format: ComicFormat
   width?: number
   height?: number
   pageUrl?: string
+  /** Printed-paper dressing (scene3d_comic_paper.py): the desk under the page. */
+  deskUrl?: string
   panels?: ComicPanelInput[]
   fromPanel?: number
   toPanel?: number
@@ -349,10 +352,16 @@ export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; 
   const enterDuration = input.enterDuration ?? COMIC_DURATION
   const leave = fillPose(layout.panels[fromPanel])
   const arrive = fillPose(layout.panels[toPanel])
-  return {
-    exit: documentOf(comicTemplateId('exit', format), format, size, slots, layout.panels[fromPanel], fromPanel, leave, wide, exitDuration, comicMoveWindow('exit', exitDuration, hold), yawArc),
-    enter: documentOf(comicTemplateId('enter', format), format, size, slots, layout.panels[toPanel], toPanel, wide, arrive, enterDuration, comicMoveWindow('enter', enterDuration, hold), yawArc),
-  }
+  const exitMove = comicMoveWindow('exit', exitDuration, hold), enterMove = comicMoveWindow('enter', enterDuration, hold)
+  const dressed = dressComicSlots(slots, {
+    panels: sources, fromPanel, toPanel, pageScale: layout.pageScale, fov: COMIC_FOV, deskUrl: input.deskUrl,
+    exit: { duration: exitDuration, ...exitMove }, enter: { duration: enterDuration, ...enterMove },
+  })
+  const exit = documentOf(comicTemplateId('exit', format), format, size, dressed.exit, layout.panels[fromPanel], fromPanel, leave, wide, exitDuration, exitMove, yawArc)
+  const enter = documentOf(comicTemplateId('enter', format), format, size, dressed.enter, layout.panels[toPanel], toPanel, wide, arrive, enterDuration, enterMove, yawArc)
+  // The desk runs below the page, where the studio floor would hide it.
+  if (input.deskUrl) for (const doc of [exit, enter]) doc.environment = { reflectiveFloor: false, platform: false, bloom: 0, floorStyle: 'none' }
+  return { exit, enter }
 }
 
 export function applyComicTemplate(id: string): Scene3DDocument | null {

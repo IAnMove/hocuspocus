@@ -46,8 +46,15 @@ def _place(data: dict, workspace_dir, transition) -> dict:
     anchor, split, from_source, to_source = _plan(kind, index, cut, mode, exit_d, enter_d, starts, spans)
     samples = _samples(clips, anchor, split, from_source, to_source, root, cache)
     panels = _extract(samples, root, cache)
+    if mode == "replace":
+        # The entering panel plays the frames the trim removed, so it moves in time with the song.
+        panels[2] = {"video": str(_probe(samples[2][0], root, cache)["path"]), "at": float(samples[2][1])}
     fmt = _format(data, samples[1][0], root, cache)
-    built = transition(_inner(workspace, fmt, panels, data.get("seed", 0), exit_d, enter_d, hold), workspace_dir)
+    inner = _inner(workspace, fmt, panels, data.get("seed", 0), exit_d, enter_d, hold)
+    for key in ("paper", "live_enter"):
+        if key in data:
+            inner[key] = data[key]
+    built = transition(inner, workspace_dir)
     edited = _assemble(clips, anchor, split, from_source, to_source, built, exit_d, enter_d)
     _audio(loaded, edited, clips, spans, anchor, _duration(clips, spans), root, cache)
     saved = _keep(store, root, workspace, file, previous, revision, loaded, pristine)
