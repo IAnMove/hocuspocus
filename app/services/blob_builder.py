@@ -403,6 +403,7 @@ def _layout(spec: dict) -> dict:
     return {
         "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"],
         "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
+        "waist_taper": min(1.0, max(0.35, waist_w / torso_w)) if spec["family"] == "anime" else 1.0,
         "torso_y": (stack["torso_top"] + stack["torso_bottom"]) / 2,
         "torso_top": stack["torso_top"], "torso_bottom": stack["torso_bottom"],
         "shoulder_y": stack["torso_bottom"] + torso_h * shoulder_at,
@@ -535,16 +536,27 @@ def _neck(spec: dict, layout: dict) -> list:
 def _chest(spec: dict, layout: dict) -> list:
     top = spec["colors"]["top"]
     if spec["family"] == "anime":
-        taper = min(1.0, max(0.35, layout["waist_w"] / layout["torso_w"]))
-        turned = (math.pi, 0.0, 0.0)
-        return [_p("frustum", (0, layout["torso_y"], 0), (layout["torso_w"], layout["torso_h"], layout["torso_d"]), top, turned, BODY_SEGMENTS, taper)]
+        return torso_shell(layout, top, taper=layout["waist_taper"])
     belly_d = layout["sx"] * layout["belly"]
     belly_y = layout["torso_y"] - (layout["drop"] - 0.5) * layout["torso_h"] * 0.65
     belly_z = layout["torso_d"] * 0.5 * layout["forward"] * 0.45
-    return [
-        _p("cylinder", (0, layout["torso_y"], 0), (layout["torso_w"], layout["torso_h"], layout["torso_d"]), top, segments=BODY_SEGMENTS),
-        _p("sphere", (0, belly_y, belly_z), (belly_d, belly_d * 0.82, belly_d * 0.72), top, segments=BODY_SEGMENTS),
-    ]
+    return [*torso_shell(layout, top), _p("sphere", (0, belly_y, belly_z), (belly_d, belly_d * 0.82, belly_d * 0.72), top, segments=BODY_SEGMENTS)]
+
+
+def torso_shell(layout: dict, color: str, grow: float = 1.0, taper: float | None = None) -> list:
+    """A barrel under a dome. A flat top reads as a shelf wider than the neck; the dome rounds the shoulders and keeps the top where it was.
+
+    ``taper`` narrows the bottom (anime waist). ``grow`` makes a garment a little bigger than the body it covers.
+    """
+    width, depth = layout["torso_w"] * grow, layout["torso_d"] * grow
+    dome = min(width * 0.40, layout["torso_h"] * 0.34)
+    barrel_h = layout["torso_h"] - dome
+    barrel_y = layout["torso_bottom"] + barrel_h / 2
+    cap = _p("sphere", (0, layout["torso_bottom"] + barrel_h, 0), (width, dome * 2, depth), color, segments=BODY_SEGMENTS)
+    if taper is None:
+        return [_p("cylinder", (0, barrel_y, 0), (width, barrel_h, depth), color, segments=BODY_SEGMENTS), cap]
+    # Local bottom is the wide end. Half a turn about X puts the shoulders on top.
+    return [_p("frustum", (0, barrel_y, 0), (width, barrel_h, depth), color, (math.pi, 0.0, 0.0), BODY_SEGMENTS, taper), cap]
 
 
 def _shoulders(spec: dict, layout: dict) -> list:

@@ -51,15 +51,34 @@ def _crown(layout, color):
     return _piece("sphere", (0, y, -layout["sz"] * 0.05), (layout["sx"] * 0.98, scale_y, layout["sz"] * 0.90), color, segments=_HAIR)
 
 
+def _back(layout, color):
+    """The hair mass behind the head. It sits at the back of the skull, so the face stays clear."""
+    return _piece("sphere", (0, layout["head_y"] + layout["sy"] * 0.04, -layout["sz"] * 0.24),
+                  (layout["sx"] * 1.08, layout["sy"] * 1.02, layout["sz"] * 0.62), color, segments=_HAIR)
+
+
+def _locks(layout, color):
+    """Two locks beside the face. They hang past 70 degrees round the head, outside the face drawn on the front."""
+    length = layout["sy"] * 0.62
+    y = layout["head_y"] + layout["sy"] * 0.24 - length / 2
+    lock = _piece("capsule", (layout["sx"] * 0.47, y, -layout["sz"] * 0.06),
+                  (layout["sx"] * 0.13, length, layout["sz"] * 0.30), color, segments=_LIMB)
+    return _pair(lock)
+
+
+def _cranium(layout, color):
+    return [_crown(layout, color), _back(layout, color)]
+
+
 def _short(layout, color):
-    return [_crown(layout, color)]
+    return _cranium(layout, color)
 
 
 def _bangs(layout, color):
     scale_y = layout["sy"] * 0.12
     y = layout["head_y"] + layout["sy"] * 0.33 + scale_y / 2
     fringe = _piece("sphere", (0, y, layout["sz"] * 0.28), (layout["sx"] * 0.70, scale_y, layout["sz"] * 0.20), color, segments=_HAIR)
-    return [_crown(layout, color), fringe]
+    return [*_cranium(layout, color), fringe, *_locks(layout, color)]
 
 
 def _spike(layout, color, x, z, height):
@@ -70,7 +89,7 @@ def _spike(layout, color, x, z, height):
 def _spiky(layout, color):
     center = _spike(layout, color, 0.0, -layout["sz"] * 0.10, layout["sy"] * 0.55)
     side = _spike(layout, color, layout["sx"] * 0.22, -layout["sz"] * 0.12, layout["sy"] * 0.38)
-    return [_crown(layout, color), center, *_pair(side)]
+    return [*_cranium(layout, color), center, *_pair(side)]
 
 
 def _tail(layout, color, length, thick, z):
@@ -80,14 +99,14 @@ def _tail(layout, color, length, thick, z):
 
 def _long(layout, color):
     length = max(layout["torso_h"] * 0.95, layout["sy"] * 1.5)
-    return [_crown(layout, color), _tail(layout, color, length, layout["sz"] * 0.34, -layout["sz"] * 0.58)]
+    return [*_cranium(layout, color), *_locks(layout, color), _tail(layout, color, length, layout["sz"] * 0.34, -layout["sz"] * 0.58)]
 
 
 def _ponytail(layout, color):
     size = layout["sx"] * 0.28
     bun = _piece("sphere", (0, layout["head_y"] + layout["sy"] * 0.18, -layout["sz"] * 0.50), (size, size, size), color, segments=_HAIR)
     length = max(layout["torso_h"] * 0.62, layout["sy"])
-    return [_crown(layout, color), bun, _tail(layout, color, length, layout["sx"] * 0.15, -layout["sz"] * 0.64)]
+    return [*_cranium(layout, color), bun, _tail(layout, color, length, layout["sx"] * 0.15, -layout["sz"] * 0.64)]
 
 
 def _twin_tails(layout, color):
@@ -96,7 +115,7 @@ def _twin_tails(layout, color):
     ball = _piece("sphere", (x, layout["head_y"] + layout["sy"] * 0.04, z), (knot, knot, knot), color, segments=_LIMB)
     length = max(layout["sy"] * 1.2, layout["h"] * 0.18)
     tail = _piece("capsule", (x, layout["head_y"] - length * 0.32, z - layout["sz"] * 0.06), (knot * 0.55, length, knot * 0.55), color, segments=_LIMB)
-    return [_crown(layout, color), *_pair(ball), *_pair(tail)]
+    return [*_cranium(layout, color), *_locks(layout, color), *_pair(ball), *_pair(tail)]
 
 
 def _bun(layout, color):
@@ -104,7 +123,7 @@ def _bun(layout, color):
         "sphere", (0, layout["head_y"] + layout["sy"] * 0.52, -layout["sz"] * 0.10),
         (layout["sx"] * 0.32, layout["sy"] * 0.28, layout["sz"] * 0.32), color, segments=_HAIR,
     )
-    return [_crown(layout, color), bun]
+    return [*_cranium(layout, color), bun]
 
 
 def _skirt(layout, color):
@@ -121,12 +140,14 @@ def _skirt(layout, color):
 
 
 def _jacket(layout, color):
-    shoulder = layout["torso_w"] * 1.08
-    taper = min(0.92, max(0.35, (layout["waist_w"] * 1.05) / shoulder))
-    length = layout["torso_h"] * 0.84
-    y = layout["torso_y"] - layout["torso_h"] * 0.06
-    # Local bottom is the wide end. Half a turn about X puts the shoulders on top.
-    return [_piece("frustum", (0, y, 0), (shoulder, length, layout["torso_d"] * 1.08), color, (math.pi, 0.0, 0.0), 16, taper)]
+    """The body's barrel and dome, 8 percent bigger and 10 percent shorter. Its hem is wider than the body at that height, so no skin shows through."""
+    from services.blob_builder import torso_shell
+    drop = layout["torso_h"] * 0.10
+    short = {**layout, "torso_bottom": layout["torso_bottom"] + drop, "torso_h": layout["torso_h"] - drop}
+    body_taper = layout["waist_taper"]
+    body_at_hem = body_taper + 0.14 * (1.0 - body_taper)
+    taper = min(1.0, body_at_hem * 1.06 / 1.08)
+    return torso_shell(short, color, grow=1.08, taper=None if taper > 0.97 else taper)
 
 
 def _sleeves_long(layout, color):
@@ -147,12 +168,13 @@ def _shorts(layout, color):
 
 
 def _school_collar(layout, color):
-    y = layout["torso_top"] - layout["h"] * 0.01
-    width = min(layout["sx"] * 0.70, layout["torso_w"] * 0.72)
-    depth = min(layout["sz"] * 0.70, layout["torso_d"] * 0.72)
-    ring = _piece("cylinder", (0, y, 0), (width, layout["h"] * 0.028, depth), color, segments=_LIMB)
-    flap = _piece("box", (0, y - layout["h"] * 0.018, layout["torso_d"] * 0.42), (width * 0.62, layout["h"] * 0.04, layout["h"] * 0.012), color)
-    return [ring, flap]
+    """Two lapels in a V and a small flap, on the chest below the chin line."""
+    y = layout["head_y"] - layout["sy"] / 2 - layout["h"] * 0.034
+    z = layout["torso_d"] * 0.46
+    width = min(layout["sx"] * 0.62, layout["torso_w"] * 0.60)
+    lapel = _piece("box", (width * 0.30, y, z), (width * 0.55, layout["h"] * 0.034, layout["h"] * 0.010), color, (0.0, 0.0, -0.55))
+    flap = _piece("box", (0, y - layout["h"] * 0.026, z + layout["h"] * 0.002), (width * 0.30, layout["h"] * 0.030, layout["h"] * 0.008), color)
+    return [*_pair(lapel), flap]
 
 
 def _cape(layout, color):

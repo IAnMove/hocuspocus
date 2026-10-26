@@ -442,3 +442,38 @@ def test_synthetic_mixamo_meshy_and_vrm_clips_retarget_onto_both_families():
     junk = [("Bone", None, (0, 0, 0)), ("Bone.001", 0, (0, 0.2, 0)), ("Bone.002", 0, (0, -0.2, 0))]
     with pytest.raises(InvalidInput, match="no humanoid skeleton"):
         retarget_file(_spin_gltf(junk, 1, "junk"), ".gltf", rig, "Imported")
+
+
+@pytest.mark.parametrize("preset", ["sailor", "anime_girl", "anime_boy", "chibi_kid"])
+def test_torso_top_is_a_dome_not_a_flat_shelf(preset):
+    """A cylinder or frustum capping the torso reads as a shelf wider than the neck. The highest of them stops a dome short of the top."""
+    traits = {**PRESETS[preset], "accessories": [], "hair": {"style": "none"}}
+    built = blob_pieces(traits)
+    head_y = built["faceAnchor"]["center"][1]
+    tops = {"sphere": [], "flat": []}
+    for piece in built["pieces"]:
+        top = piece["position"][1] + piece["scale"][1] / 2
+        if piece["position"][1] < head_y - built["faceAnchor"]["radii"][1] and piece["position"][0] == 0 and piece["scale"][0] > 0.12:
+            tops["sphere" if piece["type"] == "sphere" else "flat"].append((top, piece["type"]))
+    flat = max(t for t, kind in tops["flat"] if kind in ("cylinder", "frustum"))
+    dome = max(t for t, kind in tops["sphere"])
+    assert dome > flat + 0.02, (preset, dome, flat)
+
+
+def test_school_collar_hangs_below_the_chin_and_the_jacket_hem_covers_the_body():
+    built = blob_pieces({"family": "anime", "accessories": [{"kind": "school_collar"}], "hair": {"style": "none"}})
+    bare = blob_pieces({"family": "anime", "accessories": [], "hair": {"style": "none"}})
+    old = {_piece_key(piece) for piece in bare["pieces"]}
+    extra = [piece for piece in built["pieces"] if _piece_key(piece) not in old]
+    anchor = built["faceAnchor"]
+    chin = anchor["center"][1] - anchor["radii"][1]
+    assert extra and max(point[1] for point in _world_vertices(extra)) < chin + 0.01
+    jacket = blob_pieces({"family": "anime", "build": "slim", "accessories": [{"kind": "jacket"}], "hair": {"style": "none"}})
+    shell = [piece for piece in jacket["pieces"] if piece["type"] == "frustum"]
+    assert len(shell) == 2  # body barrel and jacket barrel
+    body, coat = sorted(shell, key=lambda piece: piece["scale"][0])
+    # Half the width at the coat's lower rim: the body must be narrower there, or skin shows through.
+    low = coat["position"][1] - coat["scale"][1] / 2
+    f = (low - (body["position"][1] - body["scale"][1] / 2)) / body["scale"][1]
+    body_w = body["scale"][0] * (body["taper"] + (1 - body["taper"]) * f)
+    assert coat["scale"][0] * coat["taper"] >= body_w
