@@ -28,6 +28,10 @@ The viewer section **Cara 2D** sets the kit and the expression. It keeps a cente
 
 The cap is a child of `Head`, flat (no toon ink, no cel shading). From ±30° it still meets the head.
 
+## Head style (`anime_head`)
+
+`traits.style: "anime_head"` draws the face for a bald egg head (`model3d.anime.make` uses it): a whole-head picture whose skull box is the kit's `fit`, eleven poses (`neutral, happy, sad, angry, surprised, smug, shy, sleepy, suspicious, tired, shout`), nine visemes and a blink, VRoid-like eyes (iris bands, limbal ring, three highlights, a coloured upper lash from `lashColor`, crease and lower lash), brows, a nose dot, blush (`blush`, stronger with lines for `shy`) and mouth corners per expression. Only the features are drawn: the 3D skin shows through, so `skin` must equal the head colour. The kit's provenance carries `face {fit, taper}`, which `world3d.scene.face` takes as defaults.
+
 ## Egg head and a projected picture
 
 `taper` (0–0.6) narrows the cap toward the chin with the lofted head's jaw formula (0.35 for `mesh: "loft"`), so it hugs the egg instead of floating off the chin at three quarters. `fit: [cu, cv, ru, rv]` projects a whole painted head (hair included) from the front: the drawn skull's centre and half-size as fractions of the picture; each cap vertex takes the pixel in front of it (`u = cu + x·ru`), the cap covers 200 x 180 degrees, pixels outside the picture are transparent and the hair geometry of the body carries the sides and the back. Choose `ru = rv · rx / ry` so the drawing keeps its proportions on the egg (`rx`, `ry` from `faceAnchor.radii`). Mouths and blinks are painted in picture space, so they land where they were drawn. Both are stored only when given; the default cap is unchanged.

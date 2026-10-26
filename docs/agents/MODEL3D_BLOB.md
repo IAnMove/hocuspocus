@@ -51,14 +51,18 @@ feet sit on y = 0.
 `mesh: "loft"` (anime family only) replaces the primitives with one smooth
 lofted mesh in the spirit of a PS2 humanoid: elliptical rings strung along
 each limb, so an elbow or a knee is a run of rings the rig blends, a torso that
-tapers to the waist and out at the hips, a real neck, an egg head with a jaw
-(`blob_loft.egg_scale`, the same formula as the face cap's `taper`), mittens
-with a thumb, shoes with a sole, and hair as geometry in `hair.color` (a helmet
-round the crown and back, side locks and a fall for `long`, spikes for `spiky`,
-flat strands on the forehead only for `bangs`: a painted fringe draws its own).
-Accessories become colour regions of that mesh: `skirt` (two thin pleated
-sheets, knee socks), `school_collar` (a collar and a ribbon, or the shirt V of a
-`jacket`), `tie`. About 3–4k triangles. The default body is unchanged.
+tapers to the waist and out at the hips, a short real neck, an egg head with a
+jaw and ears (`blob_loft.egg_scale`, the same formula as the face cap's
+`taper`), hands with four fingers and a thumb, shoes with a sole, and hair as
+curved clumps in `hair.color` (`blob_hair`: a helmet, a fringe, side locks, a
+back fall, tails, spikes or a bun per style, `bob` included), written as the
+GLB's second primitive (material `hair`) so the toon look can gloss it.
+`outfit` (`school`, `casual`, `sport`, loft only) sets sleeve and leg lengths,
+socks and the shoe style; the accessories become colour regions: `skirt` (one
+closed pleated tube, knee socks), `shorts`, `school_collar` (a collar and a
+bow, or the shirt V of a `jacket`), `tie`. About 3k body + 2k hair triangles.
+The default body is unchanged. `model3d.anime.make` wraps all of this with the
+face (docs/agents/ANIME_CHARACTERS.md).
 
 Accessories, each at most once, up to six: `cap`, `sailor_cap`, `top_hat`,
 `beanie`, `bucket_hat`, `apron`, `tie`, `collar`, `belt`, `backpack`, `scarf`,
