@@ -65,6 +65,9 @@ class _LiveExporter:
 
 
 def comic_transition(data: dict, workspace_dir) -> dict:
+    if data.get("montage") is not None:
+        from services.scene3d_comic_montage import comic_from_montage
+        return comic_from_montage(data, workspace_dir, comic_transition)
     workspace = str(data.get("workspace") or "")
     fmt, from_panel, to_panel, seed, specs = _request(data)
     exporting = data.get("export") is True

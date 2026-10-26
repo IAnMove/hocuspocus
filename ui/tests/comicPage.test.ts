@@ -28,7 +28,7 @@ import {
   cutoutFactor,
   fillFrameOffset,
 } from '../src/features/scene3d/comicPage.ts'
-import { comicTransitionBody } from '../src/features/scene3d/comicTransition.ts'
+import { comicMontageBody, comicTransitionBody } from '../src/features/scene3d/comicTransition.ts'
 import { imageCutoutMesh } from '../src/features/scene3d/imageCutout.ts'
 import { applyScene3DTemplate, SCENE3D_TEMPLATES, TEMPLATE_CATEGORIES } from '../src/features/scene3d/templates.ts'
 import { parseScene3DDocument } from '../src/features/scene3d/document.ts'
@@ -206,6 +206,20 @@ test('the operation body is the shared command', () => {
   assert.equal(body.input.export, true)
   assert.equal(body.input.from_panel, 0)
   assert.equal(body.input.panels.length, 4)
+})
+
+test('the montage body names the cut and the mode', () => {
+  const body = comicMontageBody({
+    workspace: 'studio', file: 'song.montage.json', between: 0, mode: 'replace', intentId: 'comic-ui-1',
+  })
+  assert.equal(body.operation, 'scene3d.comic.transition')
+  assert.equal(body.version, 1)
+  assert.equal(body.intent_id, 'comic-ui-1')
+  assert.equal(body.input.montage, 'song.montage.json')
+  assert.equal(body.input.between, 0)
+  assert.equal(body.input.mode, 'replace')
+  assert.equal(body.input.export, true)
+  assert.equal('panels' in body.input, false)
 })
 
 test('a sharp panel samples the source texels without mipmaps', () => {

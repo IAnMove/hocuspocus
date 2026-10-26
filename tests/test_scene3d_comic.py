@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,7 @@ from fastapi import HTTPException
 
 from PIL import Image
 
+from services.montage_documents import MontageStore
 from services.scene3d_comic import bind_comic_exporter
 from services.scene3d_comic_cutout import bind_comic_cutout
 from services.world3d_template_commands import command_catalog, execute_command
@@ -212,3 +214,124 @@ def test_five_panels_keep_the_cut_aspect_and_crop_the_rest(tmp_path):
     stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
     panel = next(slot for slot in stored["document"]["slots"] if slot["id"] == "panel-0")
     assert panel["scale"] == pytest.approx(cells[0]["h"] * 0.00125 / 2)
+
+
+def _movie(tmp_path, name="clip.mp4", seconds=4):
+    folder = tmp_path / "studio"
+    folder.mkdir(exist_ok=True)
+    path = folder / name
+    subprocess.run(
+        ["ffmpeg", "-y", "-f", "lavfi", "-i", f"color=c=0x2244aa:s=64x36:r=30:d={seconds}",
+         "-f", "lavfi", "-i", f"sine=frequency=440:sample_rate=44100:duration={seconds}",
+         "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path)],
+        check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    return name
+
+
+def _save_montage(tmp_path, file, clips):
+    store = MontageStore(lambda workspace: str(tmp_path / workspace))
+    return store.save("studio", {
+        "version": 1, "name": "Song", "width": 640, "height": 360, "fps": 30,
+        "clips": clips, "soundtrack": None,
+    }, file=file)
+
+
+def _montage_call(tmp_path, file, between, **extra):
+    return execute_command("scene3d.comic.transition", {
+        "version": 1, "intent_id": extra.pop("intent", "comic-montage"),
+        "input": {"workspace": "studio", "montage": file, "between": between, **extra},
+    }, lambda workspace: str(tmp_path / workspace))
+
+
+def _span(clips):
+    return sum(clip["trimEnd"] - clip["trimStart"] for clip in clips)
+
+
+def test_insert_at_a_clip_index_keeps_the_first_clip_and_grows(tmp_path):
+    """Integer 0 is the boundary after clip 0, not a split at t=0."""
+    bind_comic_exporter(_FakeExport())
+    _movie(tmp_path)
+    _save_montage(tmp_path, "cuts.montage.json", [
+        {"id": "a", "name": "A", "source": "clip.mp4", "trimStart": 0, "trimEnd": 2, "transition": "none"},
+        {"id": "b", "name": "B", "source": "clip.mp4", "trimStart": 2, "trimEnd": 4, "transition": "none"},
+    ])
+    reply = _montage_call(tmp_path, "cuts.montage.json", 0, mode="insert", intent="comic-insert")
+    saved = json.loads((tmp_path / "studio" / "cuts.montage.json").read_text())
+    clips = saved["clips"]
+    assert [clip["id"] for clip in clips] == ["a", "comic-exit", "comic-enter", "b"]
+    assert clips[0]["trimStart"] == pytest.approx(0)
+    assert clips[0]["trimEnd"] == pytest.approx(2)
+    assert clips[0]["source"] == "clip.mp4"
+    assert clips[3]["trimStart"] == pytest.approx(2)
+    assert _span(clips) == pytest.approx(7.6)
+    assert saved["revision"] == 2
+    assert saved["soundtrack"]["source"] == "clip.mp4"
+    assert all(clip["muted"] for clip in clips)
+    backup = json.loads((tmp_path / "studio" / "cuts.r1.montage.json").read_text())
+    assert backup["revision"] == 1 and len(backup["clips"]) == 2
+    assert reply["result"]["montage"] == {"file": "cuts.montage.json", "revision": 2, "backup": "cuts.r1.montage.json"}
+    assert [index for index, cell in enumerate(reply["result"]["layout"]["cells"]) if cell["hero"]] == [1, 2]
+
+
+def test_replace_at_a_time_keeps_the_duration_and_the_previous_revision(tmp_path):
+    """Integer 2 is seconds: one clip has no boundary index 2."""
+    bind_comic_exporter(_FakeExport())
+    _movie(tmp_path)
+    _save_montage(tmp_path, "song.montage.json", [
+        {"id": "a", "name": "A", "source": "clip.mp4", "trimStart": 0, "trimEnd": 4, "transition": "none"},
+    ])
+    reply = _montage_call(
+        tmp_path, "song.montage.json", 2, mode="replace",
+        exit_duration=0.8, enter_duration=0.8, hold=0.2, intent="comic-replace",
+    )
+    saved = json.loads((tmp_path / "studio" / "song.montage.json").read_text())
+    clips = saved["clips"]
+    assert [clip["id"] for clip in clips] == ["a", "comic-exit", "comic-enter", "a-next"]
+    assert clips[0]["trimEnd"] == pytest.approx(1.2)
+    assert clips[3]["trimStart"] == pytest.approx(2.8)
+    assert clips[3]["trimEnd"] == pytest.approx(4)
+    assert clips[1]["trimEnd"] == pytest.approx(0.8)
+    assert clips[2]["trimEnd"] == pytest.approx(0.8)
+    assert _span(clips) == pytest.approx(4)
+    assert all(clip["muted"] for clip in clips)
+    assert saved["soundtrack"]["source"] == "clip.mp4"
+    assert saved["soundtrack"]["trimStart"] == pytest.approx(0)
+    assert saved["soundtrack"]["trimEnd"] == pytest.approx(4)
+    assert saved["revision"] == 2
+    backup = json.loads((tmp_path / "studio" / "song.r1.montage.json").read_text())
+    assert backup["revision"] == 1 and len(backup["clips"]) == 1
+    assert reply["result"]["montage"]["backup"] == "song.r1.montage.json"
+    props = next(item for item in command_catalog() if item["name"] == "scene3d.comic.transition")
+    fields = props["inputSchema"]["properties"]["input"]
+    assert fields["required"] == ["workspace"]
+    assert "montage" in fields["properties"] and "between" in fields["properties"]
+
+
+def test_replace_too_close_to_the_start_writes_no_revision(tmp_path):
+    _save_montage(tmp_path, "song.montage.json", [
+        {"id": "a", "name": "A", "source": "clip.mp4", "trimStart": 0, "trimEnd": 4, "transition": "none"},
+    ])
+    with pytest.raises(HTTPException) as tight:
+        _montage_call(
+            tmp_path, "song.montage.json", 0.1, mode="replace",
+            exit_duration=0.8, enter_duration=0.8, hold=0.2, intent="comic-tight",
+        )
+    assert tight.value.status_code == 422 and tight.value.detail["code"] == "clip_too_short"
+    live = json.loads((tmp_path / "studio" / "song.montage.json").read_text())
+    assert live["revision"] == 1 and len(live["clips"]) == 1
+    assert not (tmp_path / "studio" / "song.r1.montage.json").exists()
+
+
+def test_a_montage_document_is_saved_only_after_the_clips_exist(tmp_path):
+    bind_comic_exporter(_FakeExport())
+    _movie(tmp_path)
+    document = {
+        "version": 1, "name": "Song", "width": 640, "height": 360, "fps": 30, "soundtrack": None,
+        "clips": [{"id": "a", "name": "A", "source": "clip.mp4", "trimStart": 0, "trimEnd": 4, "transition": "none"}],
+    }
+    reply = _montage_call(tmp_path, document, 2, mode="replace", exit_duration=0.8, enter_duration=0.8, hold=0.2, intent="comic-inline")
+    saved = json.loads((tmp_path / "studio" / "Song.montage.json").read_text())
+    assert saved["revision"] == 2
+    assert reply["result"]["montage"]["backup"] == "Song.r1.montage.json"
+    assert json.loads((tmp_path / "studio" / "Song.r1.montage.json").read_text())["revision"] == 1
