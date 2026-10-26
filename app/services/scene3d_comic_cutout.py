@@ -68,6 +68,8 @@ _DILATE = 3
 _HALO = 2.0
 _AA = 1.5
 _SPECK = 0.005
+# A smaller piece this close (fraction of the shorter side) to a kept one travels with it.
+_NEAR = 0.02
 _INPAINT_RADIUS = 3
 # Unsure U2Net pixels per sure one. Busy scenes (small figures, furniture) come out around 2.7
 # and smear or leave a head behind; clean subjects stay near 0.1-1.0.
@@ -78,7 +80,7 @@ def finish_cutout(picture: Path, cutout: Path) -> None:
     """Turn a soft matte into a paper sticker and fill the picture behind it.
 
     The matte is binarized at one half, holes are filled and specks below half a percent of the
-    panel are dropped. A 3 px dilation carries a halo of the original background, then 2 px more
+    panel are dropped unless they touch a kept piece. A 3 px dilation carries a halo of the original background, then 2 px more
     so the fill under that halo is covered, and the edge falls off over 1.5 px. The cutout's
     colour is the picture. Telea runs under that whole sticker. The outer 3 percent of the panel
     keeps the original picture, so a subject that touches the frame can ghost only inside that
@@ -140,6 +142,7 @@ def _fill_holes(mask):
 
 
 def _components(mask):
+    """Keep pieces of half a percent or more, and smaller ones that touch them (a small figure's head)."""
     import cv2
     import numpy as np
 
@@ -147,10 +150,17 @@ def _components(mask):
     if count <= 1:
         return mask
     limit = max(1, int(round(mask.size * _SPECK)))
-    kept = np.zeros(mask.shape, np.uint8)
-    for label in range(1, count):
-        if int(stats[label, cv2.CC_STAT_AREA]) >= limit:
-            kept[labels == label] = 255
+    areas = stats[1:, cv2.CC_STAT_AREA]
+    big = np.isin(labels, 1 + np.flatnonzero(areas >= limit))
+    kept = np.where(big, np.uint8(255), np.uint8(0))
+    if not big.any():
+        return kept
+    reach = cv2.distanceTransform(np.where(big, np.uint8(0), np.uint8(255)), cv2.DIST_L2, 5)
+    near = max(4.0, _NEAR * min(mask.shape))
+    for label in 1 + np.flatnonzero(areas < limit):
+        piece = labels == label
+        if float(reach[piece].min()) <= near:
+            kept[piece] = 255
     return kept
 
 

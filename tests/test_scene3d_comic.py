@@ -288,6 +288,32 @@ def test_a_sticker_leaves_no_subject_in_the_base_outside_the_ring(tmp_path):
         assert opaque[y0:y1, x0:x1].any() and clear[y0:y1, x0:x1].any()
 
 
+def test_a_small_head_next_to_its_body_travels_with_the_sticker(tmp_path):
+    """A small figure splits at the neck when the matte is binarized. The head must not stay in the base."""
+    import numpy as np
+
+    from services.scene3d_comic_cutout import finish_cutout
+
+    height, width = 200, 320
+    rgb = np.full((height, width, 3), 60, np.uint8)
+    alpha = np.zeros((height, width), np.uint8)
+    head = (200, 150, 100)
+    alpha[100:160, 150:166] = 255
+    rgb[100:160, 150:166] = (180, 120, 40)
+    alpha[90:98, 154:162] = 255
+    rgb[90:98, 154:162] = head
+    original = np.dstack([rgb, np.full((height, width), 255, np.uint8)])
+    picture = tmp_path / "panel.png"
+    cutout = tmp_path / "cut.png"
+    Image.fromarray(original).save(picture)
+    Image.fromarray(np.dstack([rgb, alpha])).save(cutout)
+    finish_cutout(picture, cutout)
+    base = np.asarray(Image.open(picture).convert("RGBA"))
+    matte = np.asarray(Image.open(cutout).convert("RGBA"))
+    assert matte[94, 158, 3] == 255
+    assert not ((base[..., 0] == 200) & (base[..., 1] == 150) & (base[..., 2] == 100)).any()
+
+
 def test_an_uncertain_matte_raises_and_leaves_both_files_alone(tmp_path):
     """A busy scene where U2Net mostly guesses must stay flat, not smear the base."""
     import numpy as np
