@@ -22,8 +22,8 @@ SKULL = {"cx": 512, "cy": 470, "rx": 300, "ry": 345}
 FIT = [SKULL["cx"] / 1024, SKULL["cy"] / 1024, SKULL["rx"] / 1024, SKULL["ry"] / 1024]
 TAPER = 0.35
 # Feature placement on the skull, in canvas pixels: eyes a little under the middle, a tiny nose, a small mouth.
-EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 505, 120, 84, 104
-BROW_Y, NOSE_Y, MOUTH_Y, MOUTH_H = 398, 588, 650, 230
+EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 518, 116, 76, 94
+BROW_Y, NOSE_Y, MOUTH_Y, MOUTH_H = 412, 596, 656, 230
 BLUSH_Y, BLUSH_X = 580, 185
 EYE_WHITE = (238, 240, 247, 255)
 POSES: dict[str, dict[str, Any]] = {
@@ -127,7 +127,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
 def _brows(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any]) -> None:
     if traits["brows"]["style"] == "none":
         return
-    thick = max(3, int(traits["brows"]["thickness"] * SC * (0.5 if traits["brows"]["style"] == "thin" else 0.8)))
+    thick = max(3, int(traits["brows"]["thickness"] * SC * (0.62 if traits["brows"]["style"] == "thin" else 0.95)))
     y = _s(BROW_Y + p["brow_dy"])
     radius = _s(EYE_RX)
     for sign in (-1, 1):
