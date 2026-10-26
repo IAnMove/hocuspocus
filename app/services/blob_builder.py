@@ -419,9 +419,10 @@ def _accessory_pieces(spec: dict, layout: dict) -> list:
 
 
 def _cap(layout, color):
-    crown_h = 0.045 * layout["h"]
+    crown_h = max(0.045 * layout["h"], layout["sy"] * 0.16)
     top = layout["head_y"] + layout["sy"] / 2
-    brim_y = layout["head_y"] + layout["sy"] * 0.18
+    # The face's brows sit about 0.28 of the head height above its centre: the brim goes above them.
+    brim_y = layout["head_y"] + layout["sy"] * 0.36
     return [
         _p("cylinder", (0, top - crown_h * 0.35, 0), (layout["sx"] * 0.78, crown_h, layout["sz"] * 0.78), color, segments=LIMB_SEGMENTS),
         _p("box", (0, brim_y, layout["sz"] * 0.42), (layout["sx"] * 0.62, 0.012 * layout["h"], layout["sz"] * 0.42), color),
@@ -439,7 +440,7 @@ def _sailor_cap(layout, color):
 
 
 def _top_hat(layout, color):
-    brim_y = layout["head_y"] + layout["sy"] * 0.30
+    brim_y = layout["head_y"] + layout["sy"] * 0.38
     crown_h = 0.11 * layout["h"]
     brim_h = 0.016 * layout["h"]
     return [
@@ -449,13 +450,14 @@ def _top_hat(layout, color):
 
 
 def _beanie(layout, color):
-    return [_p("sphere", (0, layout["head_y"] + layout["sy"] * 0.28, 0),
-               (layout["sx"] * 0.90, layout["sy"] * 0.55, layout["sz"] * 0.90), color, segments=HEAD_SEGMENTS)]
+    # A low dome: its lower edge stays above the brows (0.30 of the head height over the centre), the top clears the head.
+    return [_p("sphere", (0, layout["head_y"] + layout["sy"] * 0.45, 0),
+               (layout["sx"] * 0.92, layout["sy"] * 0.30, layout["sz"] * 0.92), color, segments=HEAD_SEGMENTS)]
 
 
 def _bucket_hat(layout, color):
-    brim_y = layout["head_y"] + layout["sy"] * 0.12
-    crown_h = 0.05 * layout["h"]
+    brim_y = layout["head_y"] + layout["sy"] * 0.37
+    crown_h = max(0.05 * layout["h"], layout["sy"] * 0.14)
     return [
         _p("cylinder", (0, brim_y + crown_h * 0.45, 0), (layout["sx"] * 0.84, crown_h, layout["sz"] * 0.84), color, segments=LIMB_SEGMENTS),
         _p("cylinder", (0, brim_y, 0), (layout["sx"] * 1.16, 0.014 * layout["h"], layout["sz"] * 1.16), color, segments=LIMB_SEGMENTS),

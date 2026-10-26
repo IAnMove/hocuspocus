@@ -158,3 +158,18 @@ def test_bad_traits_name_their_code_and_presets_are_readable(tmp_path):
     catalog = asyncio.run(handlers["model3d.blob.presets"]({"version": 1}))["result"]
     assert set(catalog["presets"]) == set(PRESETS)
     assert "moustache" in catalog["accessories"]["notHere"]
+
+
+@pytest.mark.parametrize("kind", ["cap", "sailor_cap", "top_hat", "beanie", "bucket_hat"])
+def test_head_gear_stays_above_the_brows_where_a_face_is_drawn(kind):
+    """The 2D face has its brows about 0.28 of the head height over the head centre. A hat that dips below 0.30 covers eyes."""
+    for preset in ("kid", "cashier", "big"):
+        bare = blob_pieces({**PRESETS[preset], "accessories": []})
+        worn = blob_pieces({**PRESETS[preset], "accessories": [{"kind": kind}]})
+        anchor = worn["faceAnchor"]
+        centre, height = anchor["center"][1], 2 * anchor["radii"][1]
+        old = {tuple(map(tuple, (piece["position"], piece["scale"]))) for piece in bare["pieces"]}
+        extra = [piece for piece in worn["pieces"] if tuple(map(tuple, (piece["position"], piece["scale"]))) not in old]
+        assert extra, kind
+        low = min(piece["position"][1] - piece["scale"][1] / 2 for piece in extra)
+        assert low >= centre + 0.29 * height, (preset, kind, round((low - centre) / height, 3))
