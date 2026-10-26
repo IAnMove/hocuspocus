@@ -453,7 +453,8 @@ function groundLoadedSlot(gpu: SlotGpu, slot: Scene3DSlot) {
 }
 
 function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number) {
-  const face = gpu.loaded && gpu.kind === 'model' ? speechFace(gpu.root, slot.speech) : undefined
+  const packed = Boolean(slot.speech?.facePack) && !slot.speech?.face
+  const face = gpu.loaded && gpu.kind === 'model' && !packed ? speechFace(gpu.root, slot.speech) : undefined
   if (face) {
     gpu.speechFace ??= new SpeechFaceRuntime(() => renderWorld(world))
     gpu.speechFace.sync(gpu.root, slot.speech, sceneSeconds)
