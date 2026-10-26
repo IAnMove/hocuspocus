@@ -2,7 +2,8 @@
 
 Metres, Y up, +Z forward. ``scale`` is the full size (the diameter), the same
 rule as ``model3d.compose``. Pieces overlap on purpose. Arms are a T, feet sit
-on y = 0, and the head is wider than the torso so the humanoid rig can see a neck.
+on y = 0. A blob head stays wider than its torso. Anime shoulders are wider
+than the small head, and the neck between them is the narrow notch the rig uses.
 """
 from __future__ import annotations
 
@@ -13,11 +14,14 @@ LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "head", "arms", "legs", "hands", "feet", "colors", "accessories"}
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair"}
 _BUILDS = ("slim", "average", "round", "pear")
+_FAMILIES = ("blob", "anime", "chibi")
 _HANDS = ("ball", "mitten")
-_FEET = ("shoe", "ball")
-_SHAPES = ("sphere", "egg")
+_FEET = ("shoe", "ball", "boot")
+_SHAPES = ("sphere", "egg", "anime", "chibi")
+_HAIR_STYLES = ("none", "short", "bangs", "spiky", "long", "ponytail", "twin_tails", "bun")
+_HAIR_COLOR = "#2A211C"
 # Torso width and depth, and the belly, as fractions of the head. The torso stays
 # narrower than the head. The belly carries the round and pear silhouettes.
 _BUILD = {
@@ -27,11 +31,26 @@ _BUILD = {
     "pear": (0.70, 0.90, 1.04, 0.28, 0.74),
 }
 _HEAD_DEFAULT = {"width": 0.31, "height": 0.28, "depth": 0.26, "shape": "sphere"}
-_HEAD_LIMITS = {"width": (0.24, 0.38), "height": (0.22, 0.36), "depth": (0.20, 0.34)}
+_ANIME_HEAD = {"width": 0.138, "height": 0.140, "depth": 0.128, "shape": "anime"}
+_CHIBI_HEAD = {"width": 0.42, "height": 0.38, "depth": 0.36, "shape": "chibi"}
+_HEAD_LIMITS = {"width": (0.12, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
 _ARM_DEFAULT = {"length": 0.36, "thickness": 0.055}
-_ARM_LIMITS = {"length": (0.30, 0.46), "thickness": (0.046, 0.068)}
+_ANIME_ARMS = {"length": 0.44, "thickness": 0.040}
+_CHIBI_ARMS = {"length": 0.30, "thickness": 0.070}
+_ARM_LIMITS = {"length": (0.26, 0.50), "thickness": (0.030, 0.080)}
 _LEG_DEFAULT = {"length": 0.42, "thickness": 0.070}
-_LEG_LIMITS = {"length": (0.36, 0.48), "thickness": (0.052, 0.085)}
+_ANIME_LEGS = {"length": 0.52, "thickness": 0.050}
+_CHIBI_LEGS = {"length": 0.36, "thickness": 0.088}
+_LEG_LIMITS = {"length": (0.30, 0.56), "thickness": (0.040, 0.100)}
+_FAMILY = {
+    "blob": {"head": dict(_HEAD_DEFAULT), "arms": dict(_ARM_DEFAULT), "legs": dict(_LEG_DEFAULT)},
+    "anime": {"head": dict(_ANIME_HEAD), "arms": dict(_ANIME_ARMS), "legs": dict(_ANIME_LEGS)},
+    "chibi": {"head": dict(_CHIBI_HEAD), "arms": dict(_CHIBI_ARMS), "legs": dict(_CHIBI_LEGS)},
+}
+# Shoulder width as a fraction of height (anime) or of the head (chibi). Waist and hip are fractions of that shoulder.
+_ANIME_SHOULDER = {"slim": 0.21, "average": 0.24, "round": 0.27, "pear": 0.23}
+_ANIME_WAIST = {"slim": 0.58, "average": 0.66, "round": 0.84, "pear": 0.72}
+_CHIBI_SHOULDER = {"slim": 0.62, "average": 0.70, "round": 0.78, "pear": 0.74}
 _COLOR_DEFAULT = {
     "head": "#F2C7A0", "top": "#3A6EA5", "sleeves": "#F2C7A0",
     "bottom": "#2C3340", "shoes": "#201A18", "hands": "#F2C7A0",
@@ -39,11 +58,14 @@ _COLOR_DEFAULT = {
 _ACCESSORY_KINDS = (
     "cap", "sailor_cap", "top_hat", "beanie", "bucket_hat",
     "apron", "tie", "collar", "belt", "backpack", "scarf",
+    "skirt", "jacket", "sleeves_long", "shorts", "school_collar", "cape",
 )
 _ACCESSORY_COLOR = {
     "cap": "#C45C4A", "sailor_cap": "#F4F1EA", "top_hat": "#161616", "beanie": "#2C4C7C",
     "bucket_hat": "#D8C39A", "apron": "#E8E0D0", "tie": "#8C1D2C", "collar": "#F4F4F2",
     "belt": "#2A211C", "backpack": "#3E4A3A", "scarf": "#B23A48",
+    "skirt": "#1B2350", "jacket": "#1A1A1A", "sleeves_long": "#F4F4F2",
+    "shorts": "#2C3340", "school_collar": "#F7F4EF", "cape": "#6B1D2A",
 }
 _MAX_ACCESSORIES = 6
 
@@ -83,6 +105,57 @@ PRESETS = {
         "colors": {"head": "#F2C7A0", "top": "#5C6B73", "sleeves": "#5C6B73", "bottom": "#2F3D44", "shoes": "#1C1C1C", "hands": "#F2C7A0"},
         "accessories": [{"kind": "scarf", "color": "#B23A48"}],
     },
+    "blob_chef": {
+        "height": 1.72, "build": "round", "family": "blob", "hands": "mitten",
+        "colors": {"head": "#F2C7A0", "top": "#F7F4EF", "sleeves": "#F7F4EF", "bottom": "#1C1C1C", "shoes": "#1C1C1C", "hands": "#F2C7A0"},
+        "accessories": [{"kind": "top_hat", "color": "#F4F4F2"}, {"kind": "apron", "color": "#EFE6D6"}],
+    },
+    "blob_pirate": {
+        "height": 1.84, "build": "pear", "family": "blob", "feet": "boot", "hands": "mitten",
+        "colors": {"head": "#E0B090", "top": "#6B1D2A", "sleeves": "#F2C7A0", "bottom": "#2A211C", "shoes": "#1A120E", "hands": "#E0B090"},
+        "accessories": [{"kind": "beanie", "color": "#1A120E"}, {"kind": "scarf", "color": "#8C1D2C"}, {"kind": "belt", "color": "#C4A35A"}],
+    },
+    "blob_scout": {
+        "height": 1.58, "build": "slim", "family": "blob", "hands": "mitten",
+        "hair": {"style": "short", "color": "#6B4423"},
+        "colors": {"head": "#F0C09A", "top": "#2F6B3A", "sleeves": "#F2E6C9", "bottom": "#C4A35A", "shoes": "#3A2A22", "hands": "#F0C09A"},
+        "accessories": [{"kind": "beanie", "color": "#2F6B3A"}, {"kind": "shorts", "color": "#C4A35A"}, {"kind": "backpack", "color": "#6B4423"}],
+    },
+    "anime_girl": {
+        "height": 1.65, "build": "slim", "family": "anime", "hands": "mitten",
+        "head": dict(_ANIME_HEAD), "hair": {"style": "long", "color": "#1A1428"},
+        "colors": {"head": "#F3D0B8", "top": "#F7F4EF", "sleeves": "#F7F4EF", "bottom": "#1B2350", "shoes": "#201A18", "hands": "#F3D0B8"},
+        "accessories": [{"kind": "school_collar", "color": "#F7F4EF"}, {"kind": "skirt", "color": "#1B2350"}, {"kind": "sleeves_long", "color": "#F7F4EF"}],
+    },
+    "anime_boy": {
+        "height": 1.78, "build": "average", "family": "anime", "hands": "mitten",
+        "head": dict(_ANIME_HEAD), "hair": {"style": "spiky", "color": "#3D2A1A"},
+        "colors": {"head": "#E8C0A0", "top": "#F4F1EA", "sleeves": "#E8C0A0", "bottom": "#2C3340", "shoes": "#201A18", "hands": "#E8C0A0"},
+        "accessories": [{"kind": "jacket", "color": "#2E5A8C"}, {"kind": "shorts", "color": "#2C3340"}, {"kind": "school_collar", "color": "#F4F1EA"}],
+    },
+    "anime_senpai": {
+        "height": 1.90, "build": "slim", "family": "anime", "hands": "mitten",
+        "head": dict(_ANIME_HEAD), "hair": {"style": "ponytail", "color": "#2A1A12"},
+        "colors": {"head": "#E8C4A4", "top": "#161616", "sleeves": "#E8C4A4", "bottom": "#1A1A1A", "shoes": "#111111", "hands": "#E8C4A4"},
+        "accessories": [{"kind": "jacket", "color": "#161616"}, {"kind": "cape", "color": "#4A1C2A"}],
+    },
+    "chibi_kid": {
+        "height": 1.24, "build": "round", "family": "chibi", "hands": "ball",
+        "head": dict(_CHIBI_HEAD), "hair": {"style": "bangs", "color": "#5A3318"},
+        "colors": {"head": "#F0C09A", "top": "#F08A24", "sleeves": "#F2D24A", "bottom": "#3C6EBE", "shoes": "#F4F4F2", "hands": "#F0C09A"},
+    },
+    "chibi_mage": {
+        "height": 1.34, "build": "round", "family": "chibi", "hands": "mitten",
+        "head": dict(_CHIBI_HEAD), "hair": {"style": "bun", "color": "#E4D8F0"},
+        "colors": {"head": "#F2C7A0", "top": "#5C3A8A", "sleeves": "#5C3A8A", "bottom": "#3A2060", "shoes": "#2A1840", "hands": "#F2C7A0"},
+        "accessories": [{"kind": "top_hat", "color": "#2A1840"}, {"kind": "skirt", "color": "#3A2060"}, {"kind": "cape", "color": "#2A1848"}],
+    },
+    "chibi_knight": {
+        "height": 1.40, "build": "average", "family": "chibi", "feet": "boot", "hands": "mitten",
+        "head": dict(_CHIBI_HEAD), "hair": {"style": "short", "color": "#3A2A22"},
+        "colors": {"head": "#E8C4A4", "top": "#8A8E96", "sleeves": "#8A8E96", "bottom": "#4A4E56", "shoes": "#2A2E34", "hands": "#E8C4A4"},
+        "accessories": [{"kind": "bucket_hat", "color": "#C0C4CC"}, {"kind": "cape", "color": "#A32020"}, {"kind": "belt", "color": "#C4A35A"}],
+    },
 }
 
 # The six presets plus six edges. Every one has to stay a person the rig accepts.
@@ -114,15 +187,18 @@ class BlobTraitsError(ValueError):
 
 
 def trait_catalog() -> dict:
-    """Limits, defaults and the six named presets. The face (moustache, glasses) is not here."""
+    """Limits, defaults and the fifteen named presets. The face (moustache, glasses) is not here."""
     return {
         "height": {"min": 1.2, "max": 2.2, "default": 1.8, "unit": "m"},
         "build": list(_BUILDS),
+        "family": list(_FAMILIES),
         "head": {"limits": _HEAD_LIMITS, "shape": list(_SHAPES), "default": dict(_HEAD_DEFAULT),
-                 "note": "width, height and depth are fractions of the body height. The default head is large (width 0.31)."},
+                 "note": "width, height and depth are fractions of the body height. Omit family for a blob. "
+                         "anime is about 7 heads tall. chibi is about 2.5 to 3."},
         "arms": {"limits": _ARM_LIMITS, "default": dict(_ARM_DEFAULT)},
         "legs": {"limits": _LEG_LIMITS, "default": dict(_LEG_DEFAULT)},
         "hands": list(_HANDS), "feet": list(_FEET),
+        "hair": {"style": list(_HAIR_STYLES), "default": {"style": "none", "color": _HAIR_COLOR}},
         "colors": {"fields": list(_COLOR_DEFAULT), "default": dict(_COLOR_DEFAULT), "format": "#RRGGBB"},
         "accessories": {"kinds": list(_ACCESSORY_KINDS), "max": _MAX_ACCESSORIES, "defaultColor": dict(_ACCESSORY_COLOR),
                         "notHere": ["moustache", "glasses", "eyebrows", "freckles"]},
@@ -157,15 +233,19 @@ def _normalize(traits: dict) -> dict:
     extra = set(traits) - _FIELDS
     if extra:
         _fail("unknown_field", "Unknown trait: " + ", ".join(sorted(extra)))
+    family = _choice(traits.get("family", "blob"), _FAMILIES, "invalid_family", "family")
+    stock = _FAMILY[family]
     return {
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
-        "head": _head(traits.get("head")),
-        "arms": _pair_size(traits.get("arms"), _ARM_DEFAULT, _ARM_LIMITS, "invalid_arms", "arms"),
-        "legs": _pair_size(traits.get("legs"), _LEG_DEFAULT, _LEG_LIMITS, "invalid_legs", "legs"),
+        "family": family,
+        "head": _head(traits.get("head"), stock["head"]),
+        "arms": _pair_size(traits.get("arms"), stock["arms"], _ARM_LIMITS, "invalid_arms", "arms"),
+        "legs": _pair_size(traits.get("legs"), stock["legs"], _LEG_LIMITS, "invalid_legs", "legs"),
         "hands": _choice(traits.get("hands", "ball"), _HANDS, "invalid_hands", "hands"),
         "feet": _choice(traits.get("feet", "shoe"), _FEET, "invalid_feet", "feet"),
         "colors": _colors(traits.get("colors")),
+        "hair": _hair(traits.get("hair")),
         "accessories": _accessory_list(traits.get("accessories")),
     }
 
@@ -184,15 +264,15 @@ def _choice(value, allowed, code: str, label: str) -> str:
     return value
 
 
-def _head(value) -> dict:
+def _head(value, default: dict) -> dict:
     if value is None:
-        return dict(_HEAD_DEFAULT)
+        return dict(default)
     if not isinstance(value, dict):
         _fail("invalid_head", "head must be an object with width, height, depth and shape")
     extra = set(value) - set(_HEAD_DEFAULT)
     if extra:
         _fail("unknown_field", "Unknown head field: " + ", ".join(sorted(extra)))
-    found = dict(_HEAD_DEFAULT)
+    found = dict(default)
     for key, limits in _HEAD_LIMITS.items():
         if key not in value:
             continue
@@ -275,39 +355,92 @@ def _one_accessory(item) -> dict:
     return {"kind": kind, "color": color}
 
 
+def _hair(value) -> dict:
+    if value is None:
+        return {"style": "none", "color": _HAIR_COLOR}
+    if not isinstance(value, dict):
+        _fail("invalid_hair", "hair must be an object with style and color")
+    extra = set(value) - {"style", "color"}
+    if extra:
+        _fail("unknown_field", "Unknown hair field: " + ", ".join(sorted(extra)))
+    style = value.get("style", "none")
+    if style not in _HAIR_STYLES:
+        _fail("invalid_hair", "hair.style must be one of: " + ", ".join(_HAIR_STYLES))
+    color = _HAIR_COLOR if "color" not in value else _hex(value["color"], "hair.color")
+    return {"style": style, "color": color}
+
+
 def _assemble(spec: dict) -> tuple[list, dict]:
+    from services.blob_wear import hair_pieces
+
     layout = _layout(spec)
     pieces = _torso(spec, layout) + _arms(spec, layout) + _legs(spec, layout)
     pieces += _accessory_pieces(spec, layout)
+    pieces += hair_pieces(layout, spec["hair"])
     return pieces, _anchor(layout)
 
 
 def _layout(spec: dict) -> dict:
     height = spec["height"]
     sx, sy, sz = _head_size(spec["head"], height)
-    width, depth, belly, forward, drop = _BUILD[spec["build"]]
-    torso_w, torso_d = sx * width, min(sz * depth, sx * 0.95)
+    torso_w, torso_d, waist_w, belly, forward, drop = _widths(spec, sx, sz, height)
     foot = _foot_height(spec, height)
-    stack = _stack(height, sy, spec["legs"]["length"] * height, foot)
+    leg_len, leg_d = spec["legs"]["length"] * height, spec["legs"]["thickness"] * height
+    stack = _stack(height, sy, leg_len, foot)
     torso_h = stack["torso_top"] - stack["torso_bottom"]
+    arm_d = min(spec["arms"]["thickness"] * height, torso_w * 0.45)
+    # A wave folds the forearm up by about a third of the reach. A wide head meets a longer arm.
+    arm_len = min(spec["arms"]["length"], {"blob": 0.30, "anime": 0.50, "chibi": 0.26}[spec["family"]]) * height
+    upper_x, fore_x, upper_len, fore_len, wrist_x, tip_x = _arm_centers(torso_w / 2, torso_w, arm_len)
+    gap = max(0.045 * height, leg_d * 0.55)
+    # Low enough that a bent wave clears a tall egg head as well as a round one.
+    shoulder_at = {"blob": 0.40, "anime": 0.74, "chibi": 0.46}[spec["family"]]
     return {
         "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"],
-        "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h,
+        "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
         "torso_y": (stack["torso_top"] + stack["torso_bottom"]) / 2,
         "torso_top": stack["torso_top"], "torso_bottom": stack["torso_bottom"],
-        "shoulder_y": stack["torso_bottom"] + torso_h * 0.72,
-        "leg_len": spec["legs"]["length"] * height, "leg_d": spec["legs"]["thickness"] * height,
+        "shoulder_y": stack["torso_bottom"] + torso_h * shoulder_at,
+        "waist_y": stack["torso_bottom"] + torso_h * 0.22,
+        "knee": stack["leg_bottom"] + leg_len * 0.46,
+        "leg_len": leg_len, "leg_d": leg_d, "leg_x": gap / 2 + leg_d / 2,
         "leg_bottom": stack["leg_bottom"], "leg_top": stack["leg_top"], "foot": foot,
         "belly": belly, "forward": forward, "drop": drop,
-        "arm_len": spec["arms"]["length"] * height,
-        "arm_d": min(spec["arms"]["thickness"] * height, torso_w * 0.45),
+        "arm_len": arm_len, "arm_d": arm_d,
+        "upper_x": upper_x, "fore_x": fore_x, "upper_len": upper_len, "fore_len": fore_len,
+        "wrist_x": wrist_x, "tip_x": tip_x,
     }
+
+
+def _widths(spec: dict, sx: float, sz: float, height: float):
+    width, depth, belly, forward, drop = _BUILD[spec["build"]]
+    if spec["family"] == "anime":
+        shoulder = height * _ANIME_SHOULDER[spec["build"]]
+        return shoulder, height * 0.115, shoulder * _ANIME_WAIST[spec["build"]], belly, forward, drop
+    if spec["family"] == "chibi":
+        shoulder = sx * _CHIBI_SHOULDER[spec["build"]]
+        return shoulder, min(sz * 0.82, sx * 0.78), shoulder * 0.90, belly, forward, drop
+    torso_w = sx * width
+    return torso_w, min(sz * depth, sx * 0.95), torso_w * 0.92, belly, forward, drop
+
+
+def _arm_centers(arm_root: float, torso_w: float, arm_len: float):
+    # The rig puts the elbow at 44% of the reach and the wrist at 76%. Pieces follow that line, or a vertex past the elbow is shared by two bones and tears when the arm swings.
+    shoulder = arm_root
+    elbow = shoulder + arm_len * 0.44
+    wrist = shoulder + arm_len * 0.76
+    inner = shoulder - min(torso_w * 0.08, arm_len * 0.04)
+    upper_len = elbow - inner
+    gap = wrist - elbow
+    return (inner + elbow) / 2, elbow + gap * 0.45, upper_len, gap * 1.15, wrist, shoulder + arm_len
 
 
 def _head_size(head: dict, height: float) -> tuple[float, float, float]:
     sx, sy, sz = head["width"] * height, head["height"] * height, head["depth"] * height
     if head["shape"] == "egg":
         sy, sz = max(sy, sx * 1.12), min(sz, sx * 0.92)
+    elif head["shape"] == "anime":
+        sy, sz = max(sy, sx * 1.08), min(sz, sx * 0.96)
     return sx, sy, sz
 
 
@@ -329,7 +462,7 @@ def _stack(height: float, head_h: float, leg_len: float, foot: float) -> dict:
     return {"head_y": head_y, "torso_top": torso_top, "torso_bottom": torso_bottom, "leg_bottom": leg_bottom, "leg_top": leg_top}
 
 
-def _p(kind, pos, scale, color, rot=(0.0, 0.0, 0.0), segments=None) -> dict:
+def _p(kind, pos, scale, color, rot=(0.0, 0.0, 0.0), segments=None, taper=None) -> dict:
     item = {
         "type": kind,
         "position": [float(v) for v in pos],
@@ -339,13 +472,16 @@ def _p(kind, pos, scale, color, rot=(0.0, 0.0, 0.0), segments=None) -> dict:
     }
     if segments is not None:
         item["segments"] = int(segments)
+    if kind != "box":
+        item["smooth"] = True
+    if taper is not None:
+        item["taper"] = float(taper)
     return item
 
 
 def _mirror(item: dict) -> dict:
-    other = _p(item["type"], (-item["position"][0], item["position"][1], item["position"][2]), item["scale"], item["color"],
-               (item["rotation"][0], -item["rotation"][1], -item["rotation"][2]), item.get("segments"))
-    return other
+    return _p(item["type"], (-item["position"][0], item["position"][1], item["position"][2]), item["scale"], item["color"],
+              (item["rotation"][0], -item["rotation"][1], -item["rotation"][2]), item.get("segments"), item.get("taper"))
 
 
 def _pair(item: dict) -> list:
@@ -353,56 +489,126 @@ def _pair(item: dict) -> list:
 
 
 def _torso(spec: dict, layout: dict) -> list:
-    colors = spec["colors"]
-    skin, top = colors["head"], colors["top"]
-    neck_h = min(0.04 * layout["h"], (layout["torso_top"] - (layout["head_y"] - layout["sy"] / 2)) * 0.8)
-    neck_y = layout["torso_top"] - neck_h / 2
+    return _head_pieces(spec, layout) + _neck(spec, layout) + _chest(spec, layout) + _shoulders(spec, layout) + _hips(spec, layout)
+
+
+def _head_pieces(spec: dict, layout: dict) -> list:
+    skin = spec["colors"]["head"]
+    main = _p("sphere", (0, layout["head_y"], 0), (layout["sx"], layout["sy"], layout["sz"]), skin, segments=HEAD_SEGMENTS)
+    shape = spec["head"]["shape"]
+    if shape == "anime":
+        return [main, *_jaw(layout, skin)]
+    if shape == "chibi":
+        return [main, _chin(layout, skin)]
+    return [main]
+
+
+def _jaw(layout: dict, skin: str) -> list:
+    """Two spheres inside the cranium so the chin reads and the face anchor stays the cranium."""
+    sx, sy, sz, y = layout["sx"], layout["sy"], layout["sz"], layout["head_y"]
+    jaw = _p("sphere", (0, y - sy * 0.20, sz * 0.16), (sx * 0.70, sy * 0.40, sz * 0.58), skin, segments=BODY_SEGMENTS)
+    chin = _p("sphere", (0, y - sy * 0.32, sz * 0.24), (sx * 0.32, sy * 0.20, sz * 0.26), skin, segments=LIMB_SEGMENTS)
+    return [jaw, chin]
+
+
+def _chin(layout: dict, skin: str) -> dict:
+    sx, sy, sz, y = layout["sx"], layout["sy"], layout["sz"], layout["head_y"]
+    return _p("sphere", (0, y - sy * 0.30, sz * 0.20), (sx * 0.40, sy * 0.22, sz * 0.28), skin, segments=LIMB_SEGMENTS)
+
+
+def _neck(spec: dict, layout: dict) -> list:
+    skin = spec["colors"]["head"]
+    share = {"blob": 0.062, "anime": 0.078, "chibi": 0.045}[spec["family"]]
+    neck_h = max(share * layout["h"], layout["sy"] * 0.16)
+    top = layout["head_y"] - layout["sy"] * 0.28
+    y = top - neck_h / 2
+    width = min(layout["sx"] * 0.42, layout["torso_w"] * 0.70)
+    depth = min(layout["sz"] * 0.42, layout["torso_d"] * 0.70)
+    return [_p("capsule", (0, y, 0), (width, neck_h, depth), skin, segments=LIMB_SEGMENTS)]
+
+
+def _chest(spec: dict, layout: dict) -> list:
+    top = spec["colors"]["top"]
+    if spec["family"] == "anime":
+        taper = min(1.0, max(0.35, layout["waist_w"] / layout["torso_w"]))
+        turned = (math.pi, 0.0, 0.0)
+        return [_p("frustum", (0, layout["torso_y"], 0), (layout["torso_w"], layout["torso_h"], layout["torso_d"]), top, turned, BODY_SEGMENTS, taper)]
     belly_d = layout["sx"] * layout["belly"]
     belly_y = layout["torso_y"] - (layout["drop"] - 0.5) * layout["torso_h"] * 0.65
     belly_z = layout["torso_d"] * 0.5 * layout["forward"] * 0.45
     return [
-        _p("sphere", (0, layout["head_y"], 0), (layout["sx"], layout["sy"], layout["sz"]), skin, segments=HEAD_SEGMENTS),
-        _p("cylinder", (0, neck_y, 0), (layout["sx"] * 0.34, max(neck_h, 0.02 * layout["h"]), layout["sz"] * 0.34), skin, segments=LIMB_SEGMENTS),
         _p("cylinder", (0, layout["torso_y"], 0), (layout["torso_w"], layout["torso_h"], layout["torso_d"]), top, segments=BODY_SEGMENTS),
         _p("sphere", (0, belly_y, belly_z), (belly_d, belly_d * 0.82, belly_d * 0.72), top, segments=BODY_SEGMENTS),
     ]
 
 
+def _shoulders(spec: dict, layout: dict) -> list:
+    diameter = max(layout["arm_d"] * 1.35, layout["h"] * 0.045)
+    item = _p("sphere", (layout["torso_w"] / 2, layout["shoulder_y"], 0), (diameter, diameter, diameter), spec["colors"]["top"], segments=LIMB_SEGMENTS)
+    return _pair(item)
+
+
+def _hips(spec: dict, layout: dict) -> list:
+    diameter = layout["leg_d"] * 1.12
+    item = _p("sphere", (layout["leg_x"], layout["leg_top"], 0), (diameter, diameter, diameter * 0.9), spec["colors"]["bottom"], segments=LIMB_SEGMENTS)
+    return _pair(item)
+
+
 def _arms(spec: dict, layout: dict) -> list:
-    colors = spec["colors"]
-    sleeve, skin = colors["sleeves"], colors["hands"]
-    diameter = layout["arm_d"]
-    upper, fore = layout["arm_len"] * 0.46, layout["arm_len"] * 0.40
-    inset = upper * 0.38
-    half = layout["torso_w"] / 2
-    upper_x = half - inset + upper / 2
-    fore_x = upper_x + upper / 2 - fore * 0.18 + fore / 2
-    hand_reach = diameter * (0.85 if spec["hands"] == "mitten" else 0.62)
-    hand_x = fore_x + fore / 2 - hand_reach * 0.35
-    y = layout["shoulder_y"]
+    sleeve, skin = spec["colors"]["sleeves"], spec["colors"]["hands"]
+    diameter, y = layout["arm_d"], layout["shoulder_y"]
     turn = (0.0, 0.0, _HALF_TURN)
     arm = [
-        *_pair(_p("cylinder", (upper_x, y, 0), (diameter, upper, diameter), sleeve, turn, LIMB_SEGMENTS)),
-        *_pair(_p("cylinder", (fore_x, y, 0), (diameter * 0.92, fore, diameter * 0.92), sleeve, turn, LIMB_SEGMENTS)),
+        *_pair(_p("capsule", (layout["upper_x"], y, 0), (diameter, layout["upper_len"], diameter), sleeve, turn, LIMB_SEGMENTS)),
+        *_pair(_p("capsule", (layout["fore_x"], y, 0), (diameter * 0.86, layout["fore_len"], diameter * 0.86), sleeve, turn, LIMB_SEGMENTS)),
     ]
+    return arm + _hands(spec, layout, skin, diameter, y, turn)
+
+
+def _hands(spec: dict, layout: dict, skin: str, diameter: float, y: float, turn: tuple) -> list:
+    wrist_at, tip = layout["wrist_x"], layout["tip_x"]
+    span = max(tip - wrist_at, diameter * 0.8)
+    wrist_len = span * 0.62
+    wrist_x = wrist_at + wrist_len * 0.42
+    wrist = _pair(_p("capsule", (wrist_x, y, 0), (diameter * 0.70, wrist_len, diameter * 0.70), skin, turn, LIMB_SEGMENTS))
+    hand_x = tip - span * 0.26
     if spec["hands"] == "mitten":
-        arm += _pair(_p("box", (hand_x, y, 0), (diameter * 1.35, diameter * 1.05, diameter * 0.62), skin))
-    else:
-        arm += _pair(_p("sphere", (hand_x, y, 0), (hand_reach * 2, hand_reach * 2, hand_reach * 2), skin, segments=LIMB_SEGMENTS))
-    return arm
+        palm = _pair(_p("sphere", (hand_x, y, 0), (span * 0.62, diameter * 0.88, diameter * 0.62), skin, segments=LIMB_SEGMENTS))
+        thumb = _pair(_p("sphere", (hand_x - span * 0.06, y + diameter * 0.28, diameter * 0.36), (diameter * 0.40, diameter * 0.40, diameter * 0.40), skin, segments=LIMB_SEGMENTS))
+        return wrist + palm + thumb
+    ball = min(span * 0.72, diameter * 1.35)
+    return wrist + _pair(_p("sphere", (tip - ball * 0.42, y, 0), (ball, ball, ball), skin, segments=LIMB_SEGMENTS))
 
 
 def _legs(spec: dict, layout: dict) -> list:
-    colors = spec["colors"]
-    gap = max(0.04 * layout["h"], layout["leg_d"] * 0.4)
-    x = gap / 2 + layout["leg_d"] / 2
+    x = layout["leg_x"]
     y = (layout["leg_bottom"] + layout["leg_top"]) / 2
-    legs = _pair(_p("cylinder", (x, y, 0), (layout["leg_d"], layout["leg_len"], layout["leg_d"]), colors["bottom"], segments=LIMB_SEGMENTS))
+    legs = _pair(_p("capsule", (x, y, 0), (layout["leg_d"], layout["leg_len"], layout["leg_d"]), spec["colors"]["bottom"], segments=LIMB_SEGMENTS))
+    return legs + _feet(spec, layout)
+
+
+def _feet(spec: dict, layout: dict) -> list:
+    x, shoes, diameter = layout["leg_x"], spec["colors"]["shoes"], layout["leg_d"]
     if spec["feet"] == "ball":
         size = layout["foot"]
-        return legs + _pair(_p("sphere", (x, size / 2, 0), (size, size, size), colors["shoes"], segments=LIMB_SEGMENTS))
-    height, depth = layout["foot"], layout["leg_d"] * 1.85
-    return legs + _pair(_p("box", (x, height / 2, depth * 0.12), (layout["leg_d"] * 1.15, height, depth), colors["shoes"]))
+        ankle_r = diameter * 0.42
+        ankle = _pair(_p("sphere", (x, size * 0.62, 0), (ankle_r * 2, ankle_r * 2, ankle_r * 2), shoes, segments=LIMB_SEGMENTS))
+        ball = _pair(_p("sphere", (x, size / 2, diameter * 0.2), (size, size, size), shoes, segments=LIMB_SEGMENTS))
+        return ankle + ball
+    sole_h = layout["foot"] * (0.46 if spec["feet"] == "boot" else 0.40)
+    sole_d = diameter * (2.15 if spec["feet"] == "boot" else 1.9)
+    sole = _pair(_p("box", (x, sole_h / 2, sole_d * 0.08), (diameter * 1.12, sole_h, sole_d), shoes))
+    toe_r = diameter * 0.42
+    toe = _pair(_p("sphere", (x, toe_r, sole_d * 0.42), (toe_r * 2, toe_r * 2, toe_r * 2), shoes, segments=LIMB_SEGMENTS))
+    if spec["feet"] == "boot":
+        shaft = max(layout["foot"] * 2.1, layout["h"] * 0.09)
+        center = sole_h + shaft / 2 - diameter * 0.12
+        ankle = _pair(_p("capsule", (x, center, 0), (diameter * 1.08, shaft, diameter * 1.08), shoes, segments=LIMB_SEGMENTS))
+        return sole + toe + ankle
+    ankle_r = diameter * 0.46
+    ankle_y = max(ankle_r, sole_h * 0.85)
+    ankle = _pair(_p("sphere", (x, ankle_y, 0), (ankle_r * 2, ankle_r * 2, ankle_r * 2), shoes, segments=LIMB_SEGMENTS))
+    return sole + toe + ankle
 
 
 def _anchor(layout: dict) -> dict:
@@ -499,7 +705,13 @@ def _scarf(layout, color):
     return [_p("cylinder", (0, y, 0), (layout["torso_w"] * 0.78, 0.03 * layout["h"], layout["torso_d"] * 0.90), color, segments=LIMB_SEGMENTS)]
 
 
+def _clothes():
+    from services.blob_wear import CLOTHES
+    return CLOTHES
+
+
 _ACCESSORY_BUILDERS = {
     "cap": _cap, "sailor_cap": _sailor_cap, "top_hat": _top_hat, "beanie": _beanie, "bucket_hat": _bucket_hat,
     "apron": _apron, "tie": _tie, "collar": _collar, "belt": _belt, "backpack": _backpack, "scarf": _scarf,
+    **_clothes(),
 }

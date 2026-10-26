@@ -159,12 +159,17 @@ def _ellipse_row(piece, y_world: float, radius: float, count: int, center_y: flo
 
 
 def _capsule_wall(piece, half_body: float, count: int, smooth: bool):
-    high = _wall_row(piece, half_body, count)
-    low = _wall_row(piece, -half_body, count)
-    for index in range(count):
-        nxt = (index + 1) % count
-        yield from _quad(low[index][0], low[nxt][0], high[index][0], high[nxt][0],
-                         low[index][1], low[nxt][1], high[index][1], high[nxt][1], smooth)
+    """Rings about a diameter apart. One long quad has no vertices for the rig to bind."""
+    sx, _sy, sz = piece["scale"]
+    length = half_body * 2.0
+    steps = max(1, math.ceil(length / max(min(sx, sz), 1e-6)))
+    rows = [_wall_row(piece, -half_body + length * step / steps, count) for step in range(steps + 1)]
+    for row in range(steps):
+        low, high = rows[row], rows[row + 1]
+        for index in range(count):
+            nxt = (index + 1) % count
+            yield from _quad(low[index][0], low[nxt][0], high[index][0], high[nxt][0],
+                             low[index][1], low[nxt][1], high[index][1], high[nxt][1], smooth)
 
 
 def _wall_row(piece, y_world: float, count: int):

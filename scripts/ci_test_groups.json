@@ -694,6 +694,12 @@
       ]
     },
     {
+      "prefix": "app/services/blob_wear.py",
+      "paths": [
+        "tests/test_blob_body.py"
+      ]
+    },
+    {
       "prefix": "app/services/blob_builder.py",
       "paths": [
         "tests/test_blob_body.py"
