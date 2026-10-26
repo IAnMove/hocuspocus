@@ -75,6 +75,11 @@ export type Scene3DFaceDecal = {
   shape?: 'cap' | 'plane'
   /** The plane's width, height and lift in head radii (default `FACE_PLANE_DEFAULT`). */
   plane?: [number, number, number]
+  /** Jaw of the egg head the cap hugs: how much the radius narrows toward the chin (0 is a sphere, 0.35 the lofted anime head). */
+  taper?: number
+  /** Frontal projection of the kit picture: the drawn skull's centre and half-size as image fractions `[cu, cv, ru, rv]`.
+  The cap then covers 200 x 180 degrees, each vertex takes the pixel in front of it, and rows below the chin stay transparent. */
+  fit?: [number, number, number, number]
   bone: string
   expressions?: FaceExpressionCue[]
   art?: FaceDecalArt
@@ -125,25 +130,53 @@ export function artFromKit(kit: Pick<CharacterKit, 'base' | 'poses' | 'mouth' | 
   return { poses, mouths, rest: mapped && mouths[mapped] ? mapped : 'closed' }
 }
 
-/** Unit sphere cap. UVs cover the whole face image; default sphere UVs would show only a corner. */
-export function faceCapGeometry(span?: readonly [number, number]): SphereGeometry {
-  const wide = span ? span[0] * Math.PI / 180 : FACE_CAP_SPAN
-  const tall = span ? span[1] * Math.PI / 180 : FACE_CAP_SPAN
+/** The span a projected (`fit`) cap covers: past the ears and from the crown to under the chin. */
+export const FACE_FIT_SPAN: readonly [number, number] = [200, 180]
+/** A transparent pixel of a keyed head picture: its top-left corner. */
+const FIT_OUTSIDE: readonly [number, number] = [0, 1]
+
+/** The jaw of the lofted anime head (`blob_loft.egg_scale`): the radius share at a height `y` of the unit head. */
+export function eggScale(y: number, taper: number): number {
+  return 1 - taper * Math.max(0, -y) ** 2
+}
+
+/** Unit sphere cap. UVs cover the whole face image; default sphere UVs would show only a corner.
+With `fit` the picture is projected from the front instead (`u = cu + x ru`, `v = 1 - cv + y rv`), rows below the chin
+land on a transparent corner, and `taper` narrows the cap toward the chin like the egg head under it. */
+export function faceCapGeometry(span?: readonly [number, number], taper = 0, fit?: readonly [number, number, number, number]): SphereGeometry {
+  const extent = fit ? FACE_FIT_SPAN : span
+  const wide = extent ? extent[0] * Math.PI / 180 : FACE_CAP_SPAN
+  const tall = extent ? extent[1] * Math.PI / 180 : FACE_CAP_SPAN
   const phiStart = Math.PI / 2 - wide / 2
   const thetaStart = Math.PI / 2 - tall / 2
   const geometry = new SphereGeometry(1, 48, 24, phiStart, wide, thetaStart, tall)
   const position = geometry.getAttribute('position')
   const uv = geometry.getAttribute('uv')
   for (let index = 0; index < position.count; index += 1) {
-    const theta = Math.acos(Math.min(1, Math.max(-1, position.getY(index))))
-    let u = 0.5
-    if (Math.sin(theta) > 1e-4) {
-      const phi = Math.atan2(position.getZ(index), -position.getX(index))
-      u = (phi - phiStart) / wide
+    const x = position.getX(index), y = position.getY(index), z = position.getZ(index)
+    if (fit) {
+      const [cu, cv, ru, rv] = fit
+      const imageX = cu + x * ru
+      const imageY = cv - y * rv
+      const inside = imageX >= 0 && imageX <= 1 && imageY >= 0 && imageY <= cv + rv
+      if (inside) uv.setXY(index, imageX, 1 - imageY)
+      else uv.setXY(index, FIT_OUTSIDE[0], FIT_OUTSIDE[1])
+    } else {
+      const theta = Math.acos(Math.min(1, Math.max(-1, y)))
+      let u = 0.5
+      if (Math.sin(theta) > 1e-4) {
+        const phi = Math.atan2(z, -x)
+        u = (phi - phiStart) / wide
+      }
+      uv.setXY(index, u, 1 - (theta - thetaStart) / tall)
     }
-    uv.setXY(index, u, 1 - (theta - thetaStart) / tall)
+    if (taper > 0) {
+      const k = eggScale(y, taper)
+      position.setXYZ(index, x * k, y, z * k)
+    }
   }
   uv.needsUpdate = true
+  if (taper > 0) { position.needsUpdate = true; geometry.computeVertexNormals() }
   return geometry
 }
 
@@ -280,6 +313,15 @@ function planeOf(raw: unknown): [number, number, number] | undefined {
   return ok ? [round(wide), round(tall), round(lift)] : undefined
 }
 
+function fitOf(raw: unknown): [number, number, number, number] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 4) return undefined
+  const [cu, cv, ru, rv] = raw
+  const unit = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 1
+  const ok = unit(cu) && unit(cv) && unit(ru) && unit(rv) && ru > 0 && rv > 0
+  const round = (v: number) => Math.round(v * 10000) / 10000
+  return ok ? [round(cu), round(cv), round(ru), round(rv)] : undefined
+}
+
 export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Record<string, unknown>
@@ -293,13 +335,20 @@ export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   const span = spanOf(value.span)
   const shape = value.shape === 'plane' ? 'plane' : undefined
   const plane = shape ? planeOf(value.plane) ?? [...FACE_PLANE_DEFAULT] as [number, number, number] : undefined
+  const taper = typeof value.taper === 'number' && Number.isFinite(value.taper) && value.taper > 0 && value.taper <= 0.6 ? Math.round(value.taper * 1000) / 1000 : undefined
+  const fit = fitOf(value.fit)
   const expressions = expressionsOf(value.expressions)
   const art = artOf(value.art)
   return {
     kitId, bone, ...(pose ? { pose } : {}), ...(center ? { center } : {}), ...(radii ? { radii } : {}),
     ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(shape ? { shape, plane } : {}),
+    ...(taper !== undefined ? { taper } : {}), ...(fit ? { fit } : {}),
     ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
   }
+}
+
+function capKey(decal: Scene3DFaceDecal): string {
+  return `${(decal.span ?? []).join()}|${decal.taper ?? ''}|${(decal.fit ?? []).join()}`
 }
 
 type Painter = {
@@ -347,11 +396,11 @@ export class FaceDecalRuntime {
     const key = `${bone.uuid}|${decal.center!.join()}|${decal.radii!.join()}|${decal.size ?? FACE_DECAL_OUTSET}|${plane ? (decal.plane ?? FACE_PLANE_DEFAULT).join() : ''}`
     if (!this.mesh) this.mesh = this.createMesh(decal)
     if (!this.mesh) return
-    const spanKey = plane ? 'plane' : (decal.span ?? []).join()
+    const spanKey = plane ? 'plane' : capKey(decal)
     if (spanKey !== this.spanKey) {
       this.spanKey = spanKey
       this.mesh.geometry.dispose()
-      this.mesh.geometry = plane ? facePlaneGeometry() : faceCapGeometry(decal.span)
+      this.mesh.geometry = plane ? facePlaneGeometry() : faceCapGeometry(decal.span, decal.taper ?? 0, decal.fit)
       const material = this.mesh.material as MeshBasicMaterial
       material.color.set(plane ? 0xffffff : 0xfff6f0)
     }
@@ -378,8 +427,8 @@ export class FaceDecalRuntime {
       map: this.texture, color: plane ? 0xffffff : 0xfff6f0, transparent: true, alphaTest: 0.04, side: FrontSide, toneMapped: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     })
-    this.spanKey = plane ? 'plane' : (decal.span ?? []).join()
-    const mesh = new Mesh(plane ? facePlaneGeometry() : faceCapGeometry(decal.span), material)
+    this.spanKey = plane ? 'plane' : capKey(decal)
+    const mesh = new Mesh(plane ? facePlaneGeometry() : faceCapGeometry(decal.span, decal.taper ?? 0, decal.fit), material)
     mesh.name = 'blob-face'
     mesh.frustumCulled = false
     mesh.renderOrder = 2

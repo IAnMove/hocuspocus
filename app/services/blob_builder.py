@@ -14,7 +14,8 @@ LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair"}
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh"}
+_MESHES = ("pieces", "loft")
 _BUILDS = ("slim", "average", "round", "pear")
 _FAMILIES = ("blob", "anime", "chibi")
 _HANDS = ("ball", "mitten")
@@ -206,6 +207,7 @@ def trait_catalog() -> dict:
         "legs": {"limits": _LEG_LIMITS, "default": dict(_LEG_DEFAULT)},
         "hands": list(_HANDS), "feet": list(_FEET),
         "hair": {"style": list(_HAIR_STYLES), "default": {"style": "none", "color": _HAIR_COLOR}},
+        "mesh": {"choices": list(_MESHES), "default": "pieces", "note": "loft (anime only) is one smooth lofted body: tapered limbs, a jaw, hair geometry, clothes as colour regions."},
         "colors": {"fields": list(_COLOR_DEFAULT), "default": dict(_COLOR_DEFAULT), "format": "#RRGGBB"},
         "accessories": {"kinds": list(_ACCESSORY_KINDS), "max": _MAX_ACCESSORIES, "defaultColor": dict(_ACCESSORY_COLOR),
                         "notHere": ["moustache", "glasses", "eyebrows", "freckles"]},
@@ -217,6 +219,8 @@ def blob_pieces(traits: dict | None = None) -> dict:
     """``{pieces, faceAnchor, traits}`` for one body. Unknown fields raise ``BlobTraitsError``."""
     spec = _normalize({} if traits is None else traits)
     pieces, anchor = _assemble(spec)
+    if spec.get("mesh") == "loft":
+        return {"pieces": pieces, "faceAnchor": anchor, "traits": spec, "layout": _layout(spec)}
     if not 1 <= len(pieces) <= 128:
         raise BlobTraitsError("too_many_pieces", f"A body has {len(pieces)} pieces; the limit is 128")
     return {"pieces": pieces, "faceAnchor": anchor, "traits": spec}
@@ -242,7 +246,11 @@ def _normalize(traits: dict) -> dict:
         _fail("unknown_field", "Unknown trait: " + ", ".join(sorted(extra)))
     family = _choice(traits.get("family", "blob"), _FAMILIES, "invalid_family", "family")
     stock = _FAMILY[family]
+    mesh = _choice(traits.get("mesh", "pieces"), _MESHES, "invalid_mesh", "mesh")
+    if mesh == "loft" and family != "anime":
+        _fail("invalid_mesh", "mesh loft is for the anime family")
     return {
+        **({"mesh": mesh} if "mesh" in traits else {}),
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
         "family": family,

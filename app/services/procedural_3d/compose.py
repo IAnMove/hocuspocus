@@ -228,6 +228,11 @@ def _rotate(vector, piece):
     return (x / length, y / length, z / length)
 
 
+def pack_mesh(name, vertices, normals, colors) -> bytes:
+    """A GLB from ready triangles (three vertices each, with normals and linear colours), for a lofted body."""
+    return _pack(name, vertices, normals, colors)
+
+
 def _pack(name, vertices, normals, colors):
     count = len(vertices)
     blobs = [struct.pack(f"<{count * 3}f", *(v for row in array for v in row)) for array in (vertices, normals, colors)]

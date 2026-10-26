@@ -62,7 +62,11 @@ def rig_glb(source: bytes, clip_ids: list[str]) -> tuple[bytes, dict]:
 def build_body(traits: dict, clip_ids: list[str]) -> dict:
     """Pieces, both GLBs and the humanoid sidecar. Nothing is written."""
     built = blob_pieces(traits)
-    glb = compose_glb(built["pieces"], "blob")
+    if built["traits"].get("mesh") == "loft":
+        from services.blob_loft import loft_glb
+        glb = loft_glb(built["traits"], built.pop("layout"), "blob")
+    else:
+        glb = compose_glb(built["pieces"], "blob")
     rigged, sidecar = rig_glb(glb, clip_ids)
     return {**built, "glb": glb, "rigged": rigged, "sidecar": sidecar}
 

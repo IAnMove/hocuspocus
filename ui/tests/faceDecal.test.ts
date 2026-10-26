@@ -5,7 +5,7 @@ import { ToonLook } from '../src/features/scene3d/toonLook.ts'
 import { talkStateAt } from '../src/features/scene3d/talkingCutout.ts'
 import {
   bindInverse, boneMatches, cutoutOf, faceCapGeometry, facePlaneGeometry, findBone, isFaceDecal, markFaceDecal,
-  parseFaceDecal, placeFaceCap, placeFacePlane, poseAt, FACE_PLANE_DEFAULT,
+  parseFaceDecal, placeFaceCap, placeFacePlane, poseAt, FACE_PLANE_DEFAULT, eggScale,
 } from '../src/features/scene3d/faceDecal.ts'
 
 const mouth = { offsetX: 0, offsetY: 17, scale: 0.2, rotation: 0 }
@@ -137,4 +137,45 @@ test('a plane face is opt-in, sized in head radii, lifted, and still faces model
   assert.ok(front.z > 0.99 && Math.abs(front.x) < 1e-4, front.toArray().join())
   const size = new Vector3().setFromMatrixScale(mesh.matrixWorld)
   assert.deepEqual(size.toArray().map(value => Math.round(value * 1000) / 1000), [0.3, 0.8, 1])
+})
+
+test('a fitted cap projects the picture from the front, keeps rows under the chin transparent and hugs an egg', () => {
+  const art = { poses: { neutral: { base: '/api/v1/file/n.png?workspace=w', mouth, eyes } }, mouths: { closed: '/api/v1/file/c.png?workspace=w' }, rest: 'closed' }
+  const plain = parseFaceDecal({ kitId: 'k', art })!
+  assert.equal(plain.taper, undefined)
+  assert.equal(plain.fit, undefined)
+  const fitted = parseFaceDecal({ kitId: 'k', art, taper: 0.35, fit: [0.5, 0.35, 0.3, 0.33] })!
+  assert.equal(fitted.taper, 0.35)
+  assert.deepEqual(fitted.fit, [0.5, 0.35, 0.3, 0.33])
+  assert.equal(parseFaceDecal({ kitId: 'k', art, taper: 2, fit: [0.5, 0.5, 0, 0.3] })!.taper, undefined)
+  assert.equal(parseFaceDecal({ kitId: 'k', art, fit: [0.5, 0.5, 0, 0.3] })!.fit, undefined)
+
+  const geometry = faceCapGeometry(undefined, 0.35, [0.5, 0.35, 0.3, 0.33])
+  const position = geometry.getAttribute('position')
+  const uv = geometry.getAttribute('uv')
+  let front = -1, right = -1, lowest = -1, chinWidth = 0, browWidth = 0
+  for (let index = 0; index < position.count; index += 1) {
+    const x = position.getX(index), y = position.getY(index), z = position.getZ(index)
+    if (front < 0 && Math.abs(x) < 1e-6 && Math.abs(y) < 1e-6 && z > 0.99) front = index
+    if (right < 0 && Math.abs(y) < 1e-6 && x > 0.99) right = index
+    if (lowest < 0 && y < -0.99) lowest = index
+    if (Math.abs(y + 0.5) < 0.03) chinWidth = Math.max(chinWidth, Math.hypot(x, z))
+    if (Math.abs(y - 0.5) < 0.03) browWidth = Math.max(browWidth, Math.hypot(x, z))
+  }
+  assert.ok(front >= 0 && right >= 0 && lowest >= 0)
+  assert.ok(Math.abs(uv.getX(front) - 0.5) < 1e-6 && Math.abs(uv.getY(front) - 0.65) < 1e-6, 'centre pixel in front')
+  assert.ok(Math.abs(uv.getX(right) - 0.8) < 0.01, 'the right of the skull at cu + ru')
+  // under the chin: the transparent corner, not a smear of the picture's last row
+  assert.ok(uv.getX(lowest) === 0 && uv.getY(lowest) === 1, `${uv.getX(lowest)},${uv.getY(lowest)}`)
+  // the jaw: narrower below the equator than above, by the egg formula
+  assert.ok(chinWidth < browWidth * 0.95, `${chinWidth} vs ${browWidth}`)
+  assert.ok(Math.abs(eggScale(-1, 0.35) - 0.65) < 1e-9 && eggScale(0.5, 0.35) === 1)
+
+  // without fit or taper the cap is the one it always was
+  const old = faceCapGeometry()
+  const plainUv = old.getAttribute('uv')
+  const plainPos = old.getAttribute('position')
+  let maxR = 0
+  for (let index = 0; index < plainPos.count; index += 1) maxR = Math.max(maxR, Math.hypot(plainPos.getX(index), plainPos.getY(index), plainPos.getZ(index)))
+  assert.ok(Math.abs(maxR - 1) < 1e-6 && plainUv.count === plainPos.count)
 })

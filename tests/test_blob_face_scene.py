@@ -151,3 +151,27 @@ def test_a_plane_face_is_opt_in_and_sized_in_head_radii(tmp_path):
     with pytest.raises(HTTPException) as bad:
         execute_command("world3d.scene.face", {"version": 1, "intent_id": "bad", "input": {**base, "base_revision": 6, "shape": "plane", "plane": [0.5, 4]}}, root)
     assert bad.value.detail["code"] == "invalid_face"
+
+
+def test_a_cap_can_hug_an_egg_and_project_a_painted_head(tmp_path):
+    root = lambda workspace: str(tmp_path / workspace)
+    (tmp_path / "studio").mkdir()
+    write_character_kit_library(root("studio"), {"version": 1, "activeId": "blob", "kits": {"blob": kit()}}, base_revision=0)
+    _write("studio", "w3d-face00000003", {"revision": 1, "templateId": "t", "warnings": [], "document": {
+        "duration": 4, "camera": {}, "soundtrack": [],
+        "slots": [{"id": "hero", "slot": "subject_1", "media": "model3d", "sourceUrl": ""}]}}, root)
+    base = {"workspace": "studio", "scene_id": "w3d-face00000003", "object_id": "hero", "kit_id": "blob",
+            "face_anchor": {"center": [0, 1.5, 0], "size": [0.62, 0.58, 0.55]}}
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "plain", "input": {**base, "base_revision": 1}}, root)
+    decal = inspect_scene("studio", "w3d-face00000003", root)["document"]["slots"][0]["faceDecal"]
+    assert "taper" not in decal and "fit" not in decal
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "egg", "input": {**base, "base_revision": 2, "taper": 0.35, "fit": [0.5, 0.35, 0.3, 0.33]}}, root)
+    decal = inspect_scene("studio", "w3d-face00000003", root)["document"]["slots"][0]["faceDecal"]
+    assert decal["taper"] == 0.35 and decal["fit"] == [0.5, 0.35, 0.3, 0.33]
+    execute_command("world3d.scene.face", {"version": 1, "intent_id": "keep", "input": {**base, "base_revision": 3, "pose": "happy"}}, root)
+    decal = inspect_scene("studio", "w3d-face00000003", root)["document"]["slots"][0]["faceDecal"]
+    assert decal["taper"] == 0.35 and decal["fit"] == [0.5, 0.35, 0.3, 0.33] and decal["pose"] == "happy"
+    for index, bad in enumerate(({"taper": 0.9}, {"fit": [0.5, 0.5, 0, 0.3]}, {"fit": [1.2, 0.5, 0.3, 0.3]})):
+        with pytest.raises(HTTPException) as refused:
+            execute_command("world3d.scene.face", {"version": 1, "intent_id": f"bad-{index}", "input": {**base, "base_revision": 4, **bad}}, root)
+        assert refused.value.detail["code"] == "invalid_face"

@@ -138,6 +138,26 @@ def _plane(changes: dict, kept: dict) -> dict[str, Any]:
     return {"shape": "plane", "plane": [round(float(raw[0]), 3), round(float(raw[1]), 3), round(float(lift), 3)]}
 
 
+def _cap_fields(changes: dict, kept: dict) -> dict[str, Any]:
+    """``taper`` (the jaw of the egg head the cap hugs, 0 to 0.6) and ``fit`` ([cu, cv, ru, rv], the drawn skull's centre and
+    half-size as image fractions: the picture is then projected from the front over 200 x 180 degrees). Stored only when given."""
+    found = {}
+    taper = changes.get("taper", kept.get("taper"))
+    if taper is not None:
+        if isinstance(taper, bool) or not isinstance(taper, (int, float)) or not 0 <= float(taper) <= 0.6:
+            raise World3DSceneError("invalid_face", "taper is the jaw of the head the cap hugs, from 0 to 0.6")
+        if float(taper) > 0:
+            found["taper"] = round(float(taper), 3)
+    fit = changes.get("fit", kept.get("fit"))
+    if fit is not None:
+        ok = (isinstance(fit, (list, tuple)) and len(fit) == 4
+              and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1 for v in fit) and fit[2] > 0 and fit[3] > 0)
+        if not ok:
+            raise World3DSceneError("invalid_face", "fit is [cu, cv, ru, rv]: the drawn skull's centre and half-size as fractions of the picture, 0 to 1")
+        found["fit"] = [round(float(v), 4) for v in fit]
+    return found
+
+
 def _explicit(changes: dict) -> dict[str, Any] | None:
     if "center" not in changes and "radii" not in changes:
         return None
@@ -201,7 +221,8 @@ def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_
     span = _span(changes, kept, kit)
     slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
                          "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
-                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {}), **_plane(changes, kept)}
+                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {}), **_plane(changes, kept),
+                         **_cap_fields(changes, kept)}
     character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
     slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
     record["revision"] += 1
