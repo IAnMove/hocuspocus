@@ -108,3 +108,22 @@ def test_a_drawing_with_no_separated_arm_is_refused_and_builds_nothing():
         assert "no arm" in str(error)
     else:
         raise AssertionError("a single stroke is not a walk")
+
+
+def test_a_stored_frame_lies_on_the_screen_colour_so_the_real_key_removes_the_background(tmp_path):
+    """studio.key reads colour only: a transparent frame with black under its alpha came back as an opaque black rectangle."""
+    from PIL import Image
+
+    from services import studio_key
+    from services.walk_puppet_method import _store_frames
+
+    frame = np.zeros((80, 60, 4), np.uint8)
+    cv2.circle(frame, (30, 40), 14, (200, 90, 60, 255), -1)
+    _store_frames([frame], (40, 30), str(tmp_path), ["f.png"], "green")
+    stored = np.array(Image.open(tmp_path / "f.png"))
+    assert tuple(stored[2, 2]) == (0, 255, 0)
+    keyer = studio_key._Keyer("green", None, studio_key._options({}, "green"))
+    studio_key._key_image(str(tmp_path / "f.png"), str(tmp_path / "k.png"), keyer)
+    keyed = np.array(Image.open(tmp_path / "k.png"))[..., 3]
+    assert keyed[2, 2] < 10 and keyed[20, 15] > 245
+    assert float((keyed < 10).mean()) > 0.5
