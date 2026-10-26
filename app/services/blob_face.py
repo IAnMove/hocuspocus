@@ -19,6 +19,8 @@ from services.flat_rig_look import rig_style
 
 CANVAS = 1024
 SCALE = 4
+# The features are drawn at design size and the whole face is magnified about its centre, so the eyes and mouth fill the head.
+ZOOM = 1.45
 POSES = ("neutral", "angry", "surprised", "sad", "happy", "suspicious", "tired", "shout")
 # brow dy (px), tilt (inner end; negative pulls it down), eye opening, mouth dy, mouth height scale
 EXPRESSIONS = {
@@ -136,7 +138,8 @@ def _layout(traits: dict[str, Any], pose: str) -> dict[str, Any]:
     mouth_y = MOUTH_Y + mouth_dy
     return {"gap": EYE_GAP * traits["eyes"]["separation"], "radius": EYE_R * traits["eyes"]["size"],
             "eye_open": eye_open, "brow_dy": brow_dy, "tilt": tilt, "nose_y": NOSE_Y,
-            "mouth_y": mouth_y, "mouth_h": mouth_h, "mouth": (512.0, float(mouth_y), float(mouth_h))}
+            "mouth_y": mouth_y, "mouth_h": mouth_h,
+            "mouth": (512.0, 512.0 + (mouth_y - 512.0) * ZOOM, float(mouth_h * ZOOM))}
 
 
 def _s(value: float) -> float:
@@ -275,7 +278,9 @@ def _draw_pose(traits: dict[str, Any], pose: str, *, lids_only: bool = False) ->
         _moustache(draw, traits, layout)
         _glasses(draw, traits, layout)
         _stubble(draw, traits, layout)
-    return image.resize((CANVAS, CANVAS), Image.LANCZOS)
+    big = image.resize((round(CANVAS * ZOOM),) * 2, Image.LANCZOS)
+    margin = (big.width - CANVAS) // 2
+    return big.crop((margin, margin, margin + CANVAS, margin + CANVAS))
 
 
 def _near_ink(pixel: tuple[int, int, int, int]) -> bool:
