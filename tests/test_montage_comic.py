@@ -210,6 +210,63 @@ def _assert_hidden(tmp_path: Path, root: Path) -> None:
     assert any(path.suffix == ".png" for path in (root / ".comic-panels").iterdir())
 
 
+def _print_copy(source, dest, _seed, box=None):
+    Image.open(source).save(dest)
+
+
+def test_uploaded_clip_is_found_like_the_video_editor(tmp_path: Path, monkeypatch):
+    """The Video Editor stores an imported file as its bare name under uploads/. Looking only
+    in the workspace made every panel of that montage 404, and one such clip aborted the batch."""
+    monkeypatch.chdir(tmp_path)
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    (uploads / "imported.mp4").write_bytes(b"video")
+    store = _store(tmp_path)
+    store.save(WS, _montage(source="imported.mp4"))
+    seen: list[str] = []
+
+    def extract(source, dest, _at):
+        seen.append(source)
+        Image.new("RGB", (32, 48), "red").save(dest)
+
+    result = comic_panels(store, WS, "Bird.montage.json", extract=extract, score=lambda _path: 1.0,
+                          printer=_print_copy, duration_of=lambda _path: 10.0)
+    assert result["panels"][0]["clip_id"] == "c1"
+    assert Path(seen[0]) == uploads / "imported.mp4"
+
+    store.save(WS, {**_montage(source="/api/v1/uploads/imported.mp4"), "name": "Bird2"})
+    again = comic_panels(store, WS, "Bird2.montage.json", extract=extract, score=lambda _path: 1.0,
+                          printer=_print_copy, duration_of=lambda _path: 10.0)
+    assert again["panels"][0]["clip_id"] == "c1"
+
+
+def test_file_url_stays_in_the_workspace_when_an_upload_shares_the_name(tmp_path: Path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    (uploads / "shot.mp4").write_bytes(b"upload")
+    root = tmp_path / WS
+    root.mkdir(parents=True, exist_ok=True)
+    (root / "shot.mp4").write_bytes(b"workspace")
+    store = _store(tmp_path)
+    seen: list[bytes] = []
+
+    def extract(source, dest, _at):
+        seen.append(Path(source).read_bytes())
+        Image.new("RGB", (32, 48), "red").save(dest)
+
+    store.save(WS, _montage(source="/api/v1/file/shot.mp4?workspace=comicdemo"))
+    comic_panels(store, WS, "Bird.montage.json", extract=extract, score=lambda _path: 1.0,
+                 printer=_print_copy, duration_of=lambda _path: 10.0)
+    assert seen and all(item == b"workspace" for item in seen)
+
+    seen.clear()
+    store.save(WS, _montage(source="shot.mp4"), file="Bird.montage.json", expected_revision=1)
+    comic_panels(store, WS, "Bird.montage.json", extract=extract, score=lambda _path: 1.0,
+                 printer=_print_copy, duration_of=lambda _path: 10.0)
+    assert seen and all(item == b"upload" for item in seen)
+
+
 @pytest.mark.skipif(not FFMPEG, reason="ffmpeg is required")
 def test_real_frame_is_printed_and_cached(tmp_path: Path):
     root = tmp_path / WS
