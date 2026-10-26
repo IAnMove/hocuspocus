@@ -178,10 +178,29 @@ def _weights(payload: dict, engine: str, gap: list[dict]) -> dict[str, Any]:
     )
 
 
+def source_seconds(path: str) -> float:
+    """Duration of a source take. The error stays a short sentence: ffprobe's text is not included."""
+    import json
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", path],
+            capture_output=True, check=False, text=True,
+        )
+        duration = float((json.loads(result.stdout or "{}").get("format") or {}).get("duration"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        duration, result = 0.0, None
+    if result is None or result.returncode != 0 or duration <= 0 or duration > 36000:
+        raise MediaToolError("duration_unreadable", "The source video duration could not be read.")
+    return duration
+
+
 def _body(target: dict, workspace: str, guides: dict, folder: str) -> dict[str, Any]:
     from services.production_media_common import available_name
     spec = ENGINES[target["engine"]]
     token = _safe_token(target.get("shot") or Path(target["original_name"]).stem)
+    span = guides["span"]
+    seconds = source_seconds(guides["video"]) if span is None and target["kind"] in {"series", "clip"} else None
     body = {
         "workspace": workspace, "model_type": spec["model_type"], "prompt": PROMPT,
         "resolution": spec["resolution"], "num_inference_steps": spec["steps"],
@@ -189,7 +208,7 @@ def _body(target: dict, workspace: str, guides: dict, folder: str) -> dict[str, 
         "video_prompt_type": spec["video_prompt_type"], "audio_prompt_type": "A",
         "video_guide": guides["video"], "audio_guide": guides["audio"],
         "sliding_window_size": spec["sliding_window_size"], "force_fps": str(int(spec["fps"])),
-        "video_length": video_length(target["engine"], guides["span"]),
+        "video_length": video_length(target["engine"], span, seconds=seconds),
         "output_name": available_name(folder, f"lipsync-{token}-{target['engine']}.mp4"),
     }
     if "denoising_strength" in spec:

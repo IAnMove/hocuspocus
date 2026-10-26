@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a series or clip lip redo without a span lasts as long as the source take.** `video_length` used the 81-frame window whenever `span` was omitted. Series and clip now take the source duration from ffprobe and count it at 25 fps. A production shot with no start and end still uses the window.
+
 **Fixed: lip-sync QA scores a spanned take from the span start.** A clip that begins at 45 s was measured with offset 0, so the window held no frames and the verdict was unreliable. `offset` is now described on `shot.lipsync.redo` and `qa.lipsync`.
 
 **Fixed: a lip redo counts frames at InfiniteTalk's 25 fps and sends `force_fps`.** `generate_video` drops a `fps` argument. A 5 s span counted at 16 fps was clamped to the 81-frame window, about 3.2 s at the model's 25 fps.

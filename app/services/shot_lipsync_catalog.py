@@ -101,11 +101,12 @@ def missing_files(engine: str, root: Path) -> list[dict[str, Any]]:
     return [item for item in files_for(engine) if not _found(root, str(item["path"]))]
 
 
-def video_length(engine: str, span: tuple[float, float] | None) -> int:
-    """One sliding window, or the span in frames when that is longer."""
+def video_length(engine: str, span: tuple[float, float] | None, *, seconds: float | None = None) -> int:
+    """One sliding window, or the span (or a probed source) in frames when that is longer."""
     spec = ENGINES[engine]
     window = int(spec["sliding_window_size"])
-    if span is None:
+    if span is None and seconds is None:
         return window
-    frames = int(round((span[1] - span[0]) * int(spec["fps"])))
+    duration = (span[1] - span[0]) if span is not None else float(seconds)
+    frames = int(round(duration * int(spec["fps"])))
     return min(max(frames, window), 4000)

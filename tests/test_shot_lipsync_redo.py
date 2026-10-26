@@ -196,15 +196,15 @@ def test_a_locked_shot_is_refused_before_any_take(tmp_path, monkeypatch):
 
 def test_a_bare_clip_keeps_a_list_of_the_original_and_the_new_take(tmp_path, monkeypatch):
     folder = tmp_path / "film"
-    folder.mkdir()
-    (folder / "closeup.mp4").write_bytes(b"orig")
+    _movie(folder, "closeup.mp4", 1)
+    original = (folder / "closeup.mp4").read_bytes()
     (folder / "voice.wav").write_bytes(b"wav")
     _bind(monkeypatch, tmp_path)
     result = _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "clip": "closeup.mp4", "audio": "voice.wav"})["result"]
     listed = json.loads((folder / "closeup.lipsync-takes.json").read_text())
     assert listed["original"] == "closeup.mp4"
     assert [item["file"] for item in listed["takes"]] == ["closeup.mp4", result["file"]]
-    assert (folder / "closeup.mp4").read_bytes() == b"orig"
+    assert (folder / "closeup.mp4").read_bytes() == original
     assert result["verdict"] == "ok"
 
 
@@ -215,8 +215,8 @@ def test_a_series_shot_appends_a_take_and_keeps_the_approval(tmp_path, monkeypat
     episode = create_series_episode(series)
     series_id, episode_id = series["id"], episode["id"]
     relative = f"assets/{series_id}/original.mp4"
-    (folder / relative).parent.mkdir(parents=True)
-    (folder / relative).write_bytes(b"approved-take")
+    _movie((folder / relative).parent, "original.mp4", 1)
+    approved = (folder / relative).read_bytes()
     (folder / "voice.wav").write_bytes(b"wav")
     episode["script"] = [{"id": "scene1", "locationId": ""}]
     episode["shots"] = [{
@@ -240,7 +240,7 @@ def test_a_series_shot_appends_a_take_and_keeps_the_approval(tmp_path, monkeypat
     assert shot["approvedAttemptId"] == "attempt-1"
     assert len(shot["attempts"]) == 2 and shot["attempts"][1]["status"] == "completed"
     assert shot["attempts"][1]["id"] == result["attempt_id"]
-    assert (folder / relative).read_bytes() == b"approved-take"
+    assert (folder / relative).read_bytes() == approved
     assert (folder / result["asset"]).is_file()
     assert result["verdict"] == "ok" and result["kept_original"] == "original.mp4"
 
@@ -261,8 +261,8 @@ def test_bad_input_is_refused(tmp_path):
 
 def test_a_qa_failure_still_keeps_the_take_and_says_unreliable(tmp_path, monkeypatch):
     folder = tmp_path / "film"
-    folder.mkdir()
-    (folder / "closeup.mp4").write_bytes(b"orig")
+    _movie(folder, "closeup.mp4", 1)
+    original = (folder / "closeup.mp4").read_bytes()
     (folder / "voice.wav").write_bytes(b"wav")
     _bind(monkeypatch, tmp_path)
 
@@ -272,7 +272,7 @@ def test_a_qa_failure_still_keeps_the_take_and_says_unreliable(tmp_path, monkeyp
     monkeypatch.setattr(redo, "measure_lips", explode)
     result = _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "clip": "closeup.mp4", "audio": "voice.wav"})["result"]
     assert result["verdict"] == "unreliable" and result["qa"]["reason"] == "qa_unavailable"
-    assert (folder / result["file"]).is_file() and (folder / "closeup.mp4").read_bytes() == b"orig"
+    assert (folder / result["file"]).is_file() and (folder / "closeup.mp4").read_bytes() == original
 
 
 def test_lipsync_verdict_thresholds():
@@ -288,6 +288,57 @@ def _generate_video_params() -> set[str]:
         if isinstance(node, ast.FunctionDef) and node.name == "generate_video":
             return {arg.arg for arg in node.args.args} | {arg.arg for arg in node.args.kwonlyargs}
     raise AssertionError("generate_video is missing")
+
+
+def _movie(folder, name: str, seconds: float) -> None:
+    import subprocess
+    folder.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"color=c=black:s=32x32:r=25:d={seconds}",
+         "-f", "lavfi", "-i", "anullsrc=r=16000:cl=mono", "-t", f"{seconds}",
+         "-c:v", "mpeg4", "-c:a", "pcm_s16le", str(folder / name)],
+        check=True, capture_output=True,
+    )
+
+
+def test_a_clip_without_a_span_lasts_as_long_as_the_source(tmp_path, monkeypatch):
+    """video_length(span=None) is the sliding window, whatever the take lasts."""
+    folder = tmp_path / "film"
+    _movie(folder, "closeup.mp4", 4)
+    (folder / "voice.wav").write_bytes(b"wav")
+    seen = _bind(monkeypatch, tmp_path)
+    _call(tmp_path, {"workspace": "film", "engine": "infinitetalk", "clip": "closeup.mp4", "audio": "voice.wav"})
+    assert seen[0]["video_length"] == 100
+
+
+def test_a_series_shot_without_a_span_lasts_as_long_as_the_source(tmp_path, monkeypatch):
+    """A series shot with no span also stays on the sliding window."""
+    folder = tmp_path / "film"
+    folder.mkdir()
+    series = create_series_project("film", title="Show")
+    episode = create_series_episode(series)
+    series_id, episode_id = series["id"], episode["id"]
+    relative = f"assets/{series_id}/original.mp4"
+    _movie((folder / relative).parent, "original.mp4", 4)
+    (folder / "voice.wav").write_bytes(b"wav")
+    episode["script"] = [{"id": "scene1", "locationId": ""}]
+    episode["shots"] = [{
+        "id": "s1", "sceneId": "scene1", "productionMethod": "generated_video", "order": 1,
+        "durationSeconds": 8, "prompt": "Gorthak sings", "approvedAttemptId": "attempt-1",
+        "attempts": [{"id": "attempt-1", "status": "completed", "outputAssetIds": ["asset-1"], "model": "infinitetalk"}],
+    }]
+    series["episodesById"][episode_id] = episode
+    series["assets"] = {"asset-1": {
+        "id": "asset-1", "workspaceId": "film", "kind": "video", "uri": relative,
+        "ownerType": "attempt", "ownerId": "attempt-1", "isDerivedThumbnail": False, "metadata": {},
+    }}
+    write_series_library(str(folder), {"workspaceId": "film", "seriesById": {series_id: series}, "seriesOrder": [series_id]}, "film")
+    seen = _bind(monkeypatch, tmp_path)
+    _call(tmp_path, {
+        "workspace": "film", "engine": "infinitetalk", "series_id": series_id, "episode_id": episode_id,
+        "shot": "s1", "audio": "voice.wav",
+    })
+    assert seen[0]["video_length"] == 100
 
 
 def test_a_span_that_starts_late_is_scored_from_that_start(tmp_path, monkeypatch):
