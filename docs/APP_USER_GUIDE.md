@@ -23,8 +23,10 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
   opcionales (FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig y H3 Legacy) con
   su estado y su tamaño: instala, actualiza o quita cada uno con un botón y sigue
   la salida del instalador en vivo. Instalar necesita que la app esté abierta
-  desde Pinokio; quitar solo borra el entorno, no los modelos descargados (esos
-  se gestionan en el Gestor de almacenamiento). En el servidor completo, al compartir en LAN
+  desde Pinokio; quitar solo borra el entorno (y avisa lo que realmente libera:
+  uv comparte ruedas con la caché de Pinokio), no los modelos descargados (esos
+  se gestionan en el Gestor de almacenamiento). Guía: [Installation](install/HOWUSEIT.md).
+  En el servidor completo, al compartir en LAN
   la autenticación está encendida por defecto; el servidor core no tiene esa
   puerta: [LAN_AUTH](development/LAN_AUTH.md).
 - **Ayuda:** el tutorial dentro de la app, con capturas de la interfaz actual.

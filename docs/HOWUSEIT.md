@@ -9,6 +9,7 @@ Operator guides for HocusPocus subsystems. Prefer these over inventing a second 
 - **Workspaces tab** (Director generation threads — not the output-folder selector): [`docs/workspaces/HOWUSEIT.md`](workspaces/HOWUSEIT.md)
 - **3D Video compositor** (Hunyuan meshes + plates + camera + rain/fog, mixed with MiniMax H3): [`docs/3d-video-compositor/HOWUSEIT.md`](3d-video-compositor/HOWUSEIT.md)
 - **Character Kits / Face Rig** (2D cutout puppets, mouth overlays, dialogue cadence): [`docs/character-kits/HOWUSEIT.md`](character-kits/HOWUSEIT.md)
+- **Settings → Installation** (optional engines: FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig, H3 Legacy): [`docs/install/HOWUSEIT.md`](install/HOWUSEIT.md)
 
 ## Additional operator guides
 

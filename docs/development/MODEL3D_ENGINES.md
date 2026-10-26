@@ -36,8 +36,9 @@ single-image request. This is not a promise that hidden views are consumed.
 
 ## Isolated installation
 
-For managed TRELLIS.2 installation, use Advanced > Install TRELLIS.2 and
-follow [TRELLIS2.md](TRELLIS2.md). The following manual configuration is
+For managed TRELLIS.2 installation, use **Settings > Installation** or
+Advanced > Install TRELLIS.2 and follow [TRELLIS2.md](TRELLIS2.md) plus the
+[Installation tab](../install/HOWUSEIT.md). The following manual configuration is
 retained for Pixal3D and administrator-owned upstream checkouts. TRELLIS
 manual configurations must still download the pinned offline bundle through
 the catalog; an administrator path never authorizes automatic weight downloads.

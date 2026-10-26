@@ -245,7 +245,7 @@ For native 2K on a 24 GB GPU, use **Auto** VAE tiling and keep the GPU free of o
 
 ### Make 3D, then shoot it like a set
 
-**3D** runs [Hunyuan3D](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) in an isolated env, installed on demand from Pinokio's **Advanced > Install 3D Generation (Hunyuan3D)**: text, one image, or front/left/right/back views → GLB. Procedural rigging runs on every computer without it. **Retexture GLB** paints a new copy; the source file stays untouched.
+**3D** runs [Hunyuan3D](https://github.com/Tencent-Hunyuan/Hunyuan3D-2) in an isolated env, installed on demand from **Settings > Installation** or Pinokio's **Advanced > Install 3D Generation (Hunyuan3D)**: text, one image, or front/left/right/back views → GLB. Procedural rigging runs on every computer without it. **Retexture GLB** paints a new copy; the source file stays untouched. Operator guide: [Installation](docs/install/HOWUSEIT.md).
 
 **Character Creator:** one photo → H3 360° turntable → pick front/left/back/right → Hunyuan multi-view mesh.
 
@@ -614,8 +614,9 @@ with 24 GB VRAM (Ampere/Ada/Hopper), and at least 40 GiB free disk space.
 Windows, macOS, AMD, smaller GPUs and Blackwell are not supported by this
 CUDA 12.4 recipe; the rest of HocusPocus remains available.
 
-Use **Advanced > Install TRELLIS.2**, restart HocusPocus, then enable the model
-and click its download button under **Settings > Model Visibility > 3D**.
+Use **Settings > Installation** (or **Advanced > Install TRELLIS.2**), restart
+HocusPocus, then enable the model and click its download button under
+**Settings > Model Visibility > 3D**.
 Weights include DINOv3 and RMBG-2.0: accept their Hugging Face access terms
 and log in from Advanced if prompted. Choose TRELLIS.2 in image-to-3D, supply
 a front image and generate. The existing GPU queue, cancellation and Library
