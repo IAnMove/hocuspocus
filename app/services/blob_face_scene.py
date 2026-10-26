@@ -100,6 +100,23 @@ def _outset(value: Any) -> float:
     return round(float(value), 3)
 
 
+ANIME_SPAN = [96.0, 116.0]
+
+
+def _span(changes: dict, kept: dict, kit: dict) -> list[float] | None:
+    """Degrees of head the face covers, horizontal then vertical. ``None`` is the client default (80 x 80).
+    An anime face is drawn for a wider and taller cap, so its eyes land lower on the head."""
+    raw = changes.get("span", kept.get("span"))
+    if raw is None:
+        provenance = kit.get("provenance") if isinstance(kit.get("provenance"), list) else []
+        traits = (provenance[0] or {}).get("traits") if provenance and isinstance(provenance[0], dict) else {}
+        return list(ANIME_SPAN) if isinstance(traits, dict) and traits.get("style") == "anime" else None
+    ok = isinstance(raw, (list, tuple)) and len(raw) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 60 <= v <= 150 for v in raw)
+    if not ok:
+        raise World3DSceneError("invalid_face", "span is [horizontal, vertical] degrees of head, each from 60 to 150")
+    return [round(float(raw[0]), 2), round(float(raw[1]), 2)]
+
+
 def _explicit(changes: dict) -> dict[str, Any] | None:
     if "center" not in changes and "radii" not in changes:
         return None
@@ -160,9 +177,10 @@ def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_
     placement = _placement(changes, slot, workspace, str(workspace_dir(workspace)))
     kept = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
     art = _carry(face_art(kit), kept)
+    span = _span(changes, kept, kit)
     slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
                          "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
-                         "expressions": _expressions(changes, kit), "art": art}
+                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {})}
     character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
     slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
     record["revision"] += 1

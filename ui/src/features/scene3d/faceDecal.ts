@@ -32,9 +32,7 @@ import {
 
 /** Horizontal sweep of the cap, centred on model +Z. Wide enough that a ±30° orbit still meets the head. */
 export const FACE_CAP_SPAN = 80 * Math.PI / 180
-const PHI_START = Math.PI / 2 - FACE_CAP_SPAN / 2
-/** The same sweep upwards and downwards, centred on the equator: the art keeps its proportions (80° wide, 80° tall). */
-const THETA_START = Math.PI / 2 - FACE_CAP_SPAN / 2
+/** The same sweep upwards and downwards, centred on the equator, unless the decal gives its own `span`. */
 export const FACE_DECAL_OUTSET = 1.04
 const CANVAS = 1024
 const MOUTH_FALLBACK: CutoutAnchor = { offsetX: 0, offsetY: 0, scale: 0.16, rotation: 0 }
@@ -67,6 +65,8 @@ export type Scene3DFaceDecal = {
   radii?: [number, number, number]
   /** How far the cap sits outside the head, from 1 to 1.2. Distinct from a faceAnchor diameter. */
   size?: number
+  /** Degrees of head the face covers, horizontal then vertical (default 80 x 80). */
+  span?: [number, number]
   bone: string
   expressions?: FaceExpressionCue[]
   art?: FaceDecalArt
@@ -118,8 +118,12 @@ export function artFromKit(kit: Pick<CharacterKit, 'base' | 'poses' | 'mouth' | 
 }
 
 /** Unit sphere cap. UVs cover the whole face image; default sphere UVs would show only a corner. */
-export function faceCapGeometry(): SphereGeometry {
-  const geometry = new SphereGeometry(1, 48, 24, PHI_START, FACE_CAP_SPAN, THETA_START, FACE_CAP_SPAN)
+export function faceCapGeometry(span?: readonly [number, number]): SphereGeometry {
+  const wide = span ? span[0] * Math.PI / 180 : FACE_CAP_SPAN
+  const tall = span ? span[1] * Math.PI / 180 : FACE_CAP_SPAN
+  const phiStart = Math.PI / 2 - wide / 2
+  const thetaStart = Math.PI / 2 - tall / 2
+  const geometry = new SphereGeometry(1, 48, 24, phiStart, wide, thetaStart, tall)
   const position = geometry.getAttribute('position')
   const uv = geometry.getAttribute('uv')
   for (let index = 0; index < position.count; index += 1) {
@@ -127,9 +131,9 @@ export function faceCapGeometry(): SphereGeometry {
     let u = 0.5
     if (Math.sin(theta) > 1e-4) {
       const phi = Math.atan2(position.getZ(index), -position.getX(index))
-      u = (phi - PHI_START) / FACE_CAP_SPAN
+      u = (phi - phiStart) / wide
     }
-    uv.setXY(index, u, 1 - (theta - THETA_START) / FACE_CAP_SPAN)
+    uv.setXY(index, u, 1 - (theta - thetaStart) / tall)
   }
   uv.needsUpdate = true
   return geometry
@@ -235,6 +239,13 @@ function expressionsOf(value: unknown): FaceExpressionCue[] {
 }
 
 /** Drop a bad face instead of rejecting the whole scene document. */
+function spanOf(raw: unknown): [number, number] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 2) return undefined
+  const [wide, tall] = raw
+  const ok = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v) && v >= 60 && v <= 150
+  return ok(wide) && ok(tall) ? [Math.round(wide * 100) / 100, Math.round(tall * 100) / 100] : undefined
+}
+
 export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Record<string, unknown>
@@ -245,11 +256,12 @@ export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   const center = finiteTriple(value.center, false)
   const radii = finiteTriple(value.radii, true)
   const size = typeof value.size === 'number' && value.size >= 1 && value.size <= 1.2 ? Math.round(value.size * 1000) / 1000 : undefined
+  const span = spanOf(value.span)
   const expressions = expressionsOf(value.expressions)
   const art = artOf(value.art)
   return {
     kitId, bone, ...(pose ? { pose } : {}), ...(center ? { center } : {}), ...(radii ? { radii } : {}),
-    ...(size !== undefined ? { size } : {}), ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
+    ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
   }
 }
 
@@ -262,6 +274,7 @@ export class FaceDecalRuntime {
   ready = false
   error?: Error
   private mesh?: Mesh
+  private spanKey = ''
   private texture?: CanvasTexture
   private context?: CanvasRenderingContext2D
   private painters = new Map<string, Painter>()
@@ -294,8 +307,14 @@ export class FaceDecalRuntime {
 
   private mount(root: Object3D, bone: Bone, decal: Scene3DFaceDecal) {
     const key = `${bone.uuid}|${decal.center!.join()}|${decal.radii!.join()}|${decal.size ?? FACE_DECAL_OUTSET}`
-    if (!this.mesh) this.mesh = this.createMesh()
+    if (!this.mesh) this.mesh = this.createMesh(decal.span)
     if (!this.mesh) return
+    const spanKey = (decal.span ?? []).join()
+    if (spanKey !== this.spanKey) {
+      this.spanKey = spanKey
+      this.mesh.geometry.dispose()
+      this.mesh.geometry = faceCapGeometry(decal.span)
+    }
     if (this.placeKey === key && this.mesh.parent === bone) return
     const inverse = bindInverse(root, bone)
     this.placeKey = key
@@ -303,7 +322,7 @@ export class FaceDecalRuntime {
     bone.add(this.mesh)
   }
 
-  private createMesh(): Mesh | undefined {
+  private createMesh(span?: readonly [number, number]): Mesh | undefined {
     const canvas = document.createElement('canvas')
     canvas.width = CANVAS
     canvas.height = CANVAS
@@ -316,7 +335,7 @@ export class FaceDecalRuntime {
       map: this.texture, color: 0xfff6f0, transparent: true, alphaTest: 0.04, side: FrontSide, toneMapped: false,
       polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2,
     })
-    const mesh = new Mesh(faceCapGeometry(), material)
+    const mesh = new Mesh(faceCapGeometry(span), material)
     mesh.name = 'blob-face'
     mesh.frustumCulled = false
     mesh.renderOrder = 2

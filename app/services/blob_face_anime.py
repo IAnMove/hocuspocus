@@ -11,9 +11,12 @@ from services import blob_face as base
 from services.flat_rig import STATES
 
 SC = base.SCALE
-EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 392, 150, 56, 78
-NOSE_Y, MOUTH_Y, MOUTH_H = 548, 640, 250
-BLUSH_Y, BLUSH_X = 520, 236
+# Drawn for the wide cap (96 x 116 degrees, see ``blob_face_scene.ANIME_SPAN``) at the final size: no zoom.
+# Eyes sit at 55 percent of the head height, the mouth at 74, and each eye is about a fifth of the head width.
+ZOOM = 1.0
+EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 562, 232, 120, 150
+NOSE_Y, MOUTH_Y, MOUTH_H = 668, 772, 250
+BLUSH_Y, BLUSH_X = 752, 292
 EYE_WHITE = (252, 250, 255, 255)
 LASH_FLICK = 26
 # pose: eye openness, pupil scale, brow height offset, brow tilt (+ inner end up), lid cover (0-1 from the top), shape
@@ -41,7 +44,7 @@ def layout(pose: str) -> dict[str, Any]:
     p = POSES[pose]
     mouth_y = MOUTH_Y + p["mouth_dy"]
     mouth_h = MOUTH_H * p["mouth_k"]
-    return {"mouth": (512.0, 512.0 + (mouth_y - 512.0) * base.ZOOM, float(mouth_h * base.ZOOM))}
+    return {"mouth": (512.0, 512.0 + (mouth_y - 512.0) * ZOOM, float(mouth_h * ZOOM))}
 
 
 def _eye_box(cx: float, ry: float) -> tuple[float, float, float, float]:
@@ -107,8 +110,8 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
         depth = 0.42 if p["shape"] == "angry" else 0.30
         ImageDraw.Draw(eye).polygon([(edge, top - 4), (far, top - 4), (edge, top + h * depth)], fill=traits["skin"])
     layer.alpha_composite(_clip(eye, mask))
-    draw.ellipse(box, outline=_shade(ink, 1.0), width=max(2, width // 2))
-    _lash(draw, box, sign, ink, width * 1.7)
+    draw.ellipse(box, outline=_shade(ink, 1.0), width=max(3, width))
+    _lash(draw, box, sign, ink, width * 3.4)
     if p["shape"] == "sad":
         tx, ty = (box[0] + box[2]) / 2 + sign * _s(8), box[3] + _s(6)
         draw.ellipse((tx - _s(7), ty, tx + _s(7), ty + _s(30)), fill=(176, 214, 245, 255), outline=ink, width=max(2, width // 3))
@@ -117,7 +120,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
 def _brows(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any]) -> None:
     if traits["brows"]["style"] == "none":
         return
-    thick = max(3, int(traits["brows"]["thickness"] * SC * (0.42 if traits["brows"]["style"] == "thin" else 0.62)))
+    thick = max(3, int(traits["brows"]["thickness"] * SC * (0.62 if traits["brows"]["style"] == "thin" else 0.9)))
     y = _s(EYE_Y - EYE_RY - 38 + p["brow_dy"])
     radius = _s(EYE_RX)
     for sign in (-1, 1):
@@ -143,7 +146,7 @@ def _blush(image: Image.Image, traits: dict[str, Any]) -> None:
     draw = ImageDraw.Draw(layer)
     for sign in (-1, 1):
         cx, y = _s(512) + sign * _s(BLUSH_X), _s(BLUSH_Y)
-        draw.ellipse((cx - _s(78), y - _s(34), cx + _s(78), y + _s(34)), fill=(255, 128, 138, 112))
+        draw.ellipse((cx - _s(96), y - _s(42), cx + _s(96), y + _s(42)), fill=(255, 128, 138, 120))
     image.alpha_composite(layer.filter(ImageFilter.GaussianBlur(_s(14))))
 
 
@@ -161,9 +164,7 @@ def draw_pose(traits: dict[str, Any], pose: str, *, lids_only: bool = False) -> 
         _nose(draw, traits)
         if traits["glasses"] != "none":
             _glasses(draw, traits)
-    big = image.resize((round(base.CANVAS * base.ZOOM),) * 2, Image.LANCZOS)
-    margin = (big.width - base.CANVAS) // 2
-    return big.crop((margin, margin, margin + base.CANVAS, margin + base.CANVAS))
+    return image.resize((base.CANVAS, base.CANVAS), Image.LANCZOS)
 
 
 def _glasses(draw: ImageDraw.ImageDraw, traits: dict[str, Any]) -> None:
@@ -202,11 +203,11 @@ def _mouth_canvas() -> tuple[Image.Image, ImageDraw.ImageDraw]:
     return image, ImageDraw.Draw(image)
 
 
-MOUTH_GAIN = 1.8
+MOUTH_GAIN = 2.4
 
 
 def _pt(x: float, y: float) -> tuple[float, float]:
-    """Sprite point, supersampled 4x. Small anime mouths vanish at video size, so shapes are drawn 1.8x."""
+    """Sprite point, supersampled 4x. Small anime mouths vanish at video size, so shapes are drawn 2.4x."""
     return (256 + x * MOUTH_GAIN) * 4, (160 + y * MOUTH_GAIN) * 4
 
 
