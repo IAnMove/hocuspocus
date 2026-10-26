@@ -146,8 +146,10 @@ def _jacket(layout, color):
     short = {**layout, "torso_bottom": layout["torso_bottom"] + drop, "torso_h": layout["torso_h"] - drop}
     body_taper = layout["waist_taper"]
     body_at_hem = body_taper + 0.14 * (1.0 - body_taper)
-    taper = min(1.0, body_at_hem * 1.06 / 1.08)
-    return torso_shell(short, color, grow=1.08, taper=None if taper > 0.97 else taper)
+    # An anime jacket hugs the slim torso (4 percent bigger); a blob's hangs looser (8).
+    grow = 1.04 if body_taper != 1.0 else 1.08
+    taper = min(1.0, body_at_hem * 1.06 / grow)
+    return torso_shell(short, color, grow=grow, taper=None if taper > 0.97 else taper)
 
 
 def _sleeves_long(layout, color):

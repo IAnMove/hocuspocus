@@ -48,7 +48,8 @@ _FAMILY = {
     "chibi": {"head": dict(_CHIBI_HEAD), "arms": dict(_CHIBI_ARMS), "legs": dict(_CHIBI_LEGS)},
 }
 # Shoulder width as a fraction of height (anime) or of the head (chibi). Waist and hip are fractions of that shoulder.
-_ANIME_SHOULDER = {"slim": 0.21, "average": 0.24, "round": 0.27, "pear": 0.23}
+# Narrow: an anime shoulder line is about a head and a half wide, so a painted bust on the head plane covers it.
+_ANIME_SHOULDER = {"slim": 0.18, "average": 0.22, "round": 0.27, "pear": 0.23}
 _ANIME_WAIST = {"slim": 0.58, "average": 0.66, "round": 0.84, "pear": 0.72}
 _CHIBI_SHOULDER = {"slim": 0.62, "average": 0.70, "round": 0.78, "pear": 0.74}
 # Fraction of the torso height, measured from the hip. Blob and chibi stay low:
