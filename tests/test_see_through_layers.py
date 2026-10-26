@@ -179,6 +179,29 @@ def test_a_user_mouth_hint_is_not_replaced_by_the_layer(tmp_path, monkeypatch):
     assert saved["mouth"] == [12, 12] and saved["mouthWidth"] == 8 and saved["exact"] is True
 
 
+def test_an_ink_layer_mouth_hangs_from_the_median_row():
+    """The ink openings hang from the painted line, and the sprite holds that line in INK_SPAN of its width."""
+    from services.flat_rig_base import SPRITE
+    from services.flat_rig_ink import INK_SPAN
+    image = Image.new("RGBA", (100, 80), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((20, 10, 60, 10), fill=(40, 20, 20, 255))
+    ImageDraw.Draw(image).point((20, 50), fill=(40, 20, 20, 255))
+    rig = {
+        "warnings": [], "blink": "keep", "eyes": {"offsetY": -10}, "blinks": True,
+        "width": 100, "height": 80, "frame": (0, 0, 100, 80),
+        "mouth": {"offsetX": 0, "offsetY": 0, "scale": 0.1, "rotation": 0},
+        "skin": (1, 2, 3), "before": Image.new("RGBA", (100, 80), (0, 0, 0, 0)),
+        "eyes_box": [10, 0, 90, 8],
+    }
+    apply_face_layers(
+        {"base": rig},
+        {"base": {"images": {"mouth": image}, "missing": [], "mouth_box": (20, 10, 61, 51)}},
+        {"mouthStyle": "ink", "screen": False}, {})
+    assert rig["mouth"]["offsetY"] == -30.0
+    painted = 41
+    assert rig["mouth"]["scale"] == round(painted / INK_SPAN * SPRITE[1] / SPRITE[0] / 100, 5)
+
+
 def test_missing_eye_layers_keep_the_guessed_blink():
     rig = {"warnings": [], "blink": "keep", "eyes": {"offsetY": -10}, "blinks": True, "width": 10, "height": 10,
            "frame": (0, 0, 10, 10), "mouth": {"offsetY": 1}, "skin": (1, 2, 3)}

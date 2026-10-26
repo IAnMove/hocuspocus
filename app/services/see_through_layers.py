@@ -17,6 +17,7 @@ from PIL import Image
 
 from services.flat_rig_base import SPRITE, FlatRigError, _anchor
 from services.flat_rig_eyes import _blink_box, _eye_skin, blink_sprite
+from services.flat_rig_ink import _ink_sprite_width
 from services.runtime_environment import engine_python
 from services.runtime_profiles import APP_DIR, managed_ready
 from services.see_through.worker import REQUIRED
@@ -198,7 +199,7 @@ def _apply_one(rig: dict, layer: dict, look: dict, hint: dict) -> None:
     if labelled is not None:
         _place_blink(rig, labelled, look, hint.get("blink") is not False)
     if look.get("mouthStyle") != "warp" and layer.get("mouth_box"):
-        _set_mouth(rig, layer["mouth_box"])
+        _set_mouth(rig, layer["mouth_box"], (layer.get("images") or {}).get("mouth"), ink=look.get("mouthStyle") == "ink")
 
 
 def _eye_labels(images: dict, rig: dict):
@@ -286,12 +287,22 @@ def _place_blink(rig: dict, labelled: np.ndarray, look: dict, blink_ok: bool) ->
         rig["blinks"] = True
 
 
-def _set_mouth(rig: dict, box) -> None:
+def _set_mouth(rig: dict, box, mouth: Image.Image | None = None, *, ink: bool = False) -> None:
+    """Place the mouth. Ink hangs from the median painted row and uses ``_ink_sprite_width`` (the line is ``INK_SPAN`` of the sprite). Paper keeps the box."""
     x0, y0, x1, y1 = box
     left, top = int(rig["frame"][0]), int(rig["frame"][1])
-    sprite = max(1.0, float(x1 - x0))
-    rig["mouth"] = _anchor((x0 + x1) / 2 - left, (y0 + y1) / 2 - top, sprite * SPRITE[1] / SPRITE[0], rig["width"], rig["height"])
-    rig["mouth_box"] = [x0 - left, y0 - top, x1 - left, y1 - top]
+    row = (y0 + y1) / 2
+    local = [x0 - left, y0 - top, x1 - left, y1 - top]
+    if ink:
+        if mouth is not None:
+            rows = np.nonzero(_alpha(mouth))[0]
+            if len(rows):
+                row = float(np.median(rows))
+        sprite = _ink_sprite_width(local, {}, rig.get("eyes_box") or (0, 0, max(1, x1 - x0), 1))
+    else:
+        sprite = max(1.0, float(x1 - x0))
+    rig["mouth"] = _anchor((x0 + x1) / 2 - left, row - top, sprite * SPRITE[1] / SPRITE[0], rig["width"], rig["height"])
+    rig["mouth_box"] = local
 
 
 def save_layers(pack: dict, kit_id: str, workspace_dir: str, workspace: str) -> tuple[dict, dict]:

@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: an ink mouth from See-through layers hangs from the painted line.** The openings used the box centre and the raw width. They now use the median ink row and `_ink_sprite_width`, the same measurement as the other ink mouths.
+
 **Fixed: a mouth measured from See-through layers is not saved as the user's hint.** The point places that rig. It is not stored with `exact: true`, so a later rig and the anime landmarks can move it. A mouth the caller placed stays.
 
 **Fixed: a flat rig does not keep `faceSource: layers`.** Asking for See-through layers runs it for that call. A later rig that leaves `faceSource` out keeps the mouth style and does not run See-through again. A missing install or a machine that is not Linux still refuses the call and leaves the kit unchanged.
