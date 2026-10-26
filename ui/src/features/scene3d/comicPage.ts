@@ -24,6 +24,8 @@ export type ComicPairInput = {
   hold?: number
   yawDeg?: number
   yawArc?: number
+  /** Opt-in: one filler cutout breaks its border at the wide pose. */
+  pop?: boolean
 }
 export type ComicCardCopy = { title: string; description: string; requirements: string[] }
 
@@ -267,10 +269,10 @@ export function comicCutoutPlacement(panel: Placed, popped = false, view?: { pos
   return { position: [panel.x + shift, panel.y + panel.scale - scale, panel.z + COMIC_CUTOUT_AHEAD], scale }
 }
 
-function slotsOf(layout: PageLayout, pageUrl: string, panels: ComicPanelInput[], fromPanel: number, toPanel: number, wide: Pose, frameAspect: number): Scene3DSlot[] {
+function slotsOf(layout: PageLayout, pageUrl: string, panels: ComicPanelInput[], fromPanel: number, toPanel: number, wide: Pose, frameAspect: number, pop: boolean): Scene3DSlot[] {
   const page = imageSlot('page', [0, 0, 0], layout.pageScale, pageUrl)
   const pictures = layout.panels.map((panel, index) => imageSlot(`panel-${index}`, [panel.x, panel.y, panel.z], panel.scale, panels[index]?.url || ''))
-  const popped = popPanel(panels, fromPanel, toPanel)
+  const popped = pop ? popPanel(panels, fromPanel, toPanel) : null
   const view = { pose: wide, aspect: frameAspect }
   const cutouts = layout.panels.flatMap((panel, index) => {
     const url = panels[index]?.cutout
@@ -340,7 +342,7 @@ export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; 
   const pageUrl = input.pageUrl || pagePicture(format)
   const yawDeg = input.yawDeg ?? COMIC_YAW_DEG
   const wide = comicWidePose(format, size.width / size.height, yawDeg, layout)
-  const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel, wide, size.width / size.height)
+  const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel, wide, size.width / size.height, input.pop === true)
   const yawArc = input.yawArc ?? COMIC_YAW_ARC
   const hold = input.hold ?? COMIC_HOLD
   const exitDuration = input.exitDuration ?? COMIC_DURATION

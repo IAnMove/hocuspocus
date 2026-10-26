@@ -69,6 +69,9 @@ _HALO = 2.0
 _AA = 1.5
 _SPECK = 0.005
 _INPAINT_RADIUS = 3
+# Unsure U2Net pixels per sure one. Busy scenes (small figures, furniture) come out around 2.7
+# and smear or leave a head behind; clean subjects stay near 0.1-1.0.
+_UNSURE_LIMIT = 1.5
 
 
 def finish_cutout(picture: Path, cutout: Path) -> None:
@@ -90,12 +93,21 @@ def finish_cutout(picture: Path, cutout: Path) -> None:
         mask = np.asarray(opened.convert("RGBA"))
     if mask.shape != original.shape:
         return
+    _require_sure_matte(mask[..., 3])
     sticker, support = _sticker(mask[..., 3])
     edge = _edge_ramp(sticker.shape[0], sticker.shape[1])
     painted = original.copy()
     painted[..., 3] = np.rint(np.clip(sticker * edge, 0, 1) * 255).astype(np.uint8)
     Image.fromarray(painted).save(cutout)
     _inpaint_base(picture, original, support, edge)
+
+
+def _require_sure_matte(alpha) -> None:
+    """Raise before anything is written when the matte is mostly guesswork, so the panel stays flat."""
+    sure = int((alpha >= 230).sum())
+    unsure = int(((alpha > 25) & (alpha < 230)).sum())
+    if unsure > _UNSURE_LIMIT * max(sure, 1):
+        raise ValueError("uncertain matte")
 
 
 def _sticker(alpha):

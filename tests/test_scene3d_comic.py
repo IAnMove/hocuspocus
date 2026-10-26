@@ -219,7 +219,7 @@ def test_five_panels_keep_the_cut_aspect_and_crop_the_rest(tmp_path):
 def test_a_recolored_cutout_keeps_the_picture_on_a_full_size_cut_panel(tmp_path):
     def recolor(source, dest):
         image = Image.open(source).convert("RGBA")
-        Image.new("RGBA", image.size, (255, 0, 0, 180)).save(dest)
+        Image.new("RGBA", image.size, (255, 0, 0, 255)).save(dest)
         return dest
 
     bind_comic_cutout(recolor)
@@ -286,6 +286,28 @@ def test_a_sticker_leaves_no_subject_in_the_base_outside_the_ring(tmp_path):
         y0, y1 = max(0, y - 2), min(height, y + 3)
         x0, x1 = max(0, x - 2), min(width, x + 3)
         assert opaque[y0:y1, x0:x1].any() and clear[y0:y1, x0:x1].any()
+
+
+def test_an_uncertain_matte_raises_and_leaves_both_files_alone(tmp_path):
+    """A busy scene where U2Net mostly guesses must stay flat, not smear the base."""
+    import numpy as np
+    import pytest
+
+    from services.scene3d_comic_cutout import finish_cutout
+
+    height, width = 60, 80
+    rgb = np.full((height, width, 3), 90, np.uint8)
+    alpha = np.zeros((height, width), np.uint8)
+    alpha[10:50, 10:70] = 120
+    alpha[25:35, 35:45] = 255
+    picture = tmp_path / "panel.png"
+    cutout = tmp_path / "cut.png"
+    Image.fromarray(np.dstack([rgb, np.full((height, width), 255, np.uint8)])).save(picture)
+    Image.fromarray(np.dstack([rgb, alpha])).save(cutout)
+    before = (picture.read_bytes(), cutout.read_bytes())
+    with pytest.raises(ValueError, match="uncertain matte"):
+        finish_cutout(picture, cutout)
+    assert (picture.read_bytes(), cutout.read_bytes()) == before
 
 
 def test_a_full_matte_fades_over_the_outer_three_percent(tmp_path):

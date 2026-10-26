@@ -217,7 +217,7 @@ test('filler pictures match the catalogue page and each cutout keeps an alpha ch
 
 test('exit and enter share one wide pose and each end fills its panel', () => {
   for (const format of ['landscape', 'portrait'] as const) {
-    const pair = buildComicPair({ format })
+    const pair = buildComicPair({ format, pop: true })
     const size = comicCatalogueSize(format)
     const last = comicFrameSeconds(comicFrameCount() - 1)
     for (const doc of [pair.exit, pair.enter]) {
@@ -292,6 +292,8 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     const body = { x: host.position[0], y: host.position[1], z: host.position[2], scale: host.scale, aspect: hostCell.w / hostCell.h }
     const poppedPlace = comicCutoutPlacement(body, true, { pose: exitWide, aspect: size.width / size.height })
     assert.ok(popped.scale > comicCutoutPlacement(body, false).scale, 'one filler cutout breaks the border')
+    const plain = buildComicPair({ format }).exit.slots.find(slot => slot.id === 'cutout-1')!
+    assert.ok(Math.abs(plain.scale - comicCutoutPlacement(body, false).scale) < 1e-9, 'no pop unless asked')
     close(popped.position, poppedPlace.position, `${format} popped cutout`)
     assert.equal(matched.position[2], from.position[2] + COMIC_CUTOUT_AHEAD)
     const centerY = from.position[1] + from.scale
@@ -308,7 +310,7 @@ function projectedSpan(x: number, y: number, z: number, halfW: number, pose: { e
 
 test('a cutout slides four to six percent of its panel and the pop still reads larger', () => {
   for (const format of ['landscape', 'portrait'] as const) {
-    const pair = buildComicPair({ format })
+    const pair = buildComicPair({ format, pop: true })
     const frame = comicCatalogueSize(format)
     const aspect = frame.width / frame.height
     const last = comicFrameSeconds(comicFrameCount() - 1)
