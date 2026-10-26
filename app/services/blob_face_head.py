@@ -22,10 +22,10 @@ SKULL = {"cx": 512, "cy": 470, "rx": 300, "ry": 345}
 FIT = [SKULL["cx"] / 1024, SKULL["cy"] / 1024, SKULL["rx"] / 1024, SKULL["ry"] / 1024]
 TAPER = 0.35
 # Feature placement on the skull, in canvas pixels: eyes a little under the middle, a tiny nose, a small mouth.
-EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 505, 118, 78, 98
-BROW_Y, NOSE_Y, MOUTH_Y, MOUTH_H = 402, 588, 648, 150
+EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 505, 120, 84, 104
+BROW_Y, NOSE_Y, MOUTH_Y, MOUTH_H = 398, 588, 650, 230
 BLUSH_Y, BLUSH_X = 580, 185
-EYE_WHITE = (246, 247, 252, 255)
+EYE_WHITE = (238, 240, 247, 255)
 POSES: dict[str, dict[str, Any]] = {
     # open: eye height share; pupil: iris share; brow_dy: brow lift in px (negative is up); tilt: inner end up (+) or down (-)
     # lid: cover from the top (0-1); shape: open | arc | angry | sad; gaze: pupil shift (dx, dy) in eye shares; corners: mouth corner lift
@@ -63,7 +63,7 @@ def _iris(size, box, color, p) -> Image.Image:
     w, h = x1 - x0, y1 - y0
     gx, gy = p["gaze"]
     cx, cy = (x0 + x1) / 2 + w * 0.18 * gx, y0 + h * 0.56 + h * 0.12 * gy
-    iw, ih = w * 0.31, h * 0.38
+    iw, ih = w * 0.37, h * 0.43
     draw.ellipse((cx - iw * 1.04, cy - ih * 1.04, cx + iw * 1.04, cy + ih * 1.04), fill=_shade(color, 0.42))
     for k, (dy, hk) in zip((0.62, 1.0, 1.38), ((-0.06, 0.98), (0.04, 0.9), (0.26, 0.6))):
         draw.ellipse((cx - iw, cy - ih + ih * dy, cx + iw, cy + ih * hk + ih * dy), fill=_shade(color, k))
@@ -93,7 +93,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
     ImageDraw.Draw(eye).ellipse(box, fill=EYE_WHITE)
     # the upper third of the white sits in the lash's shadow
     shade = Image.new("RGBA", layer.size, (0, 0, 0, 0))
-    ImageDraw.Draw(shade).ellipse((box[0], box[1] - ry * 0.2, box[2], box[1] + ry * 0.55), fill=(150, 160, 190, 70))
+    ImageDraw.Draw(shade).ellipse((box[0], box[1] - ry * 0.2, box[2], box[1] + ry * 0.6), fill=(140, 150, 185, 95))
     eye.alpha_composite(_clip(shade, mask))
     eye.alpha_composite(_clip(_iris(layer.size, box, traits["eye_color"], p), mask))
     cover = p["lid"] + (0.12 if p["shape"] == "angry" else 0.0)
@@ -112,7 +112,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
     draw.arc((box[0], box[1], box[2], box[3]), 20 if sign > 0 else 90, 90 if sign > 0 else 160, fill=lash, width=max(3, int(width * 0.9)))
     top_cut = box[1] + (box[3] - box[1]) * cover if cover else box[1]
     lash_box = (box[0] - _s(3), top_cut - ry * 0.02, box[2] + _s(3), top_cut + (box[3] - top_cut) * 0.7)
-    draw.arc(lash_box, 190, 350, fill=lash, width=int(width * 3.2))
+    draw.arc(lash_box, 188, 352, fill=lash, width=int(width * 3.8))
     outer_x = box[2] if sign > 0 else box[0]
     ly = lash_box[1] + (lash_box[3] - lash_box[1]) * 0.3
     draw.line((outer_x - sign * _s(2), ly, outer_x + sign * _s(22), ly - _s(16)), fill=lash, width=int(width * 2.2))
@@ -149,15 +149,13 @@ def _nose(draw: ImageDraw.ImageDraw, traits: dict[str, Any]) -> None:
 
 
 def _mouth_corners(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any]) -> None:
-    """Corner ticks beside the rest mouth: up for a smile, down for a frown. The closed viseme stays a short neutral line."""
+    """The rest mouth drawn in the base: a short curve whose corners lift for a smile and drop for a frown. The closed
+    viseme sprite lands on the same line; an open viseme covers it."""
     lift = p["corners"]
-    if abs(lift) < 0.05:
-        return
-    width = max(3, int(traits["line"] * SC * 0.35))
+    width = max(4, int(traits["line"] * SC * 0.4))
     y = _s(MOUTH_Y)
-    for sign in (-1, 1):
-        x = _s(512) + sign * _s(30)
-        draw.line((x, y, x + sign * _s(12), y - _s(10) * lift), fill=traits["ink"], width=width)
+    points = [(_s(512) + _s(x), y - _s(9) * lift * ((x / 34) ** 2) + _s(2) * lift * (1 - (x / 34) ** 2)) for x in range(-34, 35, 2)]
+    draw.line(points, fill=traits["ink"], width=width, joint="curve")
 
 
 def _blush(image: Image.Image, traits: dict[str, Any], p: dict[str, Any]) -> None:

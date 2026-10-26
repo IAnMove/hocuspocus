@@ -66,7 +66,7 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
     _tube(mesh, top, "y", caps=True)
 
 
-def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.45, ring: int = 8) -> None:
+def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8) -> None:
     """A lofted strand: radii in head-width units from the root to the tip."""
     points = bezier(root, pull, tip, _SAMPLES)
     radii = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
@@ -74,15 +74,15 @@ def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: 
     curve_tube(mesh, points, radii, color, ring=ring, flat=flat)
 
 
-def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 5, length: float = 0.55) -> None:
-    """Strands from the hairline down over the forehead, parted a little toward the sides."""
+def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 8, length: float = 0.55) -> None:
+    """Wide flat strands from the hairline down over the forehead, overlapping, parted a little toward the sides."""
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
-        yaw = u * 38
-        root = head.at(yaw, 44)
-        pull = head.off(head.at(yaw * 1.1, 20, 1.12), dy=0.05)
-        tip = head.off(head.at(yaw * 1.25, 44 - length * 90, 1.08), dx=u * 0.06)
-        _clump(mesh, head, color, root, pull, tip, 0.17, 0.03, flat=0.4)
+        yaw = u * 44
+        root = head.at(yaw, 46)
+        pull = head.off(head.at(yaw * 1.1, 20, 1.13), dy=0.04)
+        tip = head.off(head.at(yaw * 1.25, 46 - length * 90, 1.07), dx=u * 0.05)
+        _clump(mesh, head, color, root, pull, tip, 0.26, 0.05, flat=0.22)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
@@ -91,17 +91,17 @@ def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
         root = head.at(sign * 62, 30)
         pull = head.off(head.at(sign * 72, -20, 1.14), dz=0.12)
         tip = (root[0] + sign * head.rx * 0.08, head.chin - head.ry * length, head.cz + head.rz * 0.2)
-        _clump(mesh, head, color, root, pull, tip, 0.2, 0.06, flat=0.6)
+        _clump(mesh, head, color, root, pull, tip, 0.26, 0.08, flat=0.45)
 
 
 def _short(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5, length=0.42)
-    for i in range(8):
-        yaw = 60 + i * 30
-        root = head.at(yaw, 22)
+    _fringe(mesh, head, color, count=7, length=0.42)
+    for i in range(10):
+        yaw = 54 + i * 28
+        root = head.at(yaw, 24)
         pull = head.at(yaw, -2, 1.16)
-        tip = head.at(yaw, -22, 1.08)
-        _clump(mesh, head, color, root, pull, tip, 0.2, 0.05, flat=0.5)
+        tip = head.at(yaw, -20, 1.08)
+        _clump(mesh, head, color, root, pull, tip, 0.3, 0.08, flat=0.4)
 
 
 def _bangs(mesh: Mesh, head: _Head, color: str) -> None:
@@ -110,24 +110,24 @@ def _bangs(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _bob(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5, length=0.55)
-    for i in range(12):
-        yaw = 45 + i * 27
+    _fringe(mesh, head, color, count=8, length=0.55)
+    for i in range(14):
+        yaw = 42 + i * 23.5
         root = head.at(yaw, 26)
         pull = head.at(yaw, -10, 1.2)
         tip = head.off(head.at(yaw, -42, 1.0), dy=-0.35)
-        _clump(mesh, head, color, root, pull, tip, 0.22, 0.08, flat=0.5)
+        _clump(mesh, head, color, root, pull, tip, 0.3, 0.12, flat=0.4)
 
 
 def _long(mesh: Mesh, head: _Head, color: str) -> None:
     _fringe(mesh, head, color, count=5, length=0.55)
     _side_locks(mesh, head, color, 1.4)
-    for i in range(7):
-        yaw = 120 + i * 20
-        root = head.at(yaw, 12)
+    for i in range(9):
+        yaw = 112 + i * 17
+        root = head.at(yaw, 14)
         pull = head.off(head.at(yaw, -25, 1.18), dy=-0.2)
         tip = (root[0] * 0.9, head.chest, head.back_z * 1.1 + (head.rz * 0.1 if abs(yaw - 180) > 40 else 0.0))
-        _clump(mesh, head, color, root, pull, tip, 0.24, 0.1, flat=0.42)
+        _clump(mesh, head, color, root, pull, tip, 0.3, 0.14, flat=0.35)
 
 
 def _twin_tails(mesh: Mesh, head: _Head, color: str) -> None:
