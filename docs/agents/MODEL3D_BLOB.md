@@ -5,7 +5,7 @@ mesh on CPU and rigs it in the same call. There is no job and no
 `model3d.rig.status`. The same body is the Wizard action `blob_make`, the
 Studio 3D panel (next to the existing 3D models) and `POST /api/v1/model3d/blob`.
 `model3d.blob.presets` (`POST /api/v1/model3d/blob/presets`) lists the limits
-and the six presets. No GPU.
+and the fifteen presets. No GPU.
 
 ```json
 {
@@ -20,25 +20,38 @@ and the six presets. No GPU.
 }
 ```
 
-`preset` is `sailor`, `cashier`, `boss`, `kid`, `big` or `lanky`. `traits`
-override the same fields. Omitting both uses the defaults (1.8 m, average,
-a large round head). Unknown fields are refused.
+`preset` is one of `sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`,
+`blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`,
+`anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`. `traits` override
+the same fields. Omitting both uses the defaults (1.8 m, average, family
+`blob`, a large round head, no hair). Unknown fields are refused.
 
 Traits: `height` (metres, 1.2–2.2), `build` (`slim`, `average`, `round`,
-`pear`), `head` (`width`, `height`, `depth` as fractions of the body height,
-`shape` `sphere` or `egg`), `arms` and `legs` (`length`, `thickness`,
-fractions of height), `hands` (`ball` or `mitten`), `feet` (`shoe` or `ball`),
-`colors`, `accessories`. Colors are nested under `colors` because `head` is
-already the shape: `head`, `top`, `sleeves`, `bottom`, `shoes`, `hands`, each
-`#RRGGBB`. An egg is at least 1.12 times as tall as it is wide, and no deeper
-than 0.92 of that width. Arm thickness is drawn no wider than 45% of the torso
-so the rig can peel the arms; the returned traits keep the requested number.
-The torso is a fraction of the head, so the head stays wider and the rig sees
-a neck. Pieces overlap, the arms are a T, and the feet sit on y = 0.
+`pear`), `family` (`blob`, `anime`, `chibi`; omit it for a blob), `head`
+(`width`, `height`, `depth` as fractions of the body height, `shape` `sphere`,
+`egg`, `anime` or `chibi`), `arms` and `legs` (`length`, `thickness`,
+fractions of height), `hands` (`ball` or `mitten`), `feet` (`shoe`, `ball` or
+`boot`), `hair` (`style` `none`, `short`, `bangs`, `spiky`, `long`,
+`ponytail`, `twin_tails` or `bun`, plus `color`), `colors`, `accessories`.
+Colors are nested under `colors` because `head` is already the shape: `head`,
+`top`, `sleeves`, `bottom`, `shoes`, `hands`, each `#RRGGBB`. An egg is at
+least 1.12 times as tall as it is wide, and no deeper than 0.92 of that width.
+Head width is 0.12–0.46 of the body height. Arm thickness is drawn no wider
+than 45% of the torso so the rig can peel the arms; the returned traits keep
+the requested number. A blob head stays wider than its chest. An anime body is
+about 7 heads tall, with shoulders wider than the small head and a narrower
+neck between them. A chibi is about 2.5–3 heads tall. Blob and chibi arms are
+drawn no longer than 0.30 and 0.26 of the height: a longer arm's wave meets
+the wide head. The stored trait keeps the requested length. Pieces overlap,
+the arms are a T, and the feet sit on y = 0.
 
 Accessories, each at most once, up to six: `cap`, `sailor_cap`, `top_hat`,
-`beanie`, `bucket_hat`, `apron`, `tie`, `collar`, `belt`, `backpack`, `scarf`.
-A moustache, glasses, brows and freckles are the face, not accessories.
+`beanie`, `bucket_hat`, `apron`, `tie`, `collar`, `belt`, `backpack`, `scarf`,
+`skirt`, `jacket`, `sleeves_long`, `shorts`, `school_collar`, `cape`. A skirt
+is two thin sheets, so the rig still sees the legs and reports `covered_legs`
+when the feet show. A moustache, glasses, brows and freckles are the face, not
+accessories. Hair sits on the skull and stays off the face; long hair hangs
+down the back.
 
 `clips` defaults to `idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point`
 and `run` when those names are in the humanoid catalog. An unknown clip name
@@ -60,8 +73,9 @@ A mesh the rig refuses is `not_humanoid` with the rig's own `reason`
 generic failure.
 
 Put the rigged file on a Video 3D character slot (`subject_1`), not as an
-added prop, and play `Wave`. Flat hands and flat legs stay tubes with an
-outline for now. The 2D face and visemes are a later step. Set textures are
+added prop, and play `Wave`. Every preset uses the same 25 Mixamo bones, so a
+Mixamo, Meshy or VRM clip can be retargeted onto it. The 2D face and visemes
+are a separate call. Set textures, separate fingers and body expressions are
 out of scope.
 
 See [compose](MODEL3D_COMPOSE.md) for the piece rules and

@@ -20,7 +20,8 @@ def command_catalog():
     return [
         {"name": MAKE, "version": 1, "domain": "model3d", "mutation": True,
          "description": "Build one round-headed person from traits or a preset and rig it on CPU in this call. "
-                        "Synchronous: the reply is the finished GLB, so model3d.rig.status is not used. "
+                        "family is blob (the default), anime or chibi. hair.style is none, short, bangs, spiky, long, "
+                        "ponytail, twin_tails or bun. Synchronous: the reply is the finished GLB, so model3d.rig.status is not used. "
                         "Omit clips for idle, walk, talk, nod, wave, shrug, point and run. "
                         "A mesh the rig refuses returns not_humanoid and the rig's reason (hands_stuck, single_leg, …). "
                         "No GPU. The face, visemes and set textures are not part of this body.",
@@ -37,7 +38,7 @@ def command_catalog():
                                                        "clips": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": 32},
                                                    }}}}},
         {"name": PRESETS_OP, "version": 1, "domain": "model3d", "mutation": False,
-         "description": "Limits, defaults and the six named blob presets (sailor, cashier, boss, kid, big, lanky). Read only.",
+         "description": "Limits, defaults and the named presets in the blob, anime and chibi families. Read only.",
          "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version"],
                           "properties": {"version": {"const": 1, "type": "integer"}}}},
     ]

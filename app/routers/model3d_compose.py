@@ -32,13 +32,22 @@ def command_catalog():
         "segments": {"type": "integer", "minimum": 6, "maximum": 48,
                      "description": "Radial segments. Omit it for the original 8 (a sphere keeps 6 rings). "
                                     "A sphere then uses segments//2 rings."},
+        "smooth": {"type": "boolean",
+                   "description": "Radial normals on spheres, cylinders, cones, capsules and frustums. "
+                                  "Flat caps stay axial. Omit it, or false, for the original flat normals."},
+        "taper": {"type": "number", "minimum": 0.2, "maximum": 1,
+                  "description": "Frustum only. Top diameter divided by the bottom diameter, from 0.2 to 1."},
     }}
     return [{"name": OPERATION, "version": 1, "domain": "model3d", "mutation": True,
-             "description": "Build a low-poly GLB from 1..128 box/sphere/cylinder/cone pieces on CPU. "
+             "description": "Build a low-poly GLB from 1..128 box/sphere/cylinder/cone/capsule/frustum pieces on CPU. "
                             "Metres, Y-up, Euler radians, positive scales, #RRGGBB colors. "
-                            "Optional segments (integer 6..48) smooth rounds; omit it and the mesh is byte-identical "
+                            "Optional segments (integer 6..48). Omit segments and the mesh is byte-identical "
                             "to the 8-segment, 6-ring sphere. "
-                            "Flat triangle normals and linear vertex colors; no AI or GPU. Returns file and workspace URL.",
+                            "smooth true (on a piece or on the input) uses radial normals and keeps flat caps axial. "
+                            "Without smooth, normals stay flat and old pieces stay byte-identical. "
+                            "A capsule's scale is diameter, length (caps included), diameter. "
+                            "A frustum adds taper (top/bottom, 0.2 to 1). "
+                            "No AI or GPU. Returns file and workspace URL.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"},
                                             "intent_id": {"type": "string", "minLength": 1, "maxLength": 160},
@@ -46,6 +55,7 @@ def command_catalog():
                                                       "required": ["workspace", "name", "pieces"], "properties": {
                                                           "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
                                                           "name": {"type": "string", "minLength": 1, "maxLength": 64},
+                                                          "smooth": {"type": "boolean"},
                                                           "pieces": {"type": "array", "items": piece, "minItems": 1, "maxItems": MAX_PIECES}}}}}},
             *blob_command_catalog()]
 
@@ -56,8 +66,10 @@ def _input(arguments):
     if set(arguments) - {"version", "intent_id", "input"}:
         raise ValueError("Unknown envelope field")
     payload = arguments.get("input")
-    if not isinstance(payload, dict) or set(payload) != {"workspace", "name", "pieces"}:
+    if not isinstance(payload, dict) or set(payload) - {"workspace", "name", "pieces", "smooth"} or {"workspace", "name", "pieces"} - set(payload):
         raise ValueError("input needs workspace, name and pieces")
+    if "smooth" in payload and type(payload["smooth"]) is not bool:
+        raise ValueError("smooth must be true or false")
     for field, limit in (("workspace", 120), ("name", 64)):
         value = payload[field]
         if not isinstance(value, str) or not value.strip() or len(value) > limit:
@@ -70,7 +82,7 @@ def command_handlers(workspace_dir, journal_path):
 
     def compose(arguments):
         payload, intent = _input(arguments)
-        data = compose_glb(payload["pieces"], payload["name"])
+        data = compose_glb(payload["pieces"], payload["name"], smooth=payload.get("smooth", False))
         folder = Path(workspace_dir(payload["workspace"]))
         digest = intent_digest(payload)
         identity = hashlib.sha256(f"{OPERATION}:{payload['workspace']}:{intent}".encode()).hexdigest()

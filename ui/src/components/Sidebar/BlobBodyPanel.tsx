@@ -9,6 +9,8 @@ function applyCatalogPreset(catalog: BlobPresetCatalog, name: string) {
   return {
     height: preset.height ?? catalog.height.default,
     build: preset.build || 'average',
+    family: preset.family || 'blob',
+    hairStyle: preset.hair?.style || 'none',
     headWidth: preset.head?.width ?? catalog.head.default.width,
     hands: preset.hands || 'ball',
     feet: preset.feet || 'shoe',
@@ -26,6 +28,8 @@ export function BlobBodyPanel() {
   const [name, setName] = useState('Blob')
   const [height, setHeight] = useState(1.8)
   const [build, setBuild] = useState('average')
+  const [family, setFamily] = useState('blob')
+  const [hairStyle, setHairStyle] = useState('none')
   const [headWidth, setHeadWidth] = useState(0.31)
   const [hands, setHands] = useState('ball')
   const [feet, setFeet] = useState('shoe')
@@ -45,6 +49,8 @@ export function BlobBodyPanel() {
     const applied = applyCatalogPreset(catalog, next)
     setHeight(applied.height)
     setBuild(applied.build)
+    setFamily(applied.family)
+    setHairStyle(applied.hairStyle)
     setHeadWidth(applied.headWidth)
     setHands(applied.hands)
     setFeet(applied.feet)
@@ -57,7 +63,7 @@ export function BlobBodyPanel() {
     try {
       const result = await makeBlob({
         workspace, name: name.trim() || 'Blob', preset: preset || undefined,
-        height, build, headWidth, hands, feet,
+        height, build, family, hairStyle, headWidth, hands, feet,
       })
       if (mediaFilter !== 'model3d') setMediaFilter('model3d')
       await maybeRefreshGallery({ message: 'Blob listo', force: true })
@@ -71,8 +77,11 @@ export function BlobBodyPanel() {
   }
 
   const builds = catalog?.build || ['slim', 'average', 'round', 'pear']
+  const families = catalog?.family || ['blob', 'anime', 'chibi']
+  const hairStyles = catalog?.hair?.style || ['none', 'short', 'bangs', 'spiky', 'long', 'ponytail', 'twin_tails', 'bun']
   const handChoices = catalog?.hands || ['ball', 'mitten']
-  const footChoices = catalog?.feet || ['shoe', 'ball']
+  const footChoices = catalog?.feet || ['shoe', 'ball', 'boot']
+  const headLimits = catalog?.head.limits.width || [0.12, 0.46]
   return (
     <section className="rounded-lg border border-border p-3 flex flex-col gap-2">
       <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">Blob</h3>
@@ -93,8 +102,18 @@ export function BlobBodyPanel() {
           {builds.map(item => <option key={item} value={item}>{item}</option>)}
         </select>
       </label>
+      <label className="text-[10px] text-text-muted">Family
+        <select className={FIELD} value={family} onChange={event => setFamily(event.target.value)}>
+          {families.map(item => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </label>
+      <label className="text-[10px] text-text-muted">Hair
+        <select className={FIELD} value={hairStyle} onChange={event => setHairStyle(event.target.value)}>
+          {hairStyles.map(item => <option key={item} value={item}>{item}</option>)}
+        </select>
+      </label>
       <label className="text-[10px] text-text-muted">Head width {headWidth.toFixed(2)}
-        <input type="range" min={0.24} max={0.38} step={0.01} value={headWidth} onChange={event => setHeadWidth(Number(event.target.value))} />
+        <input type="range" min={headLimits[0]} max={headLimits[1]} step={0.01} value={headWidth} onChange={event => setHeadWidth(Number(event.target.value))} />
       </label>
       <label className="text-[10px] text-text-muted">Hands
         <select className={FIELD} value={hands} onChange={event => setHands(event.target.value)}>
