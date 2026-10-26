@@ -149,6 +149,8 @@ export type FlatRigResult = {
   review: string
   unwipedPoses: string[]
   warnings?: Record<string, string[]>
+  /** Said once per rig: landmark_models_missing = the DWPose files are not on this machine (files lists them). */
+  notices?: Array<{ code: string; files?: string[] }>
   poses?: Record<string, { mouthLine?: FlatRigMouthLine; hints?: FlatRigHint; faceSize?: FlatRigFaceSize }>
   /** The look the rig used: the style sent over the kit's own (its last rig's, else its style preset's). */
   style?: Record<string, number | boolean | string>

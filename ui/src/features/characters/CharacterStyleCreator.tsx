@@ -30,6 +30,7 @@ function RigReview({ workspace, kit, rig, blocked, onUseVoice }: {
     <img src={rig.review} alt={t('styleCreator.reviewAlt')} className="max-h-72 rounded-lg border border-border bg-white object-contain" />
     {warp && <p className="text-xs text-text-muted">{t('styleCreator.warpReview')}</p>}
     {!warp && rig.unwipedPoses.length > 0 && <p className={note}>{t('styleCreator.unwiped', { poses: rig.unwipedPoses.join(', ') })}</p>}
+    {rig.notices?.some(notice => notice.code === 'landmark_models_missing') && <p className={note} data-testid="character-rig-models-missing">{t('styleCreator.modelsMissing')}</p>}
     {flagged.mouthLine.length > 0 && <p className={note} data-testid="character-rig-mouth-line">{t('styleCreator.mouthLine', { poses: flagged.mouthLine.join(', '), name: kit.name })}</p>}
     {flagged.other.length > 0 && <p className={note}>{t('styleCreator.checkPoses', { poses: flagged.other.join(', '), name: kit.name })}</p>}
     <button type="button" disabled={blocked} aria-expanded={designing} onClick={() => setDesigning(open => !open)} className={`${control} inline-flex items-center gap-2`}><Mic size={15} />{t('styleCreator.designVoice')}</button>
