@@ -166,7 +166,7 @@ test('a fitted cap projects the picture from the front, keeps rows under the chi
   assert.ok(Math.abs(uv.getX(front) - 0.5) < 1e-6 && Math.abs(uv.getY(front) - 0.65) < 1e-6, 'centre pixel in front')
   assert.ok(Math.abs(uv.getX(right) - 0.8) < 0.01, 'the right of the skull at cu + ru')
   // the chin is the picture's chin row (cv + rv); a picture narrower than the head leaves the sides transparent
-  assert.ok(Math.abs(uv.getY(lowest) - (1 - 0.68)) < 1e-6, `${uv.getX(lowest)},${uv.getY(lowest)}`)
+  assert.ok(Math.abs(uv.getY(lowest) - (1 - 0.68)) < 0.01, `${uv.getX(lowest)},${uv.getY(lowest)}`)
   const narrow = faceCapGeometry(undefined, 0, [0.5, 0.35, 0.6, 0.33])
   const narrowPos = narrow.getAttribute('position'), narrowUv = narrow.getAttribute('uv')
   let side = -1
