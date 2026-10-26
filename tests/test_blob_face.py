@@ -112,3 +112,22 @@ def test_save_face_kit_is_a_library_kit_with_eight_poses_and_a_blink(tmp_path):
     assert again["kit_id"] == saved["kit_id"]
     assert again["revision"] == saved["revision"] + 1
     assert hashlib.sha256(saved["preview"].encode()).hexdigest()
+
+
+def test_anime_style_is_its_own_face_with_the_same_exact_anchors():
+    blob = face_kit({"eyes": "oval", "brows": "thin"})
+    anime = face_kit({"style": "anime", "eye_color": "#3b82c4", "blush": True})
+    assert _png(anime["poses"]["neutral"]) != _png(blob["poses"]["neutral"])
+    assert face_kit({"style": "anime"})["traits"]["style"] == "anime"
+    assert _png(face_kit({"style": "anime"})["poses"]["neutral"]) == _png(face_kit({"style": "anime"})["poses"]["neutral"])
+    assert len({_png(anime["poses"][pose]) for pose in POSES}) == 8
+    assert len({_png(anime["mouths"][state]) for state in STATES}) == 9
+    for pose in POSES:
+        cx, cy, size = anime["layout"][pose]["mouth"]
+        assert anime["anchors"][pose]["mouth"] == _anchor(cx, cy, size, 1024, 1024)
+    neutral = anime["anchors"]["neutral"]["mouth"]
+    for state in ("wide", "medium"):
+        shot = composite_mouth(anime["poses"]["neutral"], anime["mouths"][state], neutral)
+        assert _interior_height(shot, neutral) >= 40, state
+        found_x, _ = _ink_near(shot, neutral)
+        assert abs(found_x - (512 + neutral["offsetX"] * 1024 / 100)) < 14

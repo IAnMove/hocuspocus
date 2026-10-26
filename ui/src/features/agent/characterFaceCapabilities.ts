@@ -32,7 +32,7 @@ export function registerCharacterFaceCapabilities(register: typeof defineCapabil
   register<AgentMakeCharacterFaceAction>({
     name: 'make_character_face',
     title: 'Draw a 2D blob face',
-    description: 'Draw a parametric 2D face (eyes, brows, nose, moustache, glasses, freckles, stubble) and save it as an approved Character Kit. Same route as Characters › Crear cara and characters.face.make. It is CPU work, not a GPU picture. traits uses eyes dot|oval|halflid|wide, brows thick|thin|none, nose none|dot|line|bulb, moustache none|walrus|pencil|handlebar, glasses none|round|square, mouth paper|ink, ink as #rrggbb. Bind the saved kit onto a model with world3d.scene.face.',
+    description: 'Draw a parametric 2D face (blob style, or style anime with big shaded eyes, blush and small mouths: eyes, brows, nose, moustache, glasses, freckles, stubble) and save it as an approved Character Kit. Same route as Characters › Crear cara and characters.face.make. It is CPU work, not a GPU picture. traits uses eyes dot|oval|halflid|wide, brows thick|thin|none, nose none|dot|line|bulb, moustache none|walrus|pencil|handlebar, glasses none|round|square, mouth paper|ink, ink as #rrggbb. Bind the saved kit onto a model with world3d.scene.face.',
     useWhen: 'The user wants a drawn blob face, a moustache, glasses or freckles on a character, or a 2D face to put on a round 3D head.',
     parameters: ['name', 'traits'],
     inputSchema: {

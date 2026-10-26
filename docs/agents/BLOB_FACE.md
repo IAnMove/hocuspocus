@@ -27,3 +27,7 @@ The viewer section **Cara 2D** sets the kit and the expression. It keeps a cente
 `world3d.scene.talk` on that model writes the same cues, blink and soundtrack as a cutout, onto `faceDecal.art`. The slot stays `model3d`. A model with no face is `not_a_cutout`.
 
 The cap is a child of `Head`, flat (no toon ink, no cel shading). From ±30° it still meets the head.
+
+## Anime style
+
+`traits.style: "anime"` draws the same kit (8 poses, 9 mouths, blink, exact anchors) with big shaded eyes (iris bands, highlights, lashes), thin brows, a tiny nose, small mouths and an optional blush. `eye_color` (`#rrggbb`) colours the iris, `blush` (bool) adds the cheeks. The mouths are drawn 1.8x so they still read at video size. `skin` should equal the head colour of the body (`traits.colors.head` from `model3d.blob.make`): the blink patch is painted in that colour and a different one shows as a pale oval.

@@ -10,6 +10,7 @@ const NOSES = ['none', 'dot', 'line', 'bulb'] as const
 const MOUSTACHES = ['none', 'walrus', 'pencil', 'handlebar'] as const
 const GLASSES = ['none', 'round', 'square'] as const
 const MOUTHS = ['paper', 'ink'] as const
+const STYLES = ['blob', 'anime'] as const
 
 type Traits = {
   eyes: typeof EYES[number]
@@ -22,6 +23,7 @@ type Traits = {
   ink: string
   line: number
   mouth: typeof MOUTHS[number]
+  style: typeof STYLES[number]
 }
 
 /** The same POST as `characters.face.make`: a parametric face, saved as a Character Kit. */
@@ -35,7 +37,7 @@ export function BlobFaceMaker({
   onSelect: (kit: CharacterKit) => void
 }) {
   const { t } = useUiTranslation('characters')
-  const [traits, setTraits] = useState<Traits>({ eyes: 'oval', brows: 'thin', nose: 'dot', moustache: 'none', glasses: 'none', freckles: false, stubble: false, ink: '#221614', line: 8, mouth: 'paper' })
+  const [traits, setTraits] = useState<Traits>({ eyes: 'oval', brows: 'thin', nose: 'dot', moustache: 'none', glasses: 'none', freckles: false, stubble: false, ink: '#221614', line: 8, mouth: 'paper', style: 'blob' })
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -74,6 +76,7 @@ export function BlobFaceMaker({
       <summary className="cursor-pointer text-[9px] text-text-muted">{t('library.blobFace.summary')}</summary>
       <input value={name} onChange={event => setName(event.target.value)} placeholder={t('library.namePlaceholder')} className={`${field} mt-1`} />
       <div className="mt-1 grid grid-cols-2 gap-1">
+        <label className="text-[8px] text-text-muted">{t('library.blobFace.style')}<select aria-label={t('library.blobFace.style')} value={traits.style} onChange={event => set('style', event.target.value as Traits['style'])} className={field}>{STYLES.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="text-[8px] text-text-muted">{t('library.blobFace.eyes')}<select aria-label={t('library.blobFace.eyes')} value={traits.eyes} onChange={event => set('eyes', event.target.value as Traits['eyes'])} className={field}>{EYES.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="text-[8px] text-text-muted">{t('library.blobFace.brows')}<select aria-label={t('library.blobFace.brows')} value={traits.brows} onChange={event => set('brows', event.target.value as Traits['brows'])} className={field}>{BROWS.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="text-[8px] text-text-muted">{t('library.blobFace.nose')}<select aria-label={t('library.blobFace.nose')} value={traits.nose} onChange={event => set('nose', event.target.value as Traits['nose'])} className={field}>{NOSES.map(item => <option key={item} value={item}>{item}</option>)}</select></label>

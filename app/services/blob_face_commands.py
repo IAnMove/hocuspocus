@@ -11,7 +11,7 @@ WORKSPACE = {"type": "string", "minLength": 1, "maxLength": 120}
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REVISION = {"type": "integer", "minimum": 0}
 
-_TRAITS = {"type": "object", "description": "eyes (dot|oval|halflid|wide, or {shape, size, separation}), brows (thick|thin|none), nose (none|dot|line|bulb), moustache (none|walrus|pencil|handlebar, or {style, color}), glasses (none|round|square), freckles, stubble, ink (#rrggbb), line (2-24), mouth (paper|ink), skin (#rrggbb)."}
+_TRAITS = {"type": "object", "description": "eyes (dot|oval|halflid|wide, or {shape, size, separation}), brows (thick|thin|none), nose (none|dot|line|bulb), moustache (none|walrus|pencil|handlebar, or {style, color}), glasses (none|round|square), freckles, stubble, ink (#rrggbb), line (2-24), mouth (paper|ink), skin (#rrggbb), style (blob|anime), eye_color (#rrggbb, anime), blush (anime). Pass skin equal to the head colour: the blink patch is painted in it."}
 
 OPERATIONS: dict[str, tuple[dict[str, Any], list[str], bool, str]] = {
     "characters.face.make": (

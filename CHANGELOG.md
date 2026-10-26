@@ -6,7 +6,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
-**Added: a parametric 2D face for a round 3D head.** `characters.face.make` (Characters › Crear cara, and the Wizard's `make_character_face`) draws eyes, brows, nose, moustache and nine mouths into a Character Kit. `world3d.scene.face` paints that kit as a cap on a model's Head bone; `world3d.scene.talk` then drives the same cues, blink and soundtrack and leaves the slot a model. See [BLOB_FACE.md](docs/agents/BLOB_FACE.md).
+**Added: a parametric 2D face for a round 3D head.** `characters.face.make` (Characters › Crear cara, and the Wizard's `make_character_face`) draws eyes, brows, nose, moustache and nine mouths into a Character Kit. `world3d.scene.face` paints that kit as a cap on a model's Head bone; `world3d.scene.talk` then drives the same cues, blink and soundtrack and leaves the slot a model. `traits.style: "anime"` gives the same kit big shaded eyes, a blush and small mouths. See [BLOB_FACE.md](docs/agents/BLOB_FACE.md).
 
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).
 

@@ -42,6 +42,7 @@ NOSES = ("none", "dot", "line", "bulb")
 MOUSTACHES = ("none", "walrus", "pencil", "handlebar")
 GLASSES = ("none", "round", "square")
 MOUTH_LOOKS = ("paper", "ink")
+STYLES = ("blob", "anime")
 FRECKLES = ((-70, 28), (-54, 44), (-86, 48), (62, 30), (78, 46), (48, 52), (-40, 60), (36, 64))
 STUBBLE = tuple((x, y) for x in range(-40, 41, 10) for y in (8, 20, 32))
 WHITE = (250, 248, 242, 255)
@@ -112,6 +113,9 @@ def face_traits(value: Any) -> dict[str, Any]:
         "ink": _color(raw.get("ink"), "ink", INK), "line": _number(raw.get("line"), "line", 2, 28, 14),
         "mouth": _choice(raw.get("mouth", "paper"), MOUTH_LOOKS, "mouth"),
         "skin": _color(raw.get("skin"), "skin", SKIN),
+        "style": _choice(raw.get("style", "blob"), STYLES, "style"),
+        "eye_color": _color(raw.get("eyeColor"), "eyeColor", (74, 128, 214, 255)),
+        "blush": raw.get("blush") is True if "blush" in raw else raw.get("style") == "anime",
     }
 
 
@@ -129,6 +133,7 @@ def public_traits(traits: dict[str, Any]) -> dict[str, Any]:
         "nose": look["nose"], "moustache": {"style": look["moustache"]["style"], "color": _hex(look["moustache"]["color"])},
         "glasses": look["glasses"], "freckles": look["freckles"], "stubble": look["stubble"],
         "ink": _hex(look["ink"]), "line": look["line"], "mouth": look["mouth"], "skin": _hex(look["skin"]),
+        "style": look["style"], "eyeColor": _hex(look["eye_color"]), "blush": look["blush"],
     }
 
 
@@ -357,6 +362,9 @@ def _sheet(poses: dict[str, Image.Image], mouths: dict[str, Image.Image], anchor
 def face_kit(traits: Any) -> dict[str, Any]:
     """Images, exact anchors and the pixel layout. Nothing is written."""
     look = face_traits(traits)
+    if look["style"] == "anime":
+        from services.blob_face_anime import anime_kit
+        return anime_kit(look)
     poses = {pose: _draw_pose(look, pose) for pose in POSES}
     blinks = {pose: _draw_pose(look, pose, lids_only=True) for pose in POSES}
     mouths = _mouths(look)
