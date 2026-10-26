@@ -250,28 +250,34 @@ def _hair(mesh: Mesh, L: dict, hair: dict) -> None:
         _side_locks(mesh, L, color, long=False)
 
 
+def _shoulder_top(L: dict) -> float:
+    """Where the torso closes round the neck: a neck's length under the chin. The primitives' torso_top reaches into the head."""
+    return L["head_y"] - L["sy"] / 2 - 0.05 * L["h"]
+
+
 def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     top, bottom = spec["colors"]["top"], spec["colors"]["bottom"]
     h, w, d = L["h"], L["torso_w"], L["torso_d"]
     hip_w = L["waist_w"] * (1.3 if wear["skirt"] else 1.12)
     neck_w = min(L["sx"] * 0.36, w * 0.42)
     chest = L["torso_bottom"] + L["torso_h"] * 0.64
+    closing = _shoulder_top(L)
     shirt = wear.get("shirt")
     lapel = lambda half: {"front": (shirt, half)} if shirt else {}
     stations = [
         _st((0, L["leg_top"] - 0.01 * h, 0), hip_w / 2 * 0.92, d / 2 * 0.86, bottom),
         _st((0, L["leg_top"] + 0.035 * h, 0), hip_w / 2, d / 2 * 0.98, bottom),
         _st((0, L["waist_y"] + 0.015 * h, 0), L["waist_w"] / 2, d / 2 * 0.84, bottom if wear["skirt"] else top),
-        _st((0, L["waist_y"] + 0.05 * h, 0), L["waist_w"] / 2 * 1.04, d / 2 * 0.86, top, **lapel(6)),
-        _st((0, chest, 0), w / 2 * 0.95, d / 2, top, **lapel(14)),
+        _st((0, L["waist_y"] + 0.05 * h, 0), L["waist_w"] / 2 * 1.04, d / 2 * 0.86, top),
+        _st((0, chest, 0), w / 2 * 0.95, d / 2, top, **lapel(10)),
         _st((0, L["shoulder_y"], 0), w / 2, d / 2 * 0.95, top, **lapel(22)),
-        _st((0, L["torso_top"] - 0.012 * h, 0), w / 2 * 0.6, d / 2 * 0.72, top, **lapel(30)),
-        _st((0, L["torso_top"] + 0.008 * h, 0), neck_w / 2 * 1.25, d / 2 * 0.45, top, **lapel(40)),
+        _st((0, closing - 0.012 * h, 0), w / 2 * 0.62, d / 2 * 0.72, top, **lapel(32)),
+        _st((0, closing + 0.004 * h, 0), neck_w / 2 * 1.3, d / 2 * 0.42, top, **lapel(42)),
     ]
     _tube(mesh, stations, "y")
     skin = spec["colors"]["head"]
-    neck = [_st((0, L["torso_top"] - 0.03 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
-            _st((0, L["head_y"] - L["sy"] * 0.2, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
+    neck = [_st((0, closing - 0.02 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
+            _st((0, L["head_y"] - L["sy"] * 0.3, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
     _tube(mesh, neck, "y")
 
 
@@ -336,20 +342,21 @@ def _skirt(mesh: Mesh, L: dict, color: str) -> None:
 def _collar_and_ribbon(mesh: Mesh, L: dict, wear: dict) -> None:
     h = L["h"]
     neck_w = min(L["sx"] * 0.36, L["torso_w"] * 0.42)
+    top = _shoulder_top(L)
     if wear.get("collar"):
         # The collar sits on the shoulders, under the chin, not on the neck.
-        collar = [_st((0, L["torso_top"] - 0.012 * h, 0), neck_w / 2 * 1.15, neck_w / 2 * 1.0, wear["collar"]),
-                  _st((0, L["torso_top"] - 0.04 * h, 0), neck_w / 2 * 2.0, neck_w / 2 * 1.45, wear["collar"])]
+        collar = [_st((0, top + 0.002 * h, 0), neck_w / 2 * 1.15, neck_w / 2 * 1.0, wear["collar"]),
+                  _st((0, top - 0.028 * h, 0), neck_w / 2 * 2.0, neck_w / 2 * 1.45, wear["collar"])]
         _tube(mesh, collar, "y")
     if wear.get("ribbon"):
         z = L["torso_d"] / 2 * 0.99
-        knot = [_st((0, L["torso_top"] - 0.05 * h, z), 0.02 * h, 0.005 * h, wear["ribbon"]), _st((0, L["torso_top"] - 0.065 * h, z), 0.026 * h, 0.005 * h, wear["ribbon"]),
-                _st((0, L["torso_top"] - 0.1 * h, z), 0.01 * h, 0.004 * h, wear["ribbon"])]
+        knot = [_st((0, top - 0.03 * h, z), 0.02 * h, 0.005 * h, wear["ribbon"]), _st((0, top - 0.045 * h, z), 0.026 * h, 0.005 * h, wear["ribbon"]),
+                _st((0, top - 0.085 * h, z), 0.01 * h, 0.004 * h, wear["ribbon"])]
         _tube(mesh, knot, "y", ring=8)
     if wear.get("tie"):
         z = L["torso_d"] / 2 * 1.0
-        tie = [_st((0, L["torso_top"] - 0.04 * h, z), 0.009 * h, 0.004 * h, wear["tie"]), _st((0, L["torso_top"] - 0.09 * h, z * 1.01), 0.014 * h, 0.005 * h, wear["tie"]),
-               _st((0, L["torso_top"] - 0.15 * h, z * 1.02), 0.006 * h, 0.003 * h, wear["tie"])]
+        tie = [_st((0, top - 0.025 * h, z), 0.009 * h, 0.004 * h, wear["tie"]), _st((0, top - 0.08 * h, z * 1.01), 0.014 * h, 0.005 * h, wear["tie"]),
+               _st((0, top - 0.14 * h, z * 1.02), 0.006 * h, 0.003 * h, wear["tie"])]
         _tube(mesh, tie, "y", ring=8)
 
 
