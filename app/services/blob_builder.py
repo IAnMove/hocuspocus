@@ -55,7 +55,8 @@ _CHIBI_SHOULDER = {"slim": 0.62, "average": 0.70, "round": 0.78, "pear": 0.74}
 # 0.46 already swings lanky's wave through the egg. Anime sits up at the shoulder.
 _SHOULDER_AT = {"blob": 0.40, "anime": 0.74, "chibi": 0.46}
 # Drawn reach as a fraction of height. The stored trait can be longer; a wave folds that reach up.
-_ARM_CAP = {"blob": 0.30, "anime": 0.50, "chibi": 0.26}
+# Anime arms end near the hip, not the knee: 0.42 of the height from the shoulder.
+_ARM_CAP = {"blob": 0.30, "anime": 0.42, "chibi": 0.26}
 _COLOR_DEFAULT = {
     "head": "#F2C7A0", "top": "#3A6EA5", "sleeves": "#F2C7A0",
     "bottom": "#2C3340", "shoes": "#201A18", "hands": "#F2C7A0",
@@ -560,7 +561,8 @@ def torso_shell(layout: dict, color: str, grow: float = 1.0, taper: float | None
 
 
 def _shoulders(spec: dict, layout: dict) -> list:
-    diameter = max(layout["arm_d"] * 1.35, layout["h"] * 0.045)
+    # An anime shoulder is the sleeve's own round end, not a ball wider than the arm: the sphere stays inside the sleeve.
+    diameter = layout["arm_d"] if spec["family"] == "anime" else max(layout["arm_d"] * 1.35, layout["h"] * 0.045)
     item = _p("sphere", (layout["torso_w"] / 2, layout["shoulder_y"], 0), (diameter, diameter, diameter), spec["colors"]["top"], segments=LIMB_SEGMENTS)
     return _pair(item)
 
@@ -575,11 +577,15 @@ def _arms(spec: dict, layout: dict) -> list:
     sleeve, skin = spec["colors"]["sleeves"], spec["colors"]["hands"]
     diameter, y = layout["arm_d"], layout["shoulder_y"]
     turn = (0.0, 0.0, _HALF_TURN)
-    elbow = (diameter * 0.82, diameter * 0.82, diameter * 0.82)
+    # An anime arm is one smooth tube: the elbow sphere and the forearm keep the upper arm's diameter, so no ball and no step
+    # draw an ink ring at the elbow. Blob and chibi keep their thinner forearm and smaller elbow.
+    anime = spec["family"] == "anime"
+    elbow_k, fore_k = (1.0, 1.0) if anime else (0.82, 0.86)
+    elbow = (diameter * elbow_k, diameter * elbow_k, diameter * elbow_k)
     arm = [
         *_pair(_p("capsule", (layout["upper_x"], y, 0), (diameter, layout["upper_len"], diameter), sleeve, turn, LIMB_SEGMENTS)),
         *_pair(_p("sphere", (layout["elbow_x"], y, 0), elbow, sleeve, segments=LIMB_SEGMENTS)),
-        *_pair(_p("capsule", (layout["fore_x"], y, 0), (diameter * 0.86, layout["fore_len"], diameter * 0.86), sleeve, turn, LIMB_SEGMENTS)),
+        *_pair(_p("capsule", (layout["fore_x"], y, 0), (diameter * fore_k, layout["fore_len"], diameter * fore_k), sleeve, turn, LIMB_SEGMENTS)),
     ]
     return arm + _hands(spec, layout, skin, diameter, y, turn)
 
