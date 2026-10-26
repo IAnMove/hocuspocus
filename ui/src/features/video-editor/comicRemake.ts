@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react'
 import * as api from '../../api/client'
 import { openSceneOutput } from '../../lib/sceneOutput'
-import { useStore } from '../../stores/useStore'
 import type { OutputMetadata } from '../../types'
 import { outputNameFromEditorClip, writeVideoEditorReplacementTarget, clearVideoEditorReplacementTarget } from './replacementHandoff'
 import { sceneOutput } from './shotBoardModel'
@@ -29,14 +28,15 @@ export async function reusableMetadata(names: string[], workspace: string): Prom
 }
 
 /** Open the clip's scene, or the video gallery, with the clip waiting for its replacement. */
-export async function handOffClip(clip: RemadeClip, index: number, request: Exclude<ClipRemake, { kind: 'creation' }>, workspace: string): Promise<void> {
+export async function handOffClip(clip: RemadeClip, index: number, request: Exclude<ClipRemake, { kind: 'creation' }>,
+  workspace: string, showVideos: () => void): Promise<void> {
   writeVideoEditorReplacementTarget({
     clipId: clip.id, clipIndex: index, originalName: clip.name,
     outputName: outputNameFromEditorClip(clip.source, clip.name), requestedAt: Date.now(),
   })
   try {
     if (request.kind === 'scene') await openSceneOutput(sceneOutput(workspace, request.scene))
-    else useStore.getState().setMediaFilter('videos')
+    else showVideos()
   } catch (error) {
     clearVideoEditorReplacementTarget()
     throw error

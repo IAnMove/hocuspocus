@@ -750,6 +750,7 @@ export function VideoEditorPanel() {
   const [montage, setMontage] = useState<{ layers: MontageLayers; ref: MontageRef | null }>(() => loadMontageState(activeWorkspace))
   const [shotBoardOpen, setShotBoardOpen] = useState(false)
   const [comicOpen, setComicOpen] = useComicOpen()
+  const setMediaFilter = useStore(state => state.setMediaFilter)
   const applyMontage = (state: MontageEditorState, layers: MontageLayers, ref: MontageRef) => {
     setClips(state.clips); setProjectName(state.projectName); setResolution(state.resolution); setFps(state.fps); setSoundtrack(state.soundtrack)
     persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
@@ -1177,7 +1178,7 @@ export function VideoEditorPanel() {
     if (index < 0) return
     if (request.kind === 'creation') return void openSelectedInVideoCreation(clips[index], index, request.outputs)
     persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
-    void handOffClip(clips[index], index, request, activeWorkspace)
+    void handOffClip(clips[index], index, request, activeWorkspace, () => setMediaFilter('videos'))
       .catch(reason => setError(t('remake.openFailed', { message: (reason as Error).message })))
   }
 

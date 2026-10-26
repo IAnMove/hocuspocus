@@ -7,6 +7,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 ## [Unreleased]
 
 **Added: the Video Editor can show a montage as comic pages.** Vista cómic sits next to the timeline and edits that same montage. `montages.comic.panels` prints one panel per clip; edits are `montages.save`.
+**Added: remake a clip from the comic view the way it was made.** «Rehacer» on a panel offers a new take of the same generation, its settings in Video creation, its Video 2D/3D scene, or another video; the new video comes back to that panel.
 
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).
 
