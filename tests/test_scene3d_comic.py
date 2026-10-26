@@ -153,6 +153,15 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
     pad_x, pad_y = _pad(64, 36, panel["imageLook"]["overscan"])
     assert picture.size == (64 + 2 * pad_x, 36 + 2 * pad_y)
     assert picture.getpixel((0, pad_y))[:3] == picture.getpixel((pad_x, pad_y))[:3]
+    page_fraction = page["imageLook"]["overscan"]
+    assert page_fraction >= panel["imageLook"]["overscan"]
+    page_image = Image.open(tmp_path / "studio" / "comic-page-landscape.png")
+    content_w = _content_length(page_image.size[0], page_fraction)
+    content_h = _content_length(page_image.size[1], page_fraction)
+    assert content_w and content_h
+    page_pad_x, page_pad_y = _pad(content_w, content_h, page_fraction)
+    assert page_image.size == (content_w + 2 * page_pad_x, content_h + 2 * page_pad_y)
+    assert page_image.getpixel((0, page_pad_y))[:3] == page_image.getpixel((page_pad_x, page_pad_y))[:3]
     assert stored["document"]["duration"] == pytest.approx(1.8)
     assert stored["document"]["camera"]["framing"]["yawArc"] == 8
     assert reply["result"]["warnings"] == []
@@ -346,6 +355,14 @@ def test_a_failed_inpaint_leaves_the_panel_flat_and_warns(tmp_path, monkeypatch)
     assert all("inpaint broke" in warning for warning in reply["result"]["warnings"])
     stored = json.loads(next((tmp_path / "studio" / "world3d-edits").glob("*.json")).read_text())
     assert [slot["id"] for slot in stored["document"]["slots"] if slot["id"].startswith("cutout")] == []
+
+
+def _content_length(tex: int, fraction: float) -> int | None:
+    guess = round(tex / (1 + 2 * fraction))
+    for size in range(max(1, guess - 4), guess + 5):
+        if size + 2 * math.ceil(fraction * size - 1e-9) == tex:
+            return size
+    return None
 
 
 def _pad(width: int, height: int, fraction: float) -> tuple[int, int]:

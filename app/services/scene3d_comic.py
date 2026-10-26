@@ -338,7 +338,8 @@ def _replicate_bases(built: dict, root: Path) -> None:
         if not isinstance(document, dict):
             continue
         for slot in document.get("slots") or []:
-            if not isinstance(slot, dict) or not str(slot.get("id") or "").startswith("panel-"):
+            slot_id = str(slot.get("id") or "")
+            if not isinstance(slot, dict) or not (slot_id == "page" or slot_id.startswith("panel-")):
                 continue
             look = slot.get("imageLook") if isinstance(slot.get("imageLook"), dict) else {}
             fraction = look.get("overscan") if isinstance(look, dict) else None

@@ -296,7 +296,9 @@ test('exit and enter share one wide pose and each end fills its panel', () => {
     const centerY = from.position[1] + from.scale
     assert.ok(Math.abs(matched.position[1] + matched.scale - centerY) < 1e-9, 'scaled about the fill axis')
     assert.ok((from.imageLook?.overscan ?? 0) > 0, 'the picture carries the overscan')
-    assert.equal(pair.exit.slots[0].imageLook?.overscan, undefined)
+    const pageOver = pair.exit.slots[0].imageLook?.overscan ?? 0
+    const pictureOver = Math.max(...pair.exit.slots.filter(slot => slot.id.startsWith('panel-')).map(slot => slot.imageLook?.overscan ?? 0))
+    assert.ok(pageOver + 1e-9 >= pictureOver, 'the page covers the pictures that pass its edge')
     assert.equal(matched.imageLook?.overscan, undefined)
   }
 })

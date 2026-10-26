@@ -382,11 +382,16 @@ export function comicSamplePoses(doc: Scene3DDocument): Pose[] {
 
 function stampOverscan(slots: Scene3DSlot[], docs: Scene3DDocument[], layout: PageLayout) {
   const poses = docs.flatMap(comicSamplePoses)
+  let cover = 0
   layout.panels.forEach((panel, index) => {
     const slot = slots.find(item => item.id === `panel-${index}`)
     const fraction = comicOverscanFraction(panel, poses)
     if (slot?.imageLook && fraction > 1e-4) slot.imageLook.overscan = Math.min(1, fraction)
+    cover = Math.max(cover, fraction)
   })
+  const page = slots.find(item => item.id === 'page')
+  // The same fraction of the larger page reaches past every picture that sticks out of a cell.
+  if (page?.imageLook && cover > 1e-4) page.imageLook.overscan = Math.min(1, cover)
 }
 
 export function applyComicTemplate(id: string): Scene3DDocument | null {

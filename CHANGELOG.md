@@ -35,7 +35,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Changed: a comic chapter page has the frame's shape.** Each layout of three to six panels, including the paper margin, stays within 6% of 16:9 or 9:16. At the wide hold the paper covers at least 85% of the frame's longer side, and the 8° yaw does not clip it.
 
-**Changed: a comic panel is a window.** The paper is the front layer. Each cell is a hole a few pixels larger than the picture, and the ink border stays on the paper around it. The sticker sits behind the hole and the picture further behind, both scaled by `(D + d) / D` so the fill frame still matches. The picture is extended by replicating its edge, so a yaw does not open a gap or mirror a burned-in subtitle. Nothing pops out of the page, and the outer 3% fade is gone.
+**Changed: a comic panel is a window.** The paper is the front layer. Each cell is a hole a few pixels larger than the picture, and the ink border stays on the paper around it. The sticker sits behind the hole and the picture further behind, both scaled by `(D + d) / D` so the fill frame still matches. The picture is extended by replicating its edge, so a yaw does not open a gap or mirror a burned-in subtitle. The page is extended the same way, so a picture that passes the paper stays behind it. Nothing pops out of the page, and the outer 3% fade is gone.
 
 **Changed: a comic page is tiled.** Every layout of three to six panels, both seeds, fills the paper inside the padding with panels and one gutter width. No empty patch is larger than that gutter. The two cut panels stay the frame's aspect; the others take the strip they are given and are cover-cropped.
 
