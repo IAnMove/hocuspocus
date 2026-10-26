@@ -497,3 +497,36 @@ def test_an_anime_arm_is_one_tube_while_blob_and_chibi_keep_their_joints():
             assert shoulder["scale"][0] == pytest.approx(upper["scale"][0], rel=1e-6), name
         else:
             assert shoulder["scale"][0] > upper["scale"][0], name
+
+
+def test_a_lofted_anime_body_rigs_with_its_head_in_the_egg_and_leaves_the_default_untouched():
+    """mesh loft is one smooth tube mesh. The humanoid rig still finds a T-posed person in it, its Head joint lands inside
+    the egg the face cap hugs, and a body without the field is the same pieces as before."""
+    import json, struct
+    from services.blob_loft import loft_mesh, egg_scale
+    from services.blob_make import build_body
+
+    girl = {**PRESETS["anime_girl"], "accessories": [{"kind": "skirt", "color": "#1B2350"}, {"kind": "school_collar", "color": "#F7F4EF"}]}
+    plain = blob_pieces(girl)
+    assert "mesh" not in plain["traits"] and "layout" not in plain
+    lofted = blob_pieces({**girl, "mesh": "loft"})
+    assert lofted["traits"]["mesh"] == "loft" and lofted["faceAnchor"] == plain["faceAnchor"]
+    mesh = loft_mesh(lofted["traits"], lofted["layout"])
+    assert 1500 <= len(mesh.vertices) // 3 <= 6000 and len(mesh.normals) == len(mesh.vertices) == len(mesh.colors)
+    assert egg_scale(0.5) == 1.0 and abs(egg_scale(-1.0) - 0.65) < 1e-9
+    with pytest.raises(BlobTraitsError) as refused:
+        blob_pieces({**PRESETS["blob_scout"], "mesh": "loft"})
+    assert refused.value.code == "invalid_mesh"
+
+    body = build_body({**girl, "mesh": "loft"}, ["idle"])
+    glb = body["rigged"]
+    length = struct.unpack("<I", glb[12:16])[0]
+    nodes = json.loads(glb[20:20 + length])["nodes"]
+    parent = {child: index for index, node in enumerate(nodes) for child in node.get("children", [])}
+    head = next(index for index, node in enumerate(nodes) if node.get("name") == "Head")
+    y = 0.0
+    while head is not None:
+        y += nodes[head].get("translation", [0, 0, 0])[1]
+        head = parent.get(head)
+    center, radii = plain["faceAnchor"]["center"], plain["faceAnchor"]["radii"]
+    assert center[1] - radii[1] < y < center[1] + radii[1]

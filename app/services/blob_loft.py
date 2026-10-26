@@ -205,20 +205,21 @@ def _bangs(mesh: Mesh, L: dict, color: str) -> None:
 
 def _side_locks(mesh: Mesh, L: dict, color: str, long: bool) -> None:
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    bottom = L["torso_top"] - 0.08 * L["h"] if long else L["head_y"] - ry * 0.9
+    # Side locks end at the jaw like the drawn ones; long hair is the fall down the back.
+    bottom = L["head_y"] - ry * 1.05
     for sign in (-1, 1):
         stations = [
-            _st((sign * rx * 0.92, L["head_y"] + ry * 0.35, rz * 0.2), rx * 0.2, rz * 0.32, color),
-            _st((sign * rx * 1.02, L["head_y"] - ry * 0.3, rz * 0.25), rx * 0.19, rz * 0.3, color),
-            _st((sign * rx * 1.0, bottom, rz * 0.15), rx * 0.12, rz * 0.22, color),
+            _st((sign * rx * 0.9, L["head_y"] + ry * 0.4, rz * 0.15), rx * 0.18, rz * 0.3, color),
+            _st((sign * rx * 1.0, L["head_y"] - ry * 0.35, rz * 0.2), rx * 0.16, rz * 0.26, color),
+            _st((sign * rx * 0.98, bottom, rz * 0.12), rx * 0.08, rz * 0.16, color),
         ]
         _tube(mesh, stations, "y", ring=8)
     if long:
         fall = [
-            _st((0, L["head_y"] + ry * 0.2, -rz * 0.72), rx * 0.95, rz * 0.3, color),
-            _st((0, L["head_y"] - ry * 0.8, -rz * 0.86), rx * 1.0, rz * 0.3, color),
-            _st((0, L["torso_bottom"] + L["torso_h"] * 0.35, -L["torso_d"] / 2 * 1.06), rx * 1.05, rz * 0.2, color),
-            _st((0, L["torso_bottom"] + L["torso_h"] * 0.2, -L["torso_d"] / 2 * 1.08), rx * 0.9, rz * 0.12, color),
+            _st((0, L["head_y"] + ry * 0.3, -rz * 0.74), rx * 0.9, rz * 0.28, color),
+            _st((0, L["head_y"] - ry * 0.7, -rz * 0.8), rx * 0.82, rz * 0.26, color),
+            _st((0, L["torso_top"] - L["torso_h"] * 0.22, -L["torso_d"] / 2 * 1.05), rx * 0.72, rz * 0.2, color),
+            _st((0, L["torso_top"] - L["torso_h"] * 0.5, -L["torso_d"] / 2 * 1.06), rx * 0.5, rz * 0.12, color),
         ]
         _tube(mesh, fall, "y", ring=10)
 
@@ -336,18 +337,19 @@ def _collar_and_ribbon(mesh: Mesh, L: dict, wear: dict) -> None:
     h = L["h"]
     neck_w = min(L["sx"] * 0.36, L["torso_w"] * 0.42)
     if wear.get("collar"):
-        collar = [_st((0, L["torso_top"] + 0.006 * h, 0), neck_w / 2 * 1.2, neck_w / 2 * 1.05, wear["collar"]),
-                  _st((0, L["torso_top"] - 0.028 * h, 0), neck_w / 2 * 2.1, neck_w / 2 * 1.5, wear["collar"])]
+        # The collar sits on the shoulders, under the chin, not on the neck.
+        collar = [_st((0, L["torso_top"] - 0.012 * h, 0), neck_w / 2 * 1.15, neck_w / 2 * 1.0, wear["collar"]),
+                  _st((0, L["torso_top"] - 0.04 * h, 0), neck_w / 2 * 2.0, neck_w / 2 * 1.45, wear["collar"])]
         _tube(mesh, collar, "y")
     if wear.get("ribbon"):
         z = L["torso_d"] / 2 * 0.99
-        knot = [_st((0, L["torso_top"] - 0.03 * h, z), 0.022 * h, 0.006 * h, wear["ribbon"]), _st((0, L["torso_top"] - 0.045 * h, z), 0.03 * h, 0.006 * h, wear["ribbon"]),
-                _st((0, L["torso_top"] - 0.09 * h, z), 0.012 * h, 0.005 * h, wear["ribbon"])]
+        knot = [_st((0, L["torso_top"] - 0.05 * h, z), 0.02 * h, 0.005 * h, wear["ribbon"]), _st((0, L["torso_top"] - 0.065 * h, z), 0.026 * h, 0.005 * h, wear["ribbon"]),
+                _st((0, L["torso_top"] - 0.1 * h, z), 0.01 * h, 0.004 * h, wear["ribbon"])]
         _tube(mesh, knot, "y", ring=8)
     if wear.get("tie"):
         z = L["torso_d"] / 2 * 1.0
-        tie = [_st((0, L["torso_top"] - 0.02 * h, z), 0.012 * h, 0.005 * h, wear["tie"]), _st((0, L["torso_top"] - 0.09 * h, z * 1.01), 0.02 * h, 0.006 * h, wear["tie"]),
-               _st((0, L["torso_top"] - 0.17 * h, z * 1.02), 0.008 * h, 0.004 * h, wear["tie"])]
+        tie = [_st((0, L["torso_top"] - 0.04 * h, z), 0.009 * h, 0.004 * h, wear["tie"]), _st((0, L["torso_top"] - 0.09 * h, z * 1.01), 0.014 * h, 0.005 * h, wear["tie"]),
+               _st((0, L["torso_top"] - 0.15 * h, z * 1.02), 0.006 * h, 0.003 * h, wear["tie"])]
         _tube(mesh, tie, "y", ring=8)
 
 
