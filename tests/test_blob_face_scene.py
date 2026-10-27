@@ -190,3 +190,37 @@ def test_cute_and_anime_head_styles_draw_different_faces_for_the_same_head_box()
     assert cute["face"]["skin"] == anime["face"]["skin"] == "#f3cba4"
     assert cute["poses"]["neutral"].tobytes() != anime["poses"]["neutral"].tobytes()
     assert set(cute["mouths"]) == set(anime["mouths"]) and len(anime["mouths"]) == 9
+
+
+def test_a_painted_bald_face_becomes_an_anime_head_kit_with_overlay_expressions():
+    """face_source qwen: a keyed bald painting is measured (silhouette prior when no landmarks), warped onto the anime_head
+    layout and given the eleven expressions as overlays; the kit keeps the same fit, mouths and blink as the drawn styles."""
+    import os
+    from PIL import Image, ImageDraw
+    from services.anime_make import resolve_traits
+    from services.blob_face import face_kit
+    from services.blob_face_qwen import _prior, measure, qwen_kit
+
+    os.environ["HOCUS_ANIME_FACE"] = "0"
+    picture = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(picture)
+    draw.ellipse((212, 60, 812, 760), fill=(248, 214, 184, 255))          # a bald head
+    draw.rectangle((420, 700, 604, 1024), fill=(248, 214, 184, 255))        # its neck
+    for cx in (392, 632):
+        draw.ellipse((cx - 60, 520, cx + 60, 585), fill=(255, 255, 255, 255))
+        draw.ellipse((cx - 30, 525, cx + 30, 580), fill=(40, 90, 200, 255))
+    draw.line((470, 690, 554, 690), fill=(90, 40, 50, 255), width=8)
+    prior = _prior(picture)
+    assert 440 < prior["left"][1] < 620 and prior["left"][0] < 512 < prior["right"][0]
+    m = measure(picture)
+    assert abs(m["left"][1] - 552) < 70 and abs(m["mouth"][1] - 690) < 70
+    look = {"style": "anime_head", "skin": "#F3CBA4"}
+    kit = qwen_kit(face_kit.__globals__["face_traits"](look), picture)
+    assert len(kit["poses"]) == 11 and len(kit["mouths"]) == 9 and kit["face"]["source"] == "qwen"
+    assert kit["face"]["fit"] == face_kit(look)["face"]["fit"] and kit["face"]["skin"].lower() != "#f3cba4"   # the painting's own skin
+    assert kit["poses"]["neutral"].tobytes() != kit["poses"]["happy"].tobytes()
+    with pytest.raises(Exception) as refused:
+        resolve_traits({"face_source": "qwen"})
+    assert getattr(refused.value, "code", "") == "face_image_required"
+    assert resolve_traits({"face_style": "cute"})["face"]["style"] == "cute"
+    del os.environ["HOCUS_ANIME_FACE"]
