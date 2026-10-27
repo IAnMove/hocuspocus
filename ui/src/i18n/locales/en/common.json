@@ -197,7 +197,21 @@
     "recentTitle": "Latest changes",
     "recentHint": "One short line per PR, newest first. Scroll the list to see them all.",
     "enter": "Enter the studio",
-    "closeAria": "Close"
+    "closeAria": "Close",
+    "lines": {
+      "pr1204": "A walk can be cut from one drawing.",
+      "pr1201": "Cloud rigs, scene beats, splat sets, lip-sync redo and see-through layers.",
+      "pr1178": "Settings has an Installation tab for optional engines.",
+      "pr1172": "A flat character no longer hides whoever stands behind it.",
+      "pr1170": "Flat characters in a 3D shot turn toward the camera.",
+      "pr1169": "A painted plate can be the back wall of a 3D room.",
+      "pr1168": "Walks now have twelve poses and five directions.",
+      "pr1167": "A figure's size follows the perspective of the plate.",
+      "pr1163": "Box rooms wear textures, and you can repaint them.",
+      "pr1157": "Qwen Image 2.1 Turbo is the default image model.",
+      "pr1152": "A metric box room, with the cast standing on the floor.",
+      "pr961": "TRELLIS.2 is an optional image-to-3D generator."
+    }
   },
   "imagePreview": {
     "open": "Enlarge {{name}}",

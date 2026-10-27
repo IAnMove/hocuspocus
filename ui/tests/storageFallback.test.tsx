@@ -46,7 +46,7 @@ test('WelcomeModal renders and dismisses when localStorage throws', { concurrenc
   try {
     render(<WelcomeModal />)
     assert.ok(screen.getByText('What’s new in HocusPocus'))
-    assert.ok(screen.getByText('#448'))
+    assert.ok(screen.getByText(`#${latestWhatsNewPr()}`))
     assert.ok(screen.getByLabelText('Latest changes'))
     assert.equal(screen.queryByText('Mature mode is off by default'), null)
     assert.equal(screen.queryByText(/PG-13/i), null)

@@ -197,7 +197,21 @@
     "recentTitle": "Últimos cambios",
     "recentHint": "Una frase por PR, lo más reciente arriba. Desplaza la lista para verlos todos.",
     "enter": "Entrar al estudio",
-    "closeAria": "Cerrar"
+    "closeAria": "Cerrar",
+    "lines": {
+      "pr1204": "Un andar se puede recortar desde un solo dibujo.",
+      "pr1201": "Rigs en la nube, pulsos de escena, sets de splats, rehacer el labial y capas transparentes.",
+      "pr1178": "Ajustes tiene una pestaña Instalación para los motores opcionales.",
+      "pr1172": "Un personaje plano ya no tapa a quien está detrás.",
+      "pr1170": "Los personajes planos de un plano 3D se giran hacia la cámara.",
+      "pr1169": "Un fondo pintado puede ser la pared del fondo de una sala 3D.",
+      "pr1168": "Los andares tienen doce poses y cinco direcciones.",
+      "pr1167": "El tamaño de una figura sigue la perspectiva del fondo.",
+      "pr1163": "Las salas en caja llevan texturas y se pueden repintar.",
+      "pr1157": "Qwen Image 2.1 Turbo es el modelo de imagen por defecto.",
+      "pr1152": "Una sala en caja a escala real, con el reparto de pie en el suelo.",
+      "pr961": "TRELLIS.2 es un generador opcional de imagen a 3D."
+    }
   },
   "imagePreview": {
     "open": "Ampliar {{name}}",

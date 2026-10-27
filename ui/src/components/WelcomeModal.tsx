@@ -9,9 +9,8 @@ import { latestWhatsNewPr, WELCOME_SEEN_KEY, WHATS_NEW } from '../whatsNew'
  * Re-shown when the newest listed PR changes.
  */
 export function WelcomeModal() {
-  const { t, i18n } = useUiTranslation('common')
+  const { t } = useUiTranslation('common')
   const [open, setOpen] = useState(() => safeStorageGet('local', WELCOME_SEEN_KEY) !== String(latestWhatsNewPr()))
-  const locale = i18n.language.startsWith('es') ? 'es' : 'en'
 
   if (!open) return null
 
@@ -68,7 +67,7 @@ export function WelcomeModal() {
                   #{item.pr}
                 </a>
                 <span className="text-text-muted"> · </span>
-                <span>{item[locale]}</span>
+                <span>{t(item.key)}</span>
               </li>
             ))}
           </ul>
