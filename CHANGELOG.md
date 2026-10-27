@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Changed: an icon-only control has a name, and a disabled control says why.** The name is the same Spanish and English text on `aria-label` and `title` (what the control does, not which icon it is). A disabled control's `title` says the first thing that is missing, such as an action still running, a locked layer, a production profile that is still loading, or an install that has to finish. Video 3D and the workbench are unchanged. Two budgets fail if a new unnamed icon button or a new silent `disabled` appears outside those trees.
+
 **Changed: user-visible chrome goes through the Spanish and English catalogs.** Gallery actions, settings, the CUDA banner, the Director welcome and skills, untitled titles, language names, 2.5D template and rig catalog names, the Wizard title, asset badges and the activity footer now have a key in both languages. Prompts sent to a model stay English, inside a collapsed section. A literal-string budget fails when a new hardcoded JSX string appears outside Video 3D and the workbench, which another change owns.
 
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).
