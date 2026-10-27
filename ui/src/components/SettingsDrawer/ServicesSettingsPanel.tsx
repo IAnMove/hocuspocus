@@ -748,18 +748,20 @@ export function ServicesSettingsPanel() {
               {t('services.rawPromptsHint')}
             </div>
           </div>
-          <div
+          <button
+            type="button"
             role="switch"
             aria-checked={servicesConfig.raw_prompts === true}
+            aria-label={t('services.rawPrompts')}
             onClick={() => updateConfig({ raw_prompts: servicesConfig.raw_prompts !== true })}
             className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
               servicesConfig.raw_prompts ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.raw_prompts ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
-          </div>
+          </button>
         </label>
 
         <DirectorReferenceSettings config={servicesConfig} onChange={updateConfig} />
