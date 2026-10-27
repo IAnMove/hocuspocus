@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { refreshSeriesEpisodeReferences } from '../../api/series'
@@ -61,7 +61,7 @@ export function SeriesEpisodeReferences({ workspace, series, episode, onOpenRefe
     <p className="text-xs text-text-secondary">{t(missing.length ? 'referenceBatch.missing' : needsReferences ? 'referenceBatch.available' : 'referenceBatch.ready', { count: missing.length })}</p>
     <div className="flex flex-wrap gap-2">
       <button className={primaryButton} disabled={busy || !missing.length} onClick={() => void generate()}>{t('referenceBatch.generate', { count: missing.length })}</button>
-      {onOpenReferences && <button className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onOpenReferences(missing[0]?.kind === 'location' ? 'locations' : 'characters')}>{t('referenceBatch.review')}</button>}
+      {onOpenReferences && <button className={secondaryButton} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onOpenReferences(missing[0]?.kind === 'location' ? 'locations' : 'characters')}>{t('referenceBatch.review')}</button>}
       <button className={secondaryButton} disabled={busy || series.canon.approval !== 'approved' || !needsReferences} onClick={() => void incorporate()}>{t('referenceBatch.incorporate')}</button>
     </div>
     <p className="text-xs text-text-muted">{t('referenceBatch.hint')}</p>

@@ -17,6 +17,13 @@ import { useObjectUrl } from '../../lib/useObjectUrl'
 import { useUiTranslation } from '../../i18n'
 import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
 
+function directorSendLabel(chatInputEnabled: boolean, loading: boolean, mvGenerateSetup: boolean, songDescription: string, resolvedChatInput: string) {
+  if (!chatInputEnabled) return controlLabel(loading ? 'disabled.sendWhileBusy' : 'disabled.sendNeedsStep')
+  const text = mvGenerateSetup ? songDescription : resolvedChatInput
+  if (!text.trim()) return controlLabel('disabled.sendNeedsText')
+  return controlLabel('a11y.send')
+}
+
 const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
   .then(module => ({ default: module.ComicDirectorPanel })))
 
@@ -1263,7 +1270,7 @@ export function DirectorChat() {
             onClick={handleChatSubmit}
             disabled={!chatInputEnabled || !(mvGenerateSetup ? songDescription : resolvedChatInput).trim()}
             className="p-2 rounded-lg bg-accent-blue text-white hover:bg-accent-blue-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-           title={!chatInputEnabled ? (loading ? controlLabel('disabled.sendWhileBusy') : controlLabel('disabled.sendNeedsStep')) : !(mvGenerateSetup ? songDescription : resolvedChatInput).trim() ? controlLabel('disabled.sendNeedsText') : controlLabel('a11y.send')} aria-label={!chatInputEnabled ? (loading ? controlLabel('disabled.sendWhileBusy') : controlLabel('disabled.sendNeedsStep')) : !(mvGenerateSetup ? songDescription : resolvedChatInput).trim() ? controlLabel('disabled.sendNeedsText') : controlLabel('a11y.send')}>
+           title={directorSendLabel(chatInputEnabled, loading, mvGenerateSetup, songDescription, resolvedChatInput)} aria-label={directorSendLabel(chatInputEnabled, loading, mvGenerateSetup, songDescription, resolvedChatInput)}>
             {loading && (step === 'style' || isMusicVideo) ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (

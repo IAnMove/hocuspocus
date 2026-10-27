@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type {
   ToolsUpscaleGenerationCommand,
@@ -184,7 +184,7 @@ export function ToolsCommandPanel({ workspace, source, sourceWorkspace, sourceKi
       <RequestSummary command={command} />
       <button
         type="button"
-        disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+        disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         onClick={() => void recover(command)}
         className="text-xs border border-border rounded px-2 py-1 disabled:opacity-50"
       >{t('toolsCommands.recover')}</button>

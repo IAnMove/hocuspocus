@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { ModalShell } from './ModalShell'
 import { useUiTranslation } from '../../i18n'
@@ -63,16 +63,16 @@ export default function ImageCropDialog({ source, name, onSave, onClose }: {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(['x', 'y', 'width', 'height'] as const).map(field => <label key={field} className="text-xs">{t(`crop.${field}`)}
-            <input type="number" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} min={field === 'x' || field === 'y' ? 0 : 1} value={rect[field]}
+            <input type="number" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} min={field === 'x' || field === 'y' ? 0 : 1} value={rect[field]}
               onChange={event => setRect(clampCrop({ ...rect, [field]: Number(event.target.value) }, image.naturalWidth, image.naturalHeight))}
               className="block w-full rounded border border-border bg-bg-tertiary p-2" />
           </label>)}
         </div>
-        <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="text-xs underline" onClick={() => setRect({ x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight })}>{t('crop.reset')}</button>
+        <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="text-xs underline" onClick={() => setRect({ x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight })}>{t('crop.reset')}</button>
       </> : <p role="status">{error || t('status.loading')}</p>}
       {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
       <div className="flex justify-end gap-2">
-        <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={close} className="rounded border border-border px-3 py-2 text-xs">{t('actions.cancel')}</button>
+        <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={close} className="rounded border border-border px-3 py-2 text-xs">{t('actions.cancel')}</button>
         <button type="button" disabled={busy || !image} onClick={() => void save()} className="rounded bg-accent-blue px-3 py-2 text-xs text-white disabled:opacity-50">{busy ? t('crop.saving') : t('crop.save')}</button>
       </div>
     </div>

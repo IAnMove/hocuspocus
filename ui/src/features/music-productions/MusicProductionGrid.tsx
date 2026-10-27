@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useUiTranslation } from '../../i18n'
 import { musicProductionFileUrl } from './fileUrl'
 import type { MusicProductionShot, MusicProductionTake, ShotReviewAction } from './types'
@@ -108,13 +108,13 @@ function ReviewActions({
   )
   return <>
     <span className="text-[11px] text-text-secondary">{label}</span>
-    <button type="button" className={buttonClass} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onReview(shot.key, 'approved')}>
+    <button type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onReview(shot.key, 'approved')}>
       {t('musicProductions.approveShot')}
     </button>
-    <button type="button" className={buttonClass} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onReview(shot.key, 'changes_requested')}>
+    <button type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onReview(shot.key, 'changes_requested')}>
       {t('musicProductions.requestChanges')}
     </button>
-    <button type="button" className={buttonClass} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onReview(shot.key, locked ? 'unlock' : 'lock')}>
+    <button type="button" className={buttonClass} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onReview(shot.key, locked ? 'unlock' : 'lock')}>
       {locked ? t('musicProductions.unlockShot') : t('musicProductions.lockShot')}
     </button>
   </>
@@ -135,7 +135,7 @@ function TakeRow({
     <button
       type="button"
       className={buttonClass}
-      disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+      disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
       aria-label={`${label} ${take.file}`}
       onClick={() => onUseTake(shot, take.file)}
     >{label}</button>

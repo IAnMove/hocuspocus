@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { codeLabel } from './gameErrors'
@@ -111,7 +111,7 @@ function ResumeNotice({ job }: { job: ProduceJob | null }) {
     <p className={`${panelClass} text-sm`}>
       {t(resumeReason(job))}
       {job.status === 'completed' && hasWaitingSteps(job) && <span> {t('waitingResumeHint')}</span>}
-      <button type="button" className={`${buttonClass} ml-2`} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => { void resume() }}>{t('resumeProduce')}</button>
+      <button type="button" className={`${buttonClass} ml-2`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => { void resume() }}>{t('resumeProduce')}</button>
     </p>
   )
 }

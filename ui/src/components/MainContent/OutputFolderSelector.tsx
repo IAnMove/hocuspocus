@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Check, FolderOpen, Loader2, Plus, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlLabel, controlReason } from '../../i18n/controlLabel'
 import { useStore } from '../../stores/useStore'
 
 function outputFolderAction(deleting: boolean, confirming: boolean, name: string, count: number) {
@@ -107,7 +107,7 @@ export function OutputFolderSelector() {
             {creating ? (
               <div className="flex gap-1.5">
                 <input type="text" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => event.key === 'Enter' && void handleCreate()} placeholder="output-folder" className="flex-1 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-blue focus:outline-none" autoFocus />
-                <button onClick={() => void handleCreate()} disabled={!newName.trim()} title={!newName.trim() ? controlLabel('disabled.nameTheFolder') : undefined} className="rounded bg-accent-blue px-2 py-1 text-xs text-white hover:bg-accent-blue-hover disabled:opacity-50">Create</button>
+                <button onClick={() => void handleCreate()} disabled={!newName.trim()} title={controlReason(!newName.trim(), 'disabled.nameTheFolder')} className="rounded bg-accent-blue px-2 py-1 text-xs text-white hover:bg-accent-blue-hover disabled:opacity-50">Create</button>
               </div>
             ) : (
               <button onClick={() => setCreating(true)} className="flex w-full items-center gap-1 px-1 py-1 text-left text-xs text-accent-blue hover:text-accent-blue-hover"><Plus size={12} /> New output folder</button>

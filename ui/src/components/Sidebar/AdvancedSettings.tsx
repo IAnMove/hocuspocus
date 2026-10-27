@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlLabel, controlChoice } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef } from 'react'
 import { X, Save, Trash2, FolderOpen, SlidersHorizontal } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -98,7 +98,7 @@ function PresetManager() {
                     ? 'text-red-400 bg-red-500/20'
                     : 'text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400'
                 }`}
-               title={confirmDelete === p.id ? controlLabel('a11y.confirmRemovePreset') : controlLabel('a11y.removePreset')} aria-label={confirmDelete === p.id ? controlLabel('a11y.confirmRemovePreset') : controlLabel('a11y.removePreset')}>
+               title={controlChoice(confirmDelete === p.id, 'a11y.confirmRemovePreset', 'a11y.removePreset')} aria-label={controlChoice(confirmDelete === p.id, 'a11y.confirmRemovePreset', 'a11y.removePreset')}>
                 <Trash2 size={10} />
               </button>
             </div>

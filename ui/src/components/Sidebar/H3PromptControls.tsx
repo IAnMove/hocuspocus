@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { H3SemanticBridgeControls } from './H3SemanticBridgeControls'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
@@ -23,7 +23,7 @@ export function H3PromptControls() {
   return <div className="space-y-2 rounded-lg border border-border p-3 text-xs">
     <label className="flex items-center justify-between gap-2">
       {t('h3Adoption.writing')}
-      <select aria-label={t('h3Adoption.writing')} value={style} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+      <select aria-label={t('h3Adoption.writing')} value={style} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         onChange={e => { setParam('minimax_h3_planning_style', e.target.value as typeof style); clearPlan() }}
         className="rounded bg-bg-tertiary p-1">
         <option value="faithful">{t('h3Adoption.faithful')}</option>
@@ -31,13 +31,13 @@ export function H3PromptControls() {
       </select>
     </label>
     <p className="text-text-muted">{t(style === 'creative' ? 'h3Adoption.creativeHint' : 'h3Adoption.faithfulHint')}</p>
-    <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => enhance()}
+    <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => enhance()}
       className="rounded bg-accent-blue/15 px-2 py-1 text-accent-blue disabled:opacity-50">
       {t('h3Adoption.enhance')}
     </button>
     <label className="flex items-center justify-between gap-2">
       {t('h3Adoption.audio')}
-      <select aria-label={t('h3Adoption.audio')} value={policy} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+      <select aria-label={t('h3Adoption.audio')} value={policy} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         onChange={e => { setParam('minimax_h3_audio_policy', e.target.value as typeof policy); clearPlan() }}
         className="rounded bg-bg-tertiary p-1">
         <option value="native">{t('h3Adoption.native')}</option>
@@ -45,7 +45,7 @@ export function H3PromptControls() {
       </select>
     </label>
     {omni && <label className="flex items-center gap-2">
-      <input type="checkbox" checked={sequence} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={e => { setParam('minimax_h3_reference_sequence', e.target.checked); clearPlan() }} />
+      <input type="checkbox" checked={sequence} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={e => { setParam('minimax_h3_reference_sequence', e.target.checked); clearPlan() }} />
       {t('h3Adoption.sequence')}
     </label>}
     <label className="flex items-center justify-between gap-2">

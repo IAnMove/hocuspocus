@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useMemo, useState } from 'react'
 import { Check, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { Pill, SeriesField } from './components'
@@ -108,7 +108,7 @@ export function SeriesEpisodeProposalReview({
 
     <details className="text-[10px] text-text-muted"><summary className="cursor-pointer">{t('proposal.technicalJson')}</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded bg-bg-tertiary p-2">{JSON.stringify({ outline: draft.outline, script: draft.script, shots: draft.shots, continuityIssues: draft.continuityIssues, proposedCanonDelta: draft.proposedCanonDelta }, null, 2)}</pre></details>
     <div className="sticky bottom-2 flex justify-end rounded-xl border border-green-500/20 bg-bg-secondary/95 p-2 shadow-xl backdrop-blur">
-      <button className={greenButton} onClick={() => void onApply(draft)} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}><Check size={13} />{changed ? t('proposal.applyEdited') : t('proposal.apply')}</button>
+      <button className={greenButton} onClick={() => void onApply(draft)} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}><Check size={13} />{changed ? t('proposal.applyEdited') : t('proposal.apply')}</button>
     </div>
   </div>
 }

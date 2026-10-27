@@ -1,4 +1,4 @@
-import { controlLabel } from '../../../i18n/controlLabel'
+import { controlReason } from '../../../i18n/controlLabel'
 import { useContext, useState, type ReactNode } from 'react'
 import { Edit3, Loader2, RotateCcw, Save, X } from 'lucide-react'
 import { useUiTranslation } from '../../../i18n'
@@ -34,7 +34,7 @@ function EditFooter({ busy, changed, error, onSave, onCancel }: { busy: boolean;
     <div className="flex flex-wrap items-center gap-2">
       <button type="button" className={`${primaryButton} ${button}`} disabled={busy || !changed} onClick={onSave}>
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}{t('inspector.save')}</button>
-      <button type="button" className={`${secondaryButton} ${button}`} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onCancel}><X size={13} />{t('inspector.cancel')}</button>
+      <button type="button" className={`${secondaryButton} ${button}`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onCancel}><X size={13} />{t('inspector.cancel')}</button>
     </div>
     {error && <p role="alert" className="whitespace-pre-wrap rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[11px] text-red-300">{error}</p>}
   </>

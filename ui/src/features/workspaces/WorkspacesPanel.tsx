@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useState } from 'react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import {
@@ -644,7 +644,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
                 <button
                   key={item.id || item.filename}
                   type="button"
-                  disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+                  disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
                   onClick={() => void selectClipVideo(pipeline.pipeline_id, clip.index, item.filename).catch(reason => setError(reason instanceof Error ? reason.message : String(reason)))}
                   className={`overflow-hidden rounded border text-left ${selected ? 'border-emerald-400 bg-emerald-500/10' : 'border-border bg-bg-tertiary hover:border-violet-400/60'}`}
                 >

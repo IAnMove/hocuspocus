@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useState } from 'react'
 import { Download, Loader2, RefreshCw } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -20,7 +20,7 @@ function CommunityCard({ item, busy, onInstall }: { item: CommunityTemplate; bus
       </p>
       {item.tags.length > 0 && <p className="mt-1 text-[11px] text-cyan-200">{item.tags.map(tag => `#${tag}`).join(' ')}</p>}
       <div className="mt-2 flex items-center gap-2">
-        {action ? <button type="button" className={button} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onInstall(item.state === 'conflict')}>
+        {action ? <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onInstall(item.state === 'conflict')}>
           <Download size={12} /> {t(`templateLibrary.community.${action}`)}</button>
           : <span className="text-[11px] text-emerald-300">{t('templateLibrary.community.installed')}</span>}
         {item.state === 'conflict' && <span className="text-[11px] text-amber-200">{t('templateLibrary.community.conflictHint')}</span>}
@@ -54,7 +54,7 @@ export function CommunityTemplates({ editor, onInstalled }: { editor: TemplateEd
   return <section aria-label={t('templateLibrary.community.title')} className="mt-3">
     <div className="flex flex-wrap items-center gap-2">
       <p className="mr-auto text-xs text-text-secondary">{t('templateLibrary.community.help')}</p>
-      <button type="button" className={button} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void load(true)}><RefreshCw size={12} /> {t('templateLibrary.community.refresh')}</button>
+      <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void load(true)}><RefreshCw size={12} /> {t('templateLibrary.community.refresh')}</button>
     </div>
     {items === null && <p className="mt-3 flex items-center gap-2 text-xs text-text-muted"><Loader2 size={13} className="animate-spin" /> {t('templateLibrary.community.loading')}</p>}
     {note && <p role="status" className="mt-2 text-xs text-text-secondary">{note}</p>}

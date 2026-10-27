@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { Check, Save, Upload, WandSparkles } from 'lucide-react'
 import { LabsLibraryPick } from '../../lib/LabsLibraryPick'
 import { faceRigAnchorFor } from '../../lib/characterKitFaceRig'
@@ -13,7 +13,7 @@ export function LipsNameRow({ name, busy, onName, onSave, saveLabel, nameLabel }
   name: string; busy: boolean; onName: (name: string) => void; onSave: () => void; saveLabel: string; nameLabel: string
 }) {
   return <div className="flex flex-wrap items-center gap-3">
-    <input aria-label={nameLabel} value={name} maxLength={80} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => onName(event.target.value)}
+    <input aria-label={nameLabel} value={name} maxLength={80} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onName(event.target.value)}
       className={`${control} min-w-0 flex-1 font-medium`} />
     <button type="button" disabled={busy || !name.trim()} onClick={onSave}
       className="inline-flex min-h-10 items-center gap-2 rounded-lg bg-cyan-500 px-4 text-sm font-medium text-black disabled:opacity-40"><Save size={15} />{saveLabel}</button>
@@ -31,13 +31,13 @@ export function LipsCreationSettings({ kit, busy, withReference, characters, ref
   return <details open={settingsOpen} onToggle={event => onSettingsOpen(event.currentTarget.open)} className="rounded-xl border border-border p-4">
     <summary className="cursor-pointer text-sm font-medium">{text('lips.creationSettings')}</summary>
     <div className="mt-4 space-y-3">
-      <fieldset disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="flex flex-wrap gap-4 text-sm">
+      <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="flex flex-wrap gap-4 text-sm">
         <legend className="mb-2 text-xs text-text-secondary">{text('lips.createFrom')}</legend>
         <label className="inline-flex items-center gap-2"><input type="radio" name={`lips-source-${kit.id}`} checked={!withReference} onChange={() => onMode('description')} />{text('lips.descriptionOnly')}</label>
         <label className="inline-flex items-center gap-2"><input type="radio" name={`lips-source-${kit.id}`} checked={withReference} onChange={() => onMode('reference')} />{text('lips.withReference')}</label>
       </fieldset>
-      <label className="block text-xs text-text-secondary">{text('lips.style')}<textarea rows={2} maxLength={1500} value={kit.lookNotes || ''} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => onNotes(event.target.value)} placeholder={text('lips.styleHint')} className="mt-2 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
-      <label className="block text-xs text-text-secondary">{text('lips.imageModel')}<select value={imageModel} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => onModel(event.target.value)} className={`${control} mt-2 w-full`}>
+      <label className="block text-xs text-text-secondary">{text('lips.style')}<textarea rows={2} maxLength={1500} value={kit.lookNotes || ''} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onNotes(event.target.value)} placeholder={text('lips.styleHint')} className="mt-2 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
+      <label className="block text-xs text-text-secondary">{text('lips.imageModel')}<select value={imageModel} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onModel(event.target.value)} className={`${control} mt-2 w-full`}>
         <LipsModelOptions models={imageModels} empty={text('lips.noImageModel')} />
       </select></label>
       {withReference ? <LipsReferenceFields kit={kit} busy={busy} characters={characters} referenceCharacter={referenceCharacter} workspace={workspace} onReferenceCharacter={onReferenceCharacter} onReferenceFile={onReferenceFile} onError={onError} text={text} /> : <p className="text-xs text-text-muted">{text('lips.descriptionHint')}</p>}
@@ -59,12 +59,12 @@ function LipsReferenceFields({ kit, busy, characters, referenceCharacter, worksp
   text: (key: string) => string
 }) {
   return <>
-    <label className="block text-xs text-text-secondary">{text('lips.referenceCharacter')}<select value={referenceCharacter} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className={`${control} mt-2 w-full`} onChange={event => onReferenceCharacter(event.target.value)}>
+    <label className="block text-xs text-text-secondary">{text('lips.referenceCharacter')}<select value={referenceCharacter} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className={`${control} mt-2 w-full`} onChange={event => onReferenceCharacter(event.target.value)}>
       <option value="">{text('lips.chooseCharacter')}</option>
       {characters.filter(item => item.base).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select></label>
-    <label className="block text-xs text-text-secondary">{text('lips.uploadReference')}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onReferenceFile(file) }} className="mt-2 block w-full text-xs" /></label>
-    <LabsLibraryPick workspace={workspace} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onFile={file => onReferenceFile(file)} onError={onError} />
+    <label className="block text-xs text-text-secondary">{text('lips.uploadReference')}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onReferenceFile(file) }} className="mt-2 block w-full text-xs" /></label>
+    <LabsLibraryPick workspace={workspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onFile={file => onReferenceFile(file)} onError={onError} />
     {kit.base && <img src={kit.base.source} alt={text('lips.reference')} className="h-24 max-w-full rounded-lg border border-border object-contain" />}
   </>
 }
@@ -96,7 +96,7 @@ function MouthTile({ draft, state, selected, live, busy, onSelect, text }: {
   const asset = draft.candidates[state] ?? draft.kit.mouth[state]
   const sounds = MOUTH_SOUND_GROUPS.filter(sound => mouthStateForSound(sound, draft.kit.mouthMapping) === state)
   const border = selected ? 'border-cyan-400 bg-cyan-400/5' : live ? 'border-amber-300' : 'border-border bg-bg-secondary'
-  return <button type="button" aria-pressed={selected} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onSelect(state)}
+  return <button type="button" aria-pressed={selected} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onSelect(state)}
     className={`relative rounded-xl border p-2 text-left transition-colors disabled:opacity-60 ${border}`}>
     <div className="flex h-14 items-center justify-center overflow-hidden rounded bg-bg-primary">{asset ? <img src={asset.source} alt="" className="max-h-12 max-w-[85%] object-contain" /> : <PlusMouth />}</div>
     <span className="mt-2 block truncate text-xs font-medium">{text(`faceRig.states.${state}`)}</span>
@@ -118,7 +118,7 @@ export function LipsMouthDetail({ draft, selected, candidate, existing, busy, ca
       {comparing && existing && <div><p className="mb-2 text-xs text-text-muted">{text('lips.current')}</p><MouthImage source={existing.source} /></div>}
       <div><p className="mb-2 text-xs text-text-muted">{text(candidate ? 'lips.candidate' : 'lips.current')}</p><MouthImage source={(candidate ?? existing)?.source} /></div>
     </div>
-    <input aria-label={text('lips.mouthInstruction')} placeholder={text('lips.mouthInstructionHint')} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} maxLength={500} value={draft.kit.mouthPrompts?.[selected] || ''}
+    <input aria-label={text('lips.mouthInstruction')} placeholder={text('lips.mouthInstructionHint')} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} maxLength={500} value={draft.kit.mouthPrompts?.[selected] || ''}
       onChange={event => onPrompt(event.target.value)} className={`${control} w-full`} />
     <MouthActions busy={busy} canGenerate={canGenerate} replace={Boolean(existing || candidate)} onGenerate={onGenerate} onUpload={onUpload} text={text} />
     {candidate && <LipsCandidateActions candidate={candidate} busy={busy} onClean={onClean} onAccept={onAccept} onDiscard={onDiscard} text={text} />}
@@ -131,7 +131,7 @@ function MouthActions({ busy, canGenerate, replace, onGenerate, onUpload, text }
   const label = replace ? 'lips.regenerate' : 'lips.generateMouth'
   return <div className="flex flex-wrap gap-2">
     <button type="button" disabled={busy || !canGenerate} onClick={onGenerate} className={`${control} inline-flex items-center gap-2`}><WandSparkles size={14} />{text(label)}</button>
-    <label className={`${control} inline-flex cursor-pointer items-center gap-2 ${busy ? 'opacity-40' : ''}`}><Upload size={14} />{text('lips.uploadMouth')}<input type="file" accept="image/png,image/webp,image/jpeg" className="sr-only" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onUpload(file) }} /></label>
+    <label className={`${control} inline-flex cursor-pointer items-center gap-2 ${busy ? 'opacity-40' : ''}`}><Upload size={14} />{text('lips.uploadMouth')}<input type="file" accept="image/png,image/webp,image/jpeg" className="sr-only" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onUpload(file) }} /></label>
   </div>
 }
 
@@ -140,10 +140,10 @@ function LipsCandidateActions({ candidate, busy, onClean, onAccept, onDiscard, t
 }) {
   const opaque = candidate.alphaStatus !== 'transparent' && !candidate.facePatch
   return <div className="space-y-2">
-    {opaque && <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onClean} className={`${control} w-full`}>{text('lips.removeBackground')}</button>}
+    {opaque && <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onClean} className={`${control} w-full`}>{text('lips.removeBackground')}</button>}
     <div className="flex gap-2">
       <button type="button" disabled={busy || opaque} onClick={onAccept} className="min-h-10 flex-1 rounded-lg bg-emerald-400/15 px-3 text-sm text-emerald-200 disabled:opacity-40">{text('lips.accept')}</button>
-      <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onDiscard} className={control}>{text('lips.discard')}</button>
+      <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onDiscard} className={control}>{text('lips.discard')}</button>
     </div>
   </div>
 }
@@ -156,9 +156,9 @@ export function LipsPlacement({ kit, selected, busy, onAnchor, onPlaceAll, text 
   const anchor = faceRigAnchorFor(kit, 'base', selected)
   return <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer text-sm">{text('lips.placement')}</summary>
     <div className="mt-3 space-y-3">{(['offsetX', 'offsetY', 'scale'] as const).map(field => <label key={field} className="block text-xs text-text-secondary">{text(`lips.anchor.${field}`)}
-      <input type="range" aria-label={text(`lips.anchor.${field}`)} min={field === 'scale' ? .01 : -45} max={field === 'scale' ? .5 : 45} step={field === 'scale' ? .001 : .5} value={anchor[field]} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="mt-2 w-full" onChange={event => onAnchor(field, Number(event.target.value))} />
+      <input type="range" aria-label={text(`lips.anchor.${field}`)} min={field === 'scale' ? .01 : -45} max={field === 'scale' ? .5 : 45} step={field === 'scale' ? .001 : .5} value={anchor[field]} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="mt-2 w-full" onChange={event => onAnchor(field, Number(event.target.value))} />
     </label>)}
-      <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className={control} onClick={onPlaceAll}>{text('lips.placeAll')}</button>
+      <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className={control} onClick={onPlaceAll}>{text('lips.placeAll')}</button>
     </div>
   </details>
 }
@@ -170,7 +170,7 @@ export function LipsAssignments({ kit, preview, busy, onStandard, onAssign, text
 }) {
   return <section className="space-y-3 rounded-xl border border-border bg-bg-secondary p-4">
     <div className="flex items-center justify-between gap-3"><h3 className="font-medium">{text('lips.assignments')}</h3>
-      <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onStandard} className="text-xs text-cyan-300">{text('lips.standard')}</button></div>
+      <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onStandard} className="text-xs text-cyan-300">{text('lips.standard')}</button></div>
     <p className="text-xs text-text-muted">{text('lips.assignmentsHint')}</p>
     <div className="space-y-2">{MOUTH_SOUND_GROUPS.map(sound => <SoundAssignment key={sound} sound={sound} kit={kit} preview={preview} busy={busy} onAssign={onAssign} text={text} />)}</div>
   </section>
@@ -186,7 +186,7 @@ function SoundAssignment({ sound, kit, preview, busy, onAssign, text }: {
   const label = text('lips.assignSound', { sound: text(`lips.sounds.${sound}`) })
   return <label className="flex items-center gap-3 text-sm"><span className="w-16 shrink-0">{text(`lips.sounds.${sound}`)}</span>
     <span className="flex h-8 w-9 shrink-0 items-center justify-center rounded bg-bg-primary">{asset && <img src={asset.source} alt="" className="max-h-7 max-w-8 object-contain" />}</span>
-    <select aria-label={label} value={state} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className={`${control} min-w-0 flex-1`} onChange={event => onAssign(sound, event.target.value as CharacterMouthState)}>
+    <select aria-label={label} value={state} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className={`${control} min-w-0 flex-1`} onChange={event => onAssign(sound, event.target.value as CharacterMouthState)}>
       {CHARACTER_MOUTH_STATES.map(item => <option key={item} value={item}>{text(`faceRig.states.${item}`)}</option>)}
     </select></label>
 }
@@ -197,7 +197,7 @@ export function LipsLinkCharacter({ characters, target, busy, ready, onTarget, o
 }) {
   return <details className="rounded-xl border border-border p-4"><summary className="cursor-pointer text-sm font-medium">{text('lips.linkCharacter')}</summary>
     <div className="mt-3 space-y-3"><p className="text-xs text-text-muted">{text('lips.linkHint')}</p>
-      <select aria-label={text('lips.targetCharacter')} value={target} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => onTarget(event.target.value)} className={`${control} w-full`}>
+      <select aria-label={text('lips.targetCharacter')} value={target} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onTarget(event.target.value)} className={`${control} w-full`}>
         <option value="">{text('lips.chooseCharacter')}</option>
         {characters.filter(kit => kit.base).map(kit => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
       </select>

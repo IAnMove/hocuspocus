@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlLabel, controlReason } from '../../i18n/controlLabel'
 import { Loader2, Trash2 } from 'lucide-react'
 import type { CharacterKit, CharacterKitAlphaStatus, CharacterKitLibrary, CharacterMouthState } from '../../lib/characterKit'
 import { useUiTranslation } from '../../i18n'
@@ -11,6 +11,12 @@ import {
   characterKitPoseOptions,
   type CharacterKitEditorTab,
 } from './characterKitGuide'
+
+function libraryLockTitle(locked: boolean, busy: boolean, title?: string) {
+  if (!locked) return undefined
+  if (busy) return controlLabel('disabled.actionInProgress')
+  return title
+}
 
 type Props = {
   library: CharacterKitLibrary
@@ -99,7 +105,7 @@ export function CharacterKitLibraryPanel({
             <button
               key={kit.id}
               type="button"
-              disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+              disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
               onClick={() => onSelectKit(structuredClone(kit), characterKitOpeningTab(kit))}
               className={`overflow-hidden rounded border p-1 text-left ${draft?.id === kit.id ? 'border-emerald-300 bg-emerald-400/10' : 'border-border bg-black/10'}`}
             >
@@ -164,16 +170,16 @@ export function CharacterKitLibraryPanel({
               <summary className="cursor-pointer text-[9px] text-text-muted">{t('library.advanced.summary')}</summary>
               <p className="mt-1 text-[8px] leading-relaxed text-text-secondary">{t('library.advanced.hint')}</p>
               <div className="mt-1 grid grid-cols-2 gap-1">
-                <button type="button" disabled={!hasSelectedLayer} title={!hasSelectedLayer ? controlLabel('disabled.selectLayer') : undefined} onClick={() => onAssignSelected('base')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.mainBody')}</button>
-                <button type="button" disabled={!hasSelectedLayer} title={!hasSelectedLayer ? controlLabel('disabled.selectLayer') : undefined} onClick={() => onAssignSelected('pose')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.otherPose', { pose: characterKitPoseLabel(poseId) })}</button>
+                <button type="button" disabled={!hasSelectedLayer} title={controlReason(!hasSelectedLayer, 'disabled.selectLayer')} onClick={() => onAssignSelected('base')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.mainBody')}</button>
+                <button type="button" disabled={!hasSelectedLayer} title={controlReason(!hasSelectedLayer, 'disabled.selectLayer')} onClick={() => onAssignSelected('pose')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.otherPose', { pose: characterKitPoseLabel(poseId) })}</button>
                 <select aria-label={t('library.advanced.mouthTypeAria')} value={mouthState} onChange={event => onMouthStateChange(event.target.value as CharacterMouthState)} className="rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
                   <option value="closed">{t('mouths.closed')}</option>
                   <option value="small">{t('mouths.small')}</option>
                   <option value="wide">{t('mouths.wide')}</option>
                   <option value="round">{t('mouths.round')}</option>
                 </select>
-                <button type="button" disabled={!hasSelectedLayer} title={!hasSelectedLayer ? controlLabel('disabled.selectLayer') : undefined} onClick={() => onAssignSelected('mouth')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.thisLayerMouth')}</button>
-                <button type="button" disabled={!hasSelectedLayer} title={!hasSelectedLayer ? controlLabel('disabled.selectLayer') : undefined} onClick={() => onAssignSelected('blink')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.thisLayerBlink')}</button>
+                <button type="button" disabled={!hasSelectedLayer} title={controlReason(!hasSelectedLayer, 'disabled.selectLayer')} onClick={() => onAssignSelected('mouth')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.thisLayerMouth')}</button>
+                <button type="button" disabled={!hasSelectedLayer} title={controlReason(!hasSelectedLayer, 'disabled.selectLayer')} onClick={() => onAssignSelected('blink')} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.thisLayerBlink')}</button>
                 <button type="button" disabled={!selectedIsFace} onClick={onCaptureAnchor} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.saveLayerPosition')}</button>
               </div>
               <label className="mt-1 block text-[8px] text-text-muted">{t('library.advanced.alphaWhenAssigning')}
@@ -185,7 +191,7 @@ export function CharacterKitLibraryPanel({
               </label>
             </details>
           ) : (
-            <CharacterKitFaceRigPanel kit={draft} poseId={poseId} disabled={locked} title={locked ? (busy ? controlLabel('disabled.actionInProgress') : title) : undefined} onChange={onDraftChange} onCommit={onCommit} onStatus={onStatus} />
+            <CharacterKitFaceRigPanel kit={draft} poseId={poseId} disabled={locked} title={libraryLockTitle(locked, busy, title)} onChange={onDraftChange} onCommit={onCommit} onStatus={onStatus} />
           )}
           <div className="grid grid-cols-[1fr_1fr_24px] gap-1">
             <button type="button" disabled={locked || !draft.base} onClick={onSave} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1.5 text-[10px] text-emerald-100 disabled:opacity-40">{busy ? t('library.saving') : tCommon('actions.save')}</button>

@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { Check, Loader2, RotateCcw, Trash2, WandSparkles, X } from 'lucide-react'
 import { isActiveJob, type AnimationJob } from '../../api/characterAnimationJobs'
@@ -162,11 +162,11 @@ export function CharacterAnimationsPanel({ workspace }: { workspace: string }) {
     {!loading && !usable.length && !loadError && <p className="rounded-lg border border-dashed border-border p-3 text-sm text-text-muted">{t('animations.noKits')}</p>}
     {kit && <div className="flex flex-wrap gap-3">
       <label className="text-xs text-text-secondary">{t('animations.kit')}
-        <select value={kit.id} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => setKitId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
+        <select value={kit.id} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => setKitId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
           {usable.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
         </select></label>
       <label className="text-xs text-text-secondary">{t('lips.imageModel')}
-        <select value={model} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => setModelId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
+        <select value={model} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => setModelId(event.target.value)} className={`${control} mt-1 block min-w-48`}>
           {!imageModels.length && <option value="">{t('lips.noImageModel')}</option>}
           {imageModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
         </select></label>

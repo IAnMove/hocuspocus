@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlLabel, controlReason, controlChoice } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import {
@@ -402,7 +402,7 @@ function AssetsPanel() {
         placeholder={t('assets.hint')}
         items={pickerItems}
         accept="image/*"
-        disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+        disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
         onChoose={insertPicked}
       />
@@ -546,7 +546,7 @@ function InspectorPanel() {
             <strong className="text-xs capitalize text-text-primary">{t(comicsKey(`inspector.type${element.type.charAt(0).toUpperCase()}${element.type.slice(1)}`))}</strong>
             <div className="flex gap-1">
               <button className={button} title={t('inspector.duplicateTitle')} aria-label={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
-              <button className={button} onClick={() => patch({ locked: !element.locked })} title={element.locked ? controlLabel('a11y.unlock') : controlLabel('a11y.lock')} aria-label={element.locked ? controlLabel('a11y.unlock') : controlLabel('a11y.lock')}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
+              <button className={button} onClick={() => patch({ locked: !element.locked })} title={controlChoice(element.locked, 'a11y.unlock', 'a11y.lock')} aria-label={controlChoice(element.locked, 'a11y.unlock', 'a11y.lock')}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
               <button className={`${button} hover:text-red-400`} onClick={() => remove(pageId, element.id)} title={controlLabel('a11y.removeElement')} aria-label={controlLabel('a11y.removeElement')}><Trash2 size={12} /></button>
             </div>
           </div>
@@ -560,7 +560,7 @@ function InspectorPanel() {
           </div>
           <label className="flex items-center justify-between text-xs text-text-secondary">
             {t('inspector.visible')}
-            <button onClick={() => patch({ visible: element.visible === false })} title={element.visible === false ? controlLabel('a11y.show') : controlLabel('a11y.hide')} aria-label={element.visible === false ? controlLabel('a11y.show') : controlLabel('a11y.hide')}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+            <button onClick={() => patch({ visible: element.visible === false })} title={controlChoice(element.visible === false, 'a11y.show', 'a11y.hide')} aria-label={controlChoice(element.visible === false, 'a11y.show', 'a11y.hide')}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
           </label>
           <div className="grid grid-cols-2 gap-1">
             <button className={button} onClick={() => patch({ zIndex: Math.max(...(page?.elements.map(item => item.zIndex) ?? [0])) + 1 })}>{t('inspector.bringFront')}</button>
@@ -2512,8 +2512,8 @@ export function ComicEditorPanel() {
               {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
               {remainingArtworkPanels > 0 ? t('generate.remaining', { count: remainingArtworkPanels }) : totalArtworkPanels ? t('generate.done') : t('generate.action')}
             </button>
-            <button className={button} disabled={!history.past.length} onClick={undo} title={!history.past.length ? controlLabel('disabled.nothingToUndo') : controlLabel('a11y.undo')} aria-label={!history.past.length ? controlLabel('disabled.nothingToUndo') : controlLabel('a11y.undo')}><Undo2 size={13} /></button>
-            <button className={button} disabled={!history.future.length} onClick={redo} title={!history.future.length ? controlLabel('disabled.nothingToRedo') : controlLabel('a11y.redo')} aria-label={!history.future.length ? controlLabel('disabled.nothingToRedo') : controlLabel('a11y.redo')}><Redo2 size={13} /></button>
+            <button className={button} disabled={!history.past.length} onClick={undo} title={controlChoice(!history.past.length, 'disabled.nothingToUndo', 'a11y.undo')} aria-label={controlChoice(!history.past.length, 'disabled.nothingToUndo', 'a11y.undo')}><Undo2 size={13} /></button>
+            <button className={button} disabled={!history.future.length} onClick={redo} title={controlChoice(!history.future.length, 'disabled.nothingToRedo', 'a11y.redo')} aria-label={controlChoice(!history.future.length, 'disabled.nothingToRedo', 'a11y.redo')}><Redo2 size={13} /></button>
             <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>{t('toolbar.grid')}</button>
             <div className="ml-auto flex items-center gap-1">
               <button className={button} onClick={exportComicJson}><FileJson size={13} /> {t('toolbar.json')}</button>

@@ -1,4 +1,4 @@
-import { controlLabel } from '../../../i18n/controlLabel'
+import { controlReason } from '../../../i18n/controlLabel'
 import { PropLibraryPanel } from '../../scene3d/PropLibraryPanel'
 import type { TFunction } from 'i18next'
 import { useState } from 'react'
@@ -136,7 +136,7 @@ export function Scene3DPart({ context, onOpenEditor }: { context: PartContext; o
   return <InspectorSection id={sectionId(context.shot.id, 'scene3d')} inspector={context.inspector} shotId={context.shot.id} section="scene3d"
     script={context.script} draft={context.drafts.scene3d} save={context.save} icon={<Box size={14} />} title={t('inspector.scene3d.title')}
     slice={slice} diff={diff} editable={Boolean(scene)} summary={sceneSummary(t, scene)}
-    actions={scene && <button type="button" className={`${secondaryButton} min-h-10 sm:min-h-0 sm:py-1.5`} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void open()}>
+    actions={scene && <button type="button" className={`${secondaryButton} min-h-10 sm:min-h-0 sm:py-1.5`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void open()}>
       {busy ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}{t('inspector.scene3d.openEditor')}</button>}
     view={<>
       <ObjectList objects={objects} />

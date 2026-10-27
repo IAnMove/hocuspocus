@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useMemo, useState } from 'react'
 import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../asset-picker'
@@ -146,7 +146,7 @@ function ImportPane({
       <p>{copy.importHelp}</p>
       <label className="block">
         {copy.chooseZip}
-        <input type="file" accept=".zip,application/zip" className="mt-1 block w-full" aria-label={copy.chooseZip} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+        <input type="file" accept=".zip,application/zip" className="mt-1 block w-full" aria-label={copy.chooseZip} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
           onChange={event => { onInspect(event.target.files?.[0]); event.target.value = '' }} />
       </label>
       {busy && !report ? <p role="status">{copy.inspecting}</p> : null}

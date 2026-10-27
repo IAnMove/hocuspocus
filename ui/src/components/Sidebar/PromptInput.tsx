@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlChoice } from '../../i18n/controlLabel'
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Sparkles, Loader2, ChevronDown, ChevronUp, Brain, PenLine, RefreshCw, History, Save, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -502,7 +502,7 @@ export function PromptInput() {
                 onClick={() => setTtsMenuOpen(!ttsMenuOpen)}
                 disabled={isEnhancing}
                 className="p-1.5 rounded-r-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50 border-l border-border"
-               title={isEnhancing ? controlLabel('disabled.waitForVoice') : controlLabel('a11y.voiceOptions')} aria-label={isEnhancing ? controlLabel('disabled.waitForVoice') : controlLabel('a11y.voiceOptions')}>
+               title={controlChoice(isEnhancing, 'disabled.waitForVoice', 'a11y.voiceOptions')} aria-label={controlChoice(isEnhancing, 'disabled.waitForVoice', 'a11y.voiceOptions')}>
                 <ChevronUp size={10} />
               </button>
             </div>

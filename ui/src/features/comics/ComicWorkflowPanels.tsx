@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlLabel, controlChoice } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, Clapperboard, Eye, Film,
@@ -2726,7 +2726,7 @@ export function ComicVideoPreflightPanel({
                     : motionMethodLabel(t, clip.effective_renderer || clip.renderer)}
                 </span>
                 {risk && <span className="rounded bg-amber-400/10 px-1.5 py-0.5 text-[9px] text-amber-200">{t('preflight.aspectRisk')}</span>}
-                <div className="ml-auto flex gap-1"><button className={button} disabled={position === 0} onClick={() => moveDraft(position, -1)} title={position === 0 ? controlLabel('disabled.alreadyFirst') : controlLabel('a11y.moveUp')} aria-label={position === 0 ? controlLabel('disabled.alreadyFirst') : controlLabel('a11y.moveUp')}><ArrowUp size={12} /></button><button className={button} disabled={position === drafts.length - 1} onClick={() => moveDraft(position, 1)} title={position === drafts.length - 1 ? controlLabel('disabled.alreadyLast') : controlLabel('a11y.moveDown')} aria-label={position === drafts.length - 1 ? controlLabel('disabled.alreadyLast') : controlLabel('a11y.moveDown')}><ArrowDown size={12} /></button></div>
+                <div className="ml-auto flex gap-1"><button className={button} disabled={position === 0} onClick={() => moveDraft(position, -1)} title={controlChoice(position === 0, 'disabled.alreadyFirst', 'a11y.moveUp')} aria-label={controlChoice(position === 0, 'disabled.alreadyFirst', 'a11y.moveUp')}><ArrowUp size={12} /></button><button className={button} disabled={position === drafts.length - 1} onClick={() => moveDraft(position, 1)} title={controlChoice(position === drafts.length - 1, 'disabled.alreadyLast', 'a11y.moveDown')} aria-label={controlChoice(position === drafts.length - 1, 'disabled.alreadyLast', 'a11y.moveDown')}><ArrowDown size={12} /></button></div>
               </div>
               <div className="mt-1 text-[9px] text-text-muted">
                 {t('preflight.primary', { id: clip.panel_id || `${clip.page_number || '?'}.${clip.panel_number || '?'}` })}

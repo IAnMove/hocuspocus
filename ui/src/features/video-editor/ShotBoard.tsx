@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Film, Loader2, Pencil, RefreshCw, Sparkles, X } from 'lucide-react'
 import { getMontageShots, regenerateShot, selectShotTake, type MontageShot, type MontageShotBoard, type ShotTake } from '../../api/montages'
@@ -24,7 +24,7 @@ function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onS
     {done ? <a href={take.url} target="_blank" rel="noreferrer" className="text-accent-blue hover:underline" title={take.provenance?.prompt}>{take.note || take.id}</a>
       : <span className="text-text-muted">{take.note || take.id}</span>}
     <span className={take.status === 'failed' ? 'text-red-300' : 'text-text-muted'}>{t(`shots.status.${take.status}`, { defaultValue: take.status })}</span>
-    {done && <button type="button" className={button} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onSelect}><Check size={11} /> {t('shots.use')}</button>}
+    {done && <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onSelect}><Check size={11} /> {t('shots.use')}</button>}
   </div>
 }
 
@@ -75,8 +75,8 @@ function ShotCard({ shot, busy, onRegenerate, onSelect, onOpenScene }: {
     {origin.prompt && <p className="mt-0.5 text-[11px] text-text-secondary" title={origin.prompt}>{shortPrompt(origin.prompt)}</p>}
     {origin.startImage && <a href={origin.startImage.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-[11px] text-accent-blue hover:underline">{t('shots.startImage')}</a>}
     {shot.takes.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{shot.takes.map(take => <TakeChip key={take.id} take={take} busy={busy} onSelect={() => onSelect(take)} />)}</div>}
-    {origin.scene && <button type="button" className={`${button} mt-2`} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onOpenScene(origin.scene as string)}><Pencil size={11} /> {t('shots.openScene')}</button>}
-    {origin.canRegenerate && !editing && <button type="button" className={`${button} mt-2`} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('shots.regenerate')}</button>}
+    {origin.scene && <button type="button" className={`${button} mt-2`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onOpenScene(origin.scene as string)}><Pencil size={11} /> {t('shots.openScene')}</button>}
+    {origin.canRegenerate && !editing && <button type="button" className={`${button} mt-2`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('shots.regenerate')}</button>}
     {!origin.canRegenerate && <p className="mt-1.5 text-[10px] text-text-muted">{t(origin.scene ? 'shots.sceneHint' : 'shots.notRegenerable')}</p>}
     {editing && <RegenerateForm shot={shot} busy={busy} onCancel={() => setEditing(false)}
       onSubmit={(prompt, seed) => { setEditing(false); onRegenerate(prompt, seed) }} />}

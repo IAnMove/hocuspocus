@@ -1,4 +1,4 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { ArrowUp, Loader2, Maximize2, Minimize2, PanelLeftClose, Sparkles, Trash2 } from 'lucide-react'
@@ -724,7 +724,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       {messages.length <= 1 && (
         <div className="flex flex-wrap gap-1.5 border-t border-white/5 px-3 pt-2">
           {[t('suggestions.queue'), t('suggestions.video3d'), t('suggestions.comic')].map(suggestion => (
-            <button key={suggestion} type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void ask(suggestion)} className="rounded-full border border-wizard-soft/15 bg-wizard-soft/5 px-2 py-1 text-[9px] text-wizard-pale/65 hover:border-wizard-soft/35 hover:text-wizard-lit disabled:opacity-40">{suggestion}</button>
+            <button key={suggestion} type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void ask(suggestion)} className="rounded-full border border-wizard-soft/15 bg-wizard-soft/5 px-2 py-1 text-[9px] text-wizard-pale/65 hover:border-wizard-soft/35 hover:text-wizard-lit disabled:opacity-40">{suggestion}</button>
           ))}
         </div>
       )}
@@ -756,14 +756,14 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
       )}
 
       <form onSubmit={submit} className="border-t border-white/10 p-3">
-        <WizardVisualInput media={visualMedia?.workspace === workspace ? visualMedia : null} onChange={setVisualMedia} workspace={workspace} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} />
+        <WizardVisualInput media={visualMedia?.workspace === workspace ? visualMedia : null} onChange={setVisualMedia} workspace={workspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} />
         <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/25 p-2 focus-within:border-wizard-soft/35">
           <Sparkles size={14} className="mb-1 shrink-0 text-wizard-soft/55" />
           <textarea
             autoFocus={panelPresentation.autoFocus}
             rows={2}
             value={draft}
-            disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
+            disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
             onChange={event => { setDraft(event.target.value); if (!busy) setState(event.target.value ? 'listening' : 'idle') }}
             onKeyDown={handleKeyDown}
             placeholder={t('placeholder')}

@@ -13,6 +13,11 @@ const AssetExplorerDialog = lazy(() =>
   import('../../components/common/AssetExplorerDialog.tsx').then(module => ({ default: module.AssetExplorerDialog })),
 )
 
+function assetHold(blocked: boolean, title?: string) {
+  if (!blocked) return undefined
+  return title || controlLabel('disabled.actionInProgress')
+}
+
 export function AssetInput({
   label,
   placeholder,
@@ -50,7 +55,7 @@ export function AssetInput({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const held = disabled || busy ? (title || controlLabel('disabled.actionInProgress')) : undefined
+  const held = assetHold(Boolean(disabled) || busy, title)
   useEffect(() => () => {
     chooseGen.current += 1
     upload.current.abort()
