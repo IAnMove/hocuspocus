@@ -1152,7 +1152,7 @@
     "clone": "Say the following with the same voice: \"Welcome back.\"",
     "edit": "Replace \"tomorrow\" with \"next week\", keeping the same speaker and tone.",
     "clean": "Remove background noise and reverberation while preserving all spoken words and speakers.",
-    "separate": "Keep only the second speaker in order of appearance and remove the other speakers.",
+    "separate": "Conserva solo al segundo hablante por orden de aparición y quita a los demás.",
     "language": "El proveedor documenta inglés y chino; el español no está validado. El componente Qwen tiene condiciones de investigación/evaluación; consulta su licencia para uso comercial.",
     "steps": "Pasos de síntesis",
     "guidance": "Intensidad de seguimiento de instrucciones"
@@ -1161,7 +1161,22 @@
     "label": "Resolución",
     "auto": "1K recomendado. Formato Auto sigue la imagen de edición; sin imagen, usa un lienzo cuadrado.",
     "balanced": "1K recomendado: equilibrio entre velocidad, detalle y memoria en todos los formatos.",
-    "quality": "2K: aproximadamente 4× los píxeles de 1K. Tarda más y necesita más memoria. Consulta pasos y tiempo estimado en Actividad."
+    "quality": "2K: aproximadamente 4× los píxeles de 1K. Tarda más y necesita más memoria. Consulta pasos y tiempo estimado en Actividad.",
+    "usesSource": "Usa la resolución del clip de origen",
+    "matchesReference": "Iguala la proporción de la imagen de referencia",
+    "autoResolution": "Resolución automática"
+  },
+  "resolutionPresets": {
+    "auto": "Auto",
+    "p480": "480p",
+    "p540": "540p",
+    "p720": "720p",
+    "p768": "768p",
+    "p1080": "1080p",
+    "fastest480": "480p · la más rápida",
+    "validated540": "540p · validada",
+    "aligned720": "720p · alineada",
+    "maxBase768": "768p · lienzo Base máximo"
   },
   "actionErrors": {
     "sfxPackConfirm": "Encolar el pack de SFX requiere confirm=true tras una petición explícita.",

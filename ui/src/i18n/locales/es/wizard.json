@@ -74,7 +74,25 @@
     "partial": "Completado parcialmente",
     "failed": "Fallido",
     "cancelled": "Cancelado",
-    "reported": "Informado"
+    "reported": "Informado",
+    "waiting": "En espera",
+    "retrying": "Reintentando"
+  },
+  "workflowTypes": {
+    "create_rhythmic_3d_video": "Vídeo 3D rítmico",
+    "image_then_upscale": "Imagen y luego ampliar"
+  },
+  "workflowSteps": {
+    "prepareSong": "Preparar o generar la canción",
+    "createScene": "Crear una escena 3D editable",
+    "addLayers": "Añadir las capas visuales y la cámara",
+    "attachAudio": "Resolver y adjuntar el audio exacto",
+    "analyzeAudio": "Analizar el audio una vez",
+    "bakeChoreography": "Grabar la coreografía editable al ritmo",
+    "saveScene": "Guardar la escena editable",
+    "exportMp4": "Exportar y publicar el MP4",
+    "generateImage": "Generar imagen",
+    "upscale": "Ampliar"
   },
   "rejectionReason": {
     "invalid_intent": "El asistente no devolvió una interpretación válida de tu intención. Reintenta la petición.",
@@ -297,10 +315,10 @@
     "world3dReadyWord": "listo",
     "video2dNone": "Ninguna tarjeta 2D coincide.{{missing}}",
     "video2dUnknown": "\nNinguna tarjeta reconoce: {{words}}.",
-    "workflowNeedsInput": "Workflow “{{type}}” necesita información: {{reason}}",
+    "workflowNeedsInput": "El hechizo «{{type}}» necesita información: {{reason}}",
     "workflowDecisionMissing": "falta una decisión.",
-    "workflowCompleted": "Workflow “{{type}}” completado.",
-    "workflowStep": "Workflow “{{type}}”: {{step}} ({{current}}/{{total}}).",
+    "workflowCompleted": "El hechizo «{{type}}» ha terminado.",
+    "workflowStep": "El hechizo «{{type}}»: {{step}} ({{current}}/{{total}}).",
     "programmaticHowTo": "Puedes pedir: «Monta una escena con Video3D, sólo con mis assets, sin vídeo generativo». El Wizard prepara el formulario visible; desde allí revisas los recursos, montas la escena y la exportas. No se lanza ningún generador al preparar.",
     "programmaticPrepared": "Preparo Video3D con tu petición literal y sin vídeo generativo. No crearé recursos nuevos salvo permiso explícito. Revisa los assets y la receta en el formulario antes de montar o exportar; todavía no hay un vídeo terminado.",
     "characterAnimationStarted": "Empiezo la animación «{{animation}}» de {{name}} ({{poses}} poses, trabajo {{jobId}}). Se hace en el servidor, una pose tras otra, con Qwen: tarda unos minutos. La verás en Personajes › Animaciones, donde puedes revisarla y aprobarla.",

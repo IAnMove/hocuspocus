@@ -74,7 +74,25 @@
     "partial": "Partially completed",
     "failed": "Failed",
     "cancelled": "Cancelled",
-    "reported": "Reported"
+    "reported": "Reported",
+    "waiting": "Waiting",
+    "retrying": "Retrying"
+  },
+  "workflowTypes": {
+    "create_rhythmic_3d_video": "Rhythmic 3D video",
+    "image_then_upscale": "Image, then upscale"
+  },
+  "workflowSteps": {
+    "prepareSong": "Prepare or generate the song",
+    "createScene": "Create an editable 3D scene",
+    "addLayers": "Add the visual layers and the camera",
+    "attachAudio": "Resolve and attach the exact audio",
+    "analyzeAudio": "Analyze the audio once",
+    "bakeChoreography": "Bake the editable beat choreography",
+    "saveScene": "Save the editable scene",
+    "exportMp4": "Export and publish the MP4",
+    "generateImage": "Generate image",
+    "upscale": "Upscale"
   },
   "rejectionReason": {
     "invalid_intent": "The assistant did not return a valid interpretation of your intent. Retry your request.",

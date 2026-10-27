@@ -25,6 +25,7 @@ import {
 } from './wizardConversationSync'
 import { localizeWizardWelcome, wizardWelcomeText } from './wizardWelcome'
 import { AgentMarkdown } from './AgentMarkdown'
+import { workflowStateLabel, workflowTypeLabel } from './workflowLabels'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
@@ -113,7 +114,7 @@ const welcomeMessage = (): AgentMessage => ({
 function workflowStatusText(workflow: WizardWorkflowRecord): string {
   return workflow.state === 'awaiting_input'
     ? i18n.t('needDecisionBody', { ns: 'wizard', reason: workflow.pendingInput?.reason || i18n.t('missingRequired', { ns: 'wizard' }) })
-    : i18n.t('workflowState', { ns: 'wizard', type: workflow.type, state: workflow.state })
+    : i18n.t('workflowState', { ns: 'wizard', type: workflowTypeLabel(workflow.type), state: workflowStateLabel(workflow.state) })
 }
 
 function readMessages(workspace: string): AgentMessage[] {

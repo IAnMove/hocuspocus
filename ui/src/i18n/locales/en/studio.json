@@ -1161,7 +1161,22 @@
     "label": "Resolution",
     "auto": "Recommended 1K. Auto aspect follows the edit image; without one, the canvas is square.",
     "balanced": "Recommended 1K: balanced speed, detail and memory in every aspect ratio.",
-    "quality": "2K: about 4× the pixels of 1K. Takes longer and needs more memory. Watch steps and estimated time in Activity."
+    "quality": "2K: about 4× the pixels of 1K. Takes longer and needs more memory. Watch steps and estimated time in Activity.",
+    "usesSource": "Uses source clip resolution",
+    "matchesReference": "Matches reference image aspect ratio",
+    "autoResolution": "Auto resolution"
+  },
+  "resolutionPresets": {
+    "auto": "Auto",
+    "p480": "480p",
+    "p540": "540p",
+    "p720": "720p",
+    "p768": "768p",
+    "p1080": "1080p",
+    "fastest480": "480p · fastest",
+    "validated540": "540p · validated",
+    "aligned720": "720p · aligned",
+    "maxBase768": "768p · maximum Base canvas"
   },
   "actionErrors": {
     "sfxPackConfirm": "Queueing the SFX pack requires confirm=true after an explicit request.",

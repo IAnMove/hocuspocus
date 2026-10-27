@@ -1,6 +1,7 @@
 import { Check } from 'lucide-react'
 import { resolveResolution } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { resolutionPresetLabel } from '../../lib/resolutionPresetLabel'
 import type { AspectRatio, ModelOptions, ResolutionPreset } from '../../types'
 import { button, input } from './storyLabChrome'
 import { STORY_VIDEO_ASPECTS, STORY_VIDEO_RESOLUTIONS } from './storyLabVideoFormat'
@@ -49,7 +50,7 @@ export function StoryVideoFormatControls({
           >
             {visiblePresets.map(preset => (
               <option key={preset} value={preset}>
-                {options?.resolution_presets?.[preset]?.label || preset}
+                {resolutionPresetLabel(preset, options?.resolution_presets?.[preset]?.label)}
               </option>
             ))}
           </select>
