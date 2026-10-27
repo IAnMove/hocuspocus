@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, Loader2, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -66,7 +67,7 @@ function ImportReview({ report, busy, onConfirm, onCancel }: { report: TemplateP
         {report.exists && <p className="mt-1 text-amber-200">{t('templateLibrary.reviewExists')}</p>}
       </>}
     <div className="mt-2 flex gap-2">
-      {report.canImport && <button type="button" className={button} disabled={busy} onClick={onConfirm}>{t(report.exists ? 'templateLibrary.replace' : 'templateLibrary.confirmImport')}</button>}
+      {report.canImport && <button type="button" className={button} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onConfirm}>{t(report.exists ? 'templateLibrary.replace' : 'templateLibrary.confirmImport')}</button>}
       <button type="button" className={button} onClick={onCancel}>{t('templateLibrary.cancel')}</button>
     </div>
   </div>

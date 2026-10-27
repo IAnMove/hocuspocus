@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useUiTranslation } from '../../i18n'
 import type { SeriesShot } from './types'
 import type { seriesShotReferences, OpenSeriesReference } from './shotReferences'
@@ -15,7 +16,7 @@ function SeriesShotLocationFields({ references, shot, busy, onChange }: Referenc
   const { t } = useUiTranslation('seriesLab')
   return <>
 <label className="block text-xs text-text-secondary">{t('production.assets.location')}
-          <select className={`${selectClass} mt-1`} value={shot.locationId || ''} disabled={busy}
+          <select className={`${selectClass} mt-1`} value={shot.locationId || ''} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
             onChange={event => onChange({ ...shot, locationId: event.target.value, locationVariantId: '', referenceManifest: undefined })}>
             <option value="">{t('production.assets.chooseLocation')}</option>
             {shot.locationId && !references.location && <option value={shot.locationId}>{shot.locationId}</option>}
@@ -23,7 +24,7 @@ function SeriesShotLocationFields({ references, shot, busy, onChange }: Referenc
           </select>
         </label>
         {Boolean(references.location?.variants.length) && <label className="block text-xs text-text-secondary">{t('production.assets.locationVariant')}
-          <select className={`${selectClass} mt-1`} value={shot.locationVariantId || ''} disabled={busy}
+          <select className={`${selectClass} mt-1`} value={shot.locationVariantId || ''} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
             onChange={event => onChange({ ...shot, locationVariantId: event.target.value, referenceManifest: undefined })}>
             <option value="">{t('production.assets.baseLocation')}</option>
             {references.location!.variants.map(variant => <option key={variant.id} value={variant.id}>{variant.label}</option>)}
@@ -50,9 +51,9 @@ export function SeriesShotReferencePanel({ references, shot, busy, onChange, onO
         {!references.people.length && <p className="text-xs text-text-muted">{t('production.assets.emptyCast')}</p>}
         {!references.ready && <p role="status" className="text-xs text-amber-200">{t('production.assets.completeFirst')}</p>}
         <div className="flex flex-wrap gap-2">
-          {onOpenReferences && <><button type="button" className={secondaryButton} disabled={busy} onClick={() => onOpenReferences('locations')}>{t('production.assets.prepareLocations')}</button>
-            <button type="button" className={secondaryButton} disabled={busy} onClick={() => onOpenReferences('characters')}>{t('production.assets.prepareCharacters')}</button></>}
-          {onOpenEpisode && <button type="button" className={secondaryButton} disabled={busy} onClick={onOpenEpisode}>{t('production.assets.updateEpisode')}</button>}
+          {onOpenReferences && <><button type="button" className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onOpenReferences('locations')}>{t('production.assets.prepareLocations')}</button>
+            <button type="button" className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onOpenReferences('characters')}>{t('production.assets.prepareCharacters')}</button></>}
+          {onOpenEpisode && <button type="button" className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onOpenEpisode}>{t('production.assets.updateEpisode')}</button>}
         </div>
       </fieldset>
 }

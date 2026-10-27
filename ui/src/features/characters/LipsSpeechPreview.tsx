@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState } from 'react'
 import { Play, Square, Volume2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -291,14 +292,14 @@ function LipsPhrasePanel({ pack, textValue, busy, speechModel, speechModels, cus
   return <details className="rounded-lg border border-border p-3">
     <summary className="cursor-pointer text-sm text-text-secondary">{label('lips.customPhrase')}</summary>
     <div className="mt-3 space-y-3">
-      <textarea aria-label={label('lips.phrase')} rows={2} maxLength={2000} value={textValue} disabled={busy} onChange={event => onText(event.target.value)} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" />
-      {needsModel && <select aria-label={label('lips.voiceModel')} value={speechModel} onChange={event => onModel(event.target.value)} disabled={busy} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm">
+      <textarea aria-label={label('lips.phrase')} rows={2} maxLength={2000} value={textValue} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => onText(event.target.value)} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" />
+      {needsModel && <select aria-label={label('lips.voiceModel')} value={speechModel} onChange={event => onModel(event.target.value)} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="w-full rounded-lg border border-border bg-bg-primary p-2 text-sm">
         {!speechModels.length && <option value="">{label('lips.noVoiceModel')}</option>}
         {speechModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
       </select>}
       <button type="button" disabled={blocked} onClick={onGenerate} className="min-h-10 rounded-lg border border-border px-3 text-sm disabled:opacity-40">{label(busy ? 'lips.working' : 'lips.generateVoice')}</button>
-      <label className="block text-xs text-text-secondary">{label('lips.uploadAudio')}<input type="file" accept="audio/*" disabled={busy} className="mt-2 block w-full" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onFile(file) }} /></label>
-      {custom && <button type="button" disabled={busy} onClick={onReset} className="text-xs text-cyan-300">{label('lips.defaultSample')}</button>}
+      <label className="block text-xs text-text-secondary">{label('lips.uploadAudio')}<input type="file" accept="audio/*" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="mt-2 block w-full" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onFile(file) }} /></label>
+      {custom && <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onReset} className="text-xs text-cyan-300">{label('lips.defaultSample')}</button>}
     </div>
   </details>
 }

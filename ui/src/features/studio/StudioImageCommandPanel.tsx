@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ImageGenerationCommand, ImageGenerationReceipt } from '../../api/imageGenerationCommands'
 import {
@@ -138,7 +139,7 @@ export function StudioImageCommandPanel({ workspace, model, visible, onRecovered
     {pending.filter(command => !busy || command.intent_id !== shown?.intent_id).map(command => <section key={command.intent_id} className="border border-border rounded-lg p-2 space-y-2">
       <strong className="text-xs">{t('commands.pending')}</strong>
       <RequestSummary command={command} />
-      <button type="button" disabled={busy} onClick={() => void recover(command)}
+      <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void recover(command)}
         className="text-xs border border-border rounded px-2 py-1 disabled:opacity-50">{t('commands.recover')}</button>
     </section>)}
     {error && <p role="alert" className="text-xs text-indicator-error break-words">{error}</p>}

@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useState } from 'react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import {
@@ -153,7 +154,7 @@ export function RunsPanel() {
                 {tWs('runs.intro')}
               </p>
             </div>
-            <button type="button" className={button} onClick={() => void loadPipelineList()} title={tWs('runs.reload')}>
+            <button type="button" className={button} onClick={() => void loadPipelineList()} title={tWs('runs.reload')} aria-label={tWs('runs.reload')}>
               <RefreshCw size={13} />
             </button>
           </div>
@@ -643,7 +644,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
                 <button
                   key={item.id || item.filename}
                   type="button"
-                  disabled={busy}
+                  disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
                   onClick={() => void selectClipVideo(pipeline.pipeline_id, clip.index, item.filename).catch(reason => setError(reason instanceof Error ? reason.message : String(reason)))}
                   className={`overflow-hidden rounded border text-left ${selected ? 'border-emerald-400 bg-emerald-500/10' : 'border-border bg-bg-tertiary hover:border-violet-400/60'}`}
                 >

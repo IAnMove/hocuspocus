@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { Plus, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -65,7 +66,7 @@ function RelationshipEditor({
       <button className="text-red-400 justify-self-end" onClick={() => update(current => {
         current.relationships = current.relationships.filter(item => item.id !== relationship.id)
         return current
-      })}><Trash2 size={14} /></button>
+      })} title={controlLabel('a11y.removeRelationship')} aria-label={controlLabel('a11y.removeRelationship')}><Trash2 size={14} /></button>
       <Field label={t('relationships.dynamic')} value={relationship.dynamic} onChange={dynamic => set({ dynamic })} rows={3} />
       <Field label={t('relationships.evolution')} value={relationship.evolution} onChange={evolution => set({ evolution })} rows={3} />
     </div>

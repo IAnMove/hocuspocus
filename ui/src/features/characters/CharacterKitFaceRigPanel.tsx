@@ -56,6 +56,8 @@ type Props = {
   kit: CharacterKit
   poseId: string
   disabled?: boolean
+  /** Why the parent locked the workshop. Shown on the panel while `disabled` is set. */
+  title?: string
   /** Manual workshop must never load a model or call a generation provider. */
   allowModelActions?: boolean
   workspace?: string
@@ -110,7 +112,7 @@ async function inspectSourceAlpha(source: string) {
   } finally { bitmap.close() }
 }
 
-export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowModelActions = true, workspace: workspaceOverride, onChange, onCommit, onStatus, onBusyChange, onRigged }: Props) {
+export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, title, allowModelActions = true, workspace: workspaceOverride, onChange, onCommit, onStatus, onBusyChange, onRigged }: Props) {
   const { t } = useUiTranslation('characters')
   const stateLabel = (state: CharacterKitFaceRigState) => t(`faceRig.states.${state}`)
   const imageModel = useStore(state => state.selectedModelPerMode.image || '')
@@ -599,7 +601,7 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, allowM
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('faceRig.errors.reviewFailed')) }
   }
 
-  return <div className="@container space-y-3">
+  return <div className="@container space-y-3" title={disabled ? title : undefined}>
     <p className="text-sm font-medium text-emerald-100">{t('faceRig.mouthsOnPose', { pose: poseName })}</p>
     <ol className="list-decimal space-y-0.5 pl-4 text-xs leading-relaxed text-text-secondary">
       <li>{t('faceRig.steps.box')}</li>

@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState } from 'react'
 import { getFileUrl } from '../../api/client'
 import { useUiTranslation } from '../../i18n'
@@ -31,13 +32,13 @@ export function CharacterVoiceAudition({ workspace, voice, language: spoken }: {
   }
   return <div className="space-y-2 rounded-lg border border-border bg-bg-primary p-3">
     <label className="block">{t('speech.voiceAudition.language')}
-      <select className="ml-2 min-h-10 rounded border border-border bg-bg-secondary px-2" value={language} disabled={busy}
+      <select className="ml-2 min-h-10 rounded border border-border bg-bg-secondary px-2" value={language} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
         onChange={event => { stopAudio(); setLanguage(event.target.value as 'es' | 'en'); setFilename(''); setError('') }}>
         <option value="es">{t('speech.voiceAudition.languageEs')}</option><option value="en">{t('speech.voiceAudition.languageEn')}</option>
       </select>
     </label>
     <p>{t(`speech.voiceAudition.sample.${language}`)}</p>
-    <button type="button" disabled={busy} className="min-h-10 rounded bg-cyan-400 px-3 font-semibold text-black disabled:opacity-50"
+    <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="min-h-10 rounded bg-cyan-400 px-3 font-semibold text-black disabled:opacity-50"
       onClick={() => void generate()}>{t(busy ? 'speech.voiceAudition.generating' : 'speech.voiceAudition.generate')}</button>
     {busy && <button type="button" className="ml-3 min-h-10 underline" onClick={cancel}>{t('speech.voiceAudition.cancel')}</button>}
     {filename && <audio ref={node => { if (node) audio.current = node }} aria-label={t('speech.voiceAudition.audio')}

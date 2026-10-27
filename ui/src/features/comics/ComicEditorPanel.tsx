@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import {
@@ -334,8 +335,8 @@ function PagesRail() {
             <div className="flex justify-center gap-1 mt-1">
               <button title={t('pages.moveUp')} disabled={index === 0} onClick={() => movePage(page.id, -1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↑</button>
               <button title={t('pages.moveDown')} disabled={index === project.pages.length - 1} onClick={() => movePage(page.id, 1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↓</button>
-              <button title={tCommon('actions.duplicate')} onClick={() => duplicate(page.id)} className="p-1 text-text-muted hover:text-text-primary"><Copy size={11} /></button>
-              <button title={tCommon('actions.delete')} disabled={project.pages.length === 1} onClick={() => remove(page.id)} className="p-1 text-text-muted hover:text-red-400 disabled:opacity-30"><Trash2 size={11} /></button>
+              <button title={tCommon('actions.duplicate')} aria-label={tCommon('actions.duplicate')} onClick={() => duplicate(page.id)} className="p-1 text-text-muted hover:text-text-primary"><Copy size={11} /></button>
+              <button title={tCommon('actions.delete')} aria-label={tCommon('actions.delete')} disabled={project.pages.length === 1} onClick={() => remove(page.id)} className="p-1 text-text-muted hover:text-red-400 disabled:opacity-30"><Trash2 size={11} /></button>
             </div>
           </div>
         ))}
@@ -401,7 +402,7 @@ function AssetsPanel() {
         placeholder={t('assets.hint')}
         items={pickerItems}
         accept="image/*"
-        disabled={busy}
+        disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
         constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
         onChoose={insertPicked}
       />
@@ -544,9 +545,9 @@ function InspectorPanel() {
           <div className="flex items-center justify-between">
             <strong className="text-xs capitalize text-text-primary">{t(comicsKey(`inspector.type${element.type.charAt(0).toUpperCase()}${element.type.slice(1)}`))}</strong>
             <div className="flex gap-1">
-              <button className={button} title={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
-              <button className={button} onClick={() => patch({ locked: !element.locked })}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
-              <button className={`${button} hover:text-red-400`} onClick={() => remove(pageId, element.id)}><Trash2 size={12} /></button>
+              <button className={button} title={t('inspector.duplicateTitle')} aria-label={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
+              <button className={button} onClick={() => patch({ locked: !element.locked })} title={element.locked ? controlLabel('a11y.unlock') : controlLabel('a11y.lock')} aria-label={element.locked ? controlLabel('a11y.unlock') : controlLabel('a11y.lock')}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
+              <button className={`${button} hover:text-red-400`} onClick={() => remove(pageId, element.id)} title={controlLabel('a11y.removeElement')} aria-label={controlLabel('a11y.removeElement')}><Trash2 size={12} /></button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
@@ -559,7 +560,7 @@ function InspectorPanel() {
           </div>
           <label className="flex items-center justify-between text-xs text-text-secondary">
             {t('inspector.visible')}
-            <button onClick={() => patch({ visible: element.visible === false })}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+            <button onClick={() => patch({ visible: element.visible === false })} title={element.visible === false ? controlLabel('a11y.show') : controlLabel('a11y.hide')} aria-label={element.visible === false ? controlLabel('a11y.show') : controlLabel('a11y.hide')}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
           </label>
           <div className="grid grid-cols-2 gap-1">
             <button className={button} onClick={() => patch({ zIndex: Math.max(...(page?.elements.map(item => item.zIndex) ?? [0])) + 1 })}>{t('inspector.bringFront')}</button>
@@ -1749,7 +1750,7 @@ export function ComicDirectorPanel({
         <strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('characters.heading')}</strong>
         {request.characters.map(character => (
           <div key={character.id} className="rounded border border-border p-2 text-[10px]">
-            <div className="flex justify-between"><b className="text-text-primary">{character.name}</b><button onClick={() => patch('characters', request.characters.filter(item => item.id !== character.id))}><Trash2 size={11} /></button></div>
+            <div className="flex justify-between"><b className="text-text-primary">{character.name}</b><button onClick={() => patch('characters', request.characters.filter(item => item.id !== character.id))} title={controlLabel('a11y.removeCharacter')} aria-label={controlLabel('a11y.removeCharacter')}><Trash2 size={11} /></button></div>
             <p className="text-text-muted mt-1">{character.description}</p>
             <AssetInput
               label={t('characters.noIdentity')}
@@ -2511,8 +2512,8 @@ export function ComicEditorPanel() {
               {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
               {remainingArtworkPanels > 0 ? t('generate.remaining', { count: remainingArtworkPanels }) : totalArtworkPanels ? t('generate.done') : t('generate.action')}
             </button>
-            <button className={button} disabled={!history.past.length} onClick={undo}><Undo2 size={13} /></button>
-            <button className={button} disabled={!history.future.length} onClick={redo}><Redo2 size={13} /></button>
+            <button className={button} disabled={!history.past.length} onClick={undo} title={!history.past.length ? controlLabel('disabled.nothingToUndo') : controlLabel('a11y.undo')} aria-label={!history.past.length ? controlLabel('disabled.nothingToUndo') : controlLabel('a11y.undo')}><Undo2 size={13} /></button>
+            <button className={button} disabled={!history.future.length} onClick={redo} title={!history.future.length ? controlLabel('disabled.nothingToRedo') : controlLabel('a11y.redo')} aria-label={!history.future.length ? controlLabel('disabled.nothingToRedo') : controlLabel('a11y.redo')}><Redo2 size={13} /></button>
             <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>{t('toolbar.grid')}</button>
             <div className="ml-auto flex items-center gap-1">
               <button className={button} onClick={exportComicJson}><FileJson size={13} /> {t('toolbar.json')}</button>
@@ -2522,7 +2523,7 @@ export function ComicEditorPanel() {
                 {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {exporting || t('toolbar.pdf')}
               </button>
               <TranslatedPdfExport notify={notify} />
-              <button className={button} onClick={() => setToolbarCollapsed(true)} title={t('toolbar.collapse')}>
+              <button className={button} onClick={() => setToolbarCollapsed(true)} title={t('toolbar.collapse')} aria-label={t('toolbar.collapse')}>
                 <ChevronUp size={13} />
               </button>
             </div>
@@ -2634,7 +2635,7 @@ export function ComicEditorPanel() {
                   className={button}
                   disabled={currentPageIndex === 0}
                   onClick={() => goToPage(currentPageIndex - 1)}
-                  title={t('pages.previous')}
+                  title={t('pages.previous')} aria-label={t('pages.previous')}
                 >
                   <ChevronLeft size={12} />
                 </button>
@@ -2652,7 +2653,7 @@ export function ComicEditorPanel() {
                   className={button}
                   disabled={currentPageIndex >= project.pages.length - 1}
                   onClick={() => goToPage(currentPageIndex + 1)}
-                  title={t('pages.next')}
+                  title={t('pages.next')} aria-label={t('pages.next')}
                 >
                   <ChevronRight size={12} />
                 </button>
@@ -2714,7 +2715,7 @@ export function ComicEditorPanel() {
                 <button
                   className="w-9 border-l border-border text-text-muted hover:text-accent-blue"
                   onClick={() => setSidePanelCollapsed(true)}
-                  title={t('side.collapse')}
+                  title={t('side.collapse')} aria-label={t('side.collapse')}
                 >
                   <ChevronRight size={15} className="mx-auto" />
                 </button>

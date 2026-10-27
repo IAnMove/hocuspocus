@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
@@ -72,7 +73,7 @@ export function SeriesShotProduction({ workspace, series, episode, shot, onChang
   }
   return <div className="mt-3 space-y-2 rounded-lg border border-violet-500/25 p-3">
     <label className="block text-xs text-text-secondary">{t('production.shotMethod', { order: shot.order })}
-      <select className={`${selectClass} mt-1`} disabled={busy} value={method} onChange={event => onChange({ ...shot, productionMethod: event.target.value as SeriesShot['productionMethod'] })}>
+      <select className={`${selectClass} mt-1`} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} value={method} onChange={event => onChange({ ...shot, productionMethod: event.target.value as SeriesShot['productionMethod'] })}>
         {!permitted && <option value={method}>{t(`production.methods.${method}`)} · {t('production.notAllowed')}</option>}
         {allowed.map(value => <option key={value} value={value}>{t(`production.methods.${value}`)}</option>)}
       </select>
@@ -84,7 +85,7 @@ export function SeriesShotProduction({ workspace, series, episode, shot, onChang
         onOpenReferences={onOpenReferences} onOpenEpisode={onOpenEpisode} />}
       {animation && <button type="button" className={secondaryButton} disabled={busy || !references?.ready} onClick={() => void prepare()}>{t(method === 'animation_2d' ? 'production.open2d' : 'production.open3d')}</button>}
       <p className="text-[11px] text-text-muted">{t(METHOD_HINT[method])}</p>
-      <AssetInput label={t('production.importTake')} placeholder={t('production.importTake')} items={videos} accept="video/*" disabled={busy}
+      <AssetInput label={t('production.importTake')} placeholder={t('production.importTake')} items={videos} accept="video/*" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
         constraints={{ kinds: ['video'], maxCount: 1, optional: false }} onChoose={item => { if (item) void importTake(item) }} />
     </>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}

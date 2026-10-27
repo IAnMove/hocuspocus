@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { checkPublishPreset, formatPublishNumber, publishMediaSource, publishVideo, type PublishPreset, type PublishWarning } from '../../api/publish'
@@ -59,7 +60,7 @@ export function PublishPresetBar({
       {source && (
         <button
           type="button"
-          disabled={busy}
+          disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
           onClick={() => {
             setBusy(true)
             publish({ workspace, source: publishMediaSource(source, workspace), preset, premium, width, height, duration, overlays, loudnorm: preset !== 'archive' })

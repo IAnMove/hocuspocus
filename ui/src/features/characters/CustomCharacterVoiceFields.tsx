@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useUiTranslation } from '../../i18n'
 import { CHARACTER_VOICE_LANGUAGES, REFERENCE_VOICE_MODELS, STYLED_REFERENCE_VOICE_MODELS, VOICE_STYLE_MAX_CHARS, type CustomCharacterVoice, type ReferenceVoiceModel } from '../../lib/characterVoice'
 import { VoicePreview } from '../scene3d/speech/VoicePreview'
@@ -21,7 +22,7 @@ export function CustomCharacterVoiceFields({ value, onChange, onBusyChange, lang
   }
   return <div className="space-y-3 rounded-lg border border-border p-3" data-testid="custom-character-voice">
     <p>{t('speech.customVoice.hint')}</p>
-    <fieldset disabled={busy} className="space-y-3">
+    <fieldset disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="space-y-3">
       <label className="block">{t('speech.customVoice.name')}<input className={input} maxLength={120} value={value.name}
         onChange={event => onChange({ ...value, name: event.target.value })} /></label>
       <label className="block">{t('speech.customVoice.import')}<input className={input} type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.webm"

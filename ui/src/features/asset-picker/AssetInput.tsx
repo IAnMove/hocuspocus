@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { FolderOpen, Monitor, X } from 'lucide-react'
 import type { ApiOutput } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
+import { controlLabel } from '../../i18n/controlLabel'
 import { AssetPickTrigger } from '../../components/common/AssetPickTrigger.tsx'
 import type { AssetConstraints } from './types.ts'
 import { rememberLocalImage } from '../../lib/localEditImages'
@@ -21,6 +22,7 @@ export function AssetInput({
   optional,
   constraints,
   disabled,
+  title,
   workspaceId,
   keepLocal,
   showPreview,
@@ -34,6 +36,8 @@ export function AssetInput({
   optional?: boolean
   constraints?: AssetConstraints
   disabled?: boolean
+  /** Why the field is disabled. Shown on each control while this field or an upload is busy. */
+  title?: string
   workspaceId?: string
   keepLocal?: boolean
   showPreview?: boolean
@@ -46,6 +50,7 @@ export function AssetInput({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const held = disabled || busy ? (title || controlLabel('disabled.actionInProgress')) : undefined
   useEffect(() => () => {
     chooseGen.current += 1
     upload.current.abort()
@@ -99,17 +104,17 @@ export function AssetInput({
 
   return (
     <div className="space-y-1" onDrop={event => { event.preventDefault(); event.stopPropagation(); if (!disabled && !busy) void pickLocal(event.dataTransfer.files[0]) }} onDragOver={event => event.preventDefault()}>
-      <AssetPickTrigger label={label} selected={value} showPreview={showPreview} placeholder={busy ? t('picker.uploading') : placeholder} disabled={disabled || busy} onOpen={() => setOpen(true)} />
+      <AssetPickTrigger label={label} selected={value} showPreview={showPreview} placeholder={busy ? t('picker.uploading') : placeholder} disabled={disabled || busy} title={held} onOpen={() => setOpen(true)} />
       <div className="flex flex-wrap gap-1">
-        {value?.type === 'image' && <ImageCropButton key={`${workspaceId}:${value.url}`} item={value} disabled={disabled || busy} onReplace={onChoose} />}
-        <button type="button" disabled={disabled || busy} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
+        {value?.type === 'image' && <ImageCropButton key={`${workspaceId}:${value.url}`} item={value} disabled={disabled || busy} title={held} onReplace={onChoose} />}
+        <button type="button" disabled={disabled || busy} title={held} onClick={() => fileRef.current?.click()} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
           <Monitor size={10} />{t('picker.fromDevice')}
         </button>
-        <button type="button" disabled={disabled || busy} onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
+        <button type="button" disabled={disabled || busy} title={held} onClick={() => setOpen(true)} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
           <FolderOpen size={10} />{t('picker.fromLibrary')}
         </button>
         {optional && value && (
-          <button type="button" disabled={disabled || busy} onClick={() => onChoose(null)} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
+          <button type="button" disabled={disabled || busy} title={held} onClick={() => onChoose(null)} className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[9px] text-text-secondary disabled:opacity-40">
             <X size={10} />{t('picker.remove')}
           </button>
         )}

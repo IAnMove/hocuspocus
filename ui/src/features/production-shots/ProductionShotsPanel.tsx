@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LipsyncRedoButton } from '../lipsync-redo/LipsyncRedoButton'
@@ -279,7 +280,7 @@ export function ShotLoader({ workspace, productionId, onClose }: {
   return <>
     {busy ? <p role="status">{t('working')}</p> : null}
     {actionFailed ? <p role="alert">{t('actionFailed')}</p> : null}
-    <fieldset disabled={busy} className="h-full min-h-0 w-full border-0 p-0">
+    <fieldset disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="h-full min-h-0 w-full border-0 p-0">
     <ProductionShotsPanel view={view} workspace={workspace} onClose={onClose} onAction={body => {
     if (busy) return
     setBusy(true)

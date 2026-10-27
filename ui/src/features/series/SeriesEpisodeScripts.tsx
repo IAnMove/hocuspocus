@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { Download, Eye, EyeOff, RotateCcw } from 'lucide-react'
 import { SeriesRequestError } from '../../api/series'
@@ -92,10 +93,10 @@ function ScriptRow({ item, open, busy, downloadUrl, onToggle, onRewrite }: {
     {item.created ? <span className="text-text-muted">{t('scripts.created')}</span> : null}
     {item.applied > 1 ? <span className="text-text-muted">{t('scripts.applied', { count: item.applied })}</span> : null}
     <span className="ml-auto flex flex-wrap gap-1">
-      <button type="button" className={secondaryButton} disabled={busy} aria-pressed={open} onClick={onToggle}>
+      <button type="button" className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} aria-pressed={open} onClick={onToggle}>
         {open ? <EyeOff size={13} /> : <Eye size={13} />}{t(open ? 'scripts.hide' : 'scripts.view')}</button>
       <a className={secondaryButton} href={downloadUrl} download><Download size={13} />{t('scripts.download')}</a>
-      <button type="button" className={secondaryButton} disabled={busy} onClick={onRewrite}><RotateCcw size={13} />{t('scripts.rewrite')}</button>
+      <button type="button" className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onRewrite}><RotateCcw size={13} />{t('scripts.rewrite')}</button>
     </span>
   </li>
 }

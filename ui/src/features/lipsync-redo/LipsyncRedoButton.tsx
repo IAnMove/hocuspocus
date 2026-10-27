@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '../../i18n'
@@ -56,13 +57,13 @@ export function LipsyncRedoButton({ workspace, target, namespace, labelKey, engi
   }
 
   return <span className="flex flex-wrap items-center gap-1">
-    <select data-action="lipsync-engine" aria-label={label(engineKey)} value={engine} disabled={busy}
+    <select data-action="lipsync-engine" aria-label={label(engineKey)} value={engine} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
       onChange={event => setEngine(event.target.value === 'longcat_avatar' ? 'longcat_avatar' : 'infinitetalk')}>
       <option value="infinitetalk">infinitetalk</option>
       <option value="longcat_avatar">longcat_avatar</option>
     </select>
-    <button type="button" data-action="lipsync-redo" disabled={busy} onClick={() => { void redo() }}>{label(labelKey)}</button>
-    {pending ? <button type="button" data-action="lipsync-download" disabled={busy} onClick={() => { void download() }}>{wizardLine('replies.lipsDownload')}</button> : null}
+    <button type="button" data-action="lipsync-redo" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => { void redo() }}>{label(labelKey)}</button>
+    {pending ? <button type="button" data-action="lipsync-download" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => { void download() }}>{wizardLine('replies.lipsDownload')}</button> : null}
     {note ? <span role="status">{note}</span> : null}
   </span>
 }

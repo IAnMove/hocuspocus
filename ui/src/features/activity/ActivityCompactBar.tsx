@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, ListVideo, Loader2 } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { CanonicalTask } from '../../api/client'
@@ -161,7 +162,7 @@ function CompactCancel({
   if (!primary.cancelable) return null
   const busy = busyIds.has(primary.id)
   return (
-    <button type="button" disabled={busy} onClick={() => onControl(primary, 'cancel')} className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 disabled:opacity-50">
+    <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => onControl(primary, 'cancel')} className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 disabled:opacity-50">
       {busy ? <Loader2 size={11} className="animate-spin" /> : null}
       <span>{busy ? t('cancelling') : tCommon('actions.cancel')}</span>
     </button>

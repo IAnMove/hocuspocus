@@ -23,6 +23,7 @@ export function RenderQualityPicker({
   fps,
   duration,
   disabled,
+  title,
   capabilitiesUrl,
   onChange,
 }: {
@@ -31,6 +32,7 @@ export function RenderQualityPicker({
   fps: number
   duration: number
   disabled?: boolean
+  title?: string
   capabilitiesUrl?: string
   onChange: (choice: RenderChoice) => void
 }) {
@@ -70,6 +72,7 @@ export function RenderQualityPicker({
         {t('stage.renderLevel')}
         <select
           disabled={disabled}
+          title={disabled ? title : undefined}
           value={level}
           data-testid="render-level"
           onChange={event => {

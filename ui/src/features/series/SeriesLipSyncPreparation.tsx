@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { useCharacterKitLibrary } from '../characters/useCharacterKitLibrary'
@@ -28,8 +29,8 @@ export function SeriesLipSyncPreparation({ workspace, series, episode, initialSh
     {loading && <p role="status" className="text-xs">{t('speech.loading')}</p>}
     {plan.issues.length > 0 && !loading && <div className="space-y-2 text-xs">
       <p className="text-amber-200">{t('native.blockedUpdates', { shots: plan.blocked.length, characters: plan.issues.length })}</p>
-      <SeriesSpeechIssues workspace={workspace} series={series} issues={plan.issues} disabled={busy} onError={setError} />
-      <button className={secondaryButton} disabled={busy} onClick={reload}>{t('native.refreshCharacters')}</button>
+      <SeriesSpeechIssues workspace={workspace} series={series} issues={plan.issues} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onError={setError} />
+      <button className={secondaryButton} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={reload}>{t('native.refreshCharacters')}</button>
     </div>}
     {libraryError && <p role="alert" className="text-xs text-red-300">{libraryError}<button className={`ml-2 ${secondaryButton}`} onClick={reload}>{t('native.refreshCharacters')}</button></p>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}

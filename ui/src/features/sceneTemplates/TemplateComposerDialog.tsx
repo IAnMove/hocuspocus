@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState } from 'react'
 import { ModalShell } from '../../components/common/ModalShell'
 import { useUiTranslation } from '../../i18n'
@@ -140,7 +141,7 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
     <TemplateReferencePanel templateId={template.id} disabled={busy || !replaceConfirmed} onOpen={file => void openOriginal(file)} />
     <TemplateComponentHelp templateId={template.id} />
     <ul className="list-disc pl-5 text-xs text-text-muted">{template.limits.map(limit => <li key={limit}>{limit}</li>)}</ul>
-    <fieldset disabled={busy} className="space-y-3 disabled:opacity-60">
+    <fieldset disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} className="space-y-3 disabled:opacity-60">
       <legend className="mb-2 text-xs">{t('composer.assetsOf', { workspace })}</legend>
       <div className="grid gap-2 sm:grid-cols-2">{template.slots.map(item => <div key={item.id} className={`rounded border p-2 text-xs ${activeSlot === item.id ? 'border-cyan-400' : 'border-border'}`}>
         <button type="button" aria-pressed={activeSlot === item.id} onClick={() => setActiveSlot(item.id)} className="block w-full text-left font-medium">{t(SLOT_COPY[item.id])} {needed.has(item.id) ? t('composer.required') : t('composer.optional')}</button>

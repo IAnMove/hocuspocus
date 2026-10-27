@@ -236,7 +236,7 @@ export function StoryLabLibraryChrome({
       <button className={button} disabled={libraryLocked} onClick={onDuplicate} title={t('library.duplicateTitle')}>{t('library.duplicate')}</button>
       <button className={button} onClick={() => {
         if (window.confirm(t('library.deleteConfirm', { title: project.title }))) onDelete()
-      }} disabled={libraryLocked} title={t('library.deleteTitle')}><Trash2 size={13} /></button>
+      }} disabled={libraryLocked} title={t('library.deleteTitle')} aria-label={t('library.deleteTitle')}><Trash2 size={13} /></button>
       <input ref={importRef} type="file" accept=".storypack,.zip,.json" className="hidden"
         onChange={event => {
           onImport(event.target.files?.[0])

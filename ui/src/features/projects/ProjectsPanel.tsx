@@ -145,7 +145,7 @@ export function ProjectsPanel() {
           type="button"
           onClick={() => void load(false)}
           className="rounded-md border border-border bg-bg-secondary p-1.5 text-text-muted hover:text-text-primary"
-          title={t('refresh')}
+          title={t('refresh')} aria-label={t('refresh')}
         >
           <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
         </button>

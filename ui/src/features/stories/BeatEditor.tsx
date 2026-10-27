@@ -26,11 +26,11 @@ export function BeatEditor({ beat, index, total, update, projectId }: {
       <div className="space-y-2">
         <div className="text-2xl font-bold text-text-muted/40">{String(index + 1).padStart(2, '0')}</div>
         <div className="flex gap-1">
-          <button className={button} disabled={index === 0} title={t('structure.moveUp')} onClick={() => update(current => {
+          <button className={button} disabled={index === 0} title={t('structure.moveUp')} aria-label={t('structure.moveUp')} onClick={() => update(current => {
             moveItem(current.beats, index, index - 1)
             return current
           })}><ChevronUp size={12} /></button>
-          <button className={button} disabled={index === total - 1} title={t('structure.moveDown')} onClick={() => update(current => {
+          <button className={button} disabled={index === total - 1} title={t('structure.moveDown')} aria-label={t('structure.moveDown')} onClick={() => update(current => {
             moveItem(current.beats, index, index + 1)
             return current
           })}><ChevronDown size={12} /></button>

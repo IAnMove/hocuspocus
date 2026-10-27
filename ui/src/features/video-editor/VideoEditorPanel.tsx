@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import {
   ArrowDown,
   ArrowUp,
@@ -2174,7 +2175,7 @@ export function VideoEditorPanel() {
                 onClick={() => startSequenceAt(0, undefined, false)}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                title={t('playback.restartTitle')}
+                title={t('playback.restartTitle')} aria-label={t('playback.restartTitle')}
               >
                 <RotateCcw size={13} />
               </button>
@@ -2299,7 +2300,7 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => setSelectedTransitionIndex(null)}
                   className="ml-auto p-0.5 text-text-muted hover:text-text-primary"
-                >
+                 title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
                   <X size={12} />
                 </button>
               </div>
@@ -2546,7 +2547,7 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => patchClip(selected.id, { muted: !selected.muted })}
                   className={`p-1.5 rounded border ${selected.muted ? 'border-red-500/40 text-red-400' : 'border-border text-text-secondary'}`}
-                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
+                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')} aria-label={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
                 >
                   {selected.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
                 </button>
@@ -2595,7 +2596,7 @@ export function VideoEditorPanel() {
                     setSelectedId(duplicate.id)
                   }}
                   className="p-1.5 border border-border rounded hover:bg-bg-hover"
-                  title={t('actions.duplicate')}
+                  title={t('actions.duplicate')} aria-label={t('actions.duplicate')}
                 >
                   <Copy size={11} />
                 </button>

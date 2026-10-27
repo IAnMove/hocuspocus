@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import { Box, Camera, Loader2, PersonStanding } from 'lucide-react'
@@ -553,7 +554,7 @@ function CharacterCreatorWorkshop() {
           <button
             type="button"
             className={`${button} mt-2`}
-            disabled={busy}
+            disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
             onClick={() => void openFaceRigFromCreator()}
           >
             {t('creator.openFaceRig')}
@@ -567,7 +568,7 @@ function CharacterCreatorWorkshop() {
                 <button
                   key={entry.id}
                   type="button"
-                  disabled={busy}
+                  disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
                   onClick={() => {
                     setKind(entry.kind)
                     setVideoName(entry.videoName)
@@ -590,7 +591,7 @@ function CharacterCreatorWorkshop() {
         )}
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
-        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} onUseReference={async (asset, description, signal) => {
+        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onUseReference={async (asset, description, signal) => {
           const workspace = activeWorkspace
           const response = await fetch(asset.source, { signal })
           if (!response.ok) throw new Error(t('creator.errors.needViewOrUpload'))
@@ -682,8 +683,8 @@ function CharacterCreatorWorkshop() {
             </button>
             {jobMessage && <p className="text-[11px] text-text-secondary">{jobMessage}</p>}
             {interruptedJobId && <div className="flex gap-2">
-              <button type="button" className={button + ' flex-1'} disabled={busy} onClick={() => void recoverOrbit('resume')}>{tCommon('actions.resume')}</button>
-              <button type="button" className={button + ' flex-1'} disabled={busy} onClick={() => void recoverOrbit('discard')}>{tCommon('actions.discard')}</button>
+              <button type="button" className={button + ' flex-1'} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void recoverOrbit('resume')}>{tCommon('actions.resume')}</button>
+              <button type="button" className={button + ' flex-1'} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void recoverOrbit('discard')}>{tCommon('actions.discard')}</button>
             </div>}
             {hunyuanMessage && <p className="text-[11px] text-text-secondary">{hunyuanMessage}</p>}
             {error && <p className="text-[11px] text-red-300">{error}</p>}
@@ -723,7 +724,7 @@ function CharacterCreatorWorkshop() {
                   className="mt-3 w-full accent-violet-400"
                   aria-label={t('creator.captureTimeAria')}
                 />
-                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} onClick={() => void replaceSelectedView()}>
+                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void replaceSelectedView()}>
                   <Camera size={13} /> {t('creator.replaceView')}
                 </button>
               </div>

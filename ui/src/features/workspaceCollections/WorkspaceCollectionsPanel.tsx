@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { FolderKanban, Loader2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import {
@@ -122,7 +123,7 @@ export function WorkspaceCollectionsPanel() {
           <p className="mt-1 text-[10px] text-text-muted">{tActivity('collectionsHint')}</p>
           <div className="mt-3 flex gap-1">
             <input aria-label={tWs('collections.newName')} value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') void create() }} placeholder={tWs('collections.placeholder')} className="min-w-0 flex-1 rounded-md border border-border bg-bg-primary px-2 py-1.5 text-xs" />
-            <button className={button} disabled={!newName.trim() || saving} onClick={() => void create()} title={tWs('collections.createTitle')}><Plus size={13} /></button>
+            <button className={button} disabled={!newName.trim() || saving} onClick={() => void create()} title={tWs('collections.createTitle')} aria-label={tWs('collections.createTitle')}><Plus size={13} /></button>
           </div>
         </div>
         <nav aria-label={tWs('collections.savedAria')} className="min-h-0 flex-1 overflow-y-auto p-2">
@@ -141,7 +142,7 @@ export function WorkspaceCollectionsPanel() {
         <CollectionRecovery onRecovered={openCollection} onBusyChange={setSaving} disabled={dirty} />
         <div className="mb-3 flex items-center justify-between gap-2">
           <div className="min-w-0"><h2 className="text-sm font-semibold text-text-primary">{draft?.name || tWs('collections.untitled')}</h2><p className="break-all text-[10px] text-text-muted">{draft?.id ? tWs('commands.identity', { id: draft.id, revision: draft.revision }) : tWs('collections.idsHint')}</p></div>
-          <div className="flex gap-1"><button className={button} onClick={() => void load()} title={tCommon('actions.refresh')}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /></button>{draft && <><button className={button} disabled={!dirty || saving} onClick={() => void save()}><Save size={13} /> {tCommon('actions.save')}</button><button className={`${button} text-red-300`} disabled={saving} onClick={() => void remove()}><Trash2 size={13} /></button></>}</div>
+          <div className="flex gap-1"><button className={button} onClick={() => void load()} title={tCommon('actions.refresh')} aria-label={tCommon('actions.refresh')}><RefreshCw size={13} className={loading ? 'animate-spin' : ''} /></button>{draft && <><button className={button} disabled={!dirty || saving} onClick={() => void save()}><Save size={13} /> {tCommon('actions.save')}</button><button className={`${button} text-red-300`} disabled={saving} onClick={() => void remove()} title={saving ? controlLabel('disabled.waitForSave') : controlLabel('a11y.deleteCollection')} aria-label={saving ? controlLabel('disabled.waitForSave') : controlLabel('a11y.deleteCollection')}><Trash2 size={13} /></button></>}</div>
         </div>
         {error && <div role="alert" className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300">{error}</div>}
         {loading && !draft ? <div className="flex items-center justify-center gap-2 p-12 text-xs text-text-muted"><Loader2 size={15} className="animate-spin" /> {tCommon('status.loading')}</div> : draft ? <div className="space-y-4">
