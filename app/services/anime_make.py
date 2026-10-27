@@ -132,10 +132,15 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     resolved = resolve_traits(traits)
     clips = _clips(resolved["clips"])
     picture = _picture(workspace_dir, workspace, resolved["face_image"]) if resolved["face_source"] == "qwen" else None
+    token = "anime-" + hashlib.sha256(f"{slug(name)}:{workspace}".encode()).hexdigest()[:10]
+    # the kit first: a painted face brings its own skin, and the body's head and hands take it so the face is not a mask
+    kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision, picture=picture)
+    painted = (kit.get("face") or {}).get("skin")
+    if picture is not None and isinstance(painted, str):
+        resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
+        resolved["public"]["skin"] = painted.upper()
     body = build_body(resolved["body"], clips)
     written = write_body(workspace_dir, workspace, name, intent, body)
-    token = "anime-" + hashlib.sha256(f"{slug(name)}:{workspace}".encode()).hexdigest()[:10]
-    kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision, picture=picture)
     return {**written, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
             "character": resolved["public"], "faceTraits": resolved["face"]}
 
