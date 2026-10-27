@@ -7,6 +7,9 @@ const GENDERS = ['girl', 'boy']
 const BODIES = ['slim', 'average', 'tall']
 const HAIR = ['none', 'short', 'bangs', 'bob', 'long', 'twin_tails', 'spiky', 'ponytail', 'bun']
 const OUTFITS = ['school', 'casual', 'sport']
+const FACE_SOURCES = ['program', 'qwen']
+const FACE_STYLES = ['anime', 'cute']
+const FACE_SHAPES = ['soft', 'sharp']
 
 /** One anime 3D character from traits: the same `model3d.anime.make` the Wizard and MCP call. */
 export function AnimeCharacterPanel() {
@@ -26,6 +29,10 @@ export function AnimeCharacterPanel() {
   const [outfit, setOutfit] = useState('school')
   const [top, setTop] = useState('')
   const [bottom, setBottom] = useState('')
+  const [faceSource, setFaceSource] = useState('program')
+  const [faceImage, setFaceImage] = useState('')
+  const [faceStyle, setFaceStyle] = useState('anime')
+  const [faceShape, setFaceShape] = useState('soft')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [made, setMade] = useState<string | null>(null)
@@ -37,6 +44,7 @@ export function AnimeCharacterPanel() {
       const result = await makeAnime({
         workspace, name: name.trim() || 'Anime', gender, body, height, skin, eyeColor, hairStyle, hairColor, outfit,
         outfitColors: { ...(top ? { top } : {}), ...(bottom ? { bottom } : {}) },
+        faceSource, faceStyle, faceShape, ...(faceSource === 'qwen' && faceImage.trim() ? { faceImage: faceImage.trim() } : {}),
       })
       if (mediaFilter !== 'model3d') setMediaFilter('model3d')
       await maybeRefreshGallery({ message: 'Personaje anime listo', force: true })
@@ -77,6 +85,12 @@ export function AnimeCharacterPanel() {
       {color('Skin', skin, setSkin)}
       {color('Eyes', eyeColor, setEyeColor)}
       {select('Outfit', outfit, OUTFITS, setOutfit)}
+      {select('Face style', faceStyle, FACE_STYLES, setFaceStyle)}
+      {select('Face shape', faceShape, FACE_SHAPES, setFaceShape)}
+      {select('Face source', faceSource, FACE_SOURCES, setFaceSource)}
+      {faceSource === 'qwen' && <label className="text-[10px] text-text-muted">Bald face picture (keyed, this workspace)
+        <input className={FIELD} value={faceImage} placeholder="bald_face.no-background-….png" onChange={event => setFaceImage(event.target.value)} />
+      </label>}
       {color('Top', top, setTop)}
       {color('Bottom', bottom, setBottom)}
       <button type="button" disabled={busy || !workspace} onClick={() => void create()} className={`w-full px-4 py-2 rounded-lg text-xs font-medium ${busy ? 'bg-bg-tertiary text-text-muted' : 'bg-cta text-white'}`}>

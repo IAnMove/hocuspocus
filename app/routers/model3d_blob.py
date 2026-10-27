@@ -10,6 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from services.blob_builder import PRESETS, BlobTraitsError, trait_catalog
 from services.anime_make import MAKE as ANIME_MAKE, make_character
 from services.blob_face import BlobFaceError
+from services.blob_face_qwen import QwenFaceError
 from services.blob_make import MAKE, PRESETS_OP, BlobRigError, build_body, resolve_request, write_body
 from services.mcp_intent import check_intent_id, intent_digest
 
@@ -45,7 +46,9 @@ def command_catalog():
                         "(neutral, happy, sad, angry, surprised, smug, shy, sleepy, suspicious, tired, shout; nine visemes; blink) that "
                         "world3d.scene.face projects onto the head with the kit's own fit and taper. traits: gender (girl|boy), body (slim|average|tall), "
                         "height (m), skin, eye_color, lash_color, hair_style (none|short|bangs|bob|long|twin_tails|spiky|ponytail|bun), hair_color, "
-                        "outfit (school|casual|sport), outfit_colors {top, bottom, shoes, accent}, blush, face {nose, brows, line, ink}, clips. "
+                        "outfit (school|casual|sport), outfit_colors {top, bottom, shoes, accent}, blush, face_shape (soft|sharp), face_style (anime|cute: the round-eyed mascot face), "
+                        "face_source (program, or qwen: a painted bald face given as face_image, a keyed workspace picture from image.remove_background, with the expressions as overlays), "
+                        "face {nose, brows, line, ink}, clips. "
                         "Returns rigged_file, faceAnchor, kit_id, poses, preview, face {fit, taper}. Bind the rigged file to a model slot, then "
                         "world3d.scene.face {kit_id, center, radii} and world3d.scene.talk. No GPU.",
          "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
@@ -69,7 +72,7 @@ def refusal_detail(error: Exception) -> dict:
         return {"code": "not_humanoid", "reason": error.reason, "message": str(error), "retryable": False}
     if isinstance(error, BlobTraitsError):
         return {"code": error.code, "message": str(error), "retryable": False}
-    if isinstance(error, BlobFaceError):
+    if isinstance(error, (BlobFaceError, QwenFaceError)):
         return {"code": error.code, "message": str(error), "retryable": False}
     return {"code": "invalid_command", "message": str(error), "retryable": False}
 
@@ -127,7 +130,7 @@ def command_handlers(workspace_dir, journal):
     async def handle_anime(arguments):
         try:
             return await run_in_threadpool(anime, arguments)
-        except (BlobTraitsError, BlobRigError, BlobFaceError, ValueError) as error:
+        except (BlobTraitsError, BlobRigError, BlobFaceError, QwenFaceError, ValueError) as error:
             raise HTTPException(422, refusal_detail(error)) from error
 
     async def handle_presets(arguments):

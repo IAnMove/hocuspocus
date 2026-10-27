@@ -22,7 +22,10 @@ HAIR_STYLES = ("none", "short", "bangs", "bob", "long", "twin_tails", "spiky", "
 OUTFITS = ("school", "casual", "sport")
 BODIES = {"slim": ("slim", 1.0), "average": ("average", 1.0), "tall": ("slim", 1.08)}
 GENDERS = ("girl", "boy")
-_FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips"}
+_FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
+           "face_source", "face_image", "face_style", "face_shape"}
+FACE_SOURCES = ("program", "qwen")
+FACE_STYLES = ("anime", "cute")
 _OUTFIT_COLORS = {"top", "bottom", "shoes", "accent", "socks"}
 _DEFAULT_COLORS = {
     "school": {"girl": {"top": "#FFFFFF", "bottom": "#1B2350", "shoes": "#3A2A22", "accent": "#1B2350"},
@@ -88,13 +91,22 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     face_extra = raw.get("face") or {}
     if not isinstance(face_extra, dict):
         _fail("invalid_traits", "face must be an object of face traits")
-    face = {"style": "anime_head", "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
+    source = _choice(raw.get("face_source", "program"), FACE_SOURCES, "invalid_face_source", "face_source")
+    style = _choice(raw.get("face_style", "anime"), FACE_STYLES, "invalid_face_style", "face_style")
+    face_image = raw.get("face_image")
+    if source == "qwen" and (not isinstance(face_image, str) or not face_image.strip()):
+        _fail("face_image_required", "face_source qwen needs face_image: a keyed bald face picture in this workspace (image.remove_background output)")
+    if face_image is not None and not isinstance(face_image, str):
+        _fail("invalid_traits", "face_image must be a workspace file name or URL")
+    face = {"style": "cute" if style == "cute" else "anime_head", "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
             "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
+            "faceShape": _choice(raw.get("face_shape", "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
             "blush": raw.get("blush", gender == "girl") is True, **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
     clips = raw.get("clips")
     public = {"gender": gender, "outfit": outfit, "body": raw.get("body", "slim"), "height": float(height), "skin": skin, "eye_color": face["eyeColor"],
-              "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"]}
-    return {"body": body, "face": face, "clips": clips, "public": public}
+              "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"],
+              "face_source": source, "face_style": style, "face_shape": face["faceShape"], **({"face_image": face_image} if face_image else {})}
+    return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None}
 
 
 def _accessories(outfit: str, gender: str, colors: dict) -> list[dict]:
@@ -119,9 +131,26 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
 
     resolved = resolve_traits(traits)
     clips = _clips(resolved["clips"])
+    picture = _picture(workspace_dir, workspace, resolved["face_image"]) if resolved["face_source"] == "qwen" else None
     body = build_body(resolved["body"], clips)
     written = write_body(workspace_dir, workspace, name, intent, body)
     token = "anime-" + hashlib.sha256(f"{slug(name)}:{workspace}".encode()).hexdigest()[:10]
-    kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision)
+    kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision, picture=picture)
     return {**written, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
             "character": resolved["public"], "faceTraits": resolved["face"]}
+
+
+def _picture(workspace_dir: Path, workspace: str, face_image: str):
+    """The keyed bald picture: a workspace file name or its /api/v1/file URL."""
+    from PIL import Image
+
+    name = face_image.split("/api/v1/file/")[-1].split("?")[0] if "/api/v1/file/" in face_image else face_image
+    if "/" in name or ".." in name:
+        _fail("invalid_traits", "face_image must name a file of this workspace")
+    path = Path(workspace_dir) / name
+    if not path.is_file():
+        _fail("face_image_missing", f"face_image {name} is not in workspace {workspace}")
+    picture = Image.open(path).convert("RGBA")
+    if picture.getextrema()[3][0] == 255:
+        _fail("face_image_not_keyed", "face_image must be keyed (transparent background): run image.remove_background first")
+    return picture

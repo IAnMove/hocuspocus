@@ -666,6 +666,10 @@ export interface AgentAnimeMakeAction {
   hairStyle?: string
   hairColor?: string
   outfit?: string
+  faceSource?: string
+  faceImage?: string
+  faceStyle?: string
+  faceShape?: string
 }
 
 export type AgentAction = AgentOpenTabAction

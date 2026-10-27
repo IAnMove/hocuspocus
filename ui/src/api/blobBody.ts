@@ -103,6 +103,10 @@ export interface AnimeMakeInput {
   hairColor?: string
   outfit?: string
   outfitColors?: { top?: string; bottom?: string; shoes?: string; accent?: string }
+  faceSource?: string
+  faceImage?: string
+  faceStyle?: string
+  faceShape?: string
 }
 
 export interface AnimeMakeResult extends BlobMakeResult {
@@ -135,6 +139,10 @@ export async function makeAnime(input: AnimeMakeInput): Promise<AnimeMakeResult>
           ...(input.hairColor ? { hair_color: input.hairColor } : {}),
           ...(input.outfit ? { outfit: input.outfit } : {}),
           ...(Object.keys(colors).length ? { outfit_colors: colors } : {}),
+          ...(input.faceSource ? { face_source: input.faceSource } : {}),
+          ...(input.faceImage ? { face_image: input.faceImage } : {}),
+          ...(input.faceStyle ? { face_style: input.faceStyle } : {}),
+          ...(input.faceShape ? { face_shape: input.faceShape } : {}),
         },
       },
     }),

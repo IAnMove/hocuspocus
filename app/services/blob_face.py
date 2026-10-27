@@ -363,9 +363,13 @@ def _sheet(poses: dict[str, Image.Image], mouths: dict[str, Image.Image], anchor
     return sheet
 
 
-def face_kit(traits: Any) -> dict[str, Any]:
-    """Images, exact anchors and the pixel layout. Nothing is written."""
+def face_kit(traits: Any, picture: Any = None) -> dict[str, Any]:
+    """Images, exact anchors and the pixel layout. Nothing is written. ``picture`` (a keyed bald face, PIL image)
+    makes an ``anime_head`` kit from that painting with the expressions as overlays (``blob_face_qwen``)."""
     look = face_traits(traits)
+    if picture is not None:
+        from services.blob_face_qwen import qwen_kit
+        return qwen_kit(look, picture)
     if look["style"] == "anime":
         from services.blob_face_anime import anime_kit
         return anime_kit(look)
@@ -404,9 +408,9 @@ def _asset(kit_id: str, title: str, label: str, image: Image.Image, workspace_di
 
 
 def save_face_kit(workspace_dir: str, workspace: str, traits: Any, *, name: str | None = None,
-                  kit_id: str | None = None, base_revision: int | None = None) -> dict[str, Any]:
+                  kit_id: str | None = None, base_revision: int | None = None, picture: Any = None) -> dict[str, Any]:
     """Write the face and store it with ``patch_character_kit``. The same traits keep the same kit id."""
-    made = face_kit(traits)
+    made = face_kit(traits, picture)
     look, token = made["traits"], _kit_token(made["traits"], kit_id)
     title = (name or "Blob face").strip()[:240] or "Blob face"
     if base_revision is None:

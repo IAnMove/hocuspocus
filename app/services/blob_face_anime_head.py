@@ -20,7 +20,7 @@ from services.blob_face_anime import _clip, _shade, anime_mouths
 from services.blob_face_head import FIT, POSES, SKULL, TAPER, _s, layout as _cute_layout
 
 SC = base.SCALE
-EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 528, 84, 54, 37
+EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 528, 90, 60, 41
 BROW_GAP, NOSE_Y, MOUTH_Y, MOUTH_H = 34, 646, 700, 190
 BLUSH_Y, BLUSH_X = 652, 150
 EYE_WHITE = (240, 242, 248, 255)
@@ -103,7 +103,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
     draw.line(lower, fill=lash, width=max(3, int(width * 0.8)), joint="curve")
     upper = o["upper"]
     for i in range(len(upper) - 1):
-        w = width * (1.6 + 2.2 * (i / (len(upper) - 1)))
+        w = width * (1.9 + 2.6 * (i / (len(upper) - 1)))
         draw.line((upper[i], upper[i + 1]), fill=lash, width=int(w))
     tail = o["outer"]
     flick = _quad((tail[0] - sign * _s(4), tail[1] + _s(3)), (tail[0] + sign * _s(10), tail[1] - _s(2)), (tail[0] + sign * _s(20), tail[1] - _s(14)), 6)

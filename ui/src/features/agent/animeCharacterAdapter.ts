@@ -15,6 +15,10 @@ export async function executeAnimeMake(action: AgentAnimeMakeAction, workspace?:
     hairStyle: action.hairStyle,
     hairColor: action.hairColor,
     outfit: action.outfit,
+    faceSource: action.faceSource,
+    faceImage: action.faceImage,
+    faceStyle: action.faceStyle,
+    faceShape: action.faceShape,
   })
   const store = useStore.getState()
   if (store.mediaFilter !== 'model3d') store.setMediaFilter('model3d')
