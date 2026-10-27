@@ -1459,7 +1459,12 @@ function DirectorResolutionSelector() {
   )
 }
 
-function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void }) {
+/** Coming-soon skills stay in the list with active:false and stay off the screen. */
+export function visibleDirectorSkills<T extends { active: boolean }>(skills: T[]): T[] {
+  return skills.filter(skill => skill.active)
+}
+
+export function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void }) {
   const { t } = useUiTranslation('director')
   const skills = [
     { id: 'music_video' as DirectorSkill, label: t('chat.skills.musicVideo'), desc: t('chat.skills.musicVideoDesc'), icon: Music, active: true },
@@ -1471,7 +1476,7 @@ function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void 
 
   return (
     <div className="grid grid-cols-2 gap-2">
-      {skills.map((s) => (
+      {visibleDirectorSkills(skills).map((s) => (
         <button
           key={s.label}
           onClick={() => s.active && onSelect(s.id)}
