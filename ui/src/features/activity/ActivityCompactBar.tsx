@@ -22,6 +22,7 @@ import {
 import { translatedPhase as phaseText } from './taskPresentation'
 import { OriginBadge } from './AgentChangeDetail'
 import { taskOrigin } from './agentOrigin'
+import { GpuNoticeDot } from '../notices/GpuNoticeDot'
 
 interface ActivityCompactBarProps {
   detailsOpen: boolean
@@ -245,6 +246,7 @@ export function ActivityCompactBar({
       </div>
       {isActive ? <CompactProgress primary={primary} /> : null}
       <CompactCancel primary={primary} busyIds={busyIds} onControl={onControl} t={tActivity} tCommon={tCommon} />
+      <GpuNoticeDot />
       <CompactWorkspaces t={tActivity} />
     </>
   )

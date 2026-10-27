@@ -1,26 +1,15 @@
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { Info, X } from 'lucide-react'
 import { useUiTranslation } from '../i18n'
 import { useStore } from '../stores/useStore'
 import type { ProductionProfile } from '../types'
-
-const DISMISSED_KEY = 'hocuspocus-production-profile-notice'
-
-function dismissedFor(signature: string): boolean {
-  try {
-    return localStorage.getItem(DISMISSED_KEY) === signature
-  } catch {
-    return false
-  }
-}
-
-function remember(signature: string) {
-  try {
-    localStorage.setItem(DISMISSED_KEY, signature)
-  } catch {
-    // Storage can be unavailable; the notice then simply closes for this visit.
-  }
-}
+import {
+  dismissProfileNotice,
+  isProfileNoticeVisible,
+  profileNoticeRevision,
+  profileNoticeSignature,
+  subscribeProfileNotice,
+} from '../features/notices/profileNoticeState'
 
 function describe(choice: { provider: string; model: string }, local: string): string {
   return `${choice.model} (${choice.provider === 'local' ? local : choice.provider})`
@@ -34,18 +23,16 @@ export function ProductionProfileNotice() {
   const invalidReason = useStore(s => s.productionProfileInvalidReason)
   const profile: ProductionProfile = useStore(s => s.productionProfile)
   const setSettingsOpen = useStore(s => s.setSettingsOpen)
-  const signature = invalidReason ? `invalid:${invalidReason}` : `defaults:${profile.text.provider}:${profile.image.provider}`
-  const [closed, setClosed] = useState(() => dismissedFor(signature))
+  const revision = useSyncExternalStore(subscribeProfileNotice, profileNoticeRevision, profileNoticeRevision)
+  void revision
+  const signature = profileNoticeSignature(invalidReason, profile)
 
-  if (!loaded || configured || closed || dismissedFor(signature)) return null
+  if (!isProfileNoticeVisible(loaded, configured, signature)) return null
   const local = t('profileNotice.local')
   const message = invalidReason
     ? t('profileNotice.invalid', { reason: invalidReason })
     : t('profileNotice.defaults', { text: describe(profile.text, local), image: describe(profile.image, local) })
-  const close = () => {
-    remember(signature)
-    setClosed(true)
-  }
+  const close = () => dismissProfileNotice(signature)
 
   return (
     <div

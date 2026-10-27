@@ -17,6 +17,12 @@
     "tokenLabel": "LAN access token",
     "unlock": "Unlock this session"
   },
+  "notices": {
+    "bell": "Notices",
+    "bellCount_one": "{{count}} notice",
+    "bellCount_other": "{{count}} notices",
+    "empty": "No notices"
+  },
   "preflight": {
     "dismiss": "Dismiss",
     "ffmpeg": "ffmpeg was not found on PATH. Video and audio export will fail. Install ffmpeg and restart HocusPocus Lab.",

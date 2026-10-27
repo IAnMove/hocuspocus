@@ -11,6 +11,7 @@ import {
 import { useStore } from '../../stores/useStore'
 import type { GenerationMode, MediaFilter } from '../../types'
 import { OutputFolderSelector } from './OutputFolderSelector'
+import { NoticeTray } from '../../features/notices/NoticeTray'
 
 interface MenuItem {
   value?: MediaFilter
@@ -350,6 +351,7 @@ export function TabFilter() {
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 md:shrink-0 md:flex-nowrap">
+          <NoticeTray />
           <OutputFolderSelector />
           {searchOpen ? (
             <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">

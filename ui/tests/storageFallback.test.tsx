@@ -85,8 +85,11 @@ test('PreflightBanner renders and dismisses when sessionStorage throws', { concu
     assert.equal(safeStorageGet('session', 'maestro_preflight_dismissed'), '1')
   } finally {
     cleanup()
-    globalThis.fetch = originalFetch
+    const { resetPreflightForTests } = await import('../src/features/notices/preflightNotices.ts')
+    resetPreflightForTests()
     Object.defineProperty(window, 'sessionStorage', { configurable: true, value: originalStorage })
+    safeStorageRemove('session', 'maestro_preflight_dismissed')
+    globalThis.fetch = originalFetch
   }
 })
 
