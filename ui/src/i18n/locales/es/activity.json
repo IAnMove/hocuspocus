@@ -32,8 +32,8 @@
   "dismiss": "Descartar",
   "controlFailed": "{{action}} falló: {{message}}",
   "retryAction": "Reintentar {{action}}",
-  "workspaces": "Workspaces",
-  "workspacesTitle": "Abrir Workspaces para inspeccionar prompts, referencias y la cola de generación",
+  "runs": "Ejecuciones",
+  "runsTitle": "Abrir Ejecuciones para revisar los prompts, las referencias y la cola de generación",
   "closePanel": "Cerrar el panel de actividad",
   "resources": {
     "using": "Usando {{value}}",

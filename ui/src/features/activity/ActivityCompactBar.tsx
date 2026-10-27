@@ -200,8 +200,8 @@ function CompactWorkspaces({ t }: { t: Translate }) {
     <button onClick={() => {
       useStore.getState().setMediaFilter('runs')
       setVideoWorkflowsOpen(false)
-    }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title={t('workspacesTitle')}>
-      <ListVideo size={12} /><span className="hidden sm:inline">{t('workspaces')}</span>
+    }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title={t('runsTitle')} aria-label={t('runs')}>
+      <ListVideo size={12} /><span className="hidden sm:inline">{t('runs')}</span>
     </button>
   )
 }

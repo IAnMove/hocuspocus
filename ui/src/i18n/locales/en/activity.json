@@ -32,8 +32,8 @@
   "dismiss": "Dismiss",
   "controlFailed": "{{action}} failed: {{message}}",
   "retryAction": "Retry {{action}}",
-  "workspaces": "Workspaces",
-  "workspacesTitle": "Open Workspaces to inspect prompts, references and the generation queue",
+  "runs": "Runs",
+  "runsTitle": "Open Runs to inspect prompts, references and the generation queue",
   "closePanel": "Close activity panel",
   "resources": {
     "using": "Using {{value}}",
