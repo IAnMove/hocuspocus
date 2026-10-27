@@ -46,3 +46,12 @@ Gotchas collected so far: roots of hair must sit outside the face patch; a colou
 6. **paper doll / cut-out 3D**: flat parts with thickness, the 2.5D kit look in 3D.
 
 For `real` the **face relief** (depth of the painting, `blob_face_relief`) removed the mask look; the next big step is the **photo face kit** (neutral picture from the head tile, a few mouth shapes warped from it, a blink), then sculpted face relief (cheekbones, lips, brow) in the mould so the painted profile has something to sit on.
+
+## Making many realistic characters
+One command per character (against your own test server; about 5 minutes of GPU, nearly all of it the two Qwen pictures):
+`python scripts/dev/real_character.py --port <port> --token-file <worktree>/.server.token --outputs <worktree>/app/outputs --name Marta --gender woman --skin "#E3B58F" --body "<clothes, in English>" --face "<face and hair, in English>" --say "<a line>" --voice "<a voice description>"`.
+It runs the whole chain through the app's own tools: `model3d.anime.make` (mould + guides) -> `generation.image` twice (Qwen over each guide) -> `model3d.anime.make` with the pictures -> `characters.save` + `characters.rig.flat` (warp mouth kit) -> `generation.speech` + `audio.mouth_cues` -> a turntable-while-talking Video 3D scene. It skips what already exists, so a rerun after a failure resumes. A character is then described by five things only (gender and skin, the body prompt, the face prompt, the voice, the seed), which is what to store to remake it.
+- **A new outfit for the same person:** repaint only the body guide (`generation.image`) and call `model3d.anime.make` again with the same `texture_head`; the face kit stays.
+- **A new face on the same body:** repaint only the head guide, remake the kit.
+- **First run on a new person (Marta, a woman, never seen by the code before):** it worked unattended; the face read as a real person from the front and at three quarters. What it showed: long hair is only paint on the skull (no hair volume behind the head, so the silhouette is a round head), a faint cheek ridge at three quarters, and the woman mould reuses the `boy` head table.
+- **What is missing to call it a product:** a server-side job `model3d.real.make` with the same steps (so MCP, the Studio panel and the Wizard call one operation and the user can reopen and edit the result), a prompt library (outfits, ages, skin tones) and a cast sheet; hair volume (the snug photo cap, or long hair cards) as a trait; expressions beyond the mouth.
