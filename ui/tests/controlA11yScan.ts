@@ -242,6 +242,115 @@ export function disabledHits(path: string, text: string) {
   return hits
 }
 
+const FIELD_TAGS = new Set(['input', 'select', 'textarea'])
+const SKIP_INPUT_TYPES = new Set(['hidden', 'button', 'submit', 'reset', 'image'])
+
+function jsxAttr(opening: import('typescript').JsxOpeningElement | import('typescript').JsxSelfClosingElement, name: string) {
+  const found = opening.attributes.properties.find(attr => ts.isJsxAttribute(attr) && attrName(attr) === name)
+  return found && ts.isJsxAttribute(found) ? found : undefined
+}
+
+/** Stable identity for an `id` / `htmlFor` value so a literal or the same expression links. */
+function attrIdentity(attr: import('typescript').JsxAttribute | undefined) {
+  const init = attr?.initializer
+  if (!init) return null
+  if (ts.isStringLiteral(init)) return `lit:${init.text}`
+  if (!ts.isJsxExpression(init) || !init.expression) return null
+  const expr = unwrap(init.expression)
+  if (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) return `lit:${expr.text}`
+  return `expr:${expr.getText()}`
+}
+
+function inputTypeLiteral(opening: import('typescript').JsxOpeningElement | import('typescript').JsxSelfClosingElement) {
+  const init = jsxAttr(opening, 'type')?.initializer
+  if (!init) return null
+  if (ts.isStringLiteral(init)) return init.text
+  if (!ts.isJsxExpression(init) || !init.expression) return null
+  const expr = unwrap(init.expression)
+  return ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr) ? expr.text : null
+}
+
+function attrIsBlank(attr: import('typescript').JsxAttribute) {
+  const init = attr.initializer
+  if (!init) return false
+  if (ts.isStringLiteral(init)) return !init.text.trim()
+  if (!ts.isJsxExpression(init) || !init.expression) return false
+  const expr = unwrap(init.expression)
+  return (ts.isStringLiteral(expr) || ts.isNoSubstitutionTemplateLiteral(expr)) && !expr.text.trim()
+}
+
+function htmlForIds(sf: import('typescript').SourceFile) {
+  const ids = new Set<string>()
+  function visit(node: import('typescript').Node) {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node
+      if (intrinsic(opening.tagName) === 'label') {
+        const id = attrIdentity(jsxAttr(opening, 'htmlFor'))
+        if (id) ids.add(id)
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return ids
+}
+
+function insideLabel(node: import('typescript').Node) {
+  let current = node.parent
+  while (current) {
+    if (ts.isJsxElement(current) && intrinsic(current.openingElement.tagName) === 'label') return true
+    current = current.parent
+  }
+  return false
+}
+
+function fieldHasName(opening: import('typescript').JsxOpeningElement | import('typescript').JsxSelfClosingElement) {
+  for (const name of ['aria-label', 'aria-labelledby']) {
+    const attr = jsxAttr(opening, name)
+    if (attr && !attrIsBlank(attr)) return true
+  }
+  return false
+}
+
+function skippedField(tag: string, opening: import('typescript').JsxOpeningElement | import('typescript').JsxSelfClosingElement) {
+  if (tag !== 'input') return false
+  const type = inputTypeLiteral(opening)
+  return type != null && SKIP_INPUT_TYPES.has(type.toLowerCase())
+}
+
+/**
+ * `<input>`, `<select>` and `<textarea>` with no `aria-label` / `aria-labelledby`,
+ * no ancestor `<label>`, and no `id` that an `htmlFor` in the same file uses.
+ * `type="hidden|button|submit|reset|image"` is not a form field.
+ */
+export function fieldHits(path: string, text: string) {
+  const sf = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  const linked = htmlForIds(sf)
+  const hits: ScanHit[] = []
+  function visit(node: import('typescript').Node) {
+    if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
+      const opening = ts.isJsxElement(node) ? node.openingElement : node
+      const tag = intrinsic(opening.tagName)
+      if (tag && FIELD_TAGS.has(tag) && !skippedField(tag, opening) && !fieldHasName(opening) && !insideLabel(node)) {
+        const id = attrIdentity(jsxAttr(opening, 'id'))
+        if (!id || !linked.has(id)) hits.push(at(sf, opening))
+      }
+    }
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return hits
+}
+
+export function scanFieldCounts() {
+  const counts: Record<string, number> = {}
+  for (const rel of scannedUiSources()) {
+    const hits = fieldHits(rel, readFileSync(join(uiRoot, rel), 'utf8'))
+    if (hits.length) counts[rel] = hits.length
+  }
+  return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
+}
+
 export function scanCounts(kind: 'icon' | 'disabled') {
   const counts: Record<string, number> = {}
   for (const rel of scannedUiSources()) {
