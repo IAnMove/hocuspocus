@@ -189,8 +189,8 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
 
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
     guide_name = f"anime-{slug(name)}-guide.png"
-    (Path(workspace_dir) / guide_name).write_bytes(guide_png(loft_parts(lofted["traits"], lofted["layout"])))
-    out = {"guide_file": guide_name, "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "front view on the left half, back view on the right half"}}
+    (Path(workspace_dir) / guide_name).write_bytes(guide_png(loft_parts(lofted["traits"], lofted["layout"]), lofted["layout"]))
+    out = {"guide_file": guide_name, "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "top two thirds: body front (left) and back (right) in a T-pose; bottom third: the head front (left) and back, at three times the scale"}}
     if resolved["texture"]:
         texture = resolved["texture"].split("/api/v1/file/")[-1].split("?")[0]
         path = Path(workspace_dir) / texture

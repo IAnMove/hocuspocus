@@ -368,7 +368,7 @@ def face_patch(L: dict, fit) -> tuple[Mesh, list]:
 
 def shoulder_top(L: dict) -> float:
     """Where the torso closes round the neck: a short neck under the chin. The primitives' torso_top reaches into the head."""
-    return L["head_y"] - L["sy"] / 2 - 0.035 * L["h"]
+    return L["head_y"] - L["sy"] / 2 - (0.022 if L.get("real") else 0.035) * L["h"]
 
 
 NECK_SHARE = {"fem": 0.42, "boy": 0.46, "man": 0.58}   # a man's neck is as wide as most of his head
@@ -586,7 +586,7 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
     body_uvs = None
     if spec.get("atlas"):
         from services.blob_texture import atlas_frame, atlas_uvs
-        frame = atlas_frame([mesh])
+        frame = atlas_frame([mesh], layout)
         body_uvs = atlas_uvs(mesh, frame)
         uvs = atlas_uvs(face, frame)   # without a kit the face patch shows the atlas too: the painted face, not a white mask
     parts = [(mesh, "body", body_uvs), (face, "face", uvs)]

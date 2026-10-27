@@ -426,7 +426,7 @@ def _layout(spec: dict) -> dict:
     # Above the belly. Higher than about half the torso swings a bent wave into the head.
     shoulder_at = _SHOULDER_AT[spec["family"]]
     return {
-        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"], "head_kind": spec["head"].get("kind", "fem"),
+        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"], "head_kind": spec["head"].get("kind", "fem"), "real": spec.get("realism") == "real",
         "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
         "waist_taper": min(1.0, max(0.35, waist_w / torso_w)) if spec["family"] == "anime" else 1.0,
         "torso_y": (stack["torso_top"] + stack["torso_bottom"]) / 2,
