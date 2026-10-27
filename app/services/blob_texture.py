@@ -33,15 +33,15 @@ def atlas_frame(meshes, layout=None) -> dict:
 
         # the head tile holds the head and its neck down to the shoulders, so the neck is skin from a face picture, not a few
         # pixels of collar from the body view
-        cut = shoulder_top(layout) - 0.004 * layout["h"]
-        top, bottom = layout["head_y"] + layout["sy"] * 0.62, cut - 0.01 * layout["h"]
+        cut = shoulder_top(layout) + 0.001 * layout["h"]
+        top, bottom = layout["head_y"] + layout["sy"] * 0.62, cut - 0.03 * layout["h"]
         frame["head"] = ((top + bottom) / 2, (top - bottom) * 1.08, cut)   # cy, the tile's height in metres, the cut
     return frame
 
 
 def head_tile(normal) -> int:
     """0 front, 1 side (both sides, the left one is the mirror of the right), 2 back: the way the triangle faces."""
-    if normal[2] >= 0.45:
+    if normal[2] >= 0.45 or abs(normal[1]) > 0.6:   # the underside of the jaw and the crown take the front tile, skin and hair, not the dark ground
         return 0
     return 2 if normal[2] <= -0.45 else 1
 
