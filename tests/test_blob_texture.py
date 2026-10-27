@@ -125,9 +125,9 @@ def test_the_style_catalogue_is_in_the_presets_and_every_style_says_where_it_sta
     from services.character_3d_styles import STATUS, STYLES
 
     styles = trait_catalog()["styles"]
-    assert set(styles) == set(STYLES) and {"blob", "chibi", "anime", "real"} <= set(styles)
+    assert set(styles) == set(STYLES) and {"blob", "chibi", "anime", "real", "voxel", "roblox"} <= set(styles)
     for key, style in styles.items():
         assert style["status"] in STATUS, key
         assert style["operation"].startswith("model3d.") and style["make"] and style["next"] is not None
         assert style["limits"] is not None and style["doc"].startswith("docs/agents/")
-    assert styles["real"]["status"] != "planned" and styles["blocky"]["status"] == "planned"
+    assert styles["real"]["status"] != "planned" and styles["ps1"]["status"] == "planned"

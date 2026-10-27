@@ -8,14 +8,17 @@ than the small head, and the neck between them is the narrow notch the rig uses.
 from __future__ import annotations
 
 import math
+import re
 
 HEAD_SEGMENTS = 32
 LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit", "realism", "atlas"}
-_MESHES = ("pieces", "loft")
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit", "realism", "atlas", "blocky", "blocky_colors", "sleeves", "arm_turn"}
+_MESHES = ("pieces", "loft", "blocky")
+_BLOCKY = ("voxel", "roblox")
+_BLOCKY_COLORS = ("skin", "hair", "top", "bottom", "shoes")
 _REALISMS = ("anime", "real")
 _OUTFITS = ("school", "casual", "sport", "plain")
 _BUILDS = ("slim", "average", "round", "pear")
@@ -231,6 +234,11 @@ def _styles() -> dict:
 def blob_pieces(traits: dict | None = None) -> dict:
     """``{pieces, faceAnchor, traits}`` for one body. Unknown fields raise ``BlobTraitsError``."""
     spec = _normalize({} if traits is None else traits)
+    if spec.get("mesh") == "blocky":
+        from services.blob_blocky import blocky_layout
+
+        layout = blocky_layout(spec)
+        return {"pieces": [], "faceAnchor": _anchor(layout), "traits": spec, "layout": layout}
     pieces, anchor = _assemble(spec)
     if spec.get("mesh") == "loft":
         return {"pieces": pieces, "faceAnchor": anchor, "traits": spec, "layout": _layout(spec)}
@@ -260,8 +268,8 @@ def _normalize(traits: dict) -> dict:
     family = _choice(traits.get("family", "blob"), _FAMILIES, "invalid_family", "family")
     stock = _FAMILY[family]
     mesh = _choice(traits.get("mesh", "pieces"), _MESHES, "invalid_mesh", "mesh")
-    if mesh == "loft" and family != "anime":
-        _fail("invalid_mesh", "mesh loft is for the anime family")
+    if mesh in ("loft", "blocky") and family != "anime":
+        _fail("invalid_mesh", f"mesh {mesh} is for the anime family")
     outfit = _choice(traits.get("outfit", "school"), _OUTFITS, "invalid_outfit", "outfit")
     if "outfit" in traits and mesh != "loft":
         _fail("invalid_outfit", "outfit is for a lofted body (mesh loft)")
@@ -270,6 +278,7 @@ def _normalize(traits: dict) -> dict:
         **({"outfit": outfit} if "outfit" in traits else {}),
         **({"realism": _choice(traits["realism"], _REALISMS, "invalid_realism", "realism")} if "realism" in traits else {}),
         **({"atlas": True} if traits.get("atlas") is True and mesh == "loft" else {}),
+        **(_blocky_fields(traits) if mesh == "blocky" else {}),
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
         "family": family,
@@ -282,6 +291,22 @@ def _normalize(traits: dict) -> dict:
         "hair": _hair(traits.get("hair")),
         "accessories": _accessory_list(traits.get("accessories")),
     }
+
+
+def _blocky_fields(traits: dict) -> dict:
+    """A blocky person: which one, the five colours of its picture, the sleeves and the arm pose (90 is a T)."""
+    kind = _choice(traits.get("blocky", "voxel"), _BLOCKY, "invalid_blocky", "blocky")
+    given = traits.get("blocky_colors") or {}
+    if not isinstance(given, dict) or set(given) - set(_BLOCKY_COLORS):
+        _fail("invalid_colors", "blocky_colors takes " + ", ".join(_BLOCKY_COLORS))
+    colors = {"skin": "#C8946A", "hair": "#3A2A1C", "top": "#2E6FB4", "bottom": "#2B3A5E", "shoes": "#222222", **given}
+    for key, value in colors.items():
+        if not isinstance(value, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+            _fail("invalid_colors", f"blocky_colors.{key} must be #RRGGBB")
+    turn = traits.get("arm_turn", 90.0)
+    if isinstance(turn, bool) or not isinstance(turn, (int, float)) or not 40 <= float(turn) <= 90:
+        _fail("invalid_arm_turn", "arm_turn is the arm pose in degrees from hanging, 40 to 90")
+    return {"blocky": kind, "blocky_colors": colors, "sleeves": _choice(traits.get("sleeves", "short"), ("short", "long"), "invalid_sleeves", "sleeves"), "arm_turn": float(turn)}
 
 
 def _height(value) -> float:

@@ -62,7 +62,11 @@ def rig_glb(source: bytes, clip_ids: list[str]) -> tuple[bytes, dict]:
 def build_body(traits: dict, clip_ids: list[str], face_fit=None) -> dict:
     """Pieces, both GLBs and the humanoid sidecar. Nothing is written. ``face_fit`` is the face picture's skull box for a loft."""
     built = blob_pieces(traits)
-    if built["traits"].get("mesh") == "loft":
+    if built["traits"].get("mesh") == "blocky":
+        from services.blob_blocky import blocky_glb
+        built.pop("layout", None)
+        glb = blocky_glb(built["traits"], "blob")
+    elif built["traits"].get("mesh") == "loft":
         from services.blob_loft import loft_glb
         glb = loft_glb(built["traits"], built.pop("layout"), "blob", fit=face_fit)
     else:

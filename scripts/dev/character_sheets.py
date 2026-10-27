@@ -40,7 +40,9 @@ def call(port: int, token: str, tool: str, payload: dict, workspace: str | None 
 
 def make(args, spec: dict) -> dict:
     made = call(args.port, args.token, "model3d.anime.make", {"name": spec["name"], "traits": spec.get("traits", {})}, args.workspace)
-    return {"rigged": made["rigged_file"], "height": made["traits"]["height"], "name": spec["name"], "files": {k: v for k, v in made.items() if k.endswith("_file")}}
+    face = spec.get("face", spec.get("traits", {}).get("style") != "real")   # a realistic head already carries its face in the picture
+    return {"rigged": made["rigged_file"], "height": made["traits"]["height"], "name": spec["name"], "files": {k: v for k, v in made.items() if k.endswith("_file")},
+            "kit": made.get("kit_id") if face else None, "anchor": made.get("faceAnchor")}
 
 
 def turntable(args, characters: list[dict], yaws: list[int]) -> Path:
@@ -48,7 +50,7 @@ def turntable(args, characters: list[dict], yaws: list[int]) -> Path:
     scene = call(args.port, args.token, "world3d.scene.instantiate", {"template_id": args.template}, args.workspace)
     scene = scene.get("scene", scene)
     step = args.step
-    bindings, beats = [], []
+    bindings, beats, owners = [], [], []
     slot = 0
     for who, character in enumerate(characters):
         for yaw in yaws:
@@ -59,6 +61,7 @@ def turntable(args, characters: list[dict], yaws: list[int]) -> Path:
             if slot:
                 binding.update({"add": True, "media": "model3d"})
             bindings.append(binding)
+            owners.append((oid, character))
             beats.append({"t": 0.0, "who": oid, "verb": "do", "action": "idle", "duration": 0.6})
             slot += 1
     centre = 1.62 * (characters[0]["height"] / 1.82) if args.close else 0.95
@@ -68,6 +71,14 @@ def turntable(args, characters: list[dict], yaws: list[int]) -> Path:
     patched = call(args.port, args.token, "world3d.scene.patch", patch, args.workspace)
     patched = patched.get("scene", patched)
     call(args.port, args.token, "world3d.scene.beats", {"scene_id": scene["sceneId"], "base_revision": patched["revision"], "beats": beats}, args.workspace)
+    for index, (oid, character) in enumerate(owners):
+        if not character["kit"]:
+            continue
+        current = call(args.port, args.token, "world3d.scene.inspect", {"scene_id": scene["sceneId"]}, args.workspace, mutate=False)
+        current = current.get("scene", current)
+        anchor = character["anchor"]
+        call(args.port, args.token, "world3d.scene.face", {"scene_id": scene["sceneId"], "base_revision": current["revision"], "object_id": oid,
+                                                           "kit_id": character["kit"], "center": anchor["center"], "radii": anchor["radii"]}, args.workspace)
     document = call(args.port, args.token, "world3d.scene.inspect", {"scene_id": scene["sceneId"]}, args.workspace, mutate=False)
     document = document.get("scene", document)["document"]
     document["dressing"] = "none"

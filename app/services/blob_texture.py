@@ -198,7 +198,7 @@ def frame_extras(frame: dict) -> dict:
     return out
 
 
-def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None) -> bytes:
+def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False) -> bytes:
     """The GLB with ``png`` as the base colour texture of the materials named in ``materials`` (one shared image), and no vertex
     colours on the primitives that use them (they would tint the picture). Everything else, skin and animations included, is kept
     byte for byte."""
@@ -221,7 +221,7 @@ def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body",
     binary += png + b"\x00" * (-len(png) % 4)
     document.setdefault("bufferViews", []).append({"buffer": 0, "byteOffset": offset, "byteLength": len(png)})
     document.setdefault("images", []).append({"bufferView": len(document["bufferViews"]) - 1, "mimeType": "image/png"})
-    document.setdefault("samplers", []).append({"magFilter": 9729, "minFilter": 9729, "wrapS": 33071, "wrapT": 33071})
+    document.setdefault("samplers", []).append({"magFilter": 9728 if nearest else 9729, "minFilter": 9728 if nearest else 9729, "wrapS": 33071, "wrapT": 33071})
     document.setdefault("textures", []).append({"sampler": len(document["samplers"]) - 1, "source": len(document["images"]) - 1})
     for index in found:
         if frame is not None:

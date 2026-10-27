@@ -22,7 +22,7 @@ HAIR_STYLES = ("none", "short", "bangs", "bob", "long", "twin_tails", "spiky", "
 OUTFITS = ("school", "casual", "sport")
 BODIES = {"slim": ("slim", 1.0), "average": ("average", 1.0), "tall": ("slim", 1.08)}
 GENDERS = ("girl", "boy", "man", "woman")
-STYLES = ("anime", "real")
+STYLES = ("anime", "real", "voxel", "roblox")
 BOTTOMS = ("trousers", "skirt", "shorts")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
            "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom"}
@@ -100,10 +100,14 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     look = _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style")
     if look == "real":
         body = _real_body(body, gender, raw, skin)
+    elif look in ("voxel", "roblox"):
+        body = _blocky_body(body, look, raw, skin, hair_color, colors)
     texture, texture_head = raw.get("texture"), raw.get("texture_head")
     for given in (texture, texture_head):
-        if given is not None and (not isinstance(given, str) or not given.strip() or look != "real"):
-            _fail("invalid_traits", "texture and texture_head are workspace picture file names, for style real")
+        if given is not None and (not isinstance(given, str) or not given.strip() or look == "anime"):
+            _fail("invalid_traits", "texture and texture_head are workspace picture file names, for the styles real, voxel and roblox")
+    if texture_head and look in ("voxel", "roblox"):
+        _fail("invalid_traits", "a blocky body has one picture (texture), no head picture")
     if texture_head and not texture:
         _fail("invalid_traits", "texture_head goes with texture (the body picture)")
     face_extra = raw.get("face") or {}
@@ -116,7 +120,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         _fail("face_image_required", "face_source qwen needs face_image: a keyed bald face picture in this workspace (image.remove_background output)")
     if face_image is not None and not isinstance(face_image, str):
         _fail("invalid_traits", "face_image must be a workspace file name or URL")
-    face = {"style": "cute" if style == "cute" else "anime_head", "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
+    face = {"style": "blocky" if look in ("voxel", "roblox") else "cute" if style == "cute" else "anime_head", "blocky": look if look in ("voxel", "roblox") else "voxel", "hairColor": hair_color, "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
             "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
             "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
             "blush": raw.get("blush", gender in ("girl", "woman")) is True, **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
@@ -126,6 +130,13 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
               "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}), **({"face_image": face_image} if face_image else {})}
     return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None,
             "texture": texture, "texture_head": texture_head, "style": look}
+
+
+def _blocky_body(body: dict, look: str, raw: dict, skin: str, hair_color: str, colors: dict) -> dict:
+    """A voxel or roblox person: our own boxes on the humanoid rig, a 64 x 64 picture made from the colours (or ``texture``)."""
+    return {"family": "anime", "mesh": "blocky", "blocky": look, "height": body["height"], "build": "average", "hair": {"style": "none", "color": hair_color},
+            "blocky_colors": {"skin": skin, "hair": hair_color, "top": colors["top"], "bottom": colors["bottom"], "shoes": colors["shoes"]},
+            "sleeves": "long" if raw.get("outfit") == "sport" else "short", "colors": body["colors"], "accessories": []}
 
 
 def _real_body(body: dict, gender: str, raw: dict, skin: str) -> dict:
@@ -177,7 +188,10 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
         resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
         resolved["public"]["skin"] = painted.upper()
     body = build_body(resolved["body"], clips)
-    extra = _texture_files(workspace_dir, workspace, name, resolved, body) if resolved["style"] == "real" else {}
+    if resolved["style"] in ("voxel", "roblox"):
+        extra = _blocky_files(workspace_dir, workspace, resolved, body)
+    else:
+        extra = _texture_files(workspace_dir, workspace, name, resolved, body) if resolved["style"] == "real" else {}
     written = write_body(workspace_dir, workspace, name, intent, body)
     return {**written, **extra, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
             "character": resolved["public"], "faceTraits": resolved["face"]}
@@ -208,6 +222,54 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
         body["rigged"] = attach_texture(body["rigged"], png, frame=frame)
         out["texture_file"] = Path(resolved["texture"]).name
     return out
+
+
+def _blocky_files(workspace_dir: Path, workspace: str, resolved: dict, body: dict) -> dict:
+    """The body's 64 x 64 picture: made from the colours, or ``texture`` (a picture of the workspace in the same layout)."""
+    import io
+
+    from services.blob_blocky import SIZE, blocky_picture
+    from services.blob_texture import attach_texture
+
+    if resolved["texture"]:
+        picture = _picture_of(workspace_dir, workspace, resolved["texture"], "texture").convert("RGBA")
+        if picture.size != (SIZE, SIZE):
+            from PIL import Image
+
+            picture = picture.resize((SIZE, SIZE), Image.NEAREST)
+        out = io.BytesIO()
+        picture.save(out, format="PNG")
+        png = out.getvalue()
+    else:
+        png = blocky_picture(body_spec(resolved))
+    face = _neutral_face_png(resolved)
+    for key in ("glb", "rigged"):
+        body[key] = attach_texture(body[key], png, ("body",), nearest=resolved["style"] == "voxel")
+        body[key] = attach_texture(body[key], face, ("face",), nearest=resolved["style"] == "voxel")   # until a kit paints it
+    return {"texture_file": Path(resolved["texture"]).name} if resolved["texture"] else {"picture": "made from the colours"}
+
+
+def _neutral_face_png(resolved: dict) -> bytes:
+    """The neutral pose over the skin, small: what the face quad shows before a kit is projected on it."""
+    import io
+
+    from PIL import Image
+
+    from services.blob_face import face_kit
+
+    look = resolved["face"]
+    pose = face_kit(look)["poses"]["neutral"].convert("RGBA")
+    skin = tuple(int(look["skin"][i:i + 2], 16) for i in (1, 3, 5)) if isinstance(look["skin"], str) else tuple(look["skin"][:3])
+    flat = Image.new("RGBA", pose.size, skin + (255,))
+    flat.alpha_composite(pose)
+    out = io.BytesIO()
+    small = flat.convert("RGB").resize((256, 256), Image.NEAREST if resolved["style"] == "voxel" else Image.LANCZOS)
+    small.transpose(Image.FLIP_TOP_BOTTOM).save(out, format="PNG")   # the quad's UVs are v-up (as the kit painter's), a glTF picture is v-down
+    return out.getvalue()
+
+
+def body_spec(resolved: dict) -> dict:
+    return {**resolved["body"], "blocky": resolved["style"]}
 
 
 def _picture_of(workspace_dir: Path, workspace: str, given: str, label: str):
