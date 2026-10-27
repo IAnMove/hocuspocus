@@ -133,6 +133,7 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     clips = _clips(resolved["clips"])
     picture = _picture(workspace_dir, workspace, resolved["face_image"]) if resolved["face_source"] == "qwen" else None
     token = "anime-" + hashlib.sha256(f"{slug(name)}:{workspace}".encode()).hexdigest()[:10]
+    Path(workspace_dir).mkdir(parents=True, exist_ok=True)
     # the kit first: a painted face brings its own skin, and the body's head and hands take it so the face is not a mask
     kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision, picture=picture)
     painted = (kit.get("face") or {}).get("skin")
