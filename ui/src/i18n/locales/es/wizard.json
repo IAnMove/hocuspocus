@@ -11,7 +11,7 @@
   "clear": "Borrar la conversación de Pregunta al mago",
   "maximize": "Maximizar Pregunta al mago",
   "restore": "Restaurar el tamaño de Pregunta al mago",
-  "workspace": "Workspace: {{name}}",
+  "workspace": "Espacio: {{name}}",
   "activeTasks_one": "{{count}} tarea activa",
   "activeTasks_other": "{{count}} tareas activas",
   "noActiveTasks": "No hay tareas activas",
@@ -56,7 +56,7 @@
   "footerHint": "Consulta, navega y prepara. Las órdenes explícitas de generación entran en la cola real.",
   "suggestions": {
     "queue": "¿Qué hay en cola?",
-    "video3d": "Abre 3D Video",
+    "video3d": "Abre Vídeo 3D",
     "comic": "Hazme un cómic de ejemplo"
   },
   "actionDone": "Hecho",

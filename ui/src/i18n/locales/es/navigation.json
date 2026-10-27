@@ -16,8 +16,8 @@
     "task_other": "Tareas",
     "asset": "Recurso",
     "asset_other": "Recursos",
-    "workspace": "Workspace",
-    "workspace_other": "Workspaces",
+    "workspace": "Espacio",
+    "workspace_other": "Espacios",
     "outputFolder": "Carpeta de salida",
     "outputFolder_other": "Carpetas de salida"
   },
@@ -95,7 +95,7 @@
     "all": "Todo",
     "assets": "Recursos",
     "projects": "Proyectos",
-    "workspaces": "Workspaces",
+    "workspaces": "Espacios",
     "images": "Imágenes",
     "videos": "Vídeos",
     "videoclips": "Videoclips",
@@ -118,8 +118,8 @@
     "scene3d": "Vídeo 2,5D",
     "world3d": "Vídeo 3D",
     "characterReplacement": "Reemplazar personaje",
-    "animate3d": "Animate",
-    "edits": "Edits",
+    "animate3d": "Animar",
+    "edits": "Ediciones",
     "multiclip": "Multi-clip",
     "auditDev": "Auditoría interna dev",
     "favorites": "Favoritos",
@@ -158,12 +158,12 @@
     "gameAssets": "Juego"
   },
   "filters": {
-    "allWorkspaces": "Todos los Workspaces"
+    "allWorkspaces": "Todos los espacios"
   },
   "headings": {
     "assets": "Recursos",
     "projects": "Proyectos",
-    "workspaces": "Workspaces",
+    "workspaces": "Espacios",
     "runs": "Ejecuciones",
     "storyLab": "Story Lab",
     "seriesLab": "Series Lab",

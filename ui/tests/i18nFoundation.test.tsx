@@ -110,7 +110,7 @@ test('required glossary keys exist in both languages', async () => {
       assert.notEqual(value, key, `${language} ${ns}:${key}`)
     }
   }
-  assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Workspace')
+  assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Espacio')
   assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Pregunta al mago')
   assert.equal(i18n.t('title', { ns: 'wizard', lng: 'en' }), 'Ask to the Wizard')
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')

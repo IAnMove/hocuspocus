@@ -27,6 +27,11 @@ export function workflowStateLabel(state: string) {
   return catalogLabel(`executionState.${state}`, state)
 }
 
+/** A known job state, or the server's own word. */
+export function jobStatusLabel(status: string) {
+  return String(i18n.t(`status.${status}`, status, { ns: 'common' }))
+}
+
 /** A known step kind, or the raw kind string. */
 export function workflowStepLabel(kind: string) {
   const key = STEP_KEYS[kind]

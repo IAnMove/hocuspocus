@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { setUiLanguage } from '../src/i18n/index.ts'
 import { resolutionPresetLabel } from '../src/lib/resolutionPresetLabel.ts'
-import { workflowStateLabel, workflowStepLabel, workflowTypeLabel } from '../src/features/agent/workflowLabels.ts'
+import { jobStatusLabel, workflowStateLabel, workflowStepLabel, workflowTypeLabel } from '../src/features/agent/workflowLabels.ts'
 
 test('resolution presets and workflow codes map to the active language', async () => {
   await setUiLanguage('en')
@@ -16,6 +16,8 @@ test('resolution presets and workflow codes map to the active language', async (
   assert.equal(workflowStateLabel('not-a-state'), 'not-a-state')
   assert.equal(workflowStepLabel('generation.image'), 'Generate image')
   assert.equal(workflowStepLabel('custom step'), 'custom step')
+  assert.equal(jobStatusLabel('completed'), 'Completed')
+  assert.equal(jobStatusLabel('held'), 'held')
 
   await setUiLanguage('es')
   assert.equal(resolutionPresetLabel('768p', '768p · maximum Base canvas'), '768p · lienzo Base máximo')
@@ -23,5 +25,7 @@ test('resolution presets and workflow codes map to the active language', async (
   assert.equal(workflowTypeLabel('image_then_upscale'), 'Imagen y luego ampliar')
   assert.equal(workflowStateLabel('running'), 'En curso')
   assert.equal(workflowStepLabel('export and publish MP4'), 'Exportar y publicar el MP4')
+  assert.equal(jobStatusLabel('completed'), 'Completado')
+  assert.equal(jobStatusLabel('held'), 'held')
   await setUiLanguage('en')
 })

@@ -25,7 +25,7 @@ import {
 } from './wizardConversationSync'
 import { localizeWizardWelcome, wizardWelcomeText } from './wizardWelcome'
 import { AgentMarkdown } from './AgentMarkdown'
-import { workflowStateLabel, workflowTypeLabel } from './workflowLabels'
+import { jobStatusLabel, workflowStateLabel, workflowTypeLabel } from './workflowLabels'
 import { defaultWizardWorkflowRuntime, type WizardWorkflowPendingInput, type WizardWorkflowRecord } from './wizardWorkflowRuntime'
 import { ensureRhythmic3dWorkflowRegistered } from './rhythmic3dWorkflow'
 import { defaultApplicationAdapters } from './applicationAdapters'
@@ -632,7 +632,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         <div className="relative mt-2 flex items-center gap-2 text-[9px] text-white/45">
           <span className={`h-1.5 w-1.5 rounded-full ${activeCount ? 'animate-pulse bg-blue-300' : 'bg-emerald-300'}`} />
           <span>{activeCount ? t('activeTasks', { count: activeCount }) : t('noActiveTasks')}</span>
-          {latestTask && <span className="min-w-0 flex-1 truncate">{t('latestTask', { title: latestTask.title, status: latestTask.status })}</span>}
+          {latestTask && <span className="min-w-0 flex-1 truncate">{t('latestTask', { title: latestTask.title, status: jobStatusLabel(latestTask.status) })}</span>}
         </div>
       </div>
 
