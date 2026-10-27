@@ -6,7 +6,7 @@ import type { Scene3DDeskModel } from './scene3dDeskModel'
 export function Scene3DDeskTopBar({ model }: { model: Scene3DDeskModel }) {
   const { t } = useUiTranslation('scene3d')
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto [&_[data-testid=render-quality]]:flex-nowrap [&_[data-testid=render-estimate]]:line-clamp-2 [&_[data-testid=render-estimate]]:max-w-sm">
       <Scene3DDocumentControls
         section="library"
         document={model.sceneDoc}

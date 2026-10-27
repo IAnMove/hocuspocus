@@ -79,7 +79,7 @@ export function Workbench({ topBar, outline, viewport, inspector, transport, wid
       data-layout={layout}
       className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg-primary"
     >
-      <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-2 py-2">
+      <header className="flex shrink-0 flex-nowrap items-center gap-2 border-b border-border px-2 py-2">
         <PanelToggle
           pressed={outlineOpen}
           label={outlineLabel}

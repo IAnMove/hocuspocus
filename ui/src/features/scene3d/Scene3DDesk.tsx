@@ -12,7 +12,7 @@ import { Workbench } from '../../components/workbench/Workbench'
 
 /** Vídeo 3D arranged on the shared desk. The desk itself knows nothing about 3D. */
 export function Scene3DDesk({ model }: { model: Scene3DDeskModel }) {
-  const height = model.fill ? 'flex min-h-0 flex-1 flex-col' : 'flex h-[calc(100dvh-12.5rem)] min-h-[28rem] min-w-0 flex-col'
+  const height = model.fill ? 'flex min-h-0 flex-1 flex-col' : 'flex h-[calc(100dvh-16rem)] max-h-[calc(100dvh-16rem)] min-h-0 min-w-0 flex-col'
   return (
     <div data-testid="scene3d-workspace" className={height}>
       <SceneSpeechAudio document={model.sceneDoc} seconds={model.seconds} playing={model.playing && !model.exporting} />
