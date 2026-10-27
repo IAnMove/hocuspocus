@@ -10,7 +10,7 @@ import { Vector3 } from 'three'
 
 export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number] }
 
-export const ATLAS_KEY = 'atlas-drape-1'
+export const ATLAS_KEY = 'atlas-drape-2'
 
 export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
   const raw = (userData as { atlas?: { body?: unknown; head?: unknown } } | undefined)?.atlas
@@ -25,9 +25,10 @@ export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
 type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string }
 
 /** The body and head tiles sampled from the bind pose and blended by the normal. Pure string work, so it is testable. */
-export function patchAtlasShader(shader: Shader, frame: AtlasFrame): void {
+export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = false): void {
   shader.uniforms.atlasBody = { value: new Vector3(...frame.body) }
   shader.uniforms.atlasHead = { value: new Vector3(...(frame.head ?? [0, 1, 1e9])) }
+  shader.uniforms.atlasFaceOnly = { value: faceOnly ? 1 : 0 }
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
@@ -43,13 +44,17 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame): void {
 	vec4 bodyColor = ( texture2D( map, vec2( bodyU * 0.5, bodyV ) ) * frontWeight + texture2D( map, vec2( ( 1.0 - bodyU ) * 0.5 + 0.5, bodyV ) ) * backWeight ) / ( frontWeight + backWeight );
 	float tileW = atlasHead.y / 1.5;
 	float headV = 0.5 + ( 0.5 - ( atlasP.y - atlasHead.x ) / atlasHead.y ) * 0.5;
-	float crown = pow( abs( atlasN.y ), 3.0 );
-	float hf = pow( max( atlasN.z, 0.0 ), 8.0 ) + crown + 0.002;
-	float hb = pow( max( -atlasN.z, 0.0 ), 8.0 ) + 0.002;
-	float hs = pow( abs( atlasN.x ), 8.0 ) + 0.002;
-	vec4 headColor = ( texture2D( map, vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV ) ) * hf
-		+ texture2D( map, vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV ) ) * hs
-		+ texture2D( map, vec2( ( 2.5 - atlasP.x / tileW ) / 3.0, headV ) ) * hb ) / ( hf + hs + hb );
+	// by the angle from the face, not by the normal: the painted face on its relief keeps the front picture whole, and the skull
+	// round it fades from the front to the side picture between 57 and 80 degrees and to the back one between 112 and 140
+	float faceYaw = atan( abs( atlasP.x ), atlasP.z );
+	float crownK = smoothstep( 0.55, 0.85, abs( atlasN.y ) );
+	float toSide = smoothstep( 1.0, 1.4, faceYaw ) * ( 1.0 - crownK );
+	float toBack = smoothstep( 1.95, 2.45, faceYaw ) * ( 1.0 - crownK );
+	vec4 frontTile = texture2D( map, vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV ) );
+	vec4 sideTile = texture2D( map, vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV ) );
+	vec4 backTile = texture2D( map, vec2( ( 2.5 - atlasP.x / tileW ) / 3.0, headV ) );
+	vec4 headColor = mix( mix( frontTile, sideTile, toSide ), backTile, toBack );
+	if ( atlasFaceOnly > 0.5 ) headColor = frontTile;
 	float inHead = smoothstep( atlasHead.z - 0.008, atlasHead.z + 0.008, atlasP.y ) * ( 1.0 - smoothstep( tileW * 0.42, tileW * 0.49, max( abs( atlasP.x ), abs( atlasP.z ) ) ) );
 	vec4 sampledDiffuseColor = mix( bodyColor, headColor, inHead );
 	diffuseColor *= sampledDiffuseColor;
@@ -67,8 +72,9 @@ export function applyAtlasProjection(root: Object3D): void {
       const frame = readAtlasFrame(material.userData)
       if (!frame) continue
       material.userData.atlasDrape = true
-      material.onBeforeCompile = shader => patchAtlasShader(shader as unknown as Shader, frame)
-      material.customProgramCacheKey = () => ATLAS_KEY
+      const faceOnly = material.name === 'face'
+      material.onBeforeCompile = shader => patchAtlasShader(shader as unknown as Shader, frame, faceOnly)
+      material.customProgramCacheKey = () => (faceOnly ? `${ATLAS_KEY}-face` : ATLAS_KEY)
       material.needsUpdate = true
     }
   })

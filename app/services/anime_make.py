@@ -187,7 +187,8 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     if picture is not None and isinstance(painted, str):
         resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
         resolved["public"]["skin"] = painted.upper()
-    body = build_body(resolved["body"], clips)
+    relief = _face_relief(workspace_dir, workspace, resolved) if resolved["style"] == "real" and resolved["texture_head"] else None
+    body = build_body(resolved["body"], clips, relief=relief)
     if resolved["style"] in ("voxel", "roblox"):
         extra = _blocky_files(workspace_dir, workspace, resolved, body)
     else:
@@ -222,6 +223,20 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
         body["rigged"] = attach_texture(body["rigged"], png, frame=frame)
         out["texture_file"] = Path(resolved["texture"]).name
     return out
+
+
+def _face_relief(workspace_dir: Path, workspace: str, resolved: dict):
+    """The depth of the painted face as a relief sampler (see ``blob_face_relief``), or None when the depth model is not installed."""
+    from services.blob_builder import blob_pieces
+    from services.blob_face_relief import relief_from_picture
+    from services.blob_texture import atlas_frame
+    from services.blob_loft import loft_parts
+
+    picture = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head")
+    lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
+    parts = loft_parts(lofted["traits"], lofted["layout"])
+    frame = atlas_frame([parts[0][0]], lofted["layout"])
+    return relief_from_picture(picture, frame, lofted["layout"]["sy"])
 
 
 def _blocky_files(workspace_dir: Path, workspace: str, resolved: dict, body: dict) -> dict:
