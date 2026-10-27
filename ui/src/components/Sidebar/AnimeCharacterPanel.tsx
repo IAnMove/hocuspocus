@@ -3,7 +3,7 @@ import { makeAnime } from '../../api/blobBody'
 import { useStore } from '../../stores/useStore'
 
 const FIELD = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary'
-const GENDERS = ['girl', 'boy']
+const GENDERS = ['girl', 'boy', 'man']
 const BODIES = ['slim', 'average', 'tall']
 const HAIR = ['none', 'short', 'bangs', 'bob', 'long', 'twin_tails', 'spiky', 'ponytail', 'bun']
 const OUTFITS = ['school', 'casual', 'sport']

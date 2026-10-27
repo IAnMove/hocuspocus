@@ -236,23 +236,46 @@ SKULL = (
     (0.99, 0.240, 0.236, 0.254), (1.00, 0.000, 0.000, 0.000),
 )
 _SKULL_V = [row[0] for row in SKULL]
+# Masculine heads, measured the same way from Qwen bald sheets of a teenage boy (a long head, a clean V to a point) and a
+# heroic young man (a longer, narrower head, a brow ridge, straight jaw lines to a flat chin). Same rows as SKULL.
+SKULL_BOY = (
+    (0.00, 0.080, 0.900, 0.620), (0.05, 0.250, 0.920, 0.600), (0.10, 0.440, 0.940, 0.585), (0.15, 0.580, 0.960, 0.580),
+    (0.20, 0.690, 0.980, 0.595), (0.25, 0.800, 0.990, 0.650), (0.30, 0.900, 0.990, 0.745), (0.35, 0.960, 0.990, 0.835),
+    (0.40, 0.980, 0.990, 0.900), (0.45, 0.975, 0.980, 0.950), (0.50, 0.970, 0.980, 0.975), (0.55, 0.985, 0.995, 0.995),
+    (0.60, 0.996, 1.000, 1.000), (0.65, 1.000, 0.990, 0.990), (0.70, 0.985, 0.968, 0.971), (0.75, 0.953, 0.933, 0.933),
+    (0.80, 0.900, 0.880, 0.880), (0.85, 0.820, 0.810, 0.810), (0.90, 0.705, 0.695, 0.705), (0.93, 0.605, 0.600, 0.620),
+    (0.95, 0.520, 0.515, 0.546), (0.96, 0.470, 0.460, 0.500), (0.97, 0.410, 0.400, 0.440), (0.98, 0.335, 0.325, 0.375),
+    (0.99, 0.235, 0.220, 0.275), (1.00, 0.000, 0.000, 0.000),
+)
+SKULL_MAN = (
+    (0.00, 0.230, 0.930, 0.720), (0.05, 0.340, 0.950, 0.710), (0.10, 0.460, 0.960, 0.700), (0.15, 0.570, 0.970, 0.690),
+    (0.20, 0.660, 0.980, 0.690), (0.25, 0.730, 0.990, 0.700), (0.30, 0.790, 1.000, 0.745), (0.35, 0.840, 1.020, 0.820),
+    (0.40, 0.885, 1.030, 0.895), (0.45, 0.925, 1.040, 0.945), (0.50, 0.960, 1.010, 0.975), (0.55, 0.980, 1.000, 0.995),
+    (0.60, 0.995, 1.000, 1.000), (0.65, 1.000, 0.985, 0.990), (0.70, 0.985, 0.965, 0.972), (0.75, 0.955, 0.940, 0.934),
+    (0.80, 0.905, 0.896, 0.883), (0.85, 0.825, 0.826, 0.810), (0.90, 0.715, 0.712, 0.700), (0.93, 0.620, 0.618, 0.611),
+    (0.95, 0.540, 0.530, 0.530), (0.96, 0.490, 0.480, 0.488), (0.97, 0.430, 0.420, 0.431), (0.98, 0.355, 0.343, 0.365),
+    (0.99, 0.250, 0.245, 0.276), (1.00, 0.000, 0.000, 0.000),
+)
+SKULLS = {"fem": SKULL, "boy": SKULL_BOY, "man": SKULL_MAN}
+HEAD_KINDS = tuple(SKULLS)
 
 
 def _catmull(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
     return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
 
 
-def skull_profile(lat: float) -> tuple[float, float, float, float]:
+def skull_profile(lat: float, kind: str = "fem") -> tuple[float, float, float, float]:
     """The anime skull at latitude ``lat`` (degrees, -90 chin to 90 crown): ``(width, back depth, front depth, boxiness)``
     as shares of the head radii, read from the measured ``SKULL`` table. ``boxiness`` is 0 at the poles and 1 at the widest
     ring: the rings are superellipses, round at the crown and chin and a little squarer where the face is."""
+    table = SKULLS.get(kind, SKULL)
     v = (math.sin(math.radians(lat)) + 1.0) / 2.0
-    i = min(len(SKULL) - 2, max(0, bisect.bisect_right(_SKULL_V, v) - 1))
-    t = (v - SKULL[i][0]) / (SKULL[i + 1][0] - SKULL[i][0])
+    i = min(len(table) - 2, max(0, bisect.bisect_right(_SKULL_V, v) - 1))
+    t = (v - table[i][0]) / (table[i + 1][0] - table[i][0])
     out = []
     for column in (1, 2, 3):
-        a, b = SKULL[i][column], SKULL[i + 1][column]
-        p0, p3 = SKULL[max(0, i - 1)][column], SKULL[min(len(SKULL) - 1, i + 2)][column]
+        a, b = table[i][column], table[i + 1][column]
+        p0, p3 = table[max(0, i - 1)][column], table[min(len(table) - 1, i + 2)][column]
         out.append(max(0.0, min(_catmull(p0, a, b, p3, t), max(a, b) * 1.04 + 0.02)))
     return out[0], out[2], out[1], 1.0 - abs(2 * v - 1) ** 3
 
@@ -264,7 +287,7 @@ def _spow(x: float, e: float) -> float:
 def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
     """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
     rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
-    width, back, front, box = skull_profile(lat)
+    width, back, front, box = skull_profile(lat, L.get("head_kind", "fem"))
     t = math.radians(yaw)
     s, c = math.sin(t), math.cos(t)
     exponent = 2.0 / (2.0 + ((FACE_BOX if c >= 0 else BACK_BOX) - 2.0) * box)
@@ -284,13 +307,13 @@ def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
     grid, colors = [], []
     for lat in lats:
         ring = _skull_ring(L, lat, 1.0, yaws)
-        if abs(lat) >= 89.9:
-            centre = (0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0)
-            ring = [centre] * len(yaws)
+        if lat >= 89.9:
+            ring = [(0.0, L["head_y"] + L["sy"] / 2, 0.0)] * len(yaws)
         grid.append(ring)
         colors.append([linear_color(skin)] * len(yaws))
     centers = [(0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0) for lat in lats]
     _emit(mesh, grid, colors, centers, True, None)
+    _cap(mesh, grid[0], colors[0], centers[0], (0.0, -1.0, 0.0))   # the chin is a flat plate, not a point: a man's chin is square
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
     # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
     base = skull_point(L, 0, -36, 1.0)
@@ -348,8 +371,11 @@ def shoulder_top(L: dict) -> float:
     return L["head_y"] - L["sy"] / 2 - 0.035 * L["h"]
 
 
+NECK_SHARE = {"fem": 0.42, "boy": 0.46, "man": 0.58}   # a man's neck is as wide as most of his head
+
+
 def neck_width(L: dict) -> float:
-    return min(L["sx"] * 0.42, L["torso_w"] * 0.46)
+    return min(L["sx"] * NECK_SHARE.get(L.get("head_kind", "fem"), 0.42), L["torso_w"] * 0.52)
 
 
 def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:

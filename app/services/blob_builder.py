@@ -290,10 +290,13 @@ def _head(value, default: dict) -> dict:
         return dict(default)
     if not isinstance(value, dict):
         _fail("invalid_head", "head must be an object with width, height, depth and shape")
-    extra = set(value) - set(_HEAD_DEFAULT)
+    extra = set(value) - set(_HEAD_DEFAULT) - {"kind"}
     if extra:
         _fail("unknown_field", "Unknown head field: " + ", ".join(sorted(extra)))
     found = dict(default)
+    if "kind" in value:
+        from services.blob_loft import HEAD_KINDS
+        found["kind"] = _choice(value["kind"], HEAD_KINDS, "invalid_head", "head.kind")
     for key, limits in _HEAD_LIMITS.items():
         if key not in value:
             continue
@@ -417,7 +420,7 @@ def _layout(spec: dict) -> dict:
     # Above the belly. Higher than about half the torso swings a bent wave into the head.
     shoulder_at = _SHOULDER_AT[spec["family"]]
     return {
-        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"],
+        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"], "head_kind": spec["head"].get("kind", "fem"),
         "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
         "waist_taper": min(1.0, max(0.35, waist_w / torso_w)) if spec["family"] == "anime" else 1.0,
         "torso_y": (stack["torso_top"] + stack["torso_bottom"]) / 2,
@@ -462,7 +465,7 @@ def _head_size(head: dict, height: float) -> tuple[float, float, float]:
     if head["shape"] == "egg":
         sy, sz = max(sy, sx * 1.12), min(sz, sx * 0.92)
     elif head["shape"] == "anime":
-        sy, sz = max(sy, sx * 1.08), min(sz, sx * 0.96)
+        sy, sz = max(sy, sx * 1.08), min(sz, sx * 1.3)   # a long masculine head is deeper than it is wide
     return sx, sy, sz
 
 

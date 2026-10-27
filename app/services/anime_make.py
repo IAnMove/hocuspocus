@@ -21,7 +21,7 @@ MAKE = "model3d.anime.make"
 HAIR_STYLES = ("none", "short", "bangs", "bob", "long", "twin_tails", "spiky", "ponytail", "bun")
 OUTFITS = ("school", "casual", "sport")
 BODIES = {"slim": ("slim", 1.0), "average": ("average", 1.0), "tall": ("slim", 1.08)}
-GENDERS = ("girl", "boy")
+GENDERS = ("girl", "boy", "man")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
            "face_source", "face_image", "face_style", "face_shape"}
 FACE_SOURCES = ("program", "qwen")
@@ -35,7 +35,12 @@ _DEFAULT_COLORS = {
     "sport": {"girl": {"top": "#1F6F5F", "bottom": "#17403A", "shoes": "#F4F4F2", "accent": "#F2D24A"},
               "boy": {"top": "#1F6F5F", "bottom": "#17403A", "shoes": "#F4F4F2", "accent": "#F2D24A"}},
 }
-_HEAD = {"girl": {"width": 0.12, "height": 0.146, "depth": 0.11, "shape": "anime"}, "boy": {"width": 0.12, "height": 0.152, "depth": 0.11, "shape": "anime"}}
+for _palette in _DEFAULT_COLORS.values():
+    _palette["man"] = _palette["boy"]
+# Measured on Qwen bald sheets: width over height 0.82 (girl), 0.71 (boy), 0.69 (man); depth about 0.9 of the height.
+_HEAD = {"girl": {"width": 0.12, "height": 0.146, "depth": 0.128, "shape": "anime", "kind": "fem"},
+         "boy": {"width": 0.108, "height": 0.152, "depth": 0.136, "shape": "anime", "kind": "boy"},
+         "man": {"width": 0.105, "height": 0.152, "depth": 0.138, "shape": "anime", "kind": "man"}}
 
 
 def _fail(code: str, message: str):
@@ -71,7 +76,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     gender = _choice(raw.get("gender", "girl"), GENDERS, "invalid_gender", "gender")
     outfit = _choice(raw.get("outfit", "school"), OUTFITS, "invalid_outfit", "outfit")
     build, tall = BODIES[_choice(raw.get("body", "slim"), tuple(BODIES), "invalid_body", "body")]
-    height = raw.get("height", (1.62 if gender == "girl" else 1.76) * tall)
+    height = raw.get("height", {"girl": 1.62, "boy": 1.76, "man": 1.82}[gender] * tall)
     if isinstance(height, bool) or not isinstance(height, (int, float)) or not 1.2 <= float(height) <= 2.2:
         _fail("invalid_height", "height must be from 1.2 to 2.2 metres")
     hair_style = _choice(raw.get("hair_style", "long" if gender == "girl" else "short"), HAIR_STYLES, "invalid_hair", "hair_style")
@@ -100,7 +105,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         _fail("invalid_traits", "face_image must be a workspace file name or URL")
     face = {"style": "cute" if style == "cute" else "anime_head", "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
             "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
-            "faceShape": _choice(raw.get("face_shape", "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
+            "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
             "blush": raw.get("blush", gender == "girl") is True, **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
     clips = raw.get("clips")
     public = {"gender": gender, "outfit": outfit, "body": raw.get("body", "slim"), "height": float(height), "skin": skin, "eye_color": face["eyeColor"],

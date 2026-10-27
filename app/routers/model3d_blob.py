@@ -44,7 +44,7 @@ def command_catalog():
          "description": "Make one anime 3D character from traits in one call: a lofted PS2-style body (tapered limbs, egg head with a jaw, "
                         "fingers, outfit as colour regions, hair as curved clumps) rigged on CPU, plus its face as an anime_head Character Kit "
                         "(neutral, happy, sad, angry, surprised, smug, shy, sleepy, suspicious, tired, shout; nine visemes; blink) that "
-                        "world3d.scene.face projects onto the head with the kit's own fit and taper. traits: gender (girl|boy), body (slim|average|tall), "
+                        "world3d.scene.face projects onto the head with the kit's own fit and taper. traits: gender (girl|boy|man; a man has a longer, narrower head with a squarer jaw), body (slim|average|tall), "
                         "height (m), skin, eye_color, lash_color, hair_style (none|short|bangs|bob|long|twin_tails|spiky|ponytail|bun), hair_color, "
                         "outfit (school|casual|sport), outfit_colors {top, bottom, shoes, accent}, blush, face_shape (soft|sharp), face_style (anime|cute: the round-eyed mascot face), "
                         "face_source (program, or qwen: a painted bald face given as face_image, a keyed workspace picture from image.remove_background, with the expressions as overlays), "
