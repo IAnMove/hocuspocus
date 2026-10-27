@@ -93,12 +93,12 @@ export function CharacterFacePackMaker() {
       <label className="block text-xs text-text-secondary">{t('facePackMaker.skin')}
         <input value={skin} onChange={event => setSkin(event.target.value)} className={field} />
       </label>
-      <label className="block text-xs text-text-secondary">{t('facePackMaker.restPrompt')}
-        <textarea readOnly value={restPrompt} rows={4} className={`${field} font-mono`} />
-      </label>
-      <button type="button" className={button} onClick={() => copy(restPrompt)}>{t('facePackMaker.copyRest')}</button>
       <details className="rounded border border-border p-2">
-        <summary className="cursor-pointer text-xs text-text-primary">{t('facePackMaker.editPrompts')}</summary>
+        <summary className="cursor-pointer text-xs text-text-primary">{t('facePackMaker.sentToModel')}</summary>
+        <label className="mt-2 block text-xs text-text-secondary">{t('facePackMaker.restPrompt')}
+          <textarea readOnly value={restPrompt} rows={4} className={`${field} font-mono`} />
+        </label>
+        <button type="button" className={button} onClick={() => copy(restPrompt)}>{t('facePackMaker.copyRest')}</button>
         <div className="mt-2 space-y-2">
           {VISEMES.filter(id => id !== 'rest').map(id => {
             const text = visemePrompt(id, skin)

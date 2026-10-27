@@ -122,7 +122,14 @@
     "loadFailed": "No se pudo cargar el catálogo",
     "reading": "Leyendo el catálogo…",
     "empty": "No hay assets que coincidan con estos filtros.",
-    "loadMore": "Cargar más"
+    "loadMore": "Cargar más",
+    "status": {
+      "canonical": "canónico",
+      "missing": "ausente",
+      "legacy": "heredado",
+      "unreadable": "ilegible",
+      "invalid": "no válido"
+    }
   },
   "collectionsHint": "Colecciones de referencias. No son carpetas de salida.",
   "projectCount_one": "{{count}} proyecto",
@@ -355,5 +362,48 @@
     "replaceVoice": "Sustituir la voz de este clip (SeedVC)",
     "confirmDelete": "Pulsa otra vez para confirmar el borrado",
     "deleteQuestion": "¿Borrar?"
+  },
+  "footer": {
+    "simulated": "SIMULADO",
+    "seed": "semilla {{value}}",
+    "steps": "{{value}} pasos",
+    "guidance": "guía {{value}}",
+    "frames": "{{value}} fotogramas",
+    "h3Minimum": " · mínimo de H3 aplicado",
+    "dialogueSyllables": "diálogo {{syllables}} sílabas × {{rate}}s → {{calculated}}s calculados{{minimum}}",
+    "dialogueWords": "diálogo {{words}} palabras → {{calculated}}s calculados{{minimum}}",
+    "cacheOff": "Caché desactivada",
+    "cacheOn": "Caché activada",
+    "cacheOnTyped": "Caché activada ({{type}})",
+    "lorasOff": "LoRAs desactivadas",
+    "lora_one": "{{count}} LoRA",
+    "lora_other": "{{count}} LoRAs",
+    "profile": "perfil {{name}}",
+    "flowShift": "desplazamiento de flujo {{value}}",
+    "audioShift": "desplazamiento de audio {{value}}",
+    "turboOn": "Turbo activado",
+    "turboOff": "Turbo desactivado",
+    "clips": "{{value}} clips",
+    "textModel": "texto {{model}}",
+    "imageModel": "imagen {{model}}",
+    "videoModel": "vídeo {{model}}",
+    "director": "Director",
+    "directorMusic": "Director · Videoclip",
+    "directorMode": "Director · {{mode}}",
+    "seriesChapter": "Series Lab · Capítulo",
+    "audioAnalysis": "Historia/Director · Análisis de audio",
+    "studio3d": "Studio · 3D",
+    "studioMode": "Studio · {{mode}}",
+    "studioGeneration": "Studio · Generación",
+    "modes": {
+      "shortFilm": "cortometraje",
+      "comic": "cómic",
+      "videoPodcast": "pódcast en vídeo",
+      "viralVideo": "vídeo viral",
+      "image": "Imagen",
+      "video": "Vídeo",
+      "audio": "Audio",
+      "avatar": "Avatar"
+    }
   }
 }
