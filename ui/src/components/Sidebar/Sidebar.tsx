@@ -45,6 +45,7 @@ export function DirectGenerationWorkspace() {
   const { t } = useUiTranslation('navigation')
   const { t: tCommon } = useUiTranslation('common')
   const { t: tStudio } = useUiTranslation('studio')
+  const { t: tActivity } = useUiTranslation('activity')
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
@@ -239,7 +240,7 @@ export function DirectGenerationWorkspace() {
           <button
             onClick={() => useStore.getState().setRecipesOpen(true)}
             className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-            title="Recipes — one-click presets"
+            title={tActivity('actions.recipesTitle')}
           >
             <BookMarked size={14} />
           </button>
@@ -247,7 +248,7 @@ export function DirectGenerationWorkspace() {
             <button
               onClick={() => openLoraBrowser(true, modelType)}
               className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-              title="Browse LoRAs on CivitAI"
+              title={tActivity('actions.browseLoras')}
             >
               <Globe size={14} />
             </button>

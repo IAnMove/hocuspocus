@@ -1034,7 +1034,7 @@ export function MainContent() {
                     onClick={() => useStore.getState().setRecipesOpen(true)}
                     className="mt-1 flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent-blue/10 border border-accent-blue/30 rounded-lg text-accent-blue hover:bg-accent-blue/20 transition-colors"
                   >
-                    <BookMarked size={13} /> Browse recipes
+                    <BookMarked size={13} /> {tActivity('actions.browseRecipes')}
                   </button>
                 </div>
               </div>
