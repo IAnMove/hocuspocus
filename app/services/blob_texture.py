@@ -29,7 +29,13 @@ def atlas_frame(meshes, layout=None) -> dict:
     span = max(max(xs) - min(xs), max(ys) - min(ys)) * 1.06
     frame = {"body": ((max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2, span)}
     if layout is not None:
-        frame["head"] = (layout["head_y"] + layout["sy"] * 0.12, layout["sy"] * 1.3, layout["head_y"] - layout["sy"] / 2)
+        from services.blob_loft import shoulder_top
+
+        # the head tile holds the head and its neck down to the shoulders, so the neck is skin from a face picture, not a few
+        # pixels of collar from the body view
+        cut = shoulder_top(layout) - 0.004 * layout["h"]
+        top, bottom = layout["head_y"] + layout["sy"] * 0.62, cut - 0.01 * layout["h"]
+        frame["head"] = ((top + bottom) / 2, (top - bottom) * 1.08, cut)
     return frame
 
 
