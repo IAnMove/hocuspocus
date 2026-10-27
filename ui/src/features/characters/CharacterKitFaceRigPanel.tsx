@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { reasonAfterLock } from '../../i18n/disabledReasons'
 import type { ParseKeys } from 'i18next'
 import { cleanCharacterKitFaceOverlay, getFileUrl, uploadImage } from '../../api/client'
 import { generateImageAsset } from '../../lib/imageGeneration'
@@ -213,6 +214,18 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, title,
     catch { return [] }
   }, [kit, poseId, description])
   const selectedRequest = requests.find(request => request.state === selectedState)
+  const workshopTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress']])
+  const modelTitle = reasonAfterLock(disabled, title, [[!allowModelActions, 'disabled.modelActionsOff'], [Boolean(busyState), 'disabled.actionInProgress']])
+  const mouthsPatched = Object.values(kit.mouth).some(mouth => Boolean(mouth?.facePatch))
+  const wipeTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress'], [mouthsPatched, 'disabled.mouthsAlreadyPatched']])
+  const cleanupTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress'], [Boolean(selectedAsset?.facePatch), 'disabled.alreadyAPatch'], [!allowModelActions, 'disabled.modelActionsOff']])
+  const saveTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress'], [!dirtyAnchor, 'disabled.alreadySaved']])
+  const blinkTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress'], [!kit.eyes.blink?.source, 'disabled.noBlink']])
+  const approveTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress'], [assetFor(kit, selectedState)?.alphaStatus !== 'transparent', 'disabled.needsTransparent']])
+  const lineTitle = reasonAfterLock(disabled, title, [[Boolean(busyState), 'disabled.actionInProgress'], [!dialogueText.trim(), 'disabled.writeLine']])
+  const speakTitle = reasonAfterLock(disabled, title, [[!allowModelActions, 'disabled.modelActionsOff'], [Boolean(busyState), 'disabled.actionInProgress'], [!dialogueText.trim(), 'disabled.writeLine']])
+  const generateOneTitle = reasonAfterLock(disabled, title, [[!allowModelActions, 'disabled.modelActionsOff'], [Boolean(busyState), 'disabled.actionInProgress'], [!selectedRequest, 'disabled.chooseExpression']])
+  const generatePackTitle = reasonAfterLock(disabled, title, [[!allowModelActions, 'disabled.modelActionsOff'], [Boolean(busyState), 'disabled.actionInProgress'], [!requests.length, 'disabled.nothingToGenerate']])
 
   const generateState = async (current: CharacterKit, state: CharacterKitFaceRigState): Promise<CharacterKit> => {
     const request = faceRigGenerationRequests(current, poseId, description).find(item => item.state === state)!
@@ -610,24 +623,24 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, title,
       <li>{t('faceRig.steps.scene')}</li>
     </ol>
     <p className="text-xs text-amber-100">{nextStep.title}</p>
-    <FlatRigMouthEditor kit={kit} poseId={poseId} workspace={workspace} disabled={disabled} busy={otherFaceRigWork(busyState)}
+    <FlatRigMouthEditor kit={kit} poseId={poseId} workspace={workspace} disabled={disabled} title={workshopTitle} busy={otherFaceRigWork(busyState)}
       onRigged={onRigged} onBusyChange={onMouthLineBusy} />
-    <SeeThroughLayersButton kit={kit} workspace={workspace} disabled={disabled}
+    <SeeThroughLayersButton kit={kit} workspace={workspace} disabled={disabled} title={workshopTitle}
       busy={Boolean(busyState) && busyState !== 'see-through'} onRigged={onRigged} onBusyChange={onSeeThroughBusy} />
     <FacePatchOptions kit={kit} poseId={poseId} state={selectedState} anchor={draftAnchor} workspace={workspace}
-      disabled={patchControls.disabled} onChange={onChange} onStatus={onStatus} />
+      disabled={patchControls.disabled} title={workshopTitle} onChange={onChange} onStatus={onStatus} />
     <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1">
       <summary className="cursor-pointer text-xs text-text-muted">{t('faceRig.createNew.summary')}</summary>
       <div className="mt-1 space-y-1">
         <p className="text-xs text-text-muted">{t('faceRig.createNew.hint')}</p>
         <div className="flex flex-wrap gap-1">{FACE_RIG_STYLE_PRESETS.map(preset => (
-          <button key={preset.id} type="button" disabled={disabled || Boolean(busyState)} onClick={() => setStyleId(preset.id)} className={`rounded border px-1 py-0.5 text-xs ${styleId === preset.id ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{t(`faceRig.styles.${preset.id}`)}</button>
+          <button key={preset.id} type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => setStyleId(preset.id)} className={`rounded border px-1 py-0.5 text-xs ${styleId === preset.id ? 'border-emerald-300 bg-emerald-400/15 text-emerald-100' : 'border-border text-text-muted'}`}>{t(`faceRig.styles.${preset.id}`)}</button>
         ))}</div>
         <div className="flex flex-wrap gap-1">{FACE_RIG_TRAIT_CHIPS.map(trait => (
-          <button key={trait} type="button" disabled={disabled || Boolean(busyState)} onClick={() => toggleTrait(trait)} className={`rounded border px-1 py-0.5 text-xs ${traits.includes(trait) ? 'border-amber-300 bg-amber-400/15 text-amber-100' : 'border-border text-text-muted'}`}>{t(`faceRig.traits.${trait}`)}</button>
+          <button key={trait} type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => toggleTrait(trait)} className={`rounded border px-1 py-0.5 text-xs ${traits.includes(trait) ? 'border-amber-300 bg-amber-400/15 text-amber-100' : 'border-border text-text-muted'}`}>{t(`faceRig.traits.${trait}`)}</button>
         ))}</div>
-        <label className="block text-xs text-text-muted">{t('faceRig.extraNotes')}<textarea value={extraNotes} disabled={disabled || Boolean(busyState)} onChange={event => setExtraNotes(event.target.value)} rows={2} placeholder={t('faceRig.extraNotesPlaceholder')} className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-2 text-xs" /></label>
-        <button type="button" disabled={modelActionsDisabled} onClick={() => void generatePose()} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === 'pose' ? t('faceRig.generatingBody') : poseApproved ? t('faceRig.regenerateBody') : t('faceRig.generateBody')}</button>
+        <label className="block text-xs text-text-muted">{t('faceRig.extraNotes')}<textarea value={extraNotes} disabled={disabled || Boolean(busyState)} title={workshopTitle} onChange={event => setExtraNotes(event.target.value)} rows={2} placeholder={t('faceRig.extraNotesPlaceholder')} className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-2 text-xs" /></label>
+        <button type="button" disabled={modelActionsDisabled} title={modelTitle} onClick={() => void generatePose()} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === 'pose' ? t('faceRig.generatingBody') : poseApproved ? t('faceRig.regenerateBody') : t('faceRig.generateBody')}</button>
 
       </div>
     </details>
@@ -671,73 +684,73 @@ export function CharacterKitFaceRigPanel({ kit, poseId, disabled = false, title,
       <p className="text-xs text-text-secondary">{t('faceRig.dragBoxHint')}</p>
       {placedBy && <p className="text-xs text-text-muted">{t('faceRig.placementSource', { eyes: t(`faceRig.sources.${placedBy.eyes}`), mouth: t(`faceRig.sources.${placedBy.mouth}`) })}</p>}
       <div className="grid grid-cols-2 gap-1">
-        <button type="button" disabled={patchControls.wipeDisabled} onClick={() => void wipeMouthZone()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1.5 text-xs text-amber-100 disabled:opacity-40">{busyState === 'wipe' ? t('faceRig.wiping') : t('faceRig.wipeMouth')}</button>
-        <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1.5 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.lockMouths')}</button>
+        <button type="button" disabled={patchControls.wipeDisabled} title={wipeTitle} onClick={() => void wipeMouthZone()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-1.5 text-xs text-amber-100 disabled:opacity-40">{busyState === 'wipe' ? t('faceRig.wiping') : t('faceRig.wipeMouth')}</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={lockMouths} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-1.5 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.lockMouths')}</button>
       </div>
     </div>}
     </section>
     <div className="space-y-3">
     <h3 className="text-sm font-semibold">{t('faceRig.stepChoose')}</h3>
     <p className="text-xs text-text-secondary">{t('faceRig.restHint')}</p>
-    <LipsPackChoices workspace={workspace} kit={kit} poseId={poseId} disabled={disabled || Boolean(busyState)} onApply={next => { onChange(next); onStatus?.(t('lips.collectionApplied')) }} />
-    <MouthPackChoices packs={presetPacks} selected={presetId} disabled={disabled || Boolean(busyState)} onSelect={setPresetId} onApply={applyPreset} />
-    <FaceRigStatePicker kit={kit} selected={selectedState} disabled={disabled || Boolean(busyState)} onSelect={setSelectedState} />
+    <LipsPackChoices workspace={workspace} kit={kit} poseId={poseId} disabled={disabled || Boolean(busyState)} title={workshopTitle} onApply={next => { onChange(next); onStatus?.(t('lips.collectionApplied')) }} />
+    <MouthPackChoices packs={presetPacks} selected={presetId} disabled={disabled || Boolean(busyState)} title={workshopTitle} onSelect={setPresetId} onApply={applyPreset} />
+    <FaceRigStatePicker kit={kit} selected={selectedState} disabled={disabled || Boolean(busyState)} title={workshopTitle} onSelect={setSelectedState} />
     {selectedRequest && <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1"><summary className="cursor-pointer text-xs text-text-muted">{t('faceRig.promptUsed')}</summary><p className="mt-1 select-text text-xs leading-relaxed text-text-secondary">{selectedRequest.prompt}</p></details>}
     {assetFor(kit, selectedState) && <div className="space-y-1 rounded border border-emerald-300/20 bg-[linear-gradient(45deg,#1c2330_25%,transparent_25%),linear-gradient(-45deg,#1c2330_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#1c2330_75%),linear-gradient(-45deg,transparent_75%,#1c2330_75%)] bg-[length:12px_12px] p-1.5">
       <img src={assetFor(kit, selectedState)!.source} alt={`${kit.name} ${stateLabel(selectedState)}`} className="mx-auto h-28 w-full object-contain" />
       <div className="flex items-center justify-between text-xs"><span className="truncate text-text-secondary">{assetFor(kit, selectedState)!.name}</span><span className="text-emerald-100">{t(`alpha.${assetFor(kit, selectedState)!.alphaStatus}`)} · {t(`review.${assetFor(kit, selectedState)!.reviewState}`)}</span></div>
       <FacePatchTextureNotice asset={selectedAsset} />
-      <button type="button" disabled={patchControls.cleanupDisabled || modelActionsDisabled} onClick={() => void cleanSelected()} className="w-full rounded border border-cyan-300/40 bg-cyan-400/10 px-1 py-2 text-xs text-cyan-100 disabled:opacity-40">{busyState === 'cleanup' ? t('faceRig.cleaningCutout') : t('faceRig.cleanMouthBackground')}</button>
+      <button type="button" disabled={patchControls.cleanupDisabled || modelActionsDisabled} title={cleanupTitle} onClick={() => void cleanSelected()} className="w-full rounded border border-cyan-300/40 bg-cyan-400/10 px-1 py-2 text-xs text-cyan-100 disabled:opacity-40">{busyState === 'cleanup' ? t('faceRig.cleaningCutout') : t('faceRig.cleanMouthBackground')}</button>
       <div className="flex gap-2 text-xs text-text-muted">
         <button type="button" onClick={() => setShowOverlay(value => !value)} className="rounded border border-border px-1 py-0.5">{showOverlay ? t('faceRig.hideMouth') : t('faceRig.showMouth')}</button>
         <button type="button" onClick={() => setCheckerboard(value => !value)} className="rounded border border-border px-1 py-0.5">{checkerboard ? t('faceRig.solidBackground') : t('faceRig.checkerboard')}</button>
       </div>
       <div className="space-y-1 rounded border border-border/70 bg-black/20 p-1">
         <div className="grid grid-cols-4 gap-1">
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetY', -1)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.up')}</button>
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetY', 1)} className="rounded border border-amber-300/40 bg-amber-400/10 px-1 py-2 text-xs text-amber-100">{t('faceRig.nudge.down')}</button>
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetX', -1)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.left')}</button>
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('offsetX', 1)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.right')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => nudge('offsetY', -1)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.up')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => nudge('offsetY', 1)} className="rounded border border-amber-300/40 bg-amber-400/10 px-1 py-2 text-xs text-amber-100">{t('faceRig.nudge.down')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => nudge('offsetX', -1)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.left')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => nudge('offsetX', 1)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.right')}</button>
         </div>
         <div className="grid grid-cols-2 gap-1">
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('scale', -0.005)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.smaller')}</button>
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => nudge('scale', 0.005)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.bigger')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => nudge('scale', -0.005)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.smaller')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => nudge('scale', 0.005)} className="rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.nudge.bigger')}</button>
         </div>
         <div className="grid grid-cols-2 gap-2 text-xs text-text-muted">
-          <label>{t('faceRig.fields.x')}<input type="range" min={-40} max={40} step={0.5} value={draftAnchor.offsetX} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetX', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
-          <label>{t('faceRig.fields.y')}<input type="range" min={-50} max={20} step={0.5} value={draftAnchor.offsetY} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('offsetY', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
-          <label>{t('faceRig.fields.scale')}<input type="range" min={0.01} max={0.45} step={0.001} value={draftAnchor.scale} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('scale', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
-          <label>{t('faceRig.fields.rotate')}<input type="range" min={-45} max={45} step={0.5} value={draftAnchor.rotation} disabled={disabled || Boolean(busyState)} onChange={event => updateAnchorField('rotation', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>{t('faceRig.fields.x')}<input type="range" min={-40} max={40} step={0.5} value={draftAnchor.offsetX} disabled={disabled || Boolean(busyState)} title={workshopTitle} onChange={event => updateAnchorField('offsetX', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>{t('faceRig.fields.y')}<input type="range" min={-50} max={20} step={0.5} value={draftAnchor.offsetY} disabled={disabled || Boolean(busyState)} title={workshopTitle} onChange={event => updateAnchorField('offsetY', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>{t('faceRig.fields.scale')}<input type="range" min={0.01} max={0.45} step={0.001} value={draftAnchor.scale} disabled={disabled || Boolean(busyState)} title={workshopTitle} onChange={event => updateAnchorField('scale', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
+          <label>{t('faceRig.fields.rotate')}<input type="range" min={-45} max={45} step={0.5} value={draftAnchor.rotation} disabled={disabled || Boolean(busyState)} title={workshopTitle} onChange={event => updateAnchorField('rotation', Number(event.target.value))} onPointerUp={() => commitPlacement()} className="w-full" /></label>
         </div>
         <p className="text-xs text-text-secondary">{t('faceRig.readout', { x: draftAnchor.offsetX.toFixed(2), y: draftAnchor.offsetY.toFixed(2), scale: draftAnchor.scale.toFixed(4), rot: draftAnchor.rotation.toFixed(1) })}</p>
         {placement.warnings.map(warning => <p key={warning} className="text-xs text-amber-200">{PLACEMENT_WARNING_KEYS[warning] ? t(PLACEMENT_WARNING_KEYS[warning]) : warning}</p>)}
         <div className="grid grid-cols-2 gap-1">
-          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={savePlacement} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.saveMouth')}</button>
-          <button type="button" disabled={disabled || Boolean(busyState)} onClick={lockMouths} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-2 text-xs text-amber-100 disabled:opacity-40">{t('faceRig.lockMouths')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} title={saveTitle} onClick={savePlacement} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.saveMouth')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={lockMouths} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-2 text-xs text-amber-100 disabled:opacity-40">{t('faceRig.lockMouths')}</button>
         </div>
         <div className="grid grid-cols-2 gap-1">
-          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} onClick={() => setDraftAnchor(savedAnchor)} className="rounded border border-border px-1 py-2 text-xs text-text-muted disabled:opacity-40">{t('faceRig.reset')}</button>
-          <button type="button" disabled={disabled || Boolean(busyState) || !kit.eyes.blink?.source} onClick={flashBlink} className="rounded border border-cyan-300/40 px-1 py-2 text-xs text-cyan-100 disabled:opacity-40">{holdBlink ? t('faceRig.blinking') : t('faceRig.flashBlink')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState) || !dirtyAnchor} title={saveTitle} onClick={() => setDraftAnchor(savedAnchor)} className="rounded border border-border px-1 py-2 text-xs text-text-muted disabled:opacity-40">{t('faceRig.reset')}</button>
+          <button type="button" disabled={disabled || Boolean(busyState) || !kit.eyes.blink?.source} title={blinkTitle} onClick={flashBlink} className="rounded border border-cyan-300/40 px-1 py-2 text-xs text-cyan-100 disabled:opacity-40">{holdBlink ? t('faceRig.blinking') : t('faceRig.flashBlink')}</button>
         </div>
       </div>
-      <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.approveTransparent')}</button><button type="button" disabled={disabled || Boolean(busyState)} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-2 text-xs text-red-200">{t('faceRig.reject')}</button></div>
+      <div className="grid grid-cols-2 gap-1"><button type="button" disabled={disabled || Boolean(busyState) || assetFor(kit, selectedState)!.alphaStatus !== 'transparent'} title={approveTitle} onClick={() => review(selectedState, true)} className="rounded border border-emerald-300/40 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{t('faceRig.approveTransparent')}</button><button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => review(selectedState, false)} className="rounded border border-red-300/30 px-1 py-2 text-xs text-red-200">{t('faceRig.reject')}</button></div>
     </div>}
-    <div className="grid grid-cols-2 gap-3"><button type="button" disabled={modelActionsDisabled || !selectedRequest} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === selectedState ? t('faceRig.generatingNamed', { name: stateLabel(selectedState) }) : t('faceRig.generateNamed', { name: stateLabel(selectedState) })}</button><button type="button" disabled={modelActionsDisabled || !requests.length} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? t('faceRig.generatingPack') : t('faceRig.generateMissing')}</button></div>
+    <div className="grid grid-cols-2 gap-3"><button type="button" disabled={modelActionsDisabled || !selectedRequest} title={generateOneTitle} onClick={() => void generateSelected()} className="rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === selectedState ? t('faceRig.generatingNamed', { name: stateLabel(selectedState) }) : t('faceRig.generateNamed', { name: stateLabel(selectedState) })}</button><button type="button" disabled={modelActionsDisabled || !requests.length} title={generatePackTitle} onClick={() => void generateMissingPack()} className="rounded border border-emerald-300/30 px-1 py-2 text-xs text-emerald-100 disabled:opacity-40">{busyState === 'pack' ? t('faceRig.generatingPack') : t('faceRig.generateMissing')}</button></div>
     <h3 className="pt-3 text-sm font-semibold">{t('faceRig.stepTry')}</h3>
-    <FaceRigSamplePreview kit={kit} disabled={disabled || Boolean(busyState)} stopRef={sampleStopRef}
+    <FaceRigSamplePreview kit={kit} disabled={disabled || Boolean(busyState)} title={workshopTitle} stopRef={sampleStopRef}
       onStart={() => { playTokenRef.current++; audioRef.current?.pause(); setShowOverlay(true) }} onViseme={setLiveViseme} />
     <details open className="space-y-3 rounded border border-amber-300/20 bg-black/15 p-3">
       <summary className="cursor-pointer text-xs text-text-muted">{t('faceRig.tryLine.summary')}</summary>
-      <textarea value={dialogueText} disabled={disabled || Boolean(busyState)} onChange={event => setDialogueText(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-2 text-xs" />
+      <textarea value={dialogueText} disabled={disabled || Boolean(busyState)} title={workshopTitle} onChange={event => setDialogueText(event.target.value)} rows={2} className="mt-1 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-2 text-xs" />
       <div className="grid grid-cols-2 gap-1">
-        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} onClick={planDialogue} className="rounded border border-amber-300/40 px-1 py-2 text-xs text-amber-100 disabled:opacity-40">{t('faceRig.tryLine.planMouths')}</button>
-        <button type="button" disabled={modelActionsDisabled || !dialogueText.trim()} onClick={() => void speakDialogue()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-2 text-xs text-amber-100 disabled:opacity-40">{busyState === 'dialogue' ? t('faceRig.tryLine.generatingVoice') : t('faceRig.tryLine.speak')}</button>
+        <button type="button" disabled={disabled || Boolean(busyState) || !dialogueText.trim()} title={lineTitle} onClick={planDialogue} className="rounded border border-amber-300/40 px-1 py-2 text-xs text-amber-100 disabled:opacity-40">{t('faceRig.tryLine.planMouths')}</button>
+        <button type="button" disabled={modelActionsDisabled || !dialogueText.trim()} title={speakTitle} onClick={() => void speakDialogue()} className="rounded border border-amber-300/50 bg-amber-400/10 px-1 py-2 text-xs text-amber-100 disabled:opacity-40">{busyState === 'dialogue' ? t('faceRig.tryLine.generatingVoice') : t('faceRig.tryLine.speak')}</button>
       </div>
       {dialoguePreview && <div className="space-y-1">
         <p className="text-xs text-text-secondary">{t('faceRig.tryLine.beats', { count: dialoguePreview.visemes.length, duration: dialoguePreview.end.toFixed(1), available: dialoguePreview.available.join(', ') || t('faceRig.tryLine.none') })}</p>
         {dialoguePreview.missing.length > 0 && <p className="text-xs text-amber-200">{t('faceRig.tryLine.missing', { missing: dialoguePreview.missing.join(', '), fallback: dialoguePreview.visemes.find(beat => beat.fallback)?.sourceState ?? t('faceRig.tryLine.remainingMouth') })}</p>}
         <div className="flex flex-wrap gap-1">{dialoguePreview.visemes.map((beat, index) => <span key={`${beat.start}-${index}`} className={`rounded border px-1 py-0.5 text-xs ${liveViseme && liveViseme.start === beat.start && liveViseme.state === beat.state ? 'border-amber-300 text-amber-100' : 'border-border text-text-muted'}`}>{beat.state}{beat.fallback ? `→${beat.sourceState}` : ''}</span>)}</div>
-        <button type="button" disabled={disabled || Boolean(busyState)} onClick={() => void playDialogue()} className="w-full rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.tryLine.playMouths')}</button>
+        <button type="button" disabled={disabled || Boolean(busyState)} title={workshopTitle} onClick={() => void playDialogue()} className="w-full rounded border border-border px-1 py-2 text-xs text-text-secondary">{t('faceRig.tryLine.playMouths')}</button>
       </div>}
       <audio ref={audioRef} src={dialogueAudio ? getFileUrl(dialogueAudio, workspace) : undefined} preload="auto" className="hidden" />
     </details>

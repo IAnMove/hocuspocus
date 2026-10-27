@@ -22,6 +22,7 @@ export type CharacterFacePatchPanelProps = {
   anchor: CharacterFaceAnchor
   workspace: string
   disabled?: boolean
+  title?: string
   onChange: (kit: CharacterKit) => void
   onStatus?: (message: string) => void
   /** Test seams; production defaults to local preparation and the existing upload API. */

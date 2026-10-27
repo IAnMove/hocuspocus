@@ -1,4 +1,4 @@
-import { controlLabel, controlChoice } from '../../i18n/controlLabel'
+import { controlLabel, controlChoice, controlReason, firstControlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, ArrowDown, ArrowUp, Check, CheckCircle2, Clapperboard, Eye, Film,
@@ -34,6 +34,14 @@ import {
 import type { ComicMovieAspect, ComicMovieQuality } from './movieEngines'
 
 const button = 'inline-flex items-center justify-center gap-1.5 rounded-md border border-border bg-bg-tertiary px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-hover disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+
+function motionLevelLocked(renderer: string | undefined) {
+  return renderer === 'hold' || renderer === 'parallax' || renderer === 'cinemagraph'
+}
+
+function reframeNeedsApproval(clip: { needs_reframe?: boolean; reframe_approved?: boolean; used_prepared_keyframe?: boolean }) {
+  return Boolean(clip.needs_reframe && !(clip.reframe_approved && clip.used_prepared_keyframe))
+}
 const input = 'w-full rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue'
 
 const motionLevelLabel = (t: TFunction<'comics'>, level: number) => (
@@ -122,10 +130,12 @@ export function ComicWritingProviderFields({
   value,
   onChange,
   disabled = false,
+  title,
 }: {
   value: ComicDirectorRequest
   onChange: <K extends keyof ComicDirectorRequest>(key: K, value: ComicDirectorRequest[K]) => void
   disabled?: boolean
+  title?: string
 }) {
   const { t } = useUiTranslation('comics')
   const services = useStore(state => state.servicesConfig)
@@ -164,9 +174,9 @@ export function ComicWritingProviderFields({
     }
   }
   return (
-    <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5">
+    <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5" title={title}>
       <div className="grid grid-cols-2 gap-2">
-        <button type="button" className={`${button} ${value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled}
+        <button type="button" className={`${button} ${value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled} title={controlReason(disabled, 'disabled.actionInProgress')}
           onClick={() => {
             onChange('useGlobalProfile', true)
             onChange(
@@ -185,15 +195,15 @@ export function ComicWritingProviderFields({
             onChange('provider', profile.image.provider === 'minimax' ? 'minimax' : 'maestro')
             onChange('imageModel', profile.image.model)
           }}>{t('writing.useGlobal')}</button>
-        <button type="button" className={`${button} ${!value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled}
+        <button type="button" className={`${button} ${!value.useGlobalProfile ? 'border-accent-blue text-accent-blue' : ''}`} disabled={disabled} title={controlReason(disabled, 'disabled.actionInProgress')}
           onClick={() => onChange('useGlobalProfile', false)}>{t('writing.override')}</button>
       </div>
       {value.useGlobalProfile && <p className="text-[9px] text-emerald-400">{t('writing.global', { text: profile.text.model, image: profile.image.model })}</p>}
-      <fieldset disabled={disabled || value.useGlobalProfile} className="space-y-2 disabled:opacity-50">
+      <fieldset disabled={disabled || value.useGlobalProfile} title={firstControlReason([[disabled, 'disabled.actionInProgress'], [value.useGlobalProfile, 'disabled.useGlobalProfile']])} className="space-y-2 disabled:opacity-50">
       <label className="block text-[10px] text-text-muted">{t('writing.llm')}
         <select
           className={`${input} mt-1`}
-          disabled={disabled}
+          disabled={disabled} title={controlReason(disabled, 'disabled.actionInProgress')}
           value={value.writingProvider || 'maestro'}
           onChange={event => selectProvider(event.target.value as ComicDirectorRequest['writingProvider'])}
         >
@@ -209,18 +219,18 @@ export function ComicWritingProviderFields({
       {external && <>
         <label className="block text-[10px] text-text-muted">{t('writing.model')}
           {provider === 'deepseek' ? (
-            <select className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'deepseek-v4-pro'} onChange={event => onChange('writingModel', event.target.value)}>
+            <select className={`${input} mt-1`} disabled={disabled} title={controlReason(disabled, 'disabled.actionInProgress')} value={value.writingModel || 'deepseek-v4-pro'} onChange={event => onChange('writingModel', event.target.value)}>
               <option value="deepseek-v4-pro">{t('writing.deepseekPro')}</option>
               <option value="deepseek-v4-flash">{t('writing.deepseekFlash')}</option>
             </select>
           ) : provider === 'minimax' ? (
-            <select className={`${input} mt-1`} disabled={disabled} value={value.writingModel || 'MiniMax-M3'} onChange={event => onChange('writingModel', event.target.value)}>
+            <select className={`${input} mt-1`} disabled={disabled} title={controlReason(disabled, 'disabled.actionInProgress')} value={value.writingModel || 'MiniMax-M3'} onChange={event => onChange('writingModel', event.target.value)}>
               <option value="MiniMax-M3">{t('writing.minimaxM3')}</option>
               <option value="MiniMax-M2.7">{t('writing.minimaxM27')}</option>
               <option value="MiniMax-M2.7-highspeed">{t('writing.minimaxFast')}</option>
             </select>
           ) : (
-            <input className={`${input} mt-1`} disabled={disabled} value={value.writingModel || ''} onChange={event => onChange('writingModel', event.target.value)} placeholder={provider === 'openai' ? 'gpt-4.1' : t('writing.modelPlaceholder')} />
+            <input className={`${input} mt-1`} disabled={disabled} title={controlReason(disabled, 'disabled.actionInProgress')} value={value.writingModel || ''} onChange={event => onChange('writingModel', event.target.value)} placeholder={provider === 'openai' ? 'gpt-4.1' : t('writing.modelPlaceholder')} />
           )}
         </label>
         <div className="rounded border border-border px-2 py-1.5 text-[9px] text-text-muted">
@@ -363,11 +373,11 @@ export function ComicCharactersPanel({
                 placeholder={t('characters.addReference')}
                 items={imageItems}
                 accept="image/*"
-                disabled={busy !== null}
+                disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
                 constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
                 onChoose={item => { if (item) void applyPicked(character.id, item) }}
               />
-              <button className={`${button} border-purple-400/40 text-purple-300`} disabled={busy !== null} onClick={async () => { setBusy(character.id); try { await generateReference(character); notify('ok', t('characters.referenceGenerated', { name: character.name })) } catch (error) { notify('error', (error as Error).message) } finally { setBusy(null) } }}>
+              <button className={`${button} border-purple-400/40 text-purple-300`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={async () => { setBusy(character.id); try { await generateReference(character); notify('ok', t('characters.referenceGenerated', { name: character.name })) } catch (error) { notify('error', (error as Error).message) } finally { setBusy(null) } }}>
                 {busy === character.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />} {t('characters.generatePortrait')}
               </button>
             </div>
@@ -379,7 +389,7 @@ export function ComicCharactersPanel({
         <input className={input} value={draft.name} onChange={event => setDraft(value => ({ ...value, name: event.target.value }))} placeholder={t('characters.newName')} />
         <input className={input} value={draft.role} onChange={event => setDraft(value => ({ ...value, role: event.target.value }))} placeholder={t('characters.role')} />
         <textarea className={input} rows={2} value={draft.description} onChange={event => setDraft(value => ({ ...value, description: event.target.value }))} placeholder={t('characters.appearance')} />
-        <button className={`${button} w-full`} disabled={!draft.name.trim()} onClick={add}><Plus size={12} /> {t('characters.create')}</button>
+        <button className={`${button} w-full`} disabled={!draft.name.trim()} title={controlReason(!draft.name.trim(), 'disabled.writeName')} onClick={add}><Plus size={12} /> {t('characters.create')}</button>
       </div>
     </div>
   )
@@ -476,7 +486,7 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
       </div>
       <ComicWritingProviderFields
         value={director.input}
-        disabled={revising}
+        disabled={revising} title={controlReason(revising, 'disabled.actionInProgress')}
         onChange={(key, value) => {
           const state = useComicStore.getState()
           const current = state.project.director!
@@ -487,7 +497,7 @@ export function ComicScriptPanel({ notify }: { notify: (kind: 'ok' | 'error', te
       <textarea className={input} rows={2} value={director.plan.logline} onChange={event => patchPlan({ logline: event.target.value })} placeholder={t('script.logline')} />
       <textarea className={input} rows={4} value={director.plan.synopsis} onChange={event => patchPlan({ synopsis: event.target.value })} placeholder={t('script.synopsis')} />
       {!!director.plan.storyStructure?.length && <div className="space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('script.pageBeats')}</strong>{director.plan.storyStructure.map((beat, index) => <div key={beat.pageNumber} className="space-y-1.5 rounded border border-border p-2"><input className={input} value={beat.stage} onChange={event => patchBeat(index, { stage: event.target.value })} /><textarea className={input} rows={2} value={beat.goal} onChange={event => patchBeat(index, { goal: event.target.value })} /><textarea className={input} rows={2} value={beat.turningPoint} onChange={event => patchBeat(index, { turningPoint: event.target.value })} /></div>)}</div>}
-      <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('script.improve')}</strong><textarea className={input} rows={3} value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} placeholder={t('script.improvePlaceholder')} /><button className={`${button} w-full border-purple-400/40 text-purple-300`} disabled={revising} onClick={improveStory}>{revising ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {t('script.revise')}</button></div>
+      <div className="space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-2.5"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('script.improve')}</strong><textarea className={input} rows={3} value={revisionInstruction} onChange={event => setRevisionInstruction(event.target.value)} placeholder={t('script.improvePlaceholder')} /><button className={`${button} w-full border-purple-400/40 text-purple-300`} disabled={revising} title={controlReason(revising, 'disabled.actionInProgress')} onClick={improveStory}>{revising ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} {t('script.revise')}</button></div>
       <div className="space-y-2">
         <strong className="text-[10px] uppercase tracking-wide text-text-muted">
           {storyboard ? t('script.shotList') : t('script.fullScript')}
@@ -591,7 +601,7 @@ export function ComicQualityPanel({ notify }: { notify: (kind: 'ok' | 'error', t
     useComicStore.getState().patchProject({ translationGlossary: [...(project.translationGlossary || []), { source: draft.source.trim(), translation: draft.translation.trim(), note: draft.note?.trim() }] })
     setDraft({ source: '', translation: '', note: '' })
   }
-  return <div className="space-y-3"><div className="rounded-lg border border-border bg-bg-tertiary/30 p-3"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-text-primary">{t('quality.title')}</span><span className={`text-xl font-bold ${score >= 80 ? 'text-emerald-400' : score >= 55 ? 'text-amber-300' : 'text-red-400'}`}>{score}</span></div><p className="text-[10px] text-text-muted">{t('quality.hint')}</p></div><div className="space-y-1.5">{issues.length ? issues.slice(0, 40).map((issue, index) => <div key={`${issue.text}-${index}`} className={`rounded border px-2 py-1.5 text-[10px] ${issue.level === 'error' ? 'border-red-500/30 text-red-300' : issue.level === 'warning' ? 'border-amber-500/30 text-amber-300' : 'border-border text-text-muted'}`}>{issue.text}</div>) : <div className="rounded border border-emerald-500/30 p-2 text-xs text-emerald-300">{t('quality.clean')}</div>}</div><button className={`${button} w-full`} disabled={!project.director} onClick={() => { const state = useComicStore.getState(); state.patchProject(simplifyDirectorText(state.project)); notify('ok', t('quality.fixed')) }}><Sparkles size={12} /> {t('quality.safeFixes')}</button><div className="border-t border-border pt-3 space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('quality.glossary')}</strong><p className="text-[9px] text-text-muted">{t('quality.glossaryHint')}</p>{(project.translationGlossary || []).map((entry, index) => <div key={`${entry.source}-${index}`} className="flex items-center gap-1 rounded border border-border p-1.5 text-[10px]"><span className="text-text-primary">{entry.source}</span><span className="text-text-muted">→</span><span className="text-accent-blue">{entry.translation}</span><button className="ml-auto text-red-300" onClick={() => useComicStore.getState().patchProject({ translationGlossary: (project.translationGlossary || []).filter((_, itemIndex) => itemIndex !== index) })} title={controlLabel('a11y.removeGlossaryEntry')} aria-label={controlLabel('a11y.removeGlossaryEntry')}><Trash2 size={11} /></button></div>)}<input className={input} value={draft.source} onChange={event => setDraft(value => ({ ...value, source: event.target.value }))} placeholder={t('quality.sourceTerm')} /><input className={input} value={draft.translation} onChange={event => setDraft(value => ({ ...value, translation: event.target.value }))} placeholder={t('quality.requiredTranslation')} /><input className={input} value={draft.note || ''} onChange={event => setDraft(value => ({ ...value, note: event.target.value }))} placeholder={t('quality.optionalContext')} /><button className={`${button} w-full`} onClick={addGlossary}><Plus size={12} /> {t('quality.addTerm')}</button></div></div>
+  return <div className="space-y-3"><div className="rounded-lg border border-border bg-bg-tertiary/30 p-3"><div className="flex items-center justify-between"><span className="text-xs font-semibold text-text-primary">{t('quality.title')}</span><span className={`text-xl font-bold ${score >= 80 ? 'text-emerald-400' : score >= 55 ? 'text-amber-300' : 'text-red-400'}`}>{score}</span></div><p className="text-[10px] text-text-muted">{t('quality.hint')}</p></div><div className="space-y-1.5">{issues.length ? issues.slice(0, 40).map((issue, index) => <div key={`${issue.text}-${index}`} className={`rounded border px-2 py-1.5 text-[10px] ${issue.level === 'error' ? 'border-red-500/30 text-red-300' : issue.level === 'warning' ? 'border-amber-500/30 text-amber-300' : 'border-border text-text-muted'}`}>{issue.text}</div>) : <div className="rounded border border-emerald-500/30 p-2 text-xs text-emerald-300">{t('quality.clean')}</div>}</div><button className={`${button} w-full`} disabled={!project.director} title={controlReason(!project.director, 'disabled.makePlanFirst')} onClick={() => { const state = useComicStore.getState(); state.patchProject(simplifyDirectorText(state.project)); notify('ok', t('quality.fixed')) }}><Sparkles size={12} /> {t('quality.safeFixes')}</button><div className="border-t border-border pt-3 space-y-2"><strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('quality.glossary')}</strong><p className="text-[9px] text-text-muted">{t('quality.glossaryHint')}</p>{(project.translationGlossary || []).map((entry, index) => <div key={`${entry.source}-${index}`} className="flex items-center gap-1 rounded border border-border p-1.5 text-[10px]"><span className="text-text-primary">{entry.source}</span><span className="text-text-muted">→</span><span className="text-accent-blue">{entry.translation}</span><button className="ml-auto text-red-300" onClick={() => useComicStore.getState().patchProject({ translationGlossary: (project.translationGlossary || []).filter((_, itemIndex) => itemIndex !== index) })} title={controlLabel('a11y.removeGlossaryEntry')} aria-label={controlLabel('a11y.removeGlossaryEntry')}><Trash2 size={11} /></button></div>)}<input className={input} value={draft.source} onChange={event => setDraft(value => ({ ...value, source: event.target.value }))} placeholder={t('quality.sourceTerm')} /><input className={input} value={draft.translation} onChange={event => setDraft(value => ({ ...value, translation: event.target.value }))} placeholder={t('quality.requiredTranslation')} /><input className={input} value={draft.note || ''} onChange={event => setDraft(value => ({ ...value, note: event.target.value }))} placeholder={t('quality.optionalContext')} /><button className={`${button} w-full`} onClick={addGlossary}><Plus size={12} /> {t('quality.addTerm')}</button></div></div>
 }
 
 export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', text: string) => void }) {
@@ -1562,7 +1572,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
         <select
           className={`${input} mt-2`}
           value={effectiveVideoModel}
-          disabled={Boolean(busy)}
+          disabled={Boolean(busy)} title={controlReason(Boolean(busy), 'disabled.actionInProgress')}
           onChange={event => selectDirectorVideoModel(event.target.value)}
         >
           {!selectableVideoModels.some(model => model.model_type === effectiveVideoModel) && (
@@ -1572,7 +1582,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
             <option
               key={model.model_type}
               value={model.model_type}
-              disabled={model.is_downloaded === false}
+              disabled={model.is_downloaded === false} title={controlReason(model.is_downloaded === false, 'disabled.modelNotDownloaded')}
             >
               {model.name}{model.is_downloaded === false ? t('video.notInstalled') : ''}
             </option>
@@ -1719,7 +1729,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                 <option value="wipe-left">{t('video.wipeLeft')}</option>
                 <option value="dissolve">{t('video.dissolve')}</option>
               </select>
-              <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} onClick={create}>
+              <button className={`${button} w-full border-cyan-400/50 text-cyan-300`} disabled={Boolean(busy) || panelCount === 0} title={firstControlReason([[Boolean(busy), 'disabled.actionInProgress'], [panelCount === 0, 'disabled.noPanels']])} onClick={create}>
                 {busy === 'animatic' ? <Loader2 size={13} className="animate-spin" /> : <Film size={13} />}
                 {busy === 'animatic' && progress ? progress : t('video.renderAnimatic')}
               </button>
@@ -1784,7 +1794,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                   <div className="space-y-2 border-t border-border p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={planned.videoIncluded !== false} onChange={event => updateShot(pageIndex, panelIndex, { videoIncluded: event.target.checked })} /> {t('video.include')}</label>
-                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={Boolean(planned.videoTestSelected)} disabled={planned.videoIncluded === false} onChange={event => updateShot(pageIndex, panelIndex, { videoTestSelected: event.target.checked })} /> {t('video.suggestTest')}</label>
+                      <label className="flex items-center gap-1 text-[9px] text-text-muted"><input type="checkbox" checked={Boolean(planned.videoTestSelected)} disabled={planned.videoIncluded === false} title={controlReason(planned.videoIncluded === false, 'disabled.shotNotIncluded')} onChange={event => updateShot(pageIndex, panelIndex, { videoTestSelected: event.target.checked })} /> {t('video.suggestTest')}</label>
                       <span className="ml-auto flex gap-1"><button className={button} disabled={rowIndex === 0} onClick={() => moveShot(rowIndex, -1)} title={t('video.moveEarlier')} aria-label={t('video.moveEarlier')}><ArrowUp size={12} /></button><button className={button} disabled={rowIndex === videoShotRows.length - 1} onClick={() => moveShot(rowIndex, 1)} title={t('video.moveLater')} aria-label={t('video.moveLater')}><ArrowDown size={12} /></button></span>
                     </div>
                     <label className="block text-[9px] text-text-muted">{t('video.actionHint')}
@@ -1832,7 +1842,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                       <label className="text-[9px] text-text-muted">{t('video.fitHintLabel')}
                         <select className={`${input} mt-1`} value={planned.videoFit || 'auto'} onChange={event => updateShot(pageIndex, panelIndex, { videoFit: event.target.value === 'auto' ? undefined : event.target.value as ComicPlanPanel['videoFit'] })}>
                           <option value="auto">{t('video.followFit', { fit: movieImageFit })}</option>
-                          {planned.videoFit === 'reframe' && <option value="reframe" disabled>{t('video.legacyReframe')}</option>}
+                          {planned.videoFit === 'reframe' && <option value="reframe" disabled title={controlLabel('disabled.legacyOption')}>{t('video.legacyReframe')}</option>}
                           <option value="cover">{t('video.cinematicCrop')}</option>
                           <option value="contain">{t('video.wholePanel')}</option>
                         </select>
@@ -1841,10 +1851,10 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                         <input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={planned.durationSeconds || defaultDuration} onChange={event => updateShot(pageIndex, panelIndex, { durationSeconds: Number(event.target.value) })} />
                       </label>
                       <label className="text-[9px] text-text-muted">{t('video.motionHint', { label: motionLevelLabel(t, planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1)) })}
-                        <input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={renderer === 'hold' || renderer === 'parallax' || renderer === 'cinemagraph'} value={planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1)} onChange={event => updateShot(pageIndex, panelIndex, { videoMotionLevel: Number(event.target.value) as ComicPlanPanel['videoMotionLevel'] })} />
+                        <input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={motionLevelLocked(renderer)} title={controlReason(motionLevelLocked(renderer), 'disabled.motionLocked')} value={planned.videoMotionLevel ?? (renderer === 'hold' ? 0 : 1)} onChange={event => updateShot(pageIndex, panelIndex, { videoMotionLevel: Number(event.target.value) as ComicPlanPanel['videoMotionLevel'] })} />
                       </label>
                       <label className="text-[9px] text-text-muted">{t('video.cameraHint')}
-                        <select className={`${input} mt-1`} value={planned.cameraMove || 'none'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
+                        <select className={`${input} mt-1`} value={planned.cameraMove || 'none'} disabled={renderer !== 'ltx'} title={controlReason(renderer !== 'ltx', 'disabled.rendererNotLtx')} onChange={event => updateShot(pageIndex, panelIndex, { cameraMove: event.target.value as ComicPlanPanel['cameraMove'] })}>
                           <option value="none">{t('video.lockedCamera')}</option>
                           <option value="push-in">{t('video.pushIn')}</option>
                           <option value="pull-out">{t('video.pullOut')}</option>
@@ -1853,7 +1863,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
                         </select>
                       </label>
                       <label className="text-[9px] text-text-muted">{t('video.aiMotionHint')}
-                        <select className={`${input} mt-1`} value={planned.videoMotion || 'auto'} disabled={renderer !== 'ltx'} onChange={event => updateShot(pageIndex, panelIndex, { videoMotion: event.target.value as ComicPlanPanel['videoMotion'] })}>
+                        <select className={`${input} mt-1`} value={planned.videoMotion || 'auto'} disabled={renderer !== 'ltx'} title={controlReason(renderer !== 'ltx', 'disabled.rendererNotLtx')} onChange={event => updateShot(pageIndex, panelIndex, { videoMotion: event.target.value as ComicPlanPanel['videoMotion'] })}>
                           <option value="auto">{t('video.followMotion', { mode: movieMotionMode })}</option>
                           <option value="contextual">{t('video.contextAware')}</option>
                           <option value="living-still">{t('video.livingStillShort')}</option>
@@ -1880,7 +1890,7 @@ export function ComicVideoPanel({ notify }: { notify: (kind: 'ok' | 'error', tex
       )}
 
       <div className="space-y-2 border-t border-border pt-3">
-        <button className={`${button} w-full border-red-400/60 bg-red-400/5 text-red-200`} disabled={Boolean(busy) || includedVideoShots.length === 0} onClick={() => convertToMovie(undefined, true)}>
+        <button className={`${button} w-full border-red-400/60 bg-red-400/5 text-red-200`} disabled={Boolean(busy) || includedVideoShots.length === 0} title={firstControlReason([[Boolean(busy), 'disabled.actionInProgress'], [includedVideoShots.length === 0, 'disabled.noVideoShots']])} onClick={() => convertToMovie(undefined, true)}>
           {busy === 'preflight' ? <Loader2 size={13} className="animate-spin" /> : <Eye size={13} />}
           {busy === 'preflight' && progress ? progress : t('video.preparePre', { count: includedVideoShots.length })}
         </button>
@@ -2623,8 +2633,8 @@ export function ComicVideoPreflightPanel({
             </p>
           </div>
           <div className="ml-auto flex flex-wrap gap-1.5">
-            <button className={button} disabled={busy !== null || hasUnsavedLocalChanges} onClick={() => void loadPreview(pipelineId)}>{tCommon('actions.reload')}</button>
-            <button className={button} disabled={busy !== null || frontendSourceStale} onClick={selectRepresentativePreviewTests}><Sparkles size={12} /> {t('preflight.autoSelect')}</button>
+            <button className={button} disabled={busy !== null || hasUnsavedLocalChanges} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [hasUnsavedLocalChanges, 'disabled.unsavedChanges']])} onClick={() => void loadPreview(pipelineId)}>{tCommon('actions.reload')}</button>
+            <button className={button} disabled={busy !== null || frontendSourceStale} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [frontendSourceStale, 'disabled.sourceStale']])} onClick={selectRepresentativePreviewTests}><Sparkles size={12} /> {t('preflight.autoSelect')}</button>
             <label className="flex items-center gap-1 rounded border border-border px-1.5 text-[9px] text-text-muted">
               {t('preflight.duration')}
               <input
@@ -2638,14 +2648,14 @@ export function ComicVideoPreflightPanel({
               />
               s
             </label>
-            <button className={button} disabled={busy !== null || frontendSourceStale || !enabledDrafts.length} onClick={applyDurationToPreparedShots}>{t('preflight.applyDuration')}</button>
-            <button className={`${button} border-cyan-400/40 text-cyan-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewApproved || !selectedDrafts.length} onClick={() => void generate('test')}><Play size={12} /> {t('preflight.testSelected', { count: selectedDrafts.length })}</button>
-            <button className={`${button} border-emerald-400/40 text-emerald-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewFingerprint || previewApproved || Boolean(unresolvedRisks.length)} onClick={() => void save({ approvePreview: true })}>{busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : previewApproved ? <CheckCircle2 size={12} /> : <ShieldCheck size={12} />} {previewApproved ? t('preflight.approved') : t('preflight.approve')}</button>
-            <button className={`${button} border-purple-400/50 text-purple-200`} disabled={busy !== null || !fullGenerationUnlocked} onClick={() => void generate('all')}>{busy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />} {t('preflight.generateFilm')}</button>
+            <button className={button} disabled={busy !== null || frontendSourceStale || !enabledDrafts.length} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [frontendSourceStale, 'disabled.sourceStale'], [!enabledDrafts.length, 'disabled.nothingEnabled']])} onClick={applyDurationToPreparedShots}>{t('preflight.applyDuration')}</button>
+            <button className={`${button} border-cyan-400/40 text-cyan-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewApproved || !selectedDrafts.length} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [dirty, 'disabled.unsavedChanges'], [frontendSourceStale, 'disabled.sourceStale'], [!previewApproved, 'disabled.approvePreview'], [!selectedDrafts.length, 'disabled.chooseTests']])} onClick={() => void generate('test')}><Play size={12} /> {t('preflight.testSelected', { count: selectedDrafts.length })}</button>
+            <button className={`${button} border-emerald-400/40 text-emerald-300`} disabled={busy !== null || dirty || frontendSourceStale || !previewFingerprint || previewApproved || Boolean(unresolvedRisks.length)} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [dirty, 'disabled.unsavedChanges'], [frontendSourceStale, 'disabled.sourceStale'], [!previewFingerprint, 'disabled.previewNotReady'], [previewApproved, 'disabled.alreadySaved'], [Boolean(unresolvedRisks.length), 'disabled.unresolvedRisks']])} onClick={() => void save({ approvePreview: true })}>{busy === 'approve' ? <Loader2 size={12} className="animate-spin" /> : previewApproved ? <CheckCircle2 size={12} /> : <ShieldCheck size={12} />} {previewApproved ? t('preflight.approved') : t('preflight.approve')}</button>
+            <button className={`${button} border-purple-400/50 text-purple-200`} disabled={busy !== null || !fullGenerationUnlocked} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [dirty, 'disabled.unsavedChanges'], [!previewApproved, 'disabled.approvePreview'], [!qualityGateReady, 'disabled.generationLocked'], [Boolean(unresolvedRisks.length), 'disabled.unresolvedRisks'], [frontendSourceStale, 'disabled.sourceStale']])} onClick={() => void generate('all')}>{busy === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Film size={12} />} {t('preflight.generateFilm')}</button>
           </div>
         </div>
         {frontendSourceStale && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.staleBanner')}</div>}
-        {dirty && <div className="mt-2 flex items-center justify-between rounded border border-amber-400/35 bg-amber-400/5 p-2 text-[10px] text-amber-200"><span><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.unsaved')}</span><button className={`${button} border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale} onClick={() => void save()}>{busy === 'save' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} {t('preflight.saveRebuild')}</button></div>}
+        {dirty && <div className="mt-2 flex items-center justify-between rounded border border-amber-400/35 bg-amber-400/5 p-2 text-[10px] text-amber-200"><span><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.unsaved')}</span><button className={`${button} border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [frontendSourceStale, 'disabled.sourceStale']])} onClick={() => void save()}>{busy === 'save' ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />} {t('preflight.saveRebuild')}</button></div>}
         {!previewFingerprint && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.legacy')}</div>}
         {!dirty && previewApproved && <div className={`mt-2 rounded border p-2 text-[10px] ${qualityGateReady ? 'border-emerald-400/35 bg-emerald-400/5 text-emerald-200' : 'border-cyan-400/35 bg-cyan-400/5 text-cyan-200'}`}><CheckCircle2 size={12} className="mr-1 inline" />{t('preflight.approvedGate', { status: qualityGate?.status || t('preflight.pending'), tail: qualityGateReady ? t('preflight.gateUnlocked') : t('preflight.gatePending') })}</div>}
         {!dirty && previewApproved && qualityGate && !qualityGateReady && (
@@ -2700,7 +2710,7 @@ export function ComicVideoPreflightPanel({
               {t('preflight.waiverReason')}
               <input className={`${input} mt-1`} value={waiverReason} onChange={event => setWaiverReason(event.target.value)} placeholder={t('preflight.waiverPlaceholder')} />
             </label>
-            <button className={`${button} self-end border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale || !waiverReason.trim() || Boolean(unresolvedRisks.length)} onClick={() => void save({ qualityWaiver: true })}><ShieldCheck size={12} /> {t('preflight.waive')}</button>
+            <button className={`${button} self-end border-amber-400/50 text-amber-100`} disabled={busy !== null || frontendSourceStale || !waiverReason.trim() || Boolean(unresolvedRisks.length)} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [frontendSourceStale, 'disabled.sourceStale'], [!waiverReason.trim(), 'disabled.writeReason'], [Boolean(unresolvedRisks.length), 'disabled.unresolvedRisks']])} onClick={() => void save({ qualityWaiver: true })}><ShieldCheck size={12} /> {t('preflight.waive')}</button>
           </div>
         )}
         {!!unresolvedRisks.length && <div className="mt-2 rounded border border-red-400/40 bg-red-400/5 p-2 text-[10px] text-red-200"><AlertTriangle size={12} className="mr-1 inline" />{t('preflight.unresolved', { count: unresolvedRisks.length })}</div>}
@@ -2787,7 +2797,7 @@ export function ComicVideoPreflightPanel({
               ) : null}
               <div className="mt-2 flex flex-wrap gap-3 text-[9px] text-text-muted">
                 <label className="flex items-center gap-1"><input type="checkbox" checked={clip.included} onChange={event => patchDraft(clip.index, { included: event.target.checked })} /> {t('video.include')}</label>
-                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.test_selected} disabled={!clip.included} onChange={event => patchDraft(clip.index, { test_selected: event.target.checked })} /> {t('preflight.testSample')}</label>
+                <label className="flex items-center gap-1"><input type="checkbox" checked={clip.test_selected} disabled={!clip.included} title={controlReason(!clip.included, 'disabled.shotNotIncluded')} onChange={event => patchDraft(clip.index, { test_selected: event.target.checked })} /> {t('preflight.testSample')}</label>
                 <span>{t('preflight.model', { name: clip.video_model })}</span>
                 {clip.runtime_recipe && <span>{t('preflight.recipe', { name: clip.runtime_recipe })}</span>}
                 <span>{t('preflight.steps', { value: `${clip.num_inference_steps}${clip.stage2_steps ? `+${clip.stage2_steps}` : ''}` })}</span>
@@ -2832,7 +2842,7 @@ export function ComicVideoPreflightPanel({
                 <label className="text-[9px] text-text-muted">{t('preflight.fit')}
                   <select className={`${input} mt-1`} value={clip.fit_mode} onChange={event => patchDraft(clip.index, { fit_mode: event.target.value as PreviewDraft['fit_mode'] })}>
                     {(clip.fit_mode === 'reframe' || clip.used_prepared_keyframe) && (
-                      <option value="reframe" disabled={!clip.used_prepared_keyframe}>
+                      <option value="reframe" disabled={!clip.used_prepared_keyframe} title={controlReason(!clip.used_prepared_keyframe, 'disabled.needsKeyframe')}>
                         {clip.used_prepared_keyframe ? t('preflight.reframeVerifiedOpt') : t('preflight.legacyReframe')}
                       </option>
                     )}
@@ -2842,8 +2852,8 @@ export function ComicVideoPreflightPanel({
                 </label>
                 <label className="text-[9px] text-text-muted">{t('preflight.duration')}<input className={`${input} mt-1`} type="number" min={.8} max={20} step={.1} value={clip.duration_seconds} onChange={event => patchDraft(clip.index, { duration_seconds: Number(event.target.value) })} /></label>
                 <label className="text-[9px] text-text-muted">{t('preflight.seed')}<input className={`${input} mt-1`} type="number" value={clip.seed} onChange={event => patchDraft(clip.index, { seed: Math.trunc(Number(event.target.value)) })} /></label>
-                <label className="text-[9px] text-text-muted">{t('preflight.motionLevel', { label: motionLevelLabel(t, clip.motion_level || 0) })}<input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={clip.renderer === 'hold' || clip.renderer === 'parallax' || clip.renderer === 'cinemagraph'} value={clip.motion_level || 0} onChange={event => patchDraft(clip.index, { motion_level: Number(event.target.value) })} /></label>
-                <label className="col-span-2 text-[9px] text-text-muted">{t('preflight.camera')}<select className={`${input} mt-1`} value={clip.camera_move} disabled={clip.renderer !== 'ltx'} onChange={event => patchDraft(clip.index, { camera_move: event.target.value })}><option value="none">{t('preflight.locked')}</option><option value="push-in">{t('preflight.pushIn')}</option><option value="pull-out">{t('preflight.pullOut')}</option><option value="pan-left">{t('preflight.panLeft')}</option><option value="pan-right">{t('preflight.panRight')}</option><option value="authored">{t('preflight.authored')}</option></select></label>
+                <label className="text-[9px] text-text-muted">{t('preflight.motionLevel', { label: motionLevelLabel(t, clip.motion_level || 0) })}<input className="mt-2 w-full" type="range" min={0} max={3} step={1} disabled={motionLevelLocked(clip.renderer)} title={controlReason(motionLevelLocked(clip.renderer), 'disabled.motionLocked')} value={clip.motion_level || 0} onChange={event => patchDraft(clip.index, { motion_level: Number(event.target.value) })} /></label>
+                <label className="col-span-2 text-[9px] text-text-muted">{t('preflight.camera')}<select className={`${input} mt-1`} value={clip.camera_move} disabled={clip.renderer !== 'ltx'} title={controlReason(clip.renderer !== 'ltx', 'disabled.rendererNotLtx')} onChange={event => patchDraft(clip.index, { camera_move: event.target.value })}><option value="none">{t('preflight.locked')}</option><option value="push-in">{t('preflight.pushIn')}</option><option value="pull-out">{t('preflight.pullOut')}</option><option value="pan-left">{t('preflight.panLeft')}</option><option value="pan-right">{t('preflight.panRight')}</option><option value="authored">{t('preflight.authored')}</option></select></label>
               </div>
               <label className="mt-2 block text-[9px] text-text-muted">
                 <span className="flex items-center justify-between gap-2">
@@ -2878,7 +2888,7 @@ export function ComicVideoPreflightPanel({
                 </div>
               )}
               {clip.negative_prompt && <details className="mt-2"><summary className="cursor-pointer text-[9px] text-text-muted">{t('preflight.negative')}</summary><p className="mt-1 whitespace-pre-wrap rounded border border-border bg-bg-tertiary p-2 text-[9px] text-text-muted">{clip.negative_prompt}</p></details>}
-              <button className={`${button} mt-2 w-full border-red-400/45 text-red-200`} disabled={busy !== null || dirty || frontendSourceStale || !clip.included || !previewApproved || Boolean(clip.needs_reframe && !(clip.reframe_approved && clip.used_prepared_keyframe))} onClick={() => void generate(clip.index)}>{busy === clip.index ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} {t('preflight.generateClip')}</button>
+              <button className={`${button} mt-2 w-full border-red-400/45 text-red-200`} disabled={busy !== null || dirty || frontendSourceStale || !clip.included || !previewApproved || reframeNeedsApproval(clip)} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [dirty, 'disabled.unsavedChanges'], [frontendSourceStale, 'disabled.sourceStale'], [!clip.included, 'disabled.shotNotIncluded'], [!previewApproved, 'disabled.approvePreview'], [reframeNeedsApproval(clip), 'disabled.needsReframe']])} onClick={() => void generate(clip.index)}>{busy === clip.index ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />} {t('preflight.generateClip')}</button>
             </article>
           )
         })}

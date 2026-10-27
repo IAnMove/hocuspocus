@@ -229,6 +229,7 @@ export function SceneRecipePanel({
   onApply,
 }: {
   disabled?: boolean
+  title?: string
   outputs: ApiOutput[]
   characterKits?: CharacterKitLibrary
   onApply: (recipe: SceneRecipe, scene: Scene, status: (message: string) => void, prompt: string) => Promise<void>

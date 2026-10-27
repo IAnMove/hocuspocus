@@ -1,4 +1,4 @@
-import { controlLabel, controlReason, controlChoice } from '../../i18n/controlLabel'
+import { controlLabel, controlReason, controlChoice, firstControlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import {
@@ -412,7 +412,7 @@ function AssetsPanel() {
           <button className={`${button} ${provider === 'minimax' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('minimax')}>{t('assets.minimax')}</button>
         </div>
         <textarea className={input} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={t('assets.promptPlaceholder')} />
-        <button className={`${button} w-full`} disabled={busy || !prompt.trim()} onClick={generateOne}>
+        <button className={`${button} w-full`} disabled={busy || !prompt.trim()} title={firstControlReason([[busy, 'disabled.actionInProgress'], [!prompt.trim(), 'disabled.writePrompt']])} onClick={generateOne}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {t('assets.generateInto')}
         </button>
         {generationError && <p className="text-[10px] text-red-400">{generationError}</p>}
@@ -420,6 +420,10 @@ function AssetsPanel() {
       <p className="text-[10px] text-text-muted">{t('assets.hint')}</p>
     </div>
   )
+}
+
+function noPlanToRecover(pendingPlan: unknown, recoveryJobId: string) {
+  return !pendingPlan && !recoveryJobId.trim()
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -1527,14 +1531,14 @@ export function ComicDirectorPanel({
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
         <button
           className={`${button} ${request.productionMode !== 'storyboard' ? 'border-accent-blue text-accent-blue' : ''}`}
-          disabled={busy !== null}
+          disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
           onClick={() => patch('productionMode', 'comic')}
         >
           {t('planning.comic')}
         </button>
         <button
           className={`${button} ${request.productionMode === 'storyboard' ? 'border-purple-400 text-purple-300' : ''}`}
-          disabled={busy !== null}
+          disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
           onClick={() => {
             patch('productionMode', 'storyboard')
             patch('panelsPerPage', 1)
@@ -1570,7 +1574,7 @@ export function ComicDirectorPanel({
                 : t('planning.autoLoads')}
         </div>
       </div>
-      <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} />
+      <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} />
       <Field label={t('planning.premise')}><textarea className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder={t('planning.premisePlaceholder')} /></Field>
       {request.sourceStory && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[10px] text-emerald-200">
@@ -1687,7 +1691,7 @@ export function ComicDirectorPanel({
         {t('planning.blankHint')}
       </p>
       <Field label={t('planning.imageGenerator')}><select
-        disabled={busy !== null}
+        disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
         className={input}
         value={request.provider === 'minimax'
           ? 'minimax:image-01'
@@ -1721,7 +1725,7 @@ export function ComicDirectorPanel({
         {maestroImageModels.some(model => model.is_downloaded === false) && (
           <optgroup label={t('planning.notDownloaded')}>
             {maestroImageModels.filter(model => model.is_downloaded === false).map(model => (
-              <option disabled key={model.model_type} value={`maestro:${model.model_type}`}>
+              <option disabled title={controlLabel('disabled.modelNotDownloaded')} key={model.model_type} value={`maestro:${model.model_type}`}>
                 {model.name}
               </option>
             ))}
@@ -1777,14 +1781,14 @@ export function ComicDirectorPanel({
       </div>
       <button
         className={`${button} w-full border-accent-blue text-accent-blue`}
-        disabled={busy !== null || !request.premise.trim()}
+        disabled={busy !== null || !request.premise.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!request.premise.trim(), 'disabled.writePremise']])}
         onClick={() => makePlan(createCompleteComic)}
       >
         {busy !== null ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
         {createCompleteComic ? t('planning.createComplete') : t('planning.createPlan')}
       </button>
       {createCompleteComic && (
-        <button className={`${button} w-full`} disabled={busy !== null || !request.premise.trim()} onClick={() => makePlan(false)}>
+        <button className={`${button} w-full`} disabled={busy !== null || !request.premise.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!request.premise.trim(), 'disabled.writePremise']])} onClick={() => makePlan(false)}>
           {t('planning.createPlanOnly')}
         </button>
       )}
@@ -1803,7 +1807,7 @@ export function ComicDirectorPanel({
         />
         <button
           className={`${button} mt-2 w-full border-amber-500/50 text-amber-300`}
-          disabled={busy !== null || (!pendingPlan && !recoveryJobId.trim())}
+          disabled={busy !== null || noPlanToRecover(pendingPlan, recoveryJobId)} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [noPlanToRecover(pendingPlan, recoveryJobId), 'disabled.nothingToRecover']])}
           onClick={recoverPlan}
         >
           {busy === 'plan' ? <Loader2 size={12} className="animate-spin" /> : <Redo2 size={12} />}
@@ -1844,7 +1848,7 @@ export function ComicDirectorPanel({
         )}
       </div>
       {project.director && (
-        <button className={`${button} w-full border-emerald-500/50 text-emerald-400`} disabled={busy !== null} onClick={() => generateAll()}>
+        <button className={`${button} w-full border-emerald-500/50 text-emerald-400`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={() => generateAll()}>
           {busy === 'images' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
           {progress || (remainingPanels > 0
             ? t('generate.allQueued', { count: remainingPanels })
@@ -1854,13 +1858,13 @@ export function ComicDirectorPanel({
       {project.director && (
         <div className="border-t border-border pt-3 space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            <button className={`${button} border-amber-500/50 text-amber-300`} disabled={busy !== null} onClick={cleanUpCurrentComicText}>
+            <button className={`${button} border-amber-500/50 text-amber-300`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={cleanUpCurrentComicText}>
               <Type size={12} /> {t('lettering.repair')}
             </button>
-            <button className={`${button} border-accent-blue/50 text-accent-blue`} disabled={busy !== null} onClick={regenerateAllArtwork}>
+            <button className={`${button} border-accent-blue/50 text-accent-blue`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={regenerateAllArtwork}>
               <ImagePlus size={12} /> {t('generate.regenerateAll')}
             </button>
-            <button className={`${button} col-span-2`} disabled={busy !== null} onClick={varyCurrentLayouts}>
+            <button className={`${button} col-span-2`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={varyCurrentLayouts}>
               <PanelTop size={12} /> {t('generate.varyLayouts')}
             </button>
           </div>
@@ -1874,7 +1878,7 @@ export function ComicDirectorPanel({
             </p>
             <button
               className={`${button} w-full border-amber-500/50 text-amber-300`}
-              disabled={busy !== null}
+              disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
               onClick={() => applyTextOperation(
                 'translate',
                 project.language || project.director?.plan.language || project.director?.input.language,
@@ -1892,7 +1896,7 @@ export function ComicDirectorPanel({
             />
             <button
               className={`${button} w-full`}
-              disabled={busy !== null}
+              disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
               onClick={() => applyTextOperation('rewrite')}
             >
               {busy === 'text' ? <Loader2 size={12} className="animate-spin" /> : <Type size={12} />}
@@ -1912,14 +1916,14 @@ export function ComicDirectorPanel({
             <div className="grid grid-cols-2 gap-2">
               <button
                 className={button}
-                disabled={busy !== null || !targetLanguage.trim()}
+                disabled={busy !== null || !targetLanguage.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!targetLanguage.trim(), 'disabled.writeLanguage']])}
                 onClick={() => applyTextOperation('translate')}
               >
                 {t('lettering.translateEditor')}
               </button>
               <button
                 className={`${button} border-emerald-500/50 text-emerald-400`}
-                disabled={busy !== null || !targetLanguage.trim()}
+                disabled={busy !== null || !targetLanguage.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!targetLanguage.trim(), 'disabled.writeLanguage']])}
                 onClick={exportTranslatedPdf}
               >
                 {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
@@ -2035,7 +2039,7 @@ export function ComicDirectorPanel({
                         />
                       </Field>
                     )}
-                    <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} onClick={() => generateSingle(pageIndex, panelIndex)}>
+                    <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} title={firstControlReason([[singleBusy !== null, 'disabled.actionInProgress'], [busy !== null, 'disabled.actionInProgress']])} onClick={() => generateSingle(pageIndex, panelIndex)}>
                       {singleBusy === panel.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
                       {project.director!.completedPanelIds.includes(panel.id) ? t('generate.regeneratePanel') : t('generate.panel')}
                     </button>
@@ -2502,7 +2506,7 @@ export function ComicEditorPanel() {
             </button>
             <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> {tCommon('actions.import')}</button>
             <input ref={importRef} type="file" accept=".json,.comic.json" className="hidden" onChange={event => importProject(event.target.files?.[0])} />
-            <button className={button} disabled={saving} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {tCommon('actions.save')}</button>
+            <button className={button} disabled={saving} title={controlReason(saving, 'disabled.waitForSave')} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {tCommon('actions.save')}</button>
             <button
               className={`${button} border-emerald-500/50 text-emerald-300`}
               disabled={generatingArtwork}
@@ -2517,9 +2521,9 @@ export function ComicEditorPanel() {
             <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>{t('toolbar.grid')}</button>
             <div className="ml-auto flex items-center gap-1">
               <button className={button} onClick={exportComicJson}><FileJson size={13} /> {t('toolbar.json')}</button>
-              <button className={button} disabled={!!exporting} onClick={() => runExport('png')}>{t('toolbar.png')}</button>
-              <button className={button} disabled={!!exporting} onClick={() => runExport('cbz')}>{t('toolbar.cbz')}</button>
-              <button className={`${button} border-accent-blue/50`} disabled={!!exporting} onClick={() => runExport('pdf')}>
+              <button className={button} disabled={!!exporting} title={controlReason(!!exporting, 'disabled.exporting')} onClick={() => runExport('png')}>{t('toolbar.png')}</button>
+              <button className={button} disabled={!!exporting} title={controlReason(!!exporting, 'disabled.exporting')} onClick={() => runExport('cbz')}>{t('toolbar.cbz')}</button>
+              <button className={`${button} border-accent-blue/50`} disabled={!!exporting} title={controlReason(!!exporting, 'disabled.exporting')} onClick={() => runExport('pdf')}>
                 {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {exporting || t('toolbar.pdf')}
               </button>
               <TranslatedPdfExport notify={notify} />
@@ -2544,7 +2548,7 @@ export function ComicEditorPanel() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button className={button} disabled={historyLoading} onClick={() => void refreshComicHistory()}>
+                <button className={button} disabled={historyLoading} title={controlReason(historyLoading, 'disabled.historyLoading')} onClick={() => void refreshComicHistory()}>
                   {historyLoading ? <Loader2 size={13} className="animate-spin" /> : <HistoryIcon size={13} />} {tCommon('actions.refresh')}
                 </button>
                 <button className={button} onClick={() => setHistoryOpen(false)} aria-label={t('history.closeAria')}>
@@ -2593,7 +2597,7 @@ export function ComicEditorPanel() {
                       </div>
                       <button
                         className={button}
-                        disabled={historyLoading}
+                        disabled={historyLoading} title={controlReason(historyLoading, 'disabled.historyLoading')}
                         onClick={() => void restoreComicHistory(entry)}
                       >
                         {t('history.restore')}
@@ -2740,8 +2744,8 @@ export function ComicEditorPanel() {
             <span className="font-medium text-white">{t('preview.title')}</span>
             <span>{t('pages.pageOf', { current: currentPageIndex + 1, total: project.pages.length })}</span>
             <div className="ml-auto flex items-center gap-1.5">
-              <button className={button} disabled={currentPageIndex === 0} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> {t('preview.previous')}</button>
-              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} onClick={() => goToPage(currentPageIndex + 1)}>{t('preview.next')} <ChevronRight size={13} /></button>
+              <button className={button} disabled={currentPageIndex === 0} title={controlReason(currentPageIndex === 0, 'disabled.alreadyFirst')} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> {t('preview.previous')}</button>
+              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} title={controlReason(currentPageIndex >= project.pages.length - 1, 'disabled.alreadyLast')} onClick={() => goToPage(currentPageIndex + 1)}>{t('preview.next')} <ChevronRight size={13} /></button>
               <button className={button} onClick={() => setPreviewOpen(false)}><X size={13} /> {tCommon('actions.close')}</button>
             </div>
           </div>
