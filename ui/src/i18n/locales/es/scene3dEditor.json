@@ -1,4 +1,19 @@
 {
+  "addPicker": {
+    "title": "Añadir a la escena",
+    "search": "Buscar",
+    "searchHelp": "Nombre del efecto, el texto o la demo",
+    "empty": "Nada coincide con la búsqueda.",
+    "close": "Cerrar",
+    "category": {
+      "all": "Todo",
+      "world": "Efectos 3D",
+      "overlay": "Efectos en pantalla",
+      "demo": "Demos y muestras",
+      "text": "Textos animados",
+      "prop": "Atrezo"
+    }
+  },
   "speech": {
     "resting": "en silencio",
     "speaking": "hablando",

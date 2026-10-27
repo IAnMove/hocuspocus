@@ -1,4 +1,19 @@
 {
+  "addPicker": {
+    "title": "Add to the scene",
+    "search": "Search",
+    "searchHelp": "Effect, text or demo name",
+    "empty": "Nothing matches the search.",
+    "close": "Close",
+    "category": {
+      "all": "All",
+      "world": "3D effects",
+      "overlay": "Screen effects",
+      "demo": "Demos and samples",
+      "text": "Animated text",
+      "prop": "Props"
+    }
+  },
   "speech": {
     "resting": "silent",
     "speaking": "speaking",
