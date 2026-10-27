@@ -379,24 +379,25 @@ def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     for sign in (-1, 1):
         def at(x, k, color):
             return _st((sign * x, y, 0), r * k, r * k, color)
-        arm = [at(x0, 1.0, sleeve), at(x0 + (elbow - x0) * 0.35, 1.0, sleeve)]
+        arm = [at(x0 - 0.01 * L["h"], 1.18, sleeve), at(x0, 1.2, sleeve), at(x0 + (elbow - x0) * 0.22, 1.12, sleeve), at(x0 + (elbow - x0) * 0.55, 1.0, sleeve)]
         if short:
             arm += [at(cuff, 1.04, sleeve), at(cuff + 0.001, 0.9, skin)]
         lower = skin if short else sleeve
-        arm += [at(elbow - bend, 0.93, lower), at(elbow, 0.9, lower), at(elbow + bend, 0.88, lower),
-                at(elbow + (wrist - elbow) * 0.6, 0.8, lower), at(wrist, 0.68, lower)]
+        arm += [at(elbow - bend, 0.92, lower), at(elbow, 0.9, lower), at(elbow + bend, 0.9, lower),
+                at(elbow + (wrist - elbow) * 0.35, 0.86, lower), at(elbow + (wrist - elbow) * 0.75, 0.7, lower), at(wrist, 0.58, lower)]
         _tube(mesh, arm, "x")
         d = r * 2
         palm_end = wrist + (tip - wrist) * 0.52
-        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.36, d * 0.3, skin), _st((sign * (wrist + (tip - wrist) * 0.25), y, 0), d * 0.52, d * 0.28, skin),
-                _st((sign * palm_end, y, 0), d * 0.5, d * 0.24, skin)]
+        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.3, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.58, d * 0.36, skin),
+                _st((sign * palm_end, y, 0), d * 0.58, d * 0.34, skin), _st((sign * (palm_end + (tip - palm_end) * 0.55), y, 0), d * 0.5, d * 0.28, skin),
+                _st((sign * (palm_end + (tip - palm_end) * 0.92), y, 0), d * 0.22, d * 0.16, skin)]
         _tube(mesh, hand, "x")
         # four fingers fanned from the palm's end, the thumb from its side
         for k, (dy, length) in enumerate(((0.3, 0.86), (0.1, 1.0), (-0.1, 0.96), (-0.3, 0.8))):
-            fx0 = sign * (palm_end - 0.004)
+            fx0 = sign * (palm_end + (tip - palm_end) * 0.3)
             fx1 = sign * (palm_end + (tip - palm_end) * length)
-            finger = [_st((fx0, y + d * dy, 0), d * 0.11, d * 0.1, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.1, d * 0.09, skin),
-                      _st((fx1, y + d * dy * 1.1, 0), d * 0.06, d * 0.06, skin)]
+            finger = [_st((fx0, y + d * dy, 0), d * 0.15, d * 0.13, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.13, d * 0.12, skin),
+                      _st((fx1, y + d * dy * 1.1, 0), d * 0.08, d * 0.08, skin)]
             _tube(mesh, finger, "x", ring=6)
         px = sign * (wrist + (tip - wrist) * 0.2)
         thumb = [_st((px, y + d * 0.1, d * 0.16), d * 0.13, d * 0.12, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.42), d * 0.1, d * 0.1, skin),
@@ -414,7 +415,8 @@ def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
             return _st((sign * x, y, 0), r * k, r * k * 0.95, color)
         upper = skin if legs in ("skirt", "shorts") else legs_color
         low = sock or (skin if legs in ("skirt", "shorts") else legs_color)
-        leg = [at(top, 1.15, legs_color), at(top - 0.0005, 1.15, legs_color if legs == "shorts" else upper), at(top - (top - knee) * 0.3, 1.1, legs_color if legs == "shorts" else upper)]
+        under = legs_color if legs in ("skirt", "shorts") else upper   # under a skirt or shorts the thigh is hidden: never skin beside the waist
+        leg = [at(top, 1.15, legs_color), at(top - 0.0005, 1.15, under), at(top - (top - knee) * 0.3, 1.1, under)]
         if legs == "shorts":
             hem = top - (top - knee) * 0.42
             leg += [at(hem, 1.12, legs_color), at(hem - 0.001, 1.0, skin)]
