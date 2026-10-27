@@ -5,19 +5,20 @@ import type { TransformMode, TransformPatch } from './transformGizmo'
 
 const modes = [{ id: 'translate', Icon: Move3D }, { id: 'rotate', Icon: Rotate3D }, { id: 'scale', Icon: Maximize2 }] as const
 
-export function Scene3DTransformPanel({ slot, mode, disabled, onMode, onChange, onReset }: {
+export function Scene3DTransformPanel({ slot, mode, disabled, onMode, onChange, onReset, showModes = true }: {
   slot: Scene3DSlot; mode: TransformMode; disabled: boolean
   onMode: (mode: TransformMode) => void; onChange: (patch: TransformPatch) => void; onReset: () => void
+  showModes?: boolean
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const { t: sceneT } = useUiTranslation('scene3d')
   return <section className="space-y-3 rounded-xl border border-border bg-bg-secondary p-3" data-testid="scene3d-transforms">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <h3 className="text-sm font-semibold text-text-primary">{sceneT(`stage.slot.${slot.slot}`)}</h3>
-      <div className="flex flex-wrap gap-2">
+      {showModes && <div className="flex flex-wrap gap-2">
         {modes.map(({ id, Icon }) => <button key={id} type="button" disabled={disabled} onClick={() => onMode(id)} aria-pressed={mode === id}
           className={`inline-flex min-h-10 items-center gap-2 rounded-lg border px-3 text-xs font-semibold disabled:opacity-40 ${mode === id ? 'border-cyan-300 bg-cyan-300/15 text-cyan-100' : 'border-border text-text-secondary'}`}><Icon size={17} />{t(id)}</button>)}
-      </div>
+      </div>}
     </div>
     <div className="grid gap-3 sm:grid-cols-2">
       <fieldset disabled={disabled}><legend className="mb-2 text-xs text-text-secondary">{t('position')}</legend>

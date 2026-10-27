@@ -6,7 +6,7 @@ import { parseHold } from './handHold'
 import type { Scene3DSlot } from './types'
 import type { WorldSfx } from '../sceneFx/world'
 
-export type TransformMode = 'translate' | 'rotate' | 'scale'
+export type TransformMode = 'translate' | 'rotate' | 'scale' | 'select'
 export type TransformPatch = Partial<Pick<Scene3DSlot, 'position' | 'rotationY' | 'scale'>> & {
   worldRotation?: [number, number, number]
   anchorOffset?: { x: number; y: number; z: number }
@@ -15,6 +15,7 @@ export type TransformPatch = Partial<Pick<Scene3DSlot, 'position' | 'rotationY' 
 export const WORLD_SFX_SELECT_PREFIX = 'wsfx:'
 
 export function transformPatch(proxy: Object3D, mode: TransformMode, axis: string | null, worldAxes = false): TransformPatch {
+  if (mode === 'select') return {}
   if (mode === 'translate') return { position: [proxy.position.x, proxy.position.y, proxy.position.z] }
   if (mode === 'rotate') {
     if (worldAxes) return { worldRotation: [proxy.rotation.x, proxy.rotation.y, proxy.rotation.z] }
@@ -86,10 +87,10 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
   canvas.addEventListener('pointerdown', select)
   return {
     sync(slot: Scene3DSlot | undefined, nextMode: TransformMode, enabled: boolean, worldCue?: WorldSfx) {
-      allowed = enabled
       mode = nextMode
-      controls.enabled = enabled
-      if (gizmoRests(slot, worldCue, enabled)) { controls.pointerUp(null); controls.detach(); return }
+      allowed = enabled && nextMode !== 'select'
+      controls.enabled = allowed
+      if (nextMode === 'select' || gizmoRests(slot, worldCue, enabled)) { controls.pointerUp(null); controls.detach(); return }
       worldAxes = Boolean(worldCue)
       attachedAnchorSlotId = worldCue?.anchor?.slotId
       const id = worldCue ? WORLD_SFX_SELECT_PREFIX + worldCue.id : slot!.id
@@ -110,7 +111,7 @@ export function createTransformGizmo(world: GpuWorld, onChange: (id: string, pat
         }
         proxy.updateMatrixWorld(true)
       }
-      controls.setMode(mode)
+      controls.setMode(nextMode)
       controls.showX = worldAxes || mode !== 'rotate'
       controls.showY = true
       controls.showZ = worldAxes || mode !== 'rotate'

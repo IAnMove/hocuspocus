@@ -9,12 +9,13 @@ import { Scene3DLibraryControls } from './Scene3DLibraryControls'
 import type { Scene3DDocument } from './types.ts'
 import { isWorld3DTemplateRaw } from './userTemplates.ts'
 
-export function Scene3DDocumentControls({ document, disabled, workspace, preview, identity, onChange, onLoad, onSaved }: {
+export function Scene3DDocumentControls({ document, disabled, workspace, preview, identity, onChange, onLoad, onSaved, section = 'all' }: {
   document: Scene3DDocument
   disabled: boolean
   workspace: string
   preview: () => string | undefined
   identity?: Scene3DDocumentRef
+  section?: 'all' | 'library' | 'timing' | 'files'
   onChange: (document: Scene3DDocument) => void
   onLoad: (document: Scene3DDocument, source?: Scene3DDocumentRef) => void
   onSaved?: (output: ApiOutput, document: Scene3DDocument, identity: Scene3DDocumentRef) => void
@@ -31,8 +32,12 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
     link.click()
     setTimeout(() => URL.revokeObjectURL(url), 60_000)
   }
+  const library = section === 'all' || section === 'library'
+  const timing = section === 'all' || section === 'timing'
+  const files = section === 'all' || section === 'files'
   return <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-    <Scene3DLibraryControls document={document} workspace={workspace} disabled={disabled} preview={preview} identity={identity} onLoad={onLoad} onSaved={onSaved} />
+    {library && <Scene3DLibraryControls document={document} workspace={workspace} disabled={disabled} preview={preview} identity={identity} onLoad={onLoad} onSaved={onSaved} />}
+    {timing && <>
     <label>{t('clipNumber')}
       <input type="number" min="1" step="1" aria-label={t('clipNumber')} disabled={disabled}
         className="ml-2 min-h-10 w-20 rounded-lg border border-border bg-bg-primary px-2"
@@ -75,6 +80,8 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
         <option value={60}>60</option>
       </select>
     </label>
+    </>}
+    {files && <>
     <button type="button" disabled={disabled} onClick={save} className="min-h-10 rounded-lg border border-border px-3">{t('saveDocument')}</button>
     <button type="button" disabled={disabled} onClick={() => input.current?.click()} className="min-h-10 rounded-lg border border-border px-3">{t('loadDocument')}</button>
     <input ref={input} type="file" accept=".json,application/json" data-testid="world3d-load-shot" aria-label={t('loadDocument')} disabled={disabled} className="hidden"
@@ -92,5 +99,6 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
         } catch (cause) { setError(cause instanceof Error && cause.message === 'template' ? t('userTemplates.openAsShot') : t('invalidDocument')) }
       }} />
     {error && <p role="alert">{error}</p>}
+    </>}
   </div>
 }

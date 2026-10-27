@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useUiTranslation } from '../../i18n'
 import {
   addPickerCatalog,
@@ -9,19 +9,25 @@ import {
 
 const CATEGORIES: AddPickerCategory[] = ['all', 'world', 'overlay', 'demo', 'text', 'prop']
 
-export function Scene3DAddPicker({ open, disabled, props, onPick, onClose }: {
+export function Scene3DAddPicker({ open, disabled, props, initialCategory = 'all', onPick, onClose }: {
   open: boolean
   disabled?: boolean
   props?: ReactNode
+  initialCategory?: AddPickerCategory
   onPick: (item: AddPickerItem) => void
   onClose: () => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const { t: fx } = useUiTranslation('sceneFx')
   const { t: text } = useUiTranslation('kineticText')
-  const [category, setCategory] = useState<AddPickerCategory>('all')
+  const [category, setCategory] = useState<AddPickerCategory>(initialCategory)
   const [query, setQuery] = useState('')
   const items = useMemo(() => addPickerCatalog(), [])
+  useEffect(() => {
+    if (!open) return
+    setCategory(initialCategory)
+    setQuery('')
+  }, [open, initialCategory])
   if (!open) return null
   const labelOf = (item: AddPickerItem) => item.labelNs === 'kineticText'
     ? text(item.labelKey as 'title', { defaultValue: item.id })

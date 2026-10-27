@@ -14,6 +14,13 @@
       "prop": "Atrezo"
     }
   },
+  "desk": {
+    "scene": "Escena",
+    "add": "Añadir",
+    "select": "Seleccionar",
+    "tools": "Herramientas del visor",
+    "objectSfx": "Efectos de este objeto"
+  },
   "speech": {
     "resting": "en silencio",
     "speaking": "hablando",
