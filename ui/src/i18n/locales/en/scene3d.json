@@ -1592,5 +1592,199 @@
     "unknownSlot": "The binding contains an unknown slot: {{name}}.",
     "sameSlot": "{{left}} and {{right}} name the same slot {{slot}}.",
     "candidateSuffix": "candidate"
+  },
+  "templateCards": {
+    "cinema-establishing": {
+      "title": "Establishing shot",
+      "description": "A small figure in its surroundings; the camera opens and slides with dust in the air. With mood lonely the camera looks from above, rises, and it rains."
+    },
+    "cinema-reveal": {
+      "title": "Cinematic reveal",
+      "description": "It gradually reveals the subject from a plate with restrained movement."
+    },
+    "cinema-closeup": {
+      "title": "Cinematic close-up",
+      "description": "It draws the eye to a subject at close scale with minimal movement."
+    },
+    "cinema-two-shot": {
+      "title": "Cinematic two-shot",
+      "description": "Two figures with a slight sway of their own; the camera traces a slow arc and pushes in, with parallax between the background, the figures, and the foreground."
+    },
+    "cinema-detail": {
+      "title": "Cinematic detail",
+      "description": "It isolates a small visual clue and turns it into a clear narrative beat."
+    },
+    "cinema-hero": {
+      "title": "Hero entrance",
+      "description": "The figure enters the shot (rising from below or arriving from one side) while the camera rises and opens to give it presence."
+    },
+    "cinema-tracking": {
+      "title": "Cinematic tracking",
+      "description": "The figure crosses the frame and the camera follows it sideways over the plate. With atmosphere streaks, speed lines pass instead of leaves."
+    },
+    "music-pulse": {
+      "title": "Music pulse",
+      "description": "The figure bounces to the beat. The camera pushes in (push), sweeps sideways (sweep), opens with a turn (open), or pulses to the beat (beat); fireflies, confetti, or bokeh float."
+    },
+    "music-duet": {
+      "title": "Music duet",
+      "description": "Two figures take turns to the beat: on each beat one jumps while the other rests, and the camera sways."
+    },
+    "music-orbit": {
+      "title": "Music orbit",
+      "description": "Copies of an object orbit the figure, which bounces to the beat. With bounce off the figure stays in place and only the copies orbit."
+    },
+    "music-product": {
+      "title": "Music product",
+      "description": "It presents a product or object with music-video energy and a controlled visual spin."
+    },
+    "space-cruise": {
+      "title": "Space cruise",
+      "description": "It follows a ship through a starfield with a sense of continuous travel."
+    },
+    "space-orbit": {
+      "title": "Space orbit",
+      "description": "It orbits the hero ship around a planet or a prop station using layer keyframes."
+    },
+    "space-docking": {
+      "title": "Space docking",
+      "description": "It simulates a ship approaching a station using layers and controlled movement."
+    },
+    "space-chase": {
+      "title": "Space chase",
+      "description": "It composes a ship chase with parallel movement, without collision physics."
+    },
+    "space-broadside": {
+      "title": "Lateral space confrontation",
+      "description": "Two ships in profile face each other and the first fires beams. outcome: miss (they miss), shield (a shield for the impact), or explode (explosion: the rival ship bursts with debris and a shake)."
+    },
+    "space-warp": {
+      "title": "Space jump",
+      "description": "It accelerates a ship toward a visual jump with streaks and controlled depth layers."
+    },
+    "documentary-history": {
+      "title": "Historical documentary",
+      "description": "An archive photo with slow movement: the plate pushes and slides with parallax against the photo and the foreground. A date caption and a year counter with your texts, an archival finish, and dust."
+    },
+    "city-postcard": {
+      "title": "City postcard",
+      "description": "The city plate slides sideways; the subject and the foreground cross it with parallax, leaves pass, and a paper banner carries your text. There are no seagulls: a bird particle preset does not exist."
+    },
+    "music-spiral-exit": {
+      "title": "Spiral exit",
+      "description": "The focal subject shrinks and fades at the center while it turns twice, producing a compact graphic exit."
+    },
+    "music-speed-flight": {
+      "title": "Speed flight",
+      "description": "The protagonist crosses the frame from left to right in a fast pass with a clear exit."
+    },
+    "music-infinite-fall": {
+      "title": "Endless fall",
+      "description": "The protagonist enters from above, descends along a finite path, and grows small until it exits at the bottom."
+    },
+    "music-pinball": {
+      "title": "Pinball bounce",
+      "description": "The focal subject bounces in a zigzag like a pinball. With bouncer prop a small object bounces and the figure follows it with its gaze."
+    },
+    "music-boomerang": {
+      "title": "Boomerang",
+      "description": "The subject moves away along an open curve and returns to the starting point with a recognizable visual response."
+    },
+    "music-cannon-launch": {
+      "title": "Cannon launch",
+      "description": "The focal subject is launched and leaves the frame through the upper right along a fast arc."
+    },
+    "music-orbit-duel": {
+      "title": "Orbital duel",
+      "description": "Two focal subjects cross on opposite arcs around a central axis to create music-video tension."
+    },
+    "music-high-five": {
+      "title": "High five",
+      "description": "Two characters approach a shared point, mark the meeting, and separate with a brief bounce."
+    },
+    "music-magnet-pull": {
+      "title": "Magnetic pull",
+      "description": "The first focal subject stays almost still while it attracts the second, which bounces and settles."
+    },
+    "music-portal-swap": {
+      "title": "Portal swap",
+      "description": "Two focal subjects disappear and reappear in swapped positions through controlled graphic cuts."
+    },
+    "music-trampoline": {
+      "title": "Trampoline jump",
+      "description": "The protagonist drops, bounces, and falls again with an exaggerated, readable vertical pulse."
+    },
+    "music-pendulum": {
+      "title": "Musical pendulum",
+      "description": "The focal subject swings from side to side around a fixed position with a hypnotic cadence."
+    },
+    "music-rubber-band": {
+      "title": "Rubber band",
+      "description": "The focal subject pulls away from the center, builds visual tension, and returns with a musical release."
+    },
+    "music-card-toss": {
+      "title": "Card toss",
+      "description": "The focal subject enters, holds a brief read, and is flung out of the frame with a pronounced spin."
+    },
+    "music-staircase-pop": {
+      "title": "Ascent by steps",
+      "description": "The protagonist climbs step by step with a bounce on each landing and the camera follows; on long shots it climbs and comes back down."
+    },
+    "music-accordion-clones": {
+      "title": "Accordion clones",
+      "description": "The same focal subject appears in an expansion and contraction of positions, like a visual accordion."
+    },
+    "music-domino-wave": {
+      "title": "Domino wave",
+      "description": "Limited copies of the focal subject tilt in sequence and recover their position, forming a visual wave."
+    },
+    "music-conveyor": {
+      "title": "Conveyor belt",
+      "description": "The focal subject travels in a constant direction while the environment keeps a sense of a chain."
+    },
+    "music-spotlight-relay": {
+      "title": "Spotlight relay",
+      "description": "Two presences pass the focus back and forth throughout the shot with changes of light and scale; the camera drifts."
+    },
+    "music-corkscrew-rise": {
+      "title": "Corkscrew rise",
+      "description": "The protagonist rises with a layer rotation and a lateral drift that draw a corkscrew."
+    },
+    "music-shockwave": {
+      "title": "Shockwave",
+      "description": "The central focal subject stays legible while a motion zoom marks the visual hit."
+    },
+    "music-crowd-surf": {
+      "title": "Crowd surf",
+      "description": "The protagonist moves across copies of a strip of audience that act as visual support."
+    },
+    "walk-follow-back": {
+      "title": "Follow from behind",
+      "description": "A waist-up shot seen from behind: the figure walks into the room and keeps its size while the room comes toward it with parallax. Only the bounce of each step and the tilt of the shoulders are seen; the legs stay out of the frame."
+    },
+    "walk-toward-camera": {
+      "title": "Walk toward camera",
+      "description": "Reverse tracking: the figure walks toward us in a waist-up shot, the camera backs away in step with it, and the room recedes behind with parallax. The legs stay out of the frame, and the world supplies the movement, not the figure."
+    },
+    "walk-behind-foreground": {
+      "title": "Entrance behind the foreground",
+      "description": "A whole figure in profile crosses the frame behind a foreground (a counter, a low wall, a gate) that hides its legs: the body, the bounce, and the tilt of each step are seen, but not the feet. It walks toward where it is looking."
+    },
+    "walk-shadow-first": {
+      "title": "Shadow first",
+      "description": "A cut on the action: a huge, soft shadow crosses the wall before anyone appears and, as it fades, the figure is already standing on its mark with a small stomp. No walking is shown."
+    },
+    "walk-two-pose": {
+      "title": "Two-pose walk with shadow",
+      "description": "A wide shot: a figure in profile walks across with a two-pose sheet (the stride and the legs together) that changes drawing on each half step, over a contact shadow that pulses. On reaching its mark it stops on the sheet's last pose (the legs together). The speed follows the step so the boots do not skid."
+    },
+    "walk-cycle-sheet": {
+      "title": "Walk cycle sprite sheet",
+      "description": "A figure in profile crosses the shot in full while a sprite sheet of its walk cycle plays (contact, step, contact, step): the legs really move. The sheet's pace follows the figure's speed so the boots do not slip."
+    },
+    "character-reaction": {
+      "title": "Character reaction",
+      "description": "A figure stays on its mark and reacts: it enters with a small jump, plays a pose sheet of a gesture (wave, nod, head shake, point) or of an anime expression (anger, surprise, sadness, joy, embarrassment, fear…) and keeps breathing. The sheet is made in Characters › Animaciones."
+    }
   }
 }

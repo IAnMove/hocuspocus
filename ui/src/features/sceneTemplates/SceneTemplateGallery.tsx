@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import i18n, { useUiTranslation } from '../../i18n'
 import type { Scene } from '../../types'
 import { EXPANDED_CATALOG_VERSION as CATALOG_VERSION, ALL_SCENE_TEMPLATES as CANDIDATE_SCENE_TEMPLATES, CANDIDATE_SCENE_TEMPLATES as LEGACY_TEMPLATES, getCandidateSceneTemplate } from './catalog'
+import { templateDisplay } from './templateDisplay'
 import { candidateDemoScene } from './demoScenes'
 import { loadRenderedReferenceScene } from './previewSnapshot'
 import { loadCatalogReview, saveCatalogReview } from './catalogReview'
@@ -86,9 +87,13 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
 
   const visibleTemplates = useMemo(() => {
     const search = query.trim().toLocaleLowerCase()
-    return CANDIDATE_SCENE_TEMPLATES.filter(template => (family === 'all' || template.family === family)
-      && `${template.title} ${template.description} ${template.id}`.toLocaleLowerCase().includes(search))
-  }, [family, query])
+    return CANDIDATE_SCENE_TEMPLATES.filter(template => {
+      if (family !== 'all' && template.family !== family) return false
+      if (!search) return true
+      const shown = templateDisplay(template)
+      return `${shown.title} ${shown.description} ${template.title} ${template.description} ${template.id}`.toLocaleLowerCase().includes(search)
+    })
+  }, [family, query, i18n.language])
 
   const groupedTemplates = useMemo(() => FAMILY_ORDER
     .map(item => ({ family: item, templates: visibleTemplates.filter(template => template.family === item) }))
@@ -204,6 +209,7 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
             </div>
             <div className="grid gap-3 xl:grid-cols-2">
               {group.templates.map(template => {
+                const shown = templateDisplay(template)
                 const choice: ReviewChoice = reviews.choices[template.id] || { id: template.id, templateVersion: template.version, decision: 'pending', notes: '' }
                 const selectedVariant = variantById[template.id] || 'coral'
                 const previewUrl = `${previewBaseUrl.replace(/\/+$/, '')}/${template.id}.mp4`
@@ -216,7 +222,7 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
                     <div className="flex flex-wrap items-start gap-2 border-b border-border p-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <h4 className="text-sm font-semibold text-text-primary">{template.title}</h4>
+                          <h4 className="text-sm font-semibold text-text-primary">{shown.title}</h4>
                           <span className={`rounded-full border px-2 py-0.5 text-xs ${reviewTone[choice.decision]}`}>{tScene(REVIEW_LABEL_KEY[choice.decision])}</span>
                         </div>
                         <p className="mt-1 text-xs text-text-muted">{tScene('candidateGallery.cardMeta', { id: template.id, version: template.version, duration: template.defaultDuration })}</p>
@@ -226,13 +232,13 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
 
                     <div className="relative aspect-video overflow-hidden bg-slate-950">
                       {!hasReference ? <p className="flex h-full items-center justify-center p-4 text-center text-xs text-text-muted">{tScene('candidateGallery.noCoralReference')}</p> : activePreview === template.id
-                        ? <video className="h-full w-full" controls autoPlay muted playsInline loop preload="none" src={previewUrl} aria-label={tScene('candidateGallery.coralPreviewAria', { title: template.title })} onError={() => setPreviewErrors(current => ({ ...current, [template.id]: true }))} />
-                        : <img loading="lazy" src={`${previewBaseUrl}/${template.id}.png`} alt={tScene('candidateGallery.reviewFrameAlt', { title: template.title })} className="h-full w-full object-contain" onError={event => { event.currentTarget.style.visibility = 'hidden'; setPreviewErrors(current => ({ ...current, [template.id]: true })) }} />}
+                        ? <video className="h-full w-full" controls autoPlay muted playsInline loop preload="none" src={previewUrl} aria-label={tScene('candidateGallery.coralPreviewAria', { title: shown.title })} onError={() => setPreviewErrors(current => ({ ...current, [template.id]: true }))} />
+                        : <img loading="lazy" src={`${previewBaseUrl}/${template.id}.png`} alt={tScene('candidateGallery.reviewFrameAlt', { title: shown.title })} className="h-full w-full object-contain" onError={event => { event.currentTarget.style.visibility = 'hidden'; setPreviewErrors(current => ({ ...current, [template.id]: true })) }} />}
                       {hasReference && activePreview !== template.id && <button type="button" onClick={() => setActivePreview(template.id)} className="absolute inset-0 flex items-center justify-center bg-black/10 text-lg font-semibold text-white hover:bg-black/25"><span className="rounded-xl border border-cyan-100 bg-cyan-300 px-6 py-4 text-base font-bold text-slate-950 shadow-xl">{tScene('candidateGallery.watchScene', { duration: template.defaultDuration })}</span></button>}
                       {previewErrors[template.id] && <p role="alert" className="absolute inset-x-0 bottom-0 bg-black/85 p-3 text-xs text-amber-200">{tScene('candidateGallery.previewNotRendered')}</p>}
                     </div>
                     <div className="space-y-3 p-3">
-                      <p className="text-xs leading-5 text-text-secondary">{template.description}</p>
+                      <p className="text-xs leading-5 text-text-secondary">{shown.description}</p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-wide text-text-muted">{tScene('candidateGallery.slots')}</p>
@@ -260,7 +266,7 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
 
                       <div className="flex flex-wrap items-center gap-2">
                         <button type="button" data-testid={`open-scene-${template.id}`} disabled={!hasReference || loadingReference === template.id} onClick={() => void openReference(template.id)} className="rounded-lg bg-violet-500 px-3 py-2 text-xs font-semibold text-white hover:bg-violet-400 disabled:opacity-50">{openReferenceLabel}</button>
-                        <select aria-label={tScene('candidateGallery.variantAria', { title: template.title })} value={selectedVariant} onChange={event => setVariantById(current => ({ ...current, [template.id]: event.target.value as DemoVariant }))} className="rounded-lg border border-border bg-bg-primary px-2 py-2 text-xs text-text-primary">
+                        <select aria-label={tScene('candidateGallery.variantAria', { title: shown.title })} value={selectedVariant} onChange={event => setVariantById(current => ({ ...current, [template.id]: event.target.value as DemoVariant }))} className="rounded-lg border border-border bg-bg-primary px-2 py-2 text-xs text-text-primary">
                           <option value="coral">{tScene('candidateGallery.coralVariant')}</option>
                           <option value="teal">{tScene('candidateGallery.tealVariant')}</option>
                         </select>

@@ -4,6 +4,7 @@ import { ModalShell } from '../../components/common/ModalShell'
 import { useUiTranslation } from '../../i18n'
 import type { Scene } from '../../types'
 import { COMPOSER_SCENE_TEMPLATES, getCandidateSceneTemplate, requiredSlots, type ControlSpec, type ControlValue, type SceneTemplateDefinition, type TemplateSlotName } from './catalog'
+import { templateDisplay } from './templateDisplay'
 import { catalogBindingIssue, resolveCatalogBindings, type CatalogSelections } from './catalogBindings'
 import { compileCandidateScene } from './compile'
 import { TemplateAssetPicker } from './TemplateAssetPicker'
@@ -51,7 +52,7 @@ export function TemplateComposerDialog({ workspace, onClose, onApply }: Props) {
       <p className="text-xs text-text-secondary">{t('composer.intro', { count: COMPOSER_SCENE_TEMPLATES.length })}</p>
       <label className="block text-xs">{t('composer.action')}
         <select aria-label={t('composer.action')} value={id} onChange={event => setId(event.target.value)} className={inputClass}>
-          {COMPOSER_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.family} · {item.title}</option>)}
+          {COMPOSER_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.family} · {templateDisplay(item).title}</option>)}
         </select>
       </label>
       <TemplateComposerForm key={`${workspace}:${id}`} template={template} workspace={workspace} onClose={onClose} onApply={onApply} />
@@ -136,8 +137,9 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
     }
   }
 
+  const shown = templateDisplay(template)
   return <div className="space-y-4">
-    <p className="text-xs">{template.description}</p>
+    <p className="text-xs">{shown.description}</p>
     <TemplateReferencePanel templateId={template.id} disabled={busy || !replaceConfirmed} onOpen={file => void openOriginal(file)} />
     <TemplateComponentHelp templateId={template.id} />
     <ul className="list-disc pl-5 text-xs text-text-muted">{template.limits.map(limit => <li key={limit}>{limit}</li>)}</ul>
