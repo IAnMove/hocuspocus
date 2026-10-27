@@ -30,7 +30,7 @@ The drawing then needs the legs apart and no skirt. A short bottom (`bottomwear`
 
 ## What is kept
 
-`provenance` on the animation is `{method: "puppet", reference: {animation, pose}, start, layers}`. `start` is the phase of the cycle whose pose matches the drawing (the first frame is that drawing). The gait check is not skipped: with one-shot and `autoApprove`, `walk_gait` still measures the sheet. Puppet frames do not carry a per-frame gait. Planted feet stay within one pixel of each other. They are not bit-identical.
+`provenance` on the animation is `{method: "puppet", reference: {animation, pose}, start, layers}`. `start` is the phase of the cycle whose pose matches the drawing (the first frame is that drawing). The cut frames already have alpha (they are warps of a keyed drawing) and are not sent through `studio.key`. The gait check is not skipped: with one-shot and `autoApprove`, `walk_gait` still measures the sheet. Puppet frames do not carry a per-frame gait. Planted feet stay within one pixel of each other. They are not bit-identical.
 
 ## Limits
 

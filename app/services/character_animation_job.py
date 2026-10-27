@@ -498,7 +498,7 @@ class CharacterAnimationJobs:
         """One drawing, then one keyed frame per pose. A missing limb fails the job and leaves no sheet."""
         try:
             try:
-                fill_puppet_takes(job, tools, workspace_root=self.deps.workspace_dir(job["workspace"]),
+                fill_puppet_takes(job, workspace_root=self.deps.workspace_dir(job["workspace"]),
                                   uploads_root=self.deps.uploads_root(), kit=self._kit(job["workspace"], job["kitId"]),
                                   draw=lambda animation, pose: self._puppet_reference_picture(job, tools, animation, pose),
                                   update=lambda **changes: self._update(store, job, **changes))
