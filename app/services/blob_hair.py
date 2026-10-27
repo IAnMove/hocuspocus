@@ -73,7 +73,8 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
 def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8) -> None:
     """A lofted strand: radii in head-width units from the root to the tip."""
     points = bezier(root, pull, tip, _SAMPLES)
-    radii = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
+    # narrow at the root (it disappears under the hair above, no square top edge), full by a fifth of the way, then thinning to the tip
+    radii = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
     radii[-1] = max(radii[-1], head.rx * 0.012)
     curve_tube(mesh, points, radii, color, ring=ring, flat=flat, hug=(head.cx, head.cy, head.cz))
 
@@ -95,8 +96,8 @@ def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 7, length: float =
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
         yaw = u * 48
         reach = length * levels[i % 3]
-        root = head.at(yaw, 54, 1.04)
-        pull = head.off(head.at(yaw * 1.05, 34, 1.11), dy=0.02)
+        root = head.at(yaw, 46, 1.05)
+        pull = head.off(head.at(yaw * 1.05, 32, 1.11), dy=0.02)
         tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.06), dx=u * 0.08)
         _clump(mesh, head, color, root, pull, tip, 0.36, 0.04, flat=0.18)
 
