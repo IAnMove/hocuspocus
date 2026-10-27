@@ -188,7 +188,7 @@
     "compareHint": "Las flechas y el deslizamiento cambian B",
     "madeBy": {
       "agent": "Un agente (MCP) · {{capability}}",
-      "wizard": "Ask to the Wizard · {{capability}}"
+      "wizard": "Pregunta al mago · {{capability}}"
     }
   },
   "runtimeUpdate": {

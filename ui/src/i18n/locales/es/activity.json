@@ -272,17 +272,17 @@
   },
   "origin": {
     "agent": "Agente (MCP)",
-    "wizard": "Wizard",
+    "wizard": "Mago",
     "agentTitle": "Un agente de IA lo pidió por MCP. Puedes abrir y editar el resultado como si fuera tuyo.",
-    "wizardTitle": "Lo pidió Ask to the Wizard.",
+    "wizardTitle": "Pregunta al mago pidió esto.",
     "startedByAgent": "Iniciado por un agente (MCP) · {{capability}}",
-    "startedByWizard": "Iniciado por Ask to the Wizard",
+    "startedByWizard": "Iniciado por Pregunta al mago",
     "filterLabel": "Mostrar",
     "filter": {
       "all": "Todo",
       "agents": "Agentes",
       "allTitle": "Todas las tareas de este workspace",
-      "agentsTitle": "Todo lo que un agente MCP o el Wizard hizo o cambió en este workspace, primero el último cambio"
+      "agentsTitle": "Todo lo que un agente MCP o el mago hizo o cambió en este workspace, primero el último cambio"
     },
     "emptyAgents": "Ningún agente ha hecho ni cambiado nada en este workspace todavía."
   },

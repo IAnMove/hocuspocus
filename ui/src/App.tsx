@@ -24,6 +24,7 @@ import { ProductionProfileNotice } from './components/ProductionProfileNotice'
 import { SeriesNativeBatchBanner } from './features/series/SeriesNativeBatchBanner'
 import { SeriesShotEditBanner } from './features/series/SeriesShotEditBanner'
 import { catalogFromOutputs, GenerationInspectorHost } from './features/generation-inspector'
+import { useUiTranslation } from './i18n'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
 import { LazyProductionShotsOverlay } from './features/production-shots/ProductionShotsOverlay'
@@ -166,6 +167,7 @@ function AppContent() {
   const outputs = useStore(s => s.outputs)
   const params = useStore(s => s.params)
   const isMobile = useIsMobile()
+  const { t } = useUiTranslation('wizard')
 
   useEffect(() => {
     loadModels()
@@ -263,7 +265,7 @@ function AppContent() {
           <button
             onClick={() => window.dispatchEvent(new Event('hocuspocus:wizard-open'))}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-            aria-label="Ask to the Wizard"
+            aria-label={t('title')}
           >
             <Menu size={20} />
           </button>
