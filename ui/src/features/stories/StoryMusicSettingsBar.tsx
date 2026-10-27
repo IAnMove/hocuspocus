@@ -35,7 +35,7 @@ export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
     <>
       <div className={`${panel} mb-4 grid md:grid-cols-[1fr_1fr_2fr] gap-3 items-end`}>
         <label className="block text-[10px] text-text-muted">{t('music.songModel')}
-          <select className={`${input} mt-1`} value={project.music.model} title={resourceHint || undefined}
+          <select aria-label={t('music.songModel')} className={`${input} mt-1`} value={project.music.model} title={resourceHint || undefined}
             onChange={event => patch({ music: { ...project.music, ...storyMusicSelection(event.target.value) } })}>
             <option value={ACE_STEP_MUSIC_MODEL}>{t('music.aceStepDefault')}</option>
             <option value={MINIMAX_MUSIC3_LOCAL_MODEL}>{t('music.music30Local')}</option>
@@ -61,12 +61,12 @@ export function StoryMusicSettingsBar(props: StoryMusicTabProps) {
         </div>
         <div className="grid md:grid-cols-[1fr_0.7fr_auto] gap-2 items-end">
           <label className="block text-[10px] text-text-muted">{t('music.newStyleOptional')}
-            <input className={`${input} mt-1`} value={musicVersionStyle.all || ''}
+            <input aria-label={t('music.newStyleOptional')} className={`${input} mt-1`} value={musicVersionStyle.all || ''}
               onChange={event => setMusicVersionStyle(current => ({ ...current, all: event.target.value }))}
               placeholder={t('music.newStylePlaceholder')} />
           </label>
           <label className="block text-[10px] text-text-muted">{t('music.newLanguageOptional')}
-            <input className={`${input} mt-1`} value={musicVersionLanguage.all || ''}
+            <input aria-label={t('music.newLanguageOptional')} className={`${input} mt-1`} value={musicVersionLanguage.all || ''}
               onChange={event => setMusicVersionLanguage(current => ({ ...current, all: event.target.value }))}
               placeholder={t('music.newLanguagePlaceholder')} />
           </label>

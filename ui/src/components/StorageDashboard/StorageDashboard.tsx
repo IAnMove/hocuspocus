@@ -151,7 +151,7 @@ export function StorageDashboard() {
               {t('storage.duplicatesHint')}
             </span>
             <label className="ml-auto flex items-center gap-1.5 text-[10px] text-text-secondary cursor-pointer shrink-0" title={t('storage.allowLinkedTitle')}>
-              <input
+              <input aria-label={t('storage.allowLinked')}
                 type="checkbox"
                 checked={allowLinkedRemoval}
                 onChange={e => updateServicesConfig({ storage_allow_linked_removal: e.target.checked })}

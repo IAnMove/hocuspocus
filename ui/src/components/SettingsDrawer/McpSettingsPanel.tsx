@@ -45,7 +45,7 @@ function McpTokenField({ token }: { token: string }) {
   }
   return <div className="space-y-2 text-xs">
     <label htmlFor={id}>{t('mcp.token')}</label>
-    <input id={id} ref={ref} type={visible ? 'text' : 'password'} readOnly value={token} spellCheck={false} autoComplete="off" className="w-full rounded border border-border bg-bg-tertiary p-2" />
+    <input aria-label={t('mcp.token')} id={id} ref={ref} type={visible ? 'text' : 'password'} readOnly value={token} spellCheck={false} autoComplete="off" className="w-full rounded border border-border bg-bg-tertiary p-2" />
     <div className="flex flex-wrap gap-2">
       <button type="button" onClick={() => void copy()} className="min-h-11 rounded border border-border px-3">{t('mcp.copyToken')}</button>
       <button type="button" onClick={() => setVisible(value => !value)} aria-pressed={visible} className="min-h-11 rounded border border-border px-3">{t(visible ? 'mcp.hideToken' : 'mcp.showToken')}</button>
@@ -126,9 +126,9 @@ export function McpSettingsPanel() {
       <p>{t('mcp.help')}</p><p>{t('mcp.access')}</p><p>{t('mcp.use')}</p>
     </div>}
     <p className="text-xs text-text-muted">{t('mcp.summary')}</p>
-    <label className="flex min-h-10 items-center gap-2 text-sm"><input type="checkbox" disabled={!status || busy} checked={status?.enabled ?? false} onChange={e => void update(e.target.checked)} />{t('mcp.enable')}</label>
+    <label className="flex min-h-10 items-center gap-2 text-sm"><input aria-label={t('mcp.enable')} type="checkbox" disabled={!status || busy} checked={status?.enabled ?? false} onChange={e => void update(e.target.checked)} />{t('mcp.enable')}</label>
     {status && <>
-      <label className="block text-xs">{t('mcp.endpoint')}<input readOnly value={endpoint} className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2" /></label>
+      <label className="block text-xs">{t('mcp.endpoint')}<input aria-label={t('mcp.endpoint')} readOnly value={endpoint} className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2" /></label>
       {status.managedByEnvironment && <p className="text-xs">{t('mcp.environment')}</p>}
       {token && <McpTokenField key={token} token={token} />}
       <McpDiagnostics key={`${status.enabled}:${token}`} endpoint={endpoint} token={token} enabled={status.enabled} />

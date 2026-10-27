@@ -98,7 +98,7 @@ export function ImageFitDialog({
         <p className="mt-1 text-[11px] text-text-muted">{t('imageFit.hint')}</p>
         <label className="mt-3 block text-[11px] text-text-muted">
           {t('imageFit.target')}
-          <select
+          <select aria-label={t('imageFit.target')}
             className="mt-1 w-full rounded border border-border bg-bg-tertiary px-2 py-1.5 text-xs"
             value={target}
             onChange={event => setTarget(event.target.value)}

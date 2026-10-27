@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel } from '../../i18n/controlLabel'
 import { isInstructionSpeechModel } from '../../lib/instructionSpeech'
 import { InstructionAudioControls } from './InstructionAudioControls'
@@ -13,6 +14,8 @@ import { applyChosenStudioMedia, studioMediaPath, useWorkspaceOutputs } from '..
 import { fileFromStudioOutput } from '../../lib/studioInputsPick.ts'
 
 export function AudioModeSection() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const modelOptions = useStore(s => s.modelOptions)
   const params = useStore(s => s.params)
@@ -240,7 +243,7 @@ export function AudioModeSection() {
                     constraints={{ kinds: ['audio'], maxCount: 1, optional: true }}
                     onChoose={item => chooseVoice(i, item)}
                   />
-                  <input
+                  <input aria-label={t('audio.speakerName')}
                     type="text"
                     placeholder={t('audio.speakerName')}
                     value={voice.name}
@@ -261,7 +264,7 @@ export function AudioModeSection() {
                 </p>
               )}
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input type="checkbox"
+                <input aria-label={t('audio.normalizeVolumes')} type="checkbox"
                   checked={audioValue.includes('N')}
                   onChange={e => {
                     const current = (params.audio_prompt_type || '') as string
@@ -273,7 +276,7 @@ export function AudioModeSection() {
                 </span>
               </label>
               <label className="flex items-center gap-2 cursor-pointer group">
-                <input type="checkbox"
+                <input aria-label={t('audio.removeBgMusic')} type="checkbox"
                   checked={audioValue.includes('V')}
                   onChange={e => {
                     const current = (params.audio_prompt_type || '') as string
@@ -286,7 +289,7 @@ export function AudioModeSection() {
               </label>
               {ttsVoiceCount >= 2 && (
                 <label className="flex items-center gap-2 cursor-pointer group">
-                  <input type="checkbox"
+                  <input aria-label={t('audio.smoothVolumes')} type="checkbox"
                     checked={!!(params as unknown as Record<string, unknown>).tts_dynaudnorm}
                     onChange={e => setParam('tts_dynaudnorm' as keyof import('../../types').GenerateParams, e.target.checked ? 1 : undefined)}
                     className="accent-accent-blue" />
@@ -325,14 +328,14 @@ export function AudioModeSection() {
       {!isAudioOnly && needsAudioUpload && audioGuideFilename && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted uppercase tracking-wider">
+            <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider">
               {modelOptions?.audio_scale_name || t('audio.promptStrength')}
             </label>
             <span className="text-[10px] text-text-secondary">
               {((params as unknown as Record<string, unknown>).modality_scale as number ?? 1.0).toFixed(1)}
             </span>
           </div>
-          <input
+          <input aria-label={modelOptions?.audio_scale_name || t('audio.promptStrength')} id={fieldIds('f0')}
             type="range" min={0.1} max={3.0} step={0.1}
             value={(params as unknown as Record<string, unknown>).modality_scale as number ?? 1.0}
             onChange={e => setParam('modality_scale' as keyof import('../../types').GenerateParams, parseFloat(e.target.value))}

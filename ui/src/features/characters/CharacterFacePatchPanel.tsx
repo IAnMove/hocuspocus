@@ -378,7 +378,7 @@ export function CharacterFacePatchPanel(props: CharacterFacePatchPanelProps) {
       <p className="text-[9px] leading-relaxed text-text-muted">{t('facePatch.alignment')}</p>
       <label className="block text-[8px] text-text-muted" htmlFor="character-face-patch-prompt">
         {t('facePatch.promptLabel')}
-        <textarea id="character-face-patch-prompt" readOnly rows={5} value={controller.prompt} className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px] leading-relaxed text-text-secondary" />
+        <textarea aria-label={t('facePatch.promptLabel')} id="character-face-patch-prompt" readOnly rows={5} value={controller.prompt} className="mt-0.5 w-full resize-y rounded border border-border bg-bg-primary px-1.5 py-1 text-[8px] leading-relaxed text-text-secondary" />
       </label>
       {controller.disabledReason && <p role="alert" className="rounded border border-amber-300/30 bg-amber-400/10 p-1 text-[9px] text-amber-100">{controller.disabledReason}</p>}
       <div className="space-y-1 rounded border border-border/70 bg-black/20 p-1">
@@ -391,7 +391,7 @@ export function CharacterFacePatchPanel(props: CharacterFacePatchPanelProps) {
         <p className="text-[8px] text-text-secondary">{t('facePatch.variantHint')}</p>
         <label className="block text-[9px] text-text-secondary">
           {t('facePatch.variantLabel')}
-          <input type="file" accept="image/png,image/jpeg,image/webp" disabled={fileDisabled} onChange={controller.onVariantChange} className="mt-0.5 block w-full text-[8px] text-text-muted file:mr-1 file:rounded file:border-0 file:bg-violet-400/20 file:px-1 file:py-0.5 file:text-[8px] file:text-violet-100" />
+          <input aria-label={t('facePatch.variantLabel')} type="file" accept="image/png,image/jpeg,image/webp" disabled={fileDisabled} onChange={controller.onVariantChange} className="mt-0.5 block w-full text-[8px] text-text-muted file:mr-1 file:rounded file:border-0 file:bg-violet-400/20 file:px-1 file:py-0.5 file:text-[8px] file:text-violet-100" />
         </label>
         <LabsLibraryPick workspace={props.workspace} disabled={fileDisabled} onFile={file => controller.applyVariant(file)} />
         <button type="button" disabled={saveDisabled} onClick={controller.onSave} className="w-full rounded border border-violet-300/50 bg-violet-400/10 px-1 py-1.5 text-[9px] text-violet-100 disabled:opacity-40">

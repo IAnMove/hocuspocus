@@ -19,14 +19,14 @@ export function StoryProviderImageFields({
   return (
     <>
       <label className="block text-[10px] text-text-muted">{t('provider.imageProvider')}
-        <select className={`${input} mt-1`} value={project.provider.imageProvider} onChange={event => onPatchProvider({ imageProvider: event.target.value as 'maestro' | 'minimax' })}>
+        <select aria-label={t('provider.imageProvider')} className={`${input} mt-1`} value={project.provider.imageProvider} onChange={event => onPatchProvider({ imageProvider: event.target.value as 'maestro' | 'minimax' })}>
           <option value="maestro">{t('provider.imageLocal')}</option>
           <option value="minimax">{t('provider.imageMinimax')}</option>
         </select>
       </label>
       {project.provider.imageProvider === 'maestro' && (
         <label className="block text-[10px] text-text-muted">{t('provider.imageModel')}
-          <select
+          <select aria-label={t('provider.imageModel')}
             className={`${input} mt-1`}
             value={project.provider.imageModel}
             onChange={event => onPatchProvider({ imageModel: event.target.value })}

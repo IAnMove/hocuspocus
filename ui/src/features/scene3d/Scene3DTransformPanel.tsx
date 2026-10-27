@@ -31,15 +31,15 @@ export function Scene3DTransformPanel({ slot, mode, disabled, onMode, onChange, 
           }} className={fieldClass} />
         </label>)}</div>
       </fieldset>
-      <label className="block min-w-0 text-xs text-text-secondary" data-testid="scene3d-size-field">{t('size')}<input type="number" min="0.05" max="100" step="0.05" disabled={disabled} value={Number(slot.scale.toFixed(3))}
+      <label className="block min-w-0 text-xs text-text-secondary" data-testid="scene3d-size-field">{t('size')}<input aria-label={t('size')} type="number" min="0.05" max="100" step="0.05" disabled={disabled} value={Number(slot.scale.toFixed(3))}
         onChange={event => { const scale = Number(event.target.value); if (Number.isFinite(scale) && scale >= 0.05) onChange({ scale: Math.min(100, scale) }) }} className={fieldClass} /></label>
       <fieldset disabled={disabled} className="min-w-0"><legend className="mb-2 text-xs text-text-secondary">{t('rotate')}</legend>
         <div className="grid grid-cols-3 gap-2" data-testid="scene3d-rotation-fields">
-          <label className="min-w-0 text-xs text-text-secondary">{t('rotationX')}<input type="number" step="5" disabled={disabled} value={Number(((slot.rotationX ?? 0) * 180 / Math.PI).toFixed(1))}
+          <label className="min-w-0 text-xs text-text-secondary">{t('rotationX')}<input aria-label={t('rotationX')} type="number" step="5" disabled={disabled} value={Number(((slot.rotationX ?? 0) * 180 / Math.PI).toFixed(1))}
             onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) onChange({ rotationX: value * Math.PI / 180 }) }} className={fieldClass} /></label>
-          <label className="min-w-0 text-xs text-text-secondary">{t('yaw')}<input type="number" step="5" disabled={disabled} value={Number((slot.rotationY * 180 / Math.PI).toFixed(1))}
+          <label className="min-w-0 text-xs text-text-secondary">{t('yaw')}<input aria-label={t('yaw')} type="number" step="5" disabled={disabled} value={Number((slot.rotationY * 180 / Math.PI).toFixed(1))}
             onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) onChange({ rotationY: value * Math.PI / 180 }) }} className={fieldClass} /></label>
-          <label className="min-w-0 text-xs text-text-secondary">{t('rotationZ')}<input type="number" step="5" disabled={disabled} value={Number(((slot.rotationZ ?? 0) * 180 / Math.PI).toFixed(1))}
+          <label className="min-w-0 text-xs text-text-secondary">{t('rotationZ')}<input aria-label={t('rotationZ')} type="number" step="5" disabled={disabled} value={Number(((slot.rotationZ ?? 0) * 180 / Math.PI).toFixed(1))}
             onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) onChange({ rotationZ: value * Math.PI / 180 }) }} className={fieldClass} /></label>
         </div>
       </fieldset>

@@ -198,6 +198,24 @@
     "chooseOrImport": "Elige un GLB de la galería o importa uno.",
     "retextureHelp": "Los GLB animados o con rig se rechazan a propósito porque Hunyuan Paint reconstruye los UV. Retexturiza primero la base estática y luego aplica el rig a la copia nueva.",
     "performance": "Perfil de rendimiento",
+    "presets": {
+      "eco": {
+        "label": "Poca VRAM",
+        "description": "Mini Turbo, descarga a CPU, octree 128, sin textura."
+      },
+      "balanced": {
+        "label": "Equilibrado",
+        "description": "Geometría Turbo a tamaño completo, con textura estándar."
+      },
+      "quality": {
+        "label": "Calidad / PBR",
+        "description": "Hunyuan3D 2.1, octree 384 y materiales PBR."
+      },
+      "multiview": {
+        "label": "Multivista rápida",
+        "description": "Turbo multivista con hasta cuatro vistas de referencia."
+      }
+    },
     "hunyuanModel": "Modelo Hunyuan",
     "recommendedVram": "Recomendado: {{gb}} GB+ de VRAM.",
     "promptRetexture": "Describe la textura nueva o usa una imagen",

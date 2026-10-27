@@ -28,7 +28,7 @@ export function CharacterKitLink({
   return (
     <label className="block space-y-1 text-xs">
       {t('speech.savedCharacter')}
-      <select
+      <select aria-label={t('speech.savedCharacter')}
         data-testid="character-kit-link"
         disabled={disabled}
         title={disabled ? title : undefined}

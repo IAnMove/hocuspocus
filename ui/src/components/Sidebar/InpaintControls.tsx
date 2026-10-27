@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useEffect } from 'react'
 import { X, Eye, AlertTriangle, Download } from 'lucide-react'
@@ -9,6 +10,8 @@ import { StudioSourceField } from '../../lib/StudioSourceField.tsx'
 import { applyChosenStudioMedia, useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
 
 export function InpaintControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
@@ -197,10 +200,10 @@ export function InpaintControls() {
 
       {/* SAM Target — what to segment */}
       <div>
-        <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">
+        <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">
           {t('inpaint.what')} <span className="normal-case text-text-muted">({t('inpaint.forSam')})</span>
         </label>
-        <input
+        <input aria-label={t('inpaint.what')} id={fieldIds('f0')}
           type="text"
           value={samTarget}
           onChange={e => setSamTarget(e.target.value)}
@@ -208,7 +211,7 @@ export function InpaintControls() {
           className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
         />
         <label className="flex items-center gap-2 mt-1.5 cursor-pointer">
-          <input type="checkbox"
+          <input aria-label={t('inpaint.invert')} type="checkbox"
             checked={useStore.getState().editInvertMask}
             onChange={e => useStore.setState({ editInvertMask: e.target.checked, editMasksPath: null, editMaskPreview: null })}
             className="w-3 h-3 rounded border-border accent-accent-blue" />
@@ -242,10 +245,10 @@ export function InpaintControls() {
         <div className="space-y-3 pl-2 border-l border-border/50">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('inpaint.promptStrength')}</label>
+              <label htmlFor={fieldIds('f1')} className="text-[10px] text-text-muted uppercase tracking-wider">{t('inpaint.promptStrength')}</label>
               <span className="text-[10px] text-text-secondary">{promptStrength.toFixed(1)}</span>
             </div>
-            <input
+            <input aria-label={t('inpaint.promptStrength')} id={fieldIds('f1')}
               type="range"
               min={1.0} max={7.0} step={0.5}
               value={promptStrength}
@@ -258,10 +261,10 @@ export function InpaintControls() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('inpaint.retakeStrength')}</label>
+              <label htmlFor={fieldIds('f2')} className="text-[10px] text-text-muted uppercase tracking-wider">{t('inpaint.retakeStrength')}</label>
               <span className="text-[10px] text-text-secondary">{retakeStrength.toFixed(2)}</span>
             </div>
-            <input
+            <input aria-label={t('inpaint.retakeStrength')} id={fieldIds('f2')}
               type="range"
               min={0.1} max={1.0} step={0.05}
               value={retakeStrength}

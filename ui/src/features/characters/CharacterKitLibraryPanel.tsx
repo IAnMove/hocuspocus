@@ -119,7 +119,7 @@ export function CharacterKitLibraryPanel({
       {!draft && (
         <div className="space-y-1 rounded border border-border/70 bg-black/10 p-1.5">
           <p className="text-[9px] text-text-secondary">{t('library.newHint')}</p>
-          <input value={newName} onChange={event => onNewNameChange(event.target.value)} placeholder={t('library.namePlaceholder')} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" />
+          <input aria-label={t('library.namePlaceholder')} value={newName} onChange={event => onNewNameChange(event.target.value)} placeholder={t('library.namePlaceholder')} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]" />
           <button type="button" disabled={!hasSelectedLayer || busy} onClick={onCreateFromSelected} className="w-full rounded border border-emerald-300/40 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-100 disabled:opacity-40">{t('library.createFromSelected')}</button>
         </div>
       )}
@@ -183,7 +183,7 @@ export function CharacterKitLibraryPanel({
                 <button type="button" disabled={!selectedIsFace} onClick={onCaptureAnchor} className="rounded border border-border px-1 py-1 text-[8px] text-emerald-100 disabled:opacity-40">{t('library.advanced.saveLayerPosition')}</button>
               </div>
               <label className="mt-1 block text-[8px] text-text-muted">{t('library.advanced.alphaWhenAssigning')}
-                <select value={alphaStatus} onChange={event => onAlphaStatusChange(event.target.value as CharacterKitAlphaStatus)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
+                <select aria-label={t('library.advanced.alphaWhenAssigning')} value={alphaStatus} onChange={event => onAlphaStatusChange(event.target.value as CharacterKitAlphaStatus)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]">
                   <option value="transparent">{t('alpha.transparent')}</option>
                   <option value="unknown">{t('alpha.unknown')}</option>
                   <option value="opaque">{t('alpha.opaque')}</option>

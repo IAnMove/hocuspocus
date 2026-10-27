@@ -16,12 +16,14 @@ function H3WindowPromptTextarea({
   onChange,
   readOnly,
   title,
+  label,
   active,
 }: {
   value: string
   onChange: (value: string) => void
   readOnly: boolean
   title: string
+  label: string
   active: boolean
 }) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -44,6 +46,7 @@ function H3WindowPromptTextarea({
   return (
     <textarea
       ref={textareaRef}
+      aria-label={label}
       rows={1}
       value={value}
       onChange={event => onChange(event.target.value)}
@@ -424,6 +427,7 @@ export function PromptInput() {
                     <span>{window.start_seconds.toFixed(1)}–{window.end_seconds.toFixed(1)}s</span>
                   </div>
                   <H3WindowPromptTextarea
+                    label={t('prompt.windowTitle', { index: window.index, title: window.title || t('prompt.beat', { index: window.index }) })}
                     value={window.prompt}
                     onChange={value => updateH3WindowPrompt(index, value)}
                     readOnly={!!matchingActiveH3Phase}
@@ -444,7 +448,7 @@ export function PromptInput() {
             ? 'border-accent-blue/40 bg-accent-blue/10'
             : 'border-border bg-bg-tertiary/60 hover:border-border-light'
         }`}>
-          <input
+          <input aria-label={t('prompt.scheduler')}
             type="checkbox"
             checked={promptSchedulerEnabled}
             onChange={event => setPromptSchedulerEnabled(event.target.checked)}
@@ -462,6 +466,7 @@ export function PromptInput() {
         </label>
       )}
       <textarea
+        aria-label={t('prompt.field')}
         value={prompt}
         onChange={e => setParam('prompt', e.target.value)}
         placeholder={schedulerApplies

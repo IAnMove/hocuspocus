@@ -36,12 +36,12 @@ function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
   const [seed, setSeed] = useState('')
   return <div className="mt-2 space-y-2">
     <label className="block text-[11px] text-text-muted">{t('shots.prompt')}
-      <textarea value={prompt} maxLength={4000} rows={4} onChange={event => setPrompt(event.target.value)}
+      <textarea aria-label={t('shots.prompt')} value={prompt} maxLength={4000} rows={4} onChange={event => setPrompt(event.target.value)}
         className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2 text-xs text-text-primary" />
     </label>
     <div className="flex flex-wrap items-end gap-2">
       <label className="text-[11px] text-text-muted">{t('shots.seed')}
-        <input type="number" min={0} value={seed} placeholder={t('shots.seedAuto')} onChange={event => setSeed(event.target.value)}
+        <input aria-label={t('shots.seed')} type="number" min={0} value={seed} placeholder={t('shots.seedAuto')} onChange={event => setSeed(event.target.value)}
           className="ml-2 w-32 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs" />
       </label>
       <button type="button" className={button} disabled={busy || !prompt.trim()}

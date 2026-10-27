@@ -15,7 +15,8 @@
   },
   "language": {
     "name": "Spanish",
-    "nativeName": "Español"
+    "nativeName": "Español",
+    "placeholder": "Elige o escribe cualquier idioma"
   },
   "actions": {
     "close": "Cerrar",

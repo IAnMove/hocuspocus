@@ -21,7 +21,7 @@ export function MotionLabControls({ document, disabled, onChange }: {
       <label>{t('motionLab.seed')}<input aria-label={t('motionLab.seed')} type="number" min={0} max={2147483647} value={settings.seed} onChange={event => { const seed = Number(event.target.value); if (Number.isInteger(seed) && seed >= 0 && seed <= 2147483647) patch({ seed }) }} /></label>
       {(document.dressing === 'motion-poster-breakout' || document.dressing === 'motion-particle-morph') && <label>{t('motionLab.title')}<input aria-label={t('motionLab.title')} maxLength={24} value={settings.title} onChange={event => patch({ title: event.target.value })} /></label>}
       {document.dressing === 'motion-particle-morph' && <label>{t('motionLab.density')}<input aria-label={t('motionLab.density')} type="range" min={200} max={3000} step={100} value={settings.density} onChange={event => patch({ density: Number(event.target.value) })} /></label>}
-      {musical && <><label><input type="checkbox" checked={settings.sound} onChange={event => patch({ sound: event.target.checked })} />{t('motionLab.sound')}</label>
+      {musical && <><label><input aria-label={t('motionLab.sound')} type="checkbox" checked={settings.sound} onChange={event => patch({ sound: event.target.checked })} />{t('motionLab.sound')}</label>
         <label>{t('motionLab.volume')}<input aria-label={t('motionLab.volume')} type="range" min={0} max={1} step={.05} value={settings.volume} onChange={event => patch({ volume: Number(event.target.value) })} /></label></>}
     </div>
   </fieldset>

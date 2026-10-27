@@ -195,7 +195,7 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
       </div>
 
       <label className="flex flex-wrap items-center gap-3 text-sm text-text-secondary">{t('gallerySearch')}
-        <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('galleryPlaceholder')} className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-bg-secondary px-3 text-text-primary" />
+        <input aria-label={t('gallerySearch')} type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder={t('galleryPlaceholder')} className="min-h-11 min-w-0 flex-1 rounded-lg border border-border bg-bg-secondary px-3 text-text-primary" />
         <span role="status">{t('galleryCount', { count: visibleTemplates.length })}</span>
       </label>
       <div className="space-y-6">
@@ -279,7 +279,7 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
                           {(['pending', 'keep', 'discard'] as ReviewDecision[]).map(decision => <button key={decision} type="button" aria-pressed={choice.decision === decision} onClick={() => setDecision(template.id, decision)} className={`rounded border px-2 py-1 text-xs ${choice.decision === decision ? reviewTone[decision] : 'border-border text-text-muted hover:bg-bg-hover'}`}>{tScene(REVIEW_LABEL_KEY[decision])}</button>)}
                         </div>
                         <label className="mt-2 block text-xs text-text-muted">{tScene('candidateGallery.reviewNotes')}
-                          <textarea value={choice.notes} maxLength={4_000} onChange={event => setDecision(template.id, choice.decision, event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-xs text-text-primary outline-none focus:border-violet-300" placeholder={tScene('candidateGallery.notesPlaceholder')} />
+                          <textarea aria-label={tScene('candidateGallery.reviewNotes')} value={choice.notes} maxLength={4_000} onChange={event => setDecision(template.id, choice.decision, event.target.value)} rows={2} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-xs text-text-primary outline-none focus:border-violet-300" placeholder={tScene('candidateGallery.notesPlaceholder')} />
                         </label>
                       </div>
                     </div>

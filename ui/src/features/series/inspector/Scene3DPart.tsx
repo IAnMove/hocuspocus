@@ -67,7 +67,7 @@ function ObjectEditor({ object, change }: { object: Object3D; change: (object: O
       <CheckInput title={t('inspector.scene3d.grounded')} value={object.grounded} onChange={value => change({ ...object, grounded: value })} />
     </div>
     <label className="block text-[10px] text-text-muted">{t('inspector.scene3d.advanced')}
-      <textarea className={`${textareaClass} mt-0.5 min-h-20 font-mono text-[11px]`} spellCheck={false} value={text} onChange={event => {
+      <textarea aria-label={t('inspector.scene3d.advanced')} className={`${textareaClass} mt-0.5 min-h-20 font-mono text-[11px]`} spellCheck={false} value={text} onChange={event => {
         setText(event.target.value)
         try {
           const parsed = event.target.value.trim() ? JSON.parse(event.target.value) : {}

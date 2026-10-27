@@ -100,6 +100,7 @@ export function DirectorModelPicker({ mode, value, onChange, pipeline, allowSeam
         {mode === 'image' ? t('modelPicker.image') : t('modelPicker.video')}
       </span>}
       <select
+        aria-label={mode === 'image' ? t('modelPicker.image') : t('modelPicker.video')}
         value={selectedValue}
         onChange={e => onChange(e.target.value)}
         disabled={compatibleModels.length === 0 && mode !== 'image'}

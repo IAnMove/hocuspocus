@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel, controlChoice } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef } from 'react'
 import { X, Save, Trash2, FolderOpen, SlidersHorizontal } from 'lucide-react'
@@ -60,7 +61,7 @@ function PresetManager() {
 
       {showSave && (
         <div className="flex gap-1.5 mb-2">
-          <input
+          <input aria-label={t('advanced.presetName')}
             type="text"
             value={saveName}
             onChange={e => setSaveName(e.target.value)}
@@ -185,6 +186,8 @@ function useAdvancedActiveItems(): string[] {
 }
 
 export function AdvancedSettings() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const [open, setOpen] = useState(false)
   const params = useStore(s => s.params)
@@ -307,10 +310,10 @@ export function AdvancedSettings() {
                   Expose it once here instead of multiplying model entries. */}
               {modelOptions?.minimax_h3_text_encoder_choices?.length ? (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+                  <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
                     {t('advanced.h3Encoder')}
                   </label>
-                  <select
+                  <select aria-label={t('advanced.h3Encoder')} id={fieldIds('f0')}
                     value={params.minimax_h3_text_encoder || modelOptions.minimax_h3_text_encoder_default || modelOptions.minimax_h3_text_encoder_choices[0]?.value}
                     onChange={e => setParam('minimax_h3_text_encoder', e.target.value as GenerateParams['minimax_h3_text_encoder'])}
                     className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -332,7 +335,7 @@ export function AdvancedSettings() {
               {modelOptions?.first_block_cache && (
                 <div className="space-y-2 p-2.5 bg-bg-tertiary/40 rounded-lg border border-border/60">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
+                    <input aria-label={t('advanced.firstBlockCache')}
                       type="checkbox"
                       checked={params.skip_steps_cache_type === 'first_block'}
                       onChange={e => {
@@ -359,10 +362,10 @@ export function AdvancedSettings() {
                   {params.skip_steps_cache_type === 'first_block' && (
                     <div className="space-y-2 pl-1 border-l border-border ml-1">
                       <div>
-                        <label className="text-[10px] text-text-muted block mb-1">
+                        <label htmlFor={fieldIds('f1')} className="text-[10px] text-text-muted block mb-1">
                           {modelOptions.skip_steps_multiplier_label || t('advanced.cacheThreshold')}
                         </label>
-                        <select
+                        <select aria-label={modelOptions.skip_steps_multiplier_label || t('advanced.cacheThreshold')} id={fieldIds('f1')}
                           value={params.skip_steps_multiplier ?? modelOptions.default_skip_steps_multiplier ?? 0.08}
                           onChange={e => setParam('skip_steps_multiplier', Number(e.target.value))}
                           className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -374,12 +377,12 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.warmup')}</label>
+                          <label htmlFor={fieldIds('f2')} className="text-[10px] text-text-muted">{t('advanced.warmup')}</label>
                           <span className="text-[10px] text-text-secondary">
                             {params.skip_steps_start_step_perc ?? modelOptions.default_skip_steps_start_step_perc ?? 25}%
                           </span>
                         </div>
-                        <input
+                        <input aria-label={t('advanced.warmup')} id={fieldIds('f2')}
                           type="range"
                           min={0}
                           max={75}
@@ -405,7 +408,7 @@ export function AdvancedSettings() {
               {isVideo && modelOptions?.sliding_window_auto_prompt_pacing === true && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
+                    <input aria-label={t('advanced.planWindows')}
                       type="checkbox"
                       checked={params.minimax_h3_window_storyboard !== false}
                       onChange={e => setParam('minimax_h3_window_storyboard', e.target.checked)}
@@ -428,12 +431,12 @@ export function AdvancedSettings() {
                   {modelOptions?.duration_slider && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">
+                        <label htmlFor={fieldIds('f3')} className="text-[11px] text-text-muted uppercase tracking-wider">
                           {modelOptions.duration_slider.label || t('advanced.maxDuration')}
                         </label>
                         <span className="text-xs text-text-secondary">{Math.round(durationSeconds)}s</span>
                       </div>
-                      <input
+                      <input aria-label={modelOptions.duration_slider.label || t('advanced.maxDuration')} id={fieldIds('f3')}
                         type="range"
                         min={modelOptions.duration_slider.min} max={modelOptions.duration_slider.max} step={modelOptions.duration_slider.increment}
                         value={durationSeconds}
@@ -447,10 +450,10 @@ export function AdvancedSettings() {
                   {modelOptions?.pause_between_sentences && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.speakerPause')}</label>
+                        <label htmlFor={fieldIds('f4')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.speakerPause')}</label>
                         <span className="text-xs text-text-secondary">{(params.pause_seconds ?? 0.5).toFixed(2)}s</span>
                       </div>
-                      <input
+                      <input aria-label={t('advanced.speakerPause')} id={fieldIds('f4')}
                         type="range" min={0} max={2} step={0.05}
                         value={params.pause_seconds ?? 0.5}
                         onChange={e => setParam('pause_seconds', parseFloat(e.target.value))}
@@ -463,10 +466,10 @@ export function AdvancedSettings() {
                   {modelOptions?.temperature_enabled && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.temperature')}</label>
+                        <label htmlFor={fieldIds('f5')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.temperature')}</label>
                         <span className="text-xs text-text-secondary">{(params.temperature ?? 1.0).toFixed(2)}</span>
                       </div>
-                      <input
+                      <input aria-label={t('advanced.temperature')} id={fieldIds('f5')}
                         type="range" min={0.1} max={1.5} step={0.01}
                         value={params.temperature ?? 1.0}
                         onChange={e => setParam('temperature', parseFloat(e.target.value))}
@@ -478,10 +481,10 @@ export function AdvancedSettings() {
                   {/* Guidance Scale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.guidanceCfg')}</label>
+                      <label htmlFor={fieldIds('f6')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.guidanceCfg')}</label>
                       <span className="text-xs text-text-secondary">{(params.guidance_scale ?? 3.0).toFixed(1)}</span>
                     </div>
-                    <input
+                    <input aria-label={t('advanced.guidanceCfg')} id={fieldIds('f6')}
                       type="range" min={1} max={20} step={0.1}
                       value={params.guidance_scale ?? 3.0}
                       onChange={e => setParam('guidance_scale', parseFloat(e.target.value))}
@@ -490,10 +493,10 @@ export function AdvancedSettings() {
                   </div>
 
                   {/* Auto-Split */}
-                  {modelOptions?.custom_settings_def?.map(setting => (
+                  {modelOptions?.custom_settings_def?.map((setting, fieldIndex) => (
                     <div key={setting.id}>
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{setting.name}</label>
-                      <input
+                      <label htmlFor={fieldIds(`f7-${fieldIndex}`)} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{setting.name}</label>
+                      <input aria-label={setting.name} id={fieldIds(`f7-${fieldIndex}`)}
                         type="number"
                         placeholder={t('advanced.emptyDisabled')}
                         value={String((params.custom_settings as Record<string, unknown> | undefined)?.[setting.id] ?? '')}
@@ -519,10 +522,10 @@ export function AdvancedSettings() {
                       <label className="text-[10px] text-text-muted uppercase tracking-wider block">{t('advanced.compressor')}</label>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.threshold')}</label>
+                          <label htmlFor={fieldIds('f8')} className="text-[10px] text-text-muted">{t('advanced.threshold')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_threshold ?? -25)}dB</span>
                         </div>
-                        <input type="range" min={-50} max={-10} step={1}
+                        <input aria-label={t('advanced.threshold')} id={fieldIds('f8')} type="range" min={-50} max={-10} step={1}
                           value={Number(params.tts_comp_threshold ?? -25)}
                           onChange={e => setParam('tts_comp_threshold', parseInt(e.target.value))}
                           className="w-full" />
@@ -530,10 +533,10 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.attack')}</label>
+                          <label htmlFor={fieldIds('f9')} className="text-[10px] text-text-muted">{t('advanced.attack')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_attack ?? 5)}ms</span>
                         </div>
-                        <input type="range" min={minimumSteps} max={maximumSteps} step={1}
+                        <input aria-label={t('advanced.attack')} id={fieldIds('f9')} type="range" min={minimumSteps} max={maximumSteps} step={1}
                           value={Number(params.tts_comp_attack ?? 5)}
                           onChange={e => setParam('tts_comp_attack', parseInt(e.target.value))}
                           className="w-full" />
@@ -541,10 +544,10 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.release')}</label>
+                          <label htmlFor={fieldIds('f10')} className="text-[10px] text-text-muted">{t('advanced.release')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_release ?? 100)}ms</span>
                         </div>
-                        <input type="range" min={20} max={500} step={10}
+                        <input aria-label={t('advanced.release')} id={fieldIds('f10')} type="range" min={20} max={500} step={10}
                           value={Number(params.tts_comp_release ?? 100)}
                           onChange={e => setParam('tts_comp_release', parseInt(e.target.value))}
                           className="w-full" />
@@ -552,10 +555,10 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.makeup')}</label>
+                          <label htmlFor={fieldIds('f11')} className="text-[10px] text-text-muted">{t('advanced.makeup')}</label>
                           <span className="text-[10px] text-text-secondary">{Number(params.tts_comp_makeup ?? 4)}dB</span>
                         </div>
-                        <input type="range" min={0} max={12} step={1}
+                        <input aria-label={t('advanced.makeup')} id={fieldIds('f11')} type="range" min={0} max={12} step={1}
                           value={Number(params.tts_comp_makeup ?? 4)}
                           onChange={e => setParam('tts_comp_makeup', parseInt(e.target.value))}
                           className="w-full" />
@@ -572,12 +575,12 @@ export function AdvancedSettings() {
               {(
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.seed')}</label>
+                  <label htmlFor={fieldIds('f12')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.seed')}</label>
                   <button onClick={() => setParam('seed', -1)} className="text-[10px] text-accent-blue hover:text-accent-blue-hover">
                     {t('chrome.random')}
                   </button>
                 </div>
-                <input
+                <input aria-label={t('advanced.seed')} id={fieldIds('f12')}
                   type="number"
                   value={Number(params.seed)}
                   onChange={e => setParam('seed', Number(e.target.value))}
@@ -590,8 +593,8 @@ export function AdvancedSettings() {
               {/* Self Refiner */}
               {!isScailEdit && modelOptions?.self_refiner === true ? (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.selfRefiner')}</label>
-                  <select
+                  <label htmlFor={fieldIds('f13')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.selfRefiner')}</label>
+                  <select aria-label={t('advanced.selfRefiner')} id={fieldIds('f13')}
                     value={params.self_refiner_setting ?? 0}
                     onChange={e => setParam('self_refiner_setting', Number(e.target.value))}
                     className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -610,7 +613,7 @@ export function AdvancedSettings() {
                 <div className="space-y-2">
                   <label className="block text-[10px] text-text-muted">
                     {t('advanced.startFit')}
-                    <select
+                    <select aria-label={t('advanced.startFit')}
                       value={params.image_fit_mode === 'crop' ? 'crop' : 'contain'}
                       onChange={e => setParam('image_fit_mode', e.target.value as 'contain' | 'crop')}
                       className="mt-1 w-full rounded-lg border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary focus:border-accent-blue focus:outline-none"
@@ -620,7 +623,7 @@ export function AdvancedSettings() {
                     </select>
                   </label>
                   <label className="flex cursor-pointer items-center gap-2">
-                    <input
+                    <input aria-label={t('advanced.preserveStyle')}
                       type="checkbox"
                       checked={params.preserve_source_style !== false}
                       onChange={e => setParam('preserve_source_style', e.target.checked)}
@@ -691,10 +694,10 @@ export function AdvancedSettings() {
                   {!params.progressive_pipeline && !params.single_stage_pipeline && (
                     <div>
                       <div className="flex items-center justify-between mb-1.5">
-                        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.stage2Steps')}</label>
+                        <label htmlFor={fieldIds('f14')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.stage2Steps')}</label>
                         <span className="text-xs text-text-secondary">{params.stage2_steps || 3}</span>
                       </div>
-                      <input
+                      <input aria-label={t('advanced.stage2Steps')} id={fieldIds('f14')}
                         type="range" min={2} max={7} step={1}
                         value={params.stage2_steps || 3}
                         onChange={e => setParam('stage2_steps', Number(e.target.value))}
@@ -711,10 +714,10 @@ export function AdvancedSettings() {
                     <div className="space-y-3 pt-1 border-t border-border/30">
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.stage1Weight')}</label>
+                          <label htmlFor={fieldIds('f15')} className="text-[10px] text-text-muted">{t('advanced.stage1Weight')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage1_image_weight ?? 0.7).toFixed(2)}</span>
                         </div>
-                        <input type="range" min={0.3} max={1.0} step={0.05}
+                        <input aria-label={t('advanced.stage1Weight')} id={fieldIds('f15')} type="range" min={0.3} max={1.0} step={0.05}
                           value={params.progressive_stage1_image_weight ?? 0.7}
                           onChange={e => setParam('progressive_stage1_image_weight', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
@@ -724,30 +727,30 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.stage2Half')}</label>
+                          <label htmlFor={fieldIds('f16')} className="text-[10px] text-text-muted">{t('advanced.stage2Half')}</label>
                           <span className="text-[10px] text-text-secondary">{params.progressive_stage2_steps ?? 5}</span>
                         </div>
-                        <input type="range" min={1} max={8} step={1}
+                        <input aria-label={t('advanced.stage2Half')} id={fieldIds('f16')} type="range" min={1} max={8} step={1}
                           value={params.progressive_stage2_steps ?? 5}
                           onChange={e => setParam('progressive_stage2_steps', Number(e.target.value))}
                           className="w-full accent-accent-blue" />
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.stage3Full')}</label>
+                          <label htmlFor={fieldIds('f17')} className="text-[10px] text-text-muted">{t('advanced.stage3Full')}</label>
                           <span className="text-[10px] text-text-secondary">{params.progressive_stage3_steps ?? 3}</span>
                         </div>
-                        <input type="range" min={1} max={8} step={1}
+                        <input aria-label={t('advanced.stage3Full')} id={fieldIds('f17')} type="range" min={1} max={8} step={1}
                           value={params.progressive_stage3_steps ?? 3}
                           onChange={e => setParam('progressive_stage3_steps', Number(e.target.value))}
                           className="w-full accent-accent-blue" />
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.stage2Sigma')}</label>
+                          <label htmlFor={fieldIds('f18')} className="text-[10px] text-text-muted">{t('advanced.stage2Sigma')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage2_sigma ?? 0.85).toFixed(2)}</span>
                         </div>
-                        <input type="range" min={0.5} max={1.0} step={0.05}
+                        <input aria-label={t('advanced.stage2Sigma')} id={fieldIds('f18')} type="range" min={0.5} max={1.0} step={0.05}
                           value={params.progressive_stage2_sigma ?? 0.85}
                           onChange={e => setParam('progressive_stage2_sigma', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
@@ -757,10 +760,10 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.stage3Sigma')}</label>
+                          <label htmlFor={fieldIds('f19')} className="text-[10px] text-text-muted">{t('advanced.stage3Sigma')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage3_sigma ?? 0.85).toFixed(2)}</span>
                         </div>
-                        <input type="range" min={0.5} max={1.0} step={0.05}
+                        <input aria-label={t('advanced.stage3Sigma')} id={fieldIds('f19')} type="range" min={0.5} max={1.0} step={0.05}
                           value={params.progressive_stage3_sigma ?? 0.85}
                           onChange={e => setParam('progressive_stage3_sigma', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
@@ -770,10 +773,10 @@ export function AdvancedSettings() {
                       </div>
                       <div>
                         <div className="flex items-center justify-between mb-1">
-                          <label className="text-[10px] text-text-muted">{t('advanced.stage3Weight')}</label>
+                          <label htmlFor={fieldIds('f20')} className="text-[10px] text-text-muted">{t('advanced.stage3Weight')}</label>
                           <span className="text-[10px] text-text-secondary">{(params.progressive_stage3_image_weight ?? 0.7).toFixed(2)}</span>
                         </div>
-                        <input type="range" min={0.3} max={1.0} step={0.05}
+                        <input aria-label={t('advanced.stage3Weight')} id={fieldIds('f20')} type="range" min={0.3} max={1.0} step={0.05}
                           value={params.progressive_stage3_image_weight ?? 0.7}
                           onChange={e => setParam('progressive_stage3_image_weight', parseFloat(e.target.value))}
                           className="w-full accent-accent-blue" />
@@ -794,7 +797,7 @@ export function AdvancedSettings() {
               {!isScailEdit && (modelOptions as Record<string, unknown> | null)?.reference_pipeline && (
                 <div className="space-y-1">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input type="checkbox"
+                    <input aria-label={t('advanced.referencePipeline')} type="checkbox"
                       checked={!!params.reference_pipeline}
                       onChange={e => setParam('reference_pipeline', e.target.checked ? true : undefined)}
                       className="accent-accent-blue" />
@@ -813,8 +816,8 @@ export function AdvancedSettings() {
               {showInferenceSteps && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.inferenceSteps')}</label>
-                    <input
+                    <label htmlFor={fieldIds('f21')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.inferenceSteps')}</label>
+                    <input aria-label={t('advanced.inferenceSteps')} id={fieldIds('f21')}
                       type="number"
                       value={params.num_inference_steps}
                       min={minimumSteps} max={maximumSteps}
@@ -824,6 +827,7 @@ export function AdvancedSettings() {
                     />
                   </div>
                   <input
+                    aria-label={t('advanced.inferenceSteps')}
                     type="range" min={minimumSteps} max={maximumSteps} step={1}
                     value={params.num_inference_steps}
                     disabled={h3TurboMode}
@@ -847,8 +851,8 @@ export function AdvancedSettings() {
               {showGuidanceScale && (
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.guidanceScale')}</label>
-                    <input
+                    <label htmlFor={fieldIds('f22')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.guidanceScale')}</label>
+                    <input aria-label={t('advanced.guidanceScale')} id={fieldIds('f22')}
                       type="number"
                       value={params.guidance_scale}
                       onChange={e => setParam('guidance_scale', Number(e.target.value))}
@@ -857,6 +861,7 @@ export function AdvancedSettings() {
                     />
                   </div>
                   <input
+                    aria-label={t('advanced.guidanceScale')}
                     type="range" min={0} max={20} step={0.1}
                     value={params.guidance_scale}
                     onChange={e => setParam('guidance_scale', Number(e.target.value))}
@@ -871,10 +876,10 @@ export function AdvancedSettings() {
                   {/* STG Scale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.stg')}</label>
+                      <label htmlFor={fieldIds('f23')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.stg')}</label>
                       <span className="text-xs text-text-secondary">{(params.stg_scale ?? 0) > 0 ? (params.stg_scale as number).toFixed(1) : t('chrome.off')}</span>
                     </div>
-                    <input type="range" min={0} max={3} step={0.1}
+                    <input aria-label={t('advanced.stg')} id={fieldIds('f23')} type="range" min={0} max={3} step={0.1}
                       value={params.stg_scale ?? 0}
                       onChange={e => setParam('stg_scale', parseFloat(e.target.value))}
                       className="w-full" />
@@ -884,10 +889,10 @@ export function AdvancedSettings() {
                   {/* CFG Rescale */}
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.cfgRescale')}</label>
+                      <label htmlFor={fieldIds('f24')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.cfgRescale')}</label>
                       <span className="text-xs text-text-secondary">{(params.cfg_rescale ?? 0).toFixed(2)}</span>
                     </div>
-                    <input type="range" min={0} max={1} step={0.05}
+                    <input aria-label={t('advanced.cfgRescale')} id={fieldIds('f24')} type="range" min={0} max={1} step={0.05}
                       value={params.cfg_rescale ?? 0}
                       onChange={e => setParam('cfg_rescale', parseFloat(e.target.value))}
                       className="w-full" />
@@ -897,7 +902,7 @@ export function AdvancedSettings() {
                   {/* Gradient Estimation */}
                   <div className="space-y-1.5">
                     <label className="flex items-center gap-2 cursor-pointer group">
-                      <input type="checkbox"
+                      <input aria-label={t('advanced.gradient')} type="checkbox"
                         checked={!!params.use_gradient_estimation}
                         onChange={e => setParam('use_gradient_estimation', e.target.checked ? true : undefined)}
                         className="accent-accent-blue" />
@@ -913,7 +918,7 @@ export function AdvancedSettings() {
                             <span className="text-[10px] text-text-muted">{t('advanced.gamma')}</span>
                             <span className="text-[9px] text-text-muted">{(params.ge_gamma ?? 2.0).toFixed(1)}</span>
                           </div>
-                          <input type="range" min={1} max={4} step={0.1}
+                          <input aria-label={t('advanced.gamma')} type="range" min={1} max={4} step={0.1}
                             value={params.ge_gamma ?? 2.0}
                             onChange={e => setParam('ge_gamma', parseFloat(e.target.value))}
                             className="w-full" />
@@ -927,8 +932,8 @@ export function AdvancedSettings() {
               {/* Keyframe Conditioning Mode — Start/End frames */}
               {!isScailEdit && (isVideo || isAvatar) && (hasStartImage || hasEndImage) && (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.startEndMode')}</label>
-                  <select
+                  <label htmlFor={fieldIds('f25')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.startEndMode')}</label>
+                  <select aria-label={t('advanced.startEndMode')} id={fieldIds('f25')}
                     value={params.keyframe_conditioning_mode || 'replace'}
                     onChange={e => setParam('keyframe_conditioning_mode', e.target.value)}
                     className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -943,8 +948,8 @@ export function AdvancedSettings() {
               {/* Keyframe Conditioning Mode — Injected keyframes */}
               {!isScailEdit && (isVideo || isAvatar) && hasImageRefs && (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.injectMode')}</label>
-                  <select
+                  <label htmlFor={fieldIds('f26')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.injectMode')}</label>
+                  <select aria-label={t('advanced.injectMode')} id={fieldIds('f26')}
                     value={params.keyframe_inject_mode || 'additive'}
                     onChange={e => setParam('keyframe_inject_mode', e.target.value)}
                     className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -959,8 +964,8 @@ export function AdvancedSettings() {
               {/* Negative Prompt */}
               {showNegativePrompt && (
                 <div>
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.negative')}</label>
-                  <textarea
+                  <label htmlFor={fieldIds('f27')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('advanced.negative')}</label>
+                  <textarea aria-label={t('advanced.negative')} id={fieldIds('f27')}
                     value={params.negative_prompt || ''}
                     onChange={e => setParam('negative_prompt', e.target.value)}
                     placeholder={t('advanced.negativePlaceholder')}
@@ -975,7 +980,7 @@ export function AdvancedSettings() {
               {isVideo && (
                 <div className="space-y-2">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
+                    <input aria-label={t('advanced.mmaudio')}
                       type="checkbox"
                       checked={params.MMAudio_setting === 1}
                       onChange={e => setParam('MMAudio_setting', e.target.checked ? 1 : 0)}
@@ -988,8 +993,8 @@ export function AdvancedSettings() {
                   {params.MMAudio_setting === 1 && (
                     <div className="space-y-2 pl-1 border-l border-border ml-1">
                       <div>
-                        <label className="text-[10px] text-text-muted block mb-1">{t('advanced.mmaudioPrompt')}</label>
-                        <input
+                        <label htmlFor={fieldIds('f28')} className="text-[10px] text-text-muted block mb-1">{t('advanced.mmaudioPrompt')}</label>
+                        <input aria-label={t('advanced.mmaudioPrompt')} id={fieldIds('f28')}
                           type="text"
                           value={(params.MMAudio_prompt) || ''}
                           onChange={e => setParam('MMAudio_prompt', e.target.value)}
@@ -998,8 +1003,8 @@ export function AdvancedSettings() {
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-text-muted block mb-1">{t('advanced.mmaudioNeg')}</label>
-                        <input
+                        <label htmlFor={fieldIds('f29')} className="text-[10px] text-text-muted block mb-1">{t('advanced.mmaudioNeg')}</label>
+                        <input aria-label={t('advanced.mmaudioNeg')} id={fieldIds('f29')}
                           type="text"
                           value={(params.MMAudio_neg_prompt) || ''}
                           onChange={e => setParam('MMAudio_neg_prompt', e.target.value)}
@@ -1028,10 +1033,10 @@ export function AdvancedSettings() {
               {/* Dedicated Recast/Repaint submissions create one edit job. */}
               {!isScailEdit && <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.outputCount')}</label>
+                  <label htmlFor={fieldIds('f30')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('advanced.outputCount')}</label>
                   <span className="text-xs text-text-secondary">{params.repeat_generation || 1}</span>
                 </div>
-                <input
+                <input aria-label={t('advanced.outputCount')} id={fieldIds('f30')}
                   type="range" min={1} max={10} step={1}
                   value={params.repeat_generation || 1}
                   onChange={e => setParam('repeat_generation', Number(e.target.value))}

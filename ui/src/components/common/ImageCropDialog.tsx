@@ -63,7 +63,7 @@ export default function ImageCropDialog({ source, name, onSave, onClose }: {
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(['x', 'y', 'width', 'height'] as const).map(field => <label key={field} className="text-xs">{t(`crop.${field}`)}
-            <input type="number" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} min={field === 'x' || field === 'y' ? 0 : 1} value={rect[field]}
+            <input aria-label={t(`crop.${field}`)} type="number" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} min={field === 'x' || field === 'y' ? 0 : 1} value={rect[field]}
               onChange={event => setRect(clampCrop({ ...rect, [field]: Number(event.target.value) }, image.naturalWidth, image.naturalHeight))}
               className="block w-full rounded border border-border bg-bg-tertiary p-2" />
           </label>)}

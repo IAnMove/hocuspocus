@@ -760,7 +760,7 @@ export function AgentAssistantPanel({ workspace, tasks, onClose, embedded = fals
         <WizardVisualInput media={visualMedia?.workspace === workspace ? visualMedia : null} onChange={setVisualMedia} workspace={workspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} />
         <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/25 p-2 focus-within:border-wizard-soft/35">
           <Sparkles size={14} className="mb-1 shrink-0 text-wizard-soft/55" />
-          <textarea
+          <textarea aria-label={t('placeholder')}
             autoFocus={panelPresentation.autoFocus}
             rows={2}
             value={draft}

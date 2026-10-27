@@ -24,12 +24,12 @@ export function SceneFxControls({ cues = [], duration, disabled, title, showShow
     <fieldset disabled={disabled} title={disabled ? title : undefined} className="space-y-3 disabled:opacity-50">
       {cues.map(cue => <div key={cue.id} className="space-y-2 rounded border border-border p-2">
         <div className="flex flex-wrap items-center gap-3">
-          <label>{t('effect')}<select value={cue.kind} onChange={e => update(cue.id, switchFxKind(cue, e.target.value))} className="ml-2 rounded border border-border bg-bg-tertiary p-2">{collections.map(collection => <optgroup key={collection} label={t(`collections.${collection}`)}>{FX_CATALOG.filter(item => item.collection === collection).map(item => <option key={item.id} value={item.id}>{t(`presets.${item.id}`, { defaultValue: item.id })}</option>)}</optgroup>)}</select></label>
-          <label>{t('color')}<input type="color" value={cue.color} onChange={e => update(cue.id, { color: e.target.value })} /></label>
-          <label><input type="checkbox" checked={cue.sound} onChange={e => update(cue.id, { sound: e.target.checked })} /> {t('sound')}</label>
+          <label>{t('effect')}<select aria-label={t('effect')} value={cue.kind} onChange={e => update(cue.id, switchFxKind(cue, e.target.value))} className="ml-2 rounded border border-border bg-bg-tertiary p-2">{collections.map(collection => <optgroup key={collection} label={t(`collections.${collection}`)}>{FX_CATALOG.filter(item => item.collection === collection).map(item => <option key={item.id} value={item.id}>{t(`presets.${item.id}`, { defaultValue: item.id })}</option>)}</optgroup>)}</select></label>
+          <label>{t('color')}<input aria-label={t('color')} type="color" value={cue.color} onChange={e => update(cue.id, { color: e.target.value })} /></label>
+          <label><input aria-label={t('sound')} type="checkbox" checked={cue.sound} onChange={e => update(cue.id, { sound: e.target.checked })} /> {t('sound')}</label>
         </div>
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-          {FIELDS.map(key => <label key={key} className="text-xs">{t(key)}<input type="number" {...fieldInput(key, cue, duration)} onChange={e => { const value = e.target.valueAsNumber; if (Number.isFinite(value) && (key !== 'start' || value < cue.end) && (key !== 'end' || value > cue.start)) update(cue.id, { [key]: value }) }} className="mt-1 min-h-9 w-full rounded border border-border bg-bg-tertiary px-2" /></label>)}
+          {FIELDS.map(key => <label key={key} className="text-xs">{t(key)}<input aria-label={t(key)} type="number" {...fieldInput(key, cue, duration)} onChange={e => { const value = e.target.valueAsNumber; if (Number.isFinite(value) && (key !== 'start' || value < cue.end) && (key !== 'end' || value > cue.start)) update(cue.id, { [key]: value }) }} className="mt-1 min-h-9 w-full rounded border border-border bg-bg-tertiary px-2" /></label>)}
         </div>
         <button type="button" onClick={() => onChange(cues.filter(item => item.id !== cue.id))} className="min-h-9 text-xs text-red-300">{t('remove')}</button>
       </div>)}

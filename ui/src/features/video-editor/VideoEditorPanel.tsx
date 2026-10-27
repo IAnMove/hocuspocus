@@ -1,3 +1,4 @@
+import { useFieldIds } from '../../components/common/fieldIds'
 import { controlLabel } from '../../i18n/controlLabel'
 import {
   ArrowDown,
@@ -694,6 +695,8 @@ function wait(ms: number): Promise<void> {
 }
 
 export function VideoEditorPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('videoEditor')
   const { t: tCommon } = useUiTranslation('common')
   const tRef = useRef(t)
@@ -1962,6 +1965,7 @@ export function VideoEditorPanel() {
     >
       <input
         ref={fileInputRef}
+        aria-label={t('toolbar.import')}
         type="file"
         accept={VIDEO_ACCEPT}
         multiple
@@ -2258,8 +2262,8 @@ export function VideoEditorPanel() {
 
         <aside aria-label={t('inspector.aria')} className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
-            <select
+            <label htmlFor={fieldIds('f0')} className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
+            <select aria-label={t('inspector.output')} id={fieldIds('f0')}
               value={`${resolution.width}x${resolution.height}`}
               onChange={event => {
                 const next = RESOLUTIONS.find(option => `${option.width}x${option.height}` === event.target.value)
@@ -2276,7 +2280,7 @@ export function VideoEditorPanel() {
             <div className="mt-2">
               <label className="text-[10px] text-text-muted">
                 {t('inspector.frameRate')}
-                <select
+                <select aria-label={t('inspector.frameRate')}
                   value={fps}
                   onChange={event => setFps(Number(event.target.value))}
                   className="block w-full mt-1 bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary"
@@ -2387,7 +2391,7 @@ export function VideoEditorPanel() {
                     <div className="space-y-3">
                       <label className="block text-[10px] text-text-muted">
                         {t('timeCard.label')}
-                        <textarea
+                        <textarea aria-label={t('timeCard.label')}
                           rows={3}
                           maxLength={240}
                           value={clips[selectedTransitionIndex].transitionText}
@@ -2403,7 +2407,7 @@ export function VideoEditorPanel() {
                       </label>
                       <label className="block text-[10px] text-text-muted">
                         {t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
-                        <input
+                        <input aria-label={t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
                           type="range"
                           min={50}
                           max={160}
@@ -2419,7 +2423,7 @@ export function VideoEditorPanel() {
                   )}
                   <label className="block text-[10px] text-text-muted">
                     {t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
-                    <input
+                    <input aria-label={t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
                       type="range"
                       min={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 0.5 : 0.1}
                       max={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 5 : 2}
@@ -2506,7 +2510,7 @@ export function VideoEditorPanel() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">
                   {t('trim.exactIn')}
-                  <input
+                  <input aria-label={t('trim.exactIn')}
                     type="number"
                     min={0}
                     max={selected.trimEnd - 0.05}
@@ -2520,7 +2524,7 @@ export function VideoEditorPanel() {
                 </label>
                 <label className="text-[10px] text-text-muted">
                   {t('trim.exactOut')}
-                  <input
+                  <input aria-label={t('trim.exactOut')}
                     type="number"
                     min={selected.trimStart + 0.05}
                     max={selected.duration}
@@ -2552,6 +2556,7 @@ export function VideoEditorPanel() {
                   {selected.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
                 </button>
                 <input
+                  aria-label={t('inspector.volume')}
                   type="range"
                   min={0}
                   max={2}

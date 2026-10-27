@@ -337,6 +337,7 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
       </div>
       {editing && (
         <textarea
+          aria-label={t('dashboard.segment', { n: segment.index + 1 })}
           value={prompt}
           onChange={event => setPrompt(event.target.value)}
           rows={5}
@@ -464,6 +465,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
             </div>
             {editingImage ? (
               <textarea
+                aria-label={requiresShotImage ? t('dashboard.imagePrompt') : t('dashboard.plannedVisual')}
                 value={editImagePrompt}
                 onChange={e => setEditImagePrompt(e.target.value)}
                 className="w-full bg-bg-tertiary border border-accent-blue rounded px-1.5 py-1 text-[10px] text-text-primary resize-none focus:outline-none"
@@ -619,6 +621,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                   <div key={wi}>
                     <div className="text-[8px] text-text-muted mb-0.5">{t('dashboard.windowN', { n: wi + 1 })}</div>
                     <textarea
+                      aria-label={t('dashboard.windowN', { n: wi + 1 })}
                       value={wp}
                       onChange={e => {
                         const updated = [...editWindowPrompts]
@@ -633,6 +636,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
               </div>
             ) : (
               <textarea
+                aria-label={t('dashboard.videoPrompt')}
                 value={editVideoPrompt}
                 onChange={e => setEditVideoPrompt(e.target.value)}
                 className="w-full bg-bg-tertiary border border-accent-blue rounded px-1.5 py-1 text-[10px] text-text-primary resize-none focus:outline-none"
@@ -898,6 +902,7 @@ function DirectorDashboardInner() {
 
         {/* Pipeline selector */}
         <select
+          aria-label={t('dashboard.selectCreation')}
           value={selectedPipeline?.pipeline_id || ''}
           onChange={e => { if (e.target.value) loadPipeline(e.target.value) }}
           className="flex-1 min-w-0 max-w-md bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue truncate"

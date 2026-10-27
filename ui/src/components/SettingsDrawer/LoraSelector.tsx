@@ -423,7 +423,7 @@ export function LoraSelector() {
       <div className="flex items-center gap-2 mb-2">
         <div className="relative flex-1">
           <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
+          <input aria-label={t('lora.search')}
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
@@ -441,7 +441,7 @@ export function LoraSelector() {
             ? t('loraBrowser.updatesFilterTitle', { count: updatableCount })
             : t('loraBrowser.updatesNoneTitle')}
         >
-          <input
+          <input aria-label={t('lora.updates')}
             type="checkbox"
             checked={updatableOnly}
             onChange={e => setUpdatableOnly(e.target.checked)}
@@ -466,7 +466,7 @@ export function LoraSelector() {
           className="flex items-center gap-1 cursor-pointer shrink-0 select-none"
           title={nsfwFilterTitle(showNsfw, hiddenByNsfw, t)}
         >
-          <input
+          <input aria-label={t('lora.nsfw')}
             type="checkbox"
             checked={showNsfw}
             onChange={e => setShowNsfwSticky(e.target.checked)}
@@ -649,6 +649,7 @@ export function LoraSelector() {
                         title={t(isCivitai ? 'lora.zoneCivitai' : 'lora.zoneDefault', { min: recMin, max: recMax, fallback: recDefault })}
                       />
                       <input
+                        aria-label={phases > 1 ? t('lora.phase', { n: i + 1 }) : t('lora.strength')}
                         type="range"
                         min={0}
                         max={sliderMax}

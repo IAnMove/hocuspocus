@@ -13,7 +13,7 @@ export function GameSetupPanel() {
     <div className={`${panelClass} space-y-3`}>
       <label className="block text-sm">
         {t('title')}
-        <input className={fieldClass} value={game.title} onChange={event => patchGame({ title: event.target.value })} />
+        <input aria-label={t('title')} className={fieldClass} value={game.title} onChange={event => patchGame({ title: event.target.value })} />
       </label>
       <label className="block text-sm">
         {t('genre')}

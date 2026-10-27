@@ -7,6 +7,10 @@
     "integrations": "Integrations",
     "installation": "Installation"
   },
+  "modelFamilies": {
+    "enableAll": "Enable all {{family}} models",
+    "disableAll": "Disable all {{family}} models"
+  },
   "appearance": {
     "title": "Appearance",
     "mode": "Mode",
@@ -353,6 +357,9 @@
     "updatesFilterTitle": "{{count}} LoRA(s) have updates available — check to filter",
     "updatesNoneTitle": "No updates available — click Check to refresh from CivitAI",
     "sortTitle": "Sort installed LoRAs",
+    "sortResults": "Sort results",
+    "period": "Time period",
+    "modelFilter": "Model filter",
     "sortName": "Name",
     "sortDownloaded": "Newest download",
     "sortReleased": "Newest release",

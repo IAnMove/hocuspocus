@@ -163,7 +163,7 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
       {extraControls.length > 0 && <div className="grid gap-3 sm:grid-cols-3">{extraControls.map(([name, spec]) => <ControlField key={name} name={name} spec={spec} value={values[name]} onChange={setValue(name)} />)}</div>}
       <p className="text-xs text-text-muted">{rhythmic ? t('composer.pulseHelp') : t('composer.noPulseHelp')}</p>
       <p className="text-xs text-amber-100">{t('composer.stillWarning')}</p>
-      <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={replaceConfirmed} onChange={event => setReplaceConfirmed(event.target.checked)} />{t('composer.replaceConfirm')}</label>
+      <label className="flex items-start gap-2 text-xs"><input aria-label={t('composer.replaceConfirm')} type="checkbox" checked={replaceConfirmed} onChange={event => setReplaceConfirmed(event.target.checked)} />{t('composer.replaceConfirm')}</label>
     </fieldset>
     {error && <p role="alert" className="text-xs text-rose-200">{error}</p>}
     <button type="button" onClick={() => void apply()} disabled={busy || missing || !replaceConfirmed} className="rounded border border-cyan-300/50 bg-cyan-400/10 px-4 py-2 text-sm disabled:opacity-40">{busy ? t('composer.checking') : t('composer.createOpen')}</button>

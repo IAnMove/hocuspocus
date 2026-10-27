@@ -125,7 +125,7 @@ export function ShortenSongPanel({
       )}
       <label className="sr-only">
         {t('toolbar.shorten', { seconds })}
-        <input type="number" min={1} max={3600} value={seconds} onChange={event => setSeconds(Number(event.target.value) || 180)} />
+        <input aria-label={t('toolbar.shorten', { seconds })} type="number" min={1} max={3600} value={seconds} onChange={event => setSeconds(Number(event.target.value) || 180)} />
       </label>
     </div>
   )

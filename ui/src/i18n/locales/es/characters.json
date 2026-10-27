@@ -440,6 +440,7 @@
     "noPhoto": "Sin foto",
     "selectViewAria": "Seleccionar vista {{label}}",
     "hunyuanAlt": "Hunyuan3D",
+    "referenceRole": "Rol de la referencia",
     "dropOrChoose": "Soltar o elegir imagen",
     "removeRefAria": "Quitar {{label}}",
     "roles": {

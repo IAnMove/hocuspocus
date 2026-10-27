@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { ArrowLeft, Download, Tag, Loader2, Check, ExternalLink, KeyRound, Boxes } from 'lucide-react'
@@ -18,6 +19,8 @@ interface Props {
 }
 
 export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('settings')
   const isCheckpoint = kind === 'checkpoint'
   const startDownload = useStore(s => s.startCivitAIDownload)
@@ -197,8 +200,8 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* Version selector */}
           {versions.length > 1 && (
             <div>
-              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.version')}</label>
-              <select
+              <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.version')}</label>
+              <select aria-label={t('loraBrowser.version')} id={fieldIds('f0')}
                 value={selectedVersionIdx}
                 onChange={e => { setSelectedVersionIdx(Number(e.target.value)); setSelectedFileIdx(0) }}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -215,8 +218,8 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* File selector */}
           {files.length > 1 && (
             <div>
-              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.file')}</label>
-              <select
+              <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.file')}</label>
+              <select aria-label={t('loraBrowser.file')} id={fieldIds('f1')}
                 value={selectedFileIdx}
                 onChange={e => setSelectedFileIdx(Number(e.target.value))}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -289,10 +292,10 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* Target: checkpoint → base-architecture picker; lora → directory */}
           {isCheckpoint ? (
             <div>
-              <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
+              <label htmlFor={fieldIds('f2')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
                 <Boxes size={12} /> {t('loraBrowser.importAsModel')}
               </label>
-              <select
+              <select aria-label={t('loraBrowser.importAsModel')} id={fieldIds('f2')}
                 value={targetArchitecture}
                 onChange={e => setTargetArchitecture(e.target.value)}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -313,8 +316,8 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           ) : (
             loraDirs.length > 0 && (
               <div>
-                <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.saveToDirectory')}</label>
-                <select
+                <label htmlFor={fieldIds('f3')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1 block">{t('loraBrowser.saveToDirectory')}</label>
+                <select aria-label={t('loraBrowser.saveToDirectory')} id={fieldIds('f3')}
                   value={targetDirOverride}
                   onChange={e => setTargetDirOverride(e.target.value)}
                   className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -331,7 +334,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           {/* Ask-per-download int8 (checkpoint only) */}
           {isCheckpoint && (
             <label className="flex items-start gap-2 cursor-pointer">
-              <input
+              <input aria-label={t('loraBrowser.optimizeVram')}
                 type="checkbox"
                 checked={autoQuantize}
                 onChange={e => setAutoQuantize(e.target.checked)}

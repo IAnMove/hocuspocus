@@ -70,6 +70,7 @@
     "activeCount": "{{count}} trabajos activos"
   },
   "prompt": {
+    "field": "Prompt",
     "placeholderImage": "Describe tu imagen...",
     "placeholderImageEdit": "Describe el cambio, p. ej. añade a Mario al lado de Banjo...",
     "placeholderVideo": "Describe tu vídeo...",

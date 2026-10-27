@@ -655,7 +655,7 @@ function CharacterCreatorWorkshop() {
                 {showAPrompt ? t('creator.hideAPrompt') : t('creator.optionalAPrompt')}
               </button>
               {showAPrompt && (
-                <textarea
+                <textarea aria-label={t('creator.aPromptPlaceholder')}
                   value={aPrompt}
                   onChange={event => setAPrompt(event.target.value)}
                   rows={5}
@@ -806,6 +806,7 @@ function RefPicker({
       <p className="mb-2 text-[10px] text-text-muted">{hint}</p>
       {!roleLocked && value && onRole && (
         <select
+          aria-label={t('creator.referenceRole')}
           value={value.role}
           onChange={event => onRole(event.target.value as OrbitRefRole)}
           className="mb-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-[11px] text-text-primary"

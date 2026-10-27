@@ -231,7 +231,7 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
         <div className="flex items-center gap-3 border-b border-border px-5 py-3">
           <Languages size={14} className="shrink-0 text-text-muted" />
           <label htmlFor="extra-info-language" className="text-xs text-text-secondary">{t('language')}</label>
-          <select
+          <select aria-label={t('language')}
             id="extra-info-language"
             value={language}
             onChange={event => setLanguage(event.target.value)}

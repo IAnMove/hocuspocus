@@ -218,15 +218,15 @@ function ScenePanel({ document, locked, onChange }: {
           onChange={event => { const fov = Number(event.target.value); if (Number.isFinite(fov) && fov > 0 && fov < 180) onChange({ ...document, camera: { ...document.camera, fov } }) }} />
       </label>
       <label className="flex min-h-11 items-center gap-2">
-        <input type="checkbox" checked={Boolean(environment)} onChange={event => onChange({ ...document, environment: event.target.checked ? { reflectiveFloor: true, platform: false, bloom: 0.48 } : undefined })} />
+        <input aria-label={t('inspector.environment')} type="checkbox" checked={Boolean(environment)} onChange={event => onChange({ ...document, environment: event.target.checked ? { reflectiveFloor: true, platform: false, bloom: 0.48 } : undefined })} />
         {t('inspector.environment')}
       </label>
       <details data-testid="scene3d-inspector-scene-advanced" className="rounded-lg border border-border p-2">
         <summary className="cursor-pointer font-semibold">{t('inspector.advanced')}</summary>
         {environment && (
           <div className="mt-2 space-y-2">
-            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={environment.reflectiveFloor} onChange={event => onChange({ ...document, environment: { ...environment, reflectiveFloor: event.target.checked } })} />{t('inspector.floor')}</label>
-            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={environment.platform} onChange={event => onChange({ ...document, environment: { ...environment, platform: event.target.checked } })} />{t('inspector.platform')}</label>
+            <label className="flex min-h-11 items-center gap-2"><input aria-label={t('inspector.floor')} type="checkbox" checked={environment.reflectiveFloor} onChange={event => onChange({ ...document, environment: { ...environment, reflectiveFloor: event.target.checked } })} />{t('inspector.floor')}</label>
+            <label className="flex min-h-11 items-center gap-2"><input aria-label={t('inspector.platform')} type="checkbox" checked={environment.platform} onChange={event => onChange({ ...document, environment: { ...environment, platform: event.target.checked } })} />{t('inspector.platform')}</label>
             <label className="flex items-center gap-2">{t('inspector.bloom')}
               <input type="number" min="0" max="1.5" step="0.05" aria-label={t('inspector.bloom')} className={fieldClass} value={environment.bloom}
                 onChange={event => { const bloom = Number(event.target.value); if (Number.isFinite(bloom)) onChange({ ...document, environment: { ...environment, bloom: Math.max(0, Math.min(1.5, bloom)) } }) }} />

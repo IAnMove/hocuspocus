@@ -291,14 +291,14 @@ export function RestyleControls() {
                       <X size={11} />
                     </button>
                   </div>
-                  <input
+                  <input aria-label={t('repaint.sourcePlaceholder')}
                     type="text"
                     value={mapping.source}
                     onChange={event => updateMapping(index, { source: event.target.value })}
                     placeholder={t('repaint.sourcePlaceholder')}
                     className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                   />
-                  <input
+                  <input aria-label={t('repaint.targetPlaceholder')}
                     type="text"
                     value={mapping.target}
                     onChange={event => updateMapping(index, { target: event.target.value })}

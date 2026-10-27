@@ -45,7 +45,7 @@ export function H3PromptControls() {
       </select>
     </label>
     {omni && <label className="flex items-center gap-2">
-      <input type="checkbox" checked={sequence} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={e => { setParam('minimax_h3_reference_sequence', e.target.checked); clearPlan() }} />
+      <input aria-label={t('h3Adoption.sequence')} type="checkbox" checked={sequence} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={e => { setParam('minimax_h3_reference_sequence', e.target.checked); clearPlan() }} />
       {t('h3Adoption.sequence')}
     </label>}
     <label className="flex items-center justify-between gap-2">

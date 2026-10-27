@@ -196,7 +196,7 @@ export function ImageRefSection() {
       {/* Background removal toggle */}
       {imageRefs.length > 0 && bgLabel && (
         <label className="flex items-start gap-2 cursor-pointer">
-          <input
+          <input aria-label={bgLabel}
             type="checkbox"
             checked={removeBackgroundRefs}
             onChange={e => setRemoveBackgroundRefs(e.target.checked)}

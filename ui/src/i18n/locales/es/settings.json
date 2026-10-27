@@ -7,6 +7,10 @@
     "integrations": "Integraciones",
     "installation": "Instalación"
   },
+  "modelFamilies": {
+    "enableAll": "Activar todos los modelos de {{family}}",
+    "disableAll": "Desactivar todos los modelos de {{family}}"
+  },
   "appearance": {
     "title": "Apariencia",
     "mode": "Modo",
@@ -353,6 +357,9 @@
     "updatesFilterTitle": "{{count}} LoRA(s) tienen actualizaciones — marca para filtrar",
     "updatesNoneTitle": "No hay actualizaciones — pulsa Comprobar para refrescar desde CivitAI",
     "sortTitle": "Ordenar LoRAs instaladas",
+    "sortResults": "Ordenar resultados",
+    "period": "Periodo",
+    "modelFilter": "Filtro de modelos",
     "sortName": "Nombre",
     "sortDownloaded": "Descarga más reciente",
     "sortReleased": "Lanzamiento más reciente",

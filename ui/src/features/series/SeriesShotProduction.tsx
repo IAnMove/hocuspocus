@@ -73,7 +73,7 @@ export function SeriesShotProduction({ workspace, series, episode, shot, onChang
   }
   return <div className="mt-3 space-y-2 rounded-lg border border-violet-500/25 p-3">
     <label className="block text-xs text-text-secondary">{t('production.shotMethod', { order: shot.order })}
-      <select className={`${selectClass} mt-1`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} value={method} onChange={event => onChange({ ...shot, productionMethod: event.target.value as SeriesShot['productionMethod'] })}>
+      <select aria-label={t('production.shotMethod', { order: shot.order })} className={`${selectClass} mt-1`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} value={method} onChange={event => onChange({ ...shot, productionMethod: event.target.value as SeriesShot['productionMethod'] })}>
         {!permitted && <option value={method}>{t(`production.methods.${method}`)} · {t('production.notAllowed')}</option>}
         {allowed.map(value => <option key={value} value={value}>{t(`production.methods.${value}`)}</option>)}
       </select>

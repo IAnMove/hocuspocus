@@ -33,11 +33,11 @@ export function LipsCreationSettings({ kit, busy, withReference, characters, ref
     <div className="mt-4 space-y-3">
       <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="flex flex-wrap gap-4 text-sm">
         <legend className="mb-2 text-xs text-text-secondary">{text('lips.createFrom')}</legend>
-        <label className="inline-flex items-center gap-2"><input type="radio" name={`lips-source-${kit.id}`} checked={!withReference} onChange={() => onMode('description')} />{text('lips.descriptionOnly')}</label>
-        <label className="inline-flex items-center gap-2"><input type="radio" name={`lips-source-${kit.id}`} checked={withReference} onChange={() => onMode('reference')} />{text('lips.withReference')}</label>
+        <label className="inline-flex items-center gap-2"><input aria-label={text('lips.descriptionOnly')} type="radio" name={`lips-source-${kit.id}`} checked={!withReference} onChange={() => onMode('description')} />{text('lips.descriptionOnly')}</label>
+        <label className="inline-flex items-center gap-2"><input aria-label={text('lips.withReference')} type="radio" name={`lips-source-${kit.id}`} checked={withReference} onChange={() => onMode('reference')} />{text('lips.withReference')}</label>
       </fieldset>
-      <label className="block text-xs text-text-secondary">{text('lips.style')}<textarea rows={2} maxLength={1500} value={kit.lookNotes || ''} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onNotes(event.target.value)} placeholder={text('lips.styleHint')} className="mt-2 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
-      <label className="block text-xs text-text-secondary">{text('lips.imageModel')}<select value={imageModel} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onModel(event.target.value)} className={`${control} mt-2 w-full`}>
+      <label className="block text-xs text-text-secondary">{text('lips.style')}<textarea aria-label={text('lips.style')} rows={2} maxLength={1500} value={kit.lookNotes || ''} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onNotes(event.target.value)} placeholder={text('lips.styleHint')} className="mt-2 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
+      <label className="block text-xs text-text-secondary">{text('lips.imageModel')}<select aria-label={text('lips.imageModel')} value={imageModel} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => onModel(event.target.value)} className={`${control} mt-2 w-full`}>
         <LipsModelOptions models={imageModels} empty={text('lips.noImageModel')} />
       </select></label>
       {withReference ? <LipsReferenceFields kit={kit} busy={busy} characters={characters} referenceCharacter={referenceCharacter} workspace={workspace} onReferenceCharacter={onReferenceCharacter} onReferenceFile={onReferenceFile} onError={onError} text={text} /> : <p className="text-xs text-text-muted">{text('lips.descriptionHint')}</p>}
@@ -59,11 +59,11 @@ function LipsReferenceFields({ kit, busy, characters, referenceCharacter, worksp
   text: (key: string) => string
 }) {
   return <>
-    <label className="block text-xs text-text-secondary">{text('lips.referenceCharacter')}<select value={referenceCharacter} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className={`${control} mt-2 w-full`} onChange={event => onReferenceCharacter(event.target.value)}>
+    <label className="block text-xs text-text-secondary">{text('lips.referenceCharacter')}<select aria-label={text('lips.referenceCharacter')} value={referenceCharacter} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className={`${control} mt-2 w-full`} onChange={event => onReferenceCharacter(event.target.value)}>
       <option value="">{text('lips.chooseCharacter')}</option>
       {characters.filter(item => item.base).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
     </select></label>
-    <label className="block text-xs text-text-secondary">{text('lips.uploadReference')}<input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onReferenceFile(file) }} className="mt-2 block w-full text-xs" /></label>
+    <label className="block text-xs text-text-secondary">{text('lips.uploadReference')}<input aria-label={text('lips.uploadReference')} type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onReferenceFile(file) }} className="mt-2 block w-full text-xs" /></label>
     <LabsLibraryPick workspace={workspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onFile={file => onReferenceFile(file)} onError={onError} />
     {kit.base && <img src={kit.base.source} alt={text('lips.reference')} className="h-24 max-w-full rounded-lg border border-border object-contain" />}
   </>
@@ -131,7 +131,7 @@ function MouthActions({ busy, canGenerate, replace, onGenerate, onUpload, text }
   const label = replace ? 'lips.regenerate' : 'lips.generateMouth'
   return <div className="flex flex-wrap gap-2">
     <button type="button" disabled={busy || !canGenerate} onClick={onGenerate} className={`${control} inline-flex items-center gap-2`}><WandSparkles size={14} />{text(label)}</button>
-    <label className={`${control} inline-flex cursor-pointer items-center gap-2 ${busy ? 'opacity-40' : ''}`}><Upload size={14} />{text('lips.uploadMouth')}<input type="file" accept="image/png,image/webp,image/jpeg" className="sr-only" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onUpload(file) }} /></label>
+    <label className={`${control} inline-flex cursor-pointer items-center gap-2 ${busy ? 'opacity-40' : ''}`}><Upload size={14} />{text('lips.uploadMouth')}<input aria-label={text('lips.uploadMouth')} type="file" accept="image/png,image/webp,image/jpeg" className="sr-only" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onUpload(file) }} /></label>
   </div>
 }
 

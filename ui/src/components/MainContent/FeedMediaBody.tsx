@@ -99,7 +99,7 @@ function FeedModel3dPreview({
       {preview}
       <a href={mediaUrl} download={file.name} className="absolute right-2 top-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-[10px] text-white transition-colors hover:bg-black/80">{t('actions.download')}</a>
       {isRigged && riggedClips.length > 0 && (
-        <select value={activeClip ?? riggedClips[0]} onChange={event => setActiveClip(event.target.value)} className="absolute bottom-2 left-2 rounded-lg border border-white/20 bg-black/60 px-2 py-1 text-[10px] text-white" title={t('actions.animationClip')}>
+        <select aria-label={t('actions.animationClip')} value={activeClip ?? riggedClips[0]} onChange={event => setActiveClip(event.target.value)} className="absolute bottom-2 left-2 rounded-lg border border-white/20 bg-black/60 px-2 py-1 text-[10px] text-white" title={t('actions.animationClip')}>
           {riggedClips.map(clip => <option key={clip} value={clip}>{clip}</option>)}
         </select>
       )}

@@ -75,6 +75,7 @@
     "noAlpha": "Sin alfa · {{format}}",
     "unmute": "Activar audio del clip",
     "mute": "Silenciar clip",
+    "volume": "Volumen",
     "fit": "Encajar · sin recorte",
     "fill": "Llenar · recortar",
     "blur": "Desenfoque · llenar el encuadre",

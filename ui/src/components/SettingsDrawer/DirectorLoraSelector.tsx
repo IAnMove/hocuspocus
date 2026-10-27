@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useState, useEffect, useCallback } from 'react'
 import { Search, X, Loader2, FolderOpen, Globe, Sparkles, BookOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -73,6 +74,8 @@ export function DirectorLoraSelector({ mode, modelType }: {
   mode: 'image' | 'video'
   modelType: string
 }) {
+  const fieldIds = useFieldIds()
+
   const savedLora = useStore(s => s.savedLoraPerMode[mode])
   const directorSetLora = useStore(s => s.directorSetLora)
   const openBrowser = useStore(s => s.setLoraBrowserOpen)
@@ -299,7 +302,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
 
       {/* Header with Browse */}
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('lora.heading')}</label>
+        <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider">{t('lora.heading')}</label>
         <div className="flex items-center gap-2">
           <LoraSortToggle sort={sortMode} onChange={setSortSticky} />
           <button
@@ -315,7 +318,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
       {/* Search */}
       <div className="relative mb-2">
         <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
-        <input
+        <input aria-label={t('lora.heading')} id={fieldIds('f0')}
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}

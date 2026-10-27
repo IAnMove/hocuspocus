@@ -398,7 +398,7 @@ export function StyleSheetPanel() {
             <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-[minmax(220px,1fr)_180px_180px_170px_auto]">
               <label className="flex items-center gap-2 rounded-lg border border-border bg-bg-primary px-2.5">
                 <Search size={13} className="text-text-muted" />
-                <input
+                <input aria-label={t('search')}
                   value={queryInput}
                   onChange={event => setQueryInput(event.target.value)}
                   placeholder={t('search')}
@@ -406,15 +406,15 @@ export function StyleSheetPanel() {
                 />
                 {queryInput && <button type="button" onClick={() => setQueryInput('')} className="text-text-muted hover:text-text-primary" title={controlLabel('a11y.clearSearch')} aria-label={controlLabel('a11y.clearSearch')}><X size={12} /></button>}
               </label>
-              <select value={collection} onChange={event => { setCollection(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
+              <select aria-label={t('collection')} value={collection} onChange={event => { setCollection(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
                 <option value="">{t('allCollections')}</option>
                 {collections.map(value => <option key={value} value={value}>{value}</option>)}
               </select>
-              <select value={group} onChange={event => { setGroup(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
+              <select aria-label={t('group')} value={group} onChange={event => { setGroup(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
                 <option value="">{t('allGroups')}</option>
                 {groups.map(value => <option key={value} value={value}>{value}</option>)}
               </select>
-              <select value={sort} onChange={event => { setSort(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
+              <select aria-label={t('sortBy')} value={sort} onChange={event => { setSort(event.target.value); setOffset(0) }} className="rounded-lg border border-border bg-bg-primary px-2.5 py-2 text-xs text-text-secondary">
                 <option value="source_order">{t('sort.source')}</option>
                 <option value="newest">{t('sort.newest')}</option>
                 <option value="oldest">{t('sort.oldest')}</option>

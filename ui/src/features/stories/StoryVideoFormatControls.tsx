@@ -42,7 +42,7 @@ export function StoryVideoFormatControls({
     <div className="rounded-lg border border-border bg-bg-tertiary/35 p-2.5 space-y-2 sm:col-span-2">
       <div className="grid gap-2 sm:grid-cols-2">
         <label className="block text-[10px] text-text-muted">{t('videoFormat.resolution')}
-          <select
+          <select aria-label={t('videoFormat.resolution')}
             className={`${input} mt-1`}
             value={resolution}
             disabled={disabled}

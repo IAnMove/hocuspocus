@@ -23,28 +23,28 @@ function SaveForm({ disabled, busy, fallbackTitle, onSave, testIdPrefix, title }
     <summary className="cursor-pointer text-xs font-medium text-text-primary">{t('templateLibrary.saveTitle')}</summary>
     <div className="mt-2 grid gap-2 sm:grid-cols-2">
       <label className="text-xs text-text-secondary">{t('templateLibrary.name')}
-        <input value={form.title} maxLength={80} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} placeholder={fallbackTitle} onChange={event => set({ title: event.target.value })} className={field} />
+        <input aria-label={t('templateLibrary.name')} value={form.title} maxLength={80} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} placeholder={fallbackTitle} onChange={event => set({ title: event.target.value })} className={field} />
       </label>
       <label className="text-xs text-text-secondary">{t('templateLibrary.tags')}
-        <input value={form.tags} maxLength={200} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} placeholder={t('templateLibrary.tagsHint')} onChange={event => set({ tags: event.target.value })} className={field} />
+        <input aria-label={t('templateLibrary.tags')} value={form.tags} maxLength={200} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} placeholder={t('templateLibrary.tagsHint')} onChange={event => set({ tags: event.target.value })} className={field} />
       </label>
       <label className="text-xs text-text-secondary sm:col-span-2">{t('templateLibrary.description')}
-        <input value={form.description} maxLength={600} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ description: event.target.value })} className={field} />
+        <input aria-label={t('templateLibrary.description')} value={form.description} maxLength={600} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ description: event.target.value })} className={field} />
       </label>
       <label className="text-xs text-text-secondary">{t('templateLibrary.author')}
-        <input value={form.authorName} maxLength={80} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ authorName: event.target.value })} className={field} />
+        <input aria-label={t('templateLibrary.author')} value={form.authorName} maxLength={80} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ authorName: event.target.value })} className={field} />
       </label>
       <label className="text-xs text-text-secondary">{t('templateLibrary.authorX')}
-        <input value={form.authorX} maxLength={31} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} placeholder="@usuario" onChange={event => set({ authorX: event.target.value })} className={field} />
+        <input aria-label={t('templateLibrary.authorX')} value={form.authorX} maxLength={31} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} placeholder="@usuario" onChange={event => set({ authorX: event.target.value })} className={field} />
       </label>
       <label className="text-xs text-text-secondary">{t('templateLibrary.license')}
-        <select value={form.license} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ license: event.target.value as TemplateForm['license'] })} className={field}>
+        <select aria-label={t('templateLibrary.license')} value={form.license} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ license: event.target.value as TemplateForm['license'] })} className={field}>
           {TEMPLATE_LICENSES.map(license => <option key={license} value={license}>{t(`templateLibrary.licenses.${license}`, { defaultValue: license })}</option>)}
         </select>
       </label>
       <div className="flex flex-col justify-end gap-1 text-xs text-text-secondary">
-        <label className="flex items-center gap-2"><input type="checkbox" checked={form.includeMedia} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ includeMedia: event.target.checked })} />{t('templateLibrary.includeMedia')}</label>
-        <label className="flex items-center gap-2"><input type="checkbox" checked={form.durationControl} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ durationControl: event.target.checked })} />{t('templateLibrary.durationControl')}</label>
+        <label className="flex items-center gap-2"><input aria-label={t('templateLibrary.includeMedia')} type="checkbox" checked={form.includeMedia} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ includeMedia: event.target.checked })} />{t('templateLibrary.includeMedia')}</label>
+        <label className="flex items-center gap-2"><input aria-label={t('templateLibrary.durationControl')} type="checkbox" checked={form.durationControl} disabled={disabled} title={controlReason(disabled, 'disabled.panelLocked')} onChange={event => set({ durationControl: event.target.checked })} />{t('templateLibrary.durationControl')}</label>
       </div>
     </div>
     <p className="mt-2 text-[11px] text-text-muted">{t(form.includeMedia ? 'templateLibrary.includeMediaWarning' : 'templateLibrary.slotsHint')}</p>

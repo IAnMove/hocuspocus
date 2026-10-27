@@ -55,8 +55,8 @@ function StyleFields({ style }: { style: GameStyle }) {
           {!presets.some(preset => preset.id === style.preset) && <option value={style.preset}>{style.preset}</option>}
         </select>
       </label>
-      <label className="block text-sm">{t('traits')}<textarea className={fieldClass} rows={3} value={style.traits} onChange={event => patchStyle({ traits: event.target.value })} /></label>
-      <label className="block text-sm">{t('negative')}<textarea className={fieldClass} rows={2} value={style.negative} onChange={event => patchStyle({ negative: event.target.value })} /></label>
+      <label className="block text-sm">{t('traits')}<textarea aria-label={t('traits')} className={fieldClass} rows={3} value={style.traits} onChange={event => patchStyle({ traits: event.target.value })} /></label>
+      <label className="block text-sm">{t('negative')}<textarea aria-label={t('negative')} className={fieldClass} rows={2} value={style.negative} onChange={event => patchStyle({ negative: event.target.value })} /></label>
       <PaletteEditor colors={style.palette} mode={style.paletteMode} maxColors={style.pixel.colors}
         onChange={palette => patchStyle({ palette })} onMode={paletteMode => patchStyle({ paletteMode })} />
       <div className="grid gap-3 sm:grid-cols-2">
@@ -85,8 +85,8 @@ function AudioFields({ style, onPatch }: { style: GameStyle; onPatch: (patch: St
   const audio = style.audio
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      <label className="block text-sm">{t('audioGenre')}<input className={fieldClass} value={audio.genre} onChange={event => onPatch({ audio: { genre: event.target.value } })} /></label>
-      <label className="block text-sm">{t('instruments')}<input className={fieldClass} value={audio.instruments} onChange={event => onPatch({ audio: { instruments: event.target.value } })} /></label>
+      <label className="block text-sm">{t('audioGenre')}<input aria-label={t('audioGenre')} className={fieldClass} value={audio.genre} onChange={event => onPatch({ audio: { genre: event.target.value } })} /></label>
+      <label className="block text-sm">{t('instruments')}<input aria-label={t('instruments')} className={fieldClass} value={audio.instruments} onChange={event => onPatch({ audio: { instruments: event.target.value } })} /></label>
       <NumberField label={t('bpmMin')} min={1} value={audio.bpm[0]} onValue={value => onPatch({ audio: { bpm: [value, audio.bpm[1]] } })} />
       <NumberField label={t('bpmMax')} min={1} value={audio.bpm[1]} onValue={value => onPatch({ audio: { bpm: [audio.bpm[0], value] } })} />
       <NumberField label={t('lufs')} min={-70} value={audio.musicLufs} onValue={musicLufs => onPatch({ audio: { musicLufs } })} />

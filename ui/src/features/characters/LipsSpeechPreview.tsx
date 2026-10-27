@@ -143,7 +143,7 @@ export function LipsSpeechPreview({ pack, workspace, onActiveState }: {
   const canPlay = previewCanPlay(Boolean(preview), busy, Object.keys(pack.mouth).length)
   return <section aria-label={t('lips.preview')} className="space-y-4 rounded-xl border border-border bg-bg-secondary p-4">
     <div className="flex items-center justify-between gap-3"><h3 className="font-medium">{t('lips.preview')}</h3>
-      {pack.base && <label className="flex items-center gap-2 text-xs text-text-secondary"><input type="checkbox" checked={onCharacter} onChange={event => setOnCharacter(event.target.checked)} />{t('lips.onCharacter')}</label>}
+      {pack.base && <label className="flex items-center gap-2 text-xs text-text-secondary"><input aria-label={t('lips.onCharacter')} type="checkbox" checked={onCharacter} onChange={event => setOnCharacter(event.target.checked)} />{t('lips.onCharacter')}</label>}
     </div>
     <LipsMouthStage pack={pack} pose={pose} morph={morph} onCharacter={onCharacter} playing={playing} morphDuration={morphDuration} transitionWindow={transitionWindow} resetToken={resetToken} onSupportChange={setMorphSupported} />
     <p className="text-center text-xs text-text-muted">{pose.label}{pose.mouth ? '' : ` · ${t('lips.missing')}`}</p>
@@ -232,7 +232,7 @@ function LipsMorphControls({ morph, supported, playing, duration, progress, avai
   text: (key: string) => string
 }) {
   return <div className="space-y-3 rounded-lg border border-border p-3">
-    <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={morph} disabled={available.length < 2}
+    <label className="flex items-center gap-2 text-sm"><input aria-label={text('lips.morph')} type="checkbox" checked={morph} disabled={available.length < 2}
       onChange={event => onMorph(event.target.checked)} />{text('lips.morph')}</label>
     {morph && <LipsMorphSliders supported={supported} playing={playing} duration={duration} progress={progress} available={available} from={from} to={to}
       onDuration={onDuration} onProgress={onProgress} onInspect={onInspect} onFrom={onFrom} onTo={onTo} text={text} />}
@@ -298,7 +298,7 @@ function LipsPhrasePanel({ pack, textValue, busy, speechModel, speechModels, cus
         {speechModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
       </select>}
       <button type="button" disabled={blocked} onClick={onGenerate} className="min-h-10 rounded-lg border border-border px-3 text-sm disabled:opacity-40">{label(busy ? 'lips.working' : 'lips.generateVoice')}</button>
-      <label className="block text-xs text-text-secondary">{label('lips.uploadAudio')}<input type="file" accept="audio/*" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="mt-2 block w-full" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onFile(file) }} /></label>
+      <label className="block text-xs text-text-secondary">{label('lips.uploadAudio')}<input aria-label={label('lips.uploadAudio')} type="file" accept="audio/*" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="mt-2 block w-full" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) onFile(file) }} /></label>
       {custom && <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onReset} className="text-xs text-cyan-300">{label('lips.defaultSample')}</button>}
     </div>
   </details>

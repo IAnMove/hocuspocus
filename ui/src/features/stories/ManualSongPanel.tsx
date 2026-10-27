@@ -27,13 +27,13 @@ export function ManualSongPanel({
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-[10px] text-text-muted">{t('music.mode')}
-              <select className={`${input} mt-1`} value={project.music.mode}
+              <select aria-label={t('music.mode')} className={`${input} mt-1`} value={project.music.mode}
                 onChange={event => patch({ music: { ...project.music, mode: event.target.value === 'cover' ? 'cover' : 'original' } })}>
                 <option value="original">{t('music.originalSong')}</option><option value="cover">{t('music.cover')}</option>
               </select>
             </label>
             <label className="block text-[10px] text-text-muted">{t('music.candidates')}
-              <select className={`${input} mt-1`} value={project.music.candidateCount}
+              <select aria-label={t('music.candidates')} className={`${input} mt-1`} value={project.music.candidateCount}
                 onChange={event => patch({ music: { ...project.music, candidateCount: Number(event.target.value) === 3 ? 3 : 2 } })}>
                 <option value={2}>2</option><option value={3}>3</option>
               </select>
@@ -67,7 +67,7 @@ export function ManualSongPanel({
             onChange={lyrics => patch({ music: { ...project.music, lyrics } })} rows={8} />
           <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
             <label className="block text-[10px] text-text-muted">{t('music.translateTo')}
-              <input className={`${input} mt-1`} value={lyricsTranslationLanguage.manual || ''}
+              <input aria-label={t('music.translateTo')} className={`${input} mt-1`} value={lyricsTranslationLanguage.manual || ''}
                 onChange={event => setLyricsTranslationLanguage(current => ({ ...current, manual: event.target.value }))}
                 placeholder={t('music.translatePlaceholder')} />
             </label>
@@ -78,10 +78,10 @@ export function ManualSongPanel({
           <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> {t('music.manualNewVersion')}</div>
             <div className="grid sm:grid-cols-2 gap-2">
-              <input className={input} value={musicVersionStyle.manual || ''}
+              <input aria-label={t('music.manualStylePlaceholder')} className={input} value={musicVersionStyle.manual || ''}
                 onChange={event => setMusicVersionStyle(current => ({ ...current, manual: event.target.value }))}
                 placeholder={t('music.manualStylePlaceholder')} />
-              <input className={input} value={musicVersionLanguage.manual || ''}
+              <input aria-label={t('music.languageCurrent', { language: project.music.lyricsLanguage || project.language })} className={input} value={musicVersionLanguage.manual || ''}
                 onChange={event => setMusicVersionLanguage(current => ({ ...current, manual: event.target.value }))}
                 placeholder={t('music.languageCurrent', { language: project.music.lyricsLanguage || project.language })} />
             </div>
@@ -91,7 +91,7 @@ export function ManualSongPanel({
             <p className="text-[9px] text-text-muted">{t('music.manualVersionHint')}</p>
           </div>
           <label className="block text-[10px] text-text-muted">{t('music.targetDuration')}
-            <input className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
+            <input aria-label={t('music.targetDuration')} className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
               value={project.music.targetDurationSeconds}
               onChange={event => patch({ music: { ...project.music, targetDurationSeconds: clampStoryMusicDuration(event.target.value, project.music.model) } })} />
           </label>

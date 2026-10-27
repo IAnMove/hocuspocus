@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useState } from 'react'
 import { X, Sparkles } from 'lucide-react'
@@ -14,6 +15,8 @@ import { applyChosenStudioMedia, useWorkspaceOutputs } from '../../lib/studioAss
  * the LoRA interprets Add / Remove / Replace / Style patterns directly.
  */
 export function EditAnythingControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoUrl = useStore(s => s.editVideoUrl)
@@ -96,10 +99,10 @@ export function EditAnythingControls() {
         <div className="space-y-3 pl-2 border-l border-border/50">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('editAnything.loraStrength')}</label>
+              <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider">{t('editAnything.loraStrength')}</label>
               <span className="text-[10px] text-text-secondary">{loraStrength.toFixed(2)}</span>
             </div>
-            <input
+            <input aria-label={t('editAnything.loraStrength')} id={fieldIds('f0')}
               type="range" min={0.5} max={1.5} step={0.05}
               value={loraStrength}
               onChange={e => useStore.setState({ editAnythingLoraStrength: parseFloat(e.target.value) })}
@@ -111,10 +114,10 @@ export function EditAnythingControls() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('editAnything.preserve')}</label>
+              <label htmlFor={fieldIds('f1')} className="text-[10px] text-text-muted uppercase tracking-wider">{t('editAnything.preserve')}</label>
               <span className="text-[10px] text-text-secondary">{retakeStrength.toFixed(2)}</span>
             </div>
-            <input
+            <input aria-label={t('editAnything.preserve')} id={fieldIds('f1')}
               type="range" min={0.3} max={1.0} step={0.05}
               value={retakeStrength}
               onChange={e => useStore.setState({ editRetakeStrength: parseFloat(e.target.value) })}

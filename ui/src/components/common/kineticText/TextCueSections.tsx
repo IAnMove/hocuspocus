@@ -26,7 +26,7 @@ export function TextCueContent({ cue, update }: { cue: KineticText; update: (pat
   const { t } = useUiTranslation('kineticText')
   return <details open className="rounded border border-border p-2">
     <summary className="cursor-pointer text-xs font-semibold">{t('sections.content')}</summary>
-    <Field label={t('text')}><textarea maxLength={240} value={cue.text} onChange={event => update({ text: event.target.value })} className={fieldClass} /></Field>
+    <Field label={t('text')}><textarea aria-label={t('text')} maxLength={240} value={cue.text} onChange={event => update({ text: event.target.value })} className={fieldClass} /></Field>
     <div className="mt-2 grid grid-cols-2 gap-2">
       <NumberField label={t('start')} value={cue.start} step={.1} onChange={value => { if (value < cue.end) update({ start: value }) }} />
       <NumberField label={t('end')} value={cue.end} step={.1} onChange={value => { if (value > cue.start) update({ end: value }) }} />
@@ -35,7 +35,7 @@ export function TextCueContent({ cue, update }: { cue: KineticText; update: (pat
       <NumberField label={t('size')} value={cue.size} onChange={value => update({ size: value })} />
       <NumberField label={t('rotation')} value={cue.rotation} onChange={value => update({ rotation: value })} />
     </div>
-    <label className="mt-2 flex items-center gap-2 text-xs">{t('counter')}<input type="checkbox" checked={Boolean(cue.counter)} onChange={event => update({ counter: event.target.checked ? { from: 0, to: 10, decimals: 0, ease: 'ease' } : undefined })} /></label>
+    <label className="mt-2 flex items-center gap-2 text-xs">{t('counter')}<input aria-label={t('counter')} type="checkbox" checked={Boolean(cue.counter)} onChange={event => update({ counter: event.target.checked ? { from: 0, to: 10, decimals: 0, ease: 'ease' } : undefined })} /></label>
     {cue.counter ? <div className="mt-2 grid grid-cols-2 gap-2">
       <NumberField label={t('counterFrom')} value={cue.counter.from} onChange={value => update({ counter: { ...cue.counter!, from: value } })} />
       <NumberField label={t('counterTo')} value={cue.counter.to} onChange={value => update({ counter: { ...cue.counter!, to: value } })} />
@@ -53,7 +53,7 @@ export function TextCueStyle({ cue, update }: { cue: KineticText; update: (patch
       <Choice label={t('font')} value={cue.font ?? 'sans'} options={TEXT_FONTS.map(font => ({ value: font, label: t(`fonts.${font}`) }))} onChange={value => update({ font: value as TextFont })} />
       <Choice label={t('weight')} value={String(cue.weight ?? 900)} options={TEXT_WEIGHTS.map(weight => ({ value: String(weight), label: String(weight) }))} onChange={value => update({ weight: Number(value) as TextWeight })} />
       <Choice label={t('align')} value={cue.align ?? 'center'} options={TEXT_ALIGNS.map(align => ({ value: align, label: t(`aligns.${align}`) }))} onChange={value => update({ align: value as TextAlign })} />
-      <label className="flex items-center gap-2 text-xs">{t('color')}<input type="color" value={cue.color} onChange={event => update({ color: event.target.value })} /></label>
+      <label className="flex items-center gap-2 text-xs">{t('color')}<input aria-label={t('color')} type="color" value={cue.color} onChange={event => update({ color: event.target.value })} /></label>
     </div>
     <div className="mt-2 grid grid-cols-2 gap-2">
       <NumberField label={t('maxWidth')} value={cue.maxWidth ?? 86} onChange={value => update({ maxWidth: value })} />
@@ -61,8 +61,8 @@ export function TextCueStyle({ cue, update }: { cue: KineticText; update: (patch
       <NumberField label={t('letterSpacing')} value={cue.letterSpacing ?? 0} step={.01} onChange={value => update({ letterSpacing: value })} />
     </div>
     <div className="mt-2 flex gap-4 text-xs">
-      <label className="flex items-center gap-2"><input type="checkbox" checked={cue.uppercase === true} onChange={event => update({ uppercase: event.target.checked || undefined })} />{t('uppercase')}</label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={cue.italic === true} onChange={event => update({ italic: event.target.checked || undefined })} />{t('italic')}</label>
+      <label className="flex items-center gap-2"><input aria-label={t('uppercase')} type="checkbox" checked={cue.uppercase === true} onChange={event => update({ uppercase: event.target.checked || undefined })} />{t('uppercase')}</label>
+      <label className="flex items-center gap-2"><input aria-label={t('italic')} type="checkbox" checked={cue.italic === true} onChange={event => update({ italic: event.target.checked || undefined })} />{t('italic')}</label>
     </div>
   </details>
 }
@@ -91,7 +91,7 @@ export function TextCueBox({ cue, update }: { cue: KineticText; update: (patch: 
     <summary className="cursor-pointer text-xs font-semibold">{t('sections.box')}</summary>
     <div className="mt-2 grid grid-cols-2 gap-2">
       <Choice label={t('box')} value={box.kind} options={TEXT_BOX_KINDS.map(kind => ({ value: kind, label: t(`boxKinds.${kind}`) }))} onChange={value => update({ box: value === 'none' ? undefined : { ...box, kind: value as TextBoxKind } })} />
-      <label className="flex items-center gap-2 text-xs">{t('boxColor')}<input type="color" value={box.color} onChange={event => update({ box: { ...box, kind: box.kind === 'none' ? 'solid' : box.kind, color: event.target.value } })} /></label>
+      <label className="flex items-center gap-2 text-xs">{t('boxColor')}<input aria-label={t('boxColor')} type="color" value={box.color} onChange={event => update({ box: { ...box, kind: box.kind === 'none' ? 'solid' : box.kind, color: event.target.value } })} /></label>
       <NumberField label={t('boxOpacity')} value={box.opacity} step={.05} onChange={value => update({ box: { ...box, opacity: value } })} />
       <NumberField label={t('boxPadding')} value={box.padding} step={.05} onChange={value => update({ box: { ...box, padding: value } })} />
     </div>

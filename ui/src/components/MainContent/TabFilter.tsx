@@ -358,7 +358,7 @@ export function TabFilter() {
           {searchOpen ? (
             <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">
               <Search size={12} className="shrink-0 text-text-muted" />
-              <input ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
+              <input aria-label={t('search.placeholder')} ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
               <button type="button" onClick={closeSearch} aria-label={t('search.close')} className="text-text-muted hover:text-text-secondary"><X size={12} /></button>
             </div>
           ) : (

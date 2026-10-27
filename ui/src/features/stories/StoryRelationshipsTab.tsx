@@ -53,12 +53,12 @@ function RelationshipEditor({
     <div className={`${panel} grid md:grid-cols-2 gap-3`}>
       <div className="md:col-span-2"><StoryWritingGuide projectId={project.id} scope="relationship" targetId={relationship.id} /></div>
       <label className="text-[10px] text-text-muted">{t('relationships.from')}
-        <select className={`${input} mt-1`} value={relationship.fromCharacterId} onChange={event => set({ fromCharacterId: event.target.value })}>
+        <select aria-label={t('relationships.from')} className={`${input} mt-1`} value={relationship.fromCharacterId} onChange={event => set({ fromCharacterId: event.target.value })}>
           {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
         </select>
       </label>
       <label className="text-[10px] text-text-muted">{t('relationships.to')}
-        <select className={`${input} mt-1`} value={relationship.toCharacterId} onChange={event => set({ toCharacterId: event.target.value })}>
+        <select aria-label={t('relationships.to')} className={`${input} mt-1`} value={relationship.toCharacterId} onChange={event => set({ toCharacterId: event.target.value })}>
           {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
         </select>
       </label>

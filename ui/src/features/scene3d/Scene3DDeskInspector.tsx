@@ -173,13 +173,13 @@ function Scene3DDeskScene({ model }: { model: Scene3DDeskModel }) {
       <ComicTransitionPanel workspace={model.workspace || undefined} disabled={model.editingLocked} />
       <div className="flex flex-wrap items-center gap-3">
         <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}
-          <select disabled={model.exporting} value={doc.camera.family} onChange={event => model.applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))} className="min-h-11 rounded-lg border border-border bg-bg-primary px-3 text-xs disabled:opacity-40">
+          <select aria-label={editorT('camera')} disabled={model.exporting} value={doc.camera.family} onChange={event => model.applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))} className="min-h-11 rounded-lg border border-border bg-bg-primary px-3 text-xs disabled:opacity-40">
             {FAMILIES.map(family => <option key={family} value={family}>{t(`stage.family.${family}`)}</option>)}
           </select>
         </label>
         <Scene3DRoomCameraPicker document={doc} disabled={model.exporting} onChange={id => model.applyScene(current => withRoomCamera(current, id))} />
       </div>
-      {doc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={model.exporting} value={doc.workshopScreen ?? 'code'} onChange={event => model.applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
+      {doc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select aria-label={editorT('travel.screen')} disabled={model.exporting} value={doc.workshopScreen ?? 'code'} onChange={event => model.applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
       <Scene3DGeometryReview stageRef={model.stageRef} document={doc} seconds={model.seconds} disabled={model.exporting} onSeek={model.seek} />
       {!model.selectedId && <UnselectedMotion model={model} />}
       <KineticTextControls cues={doc.texts} duration={doc.duration} disabled={model.editingLocked} onChange={texts => model.applyScene(current => ({ ...current, texts }))} />

@@ -62,7 +62,7 @@ export function PaletteEditor({ colors, mode, maxColors, onChange, onMode }: {
         <button type="button" className={buttonClass} disabled={full} onClick={add}>{t('addColor')}</button>
         <label className={buttonClass}>
           {t('extract')}
-          <input className="sr-only" type="file" accept="image/png,image/webp,image/jpeg" onChange={event => { void extract(event.currentTarget) }} />
+          <input aria-label={t('extract')} className="sr-only" type="file" accept="image/png,image/webp,image/jpeg" onChange={event => { void extract(event.currentTarget) }} />
         </label>
         <label className="text-sm">
           {t('paletteMode')}

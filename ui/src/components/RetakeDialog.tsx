@@ -1,3 +1,4 @@
+import { useFieldIds } from './common/fieldIds'
 import { controlLabel } from '../i18n/controlLabel'
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
@@ -8,6 +9,8 @@ import * as api from '../api/client'
 import { modelDisplayName } from '../lib/modelDisplay'
 
 export function RetakeDialog() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('activity')
   const retakeOpen = useStore(s => s.retakeDialogOpen)
   const retakeFile = useStore(s => s.retakeSourceFile)
@@ -114,10 +117,10 @@ export function RetakeDialog() {
 
           {/* Prompt */}
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {t('retake.promptLabel')}
             </label>
-            <textarea value={prompt}
+            <textarea aria-label={t('retake.promptLabel')} id={fieldIds('f0')} value={prompt}
               onChange={e => setPrompt(e.target.value)}
               placeholder={t('retake.promptPlaceholder')}
               rows={2}
@@ -127,7 +130,7 @@ export function RetakeDialog() {
 
           {/* Regenerate Audio */}
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={regenerateAudio}
+            <input aria-label={t('retake.regenerateAudio')} type="checkbox" checked={regenerateAudio}
               onChange={e => setRegenerateAudio(e.target.checked)}
               className="w-3.5 h-3.5 rounded border-border accent-accent-blue" />
             <span className="text-xs text-text-secondary">{t('retake.regenerateAudio')}</span>
@@ -144,26 +147,26 @@ export function RetakeDialog() {
           {showAdvanced && (
             <div className="space-y-2 pl-2 border-l border-border/50">
               <div>
-                <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('retake.negativePrompt')}</label>
-                <input type="text" value={negPrompt}
+                <label htmlFor={fieldIds('f1')} className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('retake.negativePrompt')}</label>
+                <input aria-label={t('retake.negativePrompt')} id={fieldIds('f1')} type="text" value={negPrompt}
                   onChange={e => setNegPrompt(e.target.value)}
                   placeholder={t('retake.negativePlaceholder')}
                   className="w-full bg-bg-tertiary border border-border rounded px-2.5 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue" />
               </div>
               <div className="grid grid-cols-3 gap-2">
                 <div>
-                  <label className="text-[9px] text-text-muted block mb-0.5">{t('retake.seed')}</label>
-                  <input type="number" value={seed} onChange={e => setSeed(parseInt(e.target.value) || -1)}
+                  <label htmlFor={fieldIds('f2')} className="text-[9px] text-text-muted block mb-0.5">{t('retake.seed')}</label>
+                  <input aria-label={t('retake.seed')} id={fieldIds('f2')} type="number" value={seed} onChange={e => setSeed(parseInt(e.target.value) || -1)}
                     className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue" />
                 </div>
                 <div>
-                  <label className="text-[9px] text-text-muted block mb-0.5">{t('retake.steps')}</label>
-                  <input type="number" min={1} max={50} value={steps} onChange={e => setSteps(parseInt(e.target.value) || 8)}
+                  <label htmlFor={fieldIds('f3')} className="text-[9px] text-text-muted block mb-0.5">{t('retake.steps')}</label>
+                  <input aria-label={t('retake.steps')} id={fieldIds('f3')} type="number" min={1} max={50} value={steps} onChange={e => setSteps(parseInt(e.target.value) || 8)}
                     className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue" />
                 </div>
                 <div>
-                  <label className="text-[9px] text-text-muted block mb-0.5">{t('retake.guidance')}</label>
-                  <input type="number" min={0} max={20} step={0.1} value={guidance}
+                  <label htmlFor={fieldIds('f4')} className="text-[9px] text-text-muted block mb-0.5">{t('retake.guidance')}</label>
+                  <input aria-label={t('retake.guidance')} id={fieldIds('f4')} type="number" min={0} max={20} step={0.1} value={guidance}
                     onChange={e => setGuidance(parseFloat(e.target.value) || 1.0)}
                     className="w-full bg-bg-tertiary border border-border rounded px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-accent-blue" />
                 </div>

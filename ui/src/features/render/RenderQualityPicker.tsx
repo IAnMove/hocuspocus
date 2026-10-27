@@ -71,7 +71,7 @@ export function RenderQualityPicker({
     <div className="flex shrink-0 flex-nowrap items-center gap-1" data-testid="render-quality" title={estimateText}>
       <label className="flex items-center gap-1 text-xs text-text-muted">
         {t('stage.renderLevel')}
-        <select
+        <select aria-label={t('stage.renderLevel')}
           disabled={disabled}
           title={disabled ? title : undefined}
           value={level}
@@ -88,7 +88,7 @@ export function RenderQualityPicker({
       </label>
       <label className="flex items-center gap-1 text-xs text-text-muted">
         {t('stage.renderShutter')}
-        <input
+        <input aria-label={t('stage.renderShutter')}
           type="number"
           min={0}
           max={360}

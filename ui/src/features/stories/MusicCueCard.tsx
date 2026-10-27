@@ -58,12 +58,12 @@ export function MusicCueCard({
             onChange={brief => patchMusicCue(cue.id, { brief })} rows={3} />
           <div className="grid grid-cols-2 gap-2">
             <label className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-[10px] text-text-secondary">
-              <input type="checkbox" checked={cue.instrumental}
+              <input aria-label={t('music.instrumental')} type="checkbox" checked={cue.instrumental}
                 onChange={event => patchMusicCue(cue.id, { instrumental: event.target.checked })} />
               {t('music.instrumental')}
             </label>
             <label className="block text-[10px] text-text-muted">{t('music.targetDuration')}
-              <input className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
+              <input aria-label={t('music.targetDuration')} className={`${input} mt-1`} type="number" min={20} max={storyMusicDurationMax(project.music.model)} step={5}
                 value={cue.durationSeconds}
                 onChange={event => patchMusicCue(cue.id, { durationSeconds: clampStoryMusicDuration(event.target.value, project.music.model) })} />
             </label>
@@ -75,10 +75,10 @@ export function MusicCueCard({
           </button>
           <div className="space-y-2 rounded-lg border border-purple-500/30 bg-purple-500/5 p-2.5">
             <div className="flex items-center gap-1.5 text-[10px] font-semibold text-purple-200"><Palette size={12} /> {t('music.newVersionTitle')}</div>
-            <input className={input} value={musicVersionStyle[cue.id] || ''}
+            <input aria-label={t('music.newStyleExample')} className={input} value={musicVersionStyle[cue.id] || ''}
               onChange={event => setMusicVersionStyle(current => ({ ...current, [cue.id]: event.target.value }))}
               placeholder={t('music.newStyleExample')} />
-            <input className={input} value={musicVersionLanguage[cue.id] || ''}
+            <input aria-label={t('music.newLanguageCurrent', { language: cue.lyricsLanguage || project.language })} className={input} value={musicVersionLanguage[cue.id] || ''}
               onChange={event => setMusicVersionLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
               placeholder={t('music.newLanguageCurrent', { language: cue.lyricsLanguage || project.language })} />
             <button className={`${button} w-full border-purple-500/60 text-purple-200`}
@@ -111,7 +111,7 @@ export function MusicCueCard({
             {!cue.instrumental && (
               <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                 <label className="block text-[10px] text-text-muted">{t('music.translateTo')}
-                  <input className={`${input} mt-1`} value={lyricsTranslationLanguage[cue.id] || ''}
+                  <input aria-label={t('music.translateTo')} className={`${input} mt-1`} value={lyricsTranslationLanguage[cue.id] || ''}
                     onChange={event => setLyricsTranslationLanguage(current => ({ ...current, [cue.id]: event.target.value }))}
                     placeholder={t('music.translatePlaceholder')} />
                 </label>

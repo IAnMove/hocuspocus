@@ -74,7 +74,7 @@ function SourceStep({ controller }: { controller: Controller }) {
               <label className="flex items-center justify-between gap-3 text-sm text-text-secondary" htmlFor="replacement-frame-time">
                 {t('characterReplacement.framePosition')}<span className="tabular-nums">{frameClock(session.frameTime)} / {frameClock(session.duration)}</span>
               </label>
-              <input id="replacement-frame-time" type="range" min="0" max={Math.max(0, session.duration)} step="0.01" value={session.frameTime}
+              <input aria-label={t('characterReplacement.framePosition')} id="replacement-frame-time" type="range" min="0" max={Math.max(0, session.duration)} step="0.01" value={session.frameTime}
                 disabled={locked || session.duration <= 0} onChange={event => seek(Number(event.target.value))} className="w-full accent-accent-blue" />
               <button type="button" onClick={capture} disabled={locked || session.duration <= 0} className={buttonClass}>
                 {session.extracting ? <Loader2 size={17} className="animate-spin" /> : <Camera size={17} />}
@@ -120,14 +120,14 @@ function ImageStep({ controller }: { controller: Controller }) {
         <div className="min-w-0 space-y-4">
           <label className="block space-y-2 text-sm text-text-secondary">
             <span>{t('characterReplacement.imageModel')}</span>
-            <select value={session.modelType} disabled={locked || imageModels.length === 0} onChange={event => controller.setModel(event.target.value)} className={fieldClass}>
+            <select aria-label={t('characterReplacement.imageModel')} value={session.modelType} disabled={locked || imageModels.length === 0} onChange={event => controller.setModel(event.target.value)} className={fieldClass}>
               {imageModels.length === 0 && <option value="">{t('characterReplacement.noImageModels')}</option>}
               {imageModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}</option>)}
             </select>
           </label>
           <label className="block space-y-2 text-sm text-text-secondary">
             <span>{t('characterReplacement.prompt')}</span>
-            <textarea value={session.prompt} rows={6} disabled={locked} onChange={event => controller.setPrompt(event.target.value)} className={`${fieldClass} min-h-40 resize-y leading-relaxed`} />
+            <textarea aria-label={t('characterReplacement.prompt')} value={session.prompt} rows={6} disabled={locked} onChange={event => controller.setPrompt(event.target.value)} className={`${fieldClass} min-h-40 resize-y leading-relaxed`} />
           </label>
           <p className="text-xs leading-relaxed text-text-muted">{t('characterReplacement.referencesHint')}</p>
           <button type="button" onClick={() => void controller.generateFrame()} disabled={locked || !readyToEdit} className={buttonClass}>
@@ -158,12 +158,12 @@ function VideoStep({ controller }: { controller: Controller }) {
       <div className="grid gap-4 md:grid-cols-3">
         <div className="space-y-2 text-sm"><p className="text-text-secondary">{t('characterReplacement.videoModel')}</p><p className="flex items-center gap-2 py-2.5 font-medium text-text-primary"><Film size={17} />Viggle-Animate Pruned 20B</p></div>
         <label className="block space-y-2 text-sm text-text-secondary"><span>{t('characterReplacement.quality')}</span>
-          <select value={session.quality} disabled={locked} onChange={event => controller.setQuality(event.target.value as '480p' | '512p' | '704p')} className={fieldClass}>
+          <select aria-label={t('characterReplacement.quality')} value={session.quality} disabled={locked} onChange={event => controller.setQuality(event.target.value as '480p' | '512p' | '704p')} className={fieldClass}>
             <option value="480p">480p</option><option value="512p">512p</option><option value="704p">704p</option>
           </select>
         </label>
         <label className="block space-y-2 text-sm text-text-secondary"><span>{t('characterReplacement.audio')}</span>
-          <select value={session.audio} disabled={locked} onChange={event => controller.setAudio(event.target.value as 'source' | 'generated')} className={fieldClass}>
+          <select aria-label={t('characterReplacement.audio')} value={session.audio} disabled={locked} onChange={event => controller.setAudio(event.target.value as 'source' | 'generated')} className={fieldClass}>
             <option value="source">{t('characterReplacement.sourceAudio')}</option><option value="generated">{t('characterReplacement.generatedAudio')}</option>
           </select>
         </label>

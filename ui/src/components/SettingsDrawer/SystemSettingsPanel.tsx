@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw, Check, Download, Trash2, Cpu, RefreshCw, Loader2, FolderOpen, Plus, HardDrive } from 'lucide-react'
 import type { ModelFolderCandidate } from '../../types'
@@ -336,7 +337,8 @@ function ModelVisibilitySection() {
                           ref={el => { if (el) el.indeterminate = famEnabled > 0 && !famAllEnabled }}
                           onChange={() => setModelsEnabled(group.models.map(m => m.model_type), !famAllEnabled)}
                           className="w-3 h-3 rounded border-border bg-bg-tertiary accent-accent-blue shrink-0"
-                          title={famAllEnabled ? `Disable all ${group.familyLabel} models` : `Enable all ${group.familyLabel} models`}
+                          aria-label={famAllEnabled ? tSettings('modelFamilies.disableAll', { family: group.familyLabel }) : tSettings('modelFamilies.enableAll', { family: group.familyLabel })}
+                          title={famAllEnabled ? tSettings('modelFamilies.disableAll', { family: group.familyLabel }) : tSettings('modelFamilies.enableAll', { family: group.familyLabel })}
                         />
                         <button
                           onClick={() => toggleFamily(famKey)}
@@ -646,7 +648,7 @@ function LinkedModelFoldersSection() {
           )}
 
           <div className="flex gap-1.5">
-            <input
+            <input aria-label={t('system.pastePath')}
               type="text"
               value={manualPath}
               onChange={e => setManualPath(e.target.value)}
@@ -676,12 +678,14 @@ function SelectField({ label, value, options, onChange }: {
   options: { value: string | number; label: string }[]
   onChange: (val: string) => void
 }) {
+  const fieldIds = useFieldIds()
+
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+      <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
         {label}
       </label>
-      <select
+      <select aria-label={label} id={fieldIds('f0')}
         value={value}
         onChange={e => onChange(e.target.value)}
         className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -719,6 +723,8 @@ function LanguageSection() {
 }
 
 function ThemeSection() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('settings')
   const prefs = useStore(s => s.themePrefs)
   const setThemeMode = useStore(s => s.setThemeMode)
@@ -768,7 +774,7 @@ function ThemeSection() {
         )}
       </div>
       <div>
-        <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+        <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
           {t('appearance.theme')}
         </label>
         <div className="flex items-center gap-2">
@@ -780,7 +786,7 @@ function ThemeSection() {
             <div className="w-3 h-7" style={{ background: swatch.surface }} />
             <div className="w-3 h-7" style={{ background: swatch.accent }} />
           </div>
-          <select
+          <select aria-label={t('appearance.theme')} id={fieldIds('f0')}
             value={family.id}
             onChange={e => setThemeFamily(e.target.value as FamilyId)}
             className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -804,7 +810,7 @@ function DeveloperModeSection() {
   const setDeveloperMode = useStore(s => s.setDeveloperMode)
   return (
     <label className="flex items-start gap-2 rounded-lg border border-border bg-bg-tertiary/40 px-3 py-2">
-      <input
+      <input aria-label={t('developerMode.label')}
         type="checkbox"
         checked={developerMode}
         onChange={event => setDeveloperMode(event.target.checked)}
@@ -1030,6 +1036,8 @@ function AutoPerformanceCard() {
 }
 
 export function SystemSettingsPanel() {
+  const fieldIds = useFieldIds()
+
   const systemConfig = useStore(s => s.systemConfig)
   const systemConfigLoading = useStore(s => s.systemConfigLoading)
   const updateConfig = useStore(s => s.updateSystemConfig)
@@ -1203,10 +1211,10 @@ export function SystemSettingsPanel() {
         {/* VRAM Safety Coefficient */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('system.vramSafety')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('system.vramSafety')}</label>
             <span className="text-xs text-text-secondary">{(systemConfig.vram_safety_coefficient ?? 0.8).toFixed(2)}</span>
           </div>
-          <input
+          <input aria-label={t('system.vramSafety')} id={fieldIds('f0')}
             type="range" min={0.5} max={0.95} step={0.05}
             value={systemConfig.vram_safety_coefficient ?? 0.8}
             onChange={e => updateConfigWithAutoFlip({ vram_safety_coefficient: parseFloat(e.target.value) })}

@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useState, useMemo, useEffect } from 'react'
 import { X, Upload, Music, Film, Mic, Layers, Loader2, AlertTriangle } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -92,6 +93,8 @@ const getMediaDuration = (file: File): Promise<number | null> => {
 }
 
 export function InputsPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const { t: tCommon } = useUiTranslation('common')
   const modelOptions = useStore(s => s.modelOptions)
@@ -1076,7 +1079,7 @@ export function InputsPanel() {
             {windowInfo.windowCount > 1 && (
               <>
                 <span className="text-[10px] text-text-muted shrink-0">{t('inputs.window')}</span>
-                <select value={selectedFrameTile.window}
+                <select aria-label={t('inputs.window')} value={selectedFrameTile.window}
                   onChange={e => setFramePosition(selectedFrameTile, parseInt(e.target.value), selectedFrameTile.offset)}
                   className="shrink-0 bg-bg-secondary border border-border rounded px-1 py-0.5 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue">
                   {Array.from({ length: windowInfo.windowCount }, (_, wi) => <option key={wi} value={wi}>{wi + 1}</option>)}
@@ -1103,13 +1106,13 @@ export function InputsPanel() {
           {selectedFrameTile.kind === 'inject' ? (
             <>
               <Row label={t('inputs.injectionStrength')} value={(params.injection_strength ?? 1.0).toFixed(2)} />
-              <input type="range" min={0} max={1} step={0.05} value={params.injection_strength ?? 1.0}
+              <input aria-label={t('inputs.injectionStrength')} type="range" min={0} max={1} step={0.05} value={params.injection_strength ?? 1.0}
                 onChange={e => setParam('injection_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
             </>
           ) : strengthLabel ? (
             <>
               <Row label={strengthLabel} value={inputVideoStrength.toFixed(2)} />
-              <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
+              <input aria-label={strengthLabel} type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
                 onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
             </>
           ) : null}
@@ -1125,7 +1128,7 @@ export function InputsPanel() {
           ) : (
             <>
               <Row label={t('inputs.sourceVideoStrength')} value={inputVideoStrength.toFixed(2)} />
-              <input type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
+              <input aria-label={t('inputs.sourceVideoStrength')} type="range" min={0} max={1} step={0.05} value={inputVideoStrength}
                 onChange={e => setParam('input_video_strength', parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
               <p className="text-[9px] text-text-muted/60">{t('inputs.extendStrengthHint')}</p>
             </>
@@ -1137,14 +1140,14 @@ export function InputsPanel() {
       {selected === 'audio' && hasSoundtrack && (
         <Strip>
           <Row label={modelOptions?.audio_scale_name || t('inputs.audioStrength')} value={(((params as unknown as Record<string, unknown>).modality_scale as number) ?? 1.0).toFixed(1)} />
-          <input type="range" min={0.1} max={3.0} step={0.1} value={((params as unknown as Record<string, unknown>).modality_scale as number) ?? 1.0}
+          <input aria-label={modelOptions?.audio_scale_name || t('inputs.audioStrength')} type="range" min={0.1} max={3.0} step={0.1} value={((params as unknown as Record<string, unknown>).modality_scale as number) ?? 1.0}
             onChange={e => setParam('modality_scale' as keyof typeof params, parseFloat(e.target.value) as never)} className="w-full h-1 accent-accent-blue" />
           <label className="flex items-center gap-2 cursor-pointer pt-1">
-            <input type="checkbox" checked={audioPT.includes('N')} onChange={() => toggleAudioFlag('N')} className="accent-accent-blue" />
+            <input aria-label={t('inputs.normalizeVolume')} type="checkbox" checked={audioPT.includes('N')} onChange={() => toggleAudioFlag('N')} className="accent-accent-blue" />
             <span className="text-[10px] text-text-secondary">{t('inputs.normalizeVolume')}</span>
           </label>
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={audioPT.includes('V')} onChange={() => toggleAudioFlag('V')} className="accent-accent-blue" />
+            <input aria-label={t('inputs.removeBgMusic')} type="checkbox" checked={audioPT.includes('V')} onChange={() => toggleAudioFlag('V')} className="accent-accent-blue" />
             <span className="text-[10px] text-text-secondary">{t('inputs.removeBgMusic')}</span>
           </label>
         </Strip>
@@ -1153,10 +1156,10 @@ export function InputsPanel() {
       {/* Option strip — control-video audio stays independent from motion. */}
       {selected === 'ctrlvid' && hasControlVid && (
         <Strip>
-          <label className="text-[10px] text-text-muted uppercase tracking-wider">
+          <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted uppercase tracking-wider">
             {t('inputs.audioBehavior')}
           </label>
-          <select
+          <select aria-label={t('inputs.audioBehavior')} id={fieldIds('f0')}
             value={
               audioBase === 'K' || audioBase === '2'
                 ? audioBase
@@ -1188,7 +1191,7 @@ export function InputsPanel() {
       {selected === 'voiceref' && directorVoiceRef && (
         <Strip>
           <Row label={t('inputs.identityScale')} value={String(identityScale)} />
-          <input type="range" min={0} max={10} step={0.5} value={identityScale}
+          <input aria-label={t('inputs.identityScale')} type="range" min={0} max={10} step={0.5} value={identityScale}
             onChange={e => setIdentityScale(parseFloat(e.target.value))} className="w-full h-1 accent-accent-blue" />
           <p className="text-[9px] text-text-muted">{t('inputs.voiceHint')}</p>
         </Strip>
@@ -1221,7 +1224,7 @@ export function InputsPanel() {
           )}
           {refBgLabel && (
             <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={removeBackgroundRefs} onChange={e => setRemoveBackgroundRefs(e.target.checked)} className="mt-0.5 accent-accent-blue shrink-0" />
+              <input aria-label={refBgLabel} type="checkbox" checked={removeBackgroundRefs} onChange={e => setRemoveBackgroundRefs(e.target.checked)} className="mt-0.5 accent-accent-blue shrink-0" />
               <span className="text-[10px] text-text-secondary leading-tight">{refBgLabel}</span>
             </label>
           )}

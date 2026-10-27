@@ -100,7 +100,7 @@ function ProfileSection({ engineId, profiles, rigProfileId, selectedProfile, onC
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.profile')}</label><span className="text-[8px] text-text-muted">{t('rig.hoverFocus')}</span></div>
-      {profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => onChoose(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
+      {profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => onChoose(profile.id)} />)}</div> : <select aria-label={t('rig.profile')} value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
       {selectedProfile && (
         <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
           <p className="text-[9px] leading-relaxed text-text-muted">{rigProfileCopy(tStudio, selectedProfile).description}</p>
@@ -417,7 +417,7 @@ export function RigAnimatePanel() {
                 const copy = rigEngineCopy(tStudio, item)
                 return (
                 <label key={item.id} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${item.installed ? 'border-border bg-bg-tertiary cursor-pointer hover:border-border-light' : 'border-border/60 bg-bg-tertiary/50 cursor-not-allowed opacity-70'}`}>
-                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => chooseEngine(item.id)} className="mt-0.5" />
+                  <input aria-label={copy.label} type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => chooseEngine(item.id)} className="mt-0.5" />
                   <span>
                     <span className="block text-[11px] text-text-primary">{copy.label}</span>
                     <span className="block text-[9px] text-text-muted">{copy.description}</span>
@@ -441,7 +441,7 @@ export function RigAnimatePanel() {
                 <p className="mt-0.5 text-[9px] text-text-muted">{t('rig.manualFitHelp')}</p>
               </div>
               <label className="block text-[10px] text-text-muted">{t('rig.skeletonDirection')}
-                <select value={axisMode} onChange={event => setAxisMode(event.target.value as typeof axisMode)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">
+                <select aria-label={t('rig.skeletonDirection')} value={axisMode} onChange={event => setAxisMode(event.target.value as typeof axisMode)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">
                   <option value="auto">{t('rig.axisAuto')}</option>
                   <option value="y">{t('rig.axisY')}</option>
                   <option value="x">{t('rig.axisX')}</option>
@@ -450,11 +450,11 @@ export function RigAnimatePanel() {
               </label>
               <label className="block text-[10px] text-text-muted uppercase tracking-wider">
                 <span className="flex items-center justify-between"><span>{t('rig.spineJoints')}</span><span className="text-text-primary">{spineJoints}</span></span>
-                <input type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
+                <input aria-label={t('rig.spineJoints')} type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
               </label>
               <label className="block text-[10px] text-text-muted uppercase tracking-wider">
                 <span className="flex items-center justify-between"><span>{t('rig.skinStiffness')}</span><span className="text-text-primary">{weightFalloff.toFixed(1)}</span></span>
-                <input type="range" min={1} max={6} step={.25} value={weightFalloff} onChange={event => setWeightFalloff(Number(event.target.value))} className="mt-1.5 w-full" />
+                <input aria-label={t('rig.skinStiffness')} type="range" min={1} max={6} step={.25} value={weightFalloff} onChange={event => setWeightFalloff(Number(event.target.value))} className="mt-1.5 w-full" />
                 <span className="mt-0.5 block normal-case tracking-normal text-[9px] text-text-muted/80">{t('rig.stiffnessHelp')}</span>
               </label>
             </div>

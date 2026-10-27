@@ -198,6 +198,24 @@
     "chooseOrImport": "Choose a gallery GLB or import one.",
     "retextureHelp": "Animated/rigged GLBs are intentionally rejected because Hunyuan Paint rebuilds UVs. Retexture the static base first, then rig its new copy.",
     "performance": "Performance profile",
+    "presets": {
+      "eco": {
+        "label": "Low VRAM",
+        "description": "Mini Turbo, CPU offload, 128 octree, no texture."
+      },
+      "balanced": {
+        "label": "Balanced",
+        "description": "Full-size Turbo geometry with standard texture support."
+      },
+      "quality": {
+        "label": "Quality / PBR",
+        "description": "Hunyuan3D 2.1, 384 octree and PBR materials."
+      },
+      "multiview": {
+        "label": "Multi-view Fast",
+        "description": "Multi-view Turbo using up to four reference views."
+      }
+    },
     "hunyuanModel": "Hunyuan model",
     "recommendedVram": "Recommended: {{gb}}GB+ VRAM.",
     "promptRetexture": "Describe the new texture or use an image",

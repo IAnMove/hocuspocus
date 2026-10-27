@@ -124,7 +124,7 @@ export function ProjectsPanel() {
           onSubmit={event => { event.preventDefault(); setSearch(draftSearch.trim()) }}
         >
           <Search size={12} className="text-text-muted" />
-          <input
+          <input aria-label={t('search')}
             value={draftSearch}
             onChange={event => setDraftSearch(event.target.value)}
             placeholder={t('search')}

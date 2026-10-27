@@ -33,7 +33,7 @@ export function StoryAssetsProposalCard({
         <div>
           <img src={item.source} alt={item.name} className="h-32 w-full rounded-lg border border-border object-cover" />
           <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
-            <input type="checkbox" checked={item.selected}
+            <input aria-label={t('assets.importThis')} type="checkbox" checked={item.selected}
               onChange={event => onPatch(index, { selected: event.target.checked })} />
             {t('assets.importThis')}
           </label>
@@ -49,7 +49,7 @@ export function StoryAssetsProposalCard({
         </div>
         <div className="space-y-3">
           <label className="block text-[10px] text-text-muted">{t('assets.assetType')}
-            <select className={`${input} mt-1`} value={item.kind} onChange={event => {
+            <select aria-label={t('assets.assetType')} className={`${input} mt-1`} value={item.kind} onChange={event => {
               const kind = event.target.value as StoryAssetKind
               const targetId = kind === 'character'
                 ? (project.characters[0]?.id || `new-character:${newKey}`)
@@ -68,7 +68,7 @@ export function StoryAssetsProposalCard({
           </label>
           {item.kind !== 'ignore' && (
             <label className="block text-[10px] text-text-muted">{t('assets.destination')}
-              <select className={`${input} mt-1`} value={targetOptions.some(option => option.id === item.targetId) ? item.targetId : targetOptions[0]?.id}
+              <select aria-label={t('assets.destination')} className={`${input} mt-1`} value={targetOptions.some(option => option.id === item.targetId) ? item.targetId : targetOptions[0]?.id}
                 onChange={event => onPatch(index, { targetId: event.target.value })}>
                 {targetOptions.map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
               </select>

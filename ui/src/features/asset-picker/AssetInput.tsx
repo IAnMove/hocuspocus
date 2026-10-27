@@ -127,6 +127,7 @@ export function AssetInput({
       {error && <p className="text-[9px] text-red-300">{error}</p>}
       <input
         ref={fileRef}
+        aria-label={label}
         type="file"
         accept={accept}
         className="hidden"

@@ -106,7 +106,7 @@ export function OutputFolderSelector() {
           <div className="border-t border-border p-2">
             {creating ? (
               <div className="flex gap-1.5">
-                <input type="text" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => event.key === 'Enter' && void handleCreate()} placeholder="output-folder" className="flex-1 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-blue focus:outline-none" autoFocus />
+                <input aria-label={"output-folder"} type="text" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => event.key === 'Enter' && void handleCreate()} placeholder="output-folder" className="flex-1 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-blue focus:outline-none" autoFocus />
                 <button onClick={() => void handleCreate()} disabled={!newName.trim()} title={controlReason(!newName.trim(), 'disabled.nameTheFolder')} className="rounded bg-accent-blue px-2 py-1 text-xs text-white hover:bg-accent-blue-hover disabled:opacity-50">Create</button>
               </div>
             ) : (

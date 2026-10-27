@@ -19,7 +19,7 @@ export function WangpProcessorOptions({ processor }: { processor?: WangpProcesso
       const numeric = parameter.type === 'number' || parameter.type === 'integer'
       const value = settings[parameter.name] ?? parameter.default
       return <label className="block text-xs" key={parameter.name}>{t(labels[parameter.name as keyof typeof labels])}{numeric ? `: ${value}` : ''}
-        <input className="w-full bg-bg-tertiary rounded p-2" type={numeric ? 'range' : 'text'} min={parameter.minimum} max={parameter.maximum} step={parameter.step}
+        <input aria-label={t(labels[parameter.name as keyof typeof labels])} className="w-full bg-bg-tertiary rounded p-2" type={numeric ? 'range' : 'text'} min={parameter.minimum} max={parameter.maximum} step={parameter.step}
           value={String(value ?? '')} disabled={!processor.enabled}
           onChange={event => setParam('wangp_processor_settings', { ...settings, [parameter.name]: numeric ? Number(event.target.value) : event.target.value })} />
       </label>

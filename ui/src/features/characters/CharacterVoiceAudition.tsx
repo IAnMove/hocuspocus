@@ -32,7 +32,7 @@ export function CharacterVoiceAudition({ workspace, voice, language: spoken }: {
   }
   return <div className="space-y-2 rounded-lg border border-border bg-bg-primary p-3">
     <label className="block">{t('speech.voiceAudition.language')}
-      <select className="ml-2 min-h-10 rounded border border-border bg-bg-secondary px-2" value={language} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
+      <select aria-label={t('speech.voiceAudition.language')} className="ml-2 min-h-10 rounded border border-border bg-bg-secondary px-2" value={language} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         onChange={event => { stopAudio(); setLanguage(event.target.value as 'es' | 'en'); setFilename(''); setError('') }}>
         <option value="es">{t('speech.voiceAudition.languageEs')}</option><option value="en">{t('speech.voiceAudition.languageEn')}</option>
       </select>

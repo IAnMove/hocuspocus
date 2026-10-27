@@ -15,7 +15,7 @@ export function StoryProviderWritingFields({
   return (
     <>
       <label className="block text-[10px] text-text-muted">{t('provider.writingLlm')}
-        <select className={`${input} mt-1`} value={provider} onChange={event => onProviderChange(event.target.value as StoryWritingProvider)}>
+        <select aria-label={t('provider.writingLlm')} className={`${input} mt-1`} value={provider} onChange={event => onProviderChange(event.target.value as StoryWritingProvider)}>
           <option value="maestro">{t('provider.internalLlm')}</option>
           <option value="deepseek">DeepSeek</option>{/* // i18n-ok: model id */}
           <option value="minimax">MiniMax</option>{/* // i18n-ok: model id */}
@@ -29,18 +29,18 @@ export function StoryProviderWritingFields({
       {provider !== 'maestro' && (
         <label className="block text-[10px] text-text-muted">{t('provider.writingModel')}
           {provider === 'deepseek' ? (
-            <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => onPatchProvider({ writingModel: event.target.value })}>
+            <select aria-label={t('provider.writingModel')} className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => onPatchProvider({ writingModel: event.target.value })}>
               <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>{/* // i18n-ok: model id */}
               <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>{/* // i18n-ok: model id */}
             </select>
           ) : provider === 'minimax' ? (
-            <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => onPatchProvider({ writingModel: event.target.value })}>
+            <select aria-label={t('provider.writingModel')} className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => onPatchProvider({ writingModel: event.target.value })}>
               <option value="MiniMax-M3">MiniMax M3</option>{/* // i18n-ok: model id */}
               <option value="MiniMax-M2.7">MiniMax M2.7</option>{/* // i18n-ok: model id */}
               <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>{/* // i18n-ok: model id */}
             </select>
           ) : (
-            <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => onPatchProvider({ writingModel: event.target.value })} />
+            <input aria-label={t('provider.writingModel')} className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => onPatchProvider({ writingModel: event.target.value })} />
           )}
         </label>
       )}

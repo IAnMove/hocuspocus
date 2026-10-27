@@ -28,13 +28,13 @@ export function CharacterImageCreator({ workspace, disabled, title, onUseReferen
   const hold = (blocked: boolean) => blocked ? (title || controlLabel('disabled.actionInProgress')) : undefined
   const styleBlocked = Boolean(view.busy) || Boolean(disabled)
   const modelPicker = (blocked: boolean) => <label className="block max-w-md text-xs text-text-secondary">{t('lips.imageModel')}
-    <select value={imageModel} disabled={blocked} title={hold(blocked)} onChange={event => session.edit({ model: event.target.value })} className={`${control} mt-1 w-full`}>
+    <select aria-label={t('lips.imageModel')} value={imageModel} disabled={blocked} title={hold(blocked)} onChange={event => session.edit({ model: event.target.value })} className={`${control} mt-1 w-full`}>
       {!imageModels.length && <option value="">{t('lips.noImageModel')}</option>}{imageModels.map(item => <option key={item.model_type} value={item.model_type}>{item.name}</option>)}
     </select></label>
   return <section data-testid="character-image-creator" className="mx-auto mb-5 max-w-5xl space-y-4 rounded-xl border border-cyan-400/30 bg-bg-secondary p-4">
     <div><h3 className="text-base font-semibold">{t('imageCreator.title')}</h3><p className="mt-1 text-sm text-text-muted">{t(style ? 'styleCreator.hint' : 'imageCreator.hint')}</p></div>
     <label className="block max-w-md text-xs text-text-secondary">{t('styleCreator.style')}
-      <select value={view.styleId} disabled={styleBlocked} title={hold(styleBlocked)} onChange={event => session.setStyle(event.target.value)} className={`${control} mt-1 w-full`} data-testid="character-style">
+      <select aria-label={t('styleCreator.style')} value={view.styleId} disabled={styleBlocked} title={hold(styleBlocked)} onChange={event => session.setStyle(event.target.value)} className={`${control} mt-1 w-full`} data-testid="character-style">
         <option value="">{t('styleCreator.free')}</option>
         {characterStyles.map(item => <option key={item.id} value={item.id}>{characterStyleLabel(item, i18n.language)}</option>)}
       </select>

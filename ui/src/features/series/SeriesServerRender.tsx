@@ -49,7 +49,7 @@ export function SeriesServerRender({ workspace, series, episode, language }: { w
   const done = job ? job.items.filter(item => item.status === 'done').length : 0
   return <div className="space-y-2 rounded-lg border border-border p-3" data-testid="series-server-render">
     <p className="text-xs text-text-secondary">{t('serverRender.hint')}</p>
-    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={approve} disabled={live || busy}
+    <label className="flex items-center gap-2 text-xs"><input aria-label={t('serverRender.approve')} type="checkbox" checked={approve} disabled={live || busy}
       onChange={event => setApprove(event.target.checked)} />{t('serverRender.approve')}</label>
     <div className="flex flex-wrap gap-2">
       <button className={primaryButton} disabled={live || busy} onClick={() => void act(() => startSeriesServerRender(workspace, series.id, episode.id, approve, language))}>

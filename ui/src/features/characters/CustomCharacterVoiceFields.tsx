@@ -23,24 +23,24 @@ export function CustomCharacterVoiceFields({ value, onChange, onBusyChange, lang
   return <div className="space-y-3 rounded-lg border border-border p-3" data-testid="custom-character-voice">
     <p>{t('speech.customVoice.hint')}</p>
     <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="space-y-3">
-      <label className="block">{t('speech.customVoice.name')}<input className={input} maxLength={120} value={value.name}
+      <label className="block">{t('speech.customVoice.name')}<input aria-label={t('speech.customVoice.name')} className={input} maxLength={120} value={value.name}
         onChange={event => onChange({ ...value, name: event.target.value })} /></label>
-      <label className="block">{t('speech.customVoice.import')}<input className={input} type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.webm"
+      <label className="block">{t('speech.customVoice.import')}<input aria-label={t('speech.customVoice.import')} className={input} type="file" accept="audio/*,.wav,.mp3,.m4a,.flac,.ogg,.webm"
         onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) capture.importAudio(file) }} /></label>
       <button type="button" className={button} onClick={capture.record}>{t('speech.customVoice.record')}</button>
       <p className="text-text-muted">{t('speech.customVoice.recordHint')}</p>
-      <label className="block">{t('speech.customVoice.transcript')}<textarea className={input} rows={3} maxLength={4000}
+      <label className="block">{t('speech.customVoice.transcript')}<textarea aria-label={t('speech.customVoice.transcript')} className={input} rows={3} maxLength={4000}
         placeholder={t('speech.customVoice.transcriptPlaceholder')} value={value.transcript}
         onChange={event => onChange({ ...value, transcript: event.target.value })} /></label>
-      <label className="block">{t('speech.customVoice.engine')}<select data-testid="custom-voice-engine" className={input} value={value.model}
+      <label className="block">{t('speech.customVoice.engine')}<select aria-label={t('speech.customVoice.engine')} data-testid="custom-voice-engine" className={input} value={value.model}
         onChange={event => setEngine(event.target.value as ReferenceVoiceModel)}>
         {REFERENCE_VOICE_MODELS.map(model => <option key={model} value={model}>{t(`speech.customVoice.engines.${model}`)}</option>)}
       </select></label>
-      {styled && <label className="block">{t('speech.customVoice.style')}<textarea data-testid="custom-voice-style" className={input} rows={2}
+      {styled && <label className="block">{t('speech.customVoice.style')}<textarea aria-label={t('speech.customVoice.style')} data-testid="custom-voice-style" className={input} rows={2}
         maxLength={VOICE_STYLE_MAX_CHARS} placeholder={t('speech.customVoice.stylePlaceholder')} value={value.instructions ?? ''}
         onChange={event => onChange({ ...value, instructions: event.target.value })} />
         <span className="text-text-muted">{t('speech.customVoice.styleHint')}</span></label>}
-      <label className="block">{t('speech.customVoice.language')}<select className={input} value={value.language}
+      <label className="block">{t('speech.customVoice.language')}<select aria-label={t('speech.customVoice.language')} className={input} value={value.language}
         onChange={event => onChange({ ...value, language: event.target.value as CustomCharacterVoice['language'] })}>
         {languages.map(language => <option key={language} value={language}>{t(`speech.customVoice.languages.${language}`)}</option>)}
       </select></label>

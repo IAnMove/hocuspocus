@@ -605,7 +605,7 @@ export function SceneRecipePanel({
       {mode === 'auto' && (
         <div className="rounded border border-border bg-bg-primary/30 px-2 py-1.5">
           <label className="flex items-start gap-1.5 text-[10px] text-text-secondary">
-            <input
+            <input aria-label={t('recipe.noVideoGeneration')}
               type="checkbox"
               checked={noVideoGeneration}
               disabled={locked || wizardPolicyLocked}
@@ -666,7 +666,7 @@ export function SceneRecipePanel({
 
       <label className="block text-[10px] text-text-muted">
         {t('recipe.describe')}
-        <textarea
+        <textarea aria-label={t('recipe.describe')}
           rows={3}
           value={intent}
           disabled={locked}

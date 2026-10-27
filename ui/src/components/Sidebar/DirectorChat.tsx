@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel, controlReason, firstControlReason } from '../../i18n/controlLabel'
 import { resolutionPresetLabel } from '../../lib/resolutionPresetLabel'
 import { DirectorModelPicker } from './DirectorModelPicker'
@@ -40,6 +41,7 @@ function AudioScaleSlider() {
     <>
       <span className="text-[10px] text-text-muted whitespace-nowrap">{t('chat.audioScale', { value: audioScale.toFixed(1) })}</span>
       <input
+        aria-label={t('chat.audioScale', { value: audioScale.toFixed(1) })}
         type="range"
         min={0}
         max={5}
@@ -164,7 +166,7 @@ function AutoResizeTextarea({ minHeight, maxHeight, ...props }: React.TextareaHT
   // OUR override comes last so it wins — wheel-capture is the whole
   // point of the component, can't let a caller silently break it.
   const mergedStyle: React.CSSProperties = { ...(props.style || {}), overflowY: 'hidden' }
-  return <textarea ref={ref} {...props} style={mergedStyle} />
+  return <textarea ref={ref} {...props} aria-label={props['aria-label'] ?? props.placeholder} style={mergedStyle} />
 }
 
 function SectionBadge({ label }: { label: string }) {
@@ -910,7 +912,7 @@ export function DirectorChat() {
             {atStep('style') && <SystemBubble>
               <label className="block">
                 <span className="text-[10px] text-text-muted">{t('spoken.label')}</span>
-                <select className="mt-1 w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
+                <select aria-label={t('spoken.label')} className="mt-1 w-full rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] text-text-primary" value={spokenLanguage} onChange={event => setSpokenLanguage(event.target.value)}>
                   <SpokenLanguageOptions />
                 </select>
                 <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">{t('spoken.hint')}</span>
@@ -941,6 +943,7 @@ export function DirectorChat() {
                       <span className="text-[10px] text-text-primary font-medium">{t('song.duration', { count: shortFilmTargetDuration })}</span>
                     </div>
                     <input
+                      aria-label={t('song.duration', { count: shortFilmTargetDuration })}
                       type="range"
                       min={10}
                       max={300}
@@ -957,7 +960,7 @@ export function DirectorChat() {
                     </div>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
+                    <input aria-label={t('chat.narrative')}
                       type="checkbox"
                       checked={shortFilmNarrative}
                       onChange={e => shortFilmSetNarrative(e.target.checked)}
@@ -971,7 +974,7 @@ export function DirectorChat() {
                     </div>
                   </label>
                   <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
-                    <input
+                    <input aria-label={t('chat.preserveStyle')}
                       type="checkbox"
                       checked={shortFilmPreserveVisualStyle}
                       onChange={e => shortFilmSetPreserveVisualStyle(e.target.checked)}
@@ -987,6 +990,7 @@ export function DirectorChat() {
                   <label className="block">
                     <span className="text-[10px] text-text-muted">{t('chat.canonicalStyle')}</span>
                     <AutoResizeTextarea
+                      aria-label={t('chat.canonicalStyle')}
                       value={shortFilmVisualStyle}
                       onChange={e => shortFilmSetVisualStyle(e.target.value)}
                       disabled={!shortFilmPreserveVisualStyle}
@@ -1002,6 +1006,7 @@ export function DirectorChat() {
                   <label className="block">
                     <span className="text-[10px] text-text-muted">{t('chat.characterStyle')}</span>
                     <AutoResizeTextarea
+                      aria-label={t('chat.characterStyle')}
                       value={directorCharacterVisualStyle}
                       onChange={e => setDirectorCharacterVisualStyle(e.target.value)}
                       disabled={!shortFilmPreserveVisualStyle}
@@ -1015,7 +1020,7 @@ export function DirectorChat() {
                     </p>
                   </label>
                   <label className="flex items-start gap-2 cursor-pointer group">
-                    <input
+                    <input aria-label={t('clipText.label')}
                       type="checkbox"
                       checked={directorAllowClipText}
                       onChange={e => setDirectorAllowClipText(e.target.checked)}
@@ -1197,7 +1202,7 @@ export function DirectorChat() {
                   ? t('chat.seamlessTitle')
                   : t('chat.seamlessUnsupported')}
               >
-                <input
+                <input aria-label={t('chat.seamless')}
                   type="checkbox"
                   checked={seamless}
                   disabled={!selectedVideoSupportsSeamless || isDirectVideo}
@@ -1211,7 +1216,7 @@ export function DirectorChat() {
                 <span className={`text-[10px] ${isDirectVideo ? 'text-text-muted/50' : 'text-text-secondary'}`}>{t('chat.seamless')}</span>
               </label>
               <label className="flex items-center gap-1.5 cursor-pointer select-none" title={t('chat.autoTitle')}>
-                <input
+                <input aria-label={t('chat.auto')}
                   type="checkbox"
                   checked={autoMode}
                   onChange={e => setAutoMode(e.target.checked)}
@@ -1242,6 +1247,7 @@ export function DirectorChat() {
               2 rows (min 56px), caps at 240px (~11 lines), scrolls with
               a visible thumb past that. */}
           <AutoResizeTextarea
+            aria-label={chatInputPlaceholder}
             value={mvGenerateSetup ? songDescription : resolvedChatInput}
             onChange={e => {
               const v = e.target.value
@@ -1316,14 +1322,14 @@ function CharacterNaming({
       <div className="space-y-1.5">
         {characters.map((char, i) => (
           <div key={i} className="flex items-center gap-1.5">
-            <input
+            <input aria-label={t('chat.characterName', { n: i + 1 })}
               type="text"
               value={char.name}
               onChange={e => updateCharacter(i, 'name', e.target.value)}
               placeholder={t('chat.characterName', { n: i + 1 })}
               className="flex-1 bg-bg-secondary border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
             />
-            <input
+            <input aria-label={t('chat.briefDescription')}
               type="text"
               value={char.description}
               onChange={e => updateCharacter(i, 'description', e.target.value)}
@@ -1566,7 +1572,7 @@ function UploadZone({
           <Music size={20} className="text-accent-blue/60" />
           <span className="text-xs text-text-secondary">{isShortFilm ? t('chat.dropDialogue') : t('chat.dropSongOrVideo')}</span>
           <span className="text-[10px] text-text-muted">{t('chat.audioVideoFormats')}</span>
-          <input
+          <input aria-label={t('chat.audioVideoFormats')}
             type="file"
             accept={AUDIO_ACCEPT}
             className="hidden"
@@ -1589,6 +1595,8 @@ function ReferenceImageUpload({
   setReferenceImage: (file: File | null) => void
   compact?: boolean
 }) {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('director')
   const strengthLabel = useStore(s => s.modelOptions?.input_video_strength_label ?? '')
   const inputVideoStrength = useStore(s => s.params.input_video_strength ?? 1.0)
@@ -1636,7 +1644,7 @@ function ReferenceImageUpload({
           <label className="cursor-pointer flex items-center gap-2 border border-dashed border-border rounded px-2 py-1.5 hover:border-accent-blue transition-colors">
             <ImageIcon size={12} className="text-text-muted" />
             <span className="text-[10px] text-text-muted">{t('chat.addReferenceImage')}</span>
-            <input
+            <input aria-label={t('chat.addReferenceImage')}
               type="file"
               accept={IMAGE_ACCEPT}
               className="hidden"
@@ -1647,10 +1655,10 @@ function ReferenceImageUpload({
         {referenceImage && (
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] text-text-secondary">{strengthLabel || t('chat.imageStrength')}</label>
+              <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-secondary">{strengthLabel || t('chat.imageStrength')}</label>
               <span className="text-[11px] text-text-muted tabular-nums">{inputVideoStrength.toFixed(2)}</span>
             </div>
-            <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
+            <input aria-label={strengthLabel || t('chat.imageStrength')} id={fieldIds('f0')} type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
               onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
               className="w-full h-1 accent-accent-blue" />
             <p className="text-[9px] text-text-muted">{t('chat.lowerMotion')}</p>
@@ -1703,7 +1711,7 @@ function ReferenceImageUpload({
             <span className="text-xs text-text-secondary">{t('chat.dropReference')}</span>
             <span className="text-[10px] text-text-muted">{t('chat.createsStartImages')}</span>
           </div>
-          <input
+          <input aria-label={t('chat.dropReference')}
             type="file"
             accept={IMAGE_ACCEPT}
             className="hidden"
@@ -1714,10 +1722,10 @@ function ReferenceImageUpload({
       {referenceImage && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] text-text-secondary">{strengthLabel || t('chat.imageStrength')}</label>
+            <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-secondary">{strengthLabel || t('chat.imageStrength')}</label>
             <span className="text-[11px] text-text-muted tabular-nums">{inputVideoStrength.toFixed(2)}</span>
           </div>
-          <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
+          <input aria-label={strengthLabel || t('chat.imageStrength')} id={fieldIds('f1')} type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
             onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
             className="w-full h-1 accent-accent-blue" />
           <p className="text-[9px] text-text-muted">{t('chat.lowerMotion')}</p>
@@ -1764,7 +1772,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
           {index + 1}
         </span>
       </div>
-      <input
+      <input aria-label={placeholder}
         type="text"
         value={label}
         onChange={e => onLabelChange(index, e.target.value)}
@@ -1858,7 +1866,7 @@ function AdditionalRefsSection() {
               <span className="text-[10px] text-text-secondary">{t('chat.characterRefs')}</span>
               <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
                 {t('chat.add')}
-                <input type="file" accept={IMAGE_ACCEPT} multiple className="hidden"
+                <input aria-label={t('chat.add')} type="file" accept={IMAGE_ACCEPT} multiple className="hidden"
                   onChange={e => handleFiles(e.target.files, 'char')} />
               </label>
             </div>
@@ -1881,7 +1889,7 @@ function AdditionalRefsSection() {
               <span className="text-[10px] text-text-secondary">{t('chat.locationRefs')}</span>
               <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
                 {t('chat.add')}
-                <input type="file" accept={IMAGE_ACCEPT} multiple className="hidden"
+                <input aria-label={t('chat.add')} type="file" accept={IMAGE_ACCEPT} multiple className="hidden"
                   onChange={e => handleFiles(e.target.files, 'loc')} />
               </label>
             </div>
@@ -1906,7 +1914,7 @@ function AdditionalRefsSection() {
               {!voiceRef ? (
                 <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
                   {t('chat.add')}
-                  <input type="file" accept={AUDIO_ACCEPT} className="hidden"
+                  <input aria-label={t('chat.add')} type="file" accept={AUDIO_ACCEPT} className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) setVoiceRef(f); e.target.value = '' }} />
                 </label>
               ) : (
@@ -1921,7 +1929,7 @@ function AdditionalRefsSection() {
                 </div>
                 {!nativeVoiceReference && <div className="flex items-center gap-1.5">
                   <span className="text-[9px] text-text-muted whitespace-nowrap">{t('chat.identityScale')}</span>
-                  <input type="range" min={0} max={10} step={0.5} value={identityScale}
+                  <input aria-label={t('chat.identityScale')} type="range" min={0} max={10} step={0.5} value={identityScale}
                     onChange={e => setIdentityScale(parseFloat(e.target.value))}
                     className="flex-1 h-1 accent-accent-blue" />
                   <span className="text-[9px] text-text-muted w-5 text-right">{identityScale}</span>
@@ -1943,7 +1951,7 @@ function AdditionalRefsSection() {
                 </label>
                 {h3ReferenceMode === 'references' && <span className="text-[9px] text-text-muted">{t('chat.refsPerShot', { count: h3UserRefCount, max: 11 })}</span>}
               </div>
-              <select
+              <select aria-label={t('dashboard.h3Conditioning')}
                 id="director-h3-reference-mode"
                 value={h3ReferenceMode}
                 onChange={event => setH3ReferenceMode(event.target.value as 'first_frame' | 'references')}
@@ -1963,7 +1971,7 @@ function AdditionalRefsSection() {
                 <span className="text-[10px] text-text-secondary"><Film size={9} className="inline mr-0.5" />{t('chat.videoRefs', { count: h3VideoRefs.length, max: 3 })}</span>
                 {h3VideoRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
                   {t('chat.add')}
-                  <input type="file" accept={H3_VIDEO_ACCEPT} multiple className="hidden"
+                  <input aria-label={t('chat.add')} type="file" accept={H3_VIDEO_ACCEPT} multiple className="hidden"
                     onChange={e => {
                       Array.from(e.target.files || []).slice(0, Math.min(3 - h3VideoRefs.length, 11 - h3UserRefCount)).forEach(addH3VideoRef)
                       e.target.value = ''
@@ -1983,7 +1991,7 @@ function AdditionalRefsSection() {
                 <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />{t('chat.audioRefs', { count: h3AudioRefs.length, max: 3 })}</span>
                 {h3AudioRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
                   {t('chat.add')}
-                  <input type="file" accept={H3_AUDIO_ACCEPT} multiple className="hidden"
+                  <input aria-label={t('chat.add')} type="file" accept={H3_AUDIO_ACCEPT} multiple className="hidden"
                     onChange={e => {
                       Array.from(e.target.files || []).slice(0, Math.min(3 - h3AudioRefs.length, 11 - h3UserRefCount)).forEach(addH3AudioRef)
                       e.target.value = ''
@@ -2189,6 +2197,8 @@ function StructureView({
   pacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
   setPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
 }) {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('director')
   const pacingChoices = [
     ['cinematic', t('chat.pacingCinematic'), t('chat.pacingRangeCinematic')],
@@ -2235,12 +2245,12 @@ function StructureView({
       {isActive && !isMusicVideo && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{isShortFilm ? t('chat.scenePacing') : t('panel.cutSpeed')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{isShortFilm ? t('chat.scenePacing') : t('panel.cutSpeed')}</label>
             <span className="text-xs text-text-secondary">
               {(localBias ?? energyBias) > 0 ? '+' : ''}{localBias ?? energyBias}
             </span>
           </div>
-          <input
+          <input aria-label={isShortFilm ? t('chat.scenePacing') : t('panel.cutSpeed')} id={fieldIds('f0')}
             type="range"
             min={-2}
             max={2}
@@ -2369,6 +2379,8 @@ function StructureView({
  * experimental). See the design discussion captured in commit notes.
  */
 function DirectorAdvancedAccordion() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('director')
   const [open, setOpen] = useState(false)
   const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
@@ -2535,8 +2547,8 @@ function DirectorAdvancedAccordion() {
         <div className="px-2.5 pb-2.5 space-y-3">
           {shotImageSupport && shotImageSupport !== 'required' && (
             <div className="space-y-1 pt-1">
-              <label className="text-[11px] text-text-secondary block">{t('chat.shotImageGuidance')}</label>
-              <select
+              <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-secondary block">{t('chat.shotImageGuidance')}</label>
+              <select aria-label={t('chat.shotImageGuidance')} id={fieldIds('f0')}
                 value={shotImageGuidance}
                 onChange={e => setShotImageGuidance(e.target.value as DirectorShotImageGuidance)}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -2557,8 +2569,8 @@ function DirectorAdvancedAccordion() {
             <div className="text-[10px] text-text-muted uppercase tracking-wider">{t('modelPicker.image')}</div>
 
             <div>
-              <label className="text-[11px] text-text-secondary block mb-1">{t('chat.upsampling')}</label>
-              <select
+              <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-secondary block mb-1">{t('chat.upsampling')}</label>
+              <select aria-label={t('chat.upsampling')} id={fieldIds('f1')}
                 value={imgUpsampling}
                 onChange={e => setImgUpsampling(e.target.value)}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -2574,10 +2586,10 @@ function DirectorAdvancedAccordion() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">{t('chat.filmGrain')}</label>
+                <label htmlFor={fieldIds('f2')} className="text-[11px] text-text-secondary">{t('chat.filmGrain')}</label>
                 <span className="text-[10px] text-text-muted tabular-nums">{imgGrain.toFixed(2)}</span>
               </div>
-              <input
+              <input aria-label={t('chat.filmGrain')} id={fieldIds('f2')}
                 type="range" min={0} max={1} step={0.01} value={imgGrain}
                 onChange={e => setImgGrain(parseFloat(e.target.value))}
                 className="w-full"
@@ -2588,10 +2600,10 @@ function DirectorAdvancedAccordion() {
               {imgGrain > 0 && (
                 <div className="mt-1.5">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-text-muted">{t('chat.grainSaturation')}</label>
+                    <label htmlFor={fieldIds('f3')} className="text-[10px] text-text-muted">{t('chat.grainSaturation')}</label>
                     <span className="text-[10px] text-text-muted tabular-nums">{imgGrainSat.toFixed(2)}</span>
                   </div>
-                  <input
+                  <input aria-label={t('chat.grainSaturation')} id={fieldIds('f3')}
                     type="range" min={0} max={1} step={0.01} value={imgGrainSat}
                     onChange={e => setImgGrainSat(parseFloat(e.target.value))}
                     className="w-full"
@@ -2612,7 +2624,7 @@ function DirectorAdvancedAccordion() {
                   : 'border-border bg-bg-tertiary/50'
               }`}>
                 <label className="flex cursor-pointer items-center gap-2">
-                  <input
+                  <input aria-label={'H3 Turbo'}
                     type="checkbox"
                     checked={turboSelected}
                     onChange={event => setDirectorTurbo(event.target.checked)}
@@ -2634,7 +2646,7 @@ function DirectorAdvancedAccordion() {
 
             <div title={t('chat.turboApplies')}>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">{t('chat.inferenceSteps')}</label>
+                <label htmlFor={fieldIds('f4')} className="text-[11px] text-text-secondary">{t('chat.inferenceSteps')}</label>
                 <div className="flex items-center gap-1.5">
                   {!videoStepsLocked && !turboSelected && defaultVideoSteps != null && configuredVideoSteps != null
                     && configuredVideoSteps !== defaultVideoSteps && (
@@ -2646,7 +2658,7 @@ function DirectorAdvancedAccordion() {
                       {t('chat.default')}
                     </button>
                   )}
-                  <input
+                  <input aria-label={t('chat.inferenceSteps')} id={fieldIds('f4')}
                     type="number"
                     min={1}
                     max={50}
@@ -2667,6 +2679,7 @@ function DirectorAdvancedAccordion() {
                 </div>
               </div>
               <input
+                aria-label={t('chat.inferenceSteps')}
                 type="range"
                 min={1}
                 max={50}
@@ -2691,8 +2704,8 @@ function DirectorAdvancedAccordion() {
               && nativeShotChoices.length > 0 && (
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="text-[11px] text-text-secondary">{t('chat.maxPlannedShot')}</label>
-                  <select
+                  <label htmlFor={fieldIds('f5')} className="text-[11px] text-text-secondary">{t('chat.maxPlannedShot')}</label>
+                  <select aria-label={t('chat.maxPlannedShot')} id={fieldIds('f5')}
                     value={manualMaxShotFrames ?? ''}
                     onChange={event => setMaxShotFrames(
                       videoModel,
@@ -2721,8 +2734,8 @@ function DirectorAdvancedAccordion() {
             )}
 
             <div>
-              <label className="text-[11px] text-text-secondary block mb-1">{t('chat.upsampling')}</label>
-              <select
+              <label htmlFor={fieldIds('f6')} className="text-[11px] text-text-secondary block mb-1">{t('chat.upsampling')}</label>
+              <select aria-label={t('chat.upsampling')} id={fieldIds('f6')}
                 value={vidUpsampling}
                 onChange={e => setVidUpsampling(e.target.value)}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -2738,10 +2751,10 @@ function DirectorAdvancedAccordion() {
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">{t('chat.filmGrain')}</label>
+                <label htmlFor={fieldIds('f7')} className="text-[11px] text-text-secondary">{t('chat.filmGrain')}</label>
                 <span className="text-[10px] text-text-muted tabular-nums">{vidGrain.toFixed(2)}</span>
               </div>
-              <input
+              <input aria-label={t('chat.filmGrain')} id={fieldIds('f7')}
                 type="range" min={0} max={1} step={0.01} value={vidGrain}
                 onChange={e => setVidGrain(parseFloat(e.target.value))}
                 className="w-full"
@@ -2752,10 +2765,10 @@ function DirectorAdvancedAccordion() {
               {vidGrain > 0 && (
                 <div className="mt-1.5">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-text-muted">{t('chat.grainSaturation')}</label>
+                    <label htmlFor={fieldIds('f8')} className="text-[10px] text-text-muted">{t('chat.grainSaturation')}</label>
                     <span className="text-[10px] text-text-muted tabular-nums">{vidGrainSat.toFixed(2)}</span>
                   </div>
-                  <input
+                  <input aria-label={t('chat.grainSaturation')} id={fieldIds('f8')}
                     type="range" min={0} max={1} step={0.01} value={vidGrainSat}
                     onChange={e => setVidGrainSat(parseFloat(e.target.value))}
                     className="w-full"
@@ -2766,12 +2779,12 @@ function DirectorAdvancedAccordion() {
 
             {activeDirectorVideoOptions?.self_refiner === true && <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">{t('chat.selfRefiner')}</label>
+                <label htmlFor={fieldIds('f9')} className="text-[11px] text-text-secondary">{t('chat.selfRefiner')}</label>
                 <span className="text-[9px] uppercase tracking-wider text-text-muted bg-bg-tertiary border border-border rounded px-1 py-px">
                   {t('chat.experimental')}
                 </span>
               </div>
-              <select
+              <select aria-label={t('chat.selfRefiner')} id={fieldIds('f9')}
                 value={vidSelfRefiner}
                 onChange={e => setVidSelfRefiner(Number(e.target.value))}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
@@ -2941,7 +2954,7 @@ function StyleForm({
                   >
                     {mapping.speakerId}
                   </button>
-                  <input
+                  <input aria-label={t('panel.speakerPlaceholder')}
                     type="text"
                     value={mapping.name}
                     onChange={e => setSpeakerMapping(mapping.speakerId, e.target.value, mapping.role)}
@@ -2949,6 +2962,7 @@ function StyleForm({
                     className="flex-1 bg-bg-secondary border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
                   />
                   <select
+                    aria-label={t('panel.role')}
                     value={mapping.role}
                     onChange={e => setSpeakerMapping(mapping.speakerId, mapping.name, e.target.value as typeof mapping.role)}
                     className="bg-bg-secondary border border-border rounded px-1.5 py-1 text-[10px] text-text-secondary focus:outline-none focus:border-accent-blue transition-colors"
@@ -3054,6 +3068,7 @@ function ImagePromptsReview({
                   scroll on long prompts. rows={4} provides a sensible
                   initial height before content is loaded. */}
               <AutoResizeTextarea
+                aria-label={t('dashboard.imagePrompt')}
                 value={plan.image_prompt}
                 onChange={e => editClipPlan(i, 'image_prompt', e.target.value)}
                 rows={4}
@@ -3269,6 +3284,7 @@ function VideoPromptsReview({
                 )}
               </div>
               <AutoResizeTextarea
+                aria-label={t('dashboard.videoPrompt')}
                 value={plan.video_prompt}
                 onChange={e => editClipPlan(i, 'video_prompt', e.target.value)}
                 rows={4}

@@ -70,6 +70,7 @@
     "activeCount": "{{count}} active jobs"
   },
   "prompt": {
+    "field": "Prompt",
     "placeholderImage": "Describe your image...",
     "placeholderImageEdit": "Describe the change, e.g. add Mario standing next to Banjo...",
     "placeholderVideo": "Describe your video...",

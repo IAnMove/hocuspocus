@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useState } from 'react'
 import { X, UserRoundPen, Loader2, Eye, Plus } from 'lucide-react'
@@ -48,6 +49,8 @@ function emptyMapping(index: number): RecastCharacterMapping {
  * reuse the same color and therefore describe another view of the same person.
  */
 export function RecastControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const editVideoFile = useStore(s => s.editVideoFile)
   const editVideoPath = useStore(s => s.editVideoPath)
@@ -280,8 +283,8 @@ export function RecastControls() {
               </div>
 
               <div>
-                <label className="text-[9px] text-text-muted block mb-0.5">{t('recast.who')}</label>
-                <input
+                <label htmlFor={fieldIds(`f0-${mappingIndex}`)} className="text-[9px] text-text-muted block mb-0.5">{t('recast.who')}</label>
+                <input aria-label={t('recast.who')} id={fieldIds(`f0-${mappingIndex}`)}
                   type="text"
                   value={mapping.target}
                   onChange={event => updateMapping(mappingIndex, { target: event.target.value })}
@@ -460,7 +463,7 @@ export function RecastControls() {
 
       <div className="flex items-center gap-1">
         <label className="flex cursor-pointer items-center gap-1.5 text-[9px] text-text-secondary">
-          <input
+          <input aria-label={t('recast.matchLighting')}
             type="checkbox"
             checked={useRelighting}
             onChange={event => useStore.setState({ editRecastUseRelighting: event.target.checked })}

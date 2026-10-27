@@ -24,7 +24,7 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
       </div>
       <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <label className="block text-[10px] text-text-muted">{t('productions.planningLlm')}
-          <select className={`${input} mt-1`} value={project.provider.writingProvider}
+          <select aria-label={t('productions.planningLlm')} className={`${input} mt-1`} value={project.provider.writingProvider}
             onChange={event => setMusicWritingProvider(event.target.value as StoryWritingProvider)}>
             <option value="maestro">{t('productions.internalLlm')}</option>
             <option value="deepseek">DeepSeek</option>{/* // i18n-ok: model id */}
@@ -36,18 +36,18 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
         {project.provider.writingProvider !== 'maestro' && (
           <label className="block text-[10px] text-text-muted">{t('productions.llmModel')}
             {project.provider.writingProvider === 'deepseek' ? (
-              <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
+              <select aria-label={t('productions.llmModel')} className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
                 <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>{/* // i18n-ok: model id */}
                 <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>{/* // i18n-ok: model id */}
               </select>
             ) : project.provider.writingProvider === 'minimax' ? (
-              <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
+              <select aria-label={t('productions.llmModel')} className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
                 <option value="MiniMax-M3">MiniMax M3</option>{/* // i18n-ok: model id */}
                 <option value="MiniMax-M2.7">MiniMax M2.7</option>{/* // i18n-ok: model id */}
                 <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>{/* // i18n-ok: model id */}
               </select>
             ) : (
-              <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })} />
+              <input aria-label={t('productions.llmModel')} className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })} />
             )}
           </label>
         )}
@@ -58,7 +58,7 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
           </div>
         ) : (
           <label className="block text-[10px] text-text-muted">{t('trailer.imageModel')}
-            <select className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
+            <select aria-label={t('trailer.imageModel')} className={`${input} mt-1`} value={filmImageModel} onChange={event => selectDirectorImageModel(event.target.value)}>
               {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
                 <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
               )}
@@ -100,7 +100,7 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
       </div>
       {project.provider.writingProvider === 'openai-compatible' && (
         <label className="block text-[10px] text-text-muted">{t('productions.compatibleBaseUrl')}
-          <input className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
+          <input aria-label={t('productions.compatibleBaseUrl')} className={`${input} mt-1`} value={project.provider.writingBaseUrl} onChange={event => patchMusicWritingProvider({ writingBaseUrl: event.target.value })} placeholder="https://…/v1" />
         </label>
       )}
       <p className={`text-[9px] ${ready ? 'text-text-muted' : 'text-amber-300'}`}>

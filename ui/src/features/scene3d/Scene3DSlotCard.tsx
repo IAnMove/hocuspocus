@@ -16,7 +16,7 @@ function numberField(label: string, value: number, onChange: (value: number) => 
   return (
     <label className="flex items-center gap-1 text-sm text-text-muted">
       {label}
-      <input
+      <input aria-label={label}
         type="number"
         step={step}
         disabled={disabled}
@@ -100,7 +100,7 @@ export function Scene3DSlotCard({
         onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
       <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={duration} disabled={editingLocked}
         onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-      {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
+      {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select aria-label={editorT('travel.surface')} disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
       {slot.media === 'image' && slot.surface === 'cutout' && <Scene3DImageLookControls value={slot.imageLook} disabled={exporting} onChange={imageLook => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook }))} />}
       {slot.media === 'image' && slot.surface === 'cutout' && slot.sourceUrl && <Scene3DWindowControls key={`${slot.id}:${slot.sourceUrl}`} sourceUrl={slot.sourceUrl} windows={slot.imageLook?.windows} disabled={exporting} onChange={windows => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook: { ...slot.imageLook, windows } }))} />}
       {slot.media === 'image' && (slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => onApplyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
@@ -134,7 +134,7 @@ function InfiniteBackdropControls({
   return (
     <div className="mt-1 flex flex-wrap items-center gap-1">
       <label className="flex items-center gap-1 text-sm text-text-muted">
-        <input
+        <input aria-label={infiniteLabel}
           type="checkbox"
           data-testid="scene3d-infinite"
           disabled={disabled}
