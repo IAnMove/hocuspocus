@@ -38,18 +38,20 @@ export function ProductionProfileNotice() {
     <div
       role="status"
       data-testid="production-profile-notice"
-      className="mx-3 mt-2 flex items-start gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
+      className="flex items-start gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
     >
       <Info size={14} className="mt-0.5 shrink-0 text-accent-blue" />
-      <p className="flex-1 min-w-0">{message}</p>
-      <button
-        type="button"
-        onClick={() => { setSettingsOpen(true); close() }}
-        className="shrink-0 rounded-md bg-accent-blue px-2 py-1 text-[11px] text-white"
-      >
-        {t('profileNotice.choose')}
-      </button>
-      <button type="button" onClick={close} aria-label={t('profileNotice.dismiss')} className="shrink-0 p-0.5 text-text-muted hover:text-text-primary">
+      <div className="min-w-0 flex-1 space-y-2">
+        <p>{message}</p>
+        <button
+          type="button"
+          onClick={() => { setSettingsOpen(true); close() }}
+          className="rounded-md bg-accent-blue px-2 py-1 text-[11px] text-white"
+        >
+          {t('profileNotice.choose')}
+        </button>
+      </div>
+      <button type="button" onClick={close} aria-label={t('profileNotice.dismiss')} title={t('profileNotice.dismiss')} className="shrink-0 p-0.5 text-text-muted hover:text-text-primary">
         <X size={14} />
       </button>
     </div>

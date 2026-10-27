@@ -959,7 +959,7 @@
     }
   },
   "characterReplacement": {
-    "title": "Sustituir personaje",
+    "title": "Cambiar personaje",
     "intro": "Elige un fotograma claro del vídeo, crea la imagen con el personaje sustituto y úsala para transformar el vídeo con Viggle.",
     "sourceTitle": "Elige el vídeo y un fotograma",
     "sourceVideo": "Vídeo original",

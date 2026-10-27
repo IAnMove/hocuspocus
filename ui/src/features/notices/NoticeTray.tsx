@@ -5,6 +5,7 @@ import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
 import { PreflightBanner } from '../../components/PreflightBanner'
 import { ProductionProfileNotice } from '../../components/ProductionProfileNotice'
+import { PlatformModeBanner } from '../../components/PlatformModeBanner'
 import {
   loadPreflight,
   preflightRevision,
@@ -87,6 +88,7 @@ export function NoticeTray() {
         >
           <PreflightBanner />
           <ProductionProfileNotice />
+          <PlatformModeBanner />
           {count === 0 && <p className="px-1 py-2 text-xs text-text-muted">{t('notices.empty')}</p>}
         </div>
       )}

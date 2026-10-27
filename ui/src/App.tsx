@@ -9,7 +9,6 @@ import { StorageDashboard } from './components/StorageDashboard/StorageDashboard
 import { RetakeDialog } from './components/RetakeDialog'
 import { OomRecoveryBanner } from './components/OomRecoveryBanner'
 import { DownloadStatusBanner } from './components/DownloadStatusBanner'
-import { PlatformModeBanner } from './components/PlatformModeBanner'
 import { ActivityFooter } from './components/ActivityFooter'
 import { RuntimeUpdateNotice } from './components/RuntimeUpdateNotice'
 import { GalleryReadyToast } from './components/MainContent/GalleryReadyToast'
@@ -305,7 +304,6 @@ function AppContent() {
           Lives at the App root so it floats above whichever screen the
           user is looking at when their generation OOMs. */}
       <OomRecoveryBanner />
-      <PlatformModeBanner />
       {/* DownloadStatusBanner — fixed bottom-right overlay, polls
           /api/v1/downloads/active every 2s. Renders nothing unless
           a model file is being downloaded. Highlights stalled

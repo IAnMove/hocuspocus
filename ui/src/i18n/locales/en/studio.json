@@ -959,7 +959,7 @@
     }
   },
   "characterReplacement": {
-    "title": "Replace a character",
+    "title": "Replace character",
     "intro": "Choose a clear frame from the video, create an image with the replacement character, then use it to transform the video with Viggle.",
     "sourceTitle": "Choose the video and a frame",
     "sourceVideo": "Original video",

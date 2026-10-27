@@ -9,7 +9,7 @@ const MODE_KEYS = {
   coreRemote: 'capabilities.coreRemote',
 } as const
 
-/** Persistent platform mode for Apple Silicon / core-remote hosts. */
+/** Persistent platform mode for Apple Silicon / core-remote hosts, shown as a line in the notices tray. */
 export function PlatformModeBanner() {
   const { t } = useUiTranslation('shell')
   const [snapshot, setSnapshot] = useState<SystemCapabilities | null>(null)
@@ -30,11 +30,10 @@ export function PlatformModeBanner() {
     <div
       role="status"
       data-testid="platform-mode-banner"
-      className="fixed left-1/2 top-10 z-[90] -translate-x-1/2 rounded-full border border-border bg-bg-secondary/95 px-3 py-1 text-[10px] font-semibold tracking-[0.08em] text-text-secondary shadow-xl"
+      className="flex items-start gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs text-text-secondary"
     >
-      <span className="flex items-center gap-1.5">
-        <Monitor size={12} /> {t(key)}
-      </span>
+      <Monitor size={14} className="mt-0.5 shrink-0" />
+      <p className="min-w-0 flex-1">{t(key)}</p>
     </div>
   )
 }
