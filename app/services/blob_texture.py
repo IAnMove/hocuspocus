@@ -1,8 +1,9 @@
 """A texture for a lofted body: the atlas its UVs point into, a guide to repaint, and the texture written into a GLB.
 
-The atlas is a 4:3 picture. The top two thirds hold an orthographic front view on the left half and the back view (mirrored, as seen
-from behind) on the right half, in the body's T-pose. The bottom third holds the head at three times that scale, the front on the
-left and the back next to it, so a face has the pixels a face needs. A body made with ``atlas`` gets UVs by that projection, so a picture painted over the
+The atlas is a square picture made of two 2:1 pictures, one above the other. The top one holds an orthographic front view on the
+left half and the back view (mirrored, as seen from behind) on the right half, in the body's T-pose. The bottom one holds the head at
+three times that scale, the front on the left and the back on the right, so a face has the pixels a face needs. Each is painted
+on its own guide (``body`` and ``head``) and the two are stacked. A body made with ``atlas`` gets UVs by that projection, so a picture painted over the
 guide (the same two views, shaded grey) lands on the body where it was painted, and follows it when it moves. The body itself
 never changes: to dress it differently, paint another picture over the same guide and write it in again.
 """
@@ -12,9 +13,10 @@ import json
 import math
 import struct
 
-ATLAS = (2048, 1536)
-BODY_ROWS = 1024   # the body views take the top 1024 rows, the head tiles the 512 below
-TILE = 512
+ATLAS = (2048, 2048)
+HALF_SIZE = (2048, 1024)   # the size of each of the two pictures
+BODY_ROWS = 1024   # the body views take the top 1024 rows, the head tiles the 1024 below
+TILE = 1024
 
 
 def atlas_frame(meshes, layout=None) -> dict:
@@ -63,9 +65,9 @@ def atlas_uvs(mesh, frame: dict) -> list[tuple[float, float]]:
     return uvs
 
 
-def guide_png(parts, layout, size=ATLAS) -> bytes:
-    """The body views and the two head tiles in flat grey on a dark ground: what Qwen repaints into a texture. ``parts`` are
-    ``loft_parts`` and ``layout`` the body's; the frame is the same as for the UVs."""
+def guide_png(parts, layout, part: str = "body", size=ATLAS) -> bytes:
+    """``part`` ``body`` (the two body views) or ``head`` (the two head tiles) in flat grey on a dark ground, 2048 x 1024: what Qwen
+    repaints. ``parts`` are ``loft_parts`` and ``layout`` the body's; the frame is the same as for the UVs."""
     import io
 
     from PIL import Image, ImageDraw
@@ -93,8 +95,29 @@ def guide_png(parts, layout, size=ATLAS) -> bytes:
                 shade = 0.45 + 0.55 * max(0.0, sum(seen[j] * light[j] for j in range(3)))
                 colour = (int(205 * shade), int(205 * shade), int(210 * shade))
                 draw.polygon([(atlas_uv(p, back, frame, head)[0] * size[0], atlas_uv(p, back, frame, head)[1] * size[1]) for p in pts], fill=colour)
+    image = image.crop((0, 0, size[0], BODY_ROWS)) if part == "body" else image.crop((0, BODY_ROWS, size[0], size[1]))
     out = io.BytesIO()
     image.save(out, format="PNG")
+    return out.getvalue()
+
+
+def stack_atlas(body, head=None) -> bytes:
+    """The atlas picture (PNG bytes) from the painted ``body`` picture (2:1) and, when there is one, the painted ``head`` picture
+    (2:1). Without a head picture the head tiles are cut from the body picture and enlarged, softer but the same man."""
+    import io
+
+    from PIL import Image
+
+    top = body.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+    if head is not None:
+        bottom = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+    else:
+        bottom = Image.new("RGB", HALF_SIZE, (90, 70, 60))
+    atlas = Image.new("RGB", ATLAS)
+    atlas.paste(top, (0, 0))
+    atlas.paste(bottom, (0, BODY_ROWS))
+    out = io.BytesIO()
+    atlas.save(out, format="PNG")
     return out.getvalue()
 
 

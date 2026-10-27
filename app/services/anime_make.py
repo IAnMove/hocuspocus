@@ -25,7 +25,7 @@ GENDERS = ("girl", "boy", "man", "woman")
 STYLES = ("anime", "real")
 BOTTOMS = ("trousers", "skirt", "shorts")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
-           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "bottom"}
+           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom"}
 FACE_SOURCES = ("program", "qwen")
 FACE_STYLES = ("anime", "cute")
 _OUTFIT_COLORS = {"top", "bottom", "shoes", "accent", "socks"}
@@ -100,9 +100,12 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     look = _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style")
     if look == "real":
         body = _real_body(body, gender, raw, skin)
-    texture = raw.get("texture")
-    if texture is not None and (not isinstance(texture, str) or not texture.strip() or look != "real"):
-        _fail("invalid_traits", "texture is a workspace picture file name, for style real")
+    texture, texture_head = raw.get("texture"), raw.get("texture_head")
+    for given in (texture, texture_head):
+        if given is not None and (not isinstance(given, str) or not given.strip() or look != "real"):
+            _fail("invalid_traits", "texture and texture_head are workspace picture file names, for style real")
+    if texture_head and not texture:
+        _fail("invalid_traits", "texture_head goes with texture (the body picture)")
     face_extra = raw.get("face") or {}
     if not isinstance(face_extra, dict):
         _fail("invalid_traits", "face must be an object of face traits")
@@ -120,9 +123,9 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     clips = raw.get("clips")
     public = {"gender": gender, "outfit": outfit, "body": raw.get("body", "slim"), "height": float(height), "skin": skin, "eye_color": face["eyeColor"],
               "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"],
-              "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"face_image": face_image} if face_image else {})}
+              "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}), **({"face_image": face_image} if face_image else {})}
     return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None,
-            "texture": texture, "style": look}
+            "texture": texture, "texture_head": texture_head, "style": look}
 
 
 def _real_body(body: dict, gender: str, raw: dict, skin: str) -> dict:
@@ -181,42 +184,38 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
 
 
 def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:
-    """A realistic mould: write the guide (front and back, the picture to repaint) and, when ``texture`` names a picture of this
-    workspace, write it into the GLBs. Painting another picture over the same guide and calling make again dresses it anew."""
+    """A realistic mould: write the two guides (the body views and the head tiles, the pictures to repaint) and, when ``texture``
+    names a picture of this workspace (with ``texture_head`` for the face), write the atlas into the GLBs. Painting other pictures
+    over the same guides and calling make again dresses the same body anew."""
     from services.blob_builder import blob_pieces
     from services.blob_loft import loft_parts
-    from services.blob_texture import ATLAS, attach_texture, guide_png
+    from services.blob_texture import ATLAS, attach_texture, guide_png, stack_atlas
 
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
-    guide_name = f"anime-{slug(name)}-guide.png"
-    (Path(workspace_dir) / guide_name).write_bytes(guide_png(loft_parts(lofted["traits"], lofted["layout"]), lofted["layout"]))
-    out = {"guide_file": guide_name, "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "top two thirds: body front (left) and back (right) in a T-pose; bottom third: the head front (left) and back, at three times the scale"}}
+    parts = loft_parts(lofted["traits"], lofted["layout"])
+    base = f"anime-{slug(name)}"
+    for part in ("body", "head"):
+        (Path(workspace_dir) / f"{base}-guide-{part}.png").write_bytes(guide_png(parts, lofted["layout"], part))
+    out = {"guide_body_file": f"{base}-guide-body.png", "guide_head_file": f"{base}-guide-head.png",
+           "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over the head tiles (front left, back right, 3x the scale)"}}
     if resolved["texture"]:
-        texture = resolved["texture"].split("/api/v1/file/")[-1].split("?")[0]
-        path = Path(workspace_dir) / texture
-        if "/" in texture or ".." in texture or not path.is_file():
-            _fail("texture_missing", f"texture {texture} is not a picture of workspace {workspace}")
-        png = _atlas_png(path)
+        painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
+        head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
+        png = stack_atlas(painted, head)
         body["glb"] = attach_texture(body["glb"], png)
         body["rigged"] = attach_texture(body["rigged"], png)
-        out["texture_file"] = texture
+        out["texture_file"] = Path(resolved["texture"]).name
     return out
 
 
-def _atlas_png(path: Path) -> bytes:
-    """The picture as a PNG of the atlas' 2:1 shape (a picture of another size is scaled to it)."""
-    import io
-
+def _picture_of(workspace_dir: Path, workspace: str, given: str, label: str):
     from PIL import Image
 
-    from services.blob_texture import ATLAS
-
-    picture = Image.open(path).convert("RGB")
-    if picture.size != ATLAS:
-        picture = picture.resize(ATLAS, Image.LANCZOS)
-    out = io.BytesIO()
-    picture.save(out, format="PNG")
-    return out.getvalue()
+    name = given.split("/api/v1/file/")[-1].split("?")[0]
+    path = Path(workspace_dir) / name
+    if "/" in name or ".." in name or not path.is_file():
+        _fail("texture_missing", f"{label} {name} is not a picture of workspace {workspace}")
+    return Image.open(path)
 
 
 def _picture(workspace_dir: Path, workspace: str, face_image: str):
