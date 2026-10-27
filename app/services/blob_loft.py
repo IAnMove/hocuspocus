@@ -349,7 +349,7 @@ FACE_YAWS = [-100 + 200.0 * j / 24 for j in range(25)]
 FACE_LATS = [-86 + (48 + 86) * k / 16 for k in range(17)]
 
 
-def face_patch(L: dict, fit) -> tuple[Mesh, list]:
+def face_patch(L: dict, fit, half_angle: float = 100.0) -> tuple[Mesh, list]:
     """The face as its own surface: the skull's front between the chin and the hairline, a hair's breadth outside it,
     white vertex colours (the picture multiplies them) and UVs that project the kit picture from the front: ``fit`` is
     ``[cu, cv, ru, rv]``, the drawn skull's centre and half-size as fractions of the picture."""
@@ -357,15 +357,16 @@ def face_patch(L: dict, fit) -> tuple[Mesh, list]:
     cu, cv, ru, rv = fit
     rx, ry = L["sx"] / 2, L["sy"] / 2
     grid, colors, uvs = [], [], []
+    yaws = FACE_YAWS if half_angle >= 100 else [-half_angle + 2 * half_angle * j / 24 for j in range(25)]
     for lat in FACE_LATS:
-        ring = _skull_ring(L, lat, 1.012, FACE_YAWS)
+        ring = _skull_ring(L, lat, 1.012, yaws)
         grid.append(ring)
         colors.append([(1.0, 1.0, 1.0)] * len(ring))
         uvs.append([(cu + (p[0] / ry) * rv, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
     centers = [(0.0, L["head_y"] + ry * math.sin(math.radians(lat)), 0.0) for lat in FACE_LATS]
     _emit(mesh, grid, colors, centers, False, None)
     out = []
-    count = len(FACE_YAWS)
+    count = len(yaws)
     for i in range(len(grid) - 1):
         for j in range(count - 1):
             k = j + 1
@@ -597,14 +598,16 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
         _skirt(mesh, layout, wear["legs_color"])
     _collar_and_ribbon(mesh, layout, wear)
     _head(mesh, layout, spec["colors"]["head"], spec["hair"]["style"] not in EARS_HIDDEN)
-    face, uvs = face_patch(layout, fit or DEFAULT_FIT)
+    atlas = bool(spec.get("atlas"))
+    face, uvs = face_patch(layout, fit or DEFAULT_FIT, 52.0 if atlas else 100.0)
     hair = hair_mesh(layout, spec["hair"])
     body_uvs = None
     if spec.get("atlas"):
-        from services.blob_texture import atlas_frame, atlas_uvs
+        from services.blob_texture import atlas_frame, atlas_uv, atlas_uvs
         frame = atlas_frame([mesh], layout)
         body_uvs = atlas_uvs(mesh, frame)
-        uvs = atlas_uvs(face, frame)   # without a kit the face patch shows the atlas too: the painted face, not a white mask
+        # without a kit the face patch shows the atlas too: the front tile whole (the patch is only the face, 52 degrees each way), not a white mask
+        uvs = [atlas_uv(p, False, frame, True, 0) for p in face.vertices]
     parts = [(mesh, "body", body_uvs), (face, "face", uvs)]
     if hair.vertices:
         parts.append((hair, "hair", hair.uvs))
