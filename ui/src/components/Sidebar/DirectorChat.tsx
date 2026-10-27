@@ -593,11 +593,11 @@ export function DirectorChat() {
   // Determine chat input state
   const chatInputEnabled = (step === 'style' || mvGenerateSetup) && !loading
   const chatInputPlaceholder = !skill
-    ? 'Choose a skill above...'
+    ? t('chat.chooseSkill')
     : mvGenerateSetup
     ? 'Describe your music video — subject, vibe, mood, setting…'
     : isShortFilm && !shortFilmPath
-    ? 'Choose a path above...'
+    ? t('chat.choosePath')
     : step === 'upload' || step === 'analyze'
     ? isMvGenerate
       ? 'Generating your music video…'
@@ -684,7 +684,7 @@ export function DirectorChat() {
         {/* Welcome message */}
         <SystemBubble>
           <p className="text-xs text-text-secondary">
-            Welcome to HocusPocus Director. Choose a skill to get started.
+            {t('chat.welcome')}
           </p>
         </SystemBubble>
 
@@ -703,7 +703,7 @@ export function DirectorChat() {
           <UserBubble>
             <div className="flex items-center gap-1.5 text-xs text-text-primary">
               {isShortFilm ? <Film size={12} className="text-accent-blue" /> : <Music size={12} className="text-accent-blue" />}
-              <span>{isShortFilm ? 'Short Film' : 'Music Video'}</span>
+              <span>{isShortFilm ? t('chat.shortFilm') : t('chat.musicVideo')}</span>
             </div>
           </UserBubble>
         )}
@@ -1344,18 +1344,19 @@ function CharacterNaming({
 }
 
 function DirectorAspectRatioSelector() {
+  const { t } = useUiTranslation('director')
   const ratio = useStore(s => s.directorAspectRatio)
   const setRatio = useStore(s => s.setDirectorAspectRatio)
   const presets = [
-    { value: '16:9' as const, label: '16:9', desc: 'Wide' },
-    { value: '9:16' as const, label: '9:16', desc: 'Portrait' },
-    { value: '1:1' as const, label: '1:1', desc: 'Square' },
-    { value: '4:3' as const, label: '4:3', desc: 'Classic' },
-    { value: '3:4' as const, label: '3:4', desc: 'Tall' },
+    { value: '16:9' as const, label: '16:9', desc: t('chat.wide') },
+    { value: '9:16' as const, label: '9:16', desc: t('chat.portrait') },
+    { value: '1:1' as const, label: '1:1', desc: t('chat.square') },
+    { value: '4:3' as const, label: '4:3', desc: t('chat.classic') },
+    { value: '3:4' as const, label: '3:4', desc: t('chat.tall') },
   ]
   return (
     <div>
-      <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Aspect Ratio</label>
+      <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('chat.aspectRatio')}</label>
       <div className="flex gap-1.5">
         {presets.map(p => (
           <button
@@ -1377,6 +1378,7 @@ function DirectorAspectRatioSelector() {
 }
 
 function DirectorResolutionSelector() {
+  const { t } = useUiTranslation('director')
   const resolution = useStore(s => s.directorResolution)
   const aspectRatio = useStore(s => s.directorAspectRatio)
   const setResolution = useStore(s => s.setDirectorResolution)
@@ -1413,7 +1415,7 @@ function DirectorResolutionSelector() {
   const selectedConfig = options?.resolution_presets?.[resolution]
   return (
     <div>
-      <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">Resolution</label>
+      <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('chat.resolution')}</label>
       <div className="flex gap-1.5">
         {presets.map(p => (
           <button
@@ -1432,12 +1434,12 @@ function DirectorResolutionSelector() {
       <div className="mt-1 text-[10px] text-text-muted">
         {resolvedResolution}
         {recommendation?.frames != null && totalVramGb > 0 && (
-          <> &middot; Auto max shot {formatSeconds(recommendation.frames / fps)} on {totalVramGb.toFixed(0)} GB</>
+          <> &middot; {t('chat.autoMaxShot', { time: formatSeconds(recommendation.frames / fps), gb: totalVramGb.toFixed(0) })}</>
         )}
       </div>
       {recommendation?.supported === false && (
         <div className="mt-1 text-[10px] text-amber-400">
-          Auto recommends {recommendation.fallbackResolution || 'a lower resolution'} on this GPU. An Advanced manual shot-length override is experimental.
+          {t('chat.autoRecommends', { resolution: recommendation.fallbackResolution || t('chat.lowerResolution') })}
         </div>
       )}
       {selectedConfig?.hint && (
@@ -1450,12 +1452,13 @@ function DirectorResolutionSelector() {
 }
 
 function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void }) {
+  const { t } = useUiTranslation('director')
   const skills = [
-    { id: 'music_video' as DirectorSkill, label: 'Music Video', desc: 'Automated music video from audio', icon: Music, active: true },
-    { id: 'short_film' as DirectorSkill, label: 'Short Film', desc: 'Dialogue-driven scenes from audio', icon: Film, active: true },
-    { id: 'comic' as DirectorSkill, label: 'Comic', desc: 'Plan pages, panels, art and dialogue', icon: BookOpen, active: true },
-    { id: 'music_video' as DirectorSkill, label: 'Video Podcast', desc: 'Coming Soon', icon: Mic, active: false },
-    { id: 'music_video' as DirectorSkill, label: 'Viral Video', desc: 'Coming Soon', icon: Sparkles, active: false },
+    { id: 'music_video' as DirectorSkill, label: t('chat.skills.musicVideo'), desc: t('chat.skills.musicVideoDesc'), icon: Music, active: true },
+    { id: 'short_film' as DirectorSkill, label: t('chat.skills.shortFilm'), desc: t('chat.skills.shortFilmDesc'), icon: Film, active: true },
+    { id: 'comic' as DirectorSkill, label: t('chat.skills.comic'), desc: t('chat.skills.comicDesc'), icon: BookOpen, active: true },
+    { id: 'music_video' as DirectorSkill, label: t('chat.skills.videoPodcast'), desc: t('chat.comingSoon'), icon: Mic, active: false },
+    { id: 'music_video' as DirectorSkill, label: t('chat.skills.viralVideo'), desc: t('chat.comingSoon'), icon: Sparkles, active: false },
   ]
 
   return (
@@ -1476,7 +1479,7 @@ function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void 
           <div className="text-[10px] text-text-muted mt-0.5">{s.desc}</div>
           {!s.active && (
             <span className="absolute top-1.5 right-1.5 text-[8px] bg-bg-hover text-text-muted px-1.5 py-0.5 rounded-full">
-              Soon
+              {t('chat.soon')}
             </span>
           )}
         </button>

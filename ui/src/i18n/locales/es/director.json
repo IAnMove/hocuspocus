@@ -336,5 +336,34 @@
     "summary_other": "{{mode}} · {{presence}} % actuación · {{count}} decorados recurrentes",
     "planSet": "Decorado: {{value}}",
     "planCoverage": "Encuadre: {{value}}"
+  },
+  "chat": {
+    "chooseSkill": "Elige una habilidad arriba…",
+    "choosePath": "Elige un camino arriba…",
+    "welcome": "Bienvenido a HocusPocus Director. Elige una habilidad para empezar.",
+    "aspectRatio": "Relación de aspecto",
+    "resolution": "Resolución",
+    "wide": "Ancho",
+    "portrait": "Vertical",
+    "square": "Cuadrado",
+    "classic": "Clásico",
+    "tall": "Alto",
+    "soon": "Pronto",
+    "comingSoon": "Próximamente",
+    "shortFilm": "Cortometraje",
+    "musicVideo": "Videoclip",
+    "autoMaxShot": "Plano máximo automático {{time}} en {{gb}} GB",
+    "autoRecommends": "El modo automático recomienda {{resolution}} en esta GPU. Forzar la duración del plano a mano, en Avanzado, es experimental.",
+    "lowerResolution": "una resolución más baja",
+    "skills": {
+      "musicVideo": "Videoclip",
+      "musicVideoDesc": "Videoclip automático a partir del audio",
+      "shortFilm": "Cortometraje",
+      "shortFilmDesc": "Escenas con diálogo a partir del audio",
+      "comic": "Cómic",
+      "comicDesc": "Planifica páginas, viñetas, arte y diálogo",
+      "videoPodcast": "Pódcast en vídeo",
+      "viralVideo": "Vídeo viral"
+    }
   }
 }

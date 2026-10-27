@@ -336,5 +336,34 @@
     "summary_other": "{{mode}} · {{presence}}% performance · {{count}} recurring sets",
     "planSet": "Set: {{value}}",
     "planCoverage": "Coverage: {{value}}"
+  },
+  "chat": {
+    "chooseSkill": "Choose a skill above...",
+    "choosePath": "Choose a path above...",
+    "welcome": "Welcome to HocusPocus Director. Choose a skill to get started.",
+    "aspectRatio": "Aspect Ratio",
+    "resolution": "Resolution",
+    "wide": "Wide",
+    "portrait": "Portrait",
+    "square": "Square",
+    "classic": "Classic",
+    "tall": "Tall",
+    "soon": "Soon",
+    "comingSoon": "Coming Soon",
+    "shortFilm": "Short Film",
+    "musicVideo": "Music Video",
+    "autoMaxShot": "Auto max shot {{time}} on {{gb}} GB",
+    "autoRecommends": "Auto recommends {{resolution}} on this GPU. An Advanced manual shot-length override is experimental.",
+    "lowerResolution": "a lower resolution",
+    "skills": {
+      "musicVideo": "Music Video",
+      "musicVideoDesc": "Automated music video from audio",
+      "shortFilm": "Short Film",
+      "shortFilmDesc": "Dialogue-driven scenes from audio",
+      "comic": "Comic",
+      "comicDesc": "Plan pages, panels, art and dialogue",
+      "videoPodcast": "Video Podcast",
+      "viralVideo": "Viral Video"
+    }
   }
 }
