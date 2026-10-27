@@ -28,9 +28,13 @@ The viewer section **Cara 2D** sets the kit and the expression. It keeps a cente
 
 The cap is a child of `Head`, flat (no toon ink, no cel shading). From ±30° it still meets the head.
 
+## Face material (`shape: "mesh"`)
+
+A lofted anime head carries a `face` primitive with UVs (`blob_loft.face_patch`). `shape: "mesh"` on `world3d.scene.face` paints the kit picture into that material instead of hanging a cap: the face is lit and cel-shaded with the body and outlined with the head; `skin` (`#rrggbb`) is filled under the transparent drawing. Kits drawn for a head (`anime_head`, `cute`, the `qwen` source) default to it. A model without a `face` material refuses it; pass `shape: "cap"` for a sphere head.
+
 ## Head style (`anime_head`)
 
-`traits.style: "anime_head"` draws the face for a bald egg head (`model3d.anime.make` uses it): a whole-head picture whose skull box is the kit's `fit`, eleven poses (`neutral, happy, sad, angry, surprised, smug, shy, sleepy, suspicious, tired, shout`), nine visemes and a blink, VRoid-like eyes (iris bands, limbal ring, three highlights, a coloured upper lash from `lashColor`, crease and lower lash), brows, a nose dot, blush (`blush`, stronger with lines for `shy`) and mouth corners per expression. Only the features are drawn: the 3D skin shows through, so `skin` must equal the head colour. The kit's provenance carries `face {fit, taper}`, which `world3d.scene.face` takes as defaults.
+`traits.style: "anime_head"` draws the face for the lofted human head (`model3d.anime.make` uses it): a whole-head picture whose skull box is the kit's `fit`, eleven poses (`neutral, happy, sad, angry, surprised, smug, shy, sleepy, suspicious, tired, shout`), nine visemes and a blink, with almond eyes calibrated on painted heads (heavy upper lash with a tail, iris taller than the opening and shaded under the lid, limbal ring, three highlights, lower lash, crease), tapered brows per expression, a nose, a small rest mouth, blush (stronger with lines for `shy`); `faceShape` `soft|sharp` tilts the eyes. `traits.style: "cute"` is the earlier round-eyed drawer, kept for mascots. Only the features are drawn: `skin` is filled under them. The kit's provenance carries `face {fit, taper, shape, skin}`, which `world3d.scene.face` takes as defaults. `face_kit(traits, picture)` with a keyed bald painting makes the same kit from that painting (`blob_face_qwen`; `model3d.anime.make` `face_source: "qwen"`).
 
 ## Egg head and a projected picture
 
