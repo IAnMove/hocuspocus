@@ -17,12 +17,14 @@ Metres, Y up, +Z forward. Pure: no files, no rig.
 """
 from __future__ import annotations
 
+import bisect
 import math
 
 from services.procedural_3d.compose import linear_color
 
 RING = 16
 _JAW = 0.35
+FACE_BOX, BACK_BOX = 2.7, 2.2
 OUTFITS = ("school", "casual", "sport")
 
 
@@ -210,35 +212,52 @@ def _lerp(a: float, b: float, u: float) -> float:
     return a + (b - a) * max(0.0, min(1.0, u))
 
 
+# The anime skull, measured from Qwen-drawn bald anime head sheets (front and side), crown ``v`` = 1 to chin ``v`` = 0:
+# half-width (share of the widest ring), front depth and back depth (shares of the head's half depth, centre at the widest
+# ring). The widest ring sits at 60 % of the height, the crown is a flat dome, the jaw is a V down to a small chin.
+SKULL = (
+    (0.00, 0.150, 0.853, 0.475), (0.05, 0.420, 0.876, 0.460), (0.10, 0.580, 0.900, 0.465), (0.15, 0.700, 0.924, 0.490),
+    (0.20, 0.820, 0.936, 0.560), (0.25, 0.870, 0.940, 0.656), (0.30, 0.900, 0.940, 0.758), (0.35, 0.920, 0.941, 0.840),
+    (0.40, 0.945, 0.948, 0.900), (0.45, 0.955, 0.964, 0.940), (0.50, 0.978, 0.997, 0.964), (0.55, 0.993, 1.023, 0.975),
+    (0.60, 1.000, 1.027, 0.973), (0.65, 0.990, 1.019, 0.962), (0.70, 0.971, 0.997, 0.935), (0.75, 0.936, 0.962, 0.898),
+    (0.80, 0.877, 0.905, 0.846), (0.85, 0.797, 0.822, 0.772), (0.90, 0.684, 0.706, 0.662), (0.93, 0.590, 0.610, 0.575),
+    (0.95, 0.500, 0.520, 0.500), (0.96, 0.456, 0.463, 0.468), (0.97, 0.400, 0.404, 0.415), (0.98, 0.330, 0.332, 0.350),
+    (0.99, 0.240, 0.236, 0.254), (1.00, 0.000, 0.000, 0.000),
+)
+_SKULL_V = [row[0] for row in SKULL]
+
+
+def _catmull(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
+    return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+
+
 def skull_profile(lat: float) -> tuple[float, float, float, float]:
-    """The human skull at latitude ``lat`` (degrees, -90 chin to 90 crown): ``(width, back depth, front depth, flatness)``
-    as shares of the head radii. A wide cranium, a brow ridge, cheeks that taper to a small chin pushed a little
-    forward, and a face that is flatter than the back (``flatness`` < 1 pushes the front rings toward a plane)."""
-    phi = math.radians(lat)
-    c = math.cos(phi)
-    if lat >= 0:
-        width = c * (0.94 + 0.08 * min(1.0, lat / 60.0))            # not a balloon: temples narrower than the crown
-        back = c * (1.08 + 0.02 * math.sin(phi))                      # a longer back of the skull
-        brow = 0.08 * math.exp(-((lat - 18) / 14) ** 2)
-        front = _lerp(0.86 + brow, c, (lat - 30) / 60) if lat > 30 else 0.86 + brow
-        flat = _lerp(0.55, 1.0, (lat - 25) / 50)
-        return width, back, front, flat
-    u = -lat / 90.0
-    width = c * (0.94 - 0.5 * u ** 1.15)                        # a V from the cheekbones to a small chin
-    back = c * (1.08 - 0.2 * u)
-    front = _lerp(0.86, 0.62, u ** 1.2) + 0.08 * max(0.0, u - 0.72) / 0.28
-    flat = _lerp(0.55, 0.8, u ** 2)
-    return width, back, front, flat
+    """The anime skull at latitude ``lat`` (degrees, -90 chin to 90 crown): ``(width, back depth, front depth, boxiness)``
+    as shares of the head radii, read from the measured ``SKULL`` table. ``boxiness`` is 0 at the poles and 1 at the widest
+    ring: the rings are superellipses, round at the crown and chin and a little squarer where the face is."""
+    v = (math.sin(math.radians(lat)) + 1.0) / 2.0
+    i = min(len(SKULL) - 2, max(0, bisect.bisect_right(_SKULL_V, v) - 1))
+    t = (v - SKULL[i][0]) / (SKULL[i + 1][0] - SKULL[i][0])
+    out = []
+    for column in (1, 2, 3):
+        a, b = SKULL[i][column], SKULL[i + 1][column]
+        p0, p3 = SKULL[max(0, i - 1)][column], SKULL[min(len(SKULL) - 1, i + 2)][column]
+        out.append(max(0.0, min(_catmull(p0, a, b, p3, t), max(a, b) * 1.04 + 0.02)))
+    return out[0], out[2], out[1], 1.0 - abs(2 * v - 1) ** 3
+
+
+def _spow(x: float, e: float) -> float:
+    return math.copysign(abs(x) ** e, x)
 
 
 def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
     """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
     rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
-    width, back, front, flat = skull_profile(lat)
+    width, back, front, box = skull_profile(lat)
     t = math.radians(yaw)
-    s = math.cos(t)
-    depth = front * (s ** flat) if s >= 0 else -back * (-s)
-    return (rx * width * math.sin(t), L["head_y"] + ry * math.sin(math.radians(lat)), rz * depth)
+    s, c = math.sin(t), math.cos(t)
+    exponent = 2.0 / (2.0 + ((FACE_BOX if c >= 0 else BACK_BOX) - 2.0) * box)
+    return (rx * width * _spow(s, exponent), L["head_y"] + ry * math.sin(math.radians(lat)), rz * (front if c >= 0 else back) * _spow(c, exponent))
 
 
 def _skull_ring(L: dict, lat: float, out: float, yaws) -> list:
@@ -247,7 +266,7 @@ def _skull_ring(L: dict, lat: float, out: float, yaws) -> list:
 
 def _head(mesh: Mesh, L: dict, skin: str) -> None:
     yaws = [j * 360.0 / 24 for j in range(24)]
-    lats = [-90 + 180 * k / 20 for k in range(21)]
+    lats = [-90 + 180 * k / 28 for k in range(29)]
     grid, colors = [], []
     for lat in lats:
         ring = _skull_ring(L, lat, 1.0, yaws)
@@ -266,7 +285,7 @@ def _head(mesh: Mesh, L: dict, skin: str) -> None:
     _tube(mesh, nose, "z", ring=8)
     # ears at the eye line, as tall as a fifth of the head
     for sign in (-1, 1):
-        at = skull_point(L, sign * 90, -22, 1.0)
+        at = skull_point(L, sign * 90, -16, 1.0)
         ear = [_st((at[0] * 0.94, at[1], at[2] - rz * 0.06), rx * 0.12, ry * 0.2, skin),
                _st((at[0] * 1.08, at[1] + ry * 0.02, at[2] - rz * 0.07), rx * 0.1, ry * 0.17, skin),
                _st((at[0] * 1.14, at[1] + ry * 0.02, at[2] - rz * 0.08), rx * 0.01, ry * 0.03, skin)]
@@ -289,7 +308,7 @@ def face_patch(L: dict, fit) -> tuple[Mesh, list]:
         ring = _skull_ring(L, lat, 1.012, FACE_YAWS)
         grid.append(ring)
         colors.append([(1.0, 1.0, 1.0)] * len(ring))
-        uvs.append([(cu + (p[0] / rx) * ru, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
+        uvs.append([(cu + (p[0] / ry) * rv, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
     centers = [(0.0, L["head_y"] + ry * math.sin(math.radians(lat)), 0.0) for lat in FACE_LATS]
     _emit(mesh, grid, colors, centers, False, None)
     out = []

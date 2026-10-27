@@ -33,9 +33,9 @@ _BUILD = {
     "pear": (0.70, 0.90, 1.04, 0.28, 0.74),
 }
 _HEAD_DEFAULT = {"width": 0.31, "height": 0.28, "depth": 0.26, "shape": "sphere"}
-_ANIME_HEAD = {"width": 0.138, "height": 0.140, "depth": 0.128, "shape": "anime"}
+_ANIME_HEAD = {"width": 0.116, "height": 0.140, "depth": 0.128, "shape": "anime"}
 _CHIBI_HEAD = {"width": 0.42, "height": 0.38, "depth": 0.36, "shape": "chibi"}
-_HEAD_LIMITS = {"width": (0.12, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
+_HEAD_LIMITS = {"width": (0.10, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
 _ARM_DEFAULT = {"length": 0.36, "thickness": 0.055}
 _ANIME_ARMS = {"length": 0.44, "thickness": 0.040}
 _CHIBI_ARMS = {"length": 0.30, "thickness": 0.070}

@@ -558,3 +558,25 @@ def test_anime_make_builds_a_rigged_body_and_its_head_face_kit_in_one_call(tmp_p
     again = asyncio.run(handlers["model3d.anime.make"]({"version": 1, "intent_id": "anime-1", "input": {
         "workspace": "studio", "name": "Hana", "traits": {"gender": "girl", "hair_style": "long", "hair_color": "#282945", "skin": "#F3CBA4"}}}))
     assert again["result"]["kit_id"] == result["kit_id"]
+
+
+def test_anime_skull_is_an_egg_measured_from_anime_heads_not_a_ball():
+    import math
+    from services.blob_loft import skull_point
+
+    height = 1.65
+    L = {"sx": 0.116 * height, "sy": 0.140 * height, "sz": 0.128 * height, "head_y": 0.0, "h": height}
+    rings = []
+    for k in range(0, 61):
+        lat = -90 + 180 * k / 60
+        pts = [skull_point(L, 360 * j / 72, lat) for j in range(72)]
+        rings.append((lat, max(abs(p[0]) for p in pts), max(p[2] for p in pts) - min(p[2] for p in pts)))
+    widest = max(rings, key=lambda r: r[1])
+    share_from_chin = (math.sin(math.radians(widest[0])) + 1) / 2
+    assert 0.5 <= share_from_chin <= 0.7, "the widest ring sits at about 60 % of the height, like an anime head, not at the middle"
+    assert 0.78 <= 2 * widest[1] / L["sy"] <= 0.88, "an anime head is about 0.8 as wide as it is tall"
+    assert 0.85 <= max(r[2] for r in rings) / L["sy"] <= 0.97
+    chin = min(rings, key=lambda r: abs(r[0] - math.degrees(math.asin(2 * 0.1 - 1))))
+    assert chin[1] < 0.62 * widest[1], "the jaw is a V down to a small chin"
+    crown = min(rings, key=lambda r: abs(r[0] - math.degrees(math.asin(2 * 0.95 - 1))))
+    assert 0.45 <= crown[1] / widest[1] <= 0.55, "the crown is a dome, not a point"
