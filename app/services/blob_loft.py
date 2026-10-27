@@ -25,7 +25,7 @@ from services.procedural_3d.compose import linear_color
 RING = 16
 _JAW = 0.35
 FACE_BOX, BACK_BOX = 2.7, 2.2
-OUTFITS = ("school", "casual", "sport")
+OUTFITS = ("school", "casual", "sport", "plain")
 
 
 class Mesh:
@@ -555,6 +555,9 @@ def wear_of(spec: dict, L: dict) -> dict:
         found.update({"sleeves_len": "short", "legs": "skirt" if skirt else "shorts" if "shorts" in kinds else "trousers",
                       "legs_color": kinds.get("skirt") or kinds.get("shorts") or colors["bottom"], "shoe_style": "sneaker",
                       "socks": "#F7F4EF" if (skirt or "shorts" in kinds) else None})
+    elif outfit == "plain":   # a realistic mould: no collar, tie or lapels, the clothes are the texture
+        found.update({"legs": "skirt" if skirt else "shorts" if "shorts" in kinds else "trousers", "shoe_style": "sneaker",
+                      "legs_color": kinds.get("skirt") or kinds.get("shorts") or colors["bottom"], "socks": None})
     else:  # sport: a tracksuit, long sleeves and trousers, sneakers
         found.update({"sleeves_len": "long", "legs": "trousers", "legs_color": colors["bottom"], "shoe_style": "sneaker", "socks": None})
     return found
@@ -580,7 +583,13 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
     _head(mesh, layout, spec["colors"]["head"], spec["hair"]["style"] not in EARS_HIDDEN)
     face, uvs = face_patch(layout, fit or DEFAULT_FIT)
     hair = hair_mesh(layout, spec["hair"])
-    parts = [(mesh, "body", None), (face, "face", uvs)]
+    body_uvs = None
+    if spec.get("atlas"):
+        from services.blob_texture import atlas_frame, atlas_uvs
+        frame = atlas_frame([mesh])
+        body_uvs = atlas_uvs(mesh, frame)
+        uvs = atlas_uvs(face, frame)   # without a kit the face patch shows the atlas too: the painted face, not a white mask
+    parts = [(mesh, "body", body_uvs), (face, "face", uvs)]
     if hair.vertices:
         parts.append((hair, "hair", hair.uvs))
     return parts

@@ -14,9 +14,10 @@ LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit"}
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit", "realism", "atlas"}
 _MESHES = ("pieces", "loft")
-_OUTFITS = ("school", "casual", "sport")
+_REALISMS = ("anime", "real")
+_OUTFITS = ("school", "casual", "sport", "plain")
 _BUILDS = ("slim", "average", "round", "pear")
 _FAMILIES = ("blob", "anime", "chibi")
 _HANDS = ("ball", "mitten")
@@ -35,7 +36,7 @@ _BUILD = {
 _HEAD_DEFAULT = {"width": 0.31, "height": 0.28, "depth": 0.26, "shape": "sphere"}
 _ANIME_HEAD = {"width": 0.116, "height": 0.140, "depth": 0.128, "shape": "anime"}
 _CHIBI_HEAD = {"width": 0.42, "height": 0.38, "depth": 0.36, "shape": "chibi"}
-_HEAD_LIMITS = {"width": (0.10, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
+_HEAD_LIMITS = {"width": (0.08, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
 _ARM_DEFAULT = {"length": 0.36, "thickness": 0.055}
 _ANIME_ARMS = {"length": 0.44, "thickness": 0.040}
 _CHIBI_ARMS = {"length": 0.30, "thickness": 0.070}
@@ -53,6 +54,9 @@ _FAMILY = {
 # Narrow: an anime shoulder line is about a head and a half wide, so a painted bust on the head plane covers it.
 _ANIME_SHOULDER = {"slim": 0.18, "average": 0.22, "round": 0.27, "pear": 0.23}
 _ANIME_WAIST = {"slim": 0.58, "average": 0.66, "round": 0.84, "pear": 0.72}
+# A realistic (PS2-era) person: shoulders as a share of the height, and the waist as a share of them. A man is broad, a woman less.
+_REAL_SHOULDER = {"slim": 0.205, "average": 0.245, "round": 0.28, "pear": 0.235}
+_REAL_WAIST = {"slim": 0.74, "average": 0.78, "round": 0.92, "pear": 0.80}
 _CHIBI_SHOULDER = {"slim": 0.62, "average": 0.70, "round": 0.78, "pear": 0.74}
 # Fraction of the torso height, measured from the hip. Blob and chibi stay low:
 # 0.46 already swings lanky's wave through the egg. Anime sits up at the shoulder.
@@ -257,6 +261,8 @@ def _normalize(traits: dict) -> dict:
     return {
         **({"mesh": mesh} if "mesh" in traits else {}),
         **({"outfit": outfit} if "outfit" in traits else {}),
+        **({"realism": _choice(traits["realism"], _REALISMS, "invalid_realism", "realism")} if "realism" in traits else {}),
+        **({"atlas": True} if traits.get("atlas") is True and mesh == "loft" else {}),
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
         "family": family,
@@ -439,6 +445,9 @@ def _layout(spec: dict) -> dict:
 
 def _widths(spec: dict, sx: float, sz: float, height: float):
     width, depth, belly, forward, drop = _BUILD[spec["build"]]
+    if spec["family"] == "anime" and spec.get("realism") == "real":
+        shoulder = height * _REAL_SHOULDER[spec["build"]]
+        return shoulder, min(height * 0.135, shoulder * 0.58), shoulder * _REAL_WAIST[spec["build"]], belly, forward, drop
     if spec["family"] == "anime":
         shoulder = height * _ANIME_SHOULDER[spec["build"]]
         return shoulder, min(height * 0.115, shoulder * 0.56), shoulder * _ANIME_WAIST[spec["build"]], belly, forward, drop
