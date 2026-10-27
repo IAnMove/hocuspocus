@@ -2624,7 +2624,8 @@ function DirectorAdvancedAccordion() {
                   : 'border-border bg-bg-tertiary/50'
               }`}>
                 <label className="flex cursor-pointer items-center gap-2">
-                  <input aria-label={'H3 Turbo'}
+                  <input aria-label={'H3 Turbo' // i18n-ok: H3 product name
+                    }
                     type="checkbox"
                     checked={turboSelected}
                     onChange={event => setDirectorTurbo(event.target.checked)}

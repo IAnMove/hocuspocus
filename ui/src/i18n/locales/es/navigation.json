@@ -182,7 +182,8 @@
     "option": "Salida",
     "switch": "Cambiar carpeta de salida",
     "list": "Carpetas de salida",
-    "uploads": "Subidas"
+    "uploads": "Subidas",
+    "name": "Nombre de la carpeta de salida"
   },
   "musicProductions": {
     "title": "Producciones musicales",

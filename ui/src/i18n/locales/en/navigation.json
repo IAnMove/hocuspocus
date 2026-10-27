@@ -182,7 +182,8 @@
     "option": "Output",
     "switch": "Switch output folder",
     "list": "Output folders",
-    "uploads": "Uploads"
+    "uploads": "Uploads",
+    "name": "Output folder name"
   },
   "musicProductions": {
     "title": "Music productions",
