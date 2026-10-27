@@ -218,7 +218,14 @@ def trait_catalog() -> dict:
         "accessories": {"kinds": list(_ACCESSORY_KINDS), "max": _MAX_ACCESSORIES, "defaultColor": dict(_ACCESSORY_COLOR),
                         "notHere": ["moustache", "glasses", "eyebrows", "freckles"]},
         "presets": {name: _copy(traits) for name, traits in PRESETS.items()},
+        "styles": _styles(),
     }
+
+
+def _styles() -> dict:
+    from services.character_3d_styles import catalog
+
+    return catalog()
 
 
 def blob_pieces(traits: dict | None = None) -> dict:

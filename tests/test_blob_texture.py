@@ -118,3 +118,16 @@ def test_bleed_keeps_the_painted_figure_and_fills_the_ring_around_the_silhouette
     result = bleed(painted, guide_png_bytes.getvalue(), radius=14, band=12)
     assert result.getpixel((65, 50))[0] > 150, "the ring between the painting and the mould's edge takes the figure's colour, not the ground"
     assert result.getpixel((105, 50))[0] < 40, "a dark patch well inside the silhouette is left alone"
+
+
+def test_the_style_catalogue_is_in_the_presets_and_every_style_says_where_it_stands():
+    from services.blob_builder import trait_catalog
+    from services.character_3d_styles import STATUS, STYLES
+
+    styles = trait_catalog()["styles"]
+    assert set(styles) == set(STYLES) and {"blob", "chibi", "anime", "real"} <= set(styles)
+    for key, style in styles.items():
+        assert style["status"] in STATUS, key
+        assert style["operation"].startswith("model3d.") and style["make"] and style["next"] is not None
+        assert style["limits"] is not None and style["doc"].startswith("docs/agents/")
+    assert styles["real"]["status"] != "planned" and styles["blocky"]["status"] == "planned"
