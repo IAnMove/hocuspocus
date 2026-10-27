@@ -438,7 +438,7 @@ def _widths(spec: dict, sx: float, sz: float, height: float):
     width, depth, belly, forward, drop = _BUILD[spec["build"]]
     if spec["family"] == "anime":
         shoulder = height * _ANIME_SHOULDER[spec["build"]]
-        return shoulder, height * 0.115, shoulder * _ANIME_WAIST[spec["build"]], belly, forward, drop
+        return shoulder, min(height * 0.115, shoulder * 0.56), shoulder * _ANIME_WAIST[spec["build"]], belly, forward, drop
     if spec["family"] == "chibi":
         shoulder = sx * _CHIBI_SHOULDER[spec["build"]]
         return shoulder, min(sz * 0.82, sx * 0.78), shoulder * 0.90, belly, forward, drop

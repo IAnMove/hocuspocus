@@ -378,7 +378,7 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     ]
     _tube(mesh, stations, "y", ring=48)
     if shirt:
-        _shirt_v(mesh, stations[5:], (10, 22, 30, 38, 44), shirt)
+        _shirt_v(mesh, stations[5:9], (10, 22, 30, 34), shirt)
     skin = spec["colors"]["head"]
     neck = [_st((0, closing - 0.02 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
             _st((0, L["head_y"] - L["sy"] * 0.3, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
@@ -416,20 +416,20 @@ def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         _tube(mesh, arm, "x")
         d = r * 2
         palm_end = wrist + (tip - wrist) * 0.52
-        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.3, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.58, d * 0.36, skin),
-                _st((sign * palm_end, y, 0), d * 0.58, d * 0.34, skin), _st((sign * (palm_end + (tip - palm_end) * 0.55), y, 0), d * 0.5, d * 0.28, skin),
-                _st((sign * (palm_end + (tip - palm_end) * 0.92), y, 0), d * 0.22, d * 0.16, skin)]
+        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.22, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.5, d * 0.24, skin),
+                _st((sign * palm_end, y, 0), d * 0.5, d * 0.22, skin), _st((sign * (palm_end + (tip - palm_end) * 0.55), y, 0), d * 0.44, d * 0.2, skin),
+                _st((sign * (palm_end + (tip - palm_end) * 0.92), y, 0), d * 0.2, d * 0.12, skin)]
         _tube(mesh, hand, "x")
         # four fingers fanned from the palm's end, the thumb from its side
-        for k, (dy, length) in enumerate(((0.3, 0.86), (0.1, 1.0), (-0.1, 0.96), (-0.3, 0.8))):
+        for k, (dy, length) in enumerate(((0.18, 0.86), (0.06, 1.0), (-0.06, 0.96), (-0.18, 0.8))):
             fx0 = sign * (palm_end + (tip - palm_end) * 0.3)
             fx1 = sign * (palm_end + (tip - palm_end) * length)
-            finger = [_st((fx0, y + d * dy, 0), d * 0.15, d * 0.13, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.13, d * 0.12, skin),
-                      _st((fx1, y + d * dy * 1.1, 0), d * 0.08, d * 0.08, skin)]
+            finger = [_st((fx0, y + d * dy, 0), d * 0.15, d * 0.08, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.13, d * 0.08, skin),
+                      _st((fx1, y + d * dy * 1.1, 0), d * 0.08, d * 0.06, skin)]
             _tube(mesh, finger, "x", ring=6)
         px = sign * (wrist + (tip - wrist) * 0.2)
-        thumb = [_st((px, y + d * 0.1, d * 0.16), d * 0.13, d * 0.12, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.42), d * 0.1, d * 0.1, skin),
-                 _st((px + sign * d * 0.22, y + d * 0.2, d * 0.58), d * 0.05, d * 0.05, skin)]
+        thumb = [_st((px, y + d * 0.1, d * 0.12), d * 0.13, d * 0.1, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.32), d * 0.1, d * 0.09, skin),
+                 _st((px + sign * d * 0.22, y + d * 0.2, d * 0.46), d * 0.05, d * 0.05, skin)]
         _tube(mesh, thumb, "z", ring=6)
 
 
@@ -452,7 +452,7 @@ def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
                 at(knee - (knee - ankle) * 0.1 - 0.0005, 0.84, low),
                 at(knee - (knee - ankle) * 0.35, 0.88, low), at(knee - (knee - ankle) * 0.7, 0.68, low), at(ankle, 0.55, low)]
         _tube(mesh, leg, "y")
-        sole_d, sole_h = L["leg_d"] * 1.9, L["foot"] * 0.42
+        sole_d, sole_h = L["leg_d"] * 2.5, L["foot"] * 0.42
         sneaker = wear["shoe_style"] == "sneaker"
         shoe = [_st((sign * x, sole_h * 0.95, -sole_d * 0.42), r * 1.0, sole_h * 0.95, shoes), _st((sign * x, sole_h * 1.15, -sole_d * 0.1), r * 1.14, sole_h * 1.15, shoes),
                 _st((sign * x, sole_h * 1.05, sole_d * 0.3), r * 1.08, sole_h * 1.05, shoes), _st((sign * x, sole_h * 0.75, sole_d * 0.58), r * 0.62, sole_h * 0.62, shoes)]
