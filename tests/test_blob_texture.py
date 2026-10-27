@@ -68,8 +68,15 @@ def test_the_texture_goes_into_the_rigged_glb_and_the_vertex_colours_stop_tintin
     painted = Image.new("RGB", ATLAS, (200, 120, 60))
     out = io.BytesIO()
     painted.save(out, format="PNG")
-    glb = attach_texture(body["rigged"], out.getvalue())
+    from services.blob_texture import atlas_frame
+
+    lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
+    parts = loft_parts(lofted["traits"], lofted["layout"])
+    glb = attach_texture(body["rigged"], out.getvalue(), frame=atlas_frame([parts[0][0]], lofted["layout"]))
     after = _json(glb)
+    for name in ("body", "face"):
+        extras = after["materials"][names.index(name)]["extras"]["atlas"]
+        assert len(extras["body"]) == 3 and len(extras["head"]) == 3 and extras["body"][2] > 1.0, "a viewer can project the atlas per pixel"
     assert len(after["images"]) == 1 and len(after["textures"]) == 1
     for name in ("body", "face"):
         material = after["materials"][names.index(name)]

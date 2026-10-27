@@ -189,7 +189,7 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     over the same guides and calling make again dresses the same body anew."""
     from services.blob_builder import blob_pieces
     from services.blob_loft import loft_parts
-    from services.blob_texture import ATLAS, attach_texture, guide_png, stack_atlas
+    from services.blob_texture import ATLAS, atlas_frame, attach_texture, guide_png, stack_atlas
 
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
     parts = loft_parts(lofted["traits"], lofted["layout"])
@@ -203,8 +203,9 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
         painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
         png = stack_atlas(painted, head, (guides["body"], guides["head"]))
-        body["glb"] = attach_texture(body["glb"], png)
-        body["rigged"] = attach_texture(body["rigged"], png)
+        frame = atlas_frame([parts[0][0]], lofted["layout"])
+        body["glb"] = attach_texture(body["glb"], png, frame=frame)
+        body["rigged"] = attach_texture(body["rigged"], png, frame=frame)
         out["texture_file"] = Path(resolved["texture"]).name
     return out
 

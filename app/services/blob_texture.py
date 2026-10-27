@@ -189,7 +189,16 @@ def stack_atlas(body, head=None, guides=None) -> bytes:
     return out.getvalue()
 
 
-def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face")) -> bytes:
+def frame_extras(frame: dict) -> dict:
+    """The atlas frame as numbers a viewer can read from the material's ``extras``: the body views ``[centre x, centre y, span]``,
+    the head tiles ``[centre y, tile height in metres, the cut]``."""
+    out = {"body": [round(v, 6) for v in frame["body"]]}
+    if "head" in frame:
+        out["head"] = [round(v, 6) for v in frame["head"]]
+    return out
+
+
+def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None) -> bytes:
     """The GLB with ``png`` as the base colour texture of the materials named in ``materials`` (one shared image), and no vertex
     colours on the primitives that use them (they would tint the picture). Everything else, skin and animations included, is kept
     byte for byte."""
@@ -215,6 +224,8 @@ def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body",
     document.setdefault("samplers", []).append({"magFilter": 9729, "minFilter": 9729, "wrapS": 33071, "wrapT": 33071})
     document.setdefault("textures", []).append({"sampler": len(document["samplers"]) - 1, "source": len(document["images"]) - 1})
     for index in found:
+        if frame is not None:
+            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame)
         document["materials"][index].setdefault("pbrMetallicRoughness", {})["baseColorTexture"] = {"index": len(document["textures"]) - 1}
         document["materials"][index]["pbrMetallicRoughness"]["baseColorFactor"] = [1, 1, 1, 1]
     for mesh in document.get("meshes", []):
