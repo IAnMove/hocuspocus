@@ -95,6 +95,19 @@ def _item_height(current, data, item):
     return height
 
 
+def _store_tilt(current, data, key, *, required=False):
+    """Write one Euler angle. Yaw is always stored. Pitch and roll are written only when the command names them."""
+    if key not in data:
+        if not required:
+            return
+        rotation = current.get(key, 0)
+    else:
+        rotation = data[key]
+    if type(rotation) not in (int, float) or not math.isfinite(rotation) or abs(rotation) > 20:
+        raise ValueError(f'invalid {key} in radians')
+    current[key] = rotation
+
+
 def _modify_item(current, data, item, room, action):
     warnings = []
     if item:
@@ -106,9 +119,10 @@ def _modify_item(current, data, item, room, action):
     at = data.get('at') or ({'position': [0,0,0]} if action == 'add' else None)
     if at:
         point, warnings = placement(at, room, height); current['position'] = point; meta['at'] = copy.deepcopy(at)
-    rotation = data.get('rotationY', current.get('rotationY', 0))
-    if type(rotation) not in (int,float) or not math.isfinite(rotation) or abs(rotation) > 20: raise ValueError('invalid rotationY in radians')
-    current['rotationY'] = rotation; current['setItem'] = meta
+    _store_tilt(current, data, 'rotationY', required=True)
+    for key in ('rotationX', 'rotationZ'):
+        _store_tilt(current, data, key)
+    current['setItem'] = meta
     if current['media'] == 'image':
         current['imageLook'] = {**current.get('imageLook', {}), 'grounded': True}
         if 'shadow' in data: current['imageLook']['shadow'] = .35 if data['shadow'] else 0
@@ -209,7 +223,7 @@ class ItemService:
 
 def command_catalog():
     fields={'workspace':{'type':'string'},'target':{'type':'object','description':'{series_id, episode_id, shot} or {scene_id}'},'item':{'type':'object','description':'One of {prop}, {image}, {glb}, {library}'},
-        'at':{'type':'object','description':'One of {mark}, {anchor}, {position: [x,y,z] metres}'},'id':{'type':'string'},'heightM':{'type':'number'},'rotationY':{'type':'number'},
+        'at':{'type':'object','description':'One of {mark}, {anchor}, {position: [x,y,z] metres}'},'id':{'type':'string'},'heightM':{'type':'number'},'rotationY':{'type':'number'},'rotationX':{'type':'number'},'rotationZ':{'type':'number'},
         'billboard':{'type':'boolean'},'shadow':{'type':'boolean'},'base_revision':{'type':'integer'}}
     output=[]
     for action in ('add','update','remove','list'):

@@ -66,9 +66,10 @@ export function RenderQualityPicker({
     onChange({ level: nextLevel, shutter: nextLevel === 'draft' ? 0 : clampShutter(nextShutter) })
   }
 
+  const estimateText = `${t('stage.renderEstimate', { time, size })} ${device === 'cpu' ? t('stage.renderDeviceCpu') : t('stage.renderDeviceGpu')} ${t('stage.renderHint')}`
   return (
-    <div className="flex flex-wrap items-end gap-3" data-testid="render-quality">
-      <label className="flex flex-col gap-1 text-xs text-text-muted">
+    <div className="flex shrink-0 flex-nowrap items-center gap-1" data-testid="render-quality" title={estimateText}>
+      <label className="flex items-center gap-1 text-xs text-text-muted">
         {t('stage.renderLevel')}
         <select
           disabled={disabled}
@@ -80,12 +81,12 @@ export function RenderQualityPicker({
             setLevel(next)
             publish(next, shutter)
           }}
-          className="min-h-11 rounded-lg border border-border bg-bg-primary px-3 text-xs text-text-primary disabled:opacity-40"
+          className="h-8 rounded-lg border border-border bg-bg-primary px-2 text-xs text-text-primary disabled:opacity-40"
         >
           {LEVELS.map(item => <option key={item} value={item}>{t(LEVEL_KEY[item])}</option>)}
         </select>
       </label>
-      <label className="flex flex-col gap-1 text-xs text-text-muted">
+      <label className="flex items-center gap-1 text-xs text-text-muted">
         {t('stage.renderShutter')}
         <input
           type="number"
@@ -95,21 +96,16 @@ export function RenderQualityPicker({
           disabled={disabled || level === 'draft'}
           value={shutter}
           data-testid="render-shutter"
+          title={estimateText}
           onChange={event => {
             const next = clampShutter(Number(event.target.value))
             setShutter(next)
             publish(level, next)
           }}
-          className="min-h-11 w-24 rounded-lg border border-border bg-bg-primary px-3 text-xs text-text-primary disabled:opacity-40"
+          className="h-8 w-16 rounded-lg border border-border bg-bg-primary px-2 text-xs text-text-primary disabled:opacity-40"
         />
       </label>
-      <p className="max-w-xl text-xs text-text-muted" data-testid="render-estimate">
-        {t('stage.renderEstimate', { time, size })}
-        {' '}
-        {device === 'cpu' ? t('stage.renderDeviceCpu') : t('stage.renderDeviceGpu')}
-        {' '}
-        {t('stage.renderHint')}
-      </p>
+      <p className="sr-only" data-testid="render-estimate">{estimateText}</p>
     </div>
   )
 }

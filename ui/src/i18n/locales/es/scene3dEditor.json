@@ -1,4 +1,33 @@
 {
+  "addPicker": {
+    "title": "Añadir a la escena",
+    "search": "Buscar",
+    "searchHelp": "Nombre del efecto, el texto o la demo",
+    "empty": "Nada coincide con la búsqueda.",
+    "close": "Cerrar",
+    "category": {
+      "all": "Todo",
+      "world": "Efectos 3D",
+      "overlay": "Efectos en pantalla",
+      "demo": "Demos y muestras",
+      "text": "Textos animados",
+      "prop": "Atrezo"
+    }
+  },
+  "desk": {
+    "scene": "Escena",
+    "add": "Añadir",
+    "select": "Seleccionar",
+    "tools": "Herramientas del visor",
+    "objectSfx": "Efectos de este objeto",
+    "freeView": "Vista libre",
+    "shotCamera": "Cámara del plano",
+    "useView": "Poner la cámara del plano aquí",
+    "frame": "Encuadrar la selección",
+    "more": "Más",
+    "addObject": "Objeto nuevo",
+    "addPicker": "Efecto o atrezo…"
+  },
   "speech": {
     "resting": "en silencio",
     "speaking": "hablando",
@@ -347,18 +376,20 @@
     "splat": "Splat gaussiano"
   },
   "translate": "Mover",
-  "rotate": "Girar Y",
+  "rotate": "Girar",
   "scale": "Escalar",
   "size": "Tamaño",
   "smaller": "Más pequeño",
   "larger": "Más grande",
   "reset": "Restablecer transformación",
-  "gizmoHelp": "Dentro de la escena, pulsa G para mover, R para girar en Y o S para escalar. Arrastra el manipulador; usa su centro para escalar proporcionalmente.",
+  "gizmoHelp": "Dentro de la escena, pulsa G para mover, R para girar en X, Y y Z, o S para escalar. Arrastra el manipulador; usa su centro para escalar proporcionalmente.",
   "viewport": "Escena 3D",
-  "transformShortcuts": "Dentro de la escena: R para girar en Y · S para escalar · G para mover. Arrastra el manipulador para ajustar el objeto.",
+  "transformShortcuts": "Dentro de la escena: R para girar en X, Y y Z · S para escalar · G para mover. Arrastra el manipulador para ajustar el objeto.",
   "selectObject": "Selecciona un objeto",
   "position": "Posición (m)",
+  "rotationX": "Giro X (°)",
   "yaw": "Giro Y (°)",
+  "rotationZ": "Giro Z (°)",
   "keepAssets": "Conservar mis objetos al cambiar de plano",
   "userTemplates": {
     "title": "Mis plantillas",
@@ -3916,7 +3947,10 @@
   "library": {
     "name": "Nombre de la escena",
     "save": "Guardar escena en galería",
+    "saveShort": "Guardar",
+    "saveMenu": "Más acciones al guardar",
     "open": "Abrir escena",
+    "openShort": "Abrir",
     "help": "Elige una escena de Vídeo 3D guardada, o una escena de trabajo que un agente hizo y no publicó. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
     "saved": "Escena guardada en esta carpeta. Usa Abrir escena para recuperarla.",
     "changed": "La escena cambió mientras se cargaba. Vuelve a elegirla para reemplazar la actual.",

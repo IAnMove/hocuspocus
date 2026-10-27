@@ -1329,7 +1329,9 @@
   },
   "history": {
     "undo": "Deshacer",
+    "undoHint": "Deshacer (Ctrl+Z)",
     "redo": "Rehacer",
+    "redoHint": "Rehacer (Ctrl+Mayús+Z)",
     "checkpoint": "Marcar como guardado",
     "saved": "Guardado",
     "unsaved": "Cambios sin guardar",

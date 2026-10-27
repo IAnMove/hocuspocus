@@ -209,6 +209,7 @@ def _object_entry(entry: Any) -> dict[str, Any] | None:
         result.update(_clip_fields(entry))
     result.update(_slot_fields(entry, media))
     checks = {"position": _vec3, "motion": _motion, "rotationY": lambda value: _number(value, -20, 20),
+              "rotationX": lambda value: _number(value, -20, 20), "rotationZ": lambda value: _number(value, -20, 20),
               "scale": lambda value: _number(value, 0.01, 100)}
     result.update({key: checked for key, check in checks.items() if (checked := check(entry.get(key))) is not None})
     if isinstance(entry.get("grounded"), bool):
@@ -362,7 +363,7 @@ def _object_binding(workspace: str, root: str | None, entry: dict[str, Any], err
         binding["clip"] = resolve(entry["clip"])
     if "clips" in entry:
         binding["clips"] = [{**cue, "clip": resolve(cue["clip"])} for cue in entry["clips"]]
-    for key in ("setItem", "imageLook", "billboard", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "hold", "appearance"):
+    for key in ("setItem", "imageLook", "billboard", "clipPlayback", "position", "rotationX", "rotationY", "rotationZ", "scale", "motion", "grounded", "hold", "appearance"):
         if key in entry:
             binding[key] = entry[key]
     return binding

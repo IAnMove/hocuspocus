@@ -1,4 +1,33 @@
 {
+  "addPicker": {
+    "title": "Add to the scene",
+    "search": "Search",
+    "searchHelp": "Effect, text or demo name",
+    "empty": "Nothing matches the search.",
+    "close": "Close",
+    "category": {
+      "all": "All",
+      "world": "3D effects",
+      "overlay": "Screen effects",
+      "demo": "Demos and samples",
+      "text": "Animated text",
+      "prop": "Props"
+    }
+  },
+  "desk": {
+    "scene": "Scene",
+    "add": "Add",
+    "select": "Select",
+    "tools": "Viewport tools",
+    "objectSfx": "Effects on this object",
+    "freeView": "Free view",
+    "shotCamera": "Shot camera",
+    "useView": "Put the shot camera here",
+    "frame": "Frame selection",
+    "more": "More",
+    "addObject": "New object",
+    "addPicker": "Effect or prop…"
+  },
   "speech": {
     "resting": "silent",
     "speaking": "speaking",
@@ -347,18 +376,20 @@
     "splat": "Gaussian splat"
   },
   "translate": "Move",
-  "rotate": "Rotate Y",
+  "rotate": "Rotate",
   "scale": "Scale",
   "size": "Size",
   "smaller": "Smaller",
   "larger": "Larger",
   "reset": "Reset transform",
-  "gizmoHelp": "Inside the scene, press G to move, R to rotate around Y, or S to scale. Drag the gizmo; use its centre to scale proportionally.",
+  "gizmoHelp": "Inside the scene, press G to move, R to rotate on X, Y and Z, or S to scale. Drag the gizmo; use its centre to scale proportionally.",
   "viewport": "3D scene",
-  "transformShortcuts": "Inside the scene: R to rotate around Y · S to scale · G to move. Drag the gizmo to adjust the object.",
+  "transformShortcuts": "Inside the scene: R to rotate on X, Y and Z · S to scale · G to move. Drag the gizmo to adjust the object.",
   "selectObject": "Select an object",
   "position": "Position (m)",
+  "rotationX": "Rotation X (°)",
   "yaw": "Rotation Y (°)",
+  "rotationZ": "Rotation Z (°)",
   "keepAssets": "Keep my objects when changing shots",
   "userTemplates": {
     "title": "My templates",
@@ -3916,7 +3947,10 @@
   "library": {
     "name": "Scene name",
     "save": "Save scene to gallery",
+    "saveShort": "Save",
+    "saveMenu": "More save actions",
     "open": "Open scene",
+    "openShort": "Open",
     "help": "Choose a saved Video3D scene, or a working scene an agent made and did not publish. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
     "saved": "Scene saved to this workspace. Open scene to load it again.",
     "changed": "The scene changed while loading. Choose it again to replace the current scene.",

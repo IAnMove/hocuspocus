@@ -442,9 +442,9 @@ factory and document parser; it does not build a separate renderer.
 
 Overrides include `camera`, `atmos`, `environment`, `light`, `dressing`,
 `pixelWorld`, `rhythm`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
-GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
+GLB animation name, or null), `motion`, `position`, `scale`, `rotationX`, `rotationY`, `rotationZ` and
 `grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
-turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
+turn, bob or slide without a skeleton. `rotationX`, `rotationY`, `rotationZ` and `motion.turnTo` are radians (6.283 is one full turn). Omitted `rotationX` and `rotationZ` leave the stored tilt. `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
 **Template + cast + painted set.** Prefer this over writing a `document`: ask

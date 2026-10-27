@@ -804,10 +804,8 @@ export function MainContent() {
             </div>
           </div>
         ) : mediaFilter === 'world3d' ? (
-          <div className="flex-1 overflow-y-auto p-4 md:p-8">
-            <div className="max-w-[1600px] mx-auto">
-              <Scene3DEditorPanel />
-            </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <Scene3DEditorPanel />
           </div>
         ) : mediaFilter === 'animate3d' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8">

@@ -206,6 +206,9 @@ export type Scene3DSlot = {
   slot: Scene3DSlotId
   position: Vec3
   rotationY: number
+  /** Optional tilt. Absent on older scenes, which stay a yaw around Y. */
+  rotationX?: number
+  rotationZ?: number
   scale: number
   sourceUrl: string
   sourceRef?: Scene3DSourceRef

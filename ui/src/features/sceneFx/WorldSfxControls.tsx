@@ -6,11 +6,13 @@ import type { WorldSfxDemoId } from './worldDemo'
 import { PortalPlaybackControls, WorldSfxMotionControls } from './WorldSfxMotionControls'
 import { WorldSfxThumb } from './WorldSfxThumb'
 
-export function WorldSfxControls({ cues = [], duration, selectedId, disabled, onChange, onSelect, onDemo }: {
+export function WorldSfxControls({ cues = [], duration, selectedId, disabled, showKindGrid = true, onChange, onSelect, onDemo }: {
   cues?: WorldSfx[]
   duration: number
   selectedId?: string
   disabled?: boolean
+  /** The desk replaces the named-kind grid with one picker. The default keeps every button. */
+  showKindGrid?: boolean
   onChange: (cues: WorldSfx[]) => void
   onSelect: (id: string) => void
   onDemo: (id: WorldSfxDemoId) => void
@@ -100,6 +102,7 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
         <WorldSfxMotionControls cue={cue} onChange={patch => update(cue.id, patch)} />
         <button type="button" onClick={() => onChange(cues.filter(item => item.id !== cue.id))} className="min-h-9 text-xs text-red-300">{t('remove')}</button>
       </div>)}
+      {showKindGrid && <>
       <label className="block text-xs">{t('pickerSearch')}
         <input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('pickerSearchHelp')}
           className="mt-1 min-h-9 w-full rounded border border-border bg-bg-tertiary px-2" />
@@ -114,6 +117,7 @@ export function WorldSfxControls({ cues = [], duration, selectedId, disabled, on
         </button>)}
       </div>
       {kinds.length === 0 && <p className="text-xs text-text-muted">{t('pickerEmpty')}</p>}
+      </>}
     </fieldset>
   </details>
   </div>

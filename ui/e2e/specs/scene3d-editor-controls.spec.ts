@@ -62,7 +62,7 @@ test('3D templates, playback speed and object transforms work in the editor', as
   const canvas = viewport.locator('canvas[data-engine]')
   await viewport.focus()
   await page.keyboard.press('r')
-  await expect(workspace.getByRole('button', { name: 'Rotate Y', exact: true })).toHaveAttribute('aria-pressed', 'true')
+  await expect(workspace.getByRole('button', { name: 'Rotate', exact: true })).toHaveAttribute('aria-pressed', 'true')
   await expect(workspace.getByTestId('scene3d-transform-help')).toContainText('R to rotate')
   await page.keyboard.press('g')
   await expect(workspace.getByRole('button', { name: 'Move', exact: true })).toHaveAttribute('aria-pressed', 'true')

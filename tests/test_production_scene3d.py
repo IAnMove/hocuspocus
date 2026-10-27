@@ -405,6 +405,23 @@ def glb(path, clips):
     path.write_bytes(b"glTF" + struct.pack("<II", 2, 20 + len(body)) + struct.pack("<I4s", len(body), b"JSON") + body)
 
 
+def test_subject_and_cast_accept_optional_tilt():
+    validate_scene3d_shot(shot(rotationX=0.4, rotationZ=-0.2, rotationY=0.1))
+    validate_scene3d_shot(cast_shot(cast={"subject_1": {"source": "hero.glb", "rotationX": 0.2, "rotationZ": -0.1, "rotationY": 0.5}}))
+
+
+@NODE
+def test_compiler_copies_tilt_and_leaves_a_yaw_only_subject_without_it():
+    document = compile_document(shot(rotationX=0.3, rotationZ=-0.2, rotationY=1.2), 4)
+    subject = next(slot for slot in document["slots"] if slot["slot"] == "subject_1")
+    assert subject["rotationX"] == 0.3 and subject["rotationZ"] == -0.2 and subject["rotationY"] == 1.2
+    bare = next(slot for slot in compile_document(shot(), 4)["slots"] if slot["slot"] == "subject_1")
+    assert "rotationX" not in bare and "rotationZ" not in bare
+    cast = compile_document(cast_shot(cast={"subject_1": {"source": "/api/v1/file/hero.glb?workspace=test", "rotationX": 0.25, "rotationZ": -0.05}}), 4)
+    member = next(slot for slot in cast["slots"] if slot.get("id") == "subject_1" or slot.get("slot") == "subject_1")
+    assert member["rotationX"] == 0.25 and member["rotationZ"] == -0.05
+
+
 def test_a_template_takes_a_cast_and_a_background_instead_of_a_document():
     validate_scene3d_shot(cast_shot(cast={"subject_1": "hero.glb"}, background="fair", floor="backdrop"))
     validate_scene3d_shot(cast_shot(cast={"subject_1": {"source": "hero.glb", "clip": "dance", "scale": 1.2}},

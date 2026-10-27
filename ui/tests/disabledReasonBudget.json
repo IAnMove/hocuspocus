@@ -103,7 +103,6 @@
   "src/features/production-shots/ProductionShotsPanel.tsx": 5,
   "src/features/project-transfer/ProjectTransferDialog.tsx": 2,
   "src/features/projects/ProjectsPanel.tsx": 2,
-  "src/features/render/RenderQualityPicker.tsx": 1,
   "src/features/scene2d/Scene2DTemplateDialog.tsx": 1,
   "src/features/scene2d/boostControls.tsx": 4,
   "src/features/sceneFx/SceneFxControls.tsx": 1,

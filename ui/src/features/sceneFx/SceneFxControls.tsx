@@ -11,8 +11,9 @@ function fieldInput(key: Field, cue: SceneFx, duration: number) {
     max: key === 'start' || key === 'end' ? duration : undefined, step: key === 'seed' ? 1 : .1 }
 }
 
-export function SceneFxControls({ cues = [], duration, disabled, title, onChange, onShowcase }: {
-  cues?: SceneFx[]; duration: number; disabled?: boolean; title?: string; onChange: (cues: SceneFx[]) => void; onShowcase: (collection?: 'all' | 'anime' | 'retro') => void
+export function SceneFxControls({ cues = [], duration, disabled, title, showShowcase = true, onChange, onShowcase }: {
+  cues?: SceneFx[]; duration: number; disabled?: boolean; title?: string; showShowcase?: boolean
+  onChange: (cues: SceneFx[]) => void; onShowcase: (collection?: 'all' | 'anime' | 'retro') => void
 }) {
   const { t } = useUiTranslation('sceneFx')
   const update = (id: string, patch: Partial<SceneFx>) => onChange(parseSceneFx(cues.map(cue => cue.id === id ? { ...cue, ...patch } : cue)))
@@ -34,9 +35,11 @@ export function SceneFxControls({ cues = [], duration, disabled, title, onChange
       </div>)}
       <div className="flex flex-wrap gap-2">
         <button type="button" disabled={cues.length >= 64} onClick={() => onChange([...cues, ...parseSceneFx([{ id: `fx-${Date.now()}-${crypto.getRandomValues(new Uint32Array(1))[0]}`, kind: 'sparks', start: 0, end: Math.min(3, duration) }])])} className="min-h-10 rounded border border-border px-3 text-xs">{t('add')}</button>
+        {showShowcase && <>
         <button type="button" onClick={() => onShowcase('all')} className="min-h-10 rounded border border-cyan-400/40 px-3 text-xs">{t('showcase')}</button>
         <button type="button" onClick={() => onShowcase('anime')} className="min-h-10 rounded border border-violet-400/40 px-3 text-xs">{t('animeShowcase')}</button>
         <button type="button" onClick={() => onShowcase('retro')} className="min-h-10 rounded border border-amber-400/40 px-3 text-xs">{t('retroShowcase')}</button>
+        </>}
       </div>
     </fieldset>
   </details>
