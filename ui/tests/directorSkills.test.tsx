@@ -19,7 +19,7 @@ function installDom() {
 installDom()
 
 test('director hides coming-soon skills and keeps them behind the active flag', async () => {
-  const { visibleDirectorSkills } = await import('../src/components/Sidebar/DirectorChat.tsx')
+  const { visibleDirectorSkills } = await import('../src/components/Sidebar/directorSkills.ts')
   const skills = [
     { id: 'music', label: 'Music Video', active: true },
     { id: 'podcast', label: 'Video Podcast', active: false },

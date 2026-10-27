@@ -44,7 +44,7 @@ export function ProjectsPanel() {
   const [total, setTotal] = useState(0)
   const [warningCount, setWarningCount] = useState(0)
   const [kind, setKind] = useState<ProjectKind | ''>('')
-  const [workspace, setWorkspace] = useState(() => useStore.getState().activeWorkspace || '')
+  const [workspace, setWorkspace] = useState(() => activeWorkspace || '')
   const [draftSearch, setDraftSearch] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)

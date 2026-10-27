@@ -16,6 +16,7 @@ import { MusicVideoTreatmentEditor, TreatmentSummary } from '../../features/dire
 import { useObjectUrl } from '../../lib/useObjectUrl'
 import { useUiTranslation } from '../../i18n'
 import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
+import { visibleDirectorSkills } from './directorSkills'
 
 function directorSendLabel(chatInputEnabled: boolean, loading: boolean, mvGenerateSetup: boolean, songDescription: string, resolvedChatInput: string) {
   if (!chatInputEnabled) return controlLabel(loading ? 'disabled.sendWhileBusy' : 'disabled.sendNeedsStep')
@@ -1457,11 +1458,6 @@ function DirectorResolutionSelector() {
       )}
     </div>
   )
-}
-
-/** Coming-soon skills stay in the list with active:false and stay off the screen. */
-export function visibleDirectorSkills<T extends { active: boolean }>(skills: T[]): T[] {
-  return skills.filter(skill => skill.active)
 }
 
 export function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) => void }) {

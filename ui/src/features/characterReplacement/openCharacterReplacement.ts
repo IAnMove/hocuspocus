@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useStore } from '../../stores/useStore'
 import type { EditSubMode, GenerationMode, MediaFilter } from '../../types'
 
@@ -50,18 +50,37 @@ export function leaveCharacterReplacement(state: CharacterReplacementHost, next:
   if (leaving) state.setMediaFilter('avatars')
 }
 
-/** `useStore.setState({ mediaFilter: 'character-replacement' })` skips the setter, so the screen watches the filter. */
-export function useCharacterReplacementRedirect(): void {
-  const mediaFilter = useStore(state => state.mediaFilter)
-  const editSubMode = useStore(state => state.editSubMode)
+export function useCharacterReplacementHost(): CharacterReplacementHost {
   const generationMode = useStore(state => state.generationMode)
+  const editSubMode = useStore(state => state.editSubMode)
+  const mediaFilter = useStore(state => state.mediaFilter)
+  const sidebarMode = useStore(state => state.sidebarMode)
   const sidebarOpen = useStore(state => state.sidebarOpen)
   const settingsOpen = useStore(state => state.settingsOpen)
   const dashboardOpen = useStore(state => state.dashboardOpen)
+  const setGenerationMode = useStore(state => state.setGenerationMode)
+  const setEditSubMode = useStore(state => state.setEditSubMode)
+  const setMediaFilter = useStore(state => state.setMediaFilter)
+  const setSidebarMode = useStore(state => state.setSidebarMode)
+  const setSidebarOpen = useStore(state => state.setSidebarOpen)
+  const setSettingsOpen = useStore(state => state.setSettingsOpen)
+  const setDashboardOpen = useStore(state => state.setDashboardOpen)
+  return useMemo(() => ({
+    generationMode, editSubMode, mediaFilter, sidebarMode, sidebarOpen, settingsOpen, dashboardOpen,
+    setGenerationMode, setEditSubMode, setMediaFilter, setSidebarMode, setSidebarOpen, setSettingsOpen, setDashboardOpen,
+  }), [
+    generationMode, editSubMode, mediaFilter, sidebarMode, sidebarOpen, settingsOpen, dashboardOpen,
+    setGenerationMode, setEditSubMode, setMediaFilter, setSidebarMode, setSidebarOpen, setSettingsOpen, setDashboardOpen,
+  ])
+}
+
+/** `useStore.setState({ mediaFilter: 'character-replacement' })` skips the setter, so the screen watches the filter. */
+export function useCharacterReplacementRedirect(): void {
+  const host = useCharacterReplacementHost()
+  const { mediaFilter, editSubMode, generationMode, sidebarMode, sidebarOpen, settingsOpen, dashboardOpen } = host
   useEffect(() => {
     if (mediaFilter !== CHARACTER_REPLACEMENT_FILTER) return
-    const state = useStore.getState()
-    if (characterReplacementReady(state)) return
-    openCharacterReplacement(state)
-  }, [mediaFilter, editSubMode, generationMode, sidebarOpen, settingsOpen, dashboardOpen])
+    if (characterReplacementReady(host)) return
+    openCharacterReplacement(host)
+  }, [host, mediaFilter, editSubMode, generationMode, sidebarMode, sidebarOpen, settingsOpen, dashboardOpen])
 }

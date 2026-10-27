@@ -3,7 +3,7 @@ import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { EditSubMode } from '../../types'
-import { leaveCharacterReplacement, openCharacterReplacement } from '../../features/characterReplacement/openCharacterReplacement'
+import { leaveCharacterReplacement, openCharacterReplacement, useCharacterReplacementHost } from '../../features/characterReplacement/openCharacterReplacement'
 
 const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experimental?: boolean }[] = [
   { value: 'retake', labelKey: 'editSubModes.retake' },
@@ -20,6 +20,7 @@ export function EditSubModeToggle() {
   const editSubMode = useStore(s => s.editSubMode)
   const setEditSubMode = useStore(s => s.setEditSubMode)
   const showExperimental = useStore(s => !!s.servicesConfig?.show_experimental)
+  const replacement = useCharacterReplacementHost()
 
   // When experimental features are gated off, hide the experimental
   // sub-modes from the toggle. If the user happened to be in one of
@@ -42,12 +43,11 @@ export function EditSubModeToggle() {
         <button
           key={m.value}
           onClick={() => {
-            const state = useStore.getState()
             if (m.value === 'replace_character') {
-              openCharacterReplacement(state)
+              openCharacterReplacement(replacement)
               return
             }
-            leaveCharacterReplacement(state, m.value, m.value === 'recast' ? 'scail' : undefined)
+            leaveCharacterReplacement(replacement, m.value, m.value === 'recast' ? 'scail' : undefined)
           }}
           aria-pressed={editSubMode === m.value}
           className={`flex-1 text-[10px] py-1.5 rounded-md transition-all whitespace-nowrap ${
