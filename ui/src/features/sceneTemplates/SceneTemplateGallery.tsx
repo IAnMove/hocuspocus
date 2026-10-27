@@ -85,15 +85,13 @@ export function SceneTemplateGallery({ onOpenScene, previewBaseUrl = '/scene-tem
     }
   }, [reviews])
 
-  const visibleTemplates = useMemo(() => {
-    const search = query.trim().toLocaleLowerCase()
-    return CANDIDATE_SCENE_TEMPLATES.filter(template => {
-      if (family !== 'all' && template.family !== family) return false
-      if (!search) return true
-      const shown = templateDisplay(template)
-      return `${shown.title} ${shown.description} ${template.title} ${template.description} ${template.id}`.toLocaleLowerCase().includes(search)
-    })
-  }, [family, query, i18n.language])
+  const search = query.trim().toLocaleLowerCase()
+  const visibleTemplates = CANDIDATE_SCENE_TEMPLATES.filter(template => {
+    if (family !== 'all' && template.family !== family) return false
+    if (!search) return true
+    const shown = templateDisplay(template)
+    return `${shown.title} ${shown.description} ${template.title} ${template.description} ${template.id}`.toLocaleLowerCase().includes(search)
+  })
 
   const groupedTemplates = useMemo(() => FAMILY_ORDER
     .map(item => ({ family: item, templates: visibleTemplates.filter(template => template.family === item) }))

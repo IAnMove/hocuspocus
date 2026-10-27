@@ -1,5 +1,4 @@
 import { controlLabel, controlReason, firstControlReason } from '../../i18n/controlLabel'
-import i18n from '../../i18n'
 import { resolutionPresetLabel } from '../../lib/resolutionPresetLabel'
 import { DirectorModelPicker } from './DirectorModelPicker'
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
@@ -19,156 +18,19 @@ import { useObjectUrl } from '../../lib/useObjectUrl'
 import { useUiTranslation } from '../../i18n'
 import { SpokenLanguageOptions } from '../../i18n/SpokenLanguageOptions'
 import { visibleDirectorSkills } from './directorSkills'
-
-function directorSendLabel(chatInputEnabled: boolean, loading: boolean, mvGenerateSetup: boolean, songDescription: string, resolvedChatInput: string) {
-  if (!chatInputEnabled) return controlLabel(loading ? 'disabled.sendWhileBusy' : 'disabled.sendNeedsStep')
-  const text = mvGenerateSetup ? songDescription : resolvedChatInput
-  if (!text.trim()) return controlLabel('disabled.sendNeedsText')
-  return controlLabel('a11y.send')
-}
-
-const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
-  .then(module => ({ default: module.ComicDirectorPanel })))
-
-// AUDIO_ACCEPT lists both audio formats AND video formats. When a video
-// file is uploaded, the backend's /api/v1/upload-audio endpoint extracts
-// the audio track via ffmpeg and returns a WAV path. The user sees the
-// same workflow either way — they can drop a music video here and get
-// the soundtrack analyzed without converting first.
-const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm,.avi,.m4v'
-const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
-const H3_VIDEO_ACCEPT = '.mp4,.mov,.mkv,.webm,.avi,.m4v'
-const H3_AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
-
-function directorWillGenerateShotImages(
-  support: 'required' | 'optional' | 'direct_references' | undefined,
-  guidance: DirectorShotImageGuidance,
-  hasVisualReferences: boolean,
-): boolean {
-  if (!support || support === 'required') return true
-  if (guidance === 'generate') return true
-  if (support === 'direct_references' || guidance === 'prompt_only') return false
-  return hasVisualReferences
-}
-
-function dt(key: string, options?: Record<string, unknown>) {
-  return String(i18n.t(key, key, { ns: 'director', ...options }))
-}
-
-const SECTION_LABEL_KEYS: Record<string, string> = {
-  intro: 'chat.section.intro',
-  verse: 'chat.section.verse',
-  'pre-chorus': 'chat.section.preChorus',
-  chorus: 'chat.section.chorus',
-  bridge: 'chat.section.bridge',
-  outro: 'chat.section.outro',
-  instrumental: 'chat.section.instrumental',
-  dialogue: 'chat.section.dialogue',
-  action: 'chat.section.action',
-  opening: 'chat.section.opening',
-  closing: 'chat.section.closing',
-  scene: 'chat.section.scene',
-}
-
-function sectionDisplayName(label: string) {
-  const key = SECTION_LABEL_KEYS[label]
-  return key ? dt(key) : label
-}
-
-const IMAGE_PROGRESS_KEYS: Record<string, string> = {
-  generating: 'chat.progress.generating',
-  polling: 'chat.progress.polling',
-  downloading: 'chat.progress.downloading',
-  processing: 'chat.progress.processing',
-}
-
-function imageProgressStatus(status: string) {
-  const key = IMAGE_PROGRESS_KEYS[status]
-  return key ? dt(key) : status
-}
-
-function imageSpinnerLabel(status: string | undefined) {
-  if (status === 'generating') return dt('panel.imageStatus.generating')
-  if (status === 'polling') return dt('panel.imageStatus.polling')
-  if (status === 'downloading') return dt('panel.imageStatus.downloading')
-  return dt('panel.imageStatus.processing')
-}
-
-function imageGenStatusLine(label: string, status: string) {
-  if (status === 'done') return label
-  return dt('chat.clipStatus', { label, status: imageProgressStatus(status) })
-}
-
-function directorChatPlaceholder(state: {
-  skill: string | null | undefined
-  mvGenerateSetup: boolean
-  isShortFilm: boolean
-  shortFilmPath: string | null | undefined
-  step: string
-  isMvGenerate: boolean
-  isStoryPath: boolean
-  speakerCount: number
-}) {
-  if (!state.skill) return dt('chat.chooseSkill')
-  if (state.mvGenerateSetup) return dt('chat.mvPromptPlaceholder')
-  if (state.isShortFilm && !state.shortFilmPath) return dt('chat.choosePath')
-  if (state.step === 'upload' || state.step === 'analyze') {
-    if (state.isMvGenerate) return dt('chat.generatingMusicVideo')
-    return dt(state.isShortFilm ? 'chat.uploadDialogueToBegin' : 'chat.uploadAudioToBegin')
-  }
-  if (state.step === 'style') {
-    if (state.isStoryPath) return dt('chat.storyExamplePlaceholder')
-    if (state.isShortFilm) return dt('chat.shortFilmMoodPlaceholder')
-    return dt(state.speakerCount >= 2 ? 'panel.scenePlaceholderMulti' : 'chat.sceneAndCharactersPlaceholder')
-  }
-  if (state.step === 'structure') return dt(state.isShortFilm ? 'chat.adjustScenePacing' : 'chat.adjustClipStructure')
-  return dt('chat.reviewing')
-}
-
-function planPhaseLabel(phase: string | undefined, isStoryPath: boolean, isShortFilm: boolean, usesShotImages: boolean) {
-  if (phase === 'polishing_prompts') return dt('chat.polishingPrompts')
-  if (isStoryPath) return dt(usesShotImages ? 'chat.planningScenesAndPrompts' : 'chat.planningScenesAndVideo')
-  if (isShortFilm) return dt(usesShotImages ? 'chat.writingScenePrompts' : 'panel.writingVideoPrompts')
-  return dt(usesShotImages ? 'chat.writingImageAndVideo' : 'panel.writingVideoPrompts')
-}
-
-function shotGuidanceHint(
-  support: 'required' | 'optional' | 'direct_references' | undefined,
-  guidance: DirectorShotImageGuidance,
-  hasVisualReferences: boolean,
-  generateShotImages: boolean,
-) {
-  if (support === 'direct_references') {
-    if (guidance === 'generate') return dt('chat.guidanceCompose')
-    if (!hasVisualReferences) return dt('chat.guidanceNeedImage')
-    return dt('chat.guidanceDirectRefs')
-  }
-  if (generateShotImages) return dt('chat.guidanceStartFrames')
-  return dt('chat.guidanceFromPrompt')
-}
-
-function videoStepsHint(
-  turboSelected: boolean,
-  turboSteps: number | undefined,
-  locked: boolean,
-  videoSteps: number | null,
-  defaultSteps: number | null,
-) {
-  if (turboSelected) return dt('chat.turboRecipe', { steps: turboSteps ?? 6 })
-  if (locked) return dt('chat.stepsFixed')
-  if (videoSteps == null) return dt('chat.stepsLoading')
-  if (defaultSteps === videoSteps) return dt('chat.stepsForModelDefault')
-  return dt('chat.stepsForModel')
-}
-
-function maxShotHint(manual: number | null, safe: number | null, time: string, resolution: string, gb: string) {
-  if (manual == null) {
-    if (safe != null) return dt('chat.autoPlansAtMost', { time, resolution, gb })
-    return dt('chat.autoDerivesLimit')
-  }
-  if (safe != null && manual > safe) return dt('chat.manualOverrideVram', { time })
-  return dt('chat.manualShotLimit')
-}
+import {
+  directorChatPlaceholder,
+  directorSendLabel,
+  directorText,
+  directorWillGenerateShotImages,
+  imageGenStatusLine,
+  imageSpinnerLabel,
+  maxShotHint,
+  planPhaseLabel,
+  sectionDisplayName,
+  shotGuidanceHint,
+  videoStepsHint,
+} from './directorChatLabels'
 
 function AudioScaleSlider() {
   const { t } = useUiTranslation('director')
@@ -196,6 +58,19 @@ function AudioScaleSlider() {
     </>
   )
 }
+
+const ComicDirectorPanel = lazy(() => import('../../features/comics/ComicEditorPanel')
+  .then(module => ({ default: module.ComicDirectorPanel })))
+
+// AUDIO_ACCEPT lists both audio formats AND video formats. When a video
+// file is uploaded, the backend's /api/v1/upload-audio endpoint extracts
+// the audio track via ffmpeg and returns a WAV path. The user sees the
+// same workflow either way — they can drop a music video here and get
+// the soundtrack analyzed without converting first.
+const AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a,.mp4,.mov,.mkv,.webm,.avi,.m4v'
+const IMAGE_ACCEPT = '.png,.jpg,.jpeg,.webp,.bmp'
+const H3_VIDEO_ACCEPT = '.mp4,.mov,.mkv,.webm,.avi,.m4v'
+const H3_AUDIO_ACCEPT = '.wav,.mp3,.flac,.ogg,.m4a'
 
 const STEP_ORDER = ['upload', 'analyze', 'structure', 'style', 'plan', 'review', 'generate_images', 'plan_video', 'review_video'] as const
 type DirectorStep = typeof STEP_ORDER[number]
@@ -302,7 +177,7 @@ function SectionBadge({ label }: { label: string }) {
 
 function EnergyDot({ energy }: { energy: number }) {
   const color = energy > 0.6 ? 'bg-chip-red' : energy < 0.3 ? 'bg-chip-blue' : 'bg-chip-yellow'
-  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={dt('panel.energy', { percent: (energy * 100).toFixed(0) })} />
+  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={directorText('panel.energy', { percent: (energy * 100).toFixed(0) })} />
 }
 
 // Chat bubble wrapper
