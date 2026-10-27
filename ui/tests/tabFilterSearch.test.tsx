@@ -533,3 +533,34 @@ test('closing or unmounting search cancels its hidden debounce', { concurrency: 
     window.clearTimeout = originalClearTimeout
   }
 })
+
+test('media filters wrap in order instead of being cut off', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup, within } = await import('@testing-library/react')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const labels = [
+    'Projects', 'Assets', 'All', 'Images', 'Videos', 'Videoclips', 'Trailers', 'Episodes',
+    'Audio', '3D', 'Scenes', 'Style sheet', 'Edits', 'Multi-clip', 'Favorites', 'Made by agents',
+  ]
+  useStore.setState({ mediaFilter: 'all', outputSearchQuery: '', developerMode: false, loadOutputs: async () => undefined })
+  try {
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Media' }))
+    const bar = screen.getByRole('tablist', { name: 'Browse projects and generated assets' })
+    assert.equal(bar.className.includes('flex-wrap'), true)
+    assert.equal(bar.className.includes('overflow-x-auto'), false)
+    assert.equal(bar.firstElementChild?.className.includes('flex-wrap'), true)
+    assert.equal(bar.firstElementChild?.className.includes('min-w-max'), false)
+    const tabs = within(bar).getAllByRole('tab').map(tab => tab.getAttribute('aria-label'))
+    assert.deepEqual(tabs, labels)
+    cleanup()
+    useStore.setState({ mediaFilter: 'stories' })
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Studios' }))
+    const studios = screen.getByRole('tablist', { name: 'Develop guided creative projects' })
+    assert.equal(studios.className.includes('overflow-x-auto'), true)
+    assert.equal(studios.className.includes('flex-wrap'), false)
+  } finally {
+    cleanup()
+  }
+})

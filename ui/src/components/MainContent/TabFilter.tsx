@@ -61,9 +61,10 @@ function PrimaryButton({ active, expanded, icon, label, onClick, ariaLabel, cate
 }
 
 function NavigationBar({ category, title, items, activeValue, barRef }: { category: NavigationCategory; title: string; items: MenuItem[]; activeValue: MediaFilter; barRef: (element: HTMLDivElement | null) => void }) {
+  const wraps = category === 'media'
   return (
-    <div ref={barRef} className="hp-navigation-children relative flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border px-1.5 py-1" data-navigation-category={category} aria-label={title} role="tablist">
-      <div className="flex min-w-max items-center gap-1">
+    <div ref={barRef} className={`hp-navigation-children relative flex min-w-0 items-center gap-1 rounded-lg border px-1.5 py-1 ${wraps ? 'w-full flex-wrap' : 'overflow-x-auto'}`} data-navigation-category={category} aria-label={title} role="tablist">
+      <div className={`flex items-center gap-1 ${wraps ? 'w-full flex-wrap' : 'min-w-max'}`}>
         {items.map(item => (
           <button
             key={item.label}
