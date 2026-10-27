@@ -193,3 +193,30 @@ def test_a_head_with_a_relief_has_no_modelled_nose_and_without_the_depth_model_t
     assert with_relief["face"] > plain["face"], "the face is a dense patch"
     monkeypatch.setattr(blob_face_relief, "CHECKPOINT", blob_face_relief.CHECKPOINT.with_name("not_there.pth"))
     assert blob_face_relief.relief_from_picture(Image.new("RGB", (60, 30)), {"head": (1.0, 0.4, 1.4)}, 0.2) is None
+
+
+def test_the_neck_skin_and_the_hair_colour_are_read_from_the_head_picture():
+    from services.blob_texture import hair_of, neck_skin
+
+    picture = Image.new("RGB", (2048, 1024), (30, 30, 36))
+    tile = Image.new("RGB", (683, 1024), (30, 30, 36))
+    for x in range(683):
+        for y in range(1024):
+            tile.putpixel((x, y), (60, 40, 28) if y < 200 else (205, 150, 120) if y > 700 else (190, 140, 110))
+    picture.paste(tile, (0, 0))
+    skin = neck_skin(picture)
+    assert all(abs(a - b / 255) < 0.02 for a, b in zip(skin, (205, 150, 120))), "the row under the chin, on the neck"
+    assert hair_of(picture) == "#3C281C", "the crown of the front tile"
+
+
+def test_a_head_with_a_painted_face_gets_a_hair_cap_and_no_fringe_or_ear_hiding_locks():
+    from services.blob_hair import hair_mesh
+
+    lofted, _ = _real(hair_style="short", hair_color="#3C281C")
+    layout = lofted["layout"]
+    plain = hair_mesh(layout, {"style": "short", "color": "#3C281C"})
+    capped = hair_mesh({**layout, "relief": True}, {"style": "short", "color": "#3C281C"})
+    assert 0 < len(capped.vertices) < len(plain.vertices) / 2, "a cap, not a fringe and a ring of locks"
+    ear_y = layout["head_y"] + layout["sy"] / 2 * -0.28
+    side = [v for v in capped.vertices if abs(abs(v[0]) - layout["sx"] / 2 * 1.04) < layout["sx"] * 0.02]
+    assert all(v[1] > ear_y + layout["sy"] * 0.1 for v in side), "the flanks stay above the ears"

@@ -40,6 +40,9 @@ def hair_mesh(L: dict, hair: dict) -> UVMesh:
     style, color = hair["style"], hair["color"]
     if style == "none":
         return mesh
+    if L.get("relief"):
+        _real_cap(mesh, head, color)   # a painted face brings its own hairline and fringe: only the cap and the back
+        return mesh
     _helmet(mesh, head, color, hairline=34 if style in ("short", "spiky", "bun") else 26)
     if style == "short":
         _crown(mesh, head, color)
@@ -73,6 +76,30 @@ def _scalp_uv(head: _Head):
         yaw = math.atan2(point[0] - head.cx, point[2] - head.cz)
         return (0.3 + 0.4 * abs(yaw) / math.pi, 0.02 + 0.44 * max(0.0, min(1.0, (top - point[1]) / span)))
     return uv
+
+
+def _real_cap(mesh: Mesh, head: _Head, color: str) -> None:
+    """Short hair for a head with a painted face: a cap over the crown above the painted hairline (lat 50 and up), the flanks above
+    the ears (yaw 58 to 302, lat 18 to 50) and the back behind them (yaw 104 to 256, down to the nape). The forehead, the temples in
+    front of 58 degrees and the ears stay the painting's; the cap gives the head a hair silhouette instead of an egg's."""
+    from services.procedural_3d.compose import linear_color
+
+    def band(yaws, lats, closed, out_of):
+        grid, colors = [], []
+        for lat in lats:
+            out = out_of(lat)
+            ring = [skull_point(head.L, yaw, lat, out) for yaw in yaws]
+            if lat >= 89.9:
+                ring = [(0.0, head.cy + head.ry * out, 0.0)] * len(ring)
+            grid.append(ring)
+            colors.append([linear_color(color)] * len(ring))
+        centers = [(0.0, head.cy + head.ry * math.sin(math.radians(lat)), 0.0) for lat in lats]
+        _emit(mesh, grid, colors, centers, closed, None)
+
+    thick = lambda lat: 1.045 + 0.03 * max(0.0, min(1.0, (lat - 40) / 40))
+    band([j * 360.0 / 24 for j in range(24)], [50 + 40 * k / 8 for k in range(9)], True, thick)
+    band([58 + 244.0 * j / 24 for j in range(25)], [16 + 36 * k / 6 for k in range(7)], False, lambda lat: 1.045)
+    band([104 + 152.0 * j / 16 for j in range(17)], [-26 + 44 * k / 6 for k in range(7)], False, lambda lat: 1.04)
 
 
 def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:

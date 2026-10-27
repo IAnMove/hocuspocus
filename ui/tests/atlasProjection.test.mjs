@@ -6,6 +6,8 @@ import { ATLAS_KEY, applyAtlasProjection, patchAtlasShader, readAtlasFrame } fro
 test('the frame comes from the material extras and anything malformed is refused', () => {
   assert.deepEqual(readAtlasFrame({ atlas: { body: [0, 0.9, 2], head: [1.7, 0.4, 1.5] } }), { body: [0, 0.9, 2], head: [1.7, 0.4, 1.5] })
   assert.deepEqual(readAtlasFrame({ atlas: { body: [0, 0.9, 2] } }), { body: [0, 0.9, 2] })
+  assert.deepEqual(readAtlasFrame({ atlas: { body: [0, 0.9, 2], skin: [0.8, 0.6, 0.5] } }), { body: [0, 0.9, 2], skin: [0.8, 0.6, 0.5] })
+  assert.equal(readAtlasFrame({ atlas: { body: [0, 0.9, 2], skin: [2, 0, 0] } })?.skin, undefined, 'a colour outside 0..1 is refused')
   assert.equal(readAtlasFrame({ atlas: { body: [0, 0.9] } }), undefined)
   assert.equal(readAtlasFrame({ atlas: { body: [0, 0.9, 0] } }), undefined)
   assert.equal(readAtlasFrame({ atlas: { body: [0, 'a', 1] } }), undefined)
@@ -20,6 +22,7 @@ test('the shader samples the atlas from the bind pose and blends the views by th
   }
   patchAtlasShader(shader, { body: [0, 0.9, 2], head: [1.7, 0.4, 1.5] })
   assert.ok(shader.vertexShader.includes('vAtlasPos = position;') && shader.vertexShader.includes('vAtlasNormal = normal;'))
+  assert.ok(shader.fragmentShader.includes('uniform vec3 atlasSkin;') && shader.fragmentShader.includes('underside'), 'the jaw underside takes the skin colour')
   assert.ok(shader.fragmentShader.includes('uniform float atlasFaceOnly;') && shader.fragmentShader.includes('faceYaw'), 'every uniform the shader reads is declared')
   assert.ok(shader.fragmentShader.includes('uniform vec3 atlasBody;') && shader.fragmentShader.includes('diffuseColor *= sampledDiffuseColor;'))
   assert.ok(!shader.fragmentShader.includes('#include <map_fragment>'))

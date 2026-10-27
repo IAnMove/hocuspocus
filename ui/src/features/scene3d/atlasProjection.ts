@@ -6,20 +6,21 @@
  * the surface faces each one, so the texture turns round the form without a cut. The frame the views were drawn with comes
  * from the material's `extras.atlas` (glTF extras land in `userData`). */
 import type { Material, Mesh, Object3D } from 'three'
-import { Vector3 } from 'three'
+import { Color, SRGBColorSpace, Vector3 } from 'three'
 
-export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number] }
+export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number]; skin?: [number, number, number] }
 
-export const ATLAS_KEY = 'atlas-drape-3'
+export const ATLAS_KEY = 'atlas-drape-4'
 
 export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
-  const raw = (userData as { atlas?: { body?: unknown; head?: unknown } } | undefined)?.atlas
+  const raw = (userData as { atlas?: { body?: unknown; head?: unknown; skin?: unknown } } | undefined)?.atlas
   const triple = (value: unknown): [number, number, number] | undefined =>
     Array.isArray(value) && value.length === 3 && value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [value[0], value[1], value[2]] : undefined
   const body = triple(raw?.body)
   if (!body || body[2] <= 0) return undefined
   const head = triple(raw?.head)
-  return { body, ...(head && head[1] > 0 ? { head } : {}) }
+  const skin = triple(raw?.skin)
+  return { body, ...(head && head[1] > 0 ? { head } : {}), ...(skin && skin.every(value => value >= 0 && value <= 1) ? { skin } : {}) }
 }
 
 type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string }
@@ -29,12 +30,15 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
   shader.uniforms.atlasBody = { value: new Vector3(...frame.body) }
   shader.uniforms.atlasHead = { value: new Vector3(...(frame.head ?? [0, 1, 1e9])) }
   shader.uniforms.atlasFaceOnly = { value: faceOnly ? 1 : 0 }
+  const skin = frame.skin ? new Color().setRGB(frame.skin[0], frame.skin[1], frame.skin[2], SRGBColorSpace) : undefined
+  shader.uniforms.atlasSkin = { value: new Vector3(skin?.r ?? 0, skin?.g ?? 0, skin?.b ?? 0) }
+  shader.uniforms.atlasHasSkin = { value: skin ? 1 : 0 }
   shader.uniforms.atlasUseUv = { value: useUv ? 1 : 0 }   // 1 while a face kit paints the material's own map (see `useMapUv`)
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;')
+    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;')
     .replace('#include <map_fragment>', `#ifdef USE_MAP
 	vec3 atlasN = normalize( vAtlasNormal );
 	vec3 atlasP = vAtlasPos;
@@ -49,13 +53,21 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
 	// round it fades from the front to the side picture between 53 and 75 degrees and to the back one between 112 and 140
 	float faceYaw = atan( abs( atlasP.x ), atlasP.z );
 	float crownK = smoothstep( 0.55, 0.85, abs( atlasN.y ) );
-	float toSide = smoothstep( 0.92, 1.3, faceYaw ) * ( 1.0 - crownK );
+	// above the brows the flank is hair: hair stretches well, while the side picture's forehead is bare skin, so the front picture is kept longer there
+	float upperHead = smoothstep( 0.14, 0.24, ( atlasP.y - atlasHead.x ) / atlasHead.y );
+	float toSide = smoothstep( mix( 0.92, 1.3, upperHead ), mix( 1.3, 1.7, upperHead ), faceYaw ) * ( 1.0 - crownK );
 	float toBack = smoothstep( 1.95, 2.45, faceYaw ) * ( 1.0 - crownK );
 	vec4 frontTile = texture2D( map, vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV ) );
 	vec4 sideTile = texture2D( map, vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV ) );
 	vec4 backTile = texture2D( map, vec2( ( 2.5 - atlasP.x / tileW ) / 3.0, headV ) );
 	vec4 headColor = mix( mix( frontTile, sideTile, toSide ), backTile, toBack );
 	if ( atlasFaceOnly > 0.5 ) headColor = frontTile;
+	// what faces down (the underside of the jaw and the chin) takes the skin of the neck under the same x, not the row of the beard
+	// that a front projection smears over it; the flat skin colour only fills in where the neck picture is missing
+	float neckV = 0.9; // the row at 0.8 of the head tile's height: under the chin of a head picture, on the neck (as neck_skin reads it)
+	vec4 neckTile = texture2D( map, vec2( ( 0.5 + clamp( atlasP.x, - tileW * 0.18, tileW * 0.18 ) / tileW ) / 3.0, neckV ) );
+	float underside = smoothstep( -0.45, -0.8, atlasN.y ) * atlasHasSkin;
+	headColor.rgb = mix( headColor.rgb, neckTile.rgb, underside );
 	float inHead = smoothstep( atlasHead.z - 0.008, atlasHead.z + 0.008, atlasP.y ) * ( 1.0 - smoothstep( tileW * 0.42, tileW * 0.49, max( abs( atlasP.x ), abs( atlasP.z ) ) ) );
 	vec4 sampledDiffuseColor = mix( bodyColor, headColor, inHead );
 	if ( atlasUseUv > 0.5 ) sampledDiffuseColor = texture2D( map, vMapUv );

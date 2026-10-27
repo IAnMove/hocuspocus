@@ -189,16 +189,43 @@ def stack_atlas(body, head=None, guides=None) -> bytes:
     return out.getvalue()
 
 
-def frame_extras(frame: dict) -> dict:
+def neck_skin(head) -> list[float]:
+    """The skin colour of a head picture (0..1 sRGB): the median of the front tile just under the beard, where the neck is. What the
+    underside of the jaw and the chin take, instead of the beard's row smeared down by a front projection."""
+    import numpy as np
+
+    width, height = head.size
+    tile = np.asarray(head.convert("RGB").crop((0, 0, width // 3, height))).astype(np.float32)
+    h, w = tile.shape[:2]
+    patch = tile[int(h * 0.76):int(h * 0.84), int(w * 0.42):int(w * 0.58)].reshape(-1, 3)
+    return [round(float(v) / 255.0, 4) for v in np.median(patch, axis=0)]
+
+
+def hair_of(head) -> str:
+    """The hair colour of a head picture (#RRGGBB): the median of the top of the front tile's crown, where the hair is, darker
+    than the median of the scalp pixels so a highlight does not lighten the whole cap."""
+    import numpy as np
+
+    width, height = head.size
+    tile = np.asarray(head.convert("RGB").crop((0, 0, width // 3, height))).astype(np.float32)
+    h, w = tile.shape[:2]
+    patch = tile[int(h * 0.13):int(h * 0.19), int(w * 0.40):int(w * 0.60)].reshape(-1, 3)
+    r, g, b = (int(v) for v in np.percentile(patch, 35, axis=0))
+    return "#%02X%02X%02X" % (r, g, b)
+
+
+def frame_extras(frame: dict, skin: list[float] | None = None) -> dict:
     """The atlas frame as numbers a viewer can read from the material's ``extras``: the body views ``[centre x, centre y, span]``,
     the head tiles ``[centre y, tile height in metres, the cut]``."""
     out = {"body": [round(v, 6) for v in frame["body"]]}
     if "head" in frame:
         out["head"] = [round(v, 6) for v in frame["head"]]
+    if skin:
+        out["skin"] = list(skin)
     return out
 
 
-def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False) -> bytes:
+def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None) -> bytes:
     """The GLB with ``png`` as the base colour texture of the materials named in ``materials`` (one shared image), and no vertex
     colours on the primitives that use them (they would tint the picture). Everything else, skin and animations included, is kept
     byte for byte."""
@@ -225,7 +252,7 @@ def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body",
     document.setdefault("textures", []).append({"sampler": len(document["samplers"]) - 1, "source": len(document["images"]) - 1})
     for index in found:
         if frame is not None:
-            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame)
+            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin)
         document["materials"][index].setdefault("pbrMetallicRoughness", {})["baseColorTexture"] = {"index": len(document["textures"]) - 1}
         document["materials"][index]["pbrMetallicRoughness"]["baseColorFactor"] = [1, 1, 1, 1]
     for mesh in document.get("meshes", []):

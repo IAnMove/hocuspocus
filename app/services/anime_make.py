@@ -188,6 +188,10 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
         resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
         resolved["public"]["skin"] = painted.upper()
     relief = _face_relief(workspace_dir, workspace, resolved) if resolved["style"] == "real" and resolved["texture_head"] else None
+    if relief is not None and resolved["body"]["hair"]["style"] != "none" and not (isinstance(traits, dict) and "hair_color" in traits):
+        from services.blob_texture import hair_of
+
+        resolved["body"]["hair"] = {**resolved["body"]["hair"], "color": hair_of(_picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head"))}
     body = build_body(resolved["body"], clips, relief=relief)
     if resolved["style"] in ("voxel", "roblox"):
         extra = _blocky_files(workspace_dir, workspace, resolved, body)
@@ -204,7 +208,7 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     over the same guides and calling make again dresses the same body anew."""
     from services.blob_builder import blob_pieces
     from services.blob_loft import loft_parts
-    from services.blob_texture import ATLAS, atlas_frame, attach_texture, guide_png, stack_atlas
+    from services.blob_texture import ATLAS, atlas_frame, attach_texture, guide_png, neck_skin, stack_atlas
 
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
     parts = loft_parts(lofted["traits"], lofted["layout"])
@@ -219,8 +223,9 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
         png = stack_atlas(painted, head, (guides["body"], guides["head"]))
         frame = atlas_frame([parts[0][0]], lofted["layout"])
-        body["glb"] = attach_texture(body["glb"], png, frame=frame)
-        body["rigged"] = attach_texture(body["rigged"], png, frame=frame)
+        skin = neck_skin(head) if head is not None else None
+        body["glb"] = attach_texture(body["glb"], png, frame=frame, skin=skin)
+        body["rigged"] = attach_texture(body["rigged"], png, frame=frame, skin=skin)
         out["texture_file"] = Path(resolved["texture"]).name
         if head is not None:
             out["face_pose_file"] = _face_pose(workspace_dir, base, head)
