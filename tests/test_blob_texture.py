@@ -37,7 +37,7 @@ def test_a_real_mould_has_atlas_uvs_inside_the_picture_and_the_head_in_its_tiles
     assert {int(u * 3) for u, _v in head_rows} == {0, 1, 2}, "front, side and back tiles are all used"
     face, face_uvs = named["face"]
     assert all(uv[1] >= 0.5 for uv in face_uvs)
-    assert sum(uv[0] < 1 / 3 for uv in face_uvs) > 0.4 * len(face_uvs), "the front of the face patch is in the front tile, its sides in the side tile"
+    assert sum(uv[0] < 1 / 3 for uv in face_uvs) > 0.3 * len(face_uvs), "the front of the face patch is in the front tile, its sides in the side tile"
 
 
 def test_the_guides_are_two_pictures_of_the_halves_and_an_anime_body_has_no_atlas():

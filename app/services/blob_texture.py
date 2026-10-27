@@ -41,7 +41,7 @@ def atlas_frame(meshes, layout=None) -> dict:
 
 def head_tile(normal) -> int:
     """0 front, 1 side (both sides, the left one is the mirror of the right), 2 back: the way the triangle faces."""
-    if normal[2] >= 0.45 or abs(normal[1]) > 0.6:   # the underside of the jaw and the crown take the front tile, skin and hair, not the dark ground
+    if normal[2] >= 0.7 or abs(normal[1]) > 0.6:   # the underside of the jaw and the crown take the front tile, skin and hair, not the dark ground
         return 0
     return 2 if normal[2] <= -0.45 else 1
 

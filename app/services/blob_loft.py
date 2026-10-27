@@ -315,11 +315,14 @@ def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
     _emit(mesh, grid, colors, centers, True, None)
     _cap(mesh, grid[0], colors[0], centers[0], (0.0, -1.0, 0.0))   # the chin is a flat plate, not a point: a man's chin is square
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
-    base = skull_point(L, 0, -36, 1.0)
-    nose = [_st((0, base[1] + ry * 0.03, base[2] - rz * 0.01), rx * 0.03, ry * 0.04, skin), _st((0, base[1] - ry * 0.01, base[2] + rz * 0.03), rx * 0.025, ry * 0.025, skin),
-            _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
-    _tube(mesh, nose, "z", ring=8)
+    if L.get("real"):
+        _real_nose(mesh, L, skin)
+    else:
+        # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
+        base = skull_point(L, 0, -36, 1.0)
+        nose = [_st((0, base[1] + ry * 0.03, base[2] - rz * 0.01), rx * 0.03, ry * 0.04, skin), _st((0, base[1] - ry * 0.01, base[2] + rz * 0.03), rx * 0.025, ry * 0.025, skin),
+                _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
+        _tube(mesh, nose, "z", ring=8)
     # ears at the eye line, as tall as a fifth of the head
     for sign in ((-1, 1) if ears else ()):
         at = skull_point(L, sign * 90, -16, 1.0)
@@ -327,6 +330,19 @@ def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
                _st((at[0] * 1.08, at[1] + ry * 0.02, at[2] - rz * 0.07), rx * 0.1, ry * 0.17, skin),
                _st((at[0] * 1.14, at[1] + ry * 0.02, at[2] - rz * 0.08), rx * 0.01, ry * 0.03, skin)]
         _tube(mesh, ear, "x", ring=8)
+
+
+def _real_nose(mesh: Mesh, L: dict, skin: str) -> None:
+    """A realistic nose: a bridge from between the eyes, a tip that stands out of the face by about a twentieth of the head's height
+    (the side tile's profile has one), nostril wings at the base. Rings along Y, so the side tile sees it as it was painted."""
+    sy = L["sy"]
+    surface = lambda v: skull_point(L, 0, math.degrees(math.asin(2 * v - 1)), 1.0)
+    rows = [(0.47, 0.012, 0.010, 0.000), (0.40, 0.016, 0.022, 0.012), (0.33, 0.020, 0.034, 0.030), (0.29, 0.030, 0.036, 0.034), (0.25, 0.028, 0.026, 0.016)]
+    mesh_stations = []
+    for v, half, depth, out in rows:
+        at = surface(v)
+        mesh_stations.append(_st((0, at[1], at[2] - depth * sy * 0.35 + out * sy), half * sy, depth * sy, skin))
+    _tube(mesh, mesh_stations, "y", ring=10)
 
 
 FACE_YAWS = [-100 + 200.0 * j / 24 for j in range(25)]
