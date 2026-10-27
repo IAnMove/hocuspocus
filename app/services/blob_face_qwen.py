@@ -118,7 +118,7 @@ def _eye_crops(picture: Image.Image, m: dict[str, Any]) -> dict[int, Image.Image
     crops = {}
     for sign, key in ((-1, "left_box"), (1, "right_box")):
         x0, y0, x1, y1 = m[key]
-        mx, my = (x1 - x0) * 0.12, (y1 - y0) * 0.35
+        mx, my = (x1 - x0) * 0.1, (y1 - y0) * 0.2
         box = (max(0, int(x0 - mx)), max(0, int(y0 - my)), min(picture.width, int(x1 + mx)), min(picture.height, int(y1 + my)))
         crop = picture.crop(box).convert("RGBA")
         mask = Image.new("L", crop.size, 0)

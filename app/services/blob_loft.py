@@ -217,15 +217,15 @@ def skull_profile(lat: float) -> tuple[float, float, float, float]:
     phi = math.radians(lat)
     c = math.cos(phi)
     if lat >= 0:
-        width = c * (1.0 + 0.04 * math.sin(phi))
-        back = c * (1.0 + 0.06 * math.sin(phi))
+        width = c * (0.94 + 0.08 * min(1.0, lat / 60.0))            # not a balloon: temples narrower than the crown
+        back = c * (1.08 + 0.02 * math.sin(phi))                      # a longer back of the skull
         brow = 0.08 * math.exp(-((lat - 18) / 14) ** 2)
         front = _lerp(0.86 + brow, c, (lat - 30) / 60) if lat > 30 else 0.86 + brow
         flat = _lerp(0.55, 1.0, (lat - 25) / 50)
         return width, back, front, flat
     u = -lat / 90.0
-    width = c * (1.0 - 0.42 * u ** 1.3)
-    back = c * (1.0 - 0.12 * u)
+    width = c * (0.94 - 0.5 * u ** 1.15)                        # a V from the cheekbones to a small chin
+    back = c * (1.08 - 0.2 * u)
     front = _lerp(0.86, 0.62, u ** 1.2) + 0.08 * max(0.0, u - 0.72) / 0.28
     flat = _lerp(0.55, 0.8, u ** 2)
     return width, back, front, flat

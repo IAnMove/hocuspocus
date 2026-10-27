@@ -107,7 +107,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
     ImageDraw.Draw(shade).rectangle((cx - rx * 1.2, top - ry, cx + rx * 1.2, top + ry * 0.9), fill=(90, 95, 140, 170))
     if art is not None:
         # a painted eye, scaled to the opening's width and centred on it, instead of the drawn white and iris
-        width_px = int(rx * 2 * 1.15)
+        width_px = int(rx * 2 * 1.05)
         scaled = art.resize((width_px, max(1, int(art.height * width_px / max(1, art.width)))), Image.LANCZOS)
         pasted = Image.new("RGBA", layer.size, (0, 0, 0, 0))
         pasted.alpha_composite(scaled, (int(cx - scaled.width / 2), int(o["cy"] - scaled.height / 2)))

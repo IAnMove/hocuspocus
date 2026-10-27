@@ -26,6 +26,8 @@ def hair_mesh(L: dict, hair: dict) -> Mesh:
         return mesh
     head = _Head(L)
     _helmet(mesh, head, color, hairline=34 if style in ("short", "spiky", "bun") else 26)
+    if style != "spiky":
+        _crown(mesh, head, color)
     _STYLES[style](mesh, head, color)
     return mesh
 
@@ -57,8 +59,8 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
                                (full, [hairline + (90 - hairline) * k / 8 for k in range(9)], True)):
         grid, colors = [], []
         for lat in lats:
-            # more volume on the crown: 1.10 outside the skull, 1.16 above 60 degrees
-            out = HELMET + 0.06 * max(0.0, min(1.0, (lat - 60) / 30))
+            # thin at the temples and the nape (no inflated balloon), fuller only toward the crown
+            out = 1.05 + 0.05 * max(0.0, min(1.0, (lat - 30) / 30)) + 0.04 * max(0.0, min(1.0, (lat - 60) / 30))
             ring = [skull_point(head.L, yaw, lat, out) for yaw in yaws]
             if lat >= 89.9:
                 ring = [(0.0, head.cy + head.ry * out, 0.0)] * len(ring)
@@ -76,7 +78,16 @@ def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: 
     curve_tube(mesh, points, radii, color, ring=ring, flat=flat)
 
 
-def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float = 0.75) -> None:
+def _crown(mesh: Mesh, head: _Head, color: str) -> None:
+    """Four wide flat clumps swept back over the crown: the dome's outline breaks into hair, not a cap."""
+    for yaw, lat, lean in ((-35, 62, -0.25), (-12, 70, -0.3), (12, 70, 0.3), (35, 62, 0.25)):
+        root = head.at(yaw, lat, 1.02)
+        pull = head.at(yaw + lean * 20, lat + 18, 1.3)
+        tip = head.at(yaw + lean * 50, min(89, lat + 8), 1.32)
+        _clump(mesh, head, color, root, pull, tip, 0.42, 0.06, flat=0.16)
+
+
+def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 9, length: float = 0.62) -> None:
     """Wide flat strands from the hairline down over the forehead to the brows, overlapping, parted a little to the sides."""
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
@@ -85,7 +96,7 @@ def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float 
         root = head.at(yaw, 56, 1.0)
         pull = head.off(head.at(yaw * 1.05, 30, 1.16), dy=0.02)
         tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.05), dx=u * 0.04)
-        _clump(mesh, head, color, root, pull, tip, 0.5, 0.08, flat=0.10)
+        _clump(mesh, head, color, root, pull, tip, 0.42, 0.08, flat=0.12)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
