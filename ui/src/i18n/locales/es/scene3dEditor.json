@@ -392,7 +392,7 @@
   "rotationX": "Giro X (°)",
   "yaw": "Giro Y (°)",
   "rotationZ": "Giro Z (°)",
-  "keepAssets": "Conservar mis objetos al cambiar de plano",
+  "keepAssets": "Conservar mis objetos al cambiar de plantilla",
   "userTemplates": {
     "title": "Mis plantillas",
     "noDescription": "Cámara, decorado y disposición de un escenario.",
@@ -4224,18 +4224,18 @@
   "shotLibrary": {
     "optionalExamples": "Aquí tienes los tipos de plano avanzados y todos los mundos pixel. Los aspectos adicionales de composiciones repetidas están en Ejemplos y variantes. Los recursos de ejemplo son opcionales.",
     "change": "Cambiar plantilla",
-    "use": "Usar este plano",
+    "use": "Usar esta plantilla",
     "cancel": "Cancelar",
     "close": "Cerrar la biblioteca de planos",
     "examples": "Ejemplos",
     "recent": "Recientes",
     "current": "Actual",
     "pickOne": "Elige un plano para verlo aquí.",
-    "hint": "Doble clic o Intro para usar un plano directamente"
+    "hint": "Doble clic o Intro para usar una plantilla directamente"
   },
   "workspaceTemplates": {
     "title": "Guardadas en este workspace",
-    "help": "Plantillas que un agente, el Wizard o tú guardasteis en este workspace (world3d.templates.user.put). Elige una y pulsa «Usar este plano»: se abre como un plano editable.",
+    "help": "Plantillas que un agente, el Wizard o tú guardasteis en este workspace (world3d.templates.user.put). Elige una y pulsa «Usar esta plantilla»: se abre como un plano editable.",
     "objects_one": "{{count}} objeto",
     "objects_other": "{{count}} objetos",
     "pending_one": "{{count}} hueco vacío",
@@ -4249,7 +4249,7 @@
   },
   "stages": {
     "title": "Escenarios",
-    "help": "Habitaciones y lugares abiertos con marcas para el reparto y cámaras con nombre. Elige uno y pulsa «Usar este plano»: se abre con su sala; después asigna tus personajes y elige una cámara de la sala.",
+    "help": "Habitaciones y lugares abiertos con marcas para el reparto y cámaras con nombre. Elige uno y pulsa «Usar esta plantilla»: se abre con su sala; después asigna tus personajes y elige una cámara de la sala.",
     "loading": "Cargando los escenarios",
     "noWorkspace": "Abre un workspace para ver los escenarios.",
     "error": "No se pudieron cargar los escenarios: {{reason}}",

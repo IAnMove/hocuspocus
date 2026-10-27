@@ -392,7 +392,7 @@
   "rotationX": "Rotation X (°)",
   "yaw": "Rotation Y (°)",
   "rotationZ": "Rotation Z (°)",
-  "keepAssets": "Keep my objects when changing shots",
+  "keepAssets": "Keep my objects when changing templates",
   "userTemplates": {
     "title": "My templates",
     "noDescription": "Camera, set and layout of a scenario.",
@@ -4224,18 +4224,18 @@
   "shotLibrary": {
     "optionalExamples": "Advanced shot types and all Pixel worlds stay here. Additional looks for repeated compositions are under Examples and variants. Example media is optional.",
     "change": "Change template",
-    "use": "Use this shot",
+    "use": "Use this template",
     "cancel": "Cancel",
     "close": "Close the shot library",
     "examples": "Examples",
     "recent": "Recent",
     "current": "Current",
     "pickOne": "Pick a shot to see it here.",
-    "hint": "Double-click or press Enter to use a shot straight away"
+    "hint": "Double-click or press Enter to use a template straight away"
   },
   "workspaceTemplates": {
     "title": "Saved in this workspace",
-    "help": "Templates an agent, the Wizard or you saved in this workspace (world3d.templates.user.put). Pick one and press “Use this shot”: it opens as an editable shot.",
+    "help": "Templates an agent, the Wizard or you saved in this workspace (world3d.templates.user.put). Pick one and press “Use this template”: it opens as an editable shot.",
     "objects_one": "{{count}} object",
     "objects_other": "{{count}} objects",
     "pending_one": "{{count}} empty slot",
@@ -4249,7 +4249,7 @@
   },
   "stages": {
     "title": "Stages",
-    "help": "Rooms and open places with marks for the cast and named cameras. Pick one and press “Use this shot”: it opens with its room, then bind your characters and choose a room camera.",
+    "help": "Rooms and open places with marks for the cast and named cameras. Pick one and press “Use this template”: it opens with its room, then bind your characters and choose a room camera.",
     "loading": "Loading the stages",
     "noWorkspace": "Open a workspace to see the stages.",
     "error": "Could not load the stages: {{reason}}",
