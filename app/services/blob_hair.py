@@ -78,21 +78,21 @@ def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 8, length: float =
     """Wide flat strands from the hairline down over the forehead, overlapping, parted a little toward the sides."""
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
-        yaw = u * 44
-        reach = length * (1.0 if i % 2 else 0.84)   # alternating lengths, so the strands overlap like petals, not slats
-        root = head.at(yaw, 52)
-        pull = head.off(head.at(yaw * 1.1, 22, 1.13), dy=0.04)
-        tip = head.off(head.at(yaw * 1.25, 52 - reach * 90, 1.07), dx=u * 0.05)
-        _clump(mesh, head, color, root, pull, tip, 0.3, 0.06, flat=0.2)
+        yaw = u * 46
+        reach = length * (1.0 if i % 2 else 0.86)   # alternating lengths, so the strands overlap, not slats
+        root = head.at(yaw, 56, 1.0)
+        pull = head.off(head.at(yaw * 1.05, 30, 1.16), dy=0.02)
+        tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.05), dx=u * 0.04)
+        _clump(mesh, head, color, root, pull, tip, 0.34, 0.07, flat=0.18)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
     """One lock in front of each ear. ``length`` is in head heights below the chin (0 ends at the jaw)."""
     for sign in (-1, 1):
-        root = head.at(sign * 60, 34)
-        pull = head.off(head.at(sign * 72, -20, 1.14), dz=0.12)
-        tip = (root[0] + sign * head.rx * 0.08, head.chin - head.ry * length, head.cz + head.rz * 0.2)
-        _clump(mesh, head, color, root, pull, tip, 0.32, 0.1, flat=0.42)
+        root = head.at(sign * 58, 40, 1.0)
+        pull = head.off(head.at(sign * 74, -16, 1.16), dz=0.1)
+        tip = (root[0] + sign * head.rx * 0.1, head.chin - head.ry * length, head.cz + head.rz * 0.18)
+        _clump(mesh, head, color, root, pull, tip, 0.36, 0.12, flat=0.36)
 
 
 def _short(mesh: Mesh, head: _Head, color: str) -> None:
@@ -146,13 +146,14 @@ def _twin_tails(mesh: Mesh, head: _Head, color: str) -> None:
 
 def _spiky(mesh: Mesh, head: _Head, color: str) -> None:
     _fringe(mesh, head, color, count=5, length=0.4)
+    # curved, flattened, tapered clumps that sweep up and back, not cones
     for i in range(10):
         yaw = i * 36 + 18
-        lat = 38 if i % 2 else 58
-        root = head.at(yaw, lat)
-        pull = head.at(yaw, lat + 18, 1.3)
-        tip = head.at(yaw * 1.05, lat + 30, 1.62)
-        _clump(mesh, head, color, root, pull, tip, 0.18, 0.02, flat=0.7)
+        lat = 36 if i % 2 else 56
+        root = head.at(yaw, lat, 1.0)
+        pull = head.at(yaw + 10, lat + 22, 1.28)
+        tip = head.at(yaw + 26, lat + 26, 1.58)
+        _clump(mesh, head, color, root, pull, tip, 0.3, 0.04, flat=0.35)
 
 
 def _ponytail(mesh: Mesh, head: _Head, color: str) -> None:
