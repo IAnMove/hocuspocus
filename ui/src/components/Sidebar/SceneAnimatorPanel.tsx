@@ -88,9 +88,9 @@ import { listenForAgentSceneControl, listenForAgentSceneRhythm, listenForAgentSc
 
 type ParallaxPreset = 'background' | 'midground' | 'foreground'
 type PresetCategory = 'classic' | 'game' | 'cinematic'
-type Preset = { id: string; label: string; category: PresetCategory; start: Point; end: Point; duration: number; spin: boolean; curve: SceneCurve; requiresTarget?: boolean; preview: string; poster: string }
-type CameraPreset = { id: string; label: string; start: Point; end: Point; duration: number; curve: SceneCurve; shake?: { amount: number; frequency: number; seed?: number } }
-type PhotoMotionPreset = CameraPreset & { description: string }
+type Preset = { id: string; category: PresetCategory; start: Point; end: Point; duration: number; spin: boolean; curve: SceneCurve; requiresTarget?: boolean; preview: string; poster: string }
+type CameraPreset = { id: string; start: Point; end: Point; duration: number; curve: SceneCurve; shake?: { amount: number; frequency: number; seed?: number } }
+type PhotoMotionPreset = CameraPreset
 type Gesture = { id: string; mode: 'move' | 'resize' | 'orbit'; startX: number; startY: number; x: number; y: number; scale: number; rotationX: number; rotationY: number }
 type ModelViewerAnimationElement = HTMLElement & { loaded?: boolean; availableAnimations?: string[]; animationName?: string; currentTime: number; duration: number; pause: () => void }
 type SpeechRecognizer = { lang: string; continuous: boolean; interimResults: boolean; start: () => void; stop: () => void; onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null; onerror: (() => void) | null; onend: (() => void) | null }
@@ -99,47 +99,47 @@ type SpeechRecognizerConstructor = new () => SpeechRecognizer
 const makePoint = (x: number, y: number, scale: number): Point => ({ x, y, scale })
 const scene3dKey = (key: string) => key as ParseKeys<'scene3d'>
 const CAMERA_PRESETS: CameraPreset[] = [
-  { id: 'camera-locked', label: 'Locked shot', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'linear' },
-  { id: 'camera-pan-right', label: 'Pan right', start: { x: 35, y: 50, scale: 1, rotation: 0 }, end: { x: 65, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
-  { id: 'camera-pan-left', label: 'Pan left', start: { x: 65, y: 50, scale: 1, rotation: 0 }, end: { x: 35, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
-  { id: 'camera-push-in', label: 'Slow push-in', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1.55, rotation: 0 }, duration: 6, curve: 'ease' },
-  { id: 'camera-pull-out', label: 'Reveal pull-out', start: { x: 50, y: 50, scale: 1.6, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
-  { id: 'camera-crane-up', label: 'Crane up', start: { x: 50, y: 68, scale: 1.15, rotation: 0 }, end: { x: 50, y: 34, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
-  { id: 'camera-dutch-drift', label: 'Dutch drift', start: { x: 44, y: 54, scale: 1.05, rotation: -6 }, end: { x: 57, y: 46, scale: 1.28, rotation: 7 }, duration: 6, curve: 'ease' },
-  { id: 'camera-handheld', label: 'Handheld · shake', start: { x: 50, y: 50, scale: 1.08, rotation: 0 }, end: { x: 51, y: 49, scale: 1.12, rotation: .6 }, duration: 6, curve: 'ease', shake: { amount: .75, frequency: 3.2, seed: 1.7 } },
-  { id: 'camera-whip-pan', label: 'Whip pan · shake', start: { x: 28, y: 50, scale: 1.18, rotation: -2 }, end: { x: 72, y: 50, scale: 1.05, rotation: 2 }, duration: 1.1, curve: 'dramatic', shake: { amount: .35, frequency: 7, seed: 3.1 } },
-  { id: 'camera-dolly', label: 'Dolly reveal', start: { x: 36, y: 57, scale: 1.5, rotation: -2 }, end: { x: 58, y: 46, scale: .92, rotation: 0 }, duration: 5.5, curve: 'ease' },
+  { id: 'camera-locked', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'linear' },
+  { id: 'camera-pan-right', start: { x: 35, y: 50, scale: 1, rotation: 0 }, end: { x: 65, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
+  { id: 'camera-pan-left', start: { x: 65, y: 50, scale: 1, rotation: 0 }, end: { x: 35, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
+  { id: 'camera-push-in', start: { x: 50, y: 50, scale: 1, rotation: 0 }, end: { x: 50, y: 50, scale: 1.55, rotation: 0 }, duration: 6, curve: 'ease' },
+  { id: 'camera-pull-out', start: { x: 50, y: 50, scale: 1.6, rotation: 0 }, end: { x: 50, y: 50, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
+  { id: 'camera-crane-up', start: { x: 50, y: 68, scale: 1.15, rotation: 0 }, end: { x: 50, y: 34, scale: 1, rotation: 0 }, duration: 5, curve: 'ease' },
+  { id: 'camera-dutch-drift', start: { x: 44, y: 54, scale: 1.05, rotation: -6 }, end: { x: 57, y: 46, scale: 1.28, rotation: 7 }, duration: 6, curve: 'ease' },
+  { id: 'camera-handheld', start: { x: 50, y: 50, scale: 1.08, rotation: 0 }, end: { x: 51, y: 49, scale: 1.12, rotation: .6 }, duration: 6, curve: 'ease', shake: { amount: .75, frequency: 3.2, seed: 1.7 } },
+  { id: 'camera-whip-pan', start: { x: 28, y: 50, scale: 1.18, rotation: -2 }, end: { x: 72, y: 50, scale: 1.05, rotation: 2 }, duration: 1.1, curve: 'dramatic', shake: { amount: .35, frequency: 7, seed: 3.1 } },
+  { id: 'camera-dolly', start: { x: 36, y: 57, scale: 1.5, rotation: -2 }, end: { x: 58, y: 46, scale: .92, rotation: 0 }, duration: 5.5, curve: 'ease' },
 ]
 const PHOTO_MOTION_PRESETS: PhotoMotionPreset[] = [
-  { id: 'photo-documentary-push', label: 'Documentary push-in', description: 'A restrained slow move toward the subject.', start: { x: 50, y: 51, scale: 1.04, rotation: 0 }, end: { x: 48, y: 47, scale: 1.3, rotation: 0 }, duration: 7, curve: 'ease' },
-  { id: 'photo-ken-burns-left', label: 'Ken Burns · left', description: 'Classic archival pan from right to left.', start: { x: 43, y: 50, scale: 1.18, rotation: 0 }, end: { x: 57, y: 50, scale: 1.24, rotation: 0 }, duration: 8, curve: 'ease' },
-  { id: 'photo-ken-burns-right', label: 'Ken Burns · right', description: 'Classic archival pan from left to right.', start: { x: 57, y: 50, scale: 1.18, rotation: 0 }, end: { x: 43, y: 50, scale: 1.24, rotation: 0 }, duration: 8, curve: 'ease' },
-  { id: 'photo-portrait-rise', label: 'Portrait rise', description: 'Starts low and slowly discovers the face.', start: { x: 50, y: 58, scale: 1.12, rotation: 0 }, end: { x: 50, y: 42, scale: 1.3, rotation: 0 }, duration: 7, curve: 'ease' },
-  { id: 'photo-reveal-pullback', label: 'Reveal pull-back', description: 'Opens from a detail into the full photograph.', start: { x: 52, y: 48, scale: 1.42, rotation: 0 }, end: { x: 50, y: 50, scale: 1.06, rotation: 0 }, duration: 7, curve: 'ease' },
-  { id: 'photo-diagonal-discovery', label: 'Diagonal discovery', description: 'Elegant diagonal travel for landscapes and art.', start: { x: 42, y: 58, scale: 1.08, rotation: 0 }, end: { x: 58, y: 42, scale: 1.32, rotation: 0 }, duration: 7.5, curve: 'ease' },
-  { id: 'photo-intimate-closeup', label: 'Intimate close-up', description: 'A gentle asymmetric move for emotional beats.', start: { x: 51, y: 53, scale: 1.1, rotation: 0 }, end: { x: 46, y: 45, scale: 1.43, rotation: 0 }, duration: 8, curve: 'ease' },
-  { id: 'photo-dutch-tension', label: 'Dutch tension', description: 'Slow roll and push for mystery or conflict.', start: { x: 47, y: 53, scale: 1.12, rotation: -2.5 }, end: { x: 54, y: 47, scale: 1.34, rotation: 3 }, duration: 6.5, curve: 'ease' },
-  { id: 'photo-handheld-memory', label: 'Memory drift', description: 'Subtle smooth drift for memories and reportage.', start: { x: 50, y: 51, scale: 1.12, rotation: -.3 }, end: { x: 49, y: 48, scale: 1.22, rotation: .4 }, duration: 7, curve: 'ease' },
-  { id: 'photo-rostrum-scan', label: 'Rostrum scan', description: 'A measured top-to-bottom move for documents and maps.', start: { x: 50, y: 40, scale: 1.26, rotation: 0 }, end: { x: 50, y: 60, scale: 1.26, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-documentary-push', start: { x: 50, y: 51, scale: 1.04, rotation: 0 }, end: { x: 48, y: 47, scale: 1.3, rotation: 0 }, duration: 7, curve: 'ease' },
+  { id: 'photo-ken-burns-left', start: { x: 43, y: 50, scale: 1.18, rotation: 0 }, end: { x: 57, y: 50, scale: 1.24, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-ken-burns-right', start: { x: 57, y: 50, scale: 1.18, rotation: 0 }, end: { x: 43, y: 50, scale: 1.24, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-portrait-rise', start: { x: 50, y: 58, scale: 1.12, rotation: 0 }, end: { x: 50, y: 42, scale: 1.3, rotation: 0 }, duration: 7, curve: 'ease' },
+  { id: 'photo-reveal-pullback', start: { x: 52, y: 48, scale: 1.42, rotation: 0 }, end: { x: 50, y: 50, scale: 1.06, rotation: 0 }, duration: 7, curve: 'ease' },
+  { id: 'photo-diagonal-discovery', start: { x: 42, y: 58, scale: 1.08, rotation: 0 }, end: { x: 58, y: 42, scale: 1.32, rotation: 0 }, duration: 7.5, curve: 'ease' },
+  { id: 'photo-intimate-closeup', start: { x: 51, y: 53, scale: 1.1, rotation: 0 }, end: { x: 46, y: 45, scale: 1.43, rotation: 0 }, duration: 8, curve: 'ease' },
+  { id: 'photo-dutch-tension', start: { x: 47, y: 53, scale: 1.12, rotation: -2.5 }, end: { x: 54, y: 47, scale: 1.34, rotation: 3 }, duration: 6.5, curve: 'ease' },
+  { id: 'photo-handheld-memory', start: { x: 50, y: 51, scale: 1.12, rotation: -.3 }, end: { x: 49, y: 48, scale: 1.22, rotation: .4 }, duration: 7, curve: 'ease' },
+  { id: 'photo-rostrum-scan', start: { x: 50, y: 40, scale: 1.26, rotation: 0 }, end: { x: 50, y: 60, scale: 1.26, rotation: 0 }, duration: 8, curve: 'ease' },
 ]
 const PRESETS: Preset[] = ([
-  ['turntable', 'Product turntable', 50, 50, 50, 50, .8, .8, 5, true, 'linear'], ['meteor', 'Meteor fly-by', -10, 82, 112, 18, .22, .65, 2, true, 'dramatic'], ['space-cruise', 'Spacecraft cruise', 8, 54, 92, 43, .48, .68, 5, true, 'ease'], ['hover', 'Hovering reveal', 50, 54, 50, 46, .7, .76, 4, true, 'ease'], ['landing', 'Landing', 50, -12, 50, 60, .2, .82, 4, false, 'bounce'], ['liftoff', 'Lift-off', 50, 68, 54, -15, .82, .28, 3, false, 'dramatic'], ['zoom-in', 'Hero zoom in', 50, 50, 50, 50, .18, 1.35, 3, true, 'dramatic'], ['zoom-out', 'Retreat into distance', 50, 50, 50, 50, 1.25, .18, 3, true, 'ease'], ['drift-right', 'Slow drift right', 25, 50, 75, 50, .68, .68, 6, false, 'linear'], ['drift-left', 'Slow drift left', 75, 50, 25, 50, .68, .68, 6, false, 'linear'], ['diagonal-rise', 'Diagonal rise', 20, 82, 78, 22, .38, .82, 4, true, 'ease'], ['diagonal-drop', 'Diagonal drop', 78, 16, 24, 84, .82, .35, 3, true, 'dramatic'], ['pop', 'Pop into frame', 50, 50, 50, 50, .05, .85, 1, true, 'bounce'], ['glide', 'Low glide', -8, 72, 108, 70, .4, .52, 4, false, 'ease'], ['pass-camera', 'Pass the camera', 16, 50, 90, 50, .18, 1.5, 3, true, 'dramatic'], ['vibrate', 'Nave vibrando', 49, 51, 51, 49, .72, .75, 2, false, 'bounce'], ['orbit-sweep', 'Orbit sweep', 18, 70, 86, 30, .32, .9, 5, true, 'ease'], ['center-reveal', 'Center reveal', 50, 105, 50, 52, .35, .9, 3, true, 'ease'], ['exit-frame', 'Emergency exit', 50, 50, 120, -10, .8, .25, 2, true, 'dramatic'], ['floating-logo', 'Floating logo', 50, 45, 50, 55, .72, .72, 4, true, 'ease'],
-].map(([id, label, sx, sy, ex, ey, ss, es, duration, spin, curve]) => ({ id: id as string, label: label as string, category: 'classic' as const, start: makePoint(sx as number, sy as number, ss as number), end: makePoint(ex as number, ey as number, es as number), duration: duration as number, spin: spin as boolean, curve: curve as SceneCurve })) as Array<Omit<Preset, 'preview' | 'poster'>>).concat([
-  { id: 'orbit-layer', label: 'Orbit around another layer', category: 'cinematic', start: makePoint(50, 50, .45), end: makePoint(50, 50, .45), duration: 5, spin: true, curve: 'linear', requiresTarget: true },
-  { id: 'game-spawn', label: 'Game spawn', category: 'game', start: { x: 50, y: 55, scale: .05, opacity: 0 }, end: { x: 50, y: 50, scale: .8, opacity: 1 }, duration: 1.2, spin: true, curve: 'bounce' },
-  { id: 'loot-drop', label: 'Loot drop', category: 'game', start: makePoint(50, -18, .35), end: makePoint(50, 72, .72), duration: 1.4, spin: true, curve: 'bounce' },
-  { id: 'item-pickup', label: 'Item pickup', category: 'game', start: { x: 50, y: 68, scale: .72, opacity: 1 }, end: { x: 50, y: 20, scale: .12, opacity: 0 }, duration: .9, spin: true, curve: 'dramatic' },
-  { id: 'projectile-launch', label: 'Projectile launch', category: 'game', start: makePoint(-12, 58, .16), end: makePoint(115, 42, .5), duration: .75, spin: true, curve: 'dramatic' },
-  { id: 'boss-entrance', label: 'Boss entrance', category: 'game', start: { x: 50, y: -20, scale: .18, opacity: 0 }, end: { x: 50, y: 58, scale: 1.25, opacity: 1 }, duration: 2.2, spin: false, curve: 'bounce' },
-  { id: 'dodge-dash', label: 'Dodge dash', category: 'game', start: makePoint(30, 55, .82), end: makePoint(78, 50, .68), duration: .55, spin: false, curve: 'dramatic' },
-  { id: 'hit-knockback', label: 'Hit knockback', category: 'game', start: makePoint(55, 48, .88), end: makePoint(32, 58, .62), duration: .65, spin: true, curve: 'bounce' },
-  { id: 'power-up-rise', label: 'Power-up rise', category: 'game', start: { x: 50, y: 78, scale: .3, opacity: .25 }, end: { x: 50, y: 42, scale: 1.05, opacity: 1 }, duration: 1.8, spin: true, curve: 'bounce' },
-  { id: 'cinematic-push', label: 'Cinematic push-in', category: 'cinematic', start: makePoint(38, 55, .28), end: makePoint(54, 48, 1.18), duration: 5.5, spin: false, curve: 'ease' },
-  { id: 'hero-flyover', label: 'Hero flyover', category: 'cinematic', start: makePoint(-18, 22, .22), end: makePoint(118, 72, 1.15), duration: 4.2, spin: true, curve: 'ease' },
-  { id: 'fade-reveal', label: 'Fade reveal', category: 'cinematic', start: { x: 50, y: 50, scale: .78, opacity: 0 }, end: { x: 50, y: 50, scale: .92, opacity: 1 }, duration: 2.5, spin: false, curve: 'ease' },
-  { id: 'foreground-parallax', label: 'Foreground parallax', category: 'cinematic', start: makePoint(-28, 50, 1.55), end: makePoint(128, 50, 1.55), duration: 7, spin: false, curve: 'linear' },
-  { id: 'crane-reveal', label: 'Crane reveal', category: 'cinematic', start: { x: 50, y: 112, scale: 1.3, opacity: .2 }, end: { x: 50, y: 45, scale: .72, opacity: 1 }, duration: 4.5, spin: false, curve: 'ease' },
-  { id: 'portal-arrival', label: 'Portal arrival', category: 'cinematic', start: { x: 50, y: 50, scale: .02, opacity: 0 }, end: { x: 50, y: 50, scale: 1, opacity: 1 }, duration: 1.6, spin: true, curve: 'dramatic' },
+  ['turntable', 50, 50, 50, 50, .8, .8, 5, true, 'linear'], ['meteor', -10, 82, 112, 18, .22, .65, 2, true, 'dramatic'], ['space-cruise', 8, 54, 92, 43, .48, .68, 5, true, 'ease'], ['hover', 50, 54, 50, 46, .7, .76, 4, true, 'ease'], ['landing', 50, -12, 50, 60, .2, .82, 4, false, 'bounce'], ['liftoff', 50, 68, 54, -15, .82, .28, 3, false, 'dramatic'], ['zoom-in', 50, 50, 50, 50, .18, 1.35, 3, true, 'dramatic'], ['zoom-out', 50, 50, 50, 50, 1.25, .18, 3, true, 'ease'], ['drift-right', 25, 50, 75, 50, .68, .68, 6, false, 'linear'], ['drift-left', 75, 50, 25, 50, .68, .68, 6, false, 'linear'], ['diagonal-rise', 20, 82, 78, 22, .38, .82, 4, true, 'ease'], ['diagonal-drop', 78, 16, 24, 84, .82, .35, 3, true, 'dramatic'], ['pop', 50, 50, 50, 50, .05, .85, 1, true, 'bounce'], ['glide', -8, 72, 108, 70, .4, .52, 4, false, 'ease'], ['pass-camera', 16, 50, 90, 50, .18, 1.5, 3, true, 'dramatic'], ['vibrate', 49, 51, 51, 49, .72, .75, 2, false, 'bounce'], ['orbit-sweep', 18, 70, 86, 30, .32, .9, 5, true, 'ease'], ['center-reveal', 50, 105, 50, 52, .35, .9, 3, true, 'ease'], ['exit-frame', 50, 50, 120, -10, .8, .25, 2, true, 'dramatic'], ['floating-logo', 50, 45, 50, 55, .72, .72, 4, true, 'ease'],
+].map(([id, sx, sy, ex, ey, ss, es, duration, spin, curve]) => ({ id: id as string, category: 'classic' as const, start: makePoint(sx as number, sy as number, ss as number), end: makePoint(ex as number, ey as number, es as number), duration: duration as number, spin: spin as boolean, curve: curve as SceneCurve })) as Array<Omit<Preset, 'preview' | 'poster'>>).concat([
+  { id: 'orbit-layer', category: 'cinematic', start: makePoint(50, 50, .45), end: makePoint(50, 50, .45), duration: 5, spin: true, curve: 'linear', requiresTarget: true },
+  { id: 'game-spawn', category: 'game', start: { x: 50, y: 55, scale: .05, opacity: 0 }, end: { x: 50, y: 50, scale: .8, opacity: 1 }, duration: 1.2, spin: true, curve: 'bounce' },
+  { id: 'loot-drop', category: 'game', start: makePoint(50, -18, .35), end: makePoint(50, 72, .72), duration: 1.4, spin: true, curve: 'bounce' },
+  { id: 'item-pickup', category: 'game', start: { x: 50, y: 68, scale: .72, opacity: 1 }, end: { x: 50, y: 20, scale: .12, opacity: 0 }, duration: .9, spin: true, curve: 'dramatic' },
+  { id: 'projectile-launch', category: 'game', start: makePoint(-12, 58, .16), end: makePoint(115, 42, .5), duration: .75, spin: true, curve: 'dramatic' },
+  { id: 'boss-entrance', category: 'game', start: { x: 50, y: -20, scale: .18, opacity: 0 }, end: { x: 50, y: 58, scale: 1.25, opacity: 1 }, duration: 2.2, spin: false, curve: 'bounce' },
+  { id: 'dodge-dash', category: 'game', start: makePoint(30, 55, .82), end: makePoint(78, 50, .68), duration: .55, spin: false, curve: 'dramatic' },
+  { id: 'hit-knockback', category: 'game', start: makePoint(55, 48, .88), end: makePoint(32, 58, .62), duration: .65, spin: true, curve: 'bounce' },
+  { id: 'power-up-rise', category: 'game', start: { x: 50, y: 78, scale: .3, opacity: .25 }, end: { x: 50, y: 42, scale: 1.05, opacity: 1 }, duration: 1.8, spin: true, curve: 'bounce' },
+  { id: 'cinematic-push', category: 'cinematic', start: makePoint(38, 55, .28), end: makePoint(54, 48, 1.18), duration: 5.5, spin: false, curve: 'ease' },
+  { id: 'hero-flyover', category: 'cinematic', start: makePoint(-18, 22, .22), end: makePoint(118, 72, 1.15), duration: 4.2, spin: true, curve: 'ease' },
+  { id: 'fade-reveal', category: 'cinematic', start: { x: 50, y: 50, scale: .78, opacity: 0 }, end: { x: 50, y: 50, scale: .92, opacity: 1 }, duration: 2.5, spin: false, curve: 'ease' },
+  { id: 'foreground-parallax', category: 'cinematic', start: makePoint(-28, 50, 1.55), end: makePoint(128, 50, 1.55), duration: 7, spin: false, curve: 'linear' },
+  { id: 'crane-reveal', category: 'cinematic', start: { x: 50, y: 112, scale: 1.3, opacity: .2 }, end: { x: 50, y: 45, scale: .72, opacity: 1 }, duration: 4.5, spin: false, curve: 'ease' },
+  { id: 'portal-arrival', category: 'cinematic', start: { x: 50, y: 50, scale: .02, opacity: 0 }, end: { x: 50, y: 50, scale: 1, opacity: 1 }, duration: 1.6, spin: true, curve: 'dramatic' },
 ]).map(preset => ({ ...preset, preview: `/preset-previews/${preset.id}.webm`, poster: `/preset-previews/${preset.id}.webp` }))
 
 const DEFAULT_COMPOSITION: NonNullable<Scene['composition']> = { showGrid: false, gridSize: 10, snap: false, safeArea: 'none' }
@@ -1061,7 +1061,7 @@ export function SceneAnimatorPanel() {
           transform: { x: 50, y: 50, scale: 1, opacity: 1, rotation: 0 },
           animation: { start: makePoint(50, 50, 1), end: makePoint(50, 50, 1), duration: preset.duration, curve: preset.curve },
         }),
-        name: `Photo camera · ${t(scene3dKey(`cameraPresets.${preset.id}`))}`,
+        name: t('animator.photoCamera', { label: t(scene3dKey(`cameraPresets.${preset.id}`)) }),
         visible: true,
         relationship: undefined,
         transform: { x: preset.start.x, y: preset.start.y, scale: preset.start.scale, opacity: 1, rotation: preset.start.rotation ?? 0 },
@@ -1150,7 +1150,7 @@ export function SceneAnimatorPanel() {
     updateScene(current => ({
       ...current,
       layers: current.layers
-        .filter(layer => !(layer.type === 'camera' && layer.name === `Photo camera · ${t(scene3dKey(`cameraPresets.${preset.id}`))}`))
+        .filter(layer => !(layer.type === 'camera' && layer.name === t('animator.photoCamera', { label: t(scene3dKey(`cameraPresets.${preset.id}`)) })))
         .map(layer => layer.id === photoId ? {
           ...layer,
           animation: {
@@ -1308,7 +1308,7 @@ export function SceneAnimatorPanel() {
           ...event,
           ...patch,
           time: Math.max(0, Math.min(layer.animation.duration, finiteNumber(patch.time, event.time))),
-          name: patch.name === undefined ? event.name : patch.name.trim().slice(0, 100) || 'Event',
+          name: patch.name === undefined ? event.name : patch.name.trim().slice(0, 100) || t('animator.defaultEvent'),
           payload: patch.payload === undefined ? event.payload : patch.payload.slice(0, 2000) || undefined,
         } : event).sort((a, b) => a.time - b.time),
       },
@@ -1377,7 +1377,7 @@ export function SceneAnimatorPanel() {
       const previousObjectUrls = new Set(sceneRef.current.layers.flatMap(layer => [layer.source, layer.thumbnail].filter((value): value is string => Boolean(value?.startsWith('blob:')))))
       previousObjectUrls.forEach(url => URL.revokeObjectURL(url))
       const missingAssets = layers.filter(layer => layer.type !== 'camera' && layer.missingAsset).length
-      generationRef.current += 1; pendingBindRef.current = null; localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, texts: parseKineticTexts(incoming.texts), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : 'Imported scene', width, height, fps: canonicalSceneFps(incoming.fps), duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `${t('animator.imported', { count: layers.length })}${missingAssets ? t('animator.reassignMissing', { count: missingAssets }) : ''}`); setJsonOpen(false)
+      generationRef.current += 1; pendingBindRef.current = null; localFilesRef.current = {}; pastScenesRef.current = []; futureScenesRef.current = []; lastHistoryAtRef.current = 0; replaceScene({ ...blankScene(), ...incoming, texts: parseKineticTexts(incoming.texts), name: typeof incoming.name === 'string' && incoming.name.trim() ? incoming.name : t('animator.importedScene'), width, height, fps: canonicalSceneFps(incoming.fps), duration, layers, composition }); setHistoryRevision(value => value + 1); setSelectedId(layers[0]?.id ?? null); setSelectedKeyframeId(null); setSelectedEventId(null); setProgress(0); setMessage(successMessage ?? `${t('animator.imported', { count: layers.length })}${missingAssets ? t('animator.reassignMissing', { count: missingAssets }) : ''}`); setJsonOpen(false)
       return true
     } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidSceneJson')); return false }
   }
@@ -2937,7 +2937,7 @@ export function SceneAnimatorPanel() {
         <input ref={sceneInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void importSceneFile(file) }} />
         <button onClick={() => setJsonOpen(value => !value)} className="w-full rounded border border-border bg-bg-primary py-1.5 text-[10px] flex justify-center gap-1"><FileJson size={11} /> {jsonOpen ? t('animator.closeJson') : t('animator.jsonTools')}</button>
         {jsonOpen && <div className="space-y-1.5"><textarea value={motionText} onChange={event => setMotionText(event.target.value)} placeholder={t('animator.pasteJson')} rows={4} className="w-full rounded border border-border bg-bg-primary p-1.5 text-[9px] font-mono" /><div className="flex gap-1.5"><button disabled={!selected || !motionText.trim()} title={firstControlReason([[!selected, 'disabled.selectLayer'], [!motionText.trim(), 'disabled.writeMotion']])} onClick={() => { try { applyMotion(JSON.parse(motionText.replace(/^\uFEFF/, '').trim())); setMessage(t('animator.movementApplied')) } catch (error) { setMessage(error instanceof Error ? error.message : t('animator.invalidMotionJson')) } }} className="rounded bg-accent-blue px-2 py-1 text-[10px] text-white disabled:opacity-40">{t('animator.applyMovement')}</button><button onClick={() => motionInputRef.current?.click()} className="rounded border border-border px-2 py-1 text-[10px]">{t('animator.loadMovement')}</button></div><input ref={motionInputRef} type="file" accept="application/json,.json" className="hidden" onChange={event => { const file = event.target.files?.[0]; event.currentTarget.value = ''; if (file) void loadMotionFile(file) }} /></div>}
-        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">Return only valid HocusPocus Scene Animator motion JSON.{`\n`}Use start/end x and y from 0 to 100, start/end scale,{`\n`}duration in seconds, curve as linear/ease/dramatic/bounce,{`\n`}and optional spin plus rotationSpeed. For multi-step motion, add keyframes with id, time, x, y, scale, opacity, rotation and curve. Optional events use id, local time, name and a plain-text payload.{`\n`}Do not include Markdown or explanations.{`\n\n`}{'{"version":1,"motion":{"start":{"x":10,"y":70,"scale":0.2},"end":{"x":90,"y":30,"scale":0.8},"duration":3,"curve":"dramatic","spin":true,"rotationSpeed":240}}'}</div>
+        <div className="rounded border border-border bg-bg-primary p-2 text-[9px] text-text-muted whitespace-pre-wrap">{t('animator.motionJsonHelp')}</div>
       </div>
       {message && <p className="text-[10px] text-text-secondary">{message}</p>}
     </aside>
