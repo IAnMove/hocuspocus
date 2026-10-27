@@ -29,8 +29,8 @@ export function hairStrandPixels(): Uint8Array {
   const pixels = new Uint8Array(STRAND_WIDTH * STRAND_HEIGHT * 4)
   for (let y = 0; y < STRAND_HEIGHT; y++) {
     const v = y / (STRAND_HEIGHT - 1)
-    const bend = Math.max(0, (v - 0.3) / 0.7)
-    const envelope = 1 - 0.88 * bend * bend * (3 - 2 * bend)
+    const bend = Math.max(0, (v - 0.5) / 0.5)
+    const envelope = 1 - 0.8 * bend * bend * (3 - 2 * bend)
     for (let x = 0; x < STRAND_WIDTH; x++) {
       const strand = strands[Math.floor(x / STRAND)]
       const across = Math.abs(2 * (x + 0.5) / STRAND_WIDTH - 1)

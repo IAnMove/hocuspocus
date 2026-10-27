@@ -100,7 +100,7 @@ def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: 
     (narrow at the very root, so it vanishes under the hair above). A thick lock (``flat`` 0.5 or more: a tail, a ponytail)
     is two cards crossed, so it has volume from every side."""
     points = bezier(root, pull, tip, _SAMPLES)
-    widths = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
+    widths = [1.35 * head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
     widths[-1] = max(widths[-1], head.rx * 0.012)
     _card(mesh, head, color, points, widths, 0.0)
     if flat >= 0.5:
