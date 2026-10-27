@@ -1238,5 +1238,248 @@
     "queueScopeActive": "activas",
     "queueScopeAll": "todas"
   },
-  "untitledScene": "Escena sin título"
+  "untitledScene": "Escena sin título",
+  "narrativeTemplates": {
+    "inner-thought": {
+      "title": "Pensamiento interior",
+      "description": "Plano medio corto en tres cuartos para voz en off y un momento contemplativo."
+    },
+    "hero-arrival": {
+      "title": "Llegada del héroe",
+      "description": "Una entrada que se asienta en una pose viva."
+    },
+    "character-turntable": {
+      "title": "Presentación del personaje",
+      "description": "Un revelado controlado de la silueta y el vestuario."
+    },
+    "silent-reaction": {
+      "title": "Reacción en silencio",
+      "description": "Plano medio corto contenido para escuchar, mostrar resolución o sostener una reacción."
+    },
+    "dialogue-medium-single": {
+      "title": "Plano medio de diálogo",
+      "description": "Plano de cintura para arriba: el plano de trabajo para la interpretación hablada y el gesto."
+    },
+    "emotional-close-up": {
+      "title": "Primer plano emocional",
+      "description": "Énfasis de cabeza y hombros para un momento emocional preciso."
+    },
+    "american-action-frame": {
+      "title": "Plano americano de acción",
+      "description": "Encuadre de acción a medio muslo: la pose dinámica, el accesorio y el entorno se leen juntos."
+    },
+    "profile-listen": {
+      "title": "Escucha de perfil",
+      "description": "Plano de escucha en tres cuartos, con espacio limpio en la mirada para alguien fuera de cuadro."
+    },
+    "low-angle-hero": {
+      "title": "Héroe en contrapicado",
+      "description": "Plano contrapicado estable para la resolución, la amenaza o una declaración decisiva."
+    },
+    "high-angle-isolation": {
+      "title": "Aislamiento en picado",
+      "description": "Plano picado sereno para la duda, la vulnerabilidad o una pausa reflexiva."
+    },
+    "cutout-dialogue-hold": {
+      "title": "Diálogo de recorte sostenido",
+      "description": "Diálogo limitado de recorte: pose sostenida, cambios mínimos y cámara fija."
+    },
+    "cutout-reaction-snap": {
+      "title": "Reacción de recorte en corte",
+      "description": "Reacción limitada de recorte: pausa, un corte breve y otra pose sostenida."
+    },
+    "two-shot-master": {
+      "title": "Plano máster a dos",
+      "description": "Un plano general estable a dos para la geografía del diálogo y el montaje."
+    },
+    "over-shoulder-dialogue": {
+      "title": "Diálogo por encima del hombro",
+      "description": "Un plano por encima del hombro con dos recursos: un personaje enmarca el plano medio corto del otro."
+    },
+    "reverse-over-shoulder": {
+      "title": "Contraplano por encima del hombro",
+      "description": "El ángulo complementario; intercambia los personajes para completar la cobertura."
+    },
+    "pov-detail-glance": {
+      "title": "Mirada de detalle en subjetiva",
+      "description": "Un inserto de aspecto subjetivo para una pista o un objeto, listo para enlazar el diálogo."
+    },
+    "dutch-tension": {
+      "title": "Tensión en ángulo holandés",
+      "description": "Un encuadre inclinado controlado para la inquietud, la revelación o el desequilibrio cómico."
+    },
+    "foreground-reveal": {
+      "title": "Revelado por primer término",
+      "description": "El sujeto se descubre a través de un oclusor opcional en primer término."
+    },
+    "cutout-talking-head": {
+      "title": "Cabeza parlante de recorte",
+      "description": "Diálogo de recorte limitado, con capas separadas de boca abierta y cerrada y pequeños cortes de cabeza."
+    },
+    "cutout-speaking-blink": {
+      "title": "Interpretación hablada de recorte",
+      "description": "Interpretación de recorte limitada, con aleteo de boca, capa de parpadeo y cortes más claros de la pose de la cabeza."
+    },
+    "dream-orbit": {
+      "title": "Órbita onírica",
+      "description": "Un plano arqueado y luminoso del mundo interior."
+    },
+    "portal-arrival": {
+      "title": "Portal / invocación",
+      "description": "Revelado de un personaje con un accesorio mágico o de ciencia ficción."
+    },
+    "icon-reveal": {
+      "title": "Revelado de objeto icónico",
+      "description": "Un inserto de reliquia, arma u objeto presentado como producto."
+    },
+    "detail-insert": {
+      "title": "Inserto de detalle",
+      "description": "Un inserto controlado, casi macro, para una pista, un objeto en la mano o un detalle narrativo."
+    },
+    "place-establishing": {
+      "title": "Localización de establecimiento",
+      "description": "Un lugar se descubre con paralaje y atmósfera."
+    },
+    "memory-drift": {
+      "title": "Memoria / recuerdo",
+      "description": "Un plano medio corto suave de un recuerdo, con un etalonaje que cambia."
+    },
+    "surreal-transit": {
+      "title": "Tránsito surrealista",
+      "description": "Movimiento independiente del sujeto y del mundo para los viajes."
+    },
+    "run-travel-parallax": {
+      "title": "Paralaje de carrera / viaje",
+      "description": "Una ilusión de movimiento estilizada; no inventa un esqueleto de carrera."
+    }
+  },
+  "rigCatalog": {
+    "profiles": {
+      "prop": {
+        "label": "Objeto / accesorio",
+        "description": "Objetos sueltos, logotipos y piezas independientes que se deforman con suavidad."
+      },
+      "vehicle": {
+        "label": "Vehículo / mecánico",
+        "description": "Naves, coches, robots y maquinaria de superficie dura, con una cadena corta y rígida en el eje dominante."
+      },
+      "humanoid": {
+        "label": "Humanoide",
+        "description": "Personajes erguidos. UniRig asigna extremidades reconocibles con Y hacia arriba para el reposo, el caminar y el bamboleo; el resto de clips y el motor procedural usan aproximaciones de cadena corporal."
+      },
+      "quadruped": {
+        "label": "Cuadrúpedo / criatura",
+        "description": "Criaturas de cuatro patas y de orientación horizontal, con una cadena flexible en el eje dominante."
+      },
+      "flying": {
+        "label": "Criatura voladora / dron",
+        "description": "Aves, criaturas aladas, naves y drones, con una cadena ligera en el eje dominante."
+      },
+      "serpentine": {
+        "label": "Serpenteante / tentáculo",
+        "description": "Serpientes, colas, tentáculos y mallas alargadas y flexibles, con una cadena larga y suave."
+      }
+    },
+    "clips": {
+      "idle": {
+        "label": "Balanceo en reposo",
+        "description": "Balanceo lateral suave de la columna, más marcado hacia la parte alta."
+      },
+      "breathe": {
+        "label": "Respiración",
+        "description": "Bucle suave de respiración con aplastamiento y estiramiento."
+      },
+      "hover": {
+        "label": "Levitación",
+        "description": "Bucle de flotación suave para objetos, drones, accesorios y espíritus."
+      },
+      "alert": {
+        "label": "Mirada de alerta",
+        "description": "Un barrido cauteloso con una leve inclinación de preparación."
+      },
+      "walk": {
+        "label": "Ciclo de caminar",
+        "description": "Caminar de videojuego en el sitio, con rebote del cuerpo, guiñada y balanceo articulado."
+      },
+      "run": {
+        "label": "Ciclo de correr",
+        "description": "Bucle rápido de sprint en el sitio, con más elevación y compresión."
+      },
+      "strafe": {
+        "label": "Bucle de desplazamiento lateral",
+        "description": "Locomoción evasiva de lado a lado para planos de juego."
+      },
+      "jump": {
+        "label": "Salto",
+        "description": "Anticipación, estiramiento en el aire y un aterrizaje limpio en bucle."
+      },
+      "attack": {
+        "label": "Embestida de ataque",
+        "description": "Preparación breve, golpe hacia delante y recuperación."
+      },
+      "hit": {
+        "label": "Reacción al golpe",
+        "description": "Retroceso lateral brusco y vuelta al reposo."
+      },
+      "roll": {
+        "label": "Voltereta de combate",
+        "description": "Voltereta completa hacia delante, apta para criaturas y objetos de juego."
+      },
+      "charge": {
+        "label": "Carga de energía",
+        "description": "Pulso creciente y balanceo tenso para los momentos de potenciación."
+      },
+      "victory": {
+        "label": "Salto de victoria",
+        "description": "Salto de celebración con un giro completo de exhibición."
+      },
+      "bounce": {
+        "label": "Rebote",
+        "description": "Saltitos rítmicos con aplastamiento al caer."
+      },
+      "spin": {
+        "label": "Giro de plato",
+        "description": "Rotación completa de 360 grados para exhibir."
+      },
+      "wobble": {
+        "label": "Baile de bamboleo",
+        "description": "Contoneo juguetón con balanceo y un salto ligero."
+      }
+    },
+    "categories": {
+      "Ambient": "Ambiente",
+      "Game": "Juego",
+      "Locomotion": "Locomoción",
+      "Action": "Acción",
+      "Cinematic": "Cine",
+      "Stylized": "Estilizado"
+    },
+    "engines": {
+      "procedural": {
+        "label": "Procedural (rápido)",
+        "description": "Esqueleto en cadena vertebral con pesado por distancia. Sirve para cualquier objeto y no pide descargas extra.",
+        "installHint": "Ejecuta Actualizar en Pinokio para añadir el rigging procedural al entorno de la aplicación."
+      },
+      "unirig": {
+        "label": "UniRig (IA)",
+        "description": "UniRig de VAST-AI predice un esqueleto real y pesos de piel aprendidos. Es la mejor opción para personajes y criaturas; unos 8 GB de VRAM.",
+        "installHint": "Abre HocusPocus Lab en Pinokio y ejecuta «Install AI Rigging (UniRig)». Necesita una GPU NVIDIA con 8 GB o más de VRAM; los pesos (unos 2 GB) se descargan en el primer uso."
+      },
+      "humanoid": {
+        "label": "Humanoide (estándar)",
+        "description": "Esqueleto con nombres de Mixamo, ajustado a un personaje de pie en pose de T o de A, con los clips horneados a sus proporciones. Solo CPU. Rechaza las mallas que no puede riguear con seguridad (brazos pegados al cuerpo, piernas juntas).",
+        "installHint": "Ejecuta Actualizar en Pinokio para añadir el rigging procedural al entorno de la aplicación."
+      },
+      "mia": {
+        "label": "Make-It-Animatable",
+        "description": "Predice un esqueleto al estilo Mixamo para un humanoide en cualquier pose y luego hornea la biblioteca de clips. Solo Linux. Úsalo cuando el rig humanoide estándar rechaza una malla girada, con las manos abajo o que no está erguida.",
+        "installHint": "Abre HocusPocus Lab en Pinokio y ejecuta «Install Make-It-Animatable». Solo Linux. Los pesos de demostración ocupan unos 2,33 GB en disco."
+      },
+      "meshy": {
+        "label": "Meshy (nube)",
+        "description": "Rigging en la nube de Meshy para un GLB humanoide con textura que mira hacia +Z (hasta unos 75 MB): un GLB rigueado, clips gratis de caminar y correr, y de forma opcional clips de la biblioteca de animación de Meshy. Usa tus propios créditos de Meshy.",
+        "installHint": "Añade tu clave de API de Meshy en Ajustes → Servicios."
+      }
+    }
+  }
 }

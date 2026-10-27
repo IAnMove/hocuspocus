@@ -1238,5 +1238,248 @@
     "queueScopeActive": "active",
     "queueScopeAll": "all"
   },
-  "untitledScene": "Untitled scene"
+  "untitledScene": "Untitled scene",
+  "narrativeTemplates": {
+    "inner-thought": {
+      "title": "Inner thought",
+      "description": "A three-quarter medium close-up for voice-over and a contemplative beat."
+    },
+    "hero-arrival": {
+      "title": "Hero arrival",
+      "description": "An entrance that settles into a living pose."
+    },
+    "character-turntable": {
+      "title": "Character presentation",
+      "description": "A controlled silhouette and costume reveal."
+    },
+    "silent-reaction": {
+      "title": "Silent reaction",
+      "description": "A restrained medium close-up for listening, resolve or a held reaction."
+    },
+    "dialogue-medium-single": {
+      "title": "Dialogue medium",
+      "description": "Waist-up single: the workhorse coverage for spoken performance and gesture."
+    },
+    "emotional-close-up": {
+      "title": "Emotional close-up",
+      "description": "Head-and-shoulders emphasis for one precise emotional beat."
+    },
+    "american-action-frame": {
+      "title": "American action frame",
+      "description": "Mid-thigh action framing: dynamic pose, prop and setting stay legible together."
+    },
+    "profile-listen": {
+      "title": "Profile listen",
+      "description": "Three-quarter listening single with clean eyeline space for an off-screen partner."
+    },
+    "low-angle-hero": {
+      "title": "Low-angle hero",
+      "description": "A stable low-angle single for resolve, threat or a decisive declaration."
+    },
+    "high-angle-isolation": {
+      "title": "High-angle isolation",
+      "description": "A quiet high-angle single for doubt, vulnerability or a reflective pause."
+    },
+    "cutout-dialogue-hold": {
+      "title": "Cutout dialogue hold",
+      "description": "Limited cutout-TV dialogue: held pose, tiny pose changes and a fixed camera."
+    },
+    "cutout-reaction-snap": {
+      "title": "Cutout reaction snap",
+      "description": "Limited cutout-TV reaction: pause, short snap and another held pose."
+    },
+    "two-shot-master": {
+      "title": "Two-shot master",
+      "description": "A stable wide two-person master for dialogue geography and edits."
+    },
+    "over-shoulder-dialogue": {
+      "title": "Over-shoulder dialogue",
+      "description": "A genuine two-asset OTS: one character foregrounds the other’s medium close-up."
+    },
+    "reverse-over-shoulder": {
+      "title": "Reverse over-shoulder",
+      "description": "The complementary OTS angle; swap the character assignments to complete coverage."
+    },
+    "pov-detail-glance": {
+      "title": "POV detail glance",
+      "description": "A subjective-looking insert for a clue or object, ready to bridge dialogue."
+    },
+    "dutch-tension": {
+      "title": "Dutch tension",
+      "description": "A controlled canted frame for unease, revelation or comic imbalance."
+    },
+    "foreground-reveal": {
+      "title": "Foreground reveal",
+      "description": "A subject is discovered through an optional foreground occluder."
+    },
+    "cutout-talking-head": {
+      "title": "Cutout talking head",
+      "description": "Limited cutout dialogue with separate closed/open mouth layers and small head snaps."
+    },
+    "cutout-speaking-blink": {
+      "title": "Cutout speaking performance",
+      "description": "Limited cutout performance with mouth flap, blink overlay and clearer head-pose snaps."
+    },
+    "dream-orbit": {
+      "title": "Dream orbit",
+      "description": "An arcing, luminous internal-world shot."
+    },
+    "portal-arrival": {
+      "title": "Portal / invocation",
+      "description": "A character reveal with a magical or sci-fi prop."
+    },
+    "icon-reveal": {
+      "title": "Iconic object reveal",
+      "description": "A relic, weapon or product-like insert."
+    },
+    "detail-insert": {
+      "title": "Detail insert",
+      "description": "A controlled macro-like insert for a clue, hand-held prop or narrative detail."
+    },
+    "place-establishing": {
+      "title": "Establishing location",
+      "description": "A location is discovered through parallax and atmosphere."
+    },
+    "memory-drift": {
+      "title": "Memory / flashback",
+      "description": "A soft medium close-up recollection with a changing grade."
+    },
+    "surreal-transit": {
+      "title": "Surreal transit",
+      "description": "Independent subject and world movement for journeys."
+    },
+    "run-travel-parallax": {
+      "title": "Run / travel parallax",
+      "description": "A stylised movement illusion; it does not invent a running rig."
+    }
+  },
+  "rigCatalog": {
+    "profiles": {
+      "prop": {
+        "label": "Prop / object",
+        "description": "Simple pickups, logos and softly deforming standalone objects."
+      },
+      "vehicle": {
+        "label": "Vehicle / mechanical",
+        "description": "Ships, cars, robots and hard-surface machinery using a short, stiff dominant-axis chain."
+      },
+      "humanoid": {
+        "label": "Humanoid",
+        "description": "Upright characters. UniRig maps recognizable Y-up limbs for idle, walk and wobble; other clips and the procedural engine use body-chain approximations."
+      },
+      "quadruped": {
+        "label": "Quadruped / creature",
+        "description": "Four-legged and horizontally oriented creatures using a flexible dominant-axis chain."
+      },
+      "flying": {
+        "label": "Flying creature / drone",
+        "description": "Birds, winged creatures, ships and drones with a light dominant-axis chain."
+      },
+      "serpentine": {
+        "label": "Serpentine / tentacle",
+        "description": "Snakes, tails, tentacles and elongated flexible meshes with a long smooth chain."
+      }
+    },
+    "clips": {
+      "idle": {
+        "label": "Idle Sway",
+        "description": "Gentle side-to-side spine sway, stronger toward the top."
+      },
+      "breathe": {
+        "label": "Breathe",
+        "description": "Soft squash-and-stretch breathing loop."
+      },
+      "hover": {
+        "label": "Hover",
+        "description": "Smooth floating loop for pickups, drones, props and spirits."
+      },
+      "alert": {
+        "label": "Alert Look",
+        "description": "A cautious scan with a small ready-state lean."
+      },
+      "walk": {
+        "label": "Walk Cycle",
+        "description": "In-place game walk with body bob, yaw and articulated sway."
+      },
+      "run": {
+        "label": "Run Cycle",
+        "description": "Fast in-place sprint loop with stronger lift and compression."
+      },
+      "strafe": {
+        "label": "Strafe Loop",
+        "description": "Side-to-side evasive locomotion for gameplay shots."
+      },
+      "jump": {
+        "label": "Jump",
+        "description": "Anticipation, airborne stretch and a clean landing loop."
+      },
+      "attack": {
+        "label": "Attack Lunge",
+        "description": "Quick wind-up, forward strike and recovery."
+      },
+      "hit": {
+        "label": "Hit Reaction",
+        "description": "Sharp sideways recoil followed by recovery to idle."
+      },
+      "roll": {
+        "label": "Combat Roll",
+        "description": "Full forward tumble suitable for creatures and game props."
+      },
+      "charge": {
+        "label": "Charge Up",
+        "description": "Escalating pulse and tense sway for power-up moments."
+      },
+      "victory": {
+        "label": "Victory Jump",
+        "description": "Celebratory jump with a complete showcase turn."
+      },
+      "bounce": {
+        "label": "Bounce",
+        "description": "Rhythmic hops with squash on landing."
+      },
+      "spin": {
+        "label": "Turntable Spin",
+        "description": "Full 360 degree showcase rotation."
+      },
+      "wobble": {
+        "label": "Wobble Dance",
+        "description": "Playful yaw wiggle with sway and a light hop."
+      }
+    },
+    "categories": {
+      "Ambient": "Ambient",
+      "Game": "Game",
+      "Locomotion": "Locomotion",
+      "Action": "Action",
+      "Cinematic": "Cinematic",
+      "Stylized": "Stylized"
+    },
+    "engines": {
+      "procedural": {
+        "label": "Procedural (fast)",
+        "description": "Spine-chain skeleton with distance-based skinning. Works on any object; no extra downloads.",
+        "installHint": "Run Update in Pinokio to add procedural rigging to the app environment."
+      },
+      "unirig": {
+        "label": "UniRig (AI)",
+        "description": "VAST-AI UniRig predicts a real skeleton and learned skinning weights. Best for characters and creatures; ~8GB VRAM.",
+        "installHint": "Open HocusPocus Lab in Pinokio and run 'Install AI Rigging (UniRig)'. Needs an NVIDIA GPU with 8GB+ VRAM; weights (~2GB) download on first use."
+      },
+      "humanoid": {
+        "label": "Humanoid",
+        "description": "Upright characters. UniRig maps recognizable Y-up limbs for idle, walk and wobble; other clips and the procedural engine use body-chain approximations.",
+        "installHint": "Run Update in Pinokio to add procedural rigging to the app environment."
+      },
+      "mia": {
+        "label": "Make-It-Animatable",
+        "description": "Predicts a Mixamo-style skeleton for a humanoid in any pose, then bakes the clip library. Linux only. Use it when the standard humanoid rig refuses a turned, hands-down or not-upright mesh.",
+        "installHint": "Open HocusPocus Lab in Pinokio and run 'Install Make-It-Animatable'. Linux only. The demo weights are about 2.33 GB on disk."
+      },
+      "meshy": {
+        "label": "Meshy (cloud)",
+        "description": "Meshy's cloud rigging for a textured humanoid GLB that faces +Z (up to about 75 MB): a rigged GLB plus free walking and running clips, and optionally clips from Meshy's animation library. Uses your own Meshy credits.",
+        "installHint": "Add your Meshy API key in Settings → Services."
+      }
+    }
+  }
 }

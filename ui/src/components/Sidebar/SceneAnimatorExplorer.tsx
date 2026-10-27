@@ -1,5 +1,6 @@
 import type { ApiOutput } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
+import { narrativeCopy } from '../../lib/catalogLabels'
 import type { AssetSuitability, NarrativeAssetRole } from '../../lib/assetSuitability'
 import {
   NARRATIVE_SCENE_TEMPLATES,
@@ -188,6 +189,7 @@ export function SceneAnimatorNarrativeSetup({
   onMount: () => void
 }) {
   const { t } = useUiTranslation('scene3d')
+  const { t: tStudio } = useUiTranslation('studio')
   const heroFit = suitability('hero', hero)
   const plateFit = suitability('plate', plate)
   const propSlot = template.assetSlots.find(slot => slot.id === 'prop')
@@ -196,10 +198,13 @@ export function SceneAnimatorNarrativeSetup({
     <div className="space-y-2 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.045] p-2">
       <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-100">{t('animator.narrativeTitle')}</span><span className="text-[8px] text-fuchsia-200/70">{t('animator.narrativeMeta')}</span></div>
       <select value={templateId} disabled={busy} onChange={event => onTemplateId(event.target.value as NarrativeSceneId)} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]">
-        {NARRATIVE_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.experimental ? t('animator.experimental') : ''}{item.title}</option>)}
+        {NARRATIVE_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.experimental ? t('animator.experimental') : ''}{narrativeCopy(tStudio, item).title}</option>)}
       </select>
-      <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(item => <button key={item.id} type="button" disabled={busy} onClick={() => onTemplateId(item.id)} title={item.description} className={`rounded border p-1 text-left disabled:opacity-40 ${templateId === item.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{item.experimental ? t('animator.experimental') : ''}{item.title}</span><span className="block text-[7px] text-text-muted">{t('animator.templateMeta', { duration: item.defaultDuration, count: item.assetSlots.filter(slot => slot.required).length })}</span></button>)}</div>
-      <p className="text-[8px] leading-relaxed text-text-muted">{template.description}</p>
+      <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(item => {
+        const copy = narrativeCopy(tStudio, item)
+        return <button key={item.id} type="button" disabled={busy} onClick={() => onTemplateId(item.id)} title={copy.description} className={`rounded border p-1 text-left disabled:opacity-40 ${templateId === item.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{item.experimental ? t('animator.experimental') : ''}{copy.title}</span><span className="block text-[7px] text-text-muted">{t('animator.templateMeta', { duration: item.defaultDuration, count: item.assetSlots.filter(slot => slot.required).length })}</span></button>
+      })}</div>
+      <p className="text-[8px] leading-relaxed text-text-muted">{narrativeCopy(tStudio, template).description}</p>
       <NarrativeAssetField label={t('animator.character')} placeholder={t('animator.chooseAsset')} items={visuals} selectedName={hero} disabled={busy} kinds={['image', 'video', 'model3d']} accept="image/*,video/*,.glb" onName={onHero} />
       {hero ? <p className={`rounded border px-1.5 py-1 text-[8px] leading-relaxed ${heroFit.level === 'warning' ? 'border-amber-300/25 bg-amber-400/[.06] text-amber-100' : 'border-emerald-300/20 bg-emerald-400/[.04] text-emerald-100'}`}>{heroFit.message}</p> : null}
       <NarrativeAssetField label={t('animator.background')} placeholder={t('animator.chooseAsset')} items={media} selectedName={plate} disabled={busy} kinds={['image', 'video']} accept="image/*,video/*" onName={onPlate} />
