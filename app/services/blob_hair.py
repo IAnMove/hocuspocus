@@ -26,7 +26,7 @@ def hair_mesh(L: dict, hair: dict) -> Mesh:
         return mesh
     head = _Head(L)
     _helmet(mesh, head, color, hairline=34 if style in ("short", "spiky", "bun") else 26)
-    if style != "spiky":
+    if style == "short":
         _crown(mesh, head, color)
     _STYLES[style](mesh, head, color)
     return mesh
@@ -75,7 +75,7 @@ def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: 
     points = bezier(root, pull, tip, _SAMPLES)
     radii = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
     radii[-1] = max(radii[-1], head.rx * 0.012)
-    curve_tube(mesh, points, radii, color, ring=ring, flat=flat)
+    curve_tube(mesh, points, radii, color, ring=ring, flat=flat, hug=(head.cx, head.cy, head.cz))
 
 
 def _crown(mesh: Mesh, head: _Head, color: str) -> None:
@@ -164,8 +164,8 @@ def _spiky(mesh: Mesh, head: _Head, color: str) -> None:
         yaw = i * 36 + 18
         lat = 36 if i % 2 else 56
         root = head.at(yaw, lat, 1.0)
-        pull = head.at(yaw + 10, lat + 22, 1.28)
-        tip = head.at(yaw + 26, lat + 26, 1.58)
+        pull = head.at(yaw + 10, lat + 18, 1.2)
+        tip = head.at(yaw + 26, lat + 20, 1.4)
         _clump(mesh, head, color, root, pull, tip, 0.3, 0.04, flat=0.35)
 
 

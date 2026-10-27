@@ -145,16 +145,27 @@ def bezier(p0, p1, p2, count: int) -> list:
     return out
 
 
-def curve_tube(mesh: Mesh, points: list, radii: list, color: str, ring: int = 8, flat: float = 1.0, caps: bool = True) -> None:
-    """A clump along ``points``: rings in the plane normal to the curve, ``radii[i]`` across and ``flat`` times that deep."""
+def curve_tube(mesh: Mesh, points: list, radii: list, color: str, ring: int = 8, flat: float = 1.0, caps: bool = True, hug=None) -> None:
+    """A clump along ``points``: rings in the plane normal to the curve, ``radii[i]`` across and ``flat`` times that deep.
+    ``hug`` is a centre the clump lies against (the head's): the thin side then faces away from it and the wide side lies
+    along the surface, a ribbon on the skull, not a blade seen edge-on."""
     count = len(points)
     grid, colors = [], []
     up = (0.0, 1.0, 0.0)
     for i, p in enumerate(points):
         tangent = _unit(_sub(points[min(i + 1, count - 1)], points[max(i - 1, 0)]))
-        ref = (1.0, 0.0, 0.0) if abs(_dot(tangent, up)) > 0.9 else up
-        side = _unit(_cross(ref, tangent))
-        deep = _unit(_cross(tangent, side))
+        if hug is not None:
+            out = _sub(p, hug)
+            out = _sub(out, _mul(tangent, _dot(out, tangent)))
+            if _dot(out, out) > 1e-12:
+                deep = _unit(out)
+                side = _unit(_cross(tangent, deep))
+            else:
+                hug = None
+        if hug is None:
+            ref = (1.0, 0.0, 0.0) if abs(_dot(tangent, up)) > 0.9 else up
+            side = _unit(_cross(ref, tangent))
+            deep = _unit(_cross(tangent, side))
         r = radii[i]
         grid.append([_add(p, _add(_mul(side, r * math.cos(t)), _mul(deep, r * flat * math.sin(t)))) for t in (j * math.tau / ring for j in range(ring))])
         colors.append([linear_color(color)] * ring)
