@@ -44,9 +44,9 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame): void {
 	float tileW = atlasHead.y / 1.5;
 	float headV = 0.5 + ( 0.5 - ( atlasP.y - atlasHead.x ) / atlasHead.y ) * 0.5;
 	float crown = pow( abs( atlasN.y ), 3.0 );
-	float hf = pow( max( atlasN.z, 0.0 ), 4.0 ) + crown + 0.01;
-	float hb = pow( max( -atlasN.z, 0.0 ), 4.0 ) + 0.01;
-	float hs = pow( abs( atlasN.x ), 4.0 ) + 0.01;
+	float hf = pow( max( atlasN.z, 0.0 ), 8.0 ) + crown + 0.002;
+	float hb = pow( max( -atlasN.z, 0.0 ), 8.0 ) + 0.002;
+	float hs = pow( abs( atlasN.x ), 8.0 ) + 0.002;
 	vec4 headColor = ( texture2D( map, vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV ) ) * hf
 		+ texture2D( map, vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV ) ) * hs
 		+ texture2D( map, vec2( ( 2.5 - atlasP.x / tileW ) / 3.0, headV ) ) * hb ) / ( hf + hs + hb );
