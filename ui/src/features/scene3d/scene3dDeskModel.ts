@@ -88,4 +88,8 @@ export type Scene3DDeskModel = {
   togglePlay: () => void
   restorePreviousShot: () => void
   preview: () => string | undefined
+  freeView: boolean
+  setFreeView: (value: boolean) => void
+  commitFreeView: () => void
+  frameSelection: () => void
 }

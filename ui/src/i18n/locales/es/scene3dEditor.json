@@ -19,7 +19,11 @@
     "add": "Añadir",
     "select": "Seleccionar",
     "tools": "Herramientas del visor",
-    "objectSfx": "Efectos de este objeto"
+    "objectSfx": "Efectos de este objeto",
+    "freeView": "Vista libre",
+    "shotCamera": "Cámara del plano",
+    "useView": "Poner la cámara del plano aquí",
+    "frame": "Encuadrar la selección"
   },
   "speech": {
     "resting": "en silencio",
@@ -375,12 +379,14 @@
   "smaller": "Más pequeño",
   "larger": "Más grande",
   "reset": "Restablecer transformación",
-  "gizmoHelp": "Dentro de la escena, pulsa G para mover, R para girar en Y o S para escalar. Arrastra el manipulador; usa su centro para escalar proporcionalmente.",
+  "gizmoHelp": "Dentro de la escena, pulsa G para mover, R para girar en X, Y y Z, o S para escalar. Arrastra el manipulador; usa su centro para escalar proporcionalmente.",
   "viewport": "Escena 3D",
-  "transformShortcuts": "Dentro de la escena: R para girar en Y · S para escalar · G para mover. Arrastra el manipulador para ajustar el objeto.",
+  "transformShortcuts": "Dentro de la escena: R para girar en X, Y y Z · S para escalar · G para mover. Arrastra el manipulador para ajustar el objeto.",
   "selectObject": "Selecciona un objeto",
   "position": "Posición (m)",
+  "rotationX": "Giro X (°)",
   "yaw": "Giro Y (°)",
+  "rotationZ": "Giro Z (°)",
   "keepAssets": "Conservar mis objetos al cambiar de plano",
   "userTemplates": {
     "title": "Mis plantillas",

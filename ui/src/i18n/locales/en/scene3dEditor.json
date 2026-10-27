@@ -19,7 +19,11 @@
     "add": "Add",
     "select": "Select",
     "tools": "Viewport tools",
-    "objectSfx": "Effects on this object"
+    "objectSfx": "Effects on this object",
+    "freeView": "Free view",
+    "shotCamera": "Shot camera",
+    "useView": "Put the shot camera here",
+    "frame": "Frame selection"
   },
   "speech": {
     "resting": "silent",
@@ -375,12 +379,14 @@
   "smaller": "Smaller",
   "larger": "Larger",
   "reset": "Reset transform",
-  "gizmoHelp": "Inside the scene, press G to move, R to rotate around Y, or S to scale. Drag the gizmo; use its centre to scale proportionally.",
+  "gizmoHelp": "Inside the scene, press G to move, R to rotate on X, Y and Z, or S to scale. Drag the gizmo; use its centre to scale proportionally.",
   "viewport": "3D scene",
-  "transformShortcuts": "Inside the scene: R to rotate around Y · S to scale · G to move. Drag the gizmo to adjust the object.",
+  "transformShortcuts": "Inside the scene: R to rotate on X, Y and Z · S to scale · G to move. Drag the gizmo to adjust the object.",
   "selectObject": "Select an object",
   "position": "Position (m)",
+  "rotationX": "Rotation X (°)",
   "yaw": "Rotation Y (°)",
+  "rotationZ": "Rotation Z (°)",
   "keepAssets": "Keep my objects when changing shots",
   "userTemplates": {
     "title": "My templates",

@@ -33,8 +33,12 @@ export function Scene3DTransformPanel({ slot, mode, disabled, onMode, onChange, 
       <div className="grid grid-cols-2 gap-2">
         <label className="text-xs text-text-secondary">{t('size')}<input type="number" min="0.05" max="100" step="0.05" disabled={disabled} value={Number(slot.scale.toFixed(3))}
           onChange={event => { const scale = Number(event.target.value); if (Number.isFinite(scale) && scale >= 0.05) onChange({ scale: Math.min(100, scale) }) }} className="mt-2 min-h-10 w-full rounded-lg border border-border bg-bg-primary px-2 text-text-primary disabled:opacity-40" /></label>
+        <label className="text-xs text-text-secondary">{t('rotationX')}<input type="number" step="5" disabled={disabled} value={Number(((slot.rotationX ?? 0) * 180 / Math.PI).toFixed(1))}
+          onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) onChange({ rotationX: value * Math.PI / 180 }) }} className="mt-2 min-h-10 w-full rounded-lg border border-border bg-bg-primary px-2 text-text-primary disabled:opacity-40" /></label>
         <label className="text-xs text-text-secondary">{t('yaw')}<input type="number" step="5" disabled={disabled} value={Number((slot.rotationY * 180 / Math.PI).toFixed(1))}
           onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) onChange({ rotationY: value * Math.PI / 180 }) }} className="mt-2 min-h-10 w-full rounded-lg border border-border bg-bg-primary px-2 text-text-primary disabled:opacity-40" /></label>
+        <label className="text-xs text-text-secondary">{t('rotationZ')}<input type="number" step="5" disabled={disabled} value={Number(((slot.rotationZ ?? 0) * 180 / Math.PI).toFixed(1))}
+          onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value)) onChange({ rotationZ: value * Math.PI / 180 }) }} className="mt-2 min-h-10 w-full rounded-lg border border-border bg-bg-primary px-2 text-text-primary disabled:opacity-40" /></label>
       </div>
     </div>
     <div className="flex flex-wrap gap-2">

@@ -8,6 +8,7 @@ import { LipsPickOverlay } from './speech/LipsPickOverlay'
 import { Scene3DInteraction } from './Scene3DInteraction'
 import { Scene3DPreview } from './Scene3DPreview'
 import { Scene3DStage } from './Scene3DStage.tsx'
+import { Scene3DEditCameraBar } from './Scene3DEditCameraBar'
 import { Scene3DViewportTools } from './Scene3DViewportTools'
 import { patchScene3DSlot } from './templates.ts'
 import { applyScene3DGizmoPatch } from './documentHistory.ts'
@@ -41,6 +42,7 @@ export function Scene3DDeskViewport({ model }: { model: Scene3DDeskModel }) {
             selectedWorldSfxId={model.selectedWorldSfxId}
             transformMode={model.transformMode}
             editing={!model.playing && !model.exporting}
+            freeView={model.freeView}
             onSelect={model.onStageSelect}
             onTransform={(id, patch) => model.applyScene(current => applyScene3DGizmoPatch(current, id, patch, model.seconds), `drag:${id}`)}
             onSlotClips={(slotId, clips) => model.setCatalogs(current => ({ ...current, [slotId]: clips }))}
@@ -56,6 +58,7 @@ export function Scene3DDeskViewport({ model }: { model: Scene3DDeskModel }) {
           </div>
         </Scene3DInteraction>
         <Scene3DViewportTools mode={model.transformMode} disabled={model.editingLocked} onMode={model.setTransformMode} />
+        <Scene3DEditCameraBar model={model} />
       </Scene3DPreview>
     </div>
   )

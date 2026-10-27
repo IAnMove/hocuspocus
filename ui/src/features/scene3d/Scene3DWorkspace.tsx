@@ -29,6 +29,7 @@ import type { SlotSourceCapture, SlotSourceLive } from './slotSource.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot } from './types.ts'
 import { documentFromWorld3DRequest, listenForWorld3DDocument, listenForWorld3DWorkflow } from './world3dAgent.ts'
 import { Scene3DDesk } from './Scene3DDesk'
+import { applyEditCamera } from './editCamera'
 import { dispatchAddPicker } from './pickerApply'
 import type { AddPickerCategory } from './addPickerCatalog'
 
@@ -70,6 +71,7 @@ export function Scene3DWorkspace({ width, height, initialDocument, fill = false,
   const [frame, setFrame] = useState(0)
   const [selectedId, setSelectedId] = useState('subject_1')
   const [picker, setPicker] = useState<{ open: boolean; category: AddPickerCategory }>({ open: false, category: 'all' })
+  const [freeView, setFreeView] = useState(false)
   const [selectedWorldSfxId, setSelectedWorldSfxId] = useState<string | undefined>()
   const [exporting, setExporting] = useState(false)
   const exportingRef = useRef(false)
@@ -414,6 +416,12 @@ export function Scene3DWorkspace({ width, height, initialDocument, fill = false,
     exporting: exportingRef.current,
   })
   const preview = () => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')
+  const commitFreeView = () => {
+    const pose = stageRef.current?.editViewPose?.() ?? null
+    if (!pose) return
+    applyScene(current => applyEditCamera(current, pose), 'edit-camera')
+  }
+  const frameSelection = () => stageRef.current?.frameSelection?.(selected?.id)
 
   return (
     <Scene3DDesk model={{
@@ -428,6 +436,7 @@ export function Scene3DWorkspace({ width, height, initialDocument, fill = false,
       liveSource, walkFor: walkBake.control, onPick, openPicker, closePicker, addProp, addScreen, removeSelected,
       resetSelectedPose, onStageSelect, onDemo, onShowcase, seek, setRenderChoice: choice => { renderChoiceRef.current = choice },
       onSpeed, togglePlay, restorePreviousShot, preview,
+      freeView, setFreeView, commitFreeView, frameSelection,
     }} />
   )
 }
