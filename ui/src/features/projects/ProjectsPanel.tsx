@@ -37,12 +37,14 @@ export function ProjectsPanel() {
   const { t } = useUiTranslation('projects')
   const { t: tCommon } = useUiTranslation('common')
   const workspaces = useStore(state => state.workspaces)
+  const activeWorkspace = useStore(state => state.activeWorkspace)
   const loadWorkspaces = useStore(state => state.loadWorkspaces)
+  const workspaceTouched = useRef(false)
   const [projects, setProjects] = useState<ProjectCatalogItem[]>([])
   const [total, setTotal] = useState(0)
   const [warningCount, setWarningCount] = useState(0)
   const [kind, setKind] = useState<ProjectKind | ''>('')
-  const [workspace, setWorkspace] = useState('')
+  const [workspace, setWorkspace] = useState(() => useStore.getState().activeWorkspace || '')
   const [draftSearch, setDraftSearch] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
@@ -80,6 +82,10 @@ export function ProjectsPanel() {
   }, [kind, search, workspace, t])
 
   useEffect(() => { void loadWorkspaces() }, [loadWorkspaces])
+  useEffect(() => {
+    if (workspaceTouched.current || !activeWorkspace) return
+    setWorkspace(activeWorkspace)
+  }, [activeWorkspace])
   useEffect(() => { void load(false) }, [load])
   useEffect(() => () => { requestRef.current += 1 }, [])
 
@@ -136,7 +142,7 @@ export function ProjectsPanel() {
         <select
           aria-label={t('workspaceAria')}
           value={workspace}
-          onChange={event => setWorkspace(event.target.value)}
+          onChange={event => { workspaceTouched.current = true; setWorkspace(event.target.value) }}
           className="rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-xs text-text-primary"
         >
           {workspaceOptions.map(item => <option key={item.name} value={item.name}>{item.label}</option>)}
