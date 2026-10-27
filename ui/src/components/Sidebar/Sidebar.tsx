@@ -213,7 +213,7 @@ export function DirectGenerationWorkspace() {
         {!isImage && !imageChooser && !isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
         {!isReplaceCharacter && <StudioCommandPanels mode={generationMode} audioSubMode={audioSubMode}
           workspace={workspace || 'default'} model={String(modelType)}
-          visible={studioUnobscured && (!isMobile || sidebarOpen)} />
+          visible={studioUnobscured && (!isMobile || sidebarOpen)} />}
 
         {/* Video: reference images below prompt. In Frames mode the InputsPanel
             renders them as ordered tiles instead. */}
