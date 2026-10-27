@@ -361,7 +361,7 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     closing = shoulder_top(L)
     arm_y = wear["arm_y"]
     shirt = wear.get("shirt")
-    lapel = lambda half: {"front": (shirt, half)} if shirt else {}
+    lapel = lambda half: {}   # the shirt V is its own panel (below), so its edges stay crisp
     lower = bottom if wear["legs"] != "skirt" else wear["legs_color"]
     stations = [
         _st((0, L["leg_top"] - 0.01 * h, 0), hip_w / 2 * 0.94, d / 2 * 0.86, lower),
@@ -377,10 +377,24 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         _st((0, closing + 0.004 * h, 0), neck_w / 2 * 1.25, d / 2 * 0.42, top, **lapel(44)),
     ]
     _tube(mesh, stations, "y", ring=48)
+    if shirt:
+        _shirt_v(mesh, stations[5:], (10, 22, 30, 38, 44), shirt)
     skin = spec["colors"]["head"]
     neck = [_st((0, closing - 0.02 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
             _st((0, L["head_y"] - L["sy"] * 0.3, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
     _tube(mesh, neck, "y")
+
+
+def _shirt_v(mesh: Mesh, rows: list, halves: tuple, color: str) -> None:
+    """The shirt under an open jacket: a V panel a hair outside the torso, wider toward the collar, with its own sharp edges
+    (a colour change by vertex blurs across a quad, which read as a glow on the chest)."""
+    grid, colors = [], []
+    for st, half in zip(rows, halves):
+        ring = [(st["p"][0] + st["a"] * 1.006 * math.cos(t), st["p"][1], st["p"][2] + st["b"] * 1.006 * math.sin(t))
+                for t in (math.radians(90 - half + 2 * half * j / 10) for j in range(11))]
+        grid.append(ring)
+        colors.append([linear_color(color)] * len(ring))
+    _emit(mesh, grid, colors, [st["p"] for st in rows], False, None)
 
 
 def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
