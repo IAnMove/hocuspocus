@@ -111,7 +111,9 @@
     "chooseModel": "Elige primero un modelo",
     "writeName": "Escribe primero un nombre",
     "writeDescription": "Escribe primero una descripción",
-    "alreadySaved": "Esto ya está guardado"
+    "alreadySaved": "Esto ya está guardado",
+    "createGameFirst": "Crea primero un juego",
+    "gamesLoading": "Espera a que cargue la lista de juegos"
   },
   "fields": {
     "name": "Nombre",

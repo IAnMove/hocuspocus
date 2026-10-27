@@ -515,6 +515,7 @@
     "mouthCount_other": "{{count}} approved mouths",
     "importFromCharacters": "Mouths from your characters",
     "importEdit": "Import and edit",
+    "importCard": "{{name}}. Import and edit",
     "name": "Collection name",
     "save": "Save",
     "saving": "Saving…",

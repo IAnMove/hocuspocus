@@ -27,6 +27,8 @@ import { CharacterImageCreator } from './CharacterImageCreator'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
 import { useCharacterEditorHandoff } from './characterEditorHandoff'
 import { CharacterEditorSession } from './CharacterEditorSession'
+import { FaceRigOpenButton } from './FaceRigOpenButton'
+import { faceRigHasSubject } from './faceRigSubject'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -314,6 +316,10 @@ function CharacterCreatorWorkshop() {
       setError(t('creator.errors.faceRigKitsOnly'))
       return
     }
+    if (!faceRigHasSubject(views, refs, selectedViewId)) {
+      setError(t('creator.errors.needViewOrUpload'))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -551,14 +557,11 @@ function CharacterCreatorWorkshop() {
           {t('creator.subtitle')}
         </p>
         {kind === 'character' && (
-          <button
-            type="button"
-            className={`${button} mt-2`}
-            disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
+          <FaceRigOpenButton
+            hasSubject={faceRigHasSubject(views, refs, selectedViewId)}
+            busy={busy}
             onClick={() => void openFaceRigFromCreator()}
-          >
-            {t('creator.openFaceRig')}
-          </button>
+          />
         )}
         {history.length > 0 && (
           <div className="mt-2 space-y-1">

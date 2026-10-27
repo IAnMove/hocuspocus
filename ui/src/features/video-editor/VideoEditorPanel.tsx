@@ -1977,10 +1977,10 @@ export function VideoEditorPanel() {
         <input
           value={projectName}
           onChange={event => setProjectName(event.target.value)}
-          className="min-w-0 w-32 sm:w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
+          className="min-w-0 flex-1 basis-40 truncate bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
           aria-label={t('toolbar.projectName')}
+          title={projectName || undefined}
         />
-        <div className="hidden flex-1 sm:block" />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={adding}

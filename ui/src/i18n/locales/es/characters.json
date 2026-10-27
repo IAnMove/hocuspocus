@@ -515,6 +515,7 @@
     "mouthCount_other": "{{count}} bocas aprobadas",
     "importFromCharacters": "Bocas de tus personajes",
     "importEdit": "Importar y editar",
+    "importCard": "{{name}}. Importar y editar",
     "name": "Nombre del conjunto",
     "save": "Guardar",
     "saving": "Guardando…",

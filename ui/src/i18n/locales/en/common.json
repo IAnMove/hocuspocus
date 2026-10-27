@@ -111,7 +111,9 @@
     "chooseModel": "Choose a model first",
     "writeName": "Write a name first",
     "writeDescription": "Write a description first",
-    "alreadySaved": "This is already saved"
+    "alreadySaved": "This is already saved",
+    "createGameFirst": "Create a game first",
+    "gamesLoading": "Wait until the game list loads"
   },
   "fields": {
     "name": "Name",
