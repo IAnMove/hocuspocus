@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, Loader2, Globe, Sparkles, BookOpen, Info, ArrowUpCircle, RefreshCw, ArrowDownAZ, Clock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import { sfxModelTypes } from '../../stores/modelCatalog'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails, checkLoraUpdates } from '../../api/client'
 import { formatAge } from '../../lib/format'
@@ -90,6 +91,7 @@ export function sortLoraNames(names: string[], sort: LoraPickerSort, dates: Reco
 
 /** Two-state sort toggle shared by both pickers: A-Z <-> newest first. */
 export function LoraSortToggle({ sort, onChange }: { sort: LoraPickerSort; onChange: (s: LoraPickerSort) => void }) {
+  const { t } = useUiTranslation('settings')
   const newest = sort === 'newest'
   return (
     <button
@@ -97,17 +99,16 @@ export function LoraSortToggle({ sort, onChange }: { sort: LoraPickerSort; onCha
       className={`text-[10px] flex items-center gap-0.5 transition-colors ${
         newest ? 'text-accent-blue hover:text-accent-blue-hover' : 'text-text-muted hover:text-accent-blue'
       }`}
-      title={newest
-        ? 'Sorted by newest release first. Click to sort by name.'
-        : 'Sorted by name. Click to sort by newest release first.'}
+      title={newest ? t('lora.sortNewestTitle') : t('lora.sortNameTitle')}
     >
       {newest ? <Clock size={10} /> : <ArrowDownAZ size={10} />}
-      {newest ? 'New' : 'A-Z'}
+      {newest ? t('lora.sortNew') : t('lora.sortAz')}
     </button>
   )
 }
 
 export function LoraSelector() {
+  const { t } = useUiTranslation('settings')
   const modelType = useStore(s => s.params.model_type)
   // The virtual SFX models (MMAudio) have no LoRA endpoint: the server answers 404 for them.
   const hasLoraEndpoint = Boolean(modelType) && !sfxModelTypes.has(modelType)
@@ -207,19 +208,19 @@ export function LoraSelector() {
   // Render-only formatter — "5m ago" / "2h ago" / "3d ago" / "" for null.
   const formatRelative = (iso: string | null): string => {
     if (!iso) return ''
-    const t = Date.parse(iso)
-    if (Number.isNaN(t)) return ''
-    const mins = Math.max(0, Math.round((Date.now() - t) / 60000))
-    if (mins < 1) return 'just now'
-    if (mins < 60) return `${mins}m ago`
+    const parsed = Date.parse(iso)
+    if (Number.isNaN(parsed)) return ''
+    const mins = Math.max(0, Math.round((Date.now() - parsed) / 60000))
+    if (mins < 1) return t('lora.justNow')
+    if (mins < 60) return t('lora.minutesAgo', { count: mins })
     const hrs = Math.round(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.round(hrs / 24)}d ago`
+    if (hrs < 24) return t('lora.hoursAgo', { count: hrs })
+    return t('lora.daysAgo', { count: Math.round(hrs / 24) })
   }
 
   const loraHeader = (
     <div className="flex items-center justify-between mb-1.5">
-      <label className="text-[11px] text-text-muted uppercase tracking-wider">LoRAs</label>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('lora.heading')}</label>
       <div className="flex items-center gap-2">
         <LoraSortToggle sort={sortMode} onChange={setSortSticky} />
         <button
@@ -227,13 +228,13 @@ export function LoraSelector() {
           disabled={checking || !modelType}
           className="text-[10px] text-text-muted hover:text-accent-blue flex items-center gap-0.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           title={lastCheckedAt
-            ? `Check CivitAI for newer LoRA versions (last checked ${formatRelative(lastCheckedAt)})`
-            : 'Check CivitAI for newer LoRA versions'}
+            ? t('lora.checkTitleWhen', { when: formatRelative(lastCheckedAt) })
+            : t('lora.checkTitle')}
         >
           {checking
             ? <Loader2 size={10} className="animate-spin" />
             : <RefreshCw size={10} />}
-          Check
+          {t('lora.check')}
           {updatableCount > 0 && (
             <span
               className="ml-0.5 px-1 rounded bg-amber-500/20 text-indicator-warning text-[9px] font-medium"
@@ -246,10 +247,10 @@ export function LoraSelector() {
         <button
           onClick={() => openBrowser(true, modelType)}
           className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 transition-colors"
-          title="Browse CivitAI"
+          title={t('lora.browseTitle')}
         >
           <Globe size={10} />
-          Browse
+          {t('lora.browse')}
         </button>
       </div>
     </div>

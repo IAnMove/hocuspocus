@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Search, X, Loader2, FolderOpen, Globe, Sparkles, BookOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
+import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails } from '../../api/client'
 import { LoraGuideTooltip, LoraAgeChip, LoraSortToggle, sortLoraNames } from './LoraSelector'
@@ -85,6 +86,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
   // Sticky list order shared with the Studio picker via the store.
   const sortMode = useStore(s => s.loraPickerSort)
   const setSortSticky = useStore(s => s.setLoraPickerSort)
+  const { t } = useUiTranslation('settings')
 
   const persist = useCallback((newLoras: string[], newWeights: Record<string, number[]>) => {
     const multipliers = serializeMultipliers(newLoras, newWeights)
@@ -266,7 +268,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
     return (
       <div className="text-xs text-text-muted bg-bg-tertiary border border-border rounded-lg px-3 py-3 text-center flex items-center justify-center gap-2">
         <Loader2 size={12} className="animate-spin" />
-        Loading LoRAs...
+        {t('lora.loading')}
       </div>
     )
   }
@@ -274,12 +276,12 @@ export function DirectorLoraSelector({ mode, modelType }: {
   if (availableLoras.length === 0) {
     return (
       <div className="flex items-center justify-between">
-        <div className="text-xs text-text-muted">No LoRAs found</div>
+        <div className="text-xs text-text-muted">{t('lora.noneFound')}</div>
         <button
           onClick={() => openBrowser(true, modelType)}
           className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5"
         >
-          <Globe size={10} /> Browse
+          <Globe size={10} /> {t('lora.browse')}
         </button>
       </div>
     )
@@ -292,15 +294,15 @@ export function DirectorLoraSelector({ mode, modelType }: {
 
       {/* Header with Browse */}
       <div className="flex items-center justify-between mb-1.5">
-        <label className="text-[10px] text-text-muted uppercase tracking-wider">LoRAs</label>
+        <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('lora.heading')}</label>
         <div className="flex items-center gap-2">
           <LoraSortToggle sort={sortMode} onChange={setSortSticky} />
           <button
             onClick={() => openBrowser(true, modelType)}
             className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5 transition-colors"
-            title="Browse CivitAI"
+            title={t('lora.browseTitle')}
           >
-            <Globe size={10} /> Browse
+            <Globe size={10} /> {t('lora.browse')}
           </button>
         </div>
       </div>

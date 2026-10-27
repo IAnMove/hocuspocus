@@ -336,6 +336,12 @@
   },
   "licence": {
     "territory": "Esta licencia no se aplica en {{territories}}.",
-    "link": "Licencia"
+    "link": "Licencia",
+    "territories": {
+      "EU": "la UE",
+      "UK": "el Reino Unido",
+      "KR": "Corea del Sur",
+      "US": "Estados Unidos"
+    }
   }
 }

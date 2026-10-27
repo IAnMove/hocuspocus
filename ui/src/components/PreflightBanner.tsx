@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
 import { fetchPreflight, type PreflightCheck } from '../api/client'
 import { useUiTranslation } from '../i18n'
+import { preflightText } from './preflightCopy'
 import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
 
 /**
@@ -46,7 +47,7 @@ export function PreflightBanner() {
       <div className="flex-1 min-w-0 space-y-0.5">
         {checks.map(c => (
           <div key={c.id} className="text-[11px] leading-snug text-text-primary">
-            {c.message}
+            {preflightText(c)}
           </div>
         ))}
       </div>
