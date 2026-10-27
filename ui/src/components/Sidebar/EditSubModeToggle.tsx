@@ -3,6 +3,7 @@ import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { EditSubMode } from '../../types'
+import { leaveCharacterReplacement, openCharacterReplacement } from '../../features/characterReplacement/openCharacterReplacement'
 
 const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experimental?: boolean }[] = [
   { value: 'retake', labelKey: 'editSubModes.retake' },
@@ -10,6 +11,7 @@ const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experi
   { value: 'outpaint', labelKey: 'editSubModes.outpaint' },
   { value: 'restyle', labelKey: 'editSubModes.restyle' },
   { value: 'recast', labelKey: 'editSubModes.recast' },
+  { value: 'replace_character', labelKey: 'editSubModes.replaceCharacter' },
   { value: 'inpaint', labelKey: 'editSubModes.inpaint', experimental: true },
 ]
 
@@ -39,7 +41,14 @@ export function EditSubModeToggle() {
       {subModes.map(m => (
         <button
           key={m.value}
-          onClick={() => setEditSubMode(m.value, m.value === 'recast' ? 'scail' : undefined)}
+          onClick={() => {
+            const state = useStore.getState()
+            if (m.value === 'replace_character') {
+              openCharacterReplacement(state)
+              return
+            }
+            leaveCharacterReplacement(state, m.value, m.value === 'recast' ? 'scail' : undefined)
+          }}
           aria-pressed={editSubMode === m.value}
           className={`flex-1 text-[10px] py-1.5 rounded-md transition-all whitespace-nowrap ${
             editSubMode === m.value

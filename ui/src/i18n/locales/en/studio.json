@@ -42,6 +42,7 @@
     "restyle": "Repaint",
     "recast": "Recast",
     "inpaint": "Inpaint",
+    "replaceCharacter": "Replace character",
     "viggle": "Viggle"
   },
   "audioSubModes": {

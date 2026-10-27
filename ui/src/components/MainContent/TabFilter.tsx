@@ -12,6 +12,7 @@ import { useStore } from '../../stores/useStore'
 import type { GenerationMode, MediaFilter } from '../../types'
 import { OutputFolderSelector } from './OutputFolderSelector'
 import { NoticeTray } from '../../features/notices/NoticeTray'
+import { useCharacterReplacementRedirect } from '../../features/characterReplacement/openCharacterReplacement'
 
 interface MenuItem {
   value?: MediaFilter
@@ -93,6 +94,7 @@ export function TabFilter() {
   const sidebarMode = useStore(s => s.sidebarMode)
   const sidebarOpen = useStore(s => s.sidebarOpen)
   const dashboardOpen = useStore(s => s.dashboardOpen)
+  useCharacterReplacementRedirect()
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -248,7 +250,6 @@ export function TabFilter() {
     { value: 'gameAssets', label: t('tabs.gameAssets'), description: t('descriptions.gameAssets'), icon: <Gamepad2 size={15} />, action: () => openFilter('gameAssets') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'world3d', label: t('tabs.world3d'), description: t('descriptions.world3d'), icon: <Boxes size={15} />, action: () => openFilter('world3d') },
-    { value: 'character-replacement', featured: true, label: t('tabs.characterReplacement'), description: t('descriptions.characterReplacement'), icon: <WandSparkles size={15} />, action: () => openFilter('character-replacement') },
     { value: 'animate3d', label: t('tabs.animate3d'), description: t('descriptions.animate3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('animate3d') },
   ]
   const productionItems: MenuItem[] = [

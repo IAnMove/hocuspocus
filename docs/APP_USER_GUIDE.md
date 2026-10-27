@@ -8,7 +8,8 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 
 - **Crear → Generación directa (Studio):** un recurso por trabajo. Modos
   **Imagen**, **Vídeo**, **Audio** (voz, música, efectos, mezcla), **3D**,
-  **Editar** (retake, outpaint, repaint, recast, edit anything) y
+  **Editar** (retake, outpaint, repaint, recast, edit anything y Cambiar
+  personaje: fotograma de origen, personaje nuevo y vídeo) y
   **Herramientas** (upscale, revoice, quitar fondo).
 - **Crear → Estudios:** los laboratorios de la tabla siguiente.
 - **Producción:** Director, Producciones, Producciones musicales, Obras y Video Editor.
@@ -43,7 +44,6 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 | **Vídeo 2,5D** (Scene Animator) | Escenas de capas e imágenes: cámara, movimientos, rótulos, letra, efectos y exportación MP4. |
 | **Vídeo 3D** | Monta GLB, kits y escenarios procedurales en un mundo 3D; biblioteca de planos, luz, atmósfera, voz y exportación con niveles de calidad. |
 | **Animate** (Rig y Animate) | Rig humanoide para mallas reales y clips de animación por cuerpo. |
-| **Reemplazar personaje** | Sustituye a un personaje en un vídeo a partir de un fotograma editado. |
 | **Hoja de estilos** | Estilos H3 importados con su atribución, para que los planos compartan un mismo look. |
 
 ## Producción

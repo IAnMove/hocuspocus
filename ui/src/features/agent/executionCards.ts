@@ -63,7 +63,7 @@ export function executionCardTaskId(report: Pick<AgentExecutionReport, 'taskId'>
 const APPLICATION_TABS = new Set<AgentTab>([
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d', 'story_lab',
   'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d', 'character_creator',
-  'character_kit', 'workspaces', 'settings',
+  'character_kit', 'character_replacement', 'workspaces', 'settings',
 ])
 
 export function tabForExecutionTarget(target?: AgentExecutionTarget): AgentTab | null {

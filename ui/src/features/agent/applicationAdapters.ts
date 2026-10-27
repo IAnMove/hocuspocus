@@ -46,6 +46,7 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
+import { characterReplacementReady, openCharacterReplacement } from '../characterReplacement/openCharacterReplacement'
 import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
@@ -235,7 +236,8 @@ const TAB_LABELS: Record<AgentTab, string> = {
   videos: 'Videos', audio: 'Audio', '3d': '3D', story_lab: 'Story Lab',
   series_lab: 'Series Lab', comics: 'Comics', video_editor: 'Video Editor',
   video_3d: '3D Video', animate_3d: 'Animate 3D', character_creator: 'Character Creator',
-  character_kit: 'CharacterKit', lips_creator: 'Lips Creator', game_assets: 'Game assets', workspaces: 'Workspaces', settings: 'Settings',
+  character_kit: 'CharacterKit', lips_creator: 'Lips Creator', game_assets: 'Game assets',
+  character_replacement: 'Replace character', workspaces: 'Workspaces', settings: 'Settings',
 }
 
 function target(tab: AgentTab): AgentExecutionTarget {
@@ -254,6 +256,7 @@ function isTabOpen(tab: AgentTab): boolean {
     return visibleWorkspaceSurface(state) === 'generate'
       && !state.settingsOpen && !state.dashboardOpen
   }
+  if (tab === 'character_replacement') return characterReplacementReady(state)
   const mediaFilter = TAB_TARGETS[tab]
   return Boolean(mediaFilter && state.mediaFilter === mediaFilter
     && !state.settingsOpen && !state.dashboardOpen)
@@ -281,6 +284,8 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
     state.setSidebarMode('studio')
     state.setMediaFilter(DIRECT_GENERATION_MEDIA[state.generationMode] || 'videos')
     state.setSidebarOpen(true)
+  } else if (tab === 'character_replacement') {
+    openCharacterReplacement(state)
   } else {
     const mediaFilter = TAB_TARGETS[tab]
     state.setSettingsOpen(false)

@@ -411,6 +411,7 @@ export function MainContent() {
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
   const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
@@ -792,7 +793,7 @@ export function MainContent() {
           <ProjectsPanel />
         ) : mediaFilter === 'workspaces' ? (
           <WorkspaceCollectionsPanel />
-        ) : mediaFilter === 'character-replacement' ? (
+        ) : (mediaFilter === 'character-replacement' || (generationMode === 'avatar' && editSubMode === 'replace_character')) ? (
           <div className="flex-1 min-w-0 overflow-y-auto">
             <CharacterReplacementWorkspace />
           </div>
