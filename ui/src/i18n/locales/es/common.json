@@ -44,6 +44,7 @@
     "download": "Descargar"
   },
   "a11y": {
+    "openItem": "Abrir {{name}}",
     "openSettings": "Abrir ajustes",
     "close": "Cerrar",
     "back": "Volver",

@@ -34,8 +34,8 @@ function Model3dThumbnail({ src, name }: { src: string | null | undefined; name:
     return <img src={src} alt={name} className="w-full h-full object-cover" loading="lazy" />
   }
   return (
-    <div className="w-full h-full bg-bg-active flex items-center justify-center" title="3D model">
-      <Box size={15} className="text-text-muted" aria-label="3D model" />
+    <div className="w-full h-full bg-bg-active flex items-center justify-center" title={name}>
+      <Box size={15} className="text-text-muted" aria-hidden="true" />
     </div>
   )
 }
@@ -119,6 +119,8 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
             <button
               key={file.name}
               data-thumb-index={idx}
+              aria-label={controlLabel('a11y.openItem', { name: file.name })}
+              title={controlLabel('a11y.openItem', { name: file.name })}
               onClick={() => {
                 onThumbnailClick(idx)
                 onMobileClick?.()
