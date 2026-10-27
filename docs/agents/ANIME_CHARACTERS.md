@@ -40,7 +40,7 @@ Then, in a scene: bind `rigged_file` to a model slot (`fit.heightM` = the height
 
 ## Review round (reviewer measured from stills, applied)
 
-Features sit lower on the skull (eye line 0.63 of the skull box, mouth 0.87, chin-to-mouth 13 %), the iris is taller than the opening and clipped by the lid, brows lighter, the five half-lid poses differ (asymmetric lids, a lifted corner for smug, a small o for sleepy), head visemes have a thin teeth line and a dark inside; the face patch gets no ink hull of its own (the skull's hull carries the jaw), hair strands take 0.6 of the outline width and a narrow gloss band scaled by the hair's luminance; the hairline is lower, the helmet thicker with crown volume and the fringe reaches the brows.
+Features sit lower on the skull (eye line 0.63 of the skull box, mouth 0.87, chin-to-mouth 13 %), the iris is taller than the opening and clipped by the lid, brows lighter, the five half-lid poses differ (asymmetric lids, a lifted corner for smug, a small o for sleepy), head visemes have a thin teeth line and a dark inside; the face patch gets no ink hull of its own (the skull's hull carries the jaw), hair strands take 0.4 of the outline width and a narrow gloss band scaled by the hair's luminance; the hairline is lower, the helmet thicker with crown volume and the fringe reaches the brows.
 
 ## Gotchas
 
