@@ -2059,12 +2059,12 @@ export function VideoEditorPanel() {
         />
         {montage.ref && (
           <>
-            <button type="button" onClick={() => setShotBoardOpen(open => !open)} aria-pressed={shotBoardOpen}
+            <button type="button" onClick={() => { const next = !shotBoardOpen; setShotBoardOpen(next); if (next) setComicOpen(() => false) }} aria-pressed={shotBoardOpen}
               className={viewToggleClass(shotBoardOpen)}
               title={t('shots.toggleTitle')}>
               <Film size={13} /> {t('shots.toggle')}
             </button>
-            <button type="button" data-testid="comic-toggle" onClick={() => { setComicOpen(open => !open); setSequencePlaying(false) }}
+            <button type="button" data-testid="comic-toggle" onClick={() => { const next = !comicOpen; setComicOpen(() => next); if (next) setShotBoardOpen(false); setSequencePlaying(false) }}
               aria-pressed={comicOpen} className={viewToggleClass(comicOpen)} title={t('comic.toggleTitle')}>
               <BookOpen size={13} /> {t('comic.toggle')}
             </button>
