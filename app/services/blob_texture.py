@@ -133,6 +133,34 @@ def guide_png(parts, layout, part: str = "body", size=ATLAS) -> bytes:
     return out.getvalue()
 
 
+def bleed(picture, radius: int = 24):
+    """The painted figure's colours pushed outward over the ground around it (and over the 2 pixels at its edge, which are half
+    ground). The mould is never exactly the painted figure: a hand a little wider, a neck a little longer, and without this its
+    pixels would sample the dark ground and show as black slivers."""
+    import numpy as np
+    from PIL import Image
+
+    pixels = np.asarray(picture.convert("RGB")).astype(np.float32)
+    corners = np.concatenate([pixels[:12, :12].reshape(-1, 3), pixels[:12, -12:].reshape(-1, 3), pixels[-12:, :12].reshape(-1, 3), pixels[-12:, -12:].reshape(-1, 3)])
+    ground = np.median(corners, axis=0)
+    figure = np.abs(pixels - ground).max(axis=2) > 26
+    for _ in range(2):   # erode: an edge pixel is half figure, half ground
+        figure = figure & np.roll(figure, 1, 0) & np.roll(figure, -1, 0) & np.roll(figure, 1, 1) & np.roll(figure, -1, 1)
+    out = pixels.copy()
+    filled = figure.copy()
+    for _ in range(radius):
+        total = np.zeros_like(out)
+        count = np.zeros(filled.shape, np.float32)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            near = np.roll(filled, (dy, dx), (0, 1))
+            total += np.roll(out, (dy, dx), (0, 1)) * near[..., None]
+            count += near
+        grow = (~filled) & (count > 0)
+        out[grow] = total[grow] / count[grow][:, None]
+        filled |= grow
+    return Image.fromarray(out.clip(0, 255).astype(np.uint8))
+
+
 def stack_atlas(body, head=None) -> bytes:
     """The atlas picture (PNG bytes) from the painted ``body`` picture (2:1) and, when there is one, the painted ``head`` picture
     (2:1). Without a head picture the head tiles are cut from the body picture and enlarged, softer but the same man."""
@@ -140,9 +168,9 @@ def stack_atlas(body, head=None) -> bytes:
 
     from PIL import Image
 
-    top = body.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+    top = bleed(body.convert("RGB").resize(HALF_SIZE, Image.LANCZOS))
     if head is not None:
-        bottom = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+        bottom = bleed(head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS))
     else:
         bottom = Image.new("RGB", HALF_SIZE, (90, 70, 60))
     atlas = Image.new("RGB", ATLAS)
