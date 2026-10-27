@@ -353,8 +353,8 @@ def face_relief_patch(L: dict, relief, frame: dict, steps: int = 56) -> tuple[Me
     kit canvas read at the point's own (x, y) (the front tile centred in a square 1024 picture, v up, as ``face_patch`` does): the patch
     moves along +Z only, so the picture stays exactly on its place. The viewer drapes the atlas by position and keeps these for a face kit."""
     from services.blob_face_relief import PATCH_LATS, PATCH_YAW, edge_fade
-    from services.blob_texture import atlas_uv
 
+    PATCH_YAW = float(getattr(relief, "yaw", PATCH_YAW))   # the patch's reach is the sampler's (``face_span``), 53 degrees by default
     mesh = Mesh()
     yaws = [-PATCH_YAW + 2 * PATCH_YAW * j / steps for j in range(steps + 1)]
     lats = [PATCH_LATS[0] + (PATCH_LATS[1] - PATCH_LATS[0]) * k / steps for k in range(steps + 1)]
@@ -363,7 +363,7 @@ def face_relief_patch(L: dict, relief, frame: dict, steps: int = 56) -> tuple[Me
         ring, row = [], []
         for yaw in yaws:
             x, y, z = skull_point(L, yaw, lat, 1.004)
-            lift = relief(x, y) * edge_fade(yaw, lat)
+            lift = relief(x, y) * edge_fade(yaw, lat, PATCH_LATS, PATCH_YAW)
             ring.append((x, y, z + lift))
             row.append((0.5 + x / frame["head"][1], 0.5 + (y - frame["head"][0]) / frame["head"][1]))   # the kit's canvas: the front tile centred, v up
         grid.append(ring)
@@ -657,7 +657,10 @@ def loft_parts(spec: dict, layout: dict, fit=None, relief=None) -> list[tuple[Me
             uvs = [atlas_uv(p, False, frame, True, 0) for p in face.vertices]
     parts = [(mesh, "body", body_uvs), (face, "face", uvs)]
     if hair.vertices:
-        parts.append((hair, "hair", hair.uvs))
+        hair_uvs = hair.uvs
+        if atlas and spec["hair"].get("texture") == "photo":
+            hair_uvs = atlas_uvs(hair, frame)   # the cap takes the head picture's own hair, draped like the skull
+        parts.append((hair, "hair", hair_uvs))
     return parts
 
 

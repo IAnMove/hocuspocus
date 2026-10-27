@@ -89,13 +89,16 @@ def relief_sampler(depth: np.ndarray, frame: dict, head_height: float) -> Callab
     return relief
 
 
-def relief_from_picture(picture, frame: dict, head_height: float):
-    """The sampler for the front tile of ``picture`` (the whole head picture, three tiles side by side), or None without the model."""
+def relief_from_picture(picture, frame: dict, head_height: float, span: float = PATCH_YAW):
+    """The sampler for the front tile of ``picture`` (the whole head picture, three tiles side by side), or None without the model.
+    ``span`` (degrees each way from the face) is how far the face patch reaches; the sampler carries it as ``.yaw``."""
     if not CHECKPOINT.is_file():
         return None
     width, height = picture.size
     front = picture.convert("RGB").crop((0, 0, width // 3, height))
-    return relief_sampler(depth_of_picture(front), frame, head_height)
+    sampler = relief_sampler(depth_of_picture(front), frame, head_height)
+    sampler.yaw = float(span)
+    return sampler
 
 
 def edge_fade(yaw: float, lat: float, lats: tuple[float, float] = PATCH_LATS, yaw_limit: float = PATCH_YAW) -> float:

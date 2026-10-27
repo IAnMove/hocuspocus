@@ -422,14 +422,21 @@ def _hair(value) -> dict:
         return {"style": "none", "color": _HAIR_COLOR}
     if not isinstance(value, dict):
         _fail("invalid_hair", "hair must be an object with style and color")
-    extra = set(value) - {"style", "color"}
+    extra = set(value) - {"style", "color", "texture", "edge", "fit"}
     if extra:
         _fail("unknown_field", "Unknown hair field: " + ", ".join(sorted(extra)))
     style = value.get("style", "none")
     if style not in _HAIR_STYLES:
         _fail("invalid_hair", "hair.style must be one of: " + ", ".join(_HAIR_STYLES))
     color = _HAIR_COLOR if "color" not in value else _hex(value["color"], "hair.color")
-    return {"style": style, "color": color}
+    found = {"style": style, "color": color}
+    if "texture" in value:
+        found["texture"] = _choice(value["texture"], ("flat", "photo"), "invalid_hair", "hair.texture")
+    if "edge" in value:
+        found["edge"] = _choice(value["edge"], ("smooth", "jagged"), "invalid_hair", "hair.edge")
+    if "fit" in value:
+        found["fit"] = _choice(value["fit"], ("full", "snug"), "invalid_hair", "hair.fit")
+    return found
 
 
 def _assemble(spec: dict) -> tuple[list, dict]:

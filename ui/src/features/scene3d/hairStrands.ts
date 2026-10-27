@@ -67,7 +67,7 @@ export function applyHairStrands(root: Object3D): void {
     if (!mesh.isMesh || !mesh.geometry.getAttribute('uv')) return
     for (const item of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
       const material = item as Material & Partial<MeshStandardMaterial>
-      if (!material || material.name !== 'hair' || material.userData.hairStrands) continue
+      if (!material || material.name !== 'hair' || material.userData.hairStrands || material.userData.atlas) continue   // a hair cap draped from the head picture keeps it
       material.map = hairStrandTexture()
       material.alphaTest = 0.5
       material.side = DoubleSide

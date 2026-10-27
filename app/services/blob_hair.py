@@ -41,7 +41,7 @@ def hair_mesh(L: dict, hair: dict) -> UVMesh:
     if style == "none":
         return mesh
     if L.get("relief"):
-        _real_cap(mesh, head, color)   # a painted face brings its own hairline and fringe: only the cap and the back
+        _real_cap(mesh, head, color, 9.0 if hair.get("edge") == "jagged" else 0.0, 0.972 if hair.get("fit") == "snug" else 1.0)   # a painted face brings its own hairline and fringe: only the cap and the back
         return mesh
     _helmet(mesh, head, color, hairline=34 if style in ("short", "spiky", "bun") else 26)
     if style == "short":
@@ -78,7 +78,7 @@ def _scalp_uv(head: _Head):
     return uv
 
 
-def _real_cap(mesh: Mesh, head: _Head, color: str) -> None:
+def _real_cap(mesh: Mesh, head: _Head, color: str, jag: float = 0.0, snug: float = 1.0) -> None:
     """Short hair for a head with a painted face: a cap over the crown above the painted hairline (lat 50 and up), the flanks above
     the ears (yaw 58 to 302, lat 18 to 50) and the back behind them (yaw 104 to 256, down to the nape). The forehead, the temples in
     front of 58 degrees and the ears stay the painting's; the cap gives the head a hair silhouette instead of an egg's."""
@@ -86,9 +86,10 @@ def _real_cap(mesh: Mesh, head: _Head, color: str) -> None:
 
     def band(yaws, lats, closed, out_of):
         grid, colors = [], []
-        for lat in lats:
-            out = out_of(lat)
-            ring = [skull_point(head.L, yaw, lat, out) for yaw in yaws]
+        for row, lat in enumerate(lats):
+            out = out_of(lat) * snug   # snug: within the painted hair's own outline, so a cap draped from the picture never samples its background
+            # a jagged lower edge: the first ring of a band wanders up and down by up to ``jag`` degrees, like cut hair, not a ruled line
+            ring = [skull_point(head.L, yaw, lat + (jag * (0.5 + 0.5 * math.sin(yaw * 0.43) * math.cos(yaw * 0.171 + 1.3)) if row == 0 and jag else 0.0), out) for yaw in yaws]
             if lat >= 89.9:
                 ring = [(0.0, head.cy + head.ry * out, 0.0)] * len(ring)
             grid.append(ring)

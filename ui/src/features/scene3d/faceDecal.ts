@@ -465,7 +465,7 @@ export class FaceDecalRuntime {
       this.originalMap = face.map
       useMapUv(face, true)
       face.map = this.texture
-      face.transparent = false
+      face.transparent = Boolean(face.userData.atlas?.faceFeather)   // a feathered border needs the blend
       face.needsUpdate = true
     }
   }
