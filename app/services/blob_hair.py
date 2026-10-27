@@ -87,25 +87,25 @@ def _crown(mesh: Mesh, head: _Head, color: str) -> None:
         _clump(mesh, head, color, root, pull, tip, 0.42, 0.06, flat=0.16)
 
 
-def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 6, length: float = 0.62) -> None:
-    """Pointed locks from a root buried under the dome's hairline down over the forehead to the brows, in three lengths so
+def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 7, length: float = 0.62) -> None:
+    """Pointed locks from a root on the dome's hairline (outside the face patch) down over the forehead to the brows, in three lengths so
     the tips stagger, flaring a little to the sides."""
     levels = (1.0, 0.85, 0.92)
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
         yaw = u * 48
         reach = length * levels[i % 3]
-        root = head.at(yaw, 52, 0.92)
-        pull = head.off(head.at(yaw * 1.05, 34, 1.08), dy=0.02)
-        tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.03), dx=u * 0.08)
-        _clump(mesh, head, color, root, pull, tip, 0.34, 0.03, flat=0.2)
+        root = head.at(yaw, 54, 1.04)
+        pull = head.off(head.at(yaw * 1.05, 34, 1.11), dy=0.02)
+        tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.06), dx=u * 0.08)
+        _clump(mesh, head, color, root, pull, tip, 0.36, 0.04, flat=0.18)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
     """One lock in front of each ear. ``length`` is in head heights below the chin (0 ends at the jaw)."""
     for sign in (-1, 1):
-        root = head.at(sign * 58, 48, 0.92)
-        pull = head.off(head.at(sign * 74, -16, 1.10), dz=0.1)
+        root = head.at(sign * 58, 46, 1.05)
+        pull = head.off(head.at(sign * 74, -16, 1.13), dz=0.1)
         tip = (root[0] + sign * head.rx * 0.1, head.chin - head.ry * length, head.cz + head.rz * 0.18)
         _clump(mesh, head, color, root, pull, tip, 0.30, 0.04, flat=0.36)
 
