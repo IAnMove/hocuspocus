@@ -6,6 +6,7 @@ import {
   Maximize2, Type, Undo2, Unlock, Upload, WandSparkles, X,
 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { displayLanguageName } from '../../i18n/displayLanguage'
 import { contentLanguageForUi } from '../../lib/contentLanguage'
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
@@ -192,7 +193,7 @@ const TRANSLATION_LANGUAGES = [
 ]
 
 function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
-  const { t } = useUiTranslation('comics')
+  const { t, i18n } = useUiTranslation('comics')
   const projectLanguage = useComicStore(state => state.project.language)
   const hasDirectorPlan = useComicStore(state => Boolean(state.project.director?.plan))
   const [language, setLanguage] = useState(projectLanguage || contentLanguageForUi().language)
@@ -292,7 +293,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
           : t('export.needDirector')}
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-        {progress || t('export.inLanguage', { language: language.trim() || t('export.languageFallback') })}
+        {progress || t('export.inLanguage', { language: displayLanguageName(language.trim(), i18n.language) || t('export.languageFallback') })}
       </button>
     </div>
   )
@@ -772,7 +773,7 @@ export function ComicDirectorPanel({
   notify?: (notice: Notice) => void
   createCompleteComic?: boolean
 }) {
-  const { t } = useUiTranslation('comics')
+  const { t, i18n } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const [request, setRequest] = useState<ComicDirectorRequest>(() =>
     project.director?.input
@@ -1879,7 +1880,7 @@ export function ComicDirectorPanel({
               )}
             >
               {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
-              {t('lettering.fixMixed', { language: project.language || project.director?.plan.language || project.director?.input.language })}
+              {t('lettering.fixMixed', { language: displayLanguageName(project.language || project.director?.plan.language || project.director?.input.language || '', i18n.language) })}
             </button>
             <textarea
               className={input}

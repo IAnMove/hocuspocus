@@ -631,7 +631,7 @@ export function StoryLabPanel() {
     const writer = project.provider.writingProvider === 'maestro'
       ? 'HocusPocus internal'
       : project.provider.writingModel || project.provider.writingProvider
-    const title = `Story Lab · ${project.title.trim() || 'Untitled story'} · ${writer}`
+    const title = `Story Lab · ${project.title.trim() || t('untitled')} · ${writer}`
     const lifecycle = createStoryActivityLifecycle({
       id,
       title,

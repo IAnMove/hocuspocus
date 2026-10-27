@@ -1237,5 +1237,6 @@
     "retried": "He reintentado “{{title}}” ({{id}}); Activity muestra el estado {{status}}.",
     "queueScopeActive": "activas",
     "queueScopeAll": "todas"
-  }
+  },
+  "untitledScene": "Escena sin título"
 }

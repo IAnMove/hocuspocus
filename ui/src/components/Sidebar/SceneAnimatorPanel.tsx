@@ -1,3 +1,4 @@
+import i18n from 'i18next'
 import { withCharacterPoseDimensions } from '../../lib/characterPoseDimensions'
 import { sceneAudioWav, supportsSceneAac } from '../../features/sceneFx/audioExport'
 import { waitForSceneImages } from '../../lib/sceneMediaReady'
@@ -173,7 +174,7 @@ const ATMOSPHERE_DESCRIPTIONS: Record<SceneAtmosphereKind, string> = {
   speedlines: 'Fast directional streaks for action and impacts.',
   leaves: 'Rotating autumn leaves with varied warm colours.',
 }
-const blankScene = (): AnimatorScene => ({ version: 1, name: 'Untitled scene', width: 1280, height: 720, fps: 30, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
+const blankScene = (): AnimatorScene => ({ version: 1, name: i18n.t('untitledScene', { ns: 'studio', defaultValue: 'Untitled scene' }), width: 1280, height: 720, fps: 30, duration: 5, layers: [], composition: { ...DEFAULT_COMPOSITION } })
 const AUTOSAVE_KEY = 'maestro-scene-animator-autosave-v1'
 const HISTORY_LIMIT = 80
 const uid = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`

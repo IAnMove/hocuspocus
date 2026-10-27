@@ -1237,5 +1237,6 @@
     "retried": "I retried “{{title}}” ({{id}}); Activity shows status {{status}}.",
     "queueScopeActive": "active",
     "queueScopeAll": "all"
-  }
+  },
+  "untitledScene": "Untitled scene"
 }
