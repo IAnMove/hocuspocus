@@ -13,14 +13,12 @@ import { fileURLToPath } from 'node:url'
  * A silent disabled control is a JSX element with `disabled` (not the literal
  * `false`) and neither `title` nor `aria-describedby` on that element.
  *
- * `src/features/scene3d` and `src/components/workbench` are excluded. Another
- * run owns them.
+ * Every `.tsx` file under `ui/src` is in scope, including Video 3D and the
+ * workbench.
  */
 const uiRoot = fileURLToPath(new URL('..', import.meta.url))
 const require = createRequire(join(uiRoot, 'package.json'))
 const ts = require('typescript') as typeof import('typescript')
-
-export const EXCLUDE_PREFIXES = ['src/features/scene3d/', 'src/components/workbench/']
 
 const PASSTHROUGH = new Set(['span', 'div', 'i', 'em', 'strong'])
 
@@ -43,8 +41,9 @@ function sourceFiles(dir: string, out: string[] = []) {
   return out
 }
 
-function excluded(rel: string) {
-  return EXCLUDE_PREFIXES.some(prefix => rel.startsWith(prefix))
+/** Relative `.tsx` paths the icon and disabled scanners read. */
+export function scannedUiSources() {
+  return sourceFiles(join(uiRoot, 'src')).map(path => relative(uiRoot, path).split('\\').join('/')).sort()
 }
 
 function lucideNames(sf: import('typescript').SourceFile) {
@@ -243,12 +242,10 @@ export function disabledHits(path: string, text: string) {
   return hits
 }
 
-export function scanCounts(kind: 'icon' | 'disabled', includeExcluded = false) {
+export function scanCounts(kind: 'icon' | 'disabled') {
   const counts: Record<string, number> = {}
-  for (const path of sourceFiles(join(uiRoot, 'src'))) {
-    const rel = relative(uiRoot, path).split('\\').join('/')
-    if (!includeExcluded && excluded(rel)) continue
-    const hits = (kind === 'icon' ? iconHits : disabledHits)(path, readFileSync(path, 'utf8'))
+  for (const rel of scannedUiSources()) {
+    const hits = (kind === 'icon' ? iconHits : disabledHits)(rel, readFileSync(join(uiRoot, rel), 'utf8'))
     if (hits.length) counts[rel] = hits.length
   }
   return Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))
