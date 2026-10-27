@@ -37,6 +37,8 @@ export type ToonSettings = { steps: number; outline: number; ink: string; shade:
 export type ToonTarget = { root: Object3D; outline: boolean }
 
 export const DEFAULT_TOON: ToonSettings = { steps: 3, outline: 3, ink: '#141018', shade: 'classic' }
+/** Hair strands are inked at this share of the outline width. */
+export const HAIR_INK = 0.6
 /** Light of the darkest band; the others are spread evenly up to full light. */
 const SHADOW_BAND = 0.3
 /** The anime shade keeps its shadow close to the lit colour and gives it a cool tint, as cel shadows are painted. */
@@ -186,8 +188,9 @@ export function withAnimeShade(shader: { fragmentShader: string }) {
 /** The anime hair gloss: a light band where the surface tilts up in view space, the "angel ring" of anime hair, on a
  * material named `hair` (the lofted body writes its hair as that primitive). It follows the camera, not the lamp. */
 export function withHairGloss(shader: { fragmentShader: string }) {
-  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float hairBand = smoothstep( 0.42, 0.56, geometryNormal.y ) * ( 1.0 - smoothstep( 0.72, 0.86, geometryNormal.y ) );
-	outgoingLight += ( diffuseColor.rgb * 0.9 + vec3( 0.38 ) ) * hairBand * 0.55;
+  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float hairBand = smoothstep( 0.46, 0.54, geometryNormal.y ) * ( 1.0 - smoothstep( 0.62, 0.72, geometryNormal.y ) ) * ( 1.0 - smoothstep( 0.9, 0.97, geometryNormal.y ) );
+	float hairLum = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+	outgoingLight += mix( diffuseColor.rgb, vec3( 1.0 ), 0.45 ) * hairBand * 0.35 * ( 0.4 + hairLum );
 	#include <opaque_fragment>`)
 }
 
@@ -379,6 +382,7 @@ export class ToonLook {
   private converted = new Map<Material, Converted>()
   private hulls = new Map<Mesh, { hull: Mesh; pass: number }>()
   private ink?: ShaderMaterial
+  private thinInk?: ShaderMaterial
   private hidden?: MeshBasicMaterial
   private pass = 0
   private fill: ToonFill = { value: new Color(0) }
@@ -415,6 +419,7 @@ export class ToonLook {
     this.converted.clear()
     this.hulls.clear()
     this.ink?.dispose(); this.ink = undefined
+    this.thinInk?.dispose(); this.thinInk = undefined
     this.hidden?.dispose(); this.hidden = undefined
     this.gradient?.texture.dispose(); this.gradient = undefined
   }
@@ -461,7 +466,9 @@ export class ToonLook {
     const skinned = mesh as Mesh & { isInstancedMesh?: boolean; isBatchedMesh?: boolean }
     if (skinned.isInstancedMesh || skinned.isBatchedMesh) return undefined
     const materials = Array.isArray(material) ? material : [material]
-    const inked = materials.map(inkable)
+    // the lofted head's face primitive sits a hair outside the skull: the skull's own hull carries the jaw line,
+    // a second hull on the face patch would ink the chin, cheeks and hairline twice
+    const inked = materials.map(item => inkable(item) && item.name !== 'face')
     if (!inked.some(Boolean)) return undefined
     let entry = this.hulls.get(mesh)
     if (!entry || entry.hull.geometry !== mesh.geometry || Boolean((entry.hull as SkinnedMesh).isSkinnedMesh) !== Boolean((mesh as SkinnedMesh).isSkinnedMesh)) {
@@ -469,18 +476,25 @@ export class ToonLook {
       this.hulls.set(mesh, entry)
     }
     entry.pass = this.pass
-    const ink = this.inkFor(settings)
-    entry.hull.material = Array.isArray(material) ? inked.map(ok => ok ? ink : this.hiddenMaterial()) : ink
+    // hair strands take a thinner line than the body, or every clump reads as licorice
+    const inkOf = (item: Material) => this.inkFor(settings, item.name === 'hair' ? HAIR_INK : 1)
+    entry.hull.material = Array.isArray(material) ? inked.map((ok, index) => ok ? inkOf(materials[index]) : this.hiddenMaterial()) : inkOf(materials[0])
     followMesh(entry.hull, mesh)
     mesh.add(entry.hull)
     return entry.hull
   }
 
-  private inkFor(settings: ToonSettings): ShaderMaterial {
-    this.ink ??= inkMaterial()
-    this.ink.uniforms.inkWidth.value = settings.outline / REFERENCE_HALF_HEIGHT
-    ;(this.ink.uniforms.inkColor.value as Color).set(settings.ink)
-    return this.ink
+  private inkFor(settings: ToonSettings, scale = 1): ShaderMaterial {
+    if (scale === 1) {
+      this.ink ??= inkMaterial()
+      this.ink.uniforms.inkWidth.value = settings.outline / REFERENCE_HALF_HEIGHT
+      ;(this.ink.uniforms.inkColor.value as Color).set(settings.ink)
+      return this.ink
+    }
+    this.thinInk ??= inkMaterial()
+    this.thinInk.uniforms.inkWidth.value = settings.outline * scale / REFERENCE_HALF_HEIGHT
+    ;(this.thinInk.uniforms.inkColor.value as Color).set(settings.ink)
+    return this.thinInk
   }
 
   private hiddenMaterial(): MeshBasicMaterial {

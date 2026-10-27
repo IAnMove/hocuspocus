@@ -15,7 +15,7 @@ import math
 
 from services.blob_loft import Mesh, _st, _tube, _egg_radius, bezier, curve_tube, skull_point, _emit
 
-HELMET = 1.06
+HELMET = 1.10
 _SAMPLES = 7
 
 
@@ -25,7 +25,7 @@ def hair_mesh(L: dict, hair: dict) -> Mesh:
     if style == "none":
         return mesh
     head = _Head(L)
-    _helmet(mesh, head, color, hairline=42 if style in ("short", "spiky", "bun") else 36)
+    _helmet(mesh, head, color, hairline=34 if style in ("short", "spiky", "bun") else 26)
     _STYLES[style](mesh, head, color)
     return mesh
 
@@ -57,9 +57,11 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
                                (full, [hairline + (90 - hairline) * k / 8 for k in range(9)], True)):
         grid, colors = [], []
         for lat in lats:
-            ring = [skull_point(head.L, yaw, lat, HELMET) for yaw in yaws]
+            # more volume on the crown: 1.10 outside the skull, 1.16 above 60 degrees
+            out = HELMET + 0.06 * max(0.0, min(1.0, (lat - 60) / 30))
+            ring = [skull_point(head.L, yaw, lat, out) for yaw in yaws]
             if lat >= 89.9:
-                ring = [(0.0, head.cy + head.ry * HELMET, 0.0)] * len(ring)
+                ring = [(0.0, head.cy + head.ry * out, 0.0)] * len(ring)
             grid.append(ring)
             colors.append([linear_color(color)] * len(ring))
         centers = [(0.0, head.cy + head.ry * math.sin(math.radians(lat)), 0.0) for lat in lats]
@@ -74,16 +76,16 @@ def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: 
     curve_tube(mesh, points, radii, color, ring=ring, flat=flat)
 
 
-def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 8, length: float = 0.55) -> None:
-    """Wide flat strands from the hairline down over the forehead, overlapping, parted a little toward the sides."""
+def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float = 0.75) -> None:
+    """Wide flat strands from the hairline down over the forehead to the brows, overlapping, parted a little to the sides."""
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
-        yaw = u * 46
-        reach = length * (1.0 if i % 2 else 0.86)   # alternating lengths, so the strands overlap, not slats
+        yaw = u * 48
+        reach = length * (1.0 if i % 2 else 0.92)   # alternating lengths, so the strands overlap, not slats
         root = head.at(yaw, 56, 1.0)
         pull = head.off(head.at(yaw * 1.05, 30, 1.16), dy=0.02)
         tip = head.off(head.at(yaw * 1.2, 56 - reach * 95, 1.05), dx=u * 0.04)
-        _clump(mesh, head, color, root, pull, tip, 0.34, 0.07, flat=0.18)
+        _clump(mesh, head, color, root, pull, tip, 0.5, 0.08, flat=0.10)
 
 
 def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
@@ -96,7 +98,7 @@ def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
 
 
 def _short(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=7, length=0.42)
+    _fringe(mesh, head, color)
     for i in range(10):
         yaw = 54 + i * 28
         root = head.at(yaw, 24)
@@ -106,12 +108,12 @@ def _short(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _bangs(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=6, length=0.6)
+    _fringe(mesh, head, color)
     _side_locks(mesh, head, color, 0.1)
 
 
 def _bob(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=8, length=0.55)
+    _fringe(mesh, head, color)
     for i in range(14):
         yaw = 42 + i * 23.5
         root = head.at(yaw, 26)
@@ -121,7 +123,7 @@ def _bob(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _long(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5, length=0.55)
+    _fringe(mesh, head, color)
     _side_locks(mesh, head, color, 1.4)
     for i in range(9):
         yaw = 112 + i * 17
@@ -132,7 +134,7 @@ def _long(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _twin_tails(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=6, length=0.6)
+    _fringe(mesh, head, color)
     _side_locks(mesh, head, color, 0.15)
     for sign in (-1, 1):
         knot = head.at(sign * 105, 28)
@@ -145,7 +147,7 @@ def _twin_tails(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _spiky(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5, length=0.4)
+    _fringe(mesh, head, color)
     # curved, flattened, tapered clumps that sweep up and back, not cones
     for i in range(10):
         yaw = i * 36 + 18
@@ -157,7 +159,7 @@ def _spiky(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _ponytail(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5, length=0.5)
+    _fringe(mesh, head, color)
     _side_locks(mesh, head, color, 0.05)
     knot = head.at(180, 30)
     for k, (dx, dz) in enumerate(((0.0, 0.0), (0.16, -0.05), (-0.16, -0.05), (0.0, -0.12))):
@@ -168,7 +170,7 @@ def _ponytail(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _bun(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5, length=0.5)
+    _fringe(mesh, head, color)
     top = head.at(170, 62, 1.0)
     bun = [_st((top[0], top[1] + head.ry * 0.05, top[2]), head.rx * 0.2, head.rz * 0.2, color),
            _st((top[0], top[1] + head.ry * 0.3, top[2] - head.rz * 0.05), head.rx * 0.34, head.rz * 0.34, color),

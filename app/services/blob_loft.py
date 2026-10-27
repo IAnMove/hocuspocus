@@ -224,7 +224,7 @@ def skull_profile(lat: float) -> tuple[float, float, float, float]:
         flat = _lerp(0.55, 1.0, (lat - 25) / 50)
         return width, back, front, flat
     u = -lat / 90.0
-    width = c * (1.0 - 0.34 * u ** 1.5)
+    width = c * (1.0 - 0.42 * u ** 1.3)
     back = c * (1.0 - 0.12 * u)
     front = _lerp(0.86, 0.62, u ** 1.2) + 0.08 * max(0.0, u - 0.72) / 0.28
     flat = _lerp(0.55, 0.8, u ** 2)
@@ -259,15 +259,17 @@ def _head(mesh: Mesh, L: dict, skin: str) -> None:
     centers = [(0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0) for lat in lats]
     _emit(mesh, grid, colors, centers, True, None)
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    base = skull_point(L, 0, -22, 1.0)
-    nose = [_st((0, base[1] + ry * 0.06, base[2] - rz * 0.02), rx * 0.06, ry * 0.08, skin), _st((0, base[1] - ry * 0.02, base[2] + rz * 0.07), rx * 0.055, ry * 0.05, skin),
-            _st((0, base[1] - ry * 0.07, base[2] + rz * 0.09), rx * 0.035, ry * 0.03, skin)]
+    # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
+    base = skull_point(L, 0, -36, 1.0)
+    nose = [_st((0, base[1] + ry * 0.03, base[2] - rz * 0.01), rx * 0.03, ry * 0.04, skin), _st((0, base[1] - ry * 0.01, base[2] + rz * 0.03), rx * 0.025, ry * 0.025, skin),
+            _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
     _tube(mesh, nose, "z", ring=8)
+    # ears at the eye line, as tall as a fifth of the head
     for sign in (-1, 1):
-        at = skull_point(L, sign * 90, -8, 1.0)
-        ear = [_st((at[0] * 0.94, at[1], at[2] - rz * 0.08), rx * 0.1, rz * 0.16, skin),
-               _st((at[0] * 1.1, at[1] + ry * 0.01, at[2] - rz * 0.09), rx * 0.085, rz * 0.14, skin),
-               _st((at[0] * 1.16, at[1] + ry * 0.01, at[2] - rz * 0.1), rx * 0.01, rz * 0.03, skin)]
+        at = skull_point(L, sign * 90, -22, 1.0)
+        ear = [_st((at[0] * 0.94, at[1], at[2] - rz * 0.06), rx * 0.12, ry * 0.2, skin),
+               _st((at[0] * 1.08, at[1] + ry * 0.02, at[2] - rz * 0.07), rx * 0.1, ry * 0.17, skin),
+               _st((at[0] * 1.14, at[1] + ry * 0.02, at[2] - rz * 0.08), rx * 0.01, ry * 0.03, skin)]
         _tube(mesh, ear, "x", ring=8)
 
 
