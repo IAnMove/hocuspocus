@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { creationOutputs, duplicateClipState, frameOffset, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
+import { creationOutputs, duplicateClipState, frameOffset, mergeComicShotUpdate, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
 import { outputNameFromEditorClip } from '../src/features/video-editor/replacementHandoff.ts'
 import { comicPanelKey } from '../src/features/video-editor/useComicPanels.ts'
 import { columnCount, GUTTER, layoutComic, MARGIN, PAGE_H, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicView.ts'
@@ -140,6 +140,35 @@ test('remake finds the settings of a copied clip under the original name, then t
   assert.deepEqual(creationOutputs({ kind: 'generation', canRegenerate: true, sidecar: 'shot.meta.json', generatedFrom: 'shot.mp4' }), ['shot.mp4'])
   assert.deepEqual(creationOutputs({ kind: 'upload', canRegenerate: false }), [])
   assert.equal(outputNameFromEditorClip('ol-o01.mp4', 'o01'), 'ol-o01.mp4')
+})
+
+test('a comic remake keeps unsaved clips and only adopts the selected take', () => {
+  const clips = [
+    { id: 'a', source: 'draft-a.mp4', trimStart: 1, trimEnd: 8 },
+    { id: 'copy', source: 'draft-a.mp4', trimStart: 1, trimEnd: 8 },
+    { id: 'b', source: 'replaced.mp4', trimStart: 0, trimEnd: 3 },
+  ]
+  const extras = {
+    a: { lyric: 'hola', comic: { text: 'bubble' as const } },
+    copy: { lyric: 'hola', comic: { text: 'bubble' as const } },
+  }
+  const saved = [
+    { id: 'a', source: 'saved-a.mp4', takes: [{ id: 'take-1' }, { id: 'take-new' }] },
+    { id: 'b', source: 'saved-b.mp4' },
+  ]
+
+  const regenerated = mergeComicShotUpdate(clips, extras, saved, undefined)
+  assert.deepEqual(regenerated.clips, clips)
+  assert.deepEqual(regenerated.extras.a, { lyric: 'hola', comic: { text: 'bubble' }, takes: saved[0].takes })
+  assert.deepEqual(regenerated.extras.copy, extras.copy)
+  assert.equal(regenerated.extras.b, undefined)
+
+  const selected = mergeComicShotUpdate(clips, extras, saved, { id: 'a', source: 'take.mp4', trimStart: 0, trimEnd: 7 })
+  assert.deepEqual(selected.clips.map(clip => clip.id), ['a', 'copy', 'b'])
+  assert.deepEqual(selected.clips[0], { id: 'a', source: 'take.mp4', trimStart: 0, trimEnd: 7 })
+  assert.equal(selected.clips[1].source, 'draft-a.mp4')
+  assert.equal(selected.clips[2].source, 'replaced.mp4')
+  assert.equal(selected.extras.a?.lyric, 'hola')
 })
 
 test('a panel reprints when its clip is replaced, retrimmed or gets another frame', () => {

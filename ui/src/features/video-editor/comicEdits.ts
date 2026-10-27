@@ -83,3 +83,25 @@ export function creationOutputs(origin: ShotProvenance): string[] {
   const named = origin.sidecar ? [origin.sidecar.replace(/\.meta\.json$/, '.mp4')] : []
   return [...new Set([...named, ...(origin.generatedFrom ? [origin.generatedFrom] : [])])]
 }
+
+/** After Regenerar / Usar take writes the saved montage, keep the editor's unsaved clips,
+ * trims, lyrics and panel choices. A take select also overlays that clip's new media. */
+export function mergeComicShotUpdate<T extends { id: string }>(
+  clips: T[],
+  extras: Record<string, ClipExtra | undefined>,
+  savedClips: Array<{ id: string; takes?: MontageTake[] }>,
+  adopted: (Partial<T> & { id: string }) | undefined,
+): { clips: T[]; extras: Record<string, ClipExtra> } {
+  const nextClips = adopted
+    ? clips.map(clip => clip.id === adopted.id ? { ...clip, ...adopted } : clip)
+    : clips
+  const nextExtras: Record<string, ClipExtra> = {}
+  for (const [id, extra] of Object.entries(extras)) {
+    if (extra) nextExtras[id] = extra
+  }
+  for (const clip of savedClips) {
+    if (!clip.takes?.length) continue
+    nextExtras[clip.id] = { ...nextExtras[clip.id], takes: clip.takes }
+  }
+  return { clips: nextClips, extras: nextExtras }
+}
