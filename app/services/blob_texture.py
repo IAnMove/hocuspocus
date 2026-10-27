@@ -55,7 +55,11 @@ def atlas_uv(point, back: bool, frame: dict, head: bool = False) -> tuple[float,
 
 
 def _is_head(points, frame: dict) -> bool:
-    return "head" in frame and sum(p[1] for p in points) / 3 >= frame["head"][2]
+    """At or above the shoulders and inside the head tile's width (a sleeve or a shoulder's slope stays in the body view)."""
+    if "head" not in frame:
+        return False
+    _cy, span, cut = frame["head"]
+    return sum(p[1] for p in points) / 3 >= cut and max(abs(p[0]) for p in points) <= span * 0.49
 
 
 def atlas_uvs(mesh, frame: dict) -> list[tuple[float, float]]:
