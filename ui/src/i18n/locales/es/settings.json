@@ -14,7 +14,77 @@
     "light": "Claro",
     "auto": "Auto",
     "autoHint": "Sigue la apariencia del sistema — ahora {{variant}}.",
-    "theme": "Tema"
+    "theme": "Tema",
+    "themes": {
+      "golden-hour": {
+        "label": "HocusPocus Blue",
+        "description": "El tema por defecto. Paleta HocusPocus: superficies casi negras con acentos azul eléctrico y cian; papel frío de día."
+      },
+      "default": {
+        "label": "Clásico",
+        "description": "La paleta fría original, con acentos azules: carbón de noche y papel frío de día."
+      },
+      "onyx": {
+        "label": "Ónix",
+        "description": "Monocromo minimalista: negro puro de noche, blanco y gris de día. Sin tinte de color."
+      },
+      "everforest": {
+        "label": "Everforest",
+        "description": "Verdes de bosque desaturados sobre gris cálido: el más descansado del conjunto y el más amable con una galería llena."
+      },
+      "gruvbox": {
+        "label": "Gruvbox",
+        "description": "Tonos tierra retro y cálidos, de poco contraste: cómodo para sesiones largas."
+      },
+      "nord": {
+        "label": "Nord",
+        "description": "Azul gris ártico, apagado y uniforme: una habitación fría y quieta."
+      },
+      "tokyo-night": {
+        "label": "Tokyo Night",
+        "description": "Azules y violetas fríos sobre azul marino: el vecino más cercano de HocusPocus Blue."
+      },
+      "catppuccin": {
+        "label": "Catppuccin",
+        "description": "Pasteles suaves sobre carbón con tinte ciruela: la paleta más equilibrada del conjunto."
+      },
+      "rose-pine": {
+        "label": "Rosé Pine",
+        "description": "Rosa y pino apagados sobre tinta: el vacío más bonito; es el que más compite con una galería llena."
+      },
+      "studio": {
+        "label": "Estudio",
+        "description": "Una sala de etalonaje: grises sin tinte alrededor de un entorno al 18 %, para que el cromo no tire las miniaturas hacia cálido ni frío. Cian y naranja solo en los controles."
+      },
+      "phosphor": {
+        "label": "Fósforo",
+        "description": "CRT ámbar: la luz se desborda del borde en lugar de perfilarlo; de día, el papel impreso y no la pantalla."
+      },
+      "amiga": {
+        "label": "Amiga Workbench",
+        "description": "El azul del Workbench 1.3 con sus gadgets naranjas, y el escritorio gris de la 2.0 de día: un gris medio de verdad, no papel."
+      },
+      "solarized": {
+        "label": "Solarized",
+        "description": "Fondo negro verdoso con ocre y óxido: hecho de relaciones de tono medidas, y el único tema oscuro de aquí que no se lee como gris."
+      },
+      "one": {
+        "label": "One",
+        "description": "Azul gris uniforme con un acento azul claro: el más neutro del conjunto comunitario."
+      },
+      "ayu": {
+        "label": "Ayu",
+        "description": "Casi negro con un acento dorado: el de más contraste, y el único que abre con luz cálida."
+      },
+      "dracula": {
+        "label": "Dracula",
+        "description": "Púrpura y rosa saturados sobre índigo: el más ruidoso del conjunto, con Alucard como papel cálido de día."
+      },
+      "kanagawa": {
+        "label": "Kanagawa",
+        "description": "Marrones y añil de tinta a la manera de Hokusai: cálido y pictórico, con el papel Lotus de día."
+      }
+    }
   },
   "language": {
     "title": "Idioma",

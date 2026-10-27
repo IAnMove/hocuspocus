@@ -4,7 +4,7 @@ import type { ModelFolderCandidate } from '../../types'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import * as api from '../../api/client'
 import type { GenerationMode, ModelLicence } from '../../types'
-import { FAMILIES, resolveVariant, onOsThemeChange, type FamilyId, type ThemeMode } from '../../lib/theme'
+import { FAMILIES, resolveVariant, onOsThemeChange, themeTextKey, type FamilyId, type ThemeMode } from '../../lib/theme'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
 import { controlLabel } from '../../i18n/controlLabel'
 import { H3ModelName } from '../Sidebar/H3ModelInfo'
@@ -786,12 +786,12 @@ function ThemeSection() {
             className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
             {FAMILIES.map(f => (
-              <option key={f.id} value={f.id}>{f.label}</option>
+              <option key={f.id} value={f.id}>{t(themeTextKey(f.id, 'label'))}</option>
             ))}
           </select>
         </div>
         <p className="text-[10px] text-text-muted mt-1.5">
-          {family.description}
+          {t(themeTextKey(family.id, 'description'))}
         </p>
       </div>
     </div>

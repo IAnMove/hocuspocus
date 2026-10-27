@@ -192,7 +192,6 @@
   "src/lib/scene2d/normalize.ts": 2,
   "src/lib/sceneNarrative.ts": 123,
   "src/lib/sceneRecipe.ts": 8,
-  "src/lib/theme.ts": 34,
   "src/stores/modelCatalog.ts": 3,
   "src/stores/modelsSlice.ts": 2
 }

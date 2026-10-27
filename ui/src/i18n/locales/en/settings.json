@@ -14,7 +14,77 @@
     "light": "Light",
     "auto": "Auto",
     "autoHint": "Follows your system's appearance — currently {{variant}}.",
-    "theme": "Theme"
+    "theme": "Theme",
+    "themes": {
+      "golden-hour": {
+        "label": "HocusPocus Blue",
+        "description": "Default. HocusPocus palette — near-black surfaces with electric blue and cyan accents; cool paper in daylight."
+      },
+      "default": {
+        "label": "Classic",
+        "description": "The original cool palette with blue accents — charcoal at night, cool paper in daylight."
+      },
+      "onyx": {
+        "label": "Onyx",
+        "description": "Minimalist monochrome — pure black at night, white and grey in daylight. No color tint."
+      },
+      "everforest": {
+        "label": "Everforest",
+        "description": "Desaturated forest greens on warm grey — the most restful of the set, and the kindest to a full gallery."
+      },
+      "gruvbox": {
+        "label": "Gruvbox",
+        "description": "Warm retro earth tones with low contrast — easy on the eyes over long sessions."
+      },
+      "nord": {
+        "label": "Nord",
+        "description": "Arctic blue-grey, muted and even — a cold, quiet room."
+      },
+      "tokyo-night": {
+        "label": "Tokyo Night",
+        "description": "Cool blues and violets on deep navy — the closest neighbour to HocusPocus Blue."
+      },
+      "catppuccin": {
+        "label": "Catppuccin",
+        "description": "Soft pastels on plum-tinted charcoal — the most carefully balanced palette of the set."
+      },
+      "rose-pine": {
+        "label": "Rosé Pine",
+        "description": "Muted rose and pine on ink — the prettiest empty; it competes hardest with a full gallery."
+      },
+      "studio": {
+        "label": "Studio",
+        "description": "A grading suite: untinted greys around an 18% surround, so nothing in the chrome pulls your thumbnails warm or cool. Teal and orange on the controls only."
+      },
+      "phosphor": {
+        "label": "Phosphor",
+        "description": "Amber CRT — light that blooms past the edge instead of outlining it, with the printout rather than the screen by day."
+      },
+      "amiga": {
+        "label": "Amiga Workbench",
+        "description": "Workbench 1.3 blue with its orange gadgets, and the 2.0 grey desktop by day — a true mid-grey, not paper."
+      },
+      "solarized": {
+        "label": "Solarized",
+        "description": "Teal-black ground with ochre and rust — built from measured hue relationships, and the only dark theme here that does not read as grey."
+      },
+      "one": {
+        "label": "One",
+        "description": "Even blue-grey with a clear blue accent — the most neutral of the community set."
+      },
+      "ayu": {
+        "label": "Ayu",
+        "description": "Near-black with a gold accent — the highest contrast of the set, and the only one that leads with warm light."
+      },
+      "dracula": {
+        "label": "Dracula",
+        "description": "Saturated purple and pink on indigo — the loudest of the set, with Alucard as its own warm paper by day."
+      },
+      "kanagawa": {
+        "label": "Kanagawa",
+        "description": "Ink-wash browns and indigo after Hokusai — warm and painterly, with the Lotus paper in daylight."
+      }
+    }
   },
   "language": {
     "title": "Language",
