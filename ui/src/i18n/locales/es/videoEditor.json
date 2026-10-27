@@ -292,12 +292,23 @@
     "none": "Sin texto",
     "textStyle": "Texto",
     "editText": "Verso",
-    "changeTake": "Cambiar toma",
     "pickFrame": "Elegir viñeta",
     "delete": "Borrar",
     "duplicate": "Duplicar",
     "empty": "Este montaje todavía no tiene clips.",
-    "frameAt": "{{time}} s"
+    "frameAt": "{{time}} s",
+    "missing": "No se pudo leer este clip",
+    "redo": {
+      "toggle": "Rehacer",
+      "here": "Regenerar aquí",
+      "creation": "Abrir en Creación de vídeo",
+      "scene": "Editar la escena",
+      "gallery": "Cambiar por otro vídeo",
+      "hintGenerated": "«Regenerar aquí» crea una toma nueva con el mismo prompt y luego eliges «Usar». En Creación de vídeo tienes todos los ajustes: genera y pulsa «Usar en posición N» para volver a esta viñeta.",
+      "hintScene": "Edita la escena, expórtala y pulsa «Usar en posición N» en el vídeo nuevo: vuelve a esta viñeta.",
+      "hintUpload": "Este clip se subió tal cual. Elige otro vídeo de la galería con «Usar en posición N».",
+      "unsaved": "Guarda el montaje para ver cómo se hizo este clip."
+    }
   },
   "actionErrors": {
     "onlyOneDraft": "Solo existe un borrador de Video Editor por workspace: “{{name}}”. Pide explícitamente crear otro proyecto para reemplazar el borrador actual.",

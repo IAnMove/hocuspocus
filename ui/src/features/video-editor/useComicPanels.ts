@@ -1,81 +1,71 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getComicPanels, type ComicPanelImage } from '../../api/montages'
+import { getComicPanels, type ComicDraftClip, type ComicPanelResult } from '../../api/montages'
 import type { ClipExtra } from './comicEdits'
 
-interface ClipRef { id: string }
+interface DraftClip { id: string; source: string; trimStart: number; trimEnd: number }
+
+/** What a panel shows depends on the clip as it is in the editor now, so a replaced or trimmed clip reprints. */
+export function comicPanelKey(workspace: string, clip: DraftClip, frame: number | undefined): string {
+  return [workspace, clip.id, clip.source, clip.trimStart, clip.trimEnd, frame ?? 'auto'].join('|')
+}
+
+function draftClip(clip: DraftClip, frame: number | undefined): ComicDraftClip {
+  const drafted: ComicDraftClip = { id: clip.id, source: clip.source, trimStart: clip.trimStart, trimEnd: clip.trimEnd }
+  if (typeof frame === 'number') drafted.comic = { frame }
+  return drafted
+}
 
 /** One cached print per clip, loaded in batches as panels scroll into view. */
 export function useComicPanels(input: {
   workspace: string
   file: string
-  clips: ClipRef[]
+  clips: DraftClip[]
   extras: Record<string, ClipExtra | undefined>
-  revision: number
   onError: (message: string | null) => void
-}): { imageFor: (id: string) => ComicPanelImage | undefined; observe: (id: string, element: Element | null) => void } {
-  const [images, setImages] = useState<Map<string, ComicPanelImage>>(new Map())
+}): { imageFor: (id: string) => ComicPanelResult | undefined; observe: (id: string, element: Element | null) => void } {
+  const [images, setImages] = useState<Map<string, ComicPanelResult>>(new Map())
+  const latest = useRef(input)
   const imagesRef = useRef(images)
-  const extrasRef = useRef(input.extras)
-  const revisionRef = useRef(input.revision)
-  const onErrorRef = useRef(input.onError)
   const nodes = useRef(new Map<string, Element>())
   const visible = useRef(new Set<string>())
   const inflight = useRef(new Set<string>())
-  const generation = useRef(0)
   const observerRef = useRef<IntersectionObserver | null>(null)
+  latest.current = input
   imagesRef.current = images
-  extrasRef.current = input.extras
-  revisionRef.current = input.revision
-  onErrorRef.current = input.onError
 
-  const keyFor = useCallback((id: string) => {
-    const frame = extrasRef.current[id]?.comic?.frame
-    return `${revisionRef.current}|${id}|${typeof frame === 'number' ? frame : 'auto'}`
-  }, [])
+  const keyOf = useCallback((clip: DraftClip) =>
+    comicPanelKey(latest.current.workspace, clip, latest.current.extras[clip.id]?.comic?.frame), [])
 
-  const load = useCallback(async (ids: string[], token: number, revision: number) => {
-    const keyOf = (id: string) => {
-      const frame = extrasRef.current[id]?.comic?.frame
-      return `${revision}|${id}|${typeof frame === 'number' ? frame : 'auto'}`
-    }
-    const wanted = ids.filter(id => !imagesRef.current.has(keyOf(id)) && !inflight.current.has(keyOf(id)))
+  const load = useCallback(async (ids: string[]) => {
+    const { clips, extras, workspace, file } = latest.current
+    const wanted = clips.filter(clip => ids.includes(clip.id)).map(clip => ({ clip, key: keyOf(clip) }))
+      .filter(item => !imagesRef.current.has(item.key) && !inflight.current.has(item.key))
     for (let start = 0; start < wanted.length; start += 24) {
-      if (token !== generation.current) return
       const batch = wanted.slice(start, start + 24)
-      const frames: Record<string, number> = {}
-      const keys: string[] = []
-      for (const id of batch) {
-        const frame = extrasRef.current[id]?.comic?.frame
-        if (typeof frame === 'number') frames[id] = frame
-        const key = keyOf(id)
-        keys.push(key)
-        inflight.current.add(key)
-      }
+      batch.forEach(item => inflight.current.add(item.key))
       try {
-        const result = await getComicPanels(input.workspace, input.file, batch, frames)
-        if (token !== generation.current) return
+        const result = await getComicPanels(workspace, file, batch.map(({ clip }) => draftClip(clip, extras[clip.id]?.comic?.frame)))
         setImages(current => {
           const next = new Map(current)
-          for (const panel of result.panels) {
-            const frame = frames[panel.clip_id]
-            next.set(`${revision}|${panel.clip_id}|${typeof frame === 'number' ? frame : 'auto'}`, panel)
-          }
+          result.panels.forEach((panel, index) => {
+            if (batch[index]?.clip.id === panel.clip_id) next.set(batch[index].key, panel)
+          })
           return next
         })
       } catch (error) {
-        onErrorRef.current((error as Error).message)
+        latest.current.onError((error as Error).message)
       } finally {
-        for (const key of keys) inflight.current.delete(key)
+        batch.forEach(item => inflight.current.delete(item.key))
       }
     }
-  }, [input.file, input.workspace])
+  }, [keyOf])
 
-  const frameSig = input.clips.map(clip => `${clip.id}:${input.extras[clip.id]?.comic?.frame ?? ''}`).join('|')
+  const signature = input.clips.map(keyOf).join('\n')
+  useEffect(() => {
+    if (visible.current.size) void load([...visible.current])
+  }, [signature, load])
 
   useEffect(() => {
-    const token = ++generation.current
-    const ids = [...visible.current]
-    if (ids.length) void load(ids, token, input.revision)
     const pending = new Set<string>()
     let timer = 0
     const observer = new IntersectionObserver(entries => {
@@ -86,12 +76,16 @@ export function useComicPanels(input: {
         else { visible.current.delete(id); pending.delete(id) }
       }
       window.clearTimeout(timer)
-      timer = window.setTimeout(() => { if (pending.size) void load([...pending], generation.current, revisionRef.current) }, 50)
+      timer = window.setTimeout(() => {
+        if (!pending.size) return
+        void load([...pending])
+        pending.clear()
+      }, 50)
     }, { rootMargin: '240px' })
     observerRef.current = observer
     for (const element of nodes.current.values()) observer.observe(element)
     return () => { window.clearTimeout(timer); observer.disconnect(); observerRef.current = null }
-  }, [frameSig, input.file, input.revision, input.workspace, load])
+  }, [load])
 
   const observe = useCallback((id: string, element: Element | null) => {
     const previous = nodes.current.get(id)
@@ -102,5 +96,9 @@ export function useComicPanels(input: {
     observerRef.current?.observe(element)
   }, [])
 
-  return { imageFor: id => images.get(keyFor(id)), observe }
+  const imageFor = (id: string) => {
+    const clip = input.clips.find(item => item.id === id)
+    return clip ? images.get(keyOf(clip)) : undefined
+  }
+  return { imageFor, observe }
 }

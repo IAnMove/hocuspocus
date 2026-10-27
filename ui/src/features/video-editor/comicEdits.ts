@@ -1,7 +1,7 @@
 // Montage edits made from the comic view. They change the same clip list and
 // the same per-clip extras the timeline saves.
 
-import type { MontageTake } from '../../api/montages'
+import type { MontageTake, ShotProvenance } from '../../api/montages'
 
 export type ComicTextStyle = 'caption' | 'bubble' | 'none'
 
@@ -75,4 +75,11 @@ export function duplicateClipState<T extends { id: string; name: string }>(
 /** Seconds inside the trimmed clip. `at` from the server is an absolute source time. */
 export function frameOffset(trimStart: number, at: number): number {
   return Math.max(0, Math.round((at - trimStart) * 1000) / 1000)
+}
+
+/** The outputs whose sidecar can hold a clip's generation settings: the one the montage names (a copied
+ * clip keeps its settings under the original's name), then the generated file itself. */
+export function creationOutputs(origin: ShotProvenance): string[] {
+  const named = origin.sidecar ? [origin.sidecar.replace(/\.meta\.json$/, '.mp4')] : []
+  return [...new Set([...named, ...(origin.generatedFrom ? [origin.generatedFrom] : [])])]
 }
