@@ -5,6 +5,7 @@ import { prepareWorldSfxMedia, worldSfxMediaReady } from '../sceneFx/worldRuntim
 import { worldSfxAtTime } from '../sceneFx/worldMotion'
 import { namedSceneMeshes, namedSceneNodes } from './screenPlane'
 import { slotMountKey } from './backdrop'
+import { applyHairStrands } from './hairStrands.ts'
 import { SPLAT_CLOUD_NAME, createSplatMount, ensureSparkRenderer, loadSplatCloud, poseSplatMount } from './splatItem.ts'
 import { createTransformGizmo, type TransformMode, type TransformPatch } from './transformGizmo.ts'
 import { Box3, Frustum, Matrix4, TextureLoader } from 'three'
@@ -138,6 +139,7 @@ function loadSlotGltf(
         disposeObject(gltf.scene)
         return
       }
+      applyHairStrands(gltf.scene)
       gltf.scene.userData.speechPlacements = { ...Object.fromEntries(FACE_PROFILES.map(profile => [profile, estimateFace(gltf.scene, profile)])), bounds: manualFace(gltf.scene) }
       const baseScale = fitGltf(gltf.scene, live)
       placeSlot(world, live, gltf.scene, gltf.animations, baseScale, true)

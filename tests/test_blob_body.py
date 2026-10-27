@@ -580,3 +580,16 @@ def test_anime_skull_is_an_egg_measured_from_anime_heads_not_a_ball():
     assert chin[1] < 0.62 * widest[1], "the jaw is a V down to a small chin"
     crown = min(rings, key=lambda r: abs(r[0] - math.degrees(math.asin(2 * 0.95 - 1))))
     assert 0.45 <= crown[1] / widest[1] <= 0.55, "the crown is a dome, not a point"
+
+
+def test_hair_is_strand_cards_with_uvs_aligned_to_its_vertices():
+    from services.blob_loft import loft_parts
+
+    lofted = blob_pieces({**PRESETS["anime_girl"], "mesh": "loft", "hair": {"style": "bangs", "color": "#2A211C"}})
+    parts = {name: (mesh, uvs) for mesh, name, uvs in loft_parts(lofted["traits"], lofted["layout"])}
+    hair, uvs = parts["hair"]
+    assert uvs is not None and len(uvs) == len(hair.vertices) > 0
+    assert all(0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 for u, v in uvs)
+    assert any(v > 0.9 for _u, v in uvs), "a lock's tip reaches the top of the strand map"
+    assert any(v < 0.02 for _u, v in uvs) and any(0.3 < u < 0.7 and v < 0.5 for u, v in uvs), "the scalp sits in the opaque part of it"
+    assert parts["body"][1] is None

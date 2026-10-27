@@ -582,7 +582,7 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
     hair = hair_mesh(layout, spec["hair"])
     parts = [(mesh, "body", None), (face, "face", uvs)]
     if hair.vertices:
-        parts.append((hair, "hair", None))
+        parts.append((hair, "hair", hair.uvs))
     return parts
 
 

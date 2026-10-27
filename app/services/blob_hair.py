@@ -13,18 +13,33 @@ from __future__ import annotations
 
 import math
 
-from services.blob_loft import Mesh, _st, _tube, _egg_radius, bezier, curve_tube, skull_point, _emit
+from services.blob_loft import Mesh, _add, _cross, _dot, _mul, _st, _sub, _tube, _unit, bezier, skull_point, _emit
+from services.procedural_3d.compose import linear_color
 
 HELMET = 1.10
 _SAMPLES = 7
 
 
-def hair_mesh(L: dict, hair: dict) -> Mesh:
-    mesh = Mesh()
+class UVMesh(Mesh):
+    """A mesh with texture coordinates. Geometry added without any (the scalp, a bun) gets ``default_uv(point)``: strands that
+    run from the crown down the head, in the opaque part of the strand texture (``ui/src/features/scene3d/hairStrands.ts``)."""
+
+    def __init__(self, default_uv) -> None:
+        super().__init__()
+        self.uvs: list[tuple[float, float]] = []
+        self._default = default_uv
+
+    def triangle(self, points, normals, colors, uvs=None) -> None:
+        super().triangle(points, normals, colors)
+        self.uvs.extend(uvs if uvs is not None else [self._default(p) for p in points])
+
+
+def hair_mesh(L: dict, hair: dict) -> UVMesh:
+    head = _Head(L)
+    mesh = UVMesh(_scalp_uv(head))
     style, color = hair["style"], hair["color"]
     if style == "none":
         return mesh
-    head = _Head(L)
     _helmet(mesh, head, color, hairline=34 if style in ("short", "spiky", "bun") else 26)
     if style == "short":
         _crown(mesh, head, color)
@@ -50,6 +65,16 @@ class _Head:
         return (point[0] + self.rx * dx, point[1] + self.ry * dy, point[2] + self.rz * dz)
 
 
+def _scalp_uv(head: _Head):
+    """Strands from the crown down the head: ``u`` mirrors left and right (no seam at the nape), ``v`` grows downward."""
+    top, span = head.cy + head.ry, 2 * head.ry
+
+    def uv(point):
+        yaw = math.atan2(point[0] - head.cx, point[2] - head.cz)
+        return (0.3 + 0.4 * abs(yaw) / math.pi, 0.02 + 0.44 * max(0.0, min(1.0, (top - point[1]) / span)))
+    return uv
+
+
 def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
     """Hair round the crown and the back, on the skull's own surface: full rings above the hairline, back arcs below it."""
     from services.procedural_3d.compose import linear_color
@@ -71,12 +96,46 @@ def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
 
 
 def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8) -> None:
-    """A lofted strand: radii in head-width units from the root to the tip."""
+    """A lock: a curved card from the root through the pull to the tip, ``r0`` and ``r1`` the half width in head-width units
+    (narrow at the very root, so it vanishes under the hair above). A thick lock (``flat`` 0.5 or more: a tail, a ponytail)
+    is two cards crossed, so it has volume from every side."""
     points = bezier(root, pull, tip, _SAMPLES)
-    # narrow at the root (it disappears under the hair above, no square top edge), full by a fifth of the way, then thinning to the tip
-    radii = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
-    radii[-1] = max(radii[-1], head.rx * 0.012)
-    curve_tube(mesh, points, radii, color, ring=ring, flat=flat, hug=(head.cx, head.cy, head.cz))
+    widths = [head.rx * (r0 + (r1 - r0) * i / (_SAMPLES - 1)) * min(1.0, 0.4 + 3.0 * i / (_SAMPLES - 1)) for i in range(_SAMPLES)]
+    widths[-1] = max(widths[-1], head.rx * 0.012)
+    _card(mesh, head, color, points, widths, 0.0)
+    if flat >= 0.5:
+        _card(mesh, head, color, points, widths, math.pi / 2)
+
+
+def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn: float, cols: int = 3) -> None:
+    """A strip along ``points`` with ``cols`` segments across, bowed outward a little, with strand UVs (``u`` across, ``v``
+    from the root 0 to the tip 1), roots a shade darker, both faces. ``turn`` rotates it round the path."""
+    base = linear_color(color)
+    rows = len(points)
+    grid = []
+    for i, point in enumerate(points):
+        tangent = _unit(_sub(points[min(i + 1, rows - 1)], points[max(i - 1, 0)]))
+        out = _sub(point, (head.cx, head.cy, head.cz))
+        out = _sub(out, _mul(tangent, _dot(out, tangent)))
+        deep = _unit(out) if _dot(out, out) > 1e-12 else (0.0, 0.0, 1.0)
+        side = _unit(_cross(tangent, deep))
+        if turn:
+            side, deep = _add(_mul(side, math.cos(turn)), _mul(deep, math.sin(turn))), _add(_mul(deep, math.cos(turn)), _mul(side, -math.sin(turn)))
+        shade = 0.72 + 0.28 * (i / (rows - 1)) ** 0.7
+        row = []
+        for j in range(cols + 1):
+            t = j / cols
+            s = 2 * t - 1
+            position = _add(_add(point, _mul(side, widths[i] * s)), _mul(deep, widths[i] * 0.3 * (1 - s * s)))
+            row.append((position, _unit(_add(deep, _mul(side, s * 0.45))), tuple(c * shade for c in base), (t, i / (rows - 1))))
+        grid.append(row)
+    for i in range(rows - 1):
+        for j in range(cols):
+            a, b, c, d = grid[i][j], grid[i][j + 1], grid[i + 1][j + 1], grid[i + 1][j]
+            for tri in ((a, b, c), (a, c, d)):
+                mesh.triangle([v[0] for v in tri], [v[1] for v in tri], [v[2] for v in tri], [v[3] for v in tri])
+                back = tri[::-1]
+                mesh.triangle([v[0] for v in back], [_mul(v[1], -1.0) for v in back], [v[2] for v in back], [v[3] for v in back])
 
 
 def _crown(mesh: Mesh, head: _Head, color: str) -> None:
