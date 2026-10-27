@@ -6,8 +6,8 @@ import { TextTemplateInsert } from './kineticText/TextTemplateInsert'
 
 const MAX_CUES = 48
 
-export function KineticTextControls({ cues = [], duration, width = 1280, height = 720, lyrics, disabled, onChange, onLyricsChange }: {
-  cues?: KineticText[]; duration: number; width?: number; height?: number; lyrics?: SceneLyrics; disabled?: boolean
+export function KineticTextControls({ cues = [], duration, width = 1280, height = 720, lyrics, disabled, title, onChange, onLyricsChange }: {
+  cues?: KineticText[]; duration: number; width?: number; height?: number; lyrics?: SceneLyrics; disabled?: boolean; title?: string
   onChange: (cues: KineticText[]) => void
   onLyricsChange?: (lyrics: SceneLyrics | undefined) => void
 }) {
@@ -16,7 +16,7 @@ export function KineticTextControls({ cues = [], duration, width = 1280, height 
   return <details className="rounded-lg border border-border bg-bg-primary p-3">
     <summary className="cursor-pointer text-sm font-semibold text-text-primary">{t('title')} ({cues.length})</summary>
     <p className="my-2 text-xs text-text-muted">{t('help')}</p>
-    <fieldset disabled={disabled} className="space-y-3 disabled:opacity-50">
+    <fieldset disabled={disabled} title={disabled ? title : undefined} className="space-y-3 disabled:opacity-50">
       <TextTemplateInsert duration={duration} width={width} height={height} disabled={disabled} onInsert={next => onChange(parseKineticTexts([...cues, ...next]))} onLyrics={onLyricsChange} />
       {lyrics ? <p className="text-xs text-text-muted">{lyrics.lines.length}</p> : null}
       {cues.map(cue => <div key={cue.id} className="space-y-2 rounded border border-border p-2">

@@ -1,3 +1,4 @@
+import { controlLabel } from '../i18n/controlLabel'
 import { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { useUiTranslation } from '../i18n'
@@ -95,7 +96,7 @@ export function RetakeDialog() {
             <h2 className="text-sm font-semibold text-text-primary">{t('retake.title')}</h2>
             <p className="text-[10px] text-text-muted">{t('retake.subtitle')}</p>
           </div>
-          <button onClick={closeRetake} className="p-1 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors">
+          <button onClick={closeRetake} className="p-1 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors" title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
             <X size={16} />
           </button>
         </div>

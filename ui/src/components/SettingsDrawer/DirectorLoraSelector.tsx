@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { Search, X, Loader2, FolderOpen, Globe, Sparkles, BookOpen } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import { controlLabel } from '../../i18n/controlLabel'
 import * as api from '../../api/client'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails } from '../../api/client'
 import { LoraGuideTooltip, LoraAgeChip, LoraSortToggle, sortLoraNames } from './LoraSelector'
@@ -440,7 +441,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
                       <button
                         onClick={(e) => { e.stopPropagation(); handleGenerateGuide(filename) }}
                         className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent-blue transition-colors"
-                        title="Generate AI guide for this LoRA"
+                        title={controlLabel('a11y.generateLoraGuide')} aria-label={controlLabel('a11y.generateLoraGuide')}
                       >
                         <Sparkles size={11} />
                       </button>
@@ -448,6 +449,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
                     <button
                       onClick={() => toggleLora(filename)}
                       className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
+                      title={controlLabel('a11y.removeLora')} aria-label={controlLabel('a11y.removeLora')}
                     >
                       <X size={12} />
                     </button>

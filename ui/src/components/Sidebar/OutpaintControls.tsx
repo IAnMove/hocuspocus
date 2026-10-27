@@ -144,7 +144,7 @@ export function OutpaintControls() {
             <button
               onClick={() => clearEditVideo()}
               className="shrink-0 p-1 rounded text-text-muted hover:bg-bg-hover hover:text-red-400 transition-colors"
-              title={t('outpaint.removeClip')}
+              title={t('outpaint.removeClip')} aria-label={t('outpaint.removeClip')}
             >
               <X size={14} />
             </button>

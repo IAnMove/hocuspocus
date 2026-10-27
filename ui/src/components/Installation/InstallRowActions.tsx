@@ -3,7 +3,7 @@ import { Download, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import type { InstallComponent, InstallStatus } from '../../api/installManager'
 import { formatBytes } from '../../lib/format'
-import { reclaimLabel, rowActions } from '../../lib/installView'
+import { reclaimLabel, rowActions, type RowActions } from '../../lib/installView'
 import type { InstallAction } from './useInstallManager'
 
 const CONFIRM_WINDOW_MS = 4000
@@ -15,10 +15,17 @@ interface Props {
   onAct: (id: string, action: InstallAction) => Promise<void>
 }
 
-function PrimaryButton({ row, kind, disabled, acting, onAct }: {
+function installReason(acting: boolean, blockedBy: RowActions['blockedBy'], label: (key: 'installation.waitForCurrent' | 'installation.needLauncher') => string) {
+  if (acting || blockedBy === 'busy') return label('installation.waitForCurrent')
+  if (blockedBy === 'launcher') return label('installation.needLauncher')
+  return undefined
+}
+
+function PrimaryButton({ row, kind, disabled, reason, acting, onAct }: {
   row: InstallComponent
   kind: 'install' | 'update'
   disabled: boolean
+  reason: string | undefined
   acting: boolean
   onAct: Props['onAct']
 }) {
@@ -28,6 +35,7 @@ function PrimaryButton({ row, kind, disabled, acting, onAct }: {
     <button
       type="button"
       disabled={disabled}
+      title={reason}
       onClick={() => onAct(row.id, 'install')}
       className="flex items-center gap-1 rounded border border-accent-blue/50 px-2 py-1 text-[11px] text-accent-blue transition-colors hover:bg-accent-blue/10 disabled:opacity-40"
     >
@@ -64,12 +72,13 @@ export function InstallRowActions({ row, status, acting, onAct }: Props) {
   return (
     <div className="flex items-center gap-2 pt-0.5">
       {actions.primary && (
-        <PrimaryButton row={row} kind={actions.primary} disabled={acting || actions.blockedBy !== null} acting={acting} onAct={onAct} />
+        <PrimaryButton row={row} kind={actions.primary} disabled={acting || actions.blockedBy !== null} reason={installReason(acting, actions.blockedBy, t)} acting={acting} onAct={onAct} />
       )}
       {actions.canUninstall && (
         <button
           type="button"
           disabled={acting || status.busy !== null}
+          title={acting || status.busy !== null ? t('installation.waitForCurrent') : undefined}
           onClick={remove}
           className={`ml-auto flex items-center gap-1 rounded border px-2 py-1 text-[11px] transition-colors disabled:opacity-40 ${removeStyle}`}
         >

@@ -312,7 +312,7 @@ export function OmniReferenceSection() {
               </div>
               <button
                 onClick={() => update(references.filter((_, itemIndex) => itemIndex !== index))}
-                title={t('omni.removeRef')}
+                title={t('omni.removeRef')} aria-label={t('omni.removeRef')}
                 className="p-1 self-start text-text-muted hover:text-indicator-error"
               >
                 <X size={13} />

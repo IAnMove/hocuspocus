@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useId, useRef, useState } from 'react'
 import { Info } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -84,7 +85,7 @@ function McpDiagnostics({ endpoint, token, enabled }: { endpoint: string; token:
     finally { setBusy(false) }
   }
   return <div className="space-y-2 text-xs">
-    <button type="button" disabled={busy} onClick={() => void check()} className="min-h-11 rounded border border-border px-3">{t(busy ? 'mcp.checking' : 'mcp.check')}</button>
+    <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void check()} className="min-h-11 rounded border border-border px-3">{t(busy ? 'mcp.checking' : 'mcp.check')}</button>
     {result && <div role="status" className="space-y-1 [overflow-wrap:anywhere]">
       <p>{t('mcp.profile', { profile: result.profile })}</p>
       {result.toolCount != null ? <><p>{t('mcp.connected', { server: result.server, protocol: result.protocol, count: result.toolCount })}</p><p>{t('mcp.authVerified')}</p></> : <p>{t('mcp.tokenUnavailable')}</p>}
@@ -132,7 +133,7 @@ export function McpSettingsPanel() {
       {token && <McpTokenField key={token} token={token} />}
       <McpDiagnostics key={`${status.enabled}:${token}`} endpoint={endpoint} token={token} enabled={status.enabled} />
       <details className="text-xs"><summary className="min-h-9 cursor-pointer">{t('mcp.example')}</summary><pre className="overflow-x-auto rounded bg-bg-tertiary p-2">{JSON.stringify({ mcpServers: { hocuspocus: { url: endpoint, headers: { Authorization: 'Bearer <YOUR_TOKEN>' } } } }, null, 2)}</pre><p className="mt-2">{t('mcp.client')}</p></details>
-      {status.enabled && !status.managedByEnvironment && <button type="button" disabled={busy} onClick={() => void update(true, true)} className="min-h-9 rounded border border-border px-2 text-xs">{t('mcp.rotate')}</button>}
+      {status.enabled && !status.managedByEnvironment && <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void update(true, true)} className="min-h-9 rounded border border-border px-2 text-xs">{t('mcp.rotate')}</button>}
     </>}
     {error && <p role="alert" className="text-xs text-red-300">{error}</p>}
   </section>

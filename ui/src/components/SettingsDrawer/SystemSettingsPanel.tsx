@@ -6,6 +6,7 @@ import * as api from '../../api/client'
 import type { GenerationMode, ModelLicence } from '../../types'
 import { FAMILIES, resolveVariant, onOsThemeChange, type FamilyId, type ThemeMode } from '../../lib/theme'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
+import { controlLabel } from '../../i18n/controlLabel'
 import { H3ModelName } from '../Sidebar/H3ModelInfo'
 import { ModelCatalogInfo } from '../Sidebar/ModelCatalogInfo'
 import { LicenceNotice } from '../common/LicenceNotice'
@@ -15,6 +16,24 @@ import { showsCudaControls, usePlatformCapabilities } from '../../lib/usePlatfor
 import { MINIMAX_MUSIC_COMMUNITY_MODELS, modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
 const VISIBILITY_MODES: GenerationMode[] = ['image', 'video', 'audio', 'model3d', 'avatar']
+
+interface DownloadModelState {
+  model_type: string
+  runtime?: { installed?: boolean; compatible?: boolean; install_hint?: string | null } | null
+}
+
+function modelDownloadLabel(model: DownloadModelState, error?: string) {
+  const blocked = model.model_type === 'trellis2' && (!model.runtime?.installed || model.runtime?.compatible === false)
+  if (blocked) return model.runtime?.install_hint || controlLabel('disabled.modelNotInstalled')
+  if (error) return controlLabel('a11y.downloadFailed', { error })
+  return controlLabel('a11y.downloadModel')
+}
+
+function modelDeleteLabel(deleting: boolean, confirming: boolean) {
+  if (deleting) return controlLabel('disabled.deletingModel')
+  if (confirming) return controlLabel('a11y.confirmDeleteModel')
+  return controlLabel('a11y.deleteModel')
+}
 
 // Family collapse state persists so "collapse the families I never use"
 // (issue #14) sticks across sessions — unlike the mode groups, which are
@@ -371,9 +390,8 @@ function ModelVisibilitySection() {
                                   ? 'text-red-400 hover:text-red-300'
                                   : 'text-text-muted hover:text-accent-blue'
                               }`}
-                              title={m.runtime?.install_hint || (downloadErrors[m.model_type]
-                                ? `Download failed: ${downloadErrors[m.model_type]} — click to retry`
-                                : 'Download model files now')}
+                              title={modelDownloadLabel(m, downloadErrors[m.model_type])}
+                              aria-label={modelDownloadLabel(m, downloadErrors[m.model_type])}
                             >
                               <Download size={10} />
                             </button>
@@ -403,7 +421,8 @@ function ModelVisibilitySection() {
                                   ? 'text-text-muted cursor-wait'
                                   : 'text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400'
                             }`}
-                            title={confirmDelete === m.model_type ? 'Click again to confirm delete' : 'Delete model files'}
+                            title={modelDeleteLabel(deleting === m.model_type, confirmDelete === m.model_type)}
+                            aria-label={modelDeleteLabel(deleting === m.model_type, confirmDelete === m.model_type)}
                           >
                             <Trash2 size={11} />
                           </button>
@@ -581,7 +600,7 @@ function LinkedModelFoldersSection() {
                     onClick={() => save(folders.filter(x => x !== f))}
                     disabled={saving}
                     className="p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400 transition-colors shrink-0"
-                    title={t('system.unlink')}
+                    title={t('system.unlink')} aria-label={t('system.unlink')}
                   >
                     <Trash2 size={11} />
                   </button>
@@ -609,7 +628,7 @@ function LinkedModelFoldersSection() {
                     onClick={() => addFolder(c.path)}
                     disabled={saving}
                     className="p-1 rounded text-accent-blue hover:text-accent-blue-hover shrink-0 disabled:opacity-50"
-                    title={t('system.linkFolder', { path: c.path })}
+                    title={t('system.linkFolder', { path: c.path })} aria-label={t('system.linkFolder', { path: c.path })}
                   >
                     <Plus size={12} />
                   </button>

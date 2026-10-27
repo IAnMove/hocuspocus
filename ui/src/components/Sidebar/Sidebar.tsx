@@ -240,7 +240,7 @@ export function DirectGenerationWorkspace() {
           <button
             onClick={() => useStore.getState().setRecipesOpen(true)}
             className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-            title={tActivity('actions.recipesTitle')}
+            title={tActivity('actions.recipesTitle')} aria-label={tActivity('actions.recipesTitle')}
           >
             <BookMarked size={14} />
           </button>
@@ -248,7 +248,7 @@ export function DirectGenerationWorkspace() {
             <button
               onClick={() => openLoraBrowser(true, modelType)}
               className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-              title={tActivity('actions.browseLoras')}
+              title={tActivity('actions.browseLoras')} aria-label={tActivity('actions.browseLoras')}
             >
               <Globe size={14} />
             </button>

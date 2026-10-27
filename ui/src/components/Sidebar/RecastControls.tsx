@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useState } from 'react'
 import { X, UserRoundPen, Loader2, Eye, Plus } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -209,7 +210,7 @@ export function RecastControls() {
               resetPreview()
             }}
             className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors"
-          >
+           title={controlLabel('a11y.clearVideo')} aria-label={controlLabel('a11y.clearVideo')}>
             <X size={14} />
           </button>
           <VideoTimelineSelector
@@ -271,7 +272,7 @@ export function RecastControls() {
                   <button
                     onClick={() => removeMapping(mappingIndex)}
                     className="ml-auto p-0.5 text-text-muted hover:text-status-error"
-                    title={t('recast.removeMapping')}
+                    title={t('recast.removeMapping')} aria-label={t('recast.removeMapping')}
                   >
                     <X size={12} />
                   </button>
@@ -321,7 +322,7 @@ export function RecastControls() {
                         referenceAlignedToSource: false,
                       })}
                       className="absolute top-1 right-1 p-0.5 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80"
-                    >
+                     title={controlLabel('a11y.clearReference')} aria-label={controlLabel('a11y.clearReference')}>
                       <X size={12} />
                     </button>
                   </div>
@@ -351,7 +352,7 @@ export function RecastControls() {
                             additionalRefs: mapping.additionalRefs.filter((_, index) => index !== referenceIndex),
                           })}
                           className="absolute -top-1 -right-1 p-0.5 rounded-full bg-black/70 text-white"
-                        >
+                         title={controlLabel('a11y.removeReference')} aria-label={controlLabel('a11y.removeReference')}>
                           <X size={9} />
                         </button>
                       </div>

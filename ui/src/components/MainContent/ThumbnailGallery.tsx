@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Box, Film, Music, PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -193,7 +194,7 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
             <button
               onClick={() => setMobileOpen(false)}
               className="p-1 rounded hover:bg-bg-hover text-text-secondary"
-            >
+             title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
               <X size={14} />
             </button>
           </div>
@@ -219,7 +220,7 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
         onClick={() => setCollapsed(!collapsed)}
         className="absolute top-1/2 z-10 -translate-y-1/2 w-5 h-10 bg-bg-secondary border border-border border-r-0 rounded-l-md flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
         style={{ right: collapsed ? 0 : 80 }}
-        title={collapsed ? t('actions.showThumbnails') : t('actions.hideThumbnails')}
+        title={collapsed ? t('actions.showThumbnails') : t('actions.hideThumbnails')} aria-label={collapsed ? t('actions.showThumbnails') : t('actions.hideThumbnails')}
       >
         {collapsed ? <PanelRightOpen size={12} /> : <PanelRightClose size={12} />}
       </button>

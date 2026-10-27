@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { X, Search, Loader2, BookOpen, HardDrive, Tag, Link2, ArrowUpCircle, RefreshCw, KeyRound, ExternalLink, Boxes, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -416,7 +417,7 @@ export function LoraBrowser() {
           <button
             onClick={() => setOpen(false)}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          >
+           title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
             <X size={18} />
           </button>
         </div>
@@ -547,6 +548,7 @@ export function LoraBrowser() {
                 checked={updatableOnly}
                 onChange={e => setUpdatableOnly(e.target.checked)}
                 disabled={updatableCount === 0}
+                title={updatableCount === 0 ? t('loraBrowser.updatesNoneTitle') : undefined}
                 className="w-3.5 h-3.5 rounded accent-amber-500 disabled:opacity-40"
               />
               <span className={`flex items-center gap-0.5 ${
@@ -833,6 +835,8 @@ export function LoraBrowser() {
                               : 'bg-black/60 text-white/70 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:text-red-400'
                         }`}
                         title={confirmDeleteKey === cardKey
+                          ? t('loraBrowser.confirmDelete')
+                          : t('loraBrowser.deleteLora')} aria-label={confirmDeleteKey === cardKey
                           ? t('loraBrowser.confirmDelete')
                           : t('loraBrowser.deleteLora')}
                       >

@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useRef, useMemo } from 'react'
 import { Upload, Loader2, Music, Zap, RotateCcw, X, ChevronRight, ChevronDown, ImageIcon, Play } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -471,7 +472,7 @@ export function DirectorPanel() {
                 <button
                   onClick={() => setReferenceImage(null)}
                   className="absolute -top-1 -right-1 bg-bg-secondary rounded-full p-0.5 border border-border hover:bg-bg-hover"
-                >
+                 title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}>
                   <X size={10} />
                 </button>
               </div>

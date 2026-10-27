@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { Search, X, Loader2, Globe, Sparkles, BookOpen, Info, ArrowUpCircle, RefreshCw, ArrowDownAZ, Clock } from 'lucide-react'
@@ -32,7 +33,7 @@ export function LoraGuideTooltip({ guide }: { guide: string }) {
         // BookOpen "guide available" badge below. Uses indicator-success
         // so the green meaning stays consistent across themes.
         className="p-0.5 text-indicator-success hover:text-indicator-success/80 transition-colors"
-      >
+       title={controlLabel('a11y.loraGuide')} aria-label={controlLabel('a11y.loraGuide')}>
         <Info size={11} />
       </button>
       {show && createPortal(
@@ -238,7 +239,7 @@ export function LoraSelector() {
           {updatableCount > 0 && (
             <span
               className="ml-0.5 px-1 rounded bg-amber-500/20 text-indicator-warning text-[9px] font-medium"
-              title={`${updatableCount} update${updatableCount === 1 ? '' : 's'} available`}
+              title={t('loraBrowser.updatesFilterTitle', { count: updatableCount })}
             >
               {updatableCount}
             </span>
@@ -424,14 +425,15 @@ export function LoraSelector() {
         <label
           className="flex items-center gap-1 cursor-pointer shrink-0 select-none"
           title={updatableCount > 0
-            ? `${updatableCount} LoRA${updatableCount === 1 ? ' has' : 's have'} updates available — check to filter`
-            : 'No updates available — check "Check" first to refresh from CivitAI'}
+            ? t('loraBrowser.updatesFilterTitle', { count: updatableCount })
+            : t('loraBrowser.updatesNoneTitle')}
         >
           <input
             type="checkbox"
             checked={updatableOnly}
             onChange={e => setUpdatableOnly(e.target.checked)}
             disabled={updatableCount === 0}
+            title={updatableCount === 0 ? t('loraBrowser.updatesNoneTitle') : undefined}
             className="w-3 h-3 rounded border-border accent-amber-500 disabled:opacity-40"
           />
           <span className={`text-[10px] uppercase tracking-wider flex items-center gap-0.5 ${
@@ -585,7 +587,7 @@ export function LoraSelector() {
                       <button
                         onClick={(e) => { e.stopPropagation(); handleGenerateGuide(filename) }}
                         className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-accent-blue transition-colors"
-                        title="Generate AI guide for this LoRA"
+                        title={controlLabel('a11y.generateLoraGuide')} aria-label={controlLabel('a11y.generateLoraGuide')}
                       >
                         <Sparkles size={11} />
                       </button>
@@ -593,6 +595,7 @@ export function LoraSelector() {
                     <button
                       onClick={() => toggleLora(filename)}
                       className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
+                      title={controlLabel('a11y.removeLora')} aria-label={controlLabel('a11y.removeLora')}
                     >
                       <X size={12} />
                     </button>

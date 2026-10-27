@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useState } from 'react'
 import { X, Sparkles } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -71,7 +72,7 @@ export function EditAnythingControls() {
       ) : (
         <div className="relative">
           <button onClick={clearEditVideo}
-            className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors">
+            className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors" title={controlLabel('a11y.clearVideo')} aria-label={controlLabel('a11y.clearVideo')}>
             <X size={14} />
           </button>
           <VideoTimelineSelector

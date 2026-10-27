@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { Plus, Trash2, Play, ArrowRight } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -198,7 +199,7 @@ export function MixerControls() {
                 <button
                   onClick={() => removeOverlay(track.id)}
                   className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-red-400 transition-colors shrink-0"
-                >
+                 title={controlLabel('a11y.removeOverlay')} aria-label={controlLabel('a11y.removeOverlay')}>
                   <Trash2 size={11} />
                 </button>
               </div>

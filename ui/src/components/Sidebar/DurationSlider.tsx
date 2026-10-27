@@ -282,7 +282,7 @@ export function WindowSettings() {
                   ? 'text-accent-blue hover:text-accent-blue/70'
                   : 'text-text-muted hover:text-text-secondary'
               }`}
-              title={locked ? t('window.lockTitle') : t('window.unlockTitle')}
+              title={locked ? t('window.lockTitle') : t('window.unlockTitle')} aria-label={locked ? t('window.lockTitle') : t('window.unlockTitle')}
             >
               {locked ? <Lock size={10} /> : <Unlock size={10} />}
             </button>

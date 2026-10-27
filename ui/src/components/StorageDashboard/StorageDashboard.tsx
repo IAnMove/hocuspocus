@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useCallback } from 'react'
 import { X, HardDrive, Loader2, Trash2, RefreshCw, Copy, Boxes, FolderOpen, Film } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -109,7 +110,7 @@ export function StorageDashboard() {
           </span>
         )}
         {usageLoading && <Loader2 size={13} className="animate-spin text-accent-blue" />}
-        <button onClick={() => setOpen(false)} className="ml-auto p-1.5 rounded-lg hover:bg-bg-hover transition-colors">
+        <button onClick={() => setOpen(false)} className="ml-auto p-1.5 rounded-lg hover:bg-bg-hover transition-colors" title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
           <X size={16} className="text-text-muted" />
         </button>
       </div>

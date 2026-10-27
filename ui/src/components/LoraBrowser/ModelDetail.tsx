@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { ArrowLeft, Download, Tag, Loader2, Check, ExternalLink, KeyRound, Boxes } from 'lucide-react'
 import DOMPurify from 'dompurify'
@@ -155,7 +156,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
         <button
           onClick={onBack}
           className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-        >
+         title={controlLabel('a11y.back')} aria-label={controlLabel('a11y.back')}>
           <ArrowLeft size={16} />
         </button>
         <div className="flex-1 min-w-0">
@@ -170,7 +171,7 @@ export function ModelDetail({ model, onBack, kind = 'lora' }: Props) {
           target="_blank"
           rel="noopener noreferrer"
           className="p-1.5 rounded-lg hover:bg-bg-hover text-text-muted hover:text-text-primary transition-colors"
-          title={t('loraBrowser.openOnCivitai')}
+          title={t('loraBrowser.openOnCivitai')} aria-label={t('loraBrowser.openOnCivitai')}
         >
           <ExternalLink size={14} />
         </a>

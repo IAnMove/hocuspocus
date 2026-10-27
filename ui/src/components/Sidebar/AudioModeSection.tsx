@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { isInstructionSpeechModel } from '../../lib/instructionSpeech'
 import { InstructionAudioControls } from './InstructionAudioControls'
 import { useState } from 'react'
@@ -222,7 +223,7 @@ export function AudioModeSection() {
                   <button
                     onClick={() => removeTtsVoice(i)}
                     className="absolute -top-1.5 -right-1.5 p-0.5 rounded-full bg-bg-secondary border border-border text-text-muted hover:text-red-400 hover:border-red-400/50 transition-colors z-10"
-                  >
+                   title={controlLabel('a11y.removeVoice')} aria-label={controlLabel('a11y.removeVoice')}>
                     <X size={10} />
                   </button>
                   <label className="text-[9px] text-text-muted uppercase tracking-wider block mb-1">

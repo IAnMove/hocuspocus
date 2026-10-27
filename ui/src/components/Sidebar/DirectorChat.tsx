@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { DirectorModelPicker } from './DirectorModelPicker'
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap, Download } from 'lucide-react'
@@ -1262,7 +1263,7 @@ export function DirectorChat() {
             onClick={handleChatSubmit}
             disabled={!chatInputEnabled || !(mvGenerateSetup ? songDescription : resolvedChatInput).trim()}
             className="p-2 rounded-lg bg-accent-blue text-white hover:bg-accent-blue-hover transition-colors disabled:opacity-30 disabled:cursor-not-allowed shrink-0"
-          >
+           title={!chatInputEnabled ? (loading ? controlLabel('disabled.sendWhileBusy') : controlLabel('disabled.sendNeedsStep')) : !(mvGenerateSetup ? songDescription : resolvedChatInput).trim() ? controlLabel('disabled.sendNeedsText') : controlLabel('a11y.send')} aria-label={!chatInputEnabled ? (loading ? controlLabel('disabled.sendWhileBusy') : controlLabel('disabled.sendNeedsStep')) : !(mvGenerateSetup ? songDescription : resolvedChatInput).trim() ? controlLabel('disabled.sendNeedsText') : controlLabel('a11y.send')}>
             {loading && (step === 'style' || isMusicVideo) ? (
               <Loader2 size={16} className="animate-spin" />
             ) : (
@@ -1324,7 +1325,7 @@ function CharacterNaming({
             <button
               onClick={() => removeCharacter(i)}
               className="p-1 rounded hover:bg-bg-hover transition-colors shrink-0"
-            >
+             title={controlLabel('a11y.removeCharacter')} aria-label={controlLabel('a11y.removeCharacter')}>
               <X size={10} className="text-text-muted" />
             </button>
           </div>
@@ -1614,7 +1615,7 @@ function ReferenceImageUpload({
             <button
               onClick={() => setReferenceImage(null)}
               className="p-1 rounded hover:bg-bg-hover transition-colors"
-              title="Remove"
+              title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}
             >
               <X size={12} className="text-text-muted" />
             </button>
@@ -1668,7 +1669,7 @@ function ReferenceImageUpload({
           <button
             onClick={() => setReferenceImage(null)}
             className="absolute top-1.5 right-1.5 bg-bg-primary/80 rounded-full p-1 hover:bg-bg-hover transition-colors"
-            title="Remove"
+            title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}
           >
             <X size={12} className="text-text-muted" />
           </button>
@@ -1743,7 +1744,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
         <img src={previewUrl || ''} alt={`Ref ${index+1}`}
           className="w-[60px] h-[60px] object-cover rounded border border-border pointer-events-none" />
         <button onClick={() => onRemove(index)}
-          className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+          className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10" title={controlLabel('a11y.removeReference')} aria-label={controlLabel('a11y.removeReference')}>
           <X size={8} className="text-white" />
         </button>
         <span className="absolute bottom-0 left-0 bg-black/60 text-white text-[7px] px-1 rounded-br rounded-tl pointer-events-none">
@@ -1959,7 +1960,7 @@ function AdditionalRefsSection() {
                 <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 bg-bg-tertiary rounded px-1.5 py-1 mb-1">
                   <Film size={10} className="text-cyan-300 shrink-0" />
                   <span className="text-[9px] text-text-secondary truncate flex-1">{file.name}</span>
-                  <button onClick={() => removeH3VideoRef(index)} className="text-red-400"><X size={9} /></button>
+                  <button onClick={() => removeH3VideoRef(index)} className="text-red-400" title={controlLabel('a11y.removeVideoReference')} aria-label={controlLabel('a11y.removeVideoReference')}><X size={9} /></button>
                 </div>
               ))}
             </div>
@@ -1979,7 +1980,7 @@ function AdditionalRefsSection() {
                 <div key={`${file.name}-${index}`} className="flex items-center gap-1.5 bg-bg-tertiary rounded px-1.5 py-1 mb-1">
                   <Mic size={10} className="text-cyan-300 shrink-0" />
                   <span className="text-[9px] text-text-secondary truncate flex-1">{file.name}</span>
-                  <button onClick={() => removeH3AudioRef(index)} className="text-red-400"><X size={9} /></button>
+                  <button onClick={() => removeH3AudioRef(index)} className="text-red-400" title={controlLabel('a11y.removeAudioReference')} aria-label={controlLabel('a11y.removeAudioReference')}><X size={9} /></button>
                 </div>
               ))}
               <p className="text-[9px] text-text-muted/70">Each video/audio: 2–15 s; each category totals at most 15 s.</p>

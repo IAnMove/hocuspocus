@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useRef, useCallback } from 'react'
 import { X, Film } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -91,7 +92,7 @@ export function ContinueVideoSection() {
           <button
             onClick={clearContinueVideo}
             className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
-          >
+           title={controlLabel('a11y.clearVideo')} aria-label={controlLabel('a11y.clearVideo')}>
             <X size={12} />
           </button>
           <div className="absolute bottom-1 left-1 flex gap-1.5">

@@ -379,7 +379,7 @@ export function RigAnimatePanel() {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.object')}</label>
-              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title={t('rig.refreshOutputs')}>
+              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title={t('rig.refreshOutputs')} aria-label={t('rig.refreshOutputs')}>
                 <RefreshCw size={11} />
               </button>
             </div>

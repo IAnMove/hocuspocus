@@ -222,7 +222,7 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
             onClick={onClose}
             disabled={generating}
             className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover hover:text-text-primary disabled:opacity-40"
-            title={generating ? t('waitForGeneration') : tCommon('actions.close')}
+            title={generating ? t('waitForGeneration') : tCommon('actions.close')} aria-label={generating ? t('waitForGeneration') : tCommon('actions.close')}
           >
             <X size={16} />
           </button>

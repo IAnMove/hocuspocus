@@ -179,7 +179,7 @@ export function VideoInfoBar() {
               onClick={() => void loadSettingsFromOutput()}
               disabled={restoreBlocked}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
-              title={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')}
+              title={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')} aria-label={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')}
             >
               <Pencil size={14} />
             </button>
@@ -187,7 +187,7 @@ export function VideoInfoBar() {
               onClick={() => void rerollGeneration()}
               disabled={restoreBlocked}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
-              title={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')}
+              title={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')} aria-label={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')}
             >
               <RefreshCw size={14} />
             </button>
@@ -196,7 +196,7 @@ export function VideoInfoBar() {
                 onClick={handleRejoin}
                 disabled={rejoining}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-accent-blue hover:text-accent-blue-hover transition-colors disabled:opacity-50"
-                title={t('actions.rejoin', { count: clipTotal ?? 0 })}
+                title={t('actions.rejoin', { count: clipTotal ?? 0 })} aria-label={t('actions.rejoin', { count: clipTotal ?? 0 })}
               >
                 {rejoining ? <Loader2 size={14} className="animate-spin" /> : <Combine size={14} />}
               </button>
@@ -204,7 +204,7 @@ export function VideoInfoBar() {
             <button
               onClick={handleCopyPrompt}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title={t('actions.copyPrompt')}
+              title={t('actions.copyPrompt')} aria-label={t('actions.copyPrompt')}
             >
               {copied ? <Check size={14} className="text-accent-green" /> : <Copy size={14} />}
             </button>
@@ -236,14 +236,14 @@ export function VideoInfoBar() {
               onClick={handleUpscale}
               disabled={upscaling}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors disabled:opacity-50"
-              title={t('actions.upscale')}
+              title={t('actions.upscale')} aria-label={t('actions.upscale')}
             >
               {upscaling ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
             </button>
             <button
               onClick={() => sendClipToTools(selected.name, selected.url, 'revoice')}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
-              title={t('actions.replaceVoice')}
+              title={t('actions.replaceVoice')} aria-label={t('actions.replaceVoice')}
             >
               <Mic size={14} />
             </button>

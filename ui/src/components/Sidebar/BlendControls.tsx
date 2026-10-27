@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { X, ArrowRight } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -26,7 +27,7 @@ function ClipDropZone({ label, file, url, duration, items, workspaceId, onChoose
         <button
           onClick={onClear}
           className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
-        >
+         title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}>
           <X size={10} />
         </button>
         <div className="absolute bottom-0.5 left-0.5 text-[8px] bg-black/60 text-white px-1 py-0.5 rounded">

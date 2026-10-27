@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useRef, useEffect, useLayoutEffect } from 'react'
 import { Sparkles, Loader2, ChevronDown, ChevronUp, Brain, PenLine, RefreshCw, History, Save, Trash2 } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -400,7 +401,7 @@ export function PromptInput() {
               type="button"
               onClick={() => enhancePrompt()}
               disabled={isEnhancing}
-              title={t('prompt.rebuildWindows')}
+              title={t('prompt.rebuildWindows')} aria-label={t('prompt.rebuildWindows')}
               className="p-1 text-text-muted hover:text-accent-blue disabled:opacity-50"
             >
               <RefreshCw size={11} className={isEnhancing ? 'animate-spin' : ''} />
@@ -490,6 +491,8 @@ export function PromptInput() {
                 disabled={isEnhancing}
                 title={isMultiVoice
                   ? t('prompt.writeSpeechTitleMulti', { count: voiceCount })
+                  : t('prompt.writeSpeechTitleSingle')} aria-label={isMultiVoice
+                  ? t('prompt.writeSpeechTitleMulti', { count: voiceCount })
                   : t('prompt.writeSpeechTitleSingle')}
                 className="p-1.5 rounded-l-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50"
               >
@@ -499,7 +502,7 @@ export function PromptInput() {
                 onClick={() => setTtsMenuOpen(!ttsMenuOpen)}
                 disabled={isEnhancing}
                 className="p-1.5 rounded-r-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50 border-l border-border"
-              >
+               title={isEnhancing ? controlLabel('disabled.waitForVoice') : controlLabel('a11y.voiceOptions')} aria-label={isEnhancing ? controlLabel('disabled.waitForVoice') : controlLabel('a11y.voiceOptions')}>
                 <ChevronUp size={10} />
               </button>
             </div>
@@ -544,7 +547,7 @@ export function PromptInput() {
           <button
             onClick={() => enhancePrompt()}
             disabled={isEnhancing}
-            title={t('prompt.enhance')}
+            title={t('prompt.enhance')} aria-label={t('prompt.enhance')}
             className="absolute right-2 bottom-2 p-1.5 rounded-md text-text-muted hover:text-accent-blue hover:bg-bg-hover transition-colors disabled:opacity-50"
           >
             {isEnhancing ? (

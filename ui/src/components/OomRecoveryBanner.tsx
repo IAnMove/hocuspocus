@@ -124,7 +124,7 @@ export function OomRecoveryBanner() {
           <button
             onClick={handleDismiss}
             className="text-text-muted hover:text-text-primary p-0.5 rounded transition-colors shrink-0"
-            title={t('oom.dismissTitle')}
+            title={t('oom.dismissTitle')} aria-label={t('oom.dismissTitle')}
           >
             <X size={14} />
           </button>

@@ -77,7 +77,7 @@ export function HumanoidAnimateSection({ clips, refreshKey }: { clips: RigAnimat
           <p className="flex items-center gap-1.5 text-[11px] font-medium text-text-primary"><PlusCircle size={13} className="text-accent-blue" /> {t('rig.animateTitle')}</p>
           <p className="mt-0.5 text-[9px] leading-relaxed text-text-muted">{t('rig.animateHelp')}</p>
         </div>
-        <button type="button" onClick={() => void load()} title={t('rig.refreshOutputs')} className="text-text-muted hover:text-text-primary"><RefreshCw size={11} /></button>
+        <button type="button" onClick={() => void load()} title={t('rig.refreshOutputs')} aria-label={t('rig.refreshOutputs')} className="text-text-muted hover:text-text-primary"><RefreshCw size={11} /></button>
       </div>
       <RigPicker rigs={rigs} rig={rig} onPick={setRig} />
       <ClipChips clips={clips} chosen={chosen} onToggle={toggle} />
@@ -135,7 +135,7 @@ function ImportFile({ file, onFile }: { file: File | null; onFile: (file: File |
       {file ? (
         <p className="mt-1 flex items-center justify-between gap-2 rounded border border-border bg-bg-primary px-2 py-1 text-text-primary">
           <span className="truncate">{file.name}</span>
-          <button type="button" onClick={() => onFile(null)} title={t('rig.animateRemoveFile')} className="text-text-muted hover:text-text-primary"><X size={11} /></button>
+          <button type="button" onClick={() => onFile(null)} title={t('rig.animateRemoveFile')} aria-label={t('rig.animateRemoveFile')} className="text-text-muted hover:text-text-primary"><X size={11} /></button>
         </p>
       ) : (
         <label className="mt-1 flex cursor-pointer items-center gap-1.5 rounded border border-dashed border-border px-2 py-1.5 hover:border-border-light">

@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo, type JSX } from 'react'
 import { Film, Play, Square, Loader2, X, BookMarked, ChevronDown, ChevronUp, RefreshCw, Trash2 } from 'lucide-react'
 import { TabFilter } from './TabFilter'
@@ -123,12 +124,12 @@ function JobRecoveryActions({ busy, onResume, onDiscard }: { busy: boolean; onRe
   const { t: tCommon } = useUiTranslation('common')
   return (
     <div className="flex items-center gap-3 shrink-0 ml-2">
-      <button type="button" onClick={onDiscard} disabled={busy}
+      <button type="button" onClick={onDiscard} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
         className="flex items-center gap-1 text-xs text-text-secondary hover:text-red-300 disabled:opacity-50">
         <Trash2 size={12} />
         {tCommon('actions.discard')}
       </button>
-      <button type="button" onClick={onResume} disabled={busy}
+      <button type="button" onClick={onResume} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined}
         className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50">
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
         {tCommon('actions.resume')}
@@ -206,7 +207,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
           <button
             onClick={onDismiss}
             className="absolute top-2 right-2 p-1.5 rounded-full bg-bg-active text-text-secondary hover:bg-red-600 hover:text-white transition-colors z-10"
-            title="Dismiss"
+            title={tCommon('a11y.dismiss')} aria-label={tCommon('a11y.dismiss')}
           >
             <X size={14} />
           </button>

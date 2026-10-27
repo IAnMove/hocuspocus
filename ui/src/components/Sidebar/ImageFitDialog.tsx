@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { X } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -125,7 +126,7 @@ export function ImageFitDialog({
         {error ? <p role="alert" className="mt-2 text-xs text-red-400">{error}</p> : null}
         <div className="mt-3 flex justify-end gap-2">
           <button type="button" onClick={onClose} className="rounded-lg px-3 py-1.5 text-xs text-text-muted">{t('imageFit.cancel')}</button>
-          <button type="button" disabled={busy} onClick={() => void apply()} className="rounded-lg bg-accent-blue px-3 py-1.5 text-xs text-white disabled:opacity-50">
+          <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={() => void apply()} className="rounded-lg bg-accent-blue px-3 py-1.5 text-xs text-white disabled:opacity-50">
             {t('imageFit.apply')}
           </button>
         </div>

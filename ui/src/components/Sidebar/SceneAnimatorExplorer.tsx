@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import type { ApiOutput } from '../../api/outputs'
 import { useUiTranslation } from '../../i18n'
 import { narrativeCopy } from '../../lib/catalogLabels'
@@ -71,6 +72,7 @@ function NarrativeAssetField({
   selectedName,
   optional,
   disabled,
+  title,
   kinds,
   accept,
   onName,
@@ -81,6 +83,7 @@ function NarrativeAssetField({
   selectedName: string
   optional?: boolean
   disabled: boolean
+  title?: string
   kinds: readonly AssetKind[]
   accept?: string
   onName: (name: string) => void
@@ -93,6 +96,7 @@ function NarrativeAssetField({
       value={items.find(asset => asset.name === selectedName)}
       optional={optional}
       disabled={disabled}
+      title={title}
       accept={accept}
       constraints={{ kinds, maxCount: 1, optional: Boolean(optional) }}
       onChoose={item => onName(item?.name ?? '')}
@@ -103,10 +107,12 @@ function NarrativeAssetField({
 export function SceneAnimatorAudioInput({
   audio,
   disabled,
+  title,
   onAttach,
 }: {
   audio: ApiOutput[]
   disabled: boolean
+  title?: string
   onAttach: (filename: string, title: string, kind: 'audio') => void
 }) {
   const { t } = useUiTranslation('scene3d')
@@ -116,6 +122,7 @@ export function SceneAnimatorAudioInput({
       placeholder={t('animator.chooseAudio')}
       items={audio}
       disabled={disabled}
+      title={title}
       accept="audio/*"
       constraints={{ kinds: ['audio'], maxCount: 1, optional: true }}
       onChoose={item => {
@@ -197,7 +204,7 @@ export function SceneAnimatorNarrativeSetup({
   return (
     <div className="space-y-2 rounded border border-fuchsia-400/30 bg-fuchsia-400/[.045] p-2">
       <div className="flex items-center justify-between gap-2"><span className="text-[10px] font-medium uppercase tracking-wider text-fuchsia-100">{t('animator.narrativeTitle')}</span><span className="text-[8px] text-fuchsia-200/70">{t('animator.narrativeMeta')}</span></div>
-      <select value={templateId} disabled={busy} onChange={event => onTemplateId(event.target.value as NarrativeSceneId)} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]">
+      <select value={templateId} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onChange={event => onTemplateId(event.target.value as NarrativeSceneId)} className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-[10px]">
         {NARRATIVE_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.experimental ? t('animator.experimental') : ''}{narrativeCopy(tStudio, item).title}</option>)}
       </select>
       <div className="grid grid-cols-2 gap-1">{NARRATIVE_SCENE_TEMPLATES.map(item => {
@@ -205,13 +212,13 @@ export function SceneAnimatorNarrativeSetup({
         return <button key={item.id} type="button" disabled={busy} onClick={() => onTemplateId(item.id)} title={copy.description} className={`rounded border p-1 text-left disabled:opacity-40 ${templateId === item.id ? 'border-fuchsia-300/70 bg-fuchsia-400/15 text-fuchsia-100' : 'border-border bg-bg-primary text-text-secondary hover:border-fuchsia-300/40'}`}><span className="block truncate text-[8px] font-medium">{item.experimental ? t('animator.experimental') : ''}{copy.title}</span><span className="block text-[7px] text-text-muted">{t('animator.templateMeta', { duration: item.defaultDuration, count: item.assetSlots.filter(slot => slot.required).length })}</span></button>
       })}</div>
       <p className="text-[8px] leading-relaxed text-text-muted">{narrativeCopy(tStudio, template).description}</p>
-      <NarrativeAssetField label={t('animator.character')} placeholder={t('animator.chooseAsset')} items={visuals} selectedName={hero} disabled={busy} kinds={['image', 'video', 'model3d']} accept="image/*,video/*,.glb" onName={onHero} />
+      <NarrativeAssetField label={t('animator.character')} placeholder={t('animator.chooseAsset')} items={visuals} selectedName={hero} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} kinds={['image', 'video', 'model3d']} accept="image/*,video/*,.glb" onName={onHero} />
       {hero ? <p className={`rounded border px-1.5 py-1 text-[8px] leading-relaxed ${heroFit.level === 'warning' ? 'border-amber-300/25 bg-amber-400/[.06] text-amber-100' : 'border-emerald-300/20 bg-emerald-400/[.04] text-emerald-100'}`}>{heroFit.message}</p> : null}
-      <NarrativeAssetField label={t('animator.background')} placeholder={t('animator.chooseAsset')} items={media} selectedName={plate} disabled={busy} kinds={['image', 'video']} accept="image/*,video/*" onName={onPlate} />
+      <NarrativeAssetField label={t('animator.background')} placeholder={t('animator.chooseAsset')} items={media} selectedName={plate} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} kinds={['image', 'video']} accept="image/*,video/*" onName={onPlate} />
       {plate && plateFit.level !== 'ok' ? <p className="rounded border border-cyan-300/20 bg-cyan-400/[.04] px-1.5 py-1 text-[8px] leading-relaxed text-cyan-100">{plateFit.message}</p> : null}
       {plate ? <label className="flex items-start gap-1.5 rounded border border-amber-300/20 bg-amber-400/[.035] p-1.5 text-[8px] leading-relaxed text-amber-100"><input type="checkbox" checked={plateLoopReady} onChange={event => onPlateLoopReady(event.target.checked)} className="mt-0.5" /> <span><strong>{t('animator.loopReady')}</strong><br />{t('animator.loopReadyHelp')}</span></label> : null}
-      {propSlot ? <NarrativeAssetField label={`${t('animator.objectPortal')}${propSlot.required ? '' : t('animator.optional')}`} placeholder={t('animator.none')} items={visuals} selectedName={prop} optional={!propSlot.required} disabled={busy} kinds={['image', 'video', 'model3d']} accept="image/*,video/*,.glb" onName={onProp} /> : null}
-      {foregroundSlot ? <NarrativeAssetField label={t('animator.foreground')} placeholder={t('animator.none')} items={media} selectedName={foreground} optional disabled={busy} kinds={['image', 'video']} accept="image/*,video/*" onName={onForeground} /> : null}
+      {propSlot ? <NarrativeAssetField label={`${t('animator.objectPortal')}${propSlot.required ? '' : t('animator.optional')}`} placeholder={t('animator.none')} items={visuals} selectedName={prop} optional={!propSlot.required} disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} kinds={['image', 'video', 'model3d']} accept="image/*,video/*,.glb" onName={onProp} /> : null}
+      {foregroundSlot ? <NarrativeAssetField label={t('animator.foreground')} placeholder={t('animator.none')} items={media} selectedName={foreground} optional disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} kinds={['image', 'video']} accept="image/*,video/*" onName={onForeground} /> : null}
       <div className="grid grid-cols-2 gap-1 text-[9px] text-text-muted">
         {template.controls.includes('mood') ? <label>{t('animator.mood')}<select value={mood} onChange={event => onMood(event.target.value as typeof mood)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="calm">{t('animator.moodCalm')}</option><option value="tense">{t('animator.moodTense')}</option><option value="dreamy">{t('animator.moodDreamy')}</option><option value="heroic">{t('animator.moodHeroic')}</option></select></label> : null}
         {template.controls.includes('intensity') ? <label>{t('animator.intensity')}<select value={intensity} onChange={event => onIntensity(Number(event.target.value) as 1 | 2 | 3)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value={1}>{t('animator.intensityLow')}</option><option value={2}>{t('animator.intensityMedium')}</option><option value={3}>{t('animator.intensityHigh')}</option></select></label> : null}
@@ -220,7 +227,7 @@ export function SceneAnimatorNarrativeSetup({
         {template.controls.includes('palette') ? <label>{t('animator.palette')}<select value={palette} onChange={event => onPalette(event.target.value as typeof palette)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="natural">{t('animator.paletteNatural')}</option><option value="cool">{t('animator.paletteCool')}</option><option value="warm">{t('animator.paletteWarm')}</option><option value="neon">{t('animator.paletteNeon')}</option></select></label> : null}
         {template.controls.includes('voiceSpace') ? <label>{t('animator.voiceSpace')}<select value={voiceSpace} onChange={event => onVoiceSpace(event.target.value as typeof voiceSpace)} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[9px]"><option value="center">{t('animator.center')}</option><option value="left">{t('animator.left')}</option><option value="right">{t('animator.right')}</option></select></label> : null}
       </div>
-      <button type="button" disabled={busy} onClick={onMount} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">{t('animator.mountScene')}</button>
+      <button type="button" disabled={busy} title={busy ? controlLabel('disabled.actionInProgress') : undefined} onClick={onMount} className="w-full rounded border border-fuchsia-300/50 bg-fuchsia-400/10 px-2 py-1.5 text-[10px] text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:opacity-40">{t('animator.mountScene')}</button>
     </div>
   )
 }

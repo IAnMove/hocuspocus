@@ -1,3 +1,4 @@
+import { controlLabel } from './i18n/controlLabel'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { WizardSidebar } from './components/Sidebar/WizardSidebar'
@@ -273,7 +274,7 @@ function AppContent() {
           <button
             onClick={() => { toggleSettings() }}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          >
+           title={controlLabel('a11y.openSettings')} aria-label={controlLabel('a11y.openSettings')}>
             <Settings size={20} />
           </button>
         </header>

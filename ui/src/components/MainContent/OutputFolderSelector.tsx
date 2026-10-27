@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Check, FolderOpen, Loader2, Plus, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { controlLabel } from '../../i18n/controlLabel'
 import { useStore } from '../../stores/useStore'
+
+function outputFolderAction(deleting: boolean, confirming: boolean, name: string, count: number) {
+  if (deleting) return controlLabel('disabled.deletingFolder')
+  if (confirming) return controlLabel('a11y.confirmDeleteOutputFolder', { name, count })
+  return controlLabel('a11y.deleteOutputFolder', { name, count })
+}
 
 export function OutputFolderSelector() {
   const { t } = useUiTranslation('navigation')
@@ -82,7 +89,7 @@ export function OutputFolderSelector() {
                   {workspace.name === activeWorkspace && !browsingUploads && <Check size={12} className="shrink-0" />}
                 </button>
                 {workspace.name !== 'default' && (
-                  <button onClick={event => handleDelete(workspace.name, event)} disabled={deleting === workspace.name} className={`shrink-0 px-2 py-2 transition-colors ${confirmDelete === workspace.name ? 'bg-red-500/15 text-red-400' : deleting === workspace.name ? 'cursor-wait text-text-muted' : 'text-text-muted opacity-0 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100'}`} title={confirmDelete === workspace.name ? `Click again to permanently delete "${workspace.name}" and its ${workspace.file_count ?? 0} files` : `Delete output folder (${workspace.file_count ?? 0} files)`}>
+                  <button onClick={event => handleDelete(workspace.name, event)} disabled={deleting === workspace.name} className={`shrink-0 px-2 py-2 transition-colors ${confirmDelete === workspace.name ? 'bg-red-500/15 text-red-400' : deleting === workspace.name ? 'cursor-wait text-text-muted' : 'text-text-muted opacity-0 hover:text-red-400 focus-visible:opacity-100 group-hover:opacity-100'}`} title={outputFolderAction(deleting === workspace.name, confirmDelete === workspace.name, workspace.name, workspace.file_count ?? 0)} aria-label={outputFolderAction(deleting === workspace.name, confirmDelete === workspace.name, workspace.name, workspace.file_count ?? 0)}>
                     {deleting === workspace.name ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
                   </button>
                 )}
@@ -100,7 +107,7 @@ export function OutputFolderSelector() {
             {creating ? (
               <div className="flex gap-1.5">
                 <input type="text" value={newName} onChange={event => setNewName(event.target.value)} onKeyDown={event => event.key === 'Enter' && void handleCreate()} placeholder="output-folder" className="flex-1 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-blue focus:outline-none" autoFocus />
-                <button onClick={() => void handleCreate()} disabled={!newName.trim()} className="rounded bg-accent-blue px-2 py-1 text-xs text-white hover:bg-accent-blue-hover disabled:opacity-50">Create</button>
+                <button onClick={() => void handleCreate()} disabled={!newName.trim()} title={!newName.trim() ? controlLabel('disabled.nameTheFolder') : undefined} className="rounded bg-accent-blue px-2 py-1 text-xs text-white hover:bg-accent-blue-hover disabled:opacity-50">Create</button>
               </div>
             ) : (
               <button onClick={() => setCreating(true)} className="flex w-full items-center gap-1 px-1 py-1 text-left text-xs text-accent-blue hover:text-accent-blue-hover"><Plus size={12} /> New output folder</button>

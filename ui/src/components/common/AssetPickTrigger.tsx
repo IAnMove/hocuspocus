@@ -12,6 +12,7 @@ export function AssetPickTrigger({
   placeholder,
   onOpen,
   disabled,
+  title,
   showPreview = true,
 }: {
   label: string
@@ -19,6 +20,7 @@ export function AssetPickTrigger({
   placeholder: string
   onOpen: () => void
   disabled?: boolean
+  title?: string
   showPreview?: boolean
 }) {
   const preview = selected && showPreview ? assetPreviewUrl(selected) : ''
@@ -32,7 +34,7 @@ export function AssetPickTrigger({
         </ImagePreview> : <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded bg-bg-active">
           {preview ? <img src={preview} alt="" className="h-full w-full object-cover" /> : <FolderOpen size={14} className="text-text-muted" />}
         </span>}
-        <button type="button" disabled={disabled} onClick={onOpen} className="min-w-0 flex-1 text-left disabled:opacity-40">
+        <button type="button" disabled={disabled} title={disabled ? title : undefined} onClick={onOpen} className="min-w-0 flex-1 text-left disabled:opacity-40">
           <span className="block truncate">{picked?.title ?? placeholder}</span>
           {picked && <span className="block truncate text-[8px] text-text-muted">{picked.filename}</span>}
           {selected && <span className="block text-[8px] text-text-muted">{formatAssetDate(selected)}</span>}
