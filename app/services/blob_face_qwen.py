@@ -1,13 +1,13 @@
 """A painted bald face (a Qwen picture) as the base of an ``anime_head`` kit: the ``qwen`` face source.
 
-The picture is keyed by the caller (``image.remove_background``) and read here: its anime landmarks give the eye
-centres and the mouth; the picture is scaled and moved so they land on the ``anime_head`` layout (eye line, eye
-gap, mouth), and the skull box of that layout is the kit's ``fit``. The eleven expressions keep the painted
-eyes: a measured drift of 1–3 % and a ±35 % eye size between separately edited pictures reads as a different
-person, so the expressions are overlays on one picture instead: the painted brows are covered with skin and
-redrawn (tapered, tilted per pose), lids close over the painted eyes (a happy arc, half lids, angry and sad
-wedges, the blink), tears, blush and the rest mouth come from the programmatic drawer. The mouth visemes are the
-same nine sprites. Same kit shape, same anchors, same ``fit``: ``world3d.scene.face`` cannot tell the sources apart.
+The picture is keyed by the caller (``image.remove_background``) and read here: its landmarks (or the silhouette
+prior for a bald head) give the two eyes, which are cut out with a feathered edge and pasted inside the drawn
+openings of the ``anime_head`` face; lids, lashes, crease, brows, nose, mouth, blush and blink are the drawn ones,
+so the eleven expressions are as consistent as the drawn style and nothing of the painting is lit twice. Why not
+the whole painting or Qwen-edited expressions: pasting the painting re-lights its shading and projects its
+contours onto the skull's cheeks, and separately edited expressions drift (measured on ``bald_hana_31``: eyes
+0.8–2.5 % of the picture, mouth 0.1–3.2 %, eye size ±35 %). Same kit shape, same anchors, same ``fit``:
+``world3d.scene.face`` cannot tell the sources apart.
 """
 from __future__ import annotations
 
@@ -16,11 +16,6 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFilter
 
 from services import blob_face as base
-from services.blob_face_anime import _shade, anime_mouths
-from services.blob_face_anime_head import (
-    EYE_GAP, EYE_RX, EYE_RY, EYE_Y, MOUTH_Y, SHAPES, _blush, _brows, _lids, _mouth, _opening, _quad, _s, layout,
-)
-from services.blob_face_head import FIT, POSES, TAPER
 
 SC = base.SCALE
 
@@ -118,94 +113,20 @@ def measure(image: Image.Image) -> dict[str, Any]:
             "mouth": centre(mouth), "mouth_box": box(mouth), "brow_y": sum(p[1] for p in brows) / len(brows)}
 
 
-def _warp(picture: Image.Image, m: dict[str, Any]) -> tuple[Image.Image, dict[str, Any]]:
-    """Scale and move the picture so its eye centres sit on the layout's eye line and gap and its mouth on the mouth line."""
-    eye_mid = ((m["left"][0] + m["right"][0]) / 2, (m["left"][1] + m["right"][1]) / 2)
-    gap = abs(m["right"][0] - m["left"][0]) / 2
-    drop = m["mouth"][1] - eye_mid[1]
-    sx = EYE_GAP / max(gap, 1.0)
-    sy = (MOUTH_Y - EYE_Y) / max(drop, 1.0)
-    sy = max(sx * 0.8, min(sx * 1.25, sy))             # keep the face's own proportions within reason
-    w, h = picture.size
-    scaled = picture.resize((max(1, int(w * sx)), max(1, int(h * sy))), Image.LANCZOS)
-    dx, dy = 512 - eye_mid[0] * sx, EYE_Y - eye_mid[1] * sy
-    canvas = Image.new("RGBA", (base.CANVAS, base.CANVAS), (0, 0, 0, 0))
-    canvas.alpha_composite(scaled, (int(round(dx)), int(round(dy))))
-    boxes = {}
-    for key in ("left_box", "right_box", "mouth_box"):
-        x0, y0, x1, y1 = m[key]
-        boxes[key] = (x0 * sx + dx, y0 * sy + dy, x1 * sx + dx, y1 * sy + dy)
-    return canvas, {"boxes": boxes, "brow_y": m["brow_y"] * sy + dy, "scale": (sx, sy)}
-
-
-def _cover(image: Image.Image, skin, boxes, margin: float, blur: float) -> None:
-    """Skin over the painted brows (and whatever else is given), feathered."""
-    patch = Image.new("RGBA", image.size, (*skin, 0))
-    draw = ImageDraw.Draw(patch)
-    for x0, y0, x1, y1 in boxes:
-        draw.rounded_rectangle((x0 - margin, y0 - margin, x1 + margin, y1 + margin), radius=margin, fill=(*skin, 255))
-    image.alpha_composite(patch.filter(ImageFilter.GaussianBlur(blur)))
-
-
-def _lid_overlays(image: Image.Image, traits: dict[str, Any], p: dict[str, Any], placed: dict[str, Any]) -> None:
-    """Lids over the painted eyes: the layout's eye openings decide how much of the eye the lids cover."""
-    draw = ImageDraw.Draw(image)
-    skin = tuple(traits["skin"][:3]) + (255,)
-    lash = traits["lash"]
-    width = max(4, int(traits["line"] * SC * 0.4))
-    shape = SHAPES[traits.get("face_shape", "soft")]
+def _eye_crops(picture: Image.Image, m: dict[str, Any]) -> dict[int, Image.Image]:
+    """The two painted eyes, cut with a 12 % margin and a feathered edge, keyed to the drawn opening later."""
+    crops = {}
     for sign, key in ((-1, "left_box"), (1, "right_box")):
-        x0, y0, x1, y1 = placed["boxes"][key]
-        cx, cy = _s((x0 + x1) / 2), _s((y0 + y1) / 2)
-        rx, ry = _s(x1 - x0) / 2 * 1.15, _s(y1 - y0) / 2 * 1.2
-        o = _opening(cx, sign, p, shape)
-        cover = o["lid"]
-        if p["shape"] == "arc":
-            draw.ellipse((cx - rx * 1.1, cy - ry * 1.3, cx + rx * 1.1, cy + ry * 1.3), fill=skin)
-            pts = _quad((cx - sign * rx * 0.95, cy + ry * 0.2), (cx, cy - ry * 1.3), (cx + sign * rx * 0.95, cy + ry * 0.2 - _s(shape["tilt"]) * 0.6))
-            draw.line(pts, fill=lash, width=int(width * 2.4), joint="curve")
-            continue
-        if cover > 0:
-            cut = cy - ry + 2 * ry * cover * 0.9
-            draw.rectangle((cx - rx * 1.2, cy - ry * 1.4, cx + rx * 1.2, cut), fill=skin)
-            draw.line((cx - rx * 1.05, cut, cx + rx * 1.05, cut), fill=lash, width=int(width * 2.0))
-        if p["shape"] in ("angry", "sad"):
-            inner_x = cx - sign * rx
-            edge = inner_x if p["shape"] == "angry" else cx + sign * rx
-            far = edge + (sign if p["shape"] == "angry" else -sign) * rx * 1.6
-            depth = 0.55 if p["shape"] == "angry" else 0.4
-            draw.polygon([(edge, cy - ry * 1.3), (far, cy - ry * 1.3), (edge, cy - ry + 2 * ry * depth)], fill=skin)
-            draw.line((edge, cy - ry + 2 * ry * depth, far, cy - ry * 1.3), fill=lash, width=int(width * 1.6))
-        if p["shape"] == "sad":
-            tx, ty = cx + sign * rx * 0.3, cy + ry + _s(4)
-            draw.ellipse((tx - _s(6), ty, tx + _s(6), ty + _s(24)), fill=(176, 214, 245, 230), outline=lash, width=max(2, width // 3))
-
-
-def draw_pose(traits: dict[str, Any], pose: str, warped: Image.Image, placed: dict[str, Any], *, lids_only: bool = False) -> Image.Image:
-    p = POSES[pose]
-    image = Image.new("RGBA", (base.CANVAS * SC, base.CANVAS * SC), (0, 0, 0, 0))
-    skin = tuple(traits["skin"][:3])
-    if lids_only:
-        # the blink: skin over the painted eyes, then the closed lash curve of the layout
-        boxes = [tuple(_s(v) for v in placed["boxes"][key]) for key in ("left_box", "right_box")]
-        _cover(image, skin, boxes, _s(10), _s(5))
-        _lids(image, traits, p)
-        return image.resize((base.CANVAS, base.CANVAS), Image.LANCZOS)
-    image.alpha_composite(warped.resize(image.size, Image.LANCZOS))
-    # the painted brows go; the layout's brows come back, tilted per pose
-    brow_h = _s(EYE_RY) * 0.9
-    boxes = [(_s(x0) - _s(8), _s(placed["brow_y"]) - brow_h, _s(x1) + _s(8), _s(placed["brow_y"]) + brow_h) for x0, _y0, x1, _y1 in (placed["boxes"]["left_box"], placed["boxes"]["right_box"])]
-    _cover(image, skin, boxes, _s(6), _s(6))
-    _blush(image, traits, p)
-    draw = ImageDraw.Draw(image)
-    _lid_overlays(image, traits, p, placed)
-    _brows(draw, traits, p)
-    if p["corners"] != 0.0:
-        # the rest mouth: the painted one stays for neutral; a smile or a frown is drawn over it
-        mx0, my0, mx1, my1 = placed["boxes"]["mouth_box"]
-        _cover(image, skin, [(_s(mx0) - _s(6), _s(my0) - _s(6), _s(mx1) + _s(6), _s(my1) + _s(6))], _s(4), _s(4))
-        _mouth(draw, traits, p)
-    return image.resize((base.CANVAS, base.CANVAS), Image.LANCZOS)
+        x0, y0, x1, y1 = m[key]
+        mx, my = (x1 - x0) * 0.12, (y1 - y0) * 0.35
+        box = (max(0, int(x0 - mx)), max(0, int(y0 - my)), min(picture.width, int(x1 + mx)), min(picture.height, int(y1 + my)))
+        crop = picture.crop(box).convert("RGBA")
+        mask = Image.new("L", crop.size, 0)
+        ImageDraw.Draw(mask).ellipse((2, 2, crop.width - 3, crop.height - 3), fill=255)
+        mask = mask.filter(ImageFilter.GaussianBlur(max(2, crop.width // 24)))
+        crop.putalpha(mask)
+        crops[sign] = crop
+    return crops
 
 
 def _painted_skin(picture: Image.Image, m: dict[str, Any]) -> tuple[int, int, int, int]:
@@ -229,20 +150,12 @@ def _painted_skin(picture: Image.Image, m: dict[str, Any]) -> tuple[int, int, in
 
 
 def qwen_kit(look: dict[str, Any], picture: Image.Image) -> dict[str, Any]:
-    """Kit images from one keyed bald picture. Raises ``QwenFaceError`` when no face is found."""
+    """Kit images from one keyed bald picture: its painted eyes inside the drawn face (eyes-only hybrid). Raises
+    ``QwenFaceError`` when no face is found."""
+    from services.blob_face_anime_head import anime_head_kit
+
     m = measure(picture)
     look = {**look, "skin": _painted_skin(picture, m)}
-    warped, placed = _warp(picture.convert("RGBA"), m)
-    poses = {pose: draw_pose(look, pose, warped, placed) for pose in POSES}
-    blinks = {pose: draw_pose(look, pose, warped, placed, lids_only=True) for pose in POSES}
-    mouths = anime_mouths(look)
-    anchors, placed_all = {}, {}
-    eyes = base._anchor(512, 512, base.CANVAS, base.CANVAS, base.CANVAS)
-    for pose in POSES:
-        at = layout(pose)
-        anchors[pose] = {"mouth": base._anchor(*at["mouth"], base.CANVAS, base.CANVAS), "eyes": dict(eyes)}
-        placed_all[pose] = {"mouth": at["mouth"], "eyes": (512, 512, base.CANVAS)}
-    return {"traits": look, "poses": poses, "blinks": blinks, "mouths": mouths, "anchors": anchors, "layout": placed_all,
-            "mouthMapping": dict(base.MAPPING), "preview": base._sheet(poses, mouths, anchors),
-            "face": {"fit": list(FIT), "taper": TAPER, "poses": list(POSES), "shape": "mesh", "skin": base._hex(look["skin"]),
-                     "source": "qwen", "landmarks": {k: [round(v, 1) for v in placed["boxes"][k]] for k in placed["boxes"]}}}
+    made = anime_head_kit(look, eye_art=_eye_crops(picture, m))
+    made["face"] = {**made["face"], "source": "qwen", "landmarks": {k: [round(v, 1) for v in m[k]] for k in ("left_box", "right_box", "mouth_box")}}
+    return made

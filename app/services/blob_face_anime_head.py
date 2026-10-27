@@ -16,13 +16,22 @@ from typing import Any
 from PIL import Image, ImageDraw, ImageFilter
 
 from services import blob_face as base
-from services.blob_face_anime import _clip, _shade, anime_mouths
-from services.blob_face_head import FIT, POSES, SKULL, TAPER, _s, layout as _cute_layout
+from services.blob_face_anime import _clip, _shade, anime_mouths, _mouth_canvas, _shape as _mouth_shape, _bowl, _pt
+from services.blob_face_head import FIT, SKULL, TAPER, _s, layout as _cute_layout
+from services.blob_face_head import POSES as _CUTE_POSES
+
+# The cute poses, with the half-lid faces told apart: lids as (left, right), a lifted corner, a small-o mouth.
+POSES: dict[str, dict[str, Any]] = {name: dict(pose) for name, pose in _CUTE_POSES.items()}
+POSES["smug"].update({"lid": (0.5, 0.3), "corners": 0.9, "corner_side": 1, "tilt": -0.6})
+POSES["suspicious"].update({"lid": (0.45, 0.15), "tilt": -1.0, "corners": -0.3})
+POSES["sleepy"].update({"lid": (0.62, 0.62), "mouth": "o", "corners": 0.0})
+POSES["tired"].update({"lid": (0.56, 0.56), "brow_dy": 20})
+POSES["shy"].update({"lid": (0.14, 0.14)})
 
 SC = base.SCALE
-EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 528, 90, 60, 41
-BROW_GAP, NOSE_Y, MOUTH_Y, MOUTH_H = 34, 646, 700, 190
-BLUSH_Y, BLUSH_X = 652, 150
+EYE_Y, EYE_GAP, EYE_RX, EYE_RY = 560, 90, 60, 41
+BROW_GAP, NOSE_Y, MOUTH_Y, MOUTH_H = 26, 672, 726, 190
+BLUSH_Y, BLUSH_X = 680, 150
 EYE_WHITE = (240, 242, 248, 255)
 SHAPES = {"soft": {"tilt": 5, "wide": 1.0, "tall": 1.06}, "sharp": {"tilt": 13, "wide": 1.05, "tall": 0.88}}
 
@@ -46,7 +55,8 @@ def _opening(cx: float, sign: int, p: dict[str, Any], shape: dict) -> dict[str, 
     cy = _s(EYE_Y)
     inner = (cx - sign * rx, cy + ry * 0.15)
     outer = (cx + sign * rx, cy - tilt)
-    lid = p["lid"] + (0.12 if p["shape"] == "angry" else 0.0)
+    lids = p["lid"] if isinstance(p["lid"], tuple) else (p["lid"], p["lid"])
+    lid = lids[0 if sign < 0 else 1] + (0.12 if p["shape"] == "angry" else 0.0)
     top_y = cy - ry * (1.0 - lid * 1.6)
     upper = _quad(inner, (cx + sign * rx * 0.1, top_y - ry * 0.55), outer)
     lower = _quad(outer, (cx + sign * rx * 0.05, cy + ry * 1.35), inner)
@@ -61,12 +71,12 @@ def _iris(size, o: dict, color, p: dict[str, Any]) -> Image.Image:
     layer = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(layer)
     gx, gy = p["gaze"]
-    cx, cy = o["cx"] + o["rx"] * 0.22 * gx, o["cy"] + o["ry"] * 0.1 + o["ry"] * 0.3 * gy
-    iw, ih = o["rx"] * 0.36 * p["pupil"] ** 0.2, o["ry"] * 0.82
+    cx, cy = o["cx"] + o["rx"] * 0.22 * gx, o["cy"] - o["ry"] * 0.02 + o["ry"] * 0.3 * gy
+    iw, ih = o["rx"] * 0.40 * p["pupil"] ** 0.2, o["ry"] * 1.05            # taller than the opening: the lids clip it
     draw.ellipse((cx - iw * 1.06, cy - ih * 1.06, cx + iw * 1.06, cy + ih * 1.06), fill=_shade(color, 0.38))
-    for k, (dy, hk) in zip((0.6, 1.0, 1.42), ((-0.05, 0.98), (0.08, 0.86), (0.34, 0.5))):
+    for k, (dy, hk) in zip((0.45, 1.0, 1.42), ((-0.05, 0.98), (0.08, 0.86), (0.34, 0.5))):
         draw.ellipse((cx - iw, cy - ih + ih * dy, cx + iw, cy + ih * hk + ih * dy), fill=_shade(color, k))
-    pw, ph = iw * 0.42 * p["pupil"], ih * 0.46 * p["pupil"]
+    pw, ph = iw * 0.55 * p["pupil"], ih * 0.5 * p["pupil"]
     draw.ellipse((cx - pw, cy - ph * 0.8, cx + pw, cy + ph * 1.1), fill=(20, 14, 26, 255))
     r1, r2, r3 = iw * 0.4, iw * 0.16, iw * 0.11
     draw.ellipse((cx - iw * 0.45 - r1, cy - ih * 0.5 - r1, cx - iw * 0.45 + r1, cy - ih * 0.5 + r1), fill=(255, 255, 255, 255))
@@ -75,7 +85,7 @@ def _iris(size, o: dict, color, p: dict[str, Any]) -> Image.Image:
     return layer
 
 
-def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: dict[str, Any]) -> None:
+def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: dict[str, Any], art: Image.Image | None = None) -> None:
     lash = traits["lash"]
     shape = SHAPES[traits.get("face_shape", "soft")]
     o = _opening(cx, sign, p, shape)
@@ -94,8 +104,16 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
     ImageDraw.Draw(eye).polygon(polygon, fill=EYE_WHITE)
     shade = Image.new("RGBA", layer.size, (0, 0, 0, 0))
     top = min(y for _x, y in o["upper"])
-    ImageDraw.Draw(shade).rectangle((cx - rx * 1.2, top - ry, cx + rx * 1.2, top + ry * 0.75), fill=(125, 135, 175, 110))
-    eye.alpha_composite(_clip(_iris(layer.size, o, traits["eye_color"], p), mask))
+    ImageDraw.Draw(shade).rectangle((cx - rx * 1.2, top - ry, cx + rx * 1.2, top + ry * 0.9), fill=(90, 95, 140, 170))
+    if art is not None:
+        # a painted eye, scaled to the opening's width and centred on it, instead of the drawn white and iris
+        width_px = int(rx * 2 * 1.15)
+        scaled = art.resize((width_px, max(1, int(art.height * width_px / max(1, art.width)))), Image.LANCZOS)
+        pasted = Image.new("RGBA", layer.size, (0, 0, 0, 0))
+        pasted.alpha_composite(scaled, (int(cx - scaled.width / 2), int(o["cy"] - scaled.height / 2)))
+        eye.alpha_composite(_clip(pasted, mask))
+    else:
+        eye.alpha_composite(_clip(_iris(layer.size, o, traits["eye_color"], p), mask))
     eye.alpha_composite(_clip(shade, mask))
     layer.alpha_composite(_clip(eye, mask))
     # lower lash: thin, on the outer two thirds; upper lash: heavy, thickest over the outer half, with a tail
@@ -122,7 +140,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
 def _brows(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any]) -> None:
     if traits["brows"]["style"] == "none":
         return
-    thick = max(4, int(traits["brows"]["thickness"] * SC * (0.5 if traits["brows"]["style"] == "thin" else 0.8)))
+    thick = max(4, int(traits["brows"]["thickness"] * SC * (0.32 if traits["brows"]["style"] == "thin" else 0.55)))
     shape = SHAPES[traits.get("face_shape", "soft")]
     y = _s(EYE_Y - EYE_RY - BROW_GAP + p["brow_dy"])
     rx = _s(EYE_RX) * shape["wide"]
@@ -130,7 +148,7 @@ def _brows(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any])
         cx = _s(512) + sign * _s(EYE_GAP)
         inner, outer = cx - sign * rx * 0.85, cx + sign * rx * 1.15
         tilt = p["tilt"] * rx * 0.45
-        peak = (cx + sign * rx * 0.3, y - _s(10) - abs(tilt) * 0.1)
+        peak = (cx + sign * rx * 0.3, y - _s(5) - abs(tilt) * 0.1)
         pts = _quad((inner, y - tilt), peak, (outer, y + tilt * 0.35 - _s(shape["tilt"]) * 0.4), 10)
         for i in range(len(pts) - 1):
             w = thick * (1.0 - 0.6 * i / (len(pts) - 1))
@@ -152,8 +170,16 @@ def _mouth(draw: ImageDraw.ImageDraw, traits: dict[str, Any], p: dict[str, Any])
     lift = p["corners"]
     width = max(4, int(traits["line"] * SC * 0.42))
     y = _s(MOUTH_Y)
+    if p.get("mouth") == "o":
+        draw.ellipse((_s(512) - _s(9), y - _s(10), _s(512) + _s(9), y + _s(12)), fill=(96, 34, 44, 255), outline=traits["ink"], width=max(2, width // 2))
+        return
     half = 30
-    pts = [(_s(512) + _s(x), y - _s(8) * lift * ((x / half) ** 2) + _s(2) * lift * (1 - (x / half) ** 2)) for x in range(-half, half + 1, 2)]
+    side = p.get("corner_side", 0)
+    pts = []
+    for x in range(-half, half + 1, 2):
+        u = x / half
+        corner = lift if side == 0 or (x * side) > 0 else lift * 0.2   # smug: one corner up
+        pts.append((_s(512) + _s(x), y - _s(8) * corner * (u ** 2) + _s(2) * lift * (1 - u ** 2)))
     draw.line(pts, fill=traits["ink"], width=width, joint="curve")
     if lift > 0.6:
         draw.line((pts[0][0], pts[0][1], pts[0][0] - _s(4), pts[0][1] - _s(6)), fill=traits["ink"], width=width)
@@ -201,7 +227,9 @@ def _lids(image: Image.Image, traits: dict[str, Any], p: dict[str, Any]) -> None
         draw.line((pts[-1][0], pts[-1][1], pts[-1][0] + sign * _s(14), pts[-1][1] - _s(8)), fill=traits["lash"], width=int(width * 1.6))
 
 
-def draw_pose(traits: dict[str, Any], pose: str, *, lids_only: bool = False) -> Image.Image:
+def draw_pose(traits: dict[str, Any], pose: str, *, lids_only: bool = False, eye_art=None) -> Image.Image:
+    """``eye_art`` is ``{-1: image, 1: image}``: painted eyes (RGBA, any size) pasted inside the openings instead of the
+    drawn white and iris; the lids, lashes, crease, brows and everything else stay the drawn ones."""
     p = POSES[pose]
     image = Image.new("RGBA", (base.CANVAS * SC, base.CANVAS * SC), (0, 0, 0, 0))
     if lids_only:
@@ -210,17 +238,55 @@ def draw_pose(traits: dict[str, Any], pose: str, *, lids_only: bool = False) -> 
         _blush(image, traits, p)
         draw = ImageDraw.Draw(image)
         for sign in (-1, 1):
-            _eye(image, _s(512) + sign * _s(EYE_GAP), sign, traits, p)
+            _eye(image, _s(512) + sign * _s(EYE_GAP), sign, traits, p, art=(eye_art or {}).get(sign))
         _brows(draw, traits, p)
         _nose(draw, traits)
         _mouth(draw, traits, p)
     return image.resize((base.CANVAS, base.CANVAS), Image.LANCZOS)
 
 
-def anime_head_kit(look: dict[str, Any]) -> dict[str, Any]:
-    poses = {pose: draw_pose(look, pose) for pose in POSES}
+def head_mouths(traits: dict[str, Any]) -> dict[str, Image.Image]:
+    """The nine visemes for the head styles: smaller bowls, a dark inside, teeth as a thin line, the tongue only in wide."""
+    from services.flat_rig import STATES
+    ink = traits["ink"]
+    inner, tongue, teeth = (96, 34, 44, 255), (214, 110, 122, 255), (250, 246, 240, 255)
+    line = 9
+    out: dict[str, Image.Image] = {}
+    for state in STATES:
+        image, draw = _mouth_canvas()
+        if state == "closed":
+            draw.line([_pt(x, 3 * ((x / 30) ** 2) - 1.5) for x in range(-30, 31, 2)], fill=ink, width=line * 2 + 6, joint="curve")
+        elif state == "pressed":
+            draw.line([_pt(-24, 0), _pt(24, 0)], fill=ink, width=line * 2 + 8)
+        elif state == "small":
+            _mouth_shape(draw, _bowl(24, -6, 10, 1.2), inner, ink, line * 2)
+            draw.line([_pt(-16, -5), _pt(16, -5)], fill=teeth, width=line)
+        elif state == "medium":
+            _mouth_shape(draw, _bowl(30, -11, 18, 1.6), inner, ink, line * 2)
+            draw.line([_pt(-22, -10), _pt(22, -10)], fill=teeth, width=line)
+        elif state == "wide":
+            _mouth_shape(draw, _bowl(43, -18, 32, 2.4), inner, ink, line * 2)
+            draw.line([_pt(-34, -17), _pt(34, -17)], fill=teeth, width=line)
+            draw.ellipse([*_pt(-22, 12), *_pt(22, 36)], fill=tongue)
+        elif state == "round":
+            draw.ellipse([*_pt(-18, -24), *_pt(18, 26)], fill=inner, outline=ink, width=line * 2)
+        elif state == "pucker":
+            draw.ellipse([*_pt(-12, -12), *_pt(12, 12)], fill=inner, outline=ink, width=line * 2)
+        elif state == "bite":
+            draw.rectangle([*_pt(-27, -10), *_pt(27, 3)], fill=teeth, outline=ink, width=line)
+            draw.pieslice([*_pt(-24, -2), *_pt(24, 24)], 0, 180, fill=(232, 138, 146, 255), outline=ink, width=line)
+        else:  # tongue
+            _mouth_shape(draw, _bowl(27, -10, 16, 1.6), inner, ink, line * 2)
+            draw.line([_pt(-20, -9), _pt(20, -9)], fill=teeth, width=line)
+            draw.ellipse([*_pt(-11, -4), *_pt(11, 14)], fill=tongue)
+        out[state] = image.resize((512, 320), Image.LANCZOS)
+    return out
+
+
+def anime_head_kit(look: dict[str, Any], eye_art=None) -> dict[str, Any]:
+    poses = {pose: draw_pose(look, pose, eye_art=eye_art) for pose in POSES}
     blinks = {pose: draw_pose(look, pose, lids_only=True) for pose in POSES}
-    mouths = anime_mouths(look)
+    mouths = head_mouths(look)
     anchors, placed_all = {}, {}
     eyes = base._anchor(512, 512, base.CANVAS, base.CANVAS, base.CANVAS)
     for pose in POSES:
