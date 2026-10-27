@@ -319,7 +319,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
   `clip` name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
-  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationX`/`rotationY`/`rotationZ` (radians, metres; X and Z optional),
+  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationX`/`rotationY`/`rotationZ` (radians, metres; X/Z if set),
   `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, headingOffset,
   easing}. `faceTravel` turns the model's +Z along the path; a generated ship or airship whose nose is its -X needs
   `headingOffset: 1.5708` (+X: -1.5708, -Z: 3.1416):
@@ -369,7 +369,7 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 5. Add an approved prop to one shot with `scene3d.item.add`:
    `input: {workspace, target: {series_id, episode_id, shot: 1}, item: {prop: "<approved-id>"}, at: {anchor: "desk_left"}}`.
    A working Video 3D scene uses `target: {scene_id}`; direct media uses `item: {image: "lamp.png"}` or an existing `{glb: "lamp.glb"}` with `heightM`.
-   `scene3d.item.list` gives ids; `scene3d.item.update` (`id`, `at: {position: [x, y, z]}` m, `heightM`, `rotationY` radians,
+   `scene3d.item.list` gives ids; `scene3d.item.update` (`id`, `at: {position: [x, y, z]}` m, `heightM`, `rotationX/Y/Z` radians,
    `billboard`, `shadow`) changes one, `scene3d.item.remove` (`id`) removes it.
    For every shot at the location, put `{prop: "<approved-id>", anchor: "desk_left"}` in `set3d.props`.
 6. Every mutation takes a new `intent_id` (reuse one only to retry a call); read each result first.
