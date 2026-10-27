@@ -175,3 +175,18 @@ def test_a_cap_can_hug_an_egg_and_project_a_painted_head(tmp_path):
         with pytest.raises(HTTPException) as refused:
             execute_command("world3d.scene.face", {"version": 1, "intent_id": f"bad-{index}", "input": {**base, "base_revision": 4, **bad}}, root)
         assert refused.value.detail["code"] == "invalid_face"
+
+
+def test_cute_and_anime_head_styles_draw_different_faces_for_the_same_head_box():
+    """``cute`` keeps the round mascot eyes (the old anime_head drawer); ``anime_head`` is the calibrated almond-eyed
+    face. Both are head pictures: same skull box (fit), same poses, same mouth anchors, and the kit says shape mesh."""
+    from services.blob_face import face_kit
+    from services.blob_face_head import POSES
+
+    cute = face_kit({"style": "cute", "skin": "#F3CBA4"})
+    anime = face_kit({"style": "anime_head", "skin": "#F3CBA4", "faceShape": "sharp"})
+    assert list(cute["poses"]) == list(anime["poses"]) == list(POSES) and len(POSES) == 11
+    assert cute["face"]["fit"] == anime["face"]["fit"] and cute["face"]["shape"] == anime["face"]["shape"] == "mesh"
+    assert cute["face"]["skin"] == anime["face"]["skin"] == "#f3cba4"
+    assert cute["poses"]["neutral"].tobytes() != anime["poses"]["neutral"].tobytes()
+    assert set(cute["mouths"]) == set(anime["mouths"]) and len(anime["mouths"]) == 9

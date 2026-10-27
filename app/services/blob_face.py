@@ -42,7 +42,7 @@ NOSES = ("none", "dot", "line", "bulb")
 MOUSTACHES = ("none", "walrus", "pencil", "handlebar")
 GLASSES = ("none", "round", "square")
 MOUTH_LOOKS = ("paper", "ink")
-STYLES = ("blob", "anime", "anime_head")
+STYLES = ("blob", "anime", "anime_head", "cute")
 FRECKLES = ((-70, 28), (-54, 44), (-86, 48), (62, 30), (78, 46), (48, 52), (-40, 60), (36, 64))
 STUBBLE = tuple((x, y) for x in range(-40, 41, 10) for y in (8, 20, 32))
 WHITE = (250, 248, 242, 255)
@@ -117,6 +117,7 @@ def face_traits(value: Any) -> dict[str, Any]:
         "eye_color": _color(raw.get("eyeColor"), "eyeColor", (74, 128, 214, 255)),
         "blush": raw.get("blush") is True if "blush" in raw else raw.get("style") in ("anime", "anime_head"),
         "lash": _color(raw.get("lashColor"), "lashColor", _color(raw.get("ink"), "ink", INK)),
+        "face_shape": _choice(raw.get("faceShape", "soft"), ("soft", "sharp"), "faceShape"),
     }
 
 
@@ -136,6 +137,7 @@ def public_traits(traits: dict[str, Any]) -> dict[str, Any]:
         "ink": _hex(look["ink"]), "line": look["line"], "mouth": look["mouth"], "skin": _hex(look["skin"]),
         "style": look["style"], "eyeColor": _hex(look["eye_color"]), "blush": look["blush"],
         **({"lashColor": _hex(look["lash"])} if look.get("lash") and look["lash"] != look["ink"] else {}),
+        **({"faceShape": look["face_shape"]} if look.get("face_shape", "soft") != "soft" else {}),
     }
 
 
@@ -367,9 +369,12 @@ def face_kit(traits: Any) -> dict[str, Any]:
     if look["style"] == "anime":
         from services.blob_face_anime import anime_kit
         return anime_kit(look)
-    if look["style"] == "anime_head":
+    if look["style"] == "cute":
         from services.blob_face_head import head_kit
         return head_kit(look)
+    if look["style"] == "anime_head":
+        from services.blob_face_anime_head import anime_head_kit
+        return anime_head_kit(look)
     poses = {pose: _draw_pose(look, pose) for pose in POSES}
     blinks = {pose: _draw_pose(look, pose, lids_only=True) for pose in POSES}
     mouths = _mouths(look)

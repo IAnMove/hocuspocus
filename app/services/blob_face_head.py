@@ -1,4 +1,4 @@
-"""Anime face drawn for a bald 3D head: the ``anime_head`` style.
+"""Round-eyed cartoon face for a bald 3D head: the ``cute`` style (mascots, balls, slimes, small pets).
 
 The picture is a whole-head frame (the skull box ``SKULL`` inside the 1024 canvas) so
 ``world3d.scene.face`` can project it from the front onto the egg head with ``fit``,
