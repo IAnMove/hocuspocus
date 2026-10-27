@@ -20,6 +20,7 @@ test('the shader samples the atlas from the bind pose and blends the views by th
   }
   patchAtlasShader(shader, { body: [0, 0.9, 2], head: [1.7, 0.4, 1.5] })
   assert.ok(shader.vertexShader.includes('vAtlasPos = position;') && shader.vertexShader.includes('vAtlasNormal = normal;'))
+  assert.ok(shader.fragmentShader.includes('uniform float atlasFaceOnly;') && shader.fragmentShader.includes('faceYaw'), 'every uniform the shader reads is declared')
   assert.ok(shader.fragmentShader.includes('uniform vec3 atlasBody;') && shader.fragmentShader.includes('diffuseColor *= sampledDiffuseColor;'))
   assert.ok(!shader.fragmentShader.includes('#include <map_fragment>'))
   assert.deepEqual(shader.uniforms.atlasBody.value.toArray(), [0, 0.9, 2])

@@ -131,3 +131,65 @@ def test_the_style_catalogue_is_in_the_presets_and_every_style_says_where_it_sta
         assert style["operation"].startswith("model3d.") and style["make"] and style["next"] is not None
         assert style["limits"] is not None and style["doc"].startswith("docs/agents/")
     assert styles["real"]["status"] != "planned" and styles["ps1"]["status"] == "planned"
+
+
+def _bump_depth():
+    import numpy as np
+
+    h, w = 1024, 683
+    y, x = np.mgrid[0:h, 0:w].astype(np.float32)
+    head = np.exp(-(((x - w / 2) / 190) ** 2 + ((y - 480) / 330) ** 2))              # a round head: the skull's own roundness
+    nose = 0.35 * np.exp(-(((x - w / 2) / 28) ** 2 + ((y - 560) / 55) ** 2))          # a nose standing out of it
+    d = head + nose
+    return (d / d.max()).astype(np.float32)
+
+
+def test_relief_keeps_only_what_stands_out_of_the_roundness_of_the_head():
+    from services.blob_face_relief import NOSE_SHARE, relief_sampler
+
+    lofted, parts = _real()
+    from services.blob_texture import atlas_frame
+
+    frame = atlas_frame([parts[0][0]], lofted["layout"])
+    relief = relief_sampler(_bump_depth(), frame, lofted["layout"]["sy"])
+    cy, span_y, _cut = frame["head"]
+    nose_y = cy + (0.5 - 560 / 1024) * span_y
+    cheek_x = 0.9 * (span_y / 1.5) * (110 / 683)
+    tip, cheek = relief(0.0, nose_y), relief(cheek_x, cy + (0.5 - 480 / 1024) * span_y)
+    assert tip > 0.7 * NOSE_SHARE * lofted["layout"]["sy"], "the nose protrudes"
+    assert cheek < 0.15 * tip, "the roundness of the head is the skull's, not the relief's"
+    assert relief(5.0, 5.0) == 0.0, "outside the picture there is no relief"
+
+
+def test_the_relief_patch_moves_along_z_only_and_melts_into_the_skull_at_its_border():
+    from services.blob_face_relief import relief_sampler
+    from services.blob_loft import face_relief_patch
+    from services.blob_texture import atlas_frame
+
+    lofted, parts = _real()
+    layout = lofted["layout"]
+    frame = atlas_frame([parts[0][0]], layout)
+    relief = relief_sampler(_bump_depth(), frame, layout["sy"])
+    flat, flat_uvs = face_relief_patch(layout, lambda x, y: 0.0, frame, steps=24)
+    raised, raised_uvs = face_relief_patch(layout, relief, frame, steps=24)
+    assert flat_uvs == raised_uvs, "the picture stays exactly on its place"
+    moved = [(a, b) for a, b in zip(flat.vertices, raised.vertices) if a != b]
+    assert moved and all(abs(a[0] - b[0]) < 1e-9 and abs(a[1] - b[1]) < 1e-9 and b[2] > a[2] for a, b in moved), "only +Z"
+    assert max(b[2] - a[2] for a, b in moved) > 0.004
+    x_limit = max(abs(v[0]) for v in flat.vertices)
+    rim = [(a, b) for a, b in zip(flat.vertices, raised.vertices) if abs(abs(a[0]) - x_limit) < 0.003]
+    assert all(abs(b[2] - a[2]) < 0.002 for a, b in rim), "at the border the relief has faded"
+    assert all(0.0 <= u < 1 / 3 + 1e-6 and 0.5 <= v <= 1.0 for u, v in raised_uvs)
+
+
+def test_a_head_with_a_relief_has_no_modelled_nose_and_without_the_depth_model_the_face_stays_flat(monkeypatch):
+    from services import blob_face_relief
+    from services.blob_loft import loft_parts
+
+    lofted, _ = _real()
+    plain = {name: len(mesh.vertices) for mesh, name, _u in loft_parts(lofted["traits"], lofted["layout"])}
+    with_relief = {name: len(mesh.vertices) for mesh, name, _u in loft_parts(lofted["traits"], lofted["layout"], None, lambda x, y: 0.0)}
+    assert with_relief["body"] < plain["body"], "the painted nose replaces the modelled one"
+    assert with_relief["face"] > plain["face"], "the face is a dense patch"
+    monkeypatch.setattr(blob_face_relief, "CHECKPOINT", blob_face_relief.CHECKPOINT.with_name("not_there.pth"))
+    assert blob_face_relief.relief_from_picture(Image.new("RGB", (60, 30)), {"head": (1.0, 0.4, 1.4)}, 0.2) is None

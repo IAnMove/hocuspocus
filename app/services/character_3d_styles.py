@@ -37,8 +37,8 @@ STYLES: dict[str, dict] = {
         "dress": "two pictures painted by Qwen over the guides (guide_body_file, guide_head_file); the viewer drapes them per pixel",
         "face": "the head picture (a photo-like portrait); no expressions yet", "look": "toon steps 4, outline 0, classic; look.exposure about 1.5",
         "strengths": ["change the clothes by repainting one guide", "same mould for any outfit", "reads as a PS2/PS3 game character"],
-        "limits": ["a face is a picture: no expressions or lipsync mouths yet", "the mould's face is smooth (no cheekbones, lips)", "hands and shoes are blocks", "a faint double feature near 35 degrees"],
-        "next": ["a photo face kit with warped mouths and blink", "sculpted face relief", "woman mould tuning", "UI and Wizard doors for style and texture"],
+        "limits": ["a face is a picture: no expressions or lipsync mouths yet", "the face relief comes from one depth estimate (a profile nose is stretched skin tones)", "a thin seam where the front and side portraits meet (46 to 58 degrees)", "hands and shoes are blocks"],
+        "next": ["a photo face kit with warped mouths and blink (the relief makes mouth warps possible)", "relief for the ears and the hands", "woman mould tuning", "UI and Wizard doors for style and texture"],
         "doc": "docs/agents/ANIME_CHARACTERS.md",
     },
     "voxel": {
@@ -58,6 +58,13 @@ STYLES: dict[str, dict] = {
         "strengths": ["reads as a plastic toy avatar", "split limbs bend at the elbow and knee"],
         "limits": ["do not download or reuse Roblox's avatar meshes, shirt and pants templates, faces or logos: this is our own geometry and our own picture layout"],
         "next": ["head variants (round, tall)", "accessories (hats, hair pieces) as extra boxes", "hands that grip"], "doc": "docs/agents/CHARACTER_STYLES.md",
+    },
+    "toon_real": {
+        "label": "Toon-realistic (Wind Waker-like)", "status": "planned", "operation": "model3d.anime.make",
+        "make": {"style": "toon_real"}, "mould": "the real mould (broad proportions, face relief) with a slightly exaggerated head and hands", "dress": "the same atlas, painted by Qwen in a flat cel style with a thin outline (prompt: hand-painted cel shading, two tones, soft colours), no photographic detail",
+        "face": "big simple eyes with swappable pupil and lid pieces (a face kit with a moving gaze, the Wind Waker trick), a small mouth", "look": "toon steps 2, outline 2, ink a darker version of the colour, rim light, warm key",
+        "strengths": ["warm and readable", "forgiving: painted detail hides the mould"], "limits": ["the eyes must move on their own (a gaze) to carry the character"],
+        "next": ["a cel-style atlas prompt and a test render", "a gaze kit"], "doc": "docs/agents/CHARACTER_STYLES.md",
     },
     "ps1": {
         "label": "PS1 / low-poly retro", "status": "planned", "operation": "model3d.anime.make",

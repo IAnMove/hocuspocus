@@ -15,26 +15,40 @@ from typing import Callable
 import numpy as np
 
 CHECKPOINT = Path(__file__).resolve().parents[1] / "ckpts" / "depth" / "depth_anything_v2_vitb.pth"
-PATCH_YAW = 58.0                 # degrees each way from the face: the patch covers the face, the skull the rest
+PATCH_YAW = 46.0                 # degrees each way from the face: the patch covers the face, the skull the rest
 PATCH_LATS = (-66.0, 46.0)       # from under the chin to the hairline
-NOSE_SHARE = 0.15                # a relief of 1 protrudes by this share of the head's height (the nose tip of a real head)
+NOSE_SHARE = 0.10                # a relief of 1 protrudes by this share of the head's height (a nose tip a little under a real one)
 
 
 def depth_of_picture(picture) -> np.ndarray:
-    """Float depth in 0 (far) to 1 (near) for an RGB picture, same size as the picture. CPU, Depth Anything V2 base."""
-    import os
+    """Float depth in 0 (far) to 1 (near) for an RGB picture, same size as the picture. Always the CPU (Depth Anything V2 base): the
+    shared annotator moves its input to the GPU when there is one, so the steps are run here with the model and the input on the CPU."""
     import sys
 
     root = str(Path(__file__).resolve().parents[1])
     if root not in sys.path:
         sys.path.insert(0, root)
-    os.environ.setdefault("CUDA_VISIBLE_DEVICES", "")   # a few seconds on the CPU: no GPU family is touched
-    from preprocessing.depth_anything_v2.depth import DepthV2Annotator
     import torch
+    import torch.nn.functional as F
+    from preprocessing.depth_anything_v2.dpt import DepthAnythingV2
 
-    annotator = DepthV2Annotator({"PRETRAINED_MODEL": str(CHECKPOINT), "MODEL_VARIANT": "vitb"}, device=torch.device("cpu"))
-    depth = annotator.forward(np.asarray(picture.convert("RGB")))[..., 0].astype(np.float32)
-    return depth / 255.0
+    model = DepthAnythingV2(encoder="vitb", features=128, out_channels=[96, 192, 384, 768])
+    model.load_state_dict(torch.load(str(CHECKPOINT), map_location="cpu", weights_only=True))
+    model.eval()
+    rgb = np.asarray(picture.convert("RGB"))
+    height, width = rgb.shape[:2]
+    scale = 518 / min(height, width)
+    size = (max(14, round(width * scale / 14) * 14), max(14, round(height * scale / 14) * 14))
+    from PIL import Image
+
+    small = np.asarray(Image.fromarray(rgb).resize(size, Image.BICUBIC)).astype(np.float32) / 255.0
+    mean, std = np.array([0.485, 0.456, 0.406], np.float32), np.array([0.229, 0.224, 0.225], np.float32)
+    tensor = torch.from_numpy(((small - mean) / std).transpose(2, 0, 1)).unsqueeze(0)
+    with torch.inference_mode():
+        depth = model(tensor)
+        depth = F.interpolate(depth[:, None], (height, width), mode="bilinear", align_corners=True)[0, 0].numpy()
+    depth = depth - depth.min()
+    return (depth / max(float(depth.max()), 1e-6)).astype(np.float32)
 
 
 def _blur(array: np.ndarray, sigma: float) -> np.ndarray:
@@ -48,15 +62,19 @@ def relief_sampler(depth: np.ndarray, frame: dict, head_height: float) -> Callab
     front third of the head picture: ``frame["head"]`` is its (centre y, height in metres, cut), a third is as wide as it is tall / 1.5."""
     cy, span_y, _cut = frame["head"]
     span_x = span_y / 1.5
-    smooth = _blur(depth, max(1.0, depth.shape[0] / 300))
-    h, w = smooth.shape
+    h, w = depth.shape
+    smooth = _blur(depth, max(1.0, h / 500))
+    # the head's own roundness is the skull's: keep only what stands out of a low-pass of the depth over the head (the nose, the brows,
+    # the cheekbones, the lips, the chin), found by a masked blur so the background does not pull the average down
+    head = (smooth > 0.3).astype(np.float32)
+    sigma = h / 25.0
+    low = _blur(smooth * head, sigma) / np.maximum(_blur(head, sigma), 1e-4)
+    residual = np.clip(smooth - low, 0.0, None)
     xs = (np.arange(w) + 0.5) / w - 0.5
     ys = 0.5 - (np.arange(h) + 0.5) / h
-    # the face's reach: the baseline is a low percentile of the depth over the cheeks and forehead, the top a high percentile (the nose)
     inside = (np.abs(xs)[None, :] * span_x < 0.42 * span_y / 1.5) & (np.abs(ys[:, None] * span_y) < 0.45 * span_y)
-    region = smooth[inside]
-    base, top = float(np.percentile(region, 35)), float(np.percentile(region, 99.5))
-    scale = max(top - base, 1e-3)
+    scale = max(float(np.percentile(residual[inside], 99.7)), 1e-3)
+    smooth = np.clip(residual / scale, 0.0, 1.0)
 
     def relief(x: float, y: float) -> float:
         u = (x / span_x + 0.5) * w - 0.5
@@ -66,7 +84,7 @@ def relief_sampler(depth: np.ndarray, frame: dict, head_height: float) -> Callab
         i, j = int(v), int(u)
         fv, fu = v - i, u - j
         d = (smooth[i, j] * (1 - fu) + smooth[i, j + 1] * fu) * (1 - fv) + (smooth[i + 1, j] * (1 - fu) + smooth[i + 1, j + 1] * fu) * fv
-        return max(0.0, min(1.0, (d - base) / scale)) * NOSE_SHARE * head_height
+        return float(max(0.0, min(1.0, float(d))) * NOSE_SHARE * head_height)
 
     return relief
 

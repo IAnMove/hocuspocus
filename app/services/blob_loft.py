@@ -349,7 +349,7 @@ def _real_nose(mesh: Mesh, L: dict, skin: str) -> None:
 
 def face_relief_patch(L: dict, relief, frame: dict, steps: int = 56) -> tuple[Mesh, list]:
     """The face as a dense patch pushed forward by ``relief(x, y)`` (metres, from ``blob_face_relief``): ``steps`` x ``steps`` points
-    from under the chin to the hairline and 58 degrees each way, a hair outside the skull, white vertex colours, and the UVs of the
+    from under the chin to the hairline and 46 degrees each way, a hair outside the skull, white vertex colours, and the UVs of the
     front head tile read at the point's own (x, y): the patch moves along +Z only, so the picture stays exactly on its place."""
     from services.blob_face_relief import PATCH_LATS, PATCH_YAW, edge_fade
     from services.blob_texture import atlas_uv

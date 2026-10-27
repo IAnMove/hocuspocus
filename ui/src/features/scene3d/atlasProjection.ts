@@ -33,7 +33,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;')
+    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;')
     .replace('#include <map_fragment>', `#ifdef USE_MAP
 	vec3 atlasN = normalize( vAtlasNormal );
 	vec3 atlasP = vAtlasPos;
@@ -45,10 +45,10 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
 	float tileW = atlasHead.y / 1.5;
 	float headV = 0.5 + ( 0.5 - ( atlasP.y - atlasHead.x ) / atlasHead.y ) * 0.5;
 	// by the angle from the face, not by the normal: the painted face on its relief keeps the front picture whole, and the skull
-	// round it fades from the front to the side picture between 57 and 80 degrees and to the back one between 112 and 140
+	// round it fades from the front to the side picture between 46 and 58 degrees and to the back one between 112 and 140
 	float faceYaw = atan( abs( atlasP.x ), atlasP.z );
 	float crownK = smoothstep( 0.55, 0.85, abs( atlasN.y ) );
-	float toSide = smoothstep( 1.0, 1.4, faceYaw ) * ( 1.0 - crownK );
+	float toSide = smoothstep( 0.8, 1.02, faceYaw ) * ( 1.0 - crownK );
 	float toBack = smoothstep( 1.95, 2.45, faceYaw ) * ( 1.0 - crownK );
 	vec4 frontTile = texture2D( map, vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV ) );
 	vec4 sideTile = texture2D( map, vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV ) );

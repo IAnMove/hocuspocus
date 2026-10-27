@@ -41,8 +41,8 @@ Gotchas collected so far: roots of hair must sit outside the face patch; a colou
 1. ~~blocky~~ done as `voxel` and `roblox` (`blob_blocky`, `blob_face_blocky`). Gotcha learnt: the rig refuses 4-unit-wide box arms in a 8-unit torso (`hands_stuck`); arms 3.5 wide or a wider torso pass.
 2. **ps1**: the real mould decimated, a 128x128 atlas with nearest filtering, snapped vertices; strong retro look.
 3. **clay / stop-motion**: soft chibi mould, Qwen clay texture, swappable face pieces, stepped motion.
-4. **toon-realistic** (Wind Waker-like): the real mould with a painted-style atlas and a thin ink line.
+4. **toon-realistic** (`toon_real`, Wind Waker-like; the owner wants it): the real mould with a cel-painted atlas, a thin ink line and a face whose big simple eyes move on their own (gaze) with swappable lids and mouth.
 5. **vinyl toy**: big head, glossy plastic, a studio backdrop.
 6. **paper doll / cut-out 3D**: flat parts with thickness, the 2.5D kit look in 3D.
 
-For `real` the next big step is the **photo face kit** (neutral picture from the head tile, a few mouth shapes warped from it, a blink), then sculpted face relief (cheekbones, lips, brow) in the mould so the painted profile has something to sit on.
+For `real` the **face relief** (depth of the painting, `blob_face_relief`) removed the mask look; the next big step is the **photo face kit** (neutral picture from the head tile, a few mouth shapes warped from it, a blink), then sculpted face relief (cheekbones, lips, brow) in the mould so the painted profile has something to sit on.
