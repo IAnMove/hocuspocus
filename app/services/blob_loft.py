@@ -275,7 +275,10 @@ def _skull_ring(L: dict, lat: float, out: float, yaws) -> list:
     return [skull_point(L, yaw, lat, out) for yaw in yaws]
 
 
-def _head(mesh: Mesh, L: dict, skin: str) -> None:
+EARS_HIDDEN = ("long", "bob", "twin_tails")   # hair that falls over the ears: no ear to poke through it
+
+
+def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
     yaws = [j * 360.0 / 24 for j in range(24)]
     lats = [-90 + 180 * k / 28 for k in range(29)]
     grid, colors = [], []
@@ -295,7 +298,7 @@ def _head(mesh: Mesh, L: dict, skin: str) -> None:
             _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
     _tube(mesh, nose, "z", ring=8)
     # ears at the eye line, as tall as a fifth of the head
-    for sign in (-1, 1):
+    for sign in ((-1, 1) if ears else ()):
         at = skull_point(L, sign * 90, -16, 1.0)
         ear = [_st((at[0] * 0.94, at[1], at[2] - rz * 0.06), rx * 0.12, ry * 0.2, skin),
                _st((at[0] * 1.08, at[1] + ry * 0.02, at[2] - rz * 0.07), rx * 0.1, ry * 0.17, skin),
@@ -373,7 +376,7 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         _st((0, closing - 0.008 * h, 0), w / 2 * 0.5, d / 2 * 0.66, top, **lapel(38)),
         _st((0, closing + 0.004 * h, 0), neck_w / 2 * 1.25, d / 2 * 0.42, top, **lapel(44)),
     ]
-    _tube(mesh, stations, "y")
+    _tube(mesh, stations, "y", ring=48)
     skin = spec["colors"]["head"]
     neck = [_st((0, closing - 0.02 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
             _st((0, L["head_y"] - L["sy"] * 0.3, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
@@ -534,7 +537,7 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
     if wear["legs"] == "skirt":
         _skirt(mesh, layout, wear["legs_color"])
     _collar_and_ribbon(mesh, layout, wear)
-    _head(mesh, layout, spec["colors"]["head"])
+    _head(mesh, layout, spec["colors"]["head"], spec["hair"]["style"] not in EARS_HIDDEN)
     face, uvs = face_patch(layout, fit or DEFAULT_FIT)
     hair = hair_mesh(layout, spec["hair"])
     parts = [(mesh, "body", None), (face, "face", uvs)]
