@@ -1,4 +1,6 @@
-import { controlLabel } from '../../i18n/controlLabel'
+import { controlLabel, controlReason, firstControlReason } from '../../i18n/controlLabel'
+import i18n from '../../i18n'
+import { resolutionPresetLabel } from '../../lib/resolutionPresetLabel'
 import { DirectorModelPicker } from './DirectorModelPicker'
 import { lazy, Suspense, useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import { Upload, Loader2, Music, RotateCcw, Check, X, ChevronRight, ChevronDown, ImageIcon, Play, Film, Mic, Sparkles, Send, Users, FileText, Clock, BookOpen, Zap, Download } from 'lucide-react'
@@ -49,12 +51,132 @@ function directorWillGenerateShotImages(
   return hasVisualReferences
 }
 
+function dt(key: string, options?: Record<string, unknown>) {
+  return String(i18n.t(key, key, { ns: 'director', ...options }))
+}
+
+const SECTION_LABEL_KEYS: Record<string, string> = {
+  intro: 'chat.section.intro',
+  verse: 'chat.section.verse',
+  'pre-chorus': 'chat.section.preChorus',
+  chorus: 'chat.section.chorus',
+  bridge: 'chat.section.bridge',
+  outro: 'chat.section.outro',
+  instrumental: 'chat.section.instrumental',
+  dialogue: 'chat.section.dialogue',
+  action: 'chat.section.action',
+  opening: 'chat.section.opening',
+  closing: 'chat.section.closing',
+  scene: 'chat.section.scene',
+}
+
+function sectionDisplayName(label: string) {
+  const key = SECTION_LABEL_KEYS[label]
+  return key ? dt(key) : label
+}
+
+const IMAGE_PROGRESS_KEYS: Record<string, string> = {
+  generating: 'chat.progress.generating',
+  polling: 'chat.progress.polling',
+  downloading: 'chat.progress.downloading',
+  processing: 'chat.progress.processing',
+}
+
+function imageProgressStatus(status: string) {
+  const key = IMAGE_PROGRESS_KEYS[status]
+  return key ? dt(key) : status
+}
+
+function imageSpinnerLabel(status: string | undefined) {
+  if (status === 'generating') return dt('panel.imageStatus.generating')
+  if (status === 'polling') return dt('panel.imageStatus.polling')
+  if (status === 'downloading') return dt('panel.imageStatus.downloading')
+  return dt('panel.imageStatus.processing')
+}
+
+function imageGenStatusLine(label: string, status: string) {
+  if (status === 'done') return label
+  return dt('chat.clipStatus', { label, status: imageProgressStatus(status) })
+}
+
+function directorChatPlaceholder(state: {
+  skill: string | null | undefined
+  mvGenerateSetup: boolean
+  isShortFilm: boolean
+  shortFilmPath: string | null | undefined
+  step: string
+  isMvGenerate: boolean
+  isStoryPath: boolean
+  speakerCount: number
+}) {
+  if (!state.skill) return dt('chat.chooseSkill')
+  if (state.mvGenerateSetup) return dt('chat.mvPromptPlaceholder')
+  if (state.isShortFilm && !state.shortFilmPath) return dt('chat.choosePath')
+  if (state.step === 'upload' || state.step === 'analyze') {
+    if (state.isMvGenerate) return dt('chat.generatingMusicVideo')
+    return dt(state.isShortFilm ? 'chat.uploadDialogueToBegin' : 'chat.uploadAudioToBegin')
+  }
+  if (state.step === 'style') {
+    if (state.isStoryPath) return dt('chat.storyExamplePlaceholder')
+    if (state.isShortFilm) return dt('chat.shortFilmMoodPlaceholder')
+    return dt(state.speakerCount >= 2 ? 'panel.scenePlaceholderMulti' : 'chat.sceneAndCharactersPlaceholder')
+  }
+  if (state.step === 'structure') return dt(state.isShortFilm ? 'chat.adjustScenePacing' : 'chat.adjustClipStructure')
+  return dt('chat.reviewing')
+}
+
+function planPhaseLabel(phase: string | undefined, isStoryPath: boolean, isShortFilm: boolean, usesShotImages: boolean) {
+  if (phase === 'polishing_prompts') return dt('chat.polishingPrompts')
+  if (isStoryPath) return dt(usesShotImages ? 'chat.planningScenesAndPrompts' : 'chat.planningScenesAndVideo')
+  if (isShortFilm) return dt(usesShotImages ? 'chat.writingScenePrompts' : 'panel.writingVideoPrompts')
+  return dt(usesShotImages ? 'chat.writingImageAndVideo' : 'panel.writingVideoPrompts')
+}
+
+function shotGuidanceHint(
+  support: 'required' | 'optional' | 'direct_references' | undefined,
+  guidance: DirectorShotImageGuidance,
+  hasVisualReferences: boolean,
+  generateShotImages: boolean,
+) {
+  if (support === 'direct_references') {
+    if (guidance === 'generate') return dt('chat.guidanceCompose')
+    if (!hasVisualReferences) return dt('chat.guidanceNeedImage')
+    return dt('chat.guidanceDirectRefs')
+  }
+  if (generateShotImages) return dt('chat.guidanceStartFrames')
+  return dt('chat.guidanceFromPrompt')
+}
+
+function videoStepsHint(
+  turboSelected: boolean,
+  turboSteps: number | undefined,
+  locked: boolean,
+  videoSteps: number | null,
+  defaultSteps: number | null,
+) {
+  if (turboSelected) return dt('chat.turboRecipe', { steps: turboSteps ?? 6 })
+  if (locked) return dt('chat.stepsFixed')
+  if (videoSteps == null) return dt('chat.stepsLoading')
+  if (defaultSteps === videoSteps) return dt('chat.stepsForModelDefault')
+  return dt('chat.stepsForModel')
+}
+
+function maxShotHint(manual: number | null, safe: number | null, time: string, resolution: string, gb: string) {
+  if (manual == null) {
+    if (safe != null) return dt('chat.autoPlansAtMost', { time, resolution, gb })
+    return dt('chat.autoDerivesLimit')
+  }
+  if (safe != null && manual > safe) return dt('chat.manualOverrideVram', { time })
+  return dt('chat.manualShotLimit')
+}
+
 function AudioScaleSlider() {
+  const { t } = useUiTranslation('director')
   const audioScale = useStore(s => s.directorAudioScale)
   const setAudioScale = useStore(s => s.setDirectorAudioScale)
   return (
     <>
-      <span className="text-[10px] text-text-muted whitespace-nowrap">Audio {audioScale.toFixed(1)}x</span>
+      <span className="text-[10px] text-text-muted whitespace-nowrap">{t('chat.audioScale', { value: audioScale.toFixed(1) })}</span>
       <input
         type="range"
         min={0}
@@ -65,9 +187,11 @@ function AudioScaleSlider() {
         className="flex-1 h-1"
       />
       <div className="flex gap-2 text-[8px] text-text-muted">
-        <span>1x</span>
-        <span>3x TTS</span>
-        <span>5x</span>
+        <span>{'1x' // i18n-ok: 1x
+        }</span>
+        <span>{t('chat.audioScaleTts')}</span>
+        <span>{'5x' // i18n-ok: 5x
+        }</span>
       </div>
     </>
   )
@@ -171,14 +295,14 @@ function AutoResizeTextarea({ minHeight, maxHeight, ...props }: React.TextareaHT
 function SectionBadge({ label }: { label: string }) {
   return (
     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${sectionColors[label] || 'bg-bg-hover text-text-muted'}`}>
-      {label}
+      {sectionDisplayName(label)}
     </span>
   )
 }
 
 function EnergyDot({ energy }: { energy: number }) {
   const color = energy > 0.6 ? 'bg-chip-red' : energy < 0.3 ? 'bg-chip-blue' : 'bg-chip-yellow'
-  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={`Energy: ${(energy * 100).toFixed(0)}%`} />
+  return <span className={`inline-block w-2 h-2 rounded-full ${color}`} title={dt('panel.energy', { percent: (energy * 100).toFixed(0) })} />
 }
 
 // Chat bubble wrapper
@@ -199,6 +323,7 @@ function UserBubble({ children }: { children: React.ReactNode }) {
 }
 
 function LlmThinkingStream({ stage }: { stage: string }) {
+  const { t } = useUiTranslation('director')
   const [streamText, setStreamText] = useState('')
   const [streamDone, setStreamDone] = useState(false)
   const [expanded, setExpanded] = useState(true)
@@ -305,7 +430,7 @@ function LlmThinkingStream({ stage }: { stage: string }) {
         className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-secondary transition-colors"
       >
         {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-        {isStillThinking ? 'Thinking...' : thinking && !output ? 'Thinking complete' : output ? 'Writing scenes...' : 'LLM Output'}
+        {isStillThinking ? t('chat.thinking') : thinking && !output ? t('chat.thinkingComplete') : output ? t('chat.writingScenes') : t('chat.llmOutput')}
       </button>
       {expanded && (
         // Fixed-height preview box. It's a "what's happening right now"
@@ -339,6 +464,7 @@ function LlmThinkingStream({ stage }: { stage: string }) {
  *  Replaces the old behavior where the thinking/output box vanished the
  *  moment a stage finished. Default-collapsed so history stays compact. */
 function LlmLogStage({ stage, label }: { stage: string; label: string }) {
+  const { t } = useUiTranslation('director')
   const log = useStore(s => s.directorLlmLog)
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const entries = log.filter(e => e.stage === stage)
@@ -358,7 +484,7 @@ function LlmLogStage({ stage, label }: { stage: string; label: string }) {
               className="flex items-center gap-1 text-[10px] text-text-muted hover:text-text-secondary transition-colors"
             >
               {open ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
-              {label}{entries.length > 1 ? ` · pass ${i + 1}` : ''} (done)
+              {t(entries.length > 1 ? 'chat.llmPassDone' : 'chat.llmStageDone', { label, n: i + 1 })}
             </button>
             {open && (
               <div className="mt-1 rounded bg-bg-primary/50 border border-border/30 p-2 max-h-48 overflow-y-auto">
@@ -566,9 +692,9 @@ export function DirectorChat() {
     }
     return Object.entries(counts)
       .sort(([a], [b]) => Number(a) - Number(b))
-      .map(([beats, count]) => `${count}x${beats}-beat`)
+      .map(([beats, count]) => t('panel.beatDistribution', { count: Number(count), beats }))
       .join(', ')
-  }, [plannedClips])
+  }, [plannedClips, t])
 
   // Auto-scroll to bottom on step/loading changes. loadingMessage and error
   // are included so progress-text updates (e.g. "Generating music track…",
@@ -601,27 +727,16 @@ export function DirectorChat() {
 
   // Determine chat input state
   const chatInputEnabled = (step === 'style' || mvGenerateSetup) && !loading
-  const chatInputPlaceholder = !skill
-    ? t('chat.chooseSkill')
-    : mvGenerateSetup
-    ? 'Describe your music video — subject, vibe, mood, setting…'
-    : isShortFilm && !shortFilmPath
-    ? t('chat.choosePath')
-    : step === 'upload' || step === 'analyze'
-    ? isMvGenerate
-      ? 'Generating your music video…'
-      : isShortFilm ? 'Upload dialogue audio to begin...' : 'Upload audio to begin...'
-    : step === 'style'
-    ? isStoryPath
-      ? 'Describe the story... e.g., Two detectives argue over evidence in a dark office.'
-      : isShortFilm
-        ? 'Describe the story setting and mood... e.g., A tense interrogation in a dimly lit room.'
-        : speakers.length >= 2
-          ? 'Describe the scene... e.g., Rap music video in a gym. Neon lights and grunge aesthetic.'
-          : 'Describe the scene and characters...'
-    : step === 'structure'
-    ? isShortFilm ? 'Adjust scene pacing above...' : 'Adjust clip structure above...'
-    : 'Reviewing...'
+  const chatInputPlaceholder = directorChatPlaceholder({
+    skill,
+    mvGenerateSetup,
+    isShortFilm,
+    shortFilmPath,
+    step,
+    isMvGenerate,
+    isStoryPath,
+    speakerCount: speakers.length,
+  })
 
   if (skill === 'comic') {
     return (
@@ -629,16 +744,17 @@ export function DirectorChat() {
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             <BookOpen size={14} className="text-accent-blue" />
-            <span className="text-xs font-medium text-text-primary">Comic Director</span>
+            <span className="text-xs font-medium text-text-primary">{t('chat.comicDirector')}</span>
           </div>
           <button
             onClick={reset}
             className="flex items-center gap-0.5 text-[10px] text-text-muted transition-colors hover:text-text-primary"
+            title={t('panel.startOverTitle')}
           >
-            <RotateCcw size={10} /> Start Over
+            <RotateCcw size={10} /> {t('panel.startOver')}
           </button>
         </div>
-        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-8 text-xs text-text-muted"><Loader2 size={14} className="animate-spin text-accent-blue" /> Opening Comic Director…</div>}>
+        <Suspense fallback={<div className="flex items-center justify-center gap-2 py-8 text-xs text-text-muted"><Loader2 size={14} className="animate-spin text-accent-blue" /> {t('chat.openingComic')}</div>}>
           <ComicDirectorPanel createCompleteComic />
         </Suspense>
       </div>
@@ -653,10 +769,10 @@ export function DirectorChat() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5">
             {isShortFilm ? <Film size={14} className="text-accent-blue" /> : <Music size={14} className="text-accent-blue" />}
-            <span className="text-xs font-medium text-text-primary">Director</span>
+            <span className="text-xs font-medium text-text-primary">{t('panel.title')}</span>
             {analysis && !isShortFilm && (
               <span className="text-[10px] text-text-muted">
-                {analysis.bpm.toFixed(0)} BPM
+                {t('panel.bpm', { bpm: analysis.bpm.toFixed(0) })}
               </span>
             )}
             {analysis && isShortFilm && (
@@ -666,7 +782,7 @@ export function DirectorChat() {
             )}
             {!analysis && isStoryPath && (
               <span className="text-[10px] text-text-muted">
-                {shortFilmTargetDuration}s
+                {t('song.duration', { count: shortFilmTargetDuration })}
               </span>
             )}
           </div>
@@ -674,17 +790,17 @@ export function DirectorChat() {
             <button
               onClick={() => useStore.getState().setMediaFilter('runs')}
               className="text-[10px] text-accent-blue hover:text-accent-blue/80 flex items-center gap-0.5 transition-colors"
-              title="Open Workspaces to inspect prompts, references and the generation queue"
+              title={t('chat.openWorkspaces')}
             >
-              Workspaces
+              {t('chat.workspaces')}
             </button>
             {(skill || step !== 'upload') && (
               <button
                 onClick={reset}
                 className="text-[10px] text-text-muted hover:text-text-primary flex items-center gap-0.5 transition-colors"
-                title="Start over"
+                title={t('panel.startOverTitle')}
               >
-                <RotateCcw size={10} /> Start Over
+                <RotateCcw size={10} /> {t('panel.startOver')}
               </button>
             )}
           </div>
@@ -720,7 +836,7 @@ export function DirectorChat() {
         {/* Short Film path chooser */}
         {isShortFilm && skill && !shortFilmPath && (
           <SystemBubble>
-            <p className="text-xs text-text-secondary mb-2">How would you like to create your short film?</p>
+            <p className="text-xs text-text-secondary mb-2">{t('chat.shortFilmHow')}</p>
             <PathChooser onSelect={(path: ShortFilmPath) => {
               shortFilmSetPath(path)
               if (path === 'story') {
@@ -733,7 +849,7 @@ export function DirectorChat() {
           <UserBubble>
             <div className="flex items-center gap-1.5 text-xs text-text-primary">
               {shortFilmPath === 'story' ? <FileText size={12} className="text-accent-blue" /> : <Upload size={12} className="text-accent-blue" />}
-              <span>{shortFilmPath === 'story' ? 'Describe a Story' : 'Upload Audio'}</span>
+              <span>{shortFilmPath === 'story' ? t('chat.describeStory') : t('chat.uploadAudio')}</span>
             </div>
           </UserBubble>
         )}
@@ -745,8 +861,8 @@ export function DirectorChat() {
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
                   {isShortFilm
-                    ? 'Upload reference images or artwork for your characters and dialogue audio to get started.'
-                    : 'Add a reference image (optional), then upload a track or generate one.'}
+                    ? t('chat.uploadRefsIntro')
+                    : t('chat.uploadTrackIntro')}
                 </p>
                 <div className="space-y-3">
                   <ReferenceImageUpload
@@ -774,7 +890,7 @@ export function DirectorChat() {
                               active ? 'bg-accent-blue text-white' : 'text-text-secondary hover:text-text-primary'
                             }`}
                           >
-                            {opt === 'upload' ? 'Upload a track' : 'Generate a track'}
+                            {opt === 'upload' ? t('chat.uploadTrack') : t('chat.generateTrack')}
                           </button>
                         )
                       })}
@@ -809,7 +925,7 @@ export function DirectorChat() {
                   {!isShortFilm && musicSource === 'generate' && loading && (
                     <div className="flex items-center gap-2 py-2">
                       <Loader2 size={14} className="animate-spin text-accent-blue" />
-                      <span className="text-xs text-text-muted">{loadingMessage || 'Generating…'}</span>
+                      <span className="text-xs text-text-muted">{loadingMessage || t('chat.generating')}</span>
                     </div>
                   )}
                 </div>
@@ -847,7 +963,7 @@ export function DirectorChat() {
                   {isShortFilm ? <Film size={12} className="text-text-muted" /> : <Music size={12} className="text-text-muted" />}
                   <span className="truncate">{audioName}</span>
                   {referenceImage && refImagePreview && (
-                    <img src={refImagePreview} alt="Ref" className="w-8 h-8 object-cover rounded border border-border ml-auto" />
+                    <img src={refImagePreview} alt={t('chat.refAlt')} className="w-8 h-8 object-cover rounded border border-border ml-auto" />
                   )}
                 </div>
               </UserBubble>
@@ -905,7 +1021,7 @@ export function DirectorChat() {
               <UserBubble>
                 <div className="flex items-center gap-1.5 text-xs text-text-primary">
                   <Check size={12} className="text-indicator-success" />
-                  <span>{plannedClips.length} {isShortFilm ? 'scenes' : 'clips'} confirmed</span>
+                  <span>{t(isShortFilm ? 'chat.scenesConfirmed' : 'chat.clipsConfirmed', { count: plannedClips.length })}</span>
                   <span className="text-text-muted">({formatTime(totalClipDuration)})</span>
                 </div>
               </UserBubble>
@@ -929,7 +1045,7 @@ export function DirectorChat() {
             {isStoryPath && atStep('style') && (
               <SystemBubble>
                 <p className="text-xs text-text-secondary mb-2">
-                  Set up your short film. Add reference images or artwork, name your characters, and set the target duration.
+                  {t('chat.storySetup')}
                 </p>
                 <div className="space-y-3">
                   <ReferenceImageUpload
@@ -945,9 +1061,9 @@ export function DirectorChat() {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-[10px] text-text-muted flex items-center gap-1">
-                        <Clock size={10} /> Target Duration
+                        <Clock size={10} /> {t('chat.targetDuration')}
                       </span>
-                      <span className="text-[10px] text-text-primary font-medium">{shortFilmTargetDuration}s</span>
+                      <span className="text-[10px] text-text-primary font-medium">{t('song.duration', { count: shortFilmTargetDuration })}</span>
                     </div>
                     <input
                       type="range"
@@ -959,8 +1075,10 @@ export function DirectorChat() {
                       className="w-full h-1 bg-bg-hover rounded-lg appearance-none cursor-pointer accent-accent-blue"
                     />
                     <div className="flex justify-between text-[9px] text-text-muted mt-0.5">
-                      <span>10s</span>
-                      <span>5m</span>
+                      <span>{'10s' // i18n-ok: 10s
+                      }</span>
+                      <span>{'5m' // i18n-ok: 5m
+                      }</span>
                     </div>
                   </div>
                   <label className="flex items-center gap-2 cursor-pointer group">
@@ -971,9 +1089,9 @@ export function DirectorChat() {
                       className="accent-accent-blue"
                     />
                     <div>
-                      <span className="text-[10px] text-text-primary">Narrative storytelling</span>
+                      <span className="text-[10px] text-text-primary">{t('chat.narrative')}</span>
                       <p className="text-[9px] text-text-muted leading-tight">
-                        Structure scenes around a character arc with rising tension and emotional resolution
+                        {t('chat.narrativeHint')}
                       </p>
                     </div>
                   </label>
@@ -985,38 +1103,40 @@ export function DirectorChat() {
                       className="mt-0.5 accent-purple-400"
                     />
                     <div>
-                      <span className="text-[10px] text-purple-200">Preserve Story visual style</span>
+                      <span className="text-[10px] text-purple-200">{t('chat.preserveStyle')}</span>
                       <p className="text-[9px] text-text-muted leading-tight">
-                        Locks the authored medium and reference artwork across start frames, keyframes and video.
+                        {t('chat.preserveStyleHint')}
                       </p>
                     </div>
                   </label>
                   <label className="block">
-                    <span className="text-[10px] text-text-muted">Canonical visual style</span>
+                    <span className="text-[10px] text-text-muted">{t('chat.canonicalStyle')}</span>
                     <AutoResizeTextarea
                       value={shortFilmVisualStyle}
                       onChange={e => shortFilmSetVisualStyle(e.target.value)}
                       disabled={!shortFilmPreserveVisualStyle}
+                      title={controlReason(!shortFilmPreserveVisualStyle, 'disabled.unlockLayer')}
                       rows={3}
                       className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
-                      placeholder="e.g. 2D anime, clean cel shading, restrained linework, watercolor backgrounds"
+                      placeholder={t('chat.canonicalStylePlaceholder')}
                     />
                     <p className="mt-1 text-[9px] text-text-muted">
-                      Loaded from the Story world bible. You can edit it for this film without changing the master Story.
+                      {t('chat.canonicalStyleHint')}
                     </p>
                   </label>
                   <label className="block">
-                    <span className="text-[10px] text-text-muted">Character rendering style</span>
+                    <span className="text-[10px] text-text-muted">{t('chat.characterStyle')}</span>
                     <AutoResizeTextarea
                       value={directorCharacterVisualStyle}
                       onChange={e => setDirectorCharacterVisualStyle(e.target.value)}
                       disabled={!shortFilmPreserveVisualStyle}
+                      title={controlReason(!shortFilmPreserveVisualStyle, 'disabled.unlockLayer')}
                       rows={3}
                       className="mt-1 w-full resize-none rounded-md border border-border bg-bg-secondary px-2 py-1.5 text-[10px] leading-relaxed text-text-primary focus:outline-none focus:border-accent-blue disabled:opacity-50"
-                      placeholder="e.g. realistic people, handmade claymation, or clean 2D anime cel shading"
+                      placeholder={t('chat.characterStylePlaceholder')}
                     />
                     <p className="mt-1 text-[9px] text-text-muted">
-                      Applied to every visible person independently from the world art direction.
+                      {t('chat.characterStyleHint')}
                     </p>
                   </label>
                   <label className="flex items-start gap-2 cursor-pointer group">
@@ -1039,8 +1159,8 @@ export function DirectorChat() {
             {isStoryPath && pastStep('style') && referenceImage && refImagePreview && (
               <UserBubble>
                 <div className="flex items-center gap-2 text-xs text-text-primary">
-                  <img src={refImagePreview} alt="Ref" className="w-8 h-8 object-cover rounded border border-border" />
-                  <span>{shortFilmTargetDuration}s film</span>
+                  <img src={refImagePreview} alt={t('chat.refAlt')} className="w-8 h-8 object-cover rounded border border-border" />
+                  <span>{t('chat.durationFilm', { count: shortFilmTargetDuration })}</span>
                 </div>
               </UserBubble>
             )}
@@ -1085,13 +1205,7 @@ export function DirectorChat() {
             <div className="flex items-center gap-2 py-1">
               <Loader2 size={14} className="animate-spin text-accent-blue" />
               <span className="text-xs text-text-muted">
-                {pipelinePhase === 'polishing_prompts'
-                  ? 'Polishing prompts (3rd pass)...'
-                  : isStoryPath
-                    ? `Planning scenes and writing ${usesShotImages ? 'prompts' : 'video prompts'}...`
-                    : isShortFilm
-                      ? `Writing ${usesShotImages ? 'scene prompts' : 'video prompts'}...`
-                      : `Writing ${usesShotImages ? 'image and video prompts' : 'video prompts'}...`}
+                {planPhaseLabel(pipelinePhase, isStoryPath, isShortFilm, usesShotImages)}
               </span>
             </div>
             {pipelinePhase !== 'polishing_prompts' && <LlmThinkingStream stage="plan" />}
@@ -1100,7 +1214,7 @@ export function DirectorChat() {
 
         {/* Completed planning streams stay in the chat history */}
         {(pastStep('plan') || (atStep('plan') && !loading)) && (
-          <LlmLogStage stage="plan" label={isShortFilm ? 'Scene planning' : usesShotImages ? 'Image and video prompts' : 'Video planning'} />
+          <LlmLogStage stage="plan" label={isShortFilm ? t('chat.planStage') : usesShotImages ? t('chat.imageVideoStage') : t('chat.videoPlanningStage')} />
         )}
 
         {/* Review step (image prompts) */}
@@ -1136,7 +1250,7 @@ export function DirectorChat() {
           <SystemBubble>
             <div className="flex items-center gap-2 py-1">
               <Loader2 size={14} className="animate-spin text-accent-blue" />
-              <span className="text-xs text-text-muted">Writing video prompts...</span>
+              <span className="text-xs text-text-muted">{t('panel.writingVideoPrompts')}</span>
             </div>
             <LlmThinkingStream stage="plan_video" />
           </SystemBubble>
@@ -1144,7 +1258,7 @@ export function DirectorChat() {
 
         {/* Completed video-prompt streams stay in the chat history */}
         {(pastStep('plan_video') || (atStep('plan_video') && !loading) || atStep('review_video')) && (
-          <LlmLogStage stage="plan_video" label="Video prompts" />
+          <LlmLogStage stage="plan_video" label={t('panel.videoPrompts')} />
         )}
 
         {/* Video review step */}
@@ -1190,7 +1304,7 @@ export function DirectorChat() {
         {error && !planRecovery && !atStep('review_video') && (
           <div role="alert" className="text-[11px] text-red-300 bg-red-500/10 rounded px-2 py-2 border border-red-500/30 flex items-start gap-1.5">
             <X size={12} className="mt-0.5 shrink-0" />
-            <span><strong className="font-semibold">Error:</strong> {error}</span>
+            <span><strong className="font-semibold">{t('chat.errorPrefix')}</strong> {error}</span>
           </div>
         )}
 
@@ -1205,35 +1319,41 @@ export function DirectorChat() {
               <label
                 className={`flex items-center gap-1.5 select-none ${selectedVideoSupportsSeamless ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'}`}
                 title={selectedVideoSupportsSeamless
-                  ? "Each clip's end frame uses the next clip's start image for smooth transitions"
-                  : 'The selected video model renders independent native-duration shots'}
+                  ? t('chat.seamlessTitle')
+                  : t('chat.seamlessUnsupported')}
               >
                 <input
                   type="checkbox"
                   checked={seamless}
                   disabled={!selectedVideoSupportsSeamless || isDirectVideo}
+                  title={firstControlReason([
+                    [!selectedVideoSupportsSeamless, 'disabled.chooseModel'],
+                    [isDirectVideo, 'disabled.sendNeedsStep'],
+                  ])}
                   onChange={e => setSeamless(e.target.checked)}
                   className="accent-accent-blue w-3 h-3"
                 />
-                <span className={`text-[10px] ${isDirectVideo ? 'text-text-muted/50' : 'text-text-secondary'}`}>Seamless</span>
+                <span className={`text-[10px] ${isDirectVideo ? 'text-text-muted/50' : 'text-text-secondary'}`}>{t('chat.seamless')}</span>
               </label>
-              <label className="flex items-center gap-1.5 cursor-pointer select-none" title="Skip all review steps and generate automatically">
+              <label className="flex items-center gap-1.5 cursor-pointer select-none" title={t('chat.autoTitle')}>
                 <input
                   type="checkbox"
                   checked={autoMode}
                   onChange={e => setAutoMode(e.target.checked)}
                   className="accent-red-500 w-3 h-3"
                 />
-                <span className={`text-[10px] ${autoMode ? 'text-red-400' : 'text-text-secondary'}`}>Auto</span>
+                <span className={`text-[10px] ${autoMode ? 'text-red-400' : 'text-text-secondary'}`}>{t('chat.auto')}</span>
               </label>
             </div>
             {audioName && (
               <div className="flex items-center gap-2">
                 <AudioScaleSlider />
                 <div className="flex gap-2 text-[8px] text-text-muted">
-                  <span>1x</span>
-                  <span>3x TTS</span>
-                  <span>5x</span>
+                  <span>{'1x' // i18n-ok: 1x
+                  }</span>
+                  <span>{t('chat.audioScaleTts')}</span>
+                  <span>{'5x' // i18n-ok: 5x
+                  }</span>
                 </div>
               </div>
             )}
@@ -1262,6 +1382,10 @@ export function DirectorChat() {
             }}
             placeholder={chatInputPlaceholder}
             disabled={!chatInputEnabled}
+            title={firstControlReason([
+              [loading, 'disabled.sendWhileBusy'],
+              [!chatInputEnabled, 'disabled.sendNeedsStep'],
+            ])}
             rows={2}
             minHeight={56}
             maxHeight={240}
@@ -1292,6 +1416,7 @@ function CharacterNaming({
   characters: ShortFilmCharacter[]
   setCharacters: (characters: ShortFilmCharacter[]) => void
 }) {
+  const { t } = useUiTranslation('director')
   const addCharacter = () => {
     setCharacters([...characters, { name: '', description: '' }])
   }
@@ -1311,7 +1436,7 @@ function CharacterNaming({
     <div>
       <label className="text-[11px] text-text-muted uppercase tracking-wider block mb-1.5">
         <Users size={10} className="inline mr-1" />
-        Name the Characters
+        {t('chat.nameCharacters')}
       </label>
       <div className="space-y-1.5">
         {characters.map((char, i) => (
@@ -1320,14 +1445,14 @@ function CharacterNaming({
               type="text"
               value={char.name}
               onChange={e => updateCharacter(i, 'name', e.target.value)}
-              placeholder={`Character ${i + 1} name`}
+              placeholder={t('chat.characterName', { n: i + 1 })}
               className="flex-1 bg-bg-secondary border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
             />
             <input
               type="text"
               value={char.description}
               onChange={e => updateCharacter(i, 'description', e.target.value)}
-              placeholder="brief description"
+              placeholder={t('chat.briefDescription')}
               className="flex-1 bg-bg-secondary border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
             />
             <button
@@ -1343,10 +1468,10 @@ function CharacterNaming({
         onClick={addCharacter}
         className="mt-1.5 text-[10px] text-accent-blue hover:text-accent-blue-hover transition-colors"
       >
-        + Add character
+        {t('chat.addCharacter')}
       </button>
       <span className="text-[10px] text-text-muted block mt-1">
-        Name the characters visible in the reference image so the AI can identify them.
+        {t('chat.nameCharactersHint')}
       </span>
     </div>
   )
@@ -1412,7 +1537,7 @@ function DirectorResolutionSelector() {
     : [...fallbackOrder]
   const presets = presetOrder.map(value => ({
     value,
-    label: options?.resolution_presets?.[value]?.label || value,
+    label: resolutionPresetLabel(value, options?.resolution_presets?.[value]?.label),
   }))
   const resolvedResolution = resolveResolution(options, resolution, aspectRatio)
   const recommendation = recommendedWindowProfile(
@@ -1477,6 +1602,7 @@ export function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) =
           key={s.label}
           onClick={() => s.active && onSelect(s.id)}
           disabled={!s.active}
+          title={controlReason(!s.active, 'disabled.actionInProgress')}
           className={`relative p-3 rounded-lg border text-left transition-all ${
             s.active
               ? 'border-accent-blue/30 bg-bg-tertiary/50 hover:border-accent-blue hover:bg-accent-blue/5 cursor-pointer'
@@ -1498,9 +1624,10 @@ export function SkillSelector({ onSelect }: { onSelect: (skill: DirectorSkill) =
 }
 
 function PathChooser({ onSelect }: { onSelect: (path: ShortFilmPath) => void }) {
+  const { t } = useUiTranslation('director')
   const paths = [
-    { id: 'audio' as ShortFilmPath, label: 'Upload Audio', desc: 'Upload recorded dialogue', icon: Upload },
-    { id: 'story' as ShortFilmPath, label: 'Describe a Story', desc: 'AI writes the script', icon: FileText },
+    { id: 'audio' as ShortFilmPath, label: t('chat.uploadAudio'), desc: t('chat.uploadAudioDesc'), icon: Upload },
+    { id: 'story' as ShortFilmPath, label: t('chat.describeStory'), desc: t('chat.describeStoryDesc'), icon: FileText },
   ]
   return (
     <div className="grid grid-cols-2 gap-2">
@@ -1534,6 +1661,7 @@ function UploadZone({
   audioName: string | null
   isShortFilm?: boolean
 }) {
+  const { t } = useUiTranslation('director')
   return (
     <div
       onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -1550,7 +1678,7 @@ function UploadZone({
               precedence over the static fallback. Reflects backend phase:
               "Loading transcription model (first use downloads ~300MB)..." etc. */}
           <span className="text-[11px] text-text-muted text-center px-2">
-            {loadingMessage || (isShortFilm ? 'Transcribing dialogue...' : 'Analyzing audio...')}
+            {loadingMessage || (isShortFilm ? t('chat.transcribing') : t('panel.analyzing'))}
           </span>
         </div>
       ) : audioName ? (
@@ -1561,8 +1689,8 @@ function UploadZone({
       ) : (
         <label className="cursor-pointer flex flex-col items-center gap-1.5">
           <Music size={20} className="text-accent-blue/60" />
-          <span className="text-xs text-text-secondary">{isShortFilm ? 'Drop dialogue audio or click to upload' : 'Drop a song or video or click to upload'}</span>
-          <span className="text-[10px] text-text-muted">audio: wav/mp3/flac/ogg/m4a · video: mp4/mov/mkv/webm/avi (audio extracted)</span>
+          <span className="text-xs text-text-secondary">{isShortFilm ? t('chat.dropDialogue') : t('chat.dropSongOrVideo')}</span>
+          <span className="text-[10px] text-text-muted">{t('chat.audioVideoFormats')}</span>
           <input
             type="file"
             accept={AUDIO_ACCEPT}
@@ -1586,6 +1714,7 @@ function ReferenceImageUpload({
   setReferenceImage: (file: File | null) => void
   compact?: boolean
 }) {
+  const { t } = useUiTranslation('director')
   const strengthLabel = useStore(s => s.modelOptions?.input_video_strength_label ?? '')
   const inputVideoStrength = useStore(s => s.params.input_video_strength ?? 1.0)
   const setParam = useStore(s => s.setParam)
@@ -1606,9 +1735,9 @@ function ReferenceImageUpload({
             <label className="cursor-pointer">
               <img
                 src={refImagePreview}
-                alt="Reference"
+                alt={t('panel.referenceAlt')}
                 className="w-10 h-10 object-cover rounded-lg border border-border hover:border-accent-blue transition-colors"
-                title="Click to change"
+                title={t('chat.clickToChange')}
               />
               <input
                 type="file"
@@ -1618,7 +1747,7 @@ function ReferenceImageUpload({
               />
             </label>
             <div className="flex-1 min-w-0">
-              <span className="text-[10px] text-text-muted">Reference image</span>
+              <span className="text-[10px] text-text-muted">{t('chat.referenceImage')}</span>
             </div>
             <button
               onClick={() => setReferenceImage(null)}
@@ -1631,7 +1760,7 @@ function ReferenceImageUpload({
         ) : (
           <label className="cursor-pointer flex items-center gap-2 border border-dashed border-border rounded px-2 py-1.5 hover:border-accent-blue transition-colors">
             <ImageIcon size={12} className="text-text-muted" />
-            <span className="text-[10px] text-text-muted">Add reference image</span>
+            <span className="text-[10px] text-text-muted">{t('chat.addReferenceImage')}</span>
             <input
               type="file"
               accept={IMAGE_ACCEPT}
@@ -1643,13 +1772,13 @@ function ReferenceImageUpload({
         {referenceImage && (
           <div className="space-y-1">
             <div className="flex items-center justify-between">
-              <label className="text-[11px] text-text-secondary">{strengthLabel || 'Image Strength'}</label>
+              <label className="text-[11px] text-text-secondary">{strengthLabel || t('chat.imageStrength')}</label>
               <span className="text-[11px] text-text-muted tabular-nums">{inputVideoStrength.toFixed(2)}</span>
             </div>
             <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
               onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
               className="w-full h-1 accent-accent-blue" />
-            <p className="text-[9px] text-text-muted">Lower values can increase motion</p>
+            <p className="text-[9px] text-text-muted">{t('chat.lowerMotion')}</p>
           </div>
         )}
       </div>
@@ -1663,9 +1792,9 @@ function ReferenceImageUpload({
           <label className="cursor-pointer block">
             <img
               src={refImagePreview}
-              alt="Reference"
+              alt={t('panel.referenceAlt')}
               className="w-full h-24 object-cover rounded-lg border border-border hover:border-accent-blue transition-colors"
-              title="Click to change image"
+              title={t('chat.clickToChangeImage')}
             />
             <input
               type="file"
@@ -1682,7 +1811,7 @@ function ReferenceImageUpload({
             <X size={12} className="text-text-muted" />
           </button>
           <span className="absolute bottom-1.5 left-1.5 text-[9px] text-white/80 bg-black/50 px-1.5 py-0.5 rounded">
-            Reference image &middot; click to change
+            {t('chat.referenceImageChange')}
           </span>
         </div>
       ) : (
@@ -1696,8 +1825,8 @@ function ReferenceImageUpload({
         >
           <div className="flex flex-col items-center gap-1.5">
             <ImageIcon size={20} className="text-accent-blue/60" />
-            <span className="text-xs text-text-secondary">Drop a reference image or artwork, or click to upload</span>
-            <span className="text-[10px] text-text-muted">Creates start images for each clip</span>
+            <span className="text-xs text-text-secondary">{t('chat.dropReference')}</span>
+            <span className="text-[10px] text-text-muted">{t('chat.createsStartImages')}</span>
           </div>
           <input
             type="file"
@@ -1710,13 +1839,13 @@ function ReferenceImageUpload({
       {referenceImage && (
         <div className="space-y-1">
           <div className="flex items-center justify-between">
-            <label className="text-[11px] text-text-secondary">{strengthLabel || 'Image Strength'}</label>
+            <label className="text-[11px] text-text-secondary">{strengthLabel || t('chat.imageStrength')}</label>
             <span className="text-[11px] text-text-muted tabular-nums">{inputVideoStrength.toFixed(2)}</span>
           </div>
           <input type="range" min={0} max={1} step={0.01} value={inputVideoStrength}
             onChange={e => setParam('input_video_strength', parseFloat(e.target.value))}
             className="w-full h-1 accent-accent-blue" />
-          <p className="text-[9px] text-text-muted">Lower values can increase motion</p>
+          <p className="text-[9px] text-text-muted">{t('chat.lowerMotion')}</p>
         </div>
       )}
     </div>
@@ -1730,6 +1859,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
   onReorder: (from: number, to: number) => void
   placeholder: string
 }) {
+  const { t } = useUiTranslation('director')
   const [dragOver, setDragOver] = useState(false)
   const previewUrl = useObjectUrl(file)
 
@@ -1749,7 +1879,7 @@ function DraggableRefRow({ file, label, index, onRemove, onLabelChange, onReorde
       }`}
     >
       <div className="relative flex-shrink-0">
-        <img src={previewUrl || ''} alt={`Ref ${index+1}`}
+        <img src={previewUrl || ''} alt={t('chat.refN', { n: index + 1 })}
           className="w-[60px] h-[60px] object-cover rounded border border-border pointer-events-none" />
         <button onClick={() => onRemove(index)}
           className="absolute -top-1 -right-1 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity z-10" title={controlLabel('a11y.removeReference')} aria-label={controlLabel('a11y.removeReference')}>
@@ -1813,6 +1943,7 @@ function AdditionalRefsSection() {
     s.models.find(model => model.model_type === selectedVideoModel)
       ?.director?.voice_reference_mode ?? 'none'
   ))
+  const { t } = useUiTranslation('director')
   const [expanded, setExpanded] = useState(
     charRefs.length > 0 || locRefs.length > 0 || h3VideoRefs.length > 0
       || h3AudioRefs.length > 0 || voiceRef !== null
@@ -1841,7 +1972,7 @@ function AdditionalRefsSection() {
       >
         {expanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
         <Users size={10} />
-        <span>Additional references</span>
+        <span>{t('chat.additionalRefs')}</span>
         {totalRefs > 0 && <span className="ml-auto bg-accent-blue/20 text-accent-blue px-1.5 rounded-full text-[9px]">{totalRefs}</span>}
       </button>
       {expanded && (
@@ -1849,9 +1980,9 @@ function AdditionalRefsSection() {
           {/* Character References */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-text-secondary">Character refs</span>
+              <span className="text-[10px] text-text-secondary">{t('chat.characterRefs')}</span>
               <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
-                + Add
+                {t('chat.add')}
                 <input type="file" accept={IMAGE_ACCEPT} multiple className="hidden"
                   onChange={e => handleFiles(e.target.files, 'char')} />
               </label>
@@ -1861,20 +1992,20 @@ function AdditionalRefsSection() {
                 {charRefs.map((f, i) => (
                   <DraggableRefRow key={`c${i}-${f.name}`} file={f} label={charLabels[i] || ''} index={i}
                     onRemove={removeCharRef} onLabelChange={setCharLabel} onReorder={reorderCharRefs}
-                    placeholder="e.g. Thor - blonde, hammer" />
+                    placeholder={t('chat.characterRefPlaceholder')} />
                 ))}
               </div>
             )}
             {charRefs.length === 0 && (
-              <p className="text-[9px] text-text-muted italic">Individual character close-ups improve identity</p>
+              <p className="text-[9px] text-text-muted italic">{t('chat.characterRefsHint')}</p>
             )}
           </div>
           {/* Location References */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-text-secondary">Location refs</span>
+              <span className="text-[10px] text-text-secondary">{t('chat.locationRefs')}</span>
               <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
-                + Add
+                {t('chat.add')}
                 <input type="file" accept={IMAGE_ACCEPT} multiple className="hidden"
                   onChange={e => handleFiles(e.target.files, 'loc')} />
               </label>
@@ -1884,27 +2015,27 @@ function AdditionalRefsSection() {
                 {locRefs.map((f, i) => (
                   <DraggableRefRow key={`l${i}-${f.name}`} file={f} label={locLabels[i] || ''} index={i}
                     onRemove={removeLocRef} onLabelChange={setLocLabel} onReorder={reorderLocRefs}
-                    placeholder="e.g. backstage, leather couches" />
+                    placeholder={t('chat.locationRefPlaceholder')} />
                 ))}
               </div>
             )}
             {locRefs.length === 0 && (
-              <p className="text-[9px] text-text-muted italic">Scene/environment reference images</p>
+              <p className="text-[9px] text-text-muted italic">{t('chat.locationRefsHint')}</p>
             )}
           </div>
           {/* LTX uses an ID-LoRA; H3 Omni maps the sample as a native voice
               reference in each shot's Ref2VA manifest. */}
           {showVoiceReference && <div>
             <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />Voice ref</span>
+              <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />{t('chat.voiceRef')}</span>
               {!voiceRef ? (
                 <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
-                  + Add
+                  {t('chat.add')}
                   <input type="file" accept={AUDIO_ACCEPT} className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) setVoiceRef(f); e.target.value = '' }} />
                 </label>
               ) : (
-                <button onClick={() => setVoiceRef(null)} className="text-[9px] text-red-400 hover:text-red-300">Remove</button>
+                <button onClick={() => setVoiceRef(null)} className="text-[9px] text-red-400 hover:text-red-300">{t('chat.remove')}</button>
               )}
             </div>
             {voiceRef ? (
@@ -1914,7 +2045,7 @@ function AdditionalRefsSection() {
                   <span className="text-[9px] text-text-secondary truncate">{voiceRef.name}</span>
                 </div>
                 {!nativeVoiceReference && <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] text-text-muted whitespace-nowrap">Identity scale</span>
+                  <span className="text-[9px] text-text-muted whitespace-nowrap">{t('chat.identityScale')}</span>
                   <input type="range" min={0} max={10} step={0.5} value={identityScale}
                     onChange={e => setIdentityScale(parseFloat(e.target.value))}
                     className="flex-1 h-1 accent-accent-blue" />
@@ -1924,8 +2055,8 @@ function AdditionalRefsSection() {
             ) : (
               <p className="text-[9px] text-text-muted italic">
                 {nativeVoiceReference
-                  ? 'Voice sample used by H3 Omni for the primary speaking character'
-                  : '~5 sec voice sample for consistent voice across clips'}
+                  ? t('chat.voiceSampleH3')
+                  : t('chat.voiceSampleShort')}
               </p>
             )}
           </div>}
@@ -1933,9 +2064,9 @@ function AdditionalRefsSection() {
             <div>
               <div className="flex items-center justify-between">
                 <label className="text-[10px] font-medium text-cyan-200" htmlFor="director-h3-reference-mode">
-                  H3 conditioning
+                  {t('dashboard.h3Conditioning')}
                 </label>
-                {h3ReferenceMode === 'references' && <span className="text-[9px] text-text-muted">{h3UserRefCount}/11 per shot</span>}
+                {h3ReferenceMode === 'references' && <span className="text-[9px] text-text-muted">{t('chat.refsPerShot', { count: h3UserRefCount, max: 11 })}</span>}
               </div>
               <select
                 id="director-h3-reference-mode"
@@ -1943,20 +2074,20 @@ function AdditionalRefsSection() {
                 onChange={event => setH3ReferenceMode(event.target.value as 'first_frame' | 'references')}
                 className="mt-1 w-full rounded border border-cyan-500/25 bg-bg-tertiary px-1.5 py-1 text-[10px] text-text-primary focus:outline-none focus:border-cyan-400"
               >
-                <option value="first_frame">FL2VA · exact generated frame</option>
-                <option value="references">Ref2VA · character, location and media refs</option>
+                <option value="first_frame">{t('chat.fl2vaOption')}</option>
+                <option value="references">{t('chat.ref2vaOption')}</option>
               </select>
               <p className="text-[9px] text-text-muted leading-tight mt-0.5">
                 {h3ReferenceMode === 'first_frame'
-                  ? 'Only the approved generated frame is sent to H3. Character and location images above still guide frame creation, but cannot conflict with the video model.'
-                  : 'The generated shot frame plus character refs and exactly one matched location are sent. Ref2VA composes a new opening rather than preserving that frame exactly.'}
+                  ? t('chat.fl2vaHint')
+                  : t('chat.ref2vaHint')}
               </p>
             </div>
             {h3ReferenceMode === 'references' && <><div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-text-secondary"><Film size={9} className="inline mr-0.5" />Video refs ({h3VideoRefs.length}/3)</span>
+                <span className="text-[10px] text-text-secondary"><Film size={9} className="inline mr-0.5" />{t('chat.videoRefs', { count: h3VideoRefs.length, max: 3 })}</span>
                 {h3VideoRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
-                  + Add
+                  {t('chat.add')}
                   <input type="file" accept={H3_VIDEO_ACCEPT} multiple className="hidden"
                     onChange={e => {
                       Array.from(e.target.files || []).slice(0, Math.min(3 - h3VideoRefs.length, 11 - h3UserRefCount)).forEach(addH3VideoRef)
@@ -1974,9 +2105,9 @@ function AdditionalRefsSection() {
             </div>
             <div>
               <div className="flex items-center justify-between mb-1">
-                <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />Audio refs ({h3AudioRefs.length}/3)</span>
+                <span className="text-[10px] text-text-secondary"><Mic size={9} className="inline mr-0.5" />{t('chat.audioRefs', { count: h3AudioRefs.length, max: 3 })}</span>
                 {h3AudioRefs.length < 3 && h3UserRefCount < 11 && <label className="cursor-pointer text-[9px] text-accent-blue hover:underline">
-                  + Add
+                  {t('chat.add')}
                   <input type="file" accept={H3_AUDIO_ACCEPT} multiple className="hidden"
                     onChange={e => {
                       Array.from(e.target.files || []).slice(0, Math.min(3 - h3AudioRefs.length, 11 - h3UserRefCount)).forEach(addH3AudioRef)
@@ -1991,22 +2122,24 @@ function AdditionalRefsSection() {
                   <button onClick={() => removeH3AudioRef(index)} className="text-red-400" title={controlLabel('a11y.removeAudioReference')} aria-label={controlLabel('a11y.removeAudioReference')}><X size={9} /></button>
                 </div>
               ))}
-              <p className="text-[9px] text-text-muted/70">Each video/audio: 2–15 s; each category totals at most 15 s.</p>
+              <p className="text-[9px] text-text-muted/70">{t('chat.refDurationHint')}</p>
             </div>
             {clipPlans.length > 0 && <div className="border-t border-cyan-500/15 pt-1.5 space-y-1">
-              <p className="text-[9px] font-medium text-cyan-200">References that will be sent per shot</p>
+              <p className="text-[9px] font-medium text-cyan-200">{t('chat.refsPerShotHeading')}</p>
               {clipPlans.map((plan, index) => {
                 const metadata = plan.metadata || {}
                 const requested = String(metadata.location_ref_label || '')
                 const match = requested
                   ? locLabels.findIndex(label => label.trim().toLocaleLowerCase() === requested.trim().toLocaleLowerCase())
                   : (locRefs.length === 1 ? 0 : -1)
-                const location = match >= 0 ? `${locLabels[match] || 'Location'} · ${locRefs[match]?.name || ''}` : 'No exact location match'
+                const location = match >= 0
+                  ? t('chat.locationFile', { label: locLabels[match] || t('chat.location'), file: locRefs[match]?.name || '' })
+                  : t('chat.noLocationMatch')
                 const characters = charRefs.map((file, charIndex) => charLabels[charIndex] || file.name)
                 return <div key={index} className="rounded bg-bg-tertiary px-1.5 py-1 text-[9px] leading-tight">
-                  <div className="text-text-secondary">Shot {index + 1}: generated frame</div>
-                  {characters.length > 0 && <div className="text-text-muted">Characters: {characters.join(', ')}</div>}
-                  <div className={match >= 0 ? 'text-text-muted' : 'text-amber-300'}>Location: {location}</div>
+                  <div className="text-text-secondary">{t('chat.shotGeneratedFrame', { n: index + 1 })}</div>
+                  {characters.length > 0 && <div className="text-text-muted">{t('chat.charactersList', { names: characters.join(', ') })}</div>}
+                  <div className={match >= 0 ? 'text-text-muted' : 'text-amber-300'}>{t('dashboard.locationList', { value: location })}</div>
                 </div>
               })}
             </div>}</>}
@@ -2025,6 +2158,7 @@ function AnalysisSummary({
   setShowDetails: (v: boolean | ((p: boolean) => boolean)) => void
   isShortFilm?: boolean
 }) {
+  const { t } = useUiTranslation('director')
   // Count unique speakers
   const speakerCount = new Set(
     (analysis.lyrics || []).map(l => l.speaker).filter(Boolean)
@@ -2042,7 +2176,7 @@ function AnalysisSummary({
   return (
     <div className="space-y-1">
       <p className="text-xs text-text-secondary mb-1">
-        {isShortFilm ? 'Transcription complete' : 'Analysis complete'}
+        {isShortFilm ? t('chat.transcriptionComplete') : t('chat.analysisComplete')}
       </p>
       {analysis.warnings?.map((warning, index) => (
         <p key={index} className="rounded border border-amber-500/30 bg-amber-500/5 px-2 py-1 text-[10px] text-amber-300">
@@ -2052,11 +2186,12 @@ function AnalysisSummary({
       {analysis.lyric_timing && !isShortFilm && (
         <div className="flex items-center justify-between gap-2 rounded border border-cyan-500/20 bg-cyan-500/5 px-2 py-1 text-[10px]">
           <span className="text-cyan-100">
-            Source-audio lyric timeline · {Math.round(analysis.lyric_timing.coverage * 100)}% word coverage
+            {t('chat.lyricTimeline', { percent: Math.round(analysis.lyric_timing.coverage * 100) })}
           </span>
           {analysis.lyrics_srt && (
             <button type="button" onClick={downloadSrt} className="flex shrink-0 items-center gap-1 text-cyan-300 hover:text-cyan-100">
-              <Download size={10} /> SRT
+              <Download size={10} /> {'SRT' // i18n-ok: SRT
+              }
             </button>
           )}
         </div>
@@ -2067,17 +2202,17 @@ function AnalysisSummary({
       >
         <ChevronDown size={10} className={`transition-transform ${showDetails ? '' : '-rotate-90'}`} />
         <span>{formatTime(analysis.duration)}</span>
-        {!isShortFilm && <span>{analysis.bpm.toFixed(0)} BPM</span>}
-        {isShortFilm && speakerCount > 0 && <span>{speakerCount} speaker{speakerCount > 1 ? 's' : ''}</span>}
-        {!isShortFilm && <span>{analysis.sections.length} sections</span>}
-        {analysis.lyrics && <span>{analysis.lyrics.length} {isShortFilm ? 'dialogue lines' : 'lyric segments'}</span>}
+        {!isShortFilm && <span>{t('panel.bpm', { bpm: analysis.bpm.toFixed(0) })}</span>}
+        {isShortFilm && speakerCount > 0 && <span>{t('chat.speakers', { count: speakerCount })}</span>}
+        {!isShortFilm && <span>{t('panel.sectionsCount', { count: analysis.sections.length })}</span>}
+        {analysis.lyrics && <span>{t(isShortFilm ? 'chat.dialogueLines' : 'panel.lyricSegments', { count: analysis.lyrics.length })}</span>}
       </button>
 
       {showDetails && (
         // No inner scroll — chat panel handles scrolling.
         <div className="bg-bg-tertiary rounded-lg p-2 space-y-2 text-[10px]">
           <div>
-            <div className="text-text-muted uppercase tracking-wider mb-1 font-medium">Sections</div>
+            <div className="text-text-muted uppercase tracking-wider mb-1 font-medium">{t('panel.sections')}</div>
             <div className="space-y-0.5">
               {analysis.sections.map((sec, i) => (
                 <div key={i} className="flex items-center gap-2">
@@ -2095,9 +2230,9 @@ function AnalysisSummary({
           {analysis.lyrics && analysis.lyrics.length > 0 && (
             <div>
               <div className="text-text-muted uppercase tracking-wider mb-1 font-medium">
-                Lyrics {analysis.lyric_timing?.method === 'authoritative_lyrics_word_alignment'
-                  ? '(Source audio alignment)'
-                  : analysis.song_structure?.length ? '(Structured)' : '(Whisper)'}
+                {t('panel.lyrics')} {analysis.lyric_timing?.method === 'authoritative_lyrics_word_alignment'
+                  ? t('chat.lyricsAligned')
+                  : analysis.song_structure?.length ? t('chat.lyricsStructured') : t('panel.lyricsWhisper')}
               </div>
               <div className="space-y-0.5">
                 {analysis.song_structure && analysis.song_structure.length > 0 ? (
@@ -2129,7 +2264,7 @@ function AnalysisSummary({
                           </div>
                         ))}
                         {sectionLyrics.length === 0 && (
-                          <div className="pl-2 text-text-muted italic">(instrumental)</div>
+                          <div className="pl-2 text-text-muted italic">{t('panel.instrumental')}</div>
                         )}
                       </div>
                     )
@@ -2179,30 +2314,33 @@ function StructureView({
   pacingProfile: 'cinematic' | 'balanced' | 'rhythmic'
   setPacingProfile: (profile: 'cinematic' | 'balanced' | 'rhythmic') => Promise<void>
 }) {
+  const { t } = useUiTranslation('director')
+  const pacingChoices = [
+    ['cinematic', t('chat.pacingCinematic'), t('chat.pacingRangeCinematic')],
+    ['balanced', t('chat.pacingBalanced'), t('chat.pacingRangeBalanced')],
+    ['rhythmic', t('chat.pacingRhythmic'), t('chat.pacingRangeRhythmic')],
+  ] as const
   return (
     <div className="space-y-3">
       <p className="text-xs text-text-secondary">
         {isShortFilm
-          ? 'Here are the scenes based on dialogue pacing. Adjust the scene pacing if needed.'
-          : 'Here\'s the clip structure based on the audio analysis. Adjust the cut speed if needed.'}
+          ? t('chat.structureShortFilm')
+          : t('chat.structureMusic')}
       </p>
 
       {isActive && isMusicVideo && (
         <div>
           <div className="mb-1.5 flex items-center justify-between">
-            <label className="text-[11px] uppercase tracking-wider text-text-muted">Editing rhythm</label>
-            <span className="text-[10px] text-text-muted">{plannedClips.length} generated clips</span>
+            <label className="text-[11px] uppercase tracking-wider text-text-muted">{t('chat.editingRhythm')}</label>
+            <span className="text-[10px] text-text-muted">{t('chat.generatedClips', { count: plannedClips.length })}</span>
           </div>
           <div className="grid grid-cols-3 gap-1">
-            {([
-              ['cinematic', 'Cinematic', '8–16s'],
-              ['balanced', 'Balanced', '5–8s'],
-              ['rhythmic', 'Rhythmic', '3–5s'],
-            ] as const).map(([value, label, duration]) => (
+            {pacingChoices.map(([value, label, duration]) => (
               <button
                 key={value}
                 type="button"
                 disabled={loading}
+                title={controlReason(loading, 'disabled.actionInProgress')}
                 onClick={() => void setPacingProfile(value)}
                 className={`rounded-md border px-1.5 py-1.5 text-center transition-colors disabled:opacity-50 ${pacingProfile === value
                   ? 'border-accent-blue bg-accent-blue/10 text-accent-blue'
@@ -2214,7 +2352,7 @@ function StructureView({
             ))}
           </div>
           <p className="mt-1 text-[9px] leading-relaxed text-text-muted">
-            More cuts create more start images and video generations, increasing render time and credits.
+            {t('chat.moreCuts')}
           </p>
         </div>
       )}
@@ -2222,7 +2360,7 @@ function StructureView({
       {isActive && !isMusicVideo && (
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{isShortFilm ? 'Scene Pacing' : 'Cut Speed'}</label>
+            <label className="text-[11px] text-text-muted uppercase tracking-wider">{isShortFilm ? t('chat.scenePacing') : t('panel.cutSpeed')}</label>
             <span className="text-xs text-text-secondary">
               {(localBias ?? energyBias) > 0 ? '+' : ''}{localBias ?? energyBias}
             </span>
@@ -2255,21 +2393,21 @@ function StructureView({
             className="w-full"
           />
           <div className="flex items-center justify-between mt-1 text-[10px] text-text-muted">
-            <span>{isShortFilm ? 'Longer scenes' : 'Slower cuts'}</span>
-            <span>{isShortFilm ? 'Shorter scenes' : 'Faster cuts'}</span>
+            <span>{isShortFilm ? t('chat.longerScenes') : t('panel.slowerCuts')}</span>
+            <span>{isShortFilm ? t('chat.shorterScenes') : t('panel.fasterCuts')}</span>
           </div>
         </div>
       )}
 
       <div className="bg-bg-tertiary rounded-lg p-2 space-y-2">
         <div className="flex items-center justify-between text-[11px]">
-          <span className="text-text-secondary font-medium">{plannedClips.length} {isShortFilm ? 'scenes' : 'clips'}</span>
-          <span className="text-text-muted">{formatTime(totalClipDuration)} total</span>
+          <span className="text-text-secondary font-medium">{t(isShortFilm ? 'chat.scenesCount' : 'panel.clipsCount', { count: plannedClips.length })}</span>
+          <span className="text-text-muted">{t('panel.totalTime', { time: formatTime(totalClipDuration) })}</span>
         </div>
 
         {loading ? (
           <div className="flex items-center gap-1.5 text-[10px] text-text-muted py-1">
-            <Loader2 size={10} className="animate-spin" /> Recalculating...
+            <Loader2 size={10} className="animate-spin" /> {t('panel.recalculating')}
           </div>
         ) : (
           <>
@@ -2281,9 +2419,10 @@ function StructureView({
                   ? Math.max((clipDur / totalDur) * 100, 1.5)
                   : Math.max((clip.beat_count / plannedClips.reduce((s, c) => s + c.beat_count, 0)) * 100, 1.5)
                 const barColor = sectionBarColors[clip.section_label] || 'bg-gray-500'
+                const section = sectionDisplayName(clip.section_label)
                 const tooltipLabel = isShortFilm
-                  ? `Scene ${i + 1}: ${clip.section_label} (${clipDur.toFixed(1)}s)`
-                  : `Clip ${i + 1}: ${clip.section_label}, ${clip.beat_count} beats (${clipDur.toFixed(1)}s)`
+                  ? t('chat.sceneTooltip', { n: i + 1, section, seconds: clipDur.toFixed(1) })
+                  : t('panel.clipTooltip', { n: i + 1, section, beats: clip.beat_count, seconds: clipDur.toFixed(1) })
                 return (
                   <div
                     key={i}
@@ -2310,7 +2449,7 @@ function StructureView({
                   return (
                     <div key={label} className="flex items-center gap-1">
                       <span className={`w-2 h-2 rounded-sm ${color}`} />
-                      <span>{label} ({count})</span>
+                      <span>{t('panel.sectionCount', { label: sectionDisplayName(label), count })}</span>
                     </div>
                   )
                 })}
@@ -2324,9 +2463,13 @@ function StructureView({
         <button
           onClick={confirmStructure}
           disabled={loading || plannedClips.length === 0}
+          title={firstControlReason([
+            [loading, 'disabled.actionInProgress'],
+            [plannedClips.length === 0, 'disabled.sendNeedsStep'],
+          ])}
           className="w-full py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-accent-blue-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
         >
-          <ChevronRight size={12} /> Continue
+          <ChevronRight size={12} /> {t('panel.continue')}
         </button>
       )}
     </div>
@@ -2351,6 +2494,7 @@ function StructureView({
  * experimental). See the design discussion captured in commit notes.
  */
 function DirectorAdvancedAccordion() {
+  const { t } = useUiTranslation('director')
   const [open, setOpen] = useState(false)
   const videoModel = useStore(s => s.selectedModelPerMode.video || 'ltx2_22B_distilled_1_1')
   const videoStepsByModel = useStore(s => s.directorVideoInferenceStepsByModel)
@@ -2497,10 +2641,11 @@ function DirectorAdvancedAccordion() {
   }
 
   const upsamplingOptions = [
-    { value: '', label: 'Off' },
-    { value: 'lanczos1.5', label: 'Lanczos 1.5×' },
-    { value: 'lanczos2', label: 'Lanczos 2×' },
+    { value: '', label: t('chat.off') },
+    { value: 'lanczos1.5', label: 'Lanczos 1.5×' }, // i18n-ok: Lanczos
+    { value: 'lanczos2', label: 'Lanczos 2×' }, // i18n-ok: Lanczos
   ]
+  const shotLimitTime = formatSeconds((safeShotFrames ?? 0) / ((activeDirectorVideoOptions?.fps || 24)))
 
   return (
     <div className="border border-border rounded-lg overflow-hidden">
@@ -2508,44 +2653,36 @@ function DirectorAdvancedAccordion() {
         onClick={() => setOpen(!open)}
         className="w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors"
       >
-        <span>Advanced</span>
+        <span>{t('chat.advanced')}</span>
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
       </button>
       {open && (
         <div className="px-2.5 pb-2.5 space-y-3">
           {shotImageSupport && shotImageSupport !== 'required' && (
             <div className="space-y-1 pt-1">
-              <label className="text-[11px] text-text-secondary block">Shot image guidance</label>
+              <label className="text-[11px] text-text-secondary block">{t('chat.shotImageGuidance')}</label>
               <select
                 value={shotImageGuidance}
                 onChange={e => setShotImageGuidance(e.target.value as DirectorShotImageGuidance)}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
               >
-                <option value="auto">Auto (recommended)</option>
+                <option value="auto">{t('chat.autoRecommended')}</option>
                 <option value="prompt_only">
-                  {shotImageSupport === 'direct_references' ? 'Direct references only' : 'Prompt only'}
+                  {shotImageSupport === 'direct_references' ? t('chat.directReferencesOnly') : t('chat.promptOnly')}
                 </option>
-                <option value="generate">Generate shot images</option>
+                <option value="generate">{t('chat.generateShotImages')}</option>
               </select>
               <p className="text-[10px] text-text-muted">
-                {shotImageSupport === 'direct_references'
-                  ? shotImageGuidance === 'generate'
-                    ? 'Creates a composition image for each shot before H3 uses the references.'
-                    : !hasVisualReferences
-                      ? 'Add at least one main, character, or location image, or choose generated shot images.'
-                    : 'H3 uses your character and location references directly; no image model runs.'
-                  : generateShotImages
-                    ? 'Creates start frames because visual references are present or generation was requested.'
-                    : 'H3 renders each scene directly from its video prompt.'}
+                {shotGuidanceHint(shotImageSupport, shotImageGuidance, hasVisualReferences, generateShotImages)}
               </p>
             </div>
           )}
           {/* IMAGE section */}
           {generateShotImages && <div className="space-y-2">
-            <div className="text-[10px] text-text-muted uppercase tracking-wider">Image</div>
+            <div className="text-[10px] text-text-muted uppercase tracking-wider">{t('modelPicker.image')}</div>
 
             <div>
-              <label className="text-[11px] text-text-secondary block mb-1">Upsampling</label>
+              <label className="text-[11px] text-text-secondary block mb-1">{t('chat.upsampling')}</label>
               <select
                 value={imgUpsampling}
                 onChange={e => setImgUpsampling(e.target.value)}
@@ -2556,13 +2693,13 @@ function DirectorAdvancedAccordion() {
                 ))}
               </select>
               <p className="text-[10px] text-text-muted mt-0.5">
-                Render then upscale the start image. Adds time per shot.
+                {t('chat.upscaleImage')}
               </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">Film grain</label>
+                <label className="text-[11px] text-text-secondary">{t('chat.filmGrain')}</label>
                 <span className="text-[10px] text-text-muted tabular-nums">{imgGrain.toFixed(2)}</span>
               </div>
               <input
@@ -2571,12 +2708,12 @@ function DirectorAdvancedAccordion() {
                 className="w-full"
               />
               <p className="text-[10px] text-text-muted mt-0.5">
-                Aesthetic film-grain texture. 0 = off.
+                {t('chat.filmGrainHint')}
               </p>
               {imgGrain > 0 && (
                 <div className="mt-1.5">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-text-muted">Grain saturation</label>
+                    <label className="text-[10px] text-text-muted">{t('chat.grainSaturation')}</label>
                     <span className="text-[10px] text-text-muted tabular-nums">{imgGrainSat.toFixed(2)}</span>
                   </div>
                   <input
@@ -2591,7 +2728,7 @@ function DirectorAdvancedAccordion() {
 
           {/* VIDEO section */}
           <div className="space-y-2 pt-1 border-t border-border">
-            <div className="text-[10px] text-text-muted uppercase tracking-wider pt-2">Video</div>
+            <div className="text-[10px] text-text-muted uppercase tracking-wider pt-2">{t('modelPicker.video')}</div>
 
             {turboOption && (
               <div className={`rounded-lg border px-2.5 py-2 ${
@@ -2607,21 +2744,22 @@ function DirectorAdvancedAccordion() {
                     className="accent-accent-blue"
                   />
                   <Zap size={12} className={turboSelected ? 'text-accent-blue' : 'text-text-muted'} />
-                  <span className="text-[11px] font-medium text-text-primary">H3 Turbo</span>
+                  <span className="text-[11px] font-medium text-text-primary">{'H3 Turbo' // i18n-ok: H3
+                  }</span>
                   <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[8px] font-medium uppercase tracking-wider text-indicator-warning">
-                    Experimental
+                    {t('chat.experimental')}
                   </span>
-                  <InfoTooltip label="About Director H3 Turbo" text={turboOption.guide} />
+                  <InfoTooltip label={t('chat.aboutH3Turbo')} text={turboOption.guide} />
                 </label>
                 <p className="mt-1 text-[10px] text-text-muted">
-                  Enables the managed LoRA at {turboOption.weight.toFixed(2)} and uses {turboOption.steps} steps. Adjust its strength under Video LoRAs.
+                  {t('chat.turboEnables', { weight: turboOption.weight.toFixed(2), steps: turboOption.steps })}
                 </p>
               </div>
             )}
 
-            <div title="Applies to every newly generated Director shot and is saved with the project for later repair or regeneration.">
+            <div title={t('chat.turboApplies')}>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">Inference steps</label>
+                <label className="text-[11px] text-text-secondary">{t('chat.inferenceSteps')}</label>
                 <div className="flex items-center gap-1.5">
                   {!videoStepsLocked && !turboSelected && defaultVideoSteps != null && configuredVideoSteps != null
                     && configuredVideoSteps !== defaultVideoSteps && (
@@ -2630,7 +2768,7 @@ function DirectorAdvancedAccordion() {
                       onClick={() => setVideoSteps(videoModel, defaultVideoSteps)}
                       className="text-[9px] text-accent-blue hover:text-accent-blue/80"
                     >
-                      Default
+                      {t('chat.default')}
                     </button>
                   )}
                   <input
@@ -2640,6 +2778,11 @@ function DirectorAdvancedAccordion() {
                     step={1}
                     value={videoSteps ?? ''}
                     disabled={videoSteps == null || videoStepsLocked || turboSelected}
+                    title={firstControlReason([
+                      [videoSteps == null, 'disabled.actionInProgress'],
+                      [videoStepsLocked, 'disabled.unlockLayer'],
+                      [turboSelected, 'disabled.unlockLayer'],
+                    ])}
                     onChange={e => {
                       const value = Number(e.target.value)
                       if (Number.isFinite(value)) setVideoSteps(videoModel, value)
@@ -2655,17 +2798,16 @@ function DirectorAdvancedAccordion() {
                 step={1}
                 value={videoSteps ?? 1}
                 disabled={videoSteps == null || videoStepsLocked || turboSelected}
+                title={firstControlReason([
+                  [videoSteps == null, 'disabled.actionInProgress'],
+                  [videoStepsLocked, 'disabled.unlockLayer'],
+                  [turboSelected, 'disabled.unlockLayer'],
+                ])}
                 onChange={e => setVideoSteps(videoModel, Number(e.target.value))}
                 className="w-full disabled:opacity-50"
               />
               <p className="text-[10px] text-text-muted mt-0.5">
-                {turboSelected
-                  ? `H3 Turbo uses its ${turboOption?.steps ?? 6}-step recipe.`
-                  : videoStepsLocked
-                  ? 'Fixed by this model.'
-                  : videoSteps == null
-                    ? 'Loading model default...'
-                    : `Director setting for this model${defaultVideoSteps === videoSteps ? ' (default)' : ''}.`}
+                {videoStepsHint(turboSelected, turboOption?.steps, videoStepsLocked, videoSteps, defaultVideoSteps)}
               </p>
             </div>
 
@@ -2674,7 +2816,7 @@ function DirectorAdvancedAccordion() {
               && nativeShotChoices.length > 0 && (
               <div>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <label className="text-[11px] text-text-secondary">Maximum planned shot</label>
+                  <label className="text-[11px] text-text-secondary">{t('chat.maxPlannedShot')}</label>
                   <select
                     value={manualMaxShotFrames ?? ''}
                     onChange={event => setMaxShotFrames(
@@ -2683,7 +2825,7 @@ function DirectorAdvancedAccordion() {
                     )}
                     className="bg-bg-tertiary border border-border rounded px-1.5 py-0.5 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
                   >
-                    <option value="">Auto</option>
+                    <option value="">{t('chat.auto')}</option>
                     {nativeShotChoices.map(frames => (
                       <option key={frames} value={frames}>
                         {formatSeconds(frames / (activeDirectorVideoOptions.fps || 24))}
@@ -2698,19 +2840,13 @@ function DirectorAdvancedAccordion() {
                     ? 'text-amber-400'
                     : 'text-text-muted'
                 }`}>
-                  {manualMaxShotFrames == null
-                    ? safeShotFrames != null
-                      ? `Auto plans at most ${formatSeconds(safeShotFrames / (activeDirectorVideoOptions.fps || 24))} per shot for ${resolvedVideoResolution} on ${totalVramGb.toFixed(0)} GB.`
-                      : `Auto derives the one-pass limit from the selected canvas and GPU.`
-                    : safeShotFrames != null && manualMaxShotFrames > safeShotFrames
-                      ? `Manual override exceeds Auto's ${formatSeconds(safeShotFrames / (activeDirectorVideoOptions.fps || 24))} recommendation and may run out of VRAM.`
-                      : `Manual native-shot limit. Director will plan dialogue and action to this duration.`}
+                  {maxShotHint(manualMaxShotFrames, safeShotFrames, shotLimitTime, resolvedVideoResolution, totalVramGb.toFixed(0))}
                 </p>
               </div>
             )}
 
             <div>
-              <label className="text-[11px] text-text-secondary block mb-1">Upsampling</label>
+              <label className="text-[11px] text-text-secondary block mb-1">{t('chat.upsampling')}</label>
               <select
                 value={vidUpsampling}
                 onChange={e => setVidUpsampling(e.target.value)}
@@ -2721,13 +2857,13 @@ function DirectorAdvancedAccordion() {
                 ))}
               </select>
               <p className="text-[10px] text-text-muted mt-0.5">
-                Render then upscale the video. Adds time per shot.
+                {t('chat.upscaleVideo')}
               </p>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">Film grain</label>
+                <label className="text-[11px] text-text-secondary">{t('chat.filmGrain')}</label>
                 <span className="text-[10px] text-text-muted tabular-nums">{vidGrain.toFixed(2)}</span>
               </div>
               <input
@@ -2736,12 +2872,12 @@ function DirectorAdvancedAccordion() {
                 className="w-full"
               />
               <p className="text-[10px] text-text-muted mt-0.5">
-                Aesthetic film-grain texture. 0 = off.
+                {t('chat.filmGrainHint')}
               </p>
               {vidGrain > 0 && (
                 <div className="mt-1.5">
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-text-muted">Grain saturation</label>
+                    <label className="text-[10px] text-text-muted">{t('chat.grainSaturation')}</label>
                     <span className="text-[10px] text-text-muted tabular-nums">{vidGrainSat.toFixed(2)}</span>
                   </div>
                   <input
@@ -2755,9 +2891,9 @@ function DirectorAdvancedAccordion() {
 
             {activeDirectorVideoOptions?.self_refiner === true && <div>
               <div className="flex items-center justify-between mb-1">
-                <label className="text-[11px] text-text-secondary">Self refiner</label>
+                <label className="text-[11px] text-text-secondary">{t('chat.selfRefiner')}</label>
                 <span className="text-[9px] uppercase tracking-wider text-text-muted bg-bg-tertiary border border-border rounded px-1 py-px">
-                  Experimental
+                  {t('chat.experimental')}
                 </span>
               </div>
               <select
@@ -2765,12 +2901,14 @@ function DirectorAdvancedAccordion() {
                 onChange={e => setVidSelfRefiner(Number(e.target.value))}
                 className="w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-blue"
               >
-                <option value={0}>Off</option>
-                <option value={1}>P1-Norm</option>
-                <option value={2}>P2-Norm</option>
+                <option value={0}>{t('chat.off')}</option>
+                <option value={1}>{'P1-Norm' // i18n-ok: P1-Norm
+                }</option>
+                <option value={2}>{'P2-Norm' // i18n-ok: P2-Norm
+                }</option>
               </select>
               <p className="text-[10px] text-text-muted mt-0.5">
-                Re-passes the rendered video through the refiner. May improve detail or introduce artifacts.
+                {t('chat.selfRefinerHint')}
               </p>
             </div>}
           </div>
@@ -2819,6 +2957,7 @@ function DirectorLoraAccordion() {
   const minimaxImageReady = useStore(s => Boolean(s.servicesConfig?.minimax_api_key_set))
   const [imageOpen, setImageOpen] = useState(false)
   const [videoOpen, setVideoOpen] = useState(false)
+  const { t } = useUiTranslation('director')
 
   return (
     <div className="space-y-1">
@@ -2831,8 +2970,8 @@ function DirectorLoraAccordion() {
             {imageModel === MINIMAX_IMAGE_API_MODEL && (
               <p className={`pl-[50px] text-[9px] leading-relaxed ${minimaxImageReady ? 'text-emerald-400' : 'text-amber-300'}`}>
                 {minimaxImageReady
-                  ? 'External Image-01 API ready · no local VRAM or image LoRAs.'
-                  : 'Add the MiniMax API key in Settings → Services before generating.'}
+                  ? t('chat.imageApiReady')
+                  : t('chat.imageApiKey')}
               </p>
             )}
           </>
@@ -2846,7 +2985,7 @@ function DirectorLoraAccordion() {
             onClick={() => setImageOpen(!imageOpen)}
             className="w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors"
           >
-            <span>Image LoRAs</span>
+            <span>{t('chat.imageLoras')}</span>
             {imageOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
           {imageOpen && (
@@ -2863,7 +3002,7 @@ function DirectorLoraAccordion() {
             onClick={() => setVideoOpen(!videoOpen)}
             className="w-full flex items-center justify-between px-2.5 py-1.5 text-[11px] text-text-secondary hover:bg-bg-hover transition-colors"
           >
-            <span>Video LoRAs</span>
+            <span>{t('chat.videoLoras')}</span>
             {videoOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
           </button>
           {videoOpen && (
@@ -2889,13 +3028,14 @@ function StyleForm({
   isShortFilm?: boolean
   isStoryPath?: boolean
 }) {
+  const { t } = useUiTranslation('director')
   if (!isActive) {
     return (
       <div className="space-y-2">
         <p className="text-xs text-text-muted">
-          {isStoryPath ? 'Story submitted. Planning scenes and writing prompts...'
-            : isShortFilm ? 'Story description submitted. Planning scenes...'
-            : 'Scene description submitted. Planning shots...'}
+          {isStoryPath ? t('chat.storySubmitted')
+            : isShortFilm ? t('chat.storyDescriptionSubmitted')
+            : t('chat.sceneSubmitted')}
         </p>
       </div>
     )
@@ -2905,16 +3045,16 @@ function StyleForm({
     <div className="space-y-2">
       <p className="text-xs text-text-secondary">
         {isStoryPath
-          ? 'Describe the story you want to tell. The AI will plan scenes, write dialogue, and create all prompts.'
+          ? t('chat.describeStoryLong')
           : isShortFilm
-            ? 'Describe the story setting, mood, and visual style for your short film.'
-            : 'Describe the scene, characters, and visual style.'}
+            ? t('chat.describeShortFilmStyle')
+            : t('chat.describeSceneStyle')}
       </p>
 
       {/* Speaker Mapping — hidden for story path (no audio = no detected speakers) */}
       {!isStoryPath && speakers.length >= 1 && (
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider block mb-1">Speakers Detected</label>
+          <label className="text-[11px] text-text-muted uppercase tracking-wider block mb-1">{t('panel.speakersDetected')}</label>
           <div className="space-y-2">
             {speakerMappings.map((mapping) => (
               <div key={mapping.speakerId} className="bg-bg-tertiary rounded-lg p-2 space-y-1">
@@ -2922,7 +3062,7 @@ function StyleForm({
                   <button
                     onClick={() => insertSpeakerMention(mapping.speakerId)}
                     className="text-[10px] px-1.5 py-0.5 rounded-full bg-accent-blue/20 text-accent-blue hover:bg-accent-blue/30 shrink-0 transition-colors"
-                    title={`Insert @${mapping.speakerId} into description`}
+                    title={t('panel.insertSpeaker', { id: mapping.speakerId })}
                   >
                     {mapping.speakerId}
                   </button>
@@ -2930,7 +3070,7 @@ function StyleForm({
                     type="text"
                     value={mapping.name}
                     onChange={e => setSpeakerMapping(mapping.speakerId, e.target.value, mapping.role)}
-                    placeholder="e.g. man in green hoodie"
+                    placeholder={t('panel.speakerPlaceholder')}
                     className="flex-1 bg-bg-secondary border border-border rounded px-2 py-1 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue transition-colors"
                   />
                   <select
@@ -2938,10 +3078,10 @@ function StyleForm({
                     onChange={e => setSpeakerMapping(mapping.speakerId, mapping.name, e.target.value as typeof mapping.role)}
                     className="bg-bg-secondary border border-border rounded px-1.5 py-1 text-[10px] text-text-secondary focus:outline-none focus:border-accent-blue transition-colors"
                   >
-                    <option value="">role</option>
-                    {!isShortFilm && <option value="rapping">rapping</option>}
-                    {!isShortFilm && <option value="singing">singing</option>}
-                    <option value="speaking">speaking</option>
+                    <option value="">{t('panel.role')}</option>
+                    {!isShortFilm && <option value="rapping">{t('panel.rapping')}</option>}
+                    {!isShortFilm && <option value="singing">{t('panel.singing')}</option>}
+                    <option value="speaking">{t('panel.speaking')}</option>
                   </select>
                 </div>
                 {speakerSamples[mapping.speakerId] && (
@@ -2955,7 +3095,7 @@ function StyleForm({
             ))}
           </div>
           <span className="text-[10px] text-text-muted mt-1 block">
-            Name each speaker so the director knows who to show. Click a chip to insert into description.
+            {t('panel.speakersHint')}
           </span>
         </div>
       )}
@@ -2972,10 +3112,10 @@ function StyleForm({
 
       <p className="text-[11px] text-text-muted">
         {isStoryPath
-          ? 'Describe your story in the input below and press send. The AI will plan everything.'
+          ? t('chat.sendStory')
           : isShortFilm
-            ? 'Type your story description in the input below and press send.'
-            : 'Type your scene description in the input below and press send.'}
+            ? t('chat.sendStoryDescription')
+            : t('chat.sendSceneDescription')}
       </p>
     </div>
   )
@@ -2995,17 +3135,19 @@ function ImagePromptsReview({
   isActive: boolean
   isShortFilm?: boolean
 }) {
+  const { t } = useUiTranslation('director')
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-[11px] text-text-muted uppercase tracking-wider">Start Image Prompts</label>
+        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('panel.startImagePrompts')}</label>
         {isActive && (
           <button
             onClick={planPrompts}
             disabled={loading}
+            title={controlReason(loading, 'disabled.actionInProgress')}
             className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5"
           >
-            <RotateCcw size={10} /> Regenerate
+            <RotateCcw size={10} /> {t('panel.regenerate')}
           </button>
         )}
       </div>
@@ -3018,11 +3160,11 @@ function ImagePromptsReview({
           return (
             <div key={i} className="bg-bg-tertiary rounded-lg p-2 space-y-1.5">
               <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
-                <span className="font-medium text-text-secondary">{isShortFilm ? 'Shot' : 'Clip'} {i + 1}</span>
+                <span className="font-medium text-text-secondary">{isShortFilm ? t('dashboard.shot', { n: i + 1 }) : t('panel.clipN', { n: i + 1 })}</span>
                 {clip && (
                   <>
                     <span>{formatTime(clip.start)}-{formatTime(clip.end)}</span>
-                    {!isShortFilm && <span>{clip.beat_count}b</span>}
+                    {!isShortFilm && <span>{t('panel.beatsShort', { count: clip.beat_count })}</span>}
                     <SectionBadge label={clip.section_label} />
                     {!isShortFilm && <EnergyDot energy={clip.energy} />}
                     {clip.dominant_speaker && (
@@ -3041,6 +3183,7 @@ function ImagePromptsReview({
                 onChange={e => editClipPlan(i, 'image_prompt', e.target.value)}
                 rows={4}
                 disabled={!isActive}
+                title={controlReason(!isActive, 'disabled.sendNeedsStep')}
                 className="w-full bg-bg-secondary border border-border rounded px-2 py-1.5 text-xs text-text-primary resize-none focus:outline-none focus:border-accent-blue transition-colors disabled:opacity-60"
               />
             </div>
@@ -3052,11 +3195,12 @@ function ImagePromptsReview({
         <button
           onClick={generateStartImages}
           disabled={loading}
+          title={controlReason(loading, 'disabled.actionInProgress')}
           className="w-full py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-accent-blue-hover transition-colors flex items-center justify-center gap-1.5"
         >
           {/* Always available now — directorGenerateStartImages generates an
               establishing/anchor image first when no reference was provided. */}
-          <ImageIcon size={12} /> Generate Start Images
+          <ImageIcon size={12} /> {t('panel.generateStartImages')}
         </button>
       )}
     </div>
@@ -3070,6 +3214,7 @@ function ImageGenView({
   imageGenProgress: ReturnType<typeof useStore.getState>['directorImageGenProgress']
   clipImages: ReturnType<typeof useStore.getState>['directorClipImages']
 }) {
+  const { t } = useUiTranslation('director')
   // Architecture-mismatch advisories from the backend's image-gen filter.
   // Surfacing these in chat (vs only in the console) lets the user see
   // immediately why some of their selected LoRAs didn't get applied —
@@ -3078,7 +3223,7 @@ function ImageGenView({
   const loraWarnings = useStore(s => s.pipelineStatus?.lora_warnings) || []
   return (
     <div className="space-y-3">
-      <label className="text-[11px] text-text-muted uppercase tracking-wider block">Generating Start Images</label>
+      <label className="text-[11px] text-text-muted uppercase tracking-wider block">{t('panel.generatingStartImages')}</label>
 
       {loraWarnings.length > 0 && (
         <div className="space-y-1.5">
@@ -3096,12 +3241,11 @@ function ImageGenView({
           <div className="flex items-center justify-between text-[11px]">
             <span className="text-text-secondary">
               {imageGenProgress.status === 'done'
-                ? 'All images ready — planning video shots...'
-                : `Clip ${imageGenProgress.current + 1} of ${imageGenProgress.total}`}
+                ? t('panel.allImagesReady')
+                : t('panel.clipOf', { current: imageGenProgress.current + 1, total: imageGenProgress.total })}
             </span>
             <span className="text-text-muted">
-              {imageGenProgress.currentClipLabel}
-              {imageGenProgress.status !== 'done' && ` — ${imageGenProgress.status}`}
+              {imageGenStatusLine(imageGenProgress.currentClipLabel, imageGenProgress.status)}
             </span>
           </div>
           <div className="w-full bg-bg-tertiary rounded-full h-1.5">
@@ -3122,9 +3266,7 @@ function ImageGenView({
         <div className="flex items-center justify-center gap-2 py-2">
           <Loader2 size={16} className="animate-spin text-accent-blue" />
           <span className="text-[11px] text-text-muted">
-            {imageGenProgress?.status === 'generating' ? 'Submitting...' :
-             imageGenProgress?.status === 'polling' ? 'Waiting for result...' :
-             imageGenProgress?.status === 'downloading' ? 'Downloading...' : 'Processing...'}
+            {imageSpinnerLabel(imageGenProgress?.status)}
           </span>
         </div>
       )}
@@ -3137,7 +3279,7 @@ function ImageGenView({
             <div key={i} className="relative">
               <DirectorClipImagePreview
                 image={img}
-                alt={`Clip ${img.clipIndex + 1}`}
+                alt={t('panel.clipN', { n: img.clipIndex + 1 })}
                 className="w-full aspect-square object-cover rounded-lg border border-border"
               />
               <span className="absolute bottom-0.5 left-0.5 text-[8px] bg-black/60 text-white px-1 py-0.5 rounded">
@@ -3153,7 +3295,7 @@ function ImageGenView({
           onClick={() => { useStore.setState({ directorStep: 'review_video' }) }}
           className="w-full py-2 rounded-lg bg-accent-blue text-white text-xs font-medium hover:bg-accent-blue-hover transition-colors flex items-center justify-center gap-1.5"
         >
-          <ChevronRight size={12} /> Continue to Video Prompts
+          <ChevronRight size={12} /> {t('chat.continueToVideo')}
         </button>
       )}
     </div>
@@ -3195,13 +3337,14 @@ function VideoPromptsReview({
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <label className="text-[11px] text-text-muted uppercase tracking-wider">Video Prompts</label>
+        <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('panel.videoPrompts')}</label>
         <button
           onClick={planVideoPrompts}
           disabled={loading}
+          title={controlReason(loading, 'disabled.actionInProgress')}
           className="text-[10px] text-accent-blue hover:text-accent-blue-hover flex items-center gap-0.5"
         >
-          <RotateCcw size={10} /> Regenerate
+          <RotateCcw size={10} /> {t('panel.regenerate')}
         </button>
       </div>
 
@@ -3217,7 +3360,7 @@ function VideoPromptsReview({
             <div key={i} className="relative">
               <DirectorClipImagePreview
                 image={img}
-                alt={`Clip ${img.clipIndex + 1}`}
+                alt={t('panel.clipN', { n: img.clipIndex + 1 })}
                 className="w-full aspect-square object-cover rounded border border-border"
               />
               <span className="absolute bottom-0 left-0 text-[7px] bg-black/60 text-white px-0.5 rounded-br">
@@ -3237,7 +3380,7 @@ function VideoPromptsReview({
           return (
             <div key={i} className="bg-bg-tertiary rounded-lg p-2 space-y-1.5">
               <div className="flex items-center gap-1.5 text-[10px] text-text-muted">
-                <span className="font-medium text-text-secondary">{isShortFilm ? 'Shot' : 'Clip'} {i + 1}</span>
+                <span className="font-medium text-text-secondary">{isShortFilm ? t('dashboard.shot', { n: i + 1 }) : t('panel.clipN', { n: i + 1 })}</span>
                 {clip && (
                   <>
                     <span>{formatTime(clip.start)}-{formatTime(clip.end)}</span>
@@ -3278,9 +3421,10 @@ function VideoPromptsReview({
           <div className="space-y-2">
             <button
               disabled
+              title={controlLabel('status.failed')}
               className="w-full py-2.5 rounded-lg bg-red-500/10 border border-red-500/40 text-red-300 text-sm font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed"
             >
-              <X size={14} /> Error
+              <X size={14} /> {t('chat.error')}
             </button>
             <div role="alert" className="rounded-lg border border-red-500/30 bg-red-500/10 px-2.5 py-2 text-[11px] leading-snug text-red-200">
               {generationError}
@@ -3297,24 +3441,25 @@ function VideoPromptsReview({
           // understands they're not waiting on a click.
           <button
             disabled
+            title={controlReason(true, 'disabled.actionInProgress')}
             className="w-full py-2.5 rounded-lg bg-bg-tertiary border border-border/40 text-text-muted text-sm font-medium flex items-center justify-center gap-1.5 cursor-not-allowed opacity-60"
           >
             <Loader2 size={14} className="animate-spin" />
-            {isAutoGenerating ? 'Auto Generating...' : 'Generating...'}
+            {isAutoGenerating ? t('chat.autoGenerating') : t('chat.generatingNow')}
           </button>
         ) : (
           <button
             onClick={directorGenerate}
             className="w-full py-2.5 rounded-lg bg-accent-green hover:bg-accent-green-hover text-white text-sm font-semibold transition-colors flex items-center justify-center gap-1.5"
           >
-            <Play size={14} fill="white" /> Generate
+            <Play size={14} fill="white" /> {t('chat.generate')}
           </button>
         )}
         <button
           onClick={applyToClips}
           className="w-full py-2 rounded-lg border border-border text-text-secondary text-xs font-medium hover:bg-bg-hover hover:text-text-primary transition-colors flex items-center justify-center gap-1.5"
         >
-          <ChevronRight size={12} /> Edit in Studio
+          <ChevronRight size={12} /> {t('panel.editInStudio')}
         </button>
       </div>
     </div>
