@@ -424,7 +424,7 @@ export function Scene3DWorkspace({ width, height, initialDocument, fill = false,
   const frameSelection = () => stageRef.current?.frameSelection?.(selected?.id)
 
   return (
-    <Scene3DDesk model={{
+    <Scene3DDesk stage={stageRef} model={{
       fill, topBarExtra, sceneDoc, editingLocked, exporting, playing, selected, selectedId, selectedWorldSfxId,
       speechVisible, speechOpen, pickTarget, generation, transformMode, seconds, speed, fps, count, workspace,
       session, stageRef, catalogs, modelItems, imageItems, videoItems, screenTargets, keepAssets, selectedUserTemplateId,

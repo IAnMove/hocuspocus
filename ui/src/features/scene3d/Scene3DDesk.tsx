@@ -11,7 +11,7 @@ import type { Scene3DDeskModel } from './scene3dDeskModel'
 import { Workbench } from '../../components/workbench/Workbench'
 
 /** Vídeo 3D arranged on the shared desk. The desk itself knows nothing about 3D. */
-export function Scene3DDesk({ model }: { model: Scene3DDeskModel }) {
+export function Scene3DDesk({ model, stage }: { model: Scene3DDeskModel; stage: Scene3DDeskModel['stageRef'] }) {
   const height = model.fill ? 'flex min-h-0 flex-1 flex-col' : 'flex h-[calc(100dvh-16rem)] max-h-[calc(100dvh-16rem)] min-h-0 min-w-0 flex-col'
   return (
     <div data-testid="scene3d-workspace" className={height}>
@@ -21,7 +21,7 @@ export function Scene3DDesk({ model }: { model: Scene3DDeskModel }) {
         <Workbench
           topBar={<Scene3DDeskTopBar model={model} />}
           outline={<Scene3DDeskOutline model={model} />}
-          viewport={<Scene3DDeskViewport model={model} />}
+          viewport={<Scene3DDeskViewport model={model} stage={stage} />}
           inspector={<Scene3DDeskInspector model={model} />}
           transport={<Scene3DTransport
             playing={model.playing}

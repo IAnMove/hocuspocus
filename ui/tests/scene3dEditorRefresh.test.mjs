@@ -112,7 +112,7 @@ test('gizmo converts translation, yaw and uniform scale into document transforms
   proxy.rotation.y = Math.PI / 2
   proxy.scale.set(1.5, 2, 3)
   assert.deepEqual(transformPatch(proxy, 'translate', 'Z'), { position: [-1.5, 2, 3.75] })
-  assert.deepEqual(transformPatch(proxy, 'rotate', 'Y'), { rotationY: Math.PI / 2 })
+  assert.deepEqual(transformPatch(proxy, 'rotate', 'Y'), { rotationX: 0, rotationY: Math.PI / 2, rotationZ: 0 })
   assert.deepEqual(transformPatch(proxy, 'scale', 'X'), { scale: 1.5 })
   assert.deepEqual(transformPatch(proxy, 'scale', 'Y'), { scale: 2 })
   assert.deepEqual(transformPatch(proxy, 'scale', 'Z'), { scale: 3 })

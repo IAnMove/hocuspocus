@@ -52,14 +52,10 @@ export function SceneObjectInspector({
   onChange, onUndo, onRedo, onCheckpoint, onResolveConflict,
 }: SceneObjectInspectorProps) {
   const { t } = useUiTranslation('scene3d')
-  const [mode, setMode] = useState<InspectorMode>('object')
+  const [mode, setMode] = useInspectorMode(allowEmpty, selectedId)
   const [previewOpen, setPreviewOpen] = useState(true)
   const found = document.slots.find(slot => slot.id === selectedId)
   const selected = allowEmpty ? found : found ?? document.slots[0]
-  useEffect(() => {
-    if (!allowEmpty) return
-    setMode(selectedId ? 'object' : 'scene')
-  }, [allowEmpty, selectedId])
   useInspectorHistoryKeys(locked, onUndo, onRedo)
   const commit = (next: Scene3DDocument, group?: string) => {
     if (locked) return
@@ -264,6 +260,18 @@ function AxisFields({ label, values, onChange, group }: {
       ))}
     </div>
   )
+}
+
+/** Follows the desk selection without an effect. A manual mode click sticks until the selection changes. */
+function useInspectorMode(allowEmpty: boolean, selectedId?: string) {
+  const [mode, setMode] = useState<InspectorMode>('object')
+  const track = allowEmpty ? (selectedId ?? '') : undefined
+  const [seenTrack, setSeenTrack] = useState<string | undefined>(undefined)
+  if (track !== undefined && track !== seenTrack) {
+    setSeenTrack(track)
+    setMode(track ? 'object' : 'scene')
+  }
+  return [mode, setMode] as const
 }
 
 function useInspectorHistoryKeys(locked: boolean, onUndo: () => void, onRedo: () => void) {

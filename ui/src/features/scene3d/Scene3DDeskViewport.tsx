@@ -7,15 +7,18 @@ import { defaultSpeech } from './speech/types'
 import { LipsPickOverlay } from './speech/LipsPickOverlay'
 import { Scene3DInteraction } from './Scene3DInteraction'
 import { Scene3DPreview } from './Scene3DPreview'
-import { Scene3DStage } from './Scene3DStage.tsx'
 import { Scene3DEditCameraBar } from './Scene3DEditCameraBar'
 import { Scene3DViewportTools } from './Scene3DViewportTools'
 import { patchScene3DSlot } from './templates.ts'
 import { applyScene3DGizmoPatch } from './documentHistory.ts'
+import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
 import type { Scene3DDeskModel } from './scene3dDeskModel'
-import type { DragEvent } from 'react'
+import type { DragEvent, MutableRefObject } from 'react'
 
-export function Scene3DDeskViewport({ model }: { model: Scene3DDeskModel }) {
+export function Scene3DDeskViewport({ model, stage }: {
+  model: Scene3DDeskModel
+  stage: MutableRefObject<Scene3DStageHandle | null>
+}) {
   const { t } = useUiTranslation('scene3d')
   const { t: editorT } = useUiTranslation('scene3dEditor')
   const selected = model.selected
@@ -35,7 +38,7 @@ export function Scene3DDeskViewport({ model }: { model: Scene3DDeskModel }) {
         >
           <Scene3DStage
             key={model.generation}
-            ref={model.stageRef}
+            ref={stage}
             document={model.sceneDoc}
             sceneSeconds={model.seconds}
             selectedId={model.selectedId}
@@ -48,9 +51,9 @@ export function Scene3DDeskViewport({ model }: { model: Scene3DDeskModel }) {
             onSlotClips={(slotId, clips) => model.setCatalogs(current => ({ ...current, [slotId]: clips }))}
             onSlotMeshes={(slotId, meshes, nodes) => model.setScreenTargets(current => ({ ...current, [slotId]: { meshes, nodes } }))}
           />
-          <SceneFxOverlay cues={model.sceneDoc.sfx} soundCues={[...(model.sceneDoc.sfx ?? []), ...worldSfxAudioCues(model.sceneDoc.worldSfx)]} seconds={model.seconds} width={model.sceneDoc.width} height={model.sceneDoc.height} duration={model.sceneDoc.duration} playing={model.playing} speed={model.speed} getSource={() => model.stageRef.current?.canvas() ?? null} />
+          <SceneFxOverlay cues={model.sceneDoc.sfx} soundCues={[...(model.sceneDoc.sfx ?? []), ...worldSfxAudioCues(model.sceneDoc.worldSfx)]} seconds={model.seconds} width={model.sceneDoc.width} height={model.sceneDoc.height} duration={model.sceneDoc.duration} playing={model.playing} speed={model.speed} getSource={() => stage.current?.canvas() ?? null} />
           <KineticTextOverlay cues={model.sceneDoc.texts} seconds={model.seconds} width={model.sceneDoc.width} height={model.sceneDoc.height} />
-          <LipsLayer model={model} pickKey={pickKey} />
+          <LipsLayer model={model} pickKey={pickKey} stage={stage} />
           {model.sceneDoc.clipNumber && <div className="pointer-events-none absolute right-3 top-3 z-[901] rounded bg-black/80 px-3 py-2 font-mono text-sm text-cyan-50">CLIP {String(model.sceneDoc.clipNumber).padStart(2, '0')}</div>}
           <div className="pointer-events-none absolute left-3 top-3 rounded-lg bg-black/75 px-3 py-2 text-xs text-cyan-200">
             {t('stage.badge')} · {editorT(`template.${model.sceneDoc.templateId}.title`)}
@@ -64,12 +67,16 @@ export function Scene3DDeskViewport({ model }: { model: Scene3DDeskModel }) {
   )
 }
 
-function LipsLayer({ model, pickKey }: { model: Scene3DDeskModel; pickKey: string }) {
+function LipsLayer({ model, pickKey, stage }: {
+  model: Scene3DDeskModel
+  pickKey: string
+  stage: MutableRefObject<Scene3DStageHandle | null>
+}) {
   const selected = model.selected
   if (!model.speechVisible || model.playing || model.exporting || !selected || model.pickTarget !== pickKey) return null
   return (
     <LipsPickOverlay onCancel={() => model.setPickTarget(undefined)} onPick={(x, y) => {
-      const face = model.stageRef.current?.pickFace?.(selected.id, x, y, selected.speech?.face)
+      const face = stage.current?.pickFace?.(selected.id, x, y, selected.speech?.face)
       if (!face) return false
       model.applyScene(current => patchScene3DSlot(current, selected.id, {
         speech: { ...defaultSpeech(), ...selected.speech, face, enabled: true, eyes: selected.speech?.face ? selected.speech.eyes : false, clean: selected.speech?.face ? selected.speech.clean : false },

@@ -13,18 +13,14 @@ export type WorkbenchProps = {
 }
 
 function useViewportWidth(override?: number) {
-  const [width, setWidth] = useState(override ?? 1280)
+  const [measured, setMeasured] = useState(() => (typeof window === 'undefined' ? 1280 : window.innerWidth))
   useEffect(() => {
-    if (override != null) {
-      setWidth(override)
-      return
-    }
-    const read = () => setWidth(window.innerWidth)
-    read()
+    if (override != null) return
+    const read = () => setMeasured(window.innerWidth)
     window.addEventListener('resize', read)
     return () => window.removeEventListener('resize', read)
   }, [override])
-  return width
+  return override ?? measured
 }
 
 function PanelToggle({ pressed, label, testId, onClick }: {
