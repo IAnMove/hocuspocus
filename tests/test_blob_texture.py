@@ -89,3 +89,25 @@ def test_stack_atlas_puts_the_body_over_the_head_and_enlarges_nothing_it_does_no
     atlas = Image.open(io.BytesIO(stack_atlas(top, bottom)))
     assert atlas.size == ATLAS
     assert atlas.getpixel((10, 10)) == (255, 0, 0) and atlas.getpixel((10, ATLAS[1] - 10)) == (0, 255, 0)
+
+
+def test_bleed_keeps_the_painted_figure_and_fills_the_ring_around_the_silhouette():
+    from services.blob_texture import bleed
+
+    ground = (30, 32, 40)
+    guide = Image.new("RGB", (200, 100), (40, 40, 44))
+    painted = Image.new("RGB", (200, 100), ground)
+    for x in range(60, 140):
+        for y in range(20, 80):
+            guide.putpixel((x, y), (200, 200, 205))
+    for x in range(70, 130):                       # the painting is narrower than the mould by ten pixels each side
+        for y in range(30, 70):
+            painted.putpixel((x, y), (200, 120, 60))
+    for x in range(100, 110):                      # a dark jacket inside the silhouette stays dark
+        for y in range(35, 65):
+            painted.putpixel((x, y), (28, 30, 38))
+    guide_png_bytes = io.BytesIO()
+    guide.save(guide_png_bytes, format="PNG")
+    result = bleed(painted, guide_png_bytes.getvalue(), radius=14, band=12)
+    assert result.getpixel((65, 50))[0] > 150, "the ring between the painting and the mould's edge takes the figure's colour, not the ground"
+    assert result.getpixel((105, 50))[0] < 40, "a dark patch well inside the silhouette is left alone"
