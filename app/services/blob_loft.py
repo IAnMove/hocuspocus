@@ -206,21 +206,106 @@ def egg_scale(sin_lat: float) -> float:
     return 1.0 - _JAW * max(0.0, -sin_lat) ** 2
 
 
+def _lerp(a: float, b: float, u: float) -> float:
+    return a + (b - a) * max(0.0, min(1.0, u))
+
+
+def skull_profile(lat: float) -> tuple[float, float, float, float]:
+    """The human skull at latitude ``lat`` (degrees, -90 chin to 90 crown): ``(width, back depth, front depth, flatness)``
+    as shares of the head radii. A wide cranium, a brow ridge, cheeks that taper to a small chin pushed a little
+    forward, and a face that is flatter than the back (``flatness`` < 1 pushes the front rings toward a plane)."""
+    phi = math.radians(lat)
+    c = math.cos(phi)
+    if lat >= 0:
+        width = c * (1.0 + 0.04 * math.sin(phi))
+        back = c * (1.0 + 0.06 * math.sin(phi))
+        brow = 0.08 * math.exp(-((lat - 18) / 14) ** 2)
+        front = _lerp(0.86 + brow, c, (lat - 30) / 60) if lat > 30 else 0.86 + brow
+        flat = _lerp(0.55, 1.0, (lat - 25) / 50)
+        return width, back, front, flat
+    u = -lat / 90.0
+    width = c * (1.0 - 0.34 * u ** 1.5)
+    back = c * (1.0 - 0.12 * u)
+    front = _lerp(0.86, 0.62, u ** 1.2) + 0.08 * max(0.0, u - 0.72) / 0.28
+    flat = _lerp(0.55, 0.8, u ** 2)
+    return width, back, front, flat
+
+
+def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
+    """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
+    rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
+    width, back, front, flat = skull_profile(lat)
+    t = math.radians(yaw)
+    s = math.cos(t)
+    depth = front * (s ** flat) if s >= 0 else -back * (-s)
+    return (rx * width * math.sin(t), L["head_y"] + ry * math.sin(math.radians(lat)), rz * depth)
+
+
+def _skull_ring(L: dict, lat: float, out: float, yaws) -> list:
+    return [skull_point(L, yaw, lat, out) for yaw in yaws]
+
+
 def _head(mesh: Mesh, L: dict, skin: str) -> None:
+    yaws = [j * 360.0 / 24 for j in range(24)]
+    lats = [-90 + 180 * k / 20 for k in range(21)]
+    grid, colors = [], []
+    for lat in lats:
+        ring = _skull_ring(L, lat, 1.0, yaws)
+        if abs(lat) >= 89.9:
+            centre = (0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0)
+            ring = [centre] * len(yaws)
+        grid.append(ring)
+        colors.append([linear_color(skin)] * len(yaws))
+    centers = [(0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0) for lat in lats]
+    _emit(mesh, grid, colors, centers, True, None)
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    stations = []
-    steps = 14
-    for k in range(steps + 1):
-        phi = -math.pi / 2 + math.pi * k / steps
-        r = _egg_radius(phi)
-        stations.append(_st((0, L["head_y"] + ry * math.sin(phi), 0), max(rx * r, 1e-4), max(rz * r, 1e-4), skin))
-    _tube(mesh, stations, "y", caps=True)
-    # ears: two small flat bumps on the sides, at eye height
+    base = skull_point(L, 0, -22, 1.0)
+    nose = [_st((0, base[1] + ry * 0.06, base[2] - rz * 0.02), rx * 0.06, ry * 0.08, skin), _st((0, base[1] - ry * 0.02, base[2] + rz * 0.07), rx * 0.055, ry * 0.05, skin),
+            _st((0, base[1] - ry * 0.07, base[2] + rz * 0.09), rx * 0.035, ry * 0.03, skin)]
+    _tube(mesh, nose, "z", ring=8)
     for sign in (-1, 1):
-        ear = [_st((sign * rx * 0.92, L["head_y"] - ry * 0.02, -rz * 0.05), rx * 0.1, rz * 0.16, skin),
-               _st((sign * rx * 1.08, L["head_y"] + ry * 0.0, -rz * 0.06), rx * 0.085, rz * 0.14, skin),
-               _st((sign * rx * 1.12, L["head_y"] + ry * 0.0, -rz * 0.07), rx * 0.01, rz * 0.03, skin)]
+        at = skull_point(L, sign * 90, -8, 1.0)
+        ear = [_st((at[0] * 0.94, at[1], at[2] - rz * 0.08), rx * 0.1, rz * 0.16, skin),
+               _st((at[0] * 1.1, at[1] + ry * 0.01, at[2] - rz * 0.09), rx * 0.085, rz * 0.14, skin),
+               _st((at[0] * 1.16, at[1] + ry * 0.01, at[2] - rz * 0.1), rx * 0.01, rz * 0.03, skin)]
         _tube(mesh, ear, "x", ring=8)
+
+
+FACE_YAWS = [-100 + 200.0 * j / 24 for j in range(25)]
+FACE_LATS = [-86 + (48 + 86) * k / 16 for k in range(17)]
+
+
+def face_patch(L: dict, fit) -> tuple[Mesh, list]:
+    """The face as its own surface: the skull's front between the chin and the hairline, a hair's breadth outside it,
+    white vertex colours (the picture multiplies them) and UVs that project the kit picture from the front: ``fit`` is
+    ``[cu, cv, ru, rv]``, the drawn skull's centre and half-size as fractions of the picture."""
+    mesh = Mesh()
+    cu, cv, ru, rv = fit
+    rx, ry = L["sx"] / 2, L["sy"] / 2
+    grid, colors, uvs = [], [], []
+    for lat in FACE_LATS:
+        ring = _skull_ring(L, lat, 1.012, FACE_YAWS)
+        grid.append(ring)
+        colors.append([(1.0, 1.0, 1.0)] * len(ring))
+        uvs.append([(cu + (p[0] / rx) * ru, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
+    centers = [(0.0, L["head_y"] + ry * math.sin(math.radians(lat)), 0.0) for lat in FACE_LATS]
+    _emit(mesh, grid, colors, centers, False, None)
+    out = []
+    count = len(FACE_YAWS)
+    for i in range(len(grid) - 1):
+        for j in range(count - 1):
+            k = j + 1
+            a, b, c, d = grid[i][j], grid[i][k], grid[i + 1][k], grid[i + 1][j]
+            ua, ub, uc, ud = uvs[i][j], uvs[i][k], uvs[i + 1][k], uvs[i + 1][j]
+            if _degenerate(a, b, c) and _degenerate(a, c, d):
+                continue
+            na = _normal_at(grid, i, j, False, centers[i])
+            if _dot(_cross(_sub(b, a), _sub(c, a)), na) < 0:
+                out += [ua, uc, ub, ua, ud, uc]
+            else:
+                out += [ua, ub, uc, ua, uc, ud]
+    assert len(out) == len(mesh.vertices)
+    return mesh, out
 
 
 def shoulder_top(L: dict) -> float:
@@ -246,7 +331,9 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     stations = [
         _st((0, L["leg_top"] - 0.01 * h, 0), hip_w / 2 * 0.94, d / 2 * 0.86, lower),
         _st((0, L["leg_top"] + 0.035 * h, 0), hip_w / 2, d / 2 * 0.98, lower),
-        _st((0, L["waist_y"] + 0.015 * h, 0), L["waist_w"] / 2 * 1.08, d / 2 * 0.86, lower if wear["legs"] == "skirt" else top),
+        _st((0, L["waist_y"] + 0.015 * h, 0), L["waist_w"] / 2 * 1.08, d / 2 * 0.86, lower),
+        # the same ring twice: a colour change between rings would blend navy into white across the quad
+        _st((0, L["waist_y"] + 0.015 * h + 0.0005, 0), L["waist_w"] / 2 * 1.08, d / 2 * 0.86, top),
         _st((0, L["waist_y"] + 0.05 * h, 0), L["waist_w"] / 2 * 1.1, d / 2 * 0.88, top),
         _st((0, chest, 0), w / 2 * 0.95, d / 2, top, **lapel(10)),
         _st((0, arm_y - 0.015 * h, 0), w / 2, d / 2 * 0.95, top, **lapel(22)),
@@ -306,11 +393,12 @@ def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
             return _st((sign * x, y, 0), r * k, r * k * 0.95, color)
         upper = skin if legs in ("skirt", "shorts") else legs_color
         low = sock or (skin if legs in ("skirt", "shorts") else legs_color)
-        leg = [at(top, 1.15, legs_color), at(top - (top - knee) * 0.3, 1.1, legs_color if legs == "shorts" else upper)]
+        leg = [at(top, 1.15, legs_color), at(top - 0.0005, 1.15, legs_color if legs == "shorts" else upper), at(top - (top - knee) * 0.3, 1.1, legs_color if legs == "shorts" else upper)]
         if legs == "shorts":
             hem = top - (top - knee) * 0.42
             leg += [at(hem, 1.12, legs_color), at(hem - 0.001, 1.0, skin)]
-        leg += [at(knee + (top - knee) * 0.12, 0.9, upper), at(knee, 0.82, upper), at(knee - (knee - ankle) * 0.1, 0.84, low),
+        leg += [at(knee + (top - knee) * 0.12, 0.9, upper), at(knee, 0.82, upper), at(knee - (knee - ankle) * 0.1, 0.84, upper),
+                at(knee - (knee - ankle) * 0.1 - 0.0005, 0.84, low),
                 at(knee - (knee - ankle) * 0.35, 0.88, low), at(knee - (knee - ankle) * 0.7, 0.68, low), at(ankle, 0.55, low)]
         _tube(mesh, leg, "y")
         sole_d, sole_h = L["leg_d"] * 1.9, L["foot"] * 0.42
@@ -352,9 +440,13 @@ def _collar_and_ribbon(mesh: Mesh, L: dict, wear: dict) -> None:
         _tube(mesh, collar, "y")
     if wear.get("ribbon"):
         z = L["torso_d"] / 2 * 0.99
-        knot = [_st((0, top - 0.032 * h, z), 0.013 * h, 0.004 * h, wear["ribbon"]), _st((0, top - 0.042 * h, z), 0.017 * h, 0.004 * h, wear["ribbon"]),
-                _st((0, top - 0.068 * h, z), 0.006 * h, 0.003 * h, wear["ribbon"])]
-        _tube(mesh, knot, "y", ring=8)
+        y = top - 0.04 * h
+        # A bow: two flat loops to the sides of a small knot. Not a tail hanging as a dark triangle.
+        for sign in (-1, 1):
+            loop = [_st((sign * 0.004 * h, y, z), 0.006 * h, 0.004 * h, wear["ribbon"]), _st((sign * 0.02 * h, y + 0.002 * h, z), 0.011 * h, 0.004 * h, wear["ribbon"]),
+                    _st((sign * 0.034 * h, y, z), 0.004 * h, 0.003 * h, wear["ribbon"])]
+            _tube(mesh, loop, "x", ring=8)
+        _tube(mesh, [_st((0, y - 0.008 * h, z), 0.006 * h, 0.004 * h, wear["ribbon"]), _st((0, y + 0.008 * h, z), 0.006 * h, 0.004 * h, wear["ribbon"])], "y", ring=8)
     if wear.get("tie"):
         z = L["torso_d"] / 2 * 1.0
         tie = [_st((0, top - 0.025 * h, z), 0.009 * h, 0.004 * h, wear["tie"]), _st((0, top - 0.08 * h, z * 1.01), 0.014 * h, 0.005 * h, wear["tie"]),
@@ -391,8 +483,13 @@ def wear_of(spec: dict, L: dict) -> dict:
     return found
 
 
-def loft_parts(spec: dict, layout: dict) -> list[tuple[Mesh, str]]:
-    """The body and the hair as two meshes: ``[(body, "body"), (hair, "hair")]``. ``spec`` is a normalized anime body."""
+# The drawn skull box of the programmatic faces (blob_face_head.SKULL): what a body made without a kit projects on its face.
+DEFAULT_FIT = [0.5, 0.458984375, 0.29296875, 0.3369140625]
+
+
+def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list | None]]:
+    """The body, the face patch and the hair: ``[(mesh, material, uvs or None)]``. ``spec`` is a normalized anime body;
+    ``fit`` is the face picture's skull box, so the face UVs and the kit agree."""
     from services.blob_hair import hair_mesh
 
     mesh = Mesh()
@@ -404,19 +501,23 @@ def loft_parts(spec: dict, layout: dict) -> list[tuple[Mesh, str]]:
         _skirt(mesh, layout, wear["legs_color"])
     _collar_and_ribbon(mesh, layout, wear)
     _head(mesh, layout, spec["colors"]["head"])
+    face, uvs = face_patch(layout, fit or DEFAULT_FIT)
     hair = hair_mesh(layout, spec["hair"])
-    return [(mesh, "body")] + ([(hair, "hair")] if hair.vertices else [])
+    parts = [(mesh, "body", None), (face, "face", uvs)]
+    if hair.vertices:
+        parts.append((hair, "hair", None))
+    return parts
 
 
 def loft_mesh(spec: dict, layout: dict) -> Mesh:
-    """Body and hair in one mesh, for callers that only count triangles."""
+    """Everything in one mesh, for callers that only count triangles."""
     whole = Mesh()
-    for part, _name in loft_parts(spec, layout):
+    for part, _name, _uvs in loft_parts(spec, layout):
         whole.triangle(part.vertices, part.normals, part.colors)
     return whole
 
 
-def loft_glb(spec: dict, layout: dict, name: str = "blob") -> bytes:
+def loft_glb(spec: dict, layout: dict, name: str = "blob", fit=None) -> bytes:
     from services.procedural_3d.compose import pack_parts
 
-    return pack_parts(name, [(part.vertices, part.normals, part.colors, material) for part, material in loft_parts(spec, layout)])
+    return pack_parts(name, [(part.vertices, part.normals, part.colors, material, uvs) for part, material, uvs in loft_parts(spec, layout, fit)])

@@ -226,4 +226,4 @@ def head_kit(look: dict[str, Any]) -> dict[str, Any]:
         placed_all[pose] = {"mouth": placed["mouth"], "eyes": (512, 512, base.CANVAS)}
     return {"traits": look, "poses": poses, "blinks": blinks, "mouths": mouths, "anchors": anchors, "layout": placed_all,
             "mouthMapping": dict(base.MAPPING), "preview": base._sheet(poses, mouths, anchors),
-            "face": {"fit": list(FIT), "taper": TAPER, "poses": list(POSES)}}
+            "face": {"fit": list(FIT), "taper": TAPER, "poses": list(POSES), "shape": "mesh", "skin": base._hex(look["skin"])}}

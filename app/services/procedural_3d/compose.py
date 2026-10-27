@@ -237,18 +237,30 @@ def pack_parts(name, parts) -> bytes:
     """One mesh with a primitive per part ``(vertices, normals, colors, material_name)``: the body and its hair."""
     blobs, accessors, views, primitives, materials = [], [], [], [], []
     offset = 0
-    for index, (vertices, normals, colors, material) in enumerate(parts):
+    for index, part in enumerate(parts):
+        vertices, normals, colors, material = part[:4]
+        uvs = part[4] if len(part) > 4 else None
         count = len(vertices)
+        first = len(accessors)
         for array in (vertices, normals, colors):
             packed = struct.pack(f"<{count * 3}f", *(v for row in array for v in row))
             views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(packed), "target": 34962})
             accessors.append({"bufferView": len(views) - 1, "componentType": 5126, "count": count, "type": "VEC3"})
             blobs.append(packed)
             offset += len(packed)
-        first = index * 3
+        attributes = {"POSITION": first, "NORMAL": first + 1, "COLOR_0": first + 2}
+        if uvs is not None:
+            if len(uvs) != count:
+                raise ValueError("uvs must give one (u, v) per vertex")
+            packed = struct.pack(f"<{count * 2}f", *(v for row in uvs for v in row))
+            views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(packed), "target": 34962})
+            accessors.append({"bufferView": len(views) - 1, "componentType": 5126, "count": count, "type": "VEC2"})
+            attributes["TEXCOORD_0"] = len(accessors) - 1
+            blobs.append(packed)
+            offset += len(packed)
         accessors[first].update(min=[min(v[i] for v in vertices) for i in range(3)], max=[max(v[i] for v in vertices) for i in range(3)])
         materials.append({"name": material, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}})
-        primitives.append({"attributes": {"POSITION": first, "NORMAL": first + 1, "COLOR_0": first + 2}, "material": index, "mode": 4})
+        primitives.append({"attributes": attributes, "material": index, "mode": 4})
     doc = {
         "asset": {"version": "2.0", "generator": "HocusPocus model3d.compose"},
         "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"name": name, "mesh": 0}],

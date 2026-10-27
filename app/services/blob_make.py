@@ -59,12 +59,12 @@ def rig_glb(source: bytes, clip_ids: list[str]) -> tuple[bytes, dict]:
         raise BlobRigError(exc.reason) from exc
 
 
-def build_body(traits: dict, clip_ids: list[str]) -> dict:
-    """Pieces, both GLBs and the humanoid sidecar. Nothing is written."""
+def build_body(traits: dict, clip_ids: list[str], face_fit=None) -> dict:
+    """Pieces, both GLBs and the humanoid sidecar. Nothing is written. ``face_fit`` is the face picture's skull box for a loft."""
     built = blob_pieces(traits)
     if built["traits"].get("mesh") == "loft":
         from services.blob_loft import loft_glb
-        glb = loft_glb(built["traits"], built.pop("layout"), "blob")
+        glb = loft_glb(built["traits"], built.pop("layout"), "blob", fit=face_fit)
     else:
         glb = compose_glb(built["pieces"], "blob")
     rigged, sidecar = rig_glb(glb, clip_ids)

@@ -13,9 +13,9 @@ from __future__ import annotations
 
 import math
 
-from services.blob_loft import Mesh, _st, _tube, _egg_radius, bezier, curve_tube
+from services.blob_loft import Mesh, _st, _tube, _egg_radius, bezier, curve_tube, skull_point, _emit
 
-HELMET = 1.07
+HELMET = 1.06
 _SAMPLES = 7
 
 
@@ -32,6 +32,7 @@ def hair_mesh(L: dict, hair: dict) -> Mesh:
 
 class _Head:
     def __init__(self, L: dict) -> None:
+        self.L = L
         self.cx, self.cy, self.cz = 0.0, L["head_y"], 0.0
         self.rx, self.ry, self.rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
         self.h = L["h"]
@@ -40,30 +41,29 @@ class _Head:
         self.back_z = -L["torso_d"] / 2
 
     def at(self, yaw: float, lat: float, out: float = HELMET):
-        """A point ``out`` times the egg radius from the centre, at yaw degrees from the face and lat degrees up."""
-        a, b = math.radians(yaw), math.radians(lat)
-        r = _egg_radius(b) * out
-        return (self.cx + self.rx * r * math.sin(a), self.cy + self.ry * math.sin(b) * out, self.cz + self.rz * r * math.cos(a))
+        """A point ``out`` times outside the skull, at yaw degrees from the face and lat degrees up."""
+        return skull_point(self.L, yaw, lat, out)
 
     def off(self, point, dx: float = 0.0, dy: float = 0.0, dz: float = 0.0):
         return (point[0] + self.rx * dx, point[1] + self.ry * dy, point[2] + self.rz * dz)
 
 
 def _helmet(mesh: Mesh, head: _Head, color: str, hairline: float) -> None:
-    """Hair round the crown and the back: full rings above the hairline, back arcs below it, just outside the face cap."""
-    rx, ry, rz = head.rx * HELMET, head.ry * HELMET, head.rz * HELMET
-    line = math.radians(hairline)
-    top, back = [], []
-    for k in range(9):
-        phi = line + (math.pi / 2 - line) * k / 8
-        r = _egg_radius(phi)
-        top.append(_st((0, head.cy + ry * math.sin(phi), -rz * 0.04), max(rx * r, 1e-4), max(rz * r, 1e-4), color))
-    for k in range(8):
-        phi = math.radians(-30) + (line - math.radians(-30)) * k / 7
-        r = _egg_radius(phi)
-        back.append(_st((0, head.cy + ry * math.sin(phi), -rz * 0.04), rx * r, rz * r, color))
-    _tube(mesh, back, "y", arc=(160.0, 380.0), caps=False)
-    _tube(mesh, top, "y", caps=True)
+    """Hair round the crown and the back, on the skull's own surface: full rings above the hairline, back arcs below it."""
+    from services.procedural_3d.compose import linear_color
+    full = [j * 360.0 / 24 for j in range(24)]
+    back = [70 + 220.0 * j / 24 for j in range(25)]
+    for yaws, lats, closed in ((back, [-30 + (hairline + 30) * k / 7 for k in range(8)], False),
+                               (full, [hairline + (90 - hairline) * k / 8 for k in range(9)], True)):
+        grid, colors = [], []
+        for lat in lats:
+            ring = [skull_point(head.L, yaw, lat, HELMET) for yaw in yaws]
+            if lat >= 89.9:
+                ring = [(0.0, head.cy + head.ry * HELMET, 0.0)] * len(ring)
+            grid.append(ring)
+            colors.append([linear_color(color)] * len(ring))
+        centers = [(0.0, head.cy + head.ry * math.sin(math.radians(lat)), 0.0) for lat in lats]
+        _emit(mesh, grid, colors, centers, closed, None)
 
 
 def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: float = 0.15, flat: float = 0.3, ring: int = 8) -> None:

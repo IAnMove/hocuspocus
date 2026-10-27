@@ -512,7 +512,7 @@ def test_a_lofted_anime_body_rigs_with_its_head_in_the_egg_and_leaves_the_defaul
     lofted = blob_pieces({**girl, "mesh": "loft"})
     assert lofted["traits"]["mesh"] == "loft" and lofted["faceAnchor"] == plain["faceAnchor"]
     mesh = loft_mesh(lofted["traits"], lofted["layout"])
-    assert 1500 <= len(mesh.vertices) // 3 <= 6000 and len(mesh.normals) == len(mesh.vertices) == len(mesh.colors)
+    assert 3000 <= len(mesh.vertices) // 3 <= 12000 and len(mesh.normals) == len(mesh.vertices) == len(mesh.colors)
     assert egg_scale(0.5) == 1.0 and abs(egg_scale(-1.0) - 0.65) < 1e-9
     with pytest.raises(BlobTraitsError) as refused:
         blob_pieces({**PRESETS["blob_scout"], "mesh": "loft"})

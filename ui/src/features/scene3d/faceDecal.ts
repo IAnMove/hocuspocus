@@ -11,6 +11,7 @@ import {
   Matrix4,
   Mesh,
   MeshBasicMaterial,
+  MeshStandardMaterial,
   PlaneGeometry,
   Quaternion,
   SphereGeometry,
@@ -71,8 +72,11 @@ export type Scene3DFaceDecal = {
   size?: number
   /** Degrees of head the face covers, horizontal then vertical (default 80 x 80). */
   span?: [number, number]
-  /** `plane`: a flat picture on the head (a painted head with its hair) instead of the cap. Default `cap`. */
-  shape?: 'cap' | 'plane'
+  /** `plane`: a flat picture on the head (a painted head with its hair) instead of the cap; `mesh`: the picture is painted
+  into the model's own `face` material (a lofted head carries that primitive with UVs), lit like the body. Default `cap`. */
+  shape?: 'cap' | 'plane' | 'mesh'
+  /** `mesh` only: the skin colour filled under the drawing (the face primitive is opaque). */
+  skin?: string
   /** The plane's width, height and lift in head radii (default `FACE_PLANE_DEFAULT`). */
   plane?: [number, number, number]
   /** Jaw of the egg head the cap hugs: how much the radius narrows toward the chin (0 is a sphere, 0.35 the lofted anime head). */
@@ -219,6 +223,19 @@ export function boneMatches(name: string, wanted: string): boolean {
   return before === ':' || before === '_' || (before === before.toLowerCase() && capital)
 }
 
+/** The material named `face` on the model (a lofted head's own face primitive), if any. */
+export function findFaceMaterial(root: Object3D): MeshStandardMaterial | undefined {
+  let found: MeshStandardMaterial | undefined
+  root.traverse(object => {
+    if (found || !(object as Mesh).isMesh) return
+    const material = (object as Mesh).material
+    for (const item of Array.isArray(material) ? material : [material]) {
+      if (item && item.name === 'face') { found = item as MeshStandardMaterial; return }
+    }
+  })
+  return found
+}
+
 export function findBone(root: Object3D, wanted: string): Bone | undefined {
   const bones: Bone[] = []
   root.traverse(object => { if ((object as Bone).isBone) bones.push(object as Bone) })
@@ -333,15 +350,17 @@ export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   const radii = finiteTriple(value.radii, true)
   const size = typeof value.size === 'number' && value.size >= 1 && value.size <= 1.2 ? Math.round(value.size * 1000) / 1000 : undefined
   const span = spanOf(value.span)
-  const shape = value.shape === 'plane' ? 'plane' : undefined
-  const plane = shape ? planeOf(value.plane) ?? [...FACE_PLANE_DEFAULT] as [number, number, number] : undefined
+  const shape = value.shape === 'plane' ? 'plane' : value.shape === 'mesh' ? 'mesh' : undefined
+  const plane = shape === 'plane' ? planeOf(value.plane) ?? [...FACE_PLANE_DEFAULT] as [number, number, number] : undefined
+  const skin = typeof value.skin === 'string' && /^#[0-9a-fA-F]{6}$/.test(value.skin) ? value.skin : undefined
   const taper = typeof value.taper === 'number' && Number.isFinite(value.taper) && value.taper > 0 && value.taper <= 0.6 ? Math.round(value.taper * 1000) / 1000 : undefined
   const fit = fitOf(value.fit)
   const expressions = expressionsOf(value.expressions)
   const art = artOf(value.art)
   return {
     kitId, bone, ...(pose ? { pose } : {}), ...(center ? { center } : {}), ...(radii ? { radii } : {}),
-    ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(shape ? { shape, plane } : {}),
+    ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(shape === 'plane' ? { shape, plane } : shape ? { shape } : {}),
+    ...(skin ? { skin } : {}),
     ...(taper !== undefined ? { taper } : {}), ...(fit ? { fit } : {}),
     ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
   }
@@ -360,6 +379,7 @@ export class FaceDecalRuntime {
   ready = false
   error?: Error
   private mesh?: Mesh
+  private faceMaterial?: MeshStandardMaterial
   private spanKey = ''
   private texture?: CanvasTexture
   private context?: CanvasRenderingContext2D
@@ -373,6 +393,16 @@ export class FaceDecalRuntime {
 
   sync(root: Object3D, decal: Scene3DFaceDecal | undefined, seconds: number) {
     if (!decal) { this.error = undefined; this.detach(); return }
+    if (decal.shape === 'mesh') {
+      if (!decal.art) { this.error = new Error('A face needs art.'); this.ready = false; return }
+      const face = findFaceMaterial(root)
+      if (!face) { this.error = new Error('No face material on the model to paint the face into.'); this.ready = false; return }
+      this.error = undefined
+      this.mountMaterial(face)
+      this.watch(decal)
+      this.paint(decal, seconds)
+      return
+    }
     if (!decal.art || !decal.center || !decal.radii) {
       this.error = new Error('A 2D face needs a center, radii and art.')
       this.ready = false
@@ -410,6 +440,26 @@ export class FaceDecalRuntime {
     if (plane) placeFacePlane(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET, decal.plane ?? FACE_PLANE_DEFAULT)
     else placeFaceCap(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET)
     bone.add(this.mesh)
+  }
+
+  /** The picture becomes the model's own face material's map: lit by the scene, outlined with the head. */
+  private mountMaterial(face: MeshStandardMaterial) {
+    if (!this.texture) {
+      const canvas = document.createElement('canvas')
+      canvas.width = CANVAS
+      canvas.height = CANVAS
+      const context = canvas.getContext('2d')
+      if (!context) { this.error = new Error('The 2D face canvas is unavailable.'); return }
+      this.context = context
+      this.texture = new CanvasTexture(canvas)
+      this.texture.colorSpace = SRGBColorSpace
+    }
+    if (this.faceMaterial !== face) {
+      this.faceMaterial = face
+      face.map = this.texture
+      face.transparent = false
+      face.needsUpdate = true
+    }
   }
 
   private createMesh(decal: Scene3DFaceDecal): Mesh | undefined {
@@ -472,6 +522,15 @@ export class FaceDecalRuntime {
     if (!painter || !this.context || !this.texture || !decal.art) return
     const live = cutoutOf(decal.art, pose)
     painter.paint(this.context, live ? { talk: live } : undefined, seconds)
+    if (decal.shape === 'mesh') {
+      // the face primitive is opaque: the skin goes under the drawing
+      const context = this.context
+      context.save()
+      context.globalCompositeOperation = 'destination-over'
+      context.fillStyle = decal.skin ?? '#f3cba4'
+      context.fillRect(0, 0, CANVAS, CANVAS)
+      context.restore()
+    }
     this.texture.needsUpdate = true
   }
 
@@ -479,9 +538,15 @@ export class FaceDecalRuntime {
     this.ready = false
     this.placeKey = ''
     this.mesh?.removeFromParent()
+    if (this.faceMaterial) {
+      this.faceMaterial.map = null
+      this.faceMaterial.needsUpdate = true
+      this.faceMaterial = undefined
+    }
   }
 
   dispose() {
+    this.detach()
     this.abort?.abort()
     for (const painter of this.painters.values()) painter.dispose()
     this.painters.clear()

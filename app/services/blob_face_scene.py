@@ -120,12 +120,20 @@ def _span(changes: dict, kept: dict, kit: dict) -> list[float] | None:
 PLANE_DEFAULT = [3.3, 3.3, -0.5]
 
 
-def _plane(changes: dict, kept: dict) -> dict[str, Any]:
-    """``shape: "plane"`` hangs a flat picture (a painted head with its hair) on the Head bone instead of the cap.
-    ``plane`` is [width, height, lift] in head radii. Nothing is stored for the default cap."""
-    shape = changes.get("shape", kept.get("shape") or ("plane" if "plane" in changes else None))
-    if shape not in (None, "cap", "plane"):
-        raise World3DSceneError("invalid_face", "shape is cap or plane")
+def _plane(changes: dict, kept: dict, kit: dict | None = None) -> dict[str, Any]:
+    """``shape: "plane"`` hangs a flat picture (a painted head with its hair) on the Head bone instead of the cap;
+    ``shape: "mesh"`` paints the picture into the model's own ``face`` material (a lofted head), with ``skin`` under it.
+    ``plane`` is [width, height, lift] in head radii. A kit drawn for a head (``anime_head``) defaults to its own shape.
+    Nothing is stored for the default cap."""
+    drawn = _kit_face(kit or {})
+    shape = changes.get("shape", kept.get("shape") or ("plane" if "plane" in changes else drawn.get("shape")))
+    if shape not in (None, "cap", "plane", "mesh"):
+        raise World3DSceneError("invalid_face", "shape is cap, plane or mesh")
+    if shape == "mesh":
+        skin = changes.get("skin", kept.get("skin", drawn.get("skin")))
+        if skin is not None and not (isinstance(skin, str) and len(skin) == 7 and skin[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in skin[1:])):
+            raise World3DSceneError("invalid_face", "skin is #rrggbb, the colour under the drawing")
+        return {"shape": "mesh", **({"skin": skin.upper()} if skin else {})}
     if shape != "plane":
         return {}
     raw = changes.get("plane", kept.get("plane"))
@@ -230,7 +238,7 @@ def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_
     span = _span(changes, kept, kit)
     slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
                          "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
-                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {}), **_plane(changes, kept),
+                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {}), **_plane(changes, kept, kit),
                          **_cap_fields(changes, kept, kit)}
     character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
     slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
