@@ -190,7 +190,6 @@
   "src/lib/minimaxMusicCatalog.ts": 3,
   "src/lib/productionProfileCatalog.ts": 20,
   "src/lib/scene2d/normalize.ts": 2,
-  "src/lib/sceneNarrative.ts": 123,
   "src/lib/sceneRecipe.ts": 8,
   "src/stores/modelCatalog.ts": 3,
   "src/stores/modelsSlice.ts": 2

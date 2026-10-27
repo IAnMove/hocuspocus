@@ -1255,6 +1255,32 @@
     "queueScopeAll": "todas"
   },
   "untitledScene": "Escena sin título",
+  "narrativeSlots": {
+    "background": "Fondo",
+    "character": "Personaje",
+    "graphic-background": "Fondo gráfico",
+    "cutout-character": "Personaje recortado",
+    "focal-character": "Personaje enfocado",
+    "foreground-character": "Personaje de primer término",
+    "head-character-cutout": "Cabeza / personaje recortado",
+    "open-mouth-overlay": "Capa de boca abierta",
+    "primary-character": "Personaje principal",
+    "second-character": "Segundo personaje",
+    "looked-at-object": "Objeto mirado",
+    "foreground-shape-or-character": "Forma o personaje de primer término",
+    "closed-mouth-overlay": "Capa de boca cerrada",
+    "blink-eye-overlay": "Capa de parpadeo",
+    "portal-or-prop": "Portal o accesorio",
+    "object": "Objeto",
+    "detail-object": "Objeto de detalle",
+    "environment": "Entorno",
+    "optional-landmark": "Hito opcional",
+    "character-or-object": "Personaje u objeto",
+    "optional-foreground": "Primer término opcional",
+    "running-pose-character": "Personaje en pose de carrera",
+    "seamless-background": "Fondo sin costuras",
+    "optional-foreground-strip": "Tira de primer término opcional"
+  },
   "narrativeTemplates": {
     "inner-thought": {
       "title": "Pensamiento interior",

@@ -1255,6 +1255,32 @@
     "queueScopeAll": "all"
   },
   "untitledScene": "Untitled scene",
+  "narrativeSlots": {
+    "background": "Background",
+    "character": "Character",
+    "graphic-background": "Graphic background",
+    "cutout-character": "Cutout character",
+    "focal-character": "Focal character",
+    "foreground-character": "Foreground character",
+    "head-character-cutout": "Head / character cutout",
+    "open-mouth-overlay": "Open-mouth overlay",
+    "primary-character": "Primary character",
+    "second-character": "Second character",
+    "looked-at-object": "Looked-at object",
+    "foreground-shape-or-character": "Foreground shape or character",
+    "closed-mouth-overlay": "Closed-mouth overlay",
+    "blink-eye-overlay": "Blink-eye overlay",
+    "portal-or-prop": "Portal or prop",
+    "object": "Object",
+    "detail-object": "Detail object",
+    "environment": "Environment",
+    "optional-landmark": "Optional landmark",
+    "character-or-object": "Character or object",
+    "optional-foreground": "Optional foreground",
+    "running-pose-character": "Running-pose character",
+    "seamless-background": "Seamless background",
+    "optional-foreground-strip": "Optional foreground strip"
+  },
   "narrativeTemplates": {
     "inner-thought": {
       "title": "Inner thought",

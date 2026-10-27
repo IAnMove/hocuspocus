@@ -314,6 +314,7 @@ function seekAnimatorReview(
 
 export function SceneAnimatorPanel() {
   const { t } = useUiTranslation('scene3d')
+  const { t: studioT } = useUiTranslation('studio')
   const { t: commonT } = useUiTranslation('common')
   const outputs = useStore(s => s.outputs)
   const loadOutputs = useStore(s => s.loadOutputs)
@@ -2036,7 +2037,7 @@ export function SceneAnimatorPanel() {
     const prop = asset(narrativeProp)
     const foreground = asset(narrativeForeground)
     const missing = narrativeTemplate.assetSlots.find(slot => slot.required && !({ hero, plate, prop, foreground }[slot.id]))
-    if (missing) { setMessage(t('animator.chooseBeforeMount', { label: missing.label })); return }
+    if (missing) { setMessage(t('animator.chooseBeforeMount', { label: studioT(missing.labelKey as ParseKeys<'studio'>) })); return }
     const asInput = (item: typeof hero) => item ? {
       source: item.url,
       type: item.type === 'model3d' ? 'model3d' as const : item.type === 'video' ? 'video' as const : 'image' as const,
