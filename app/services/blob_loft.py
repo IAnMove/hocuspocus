@@ -341,7 +341,7 @@ def neck_width(L: dict) -> float:
 def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     top, bottom = wear["top"], wear["bottom"]
     h, w, d = L["h"], L["torso_w"], L["torso_d"]
-    hip_w = L["waist_w"] * (1.16 if wear["legs"] == "skirt" else 1.06)
+    hip_w = max(L["waist_w"] * (1.16 if wear["legs"] == "skirt" else 1.06), 2 * L["leg_x"] + 1.2 * L["leg_d"])   # the pelvis covers the thighs' tops
     neck_w = neck_width(L)
     chest = L["torso_bottom"] + L["torso_h"] * 0.64
     closing = shoulder_top(L)
@@ -408,7 +408,7 @@ def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
 def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     skin, shoes = spec["colors"]["head"], wear["shoes"]
     r, x = L["leg_d"] / 2, L["leg_x"]
-    top, knee, ankle = L["leg_top"] + 0.06 * L["h"], L["knee"], L["leg_bottom"] + L["foot"] * 0.55
+    top, knee, ankle = L["leg_top"] + 0.02 * L["h"], L["knee"], L["leg_bottom"] + L["foot"] * 0.55
     legs, legs_color, sock = wear["legs"], wear["legs_color"], wear.get("socks")
     for sign in (-1, 1):
         def at(y, k, color):
