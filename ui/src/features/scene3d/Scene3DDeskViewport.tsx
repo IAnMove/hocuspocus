@@ -54,13 +54,15 @@ export function Scene3DDeskViewport({ model, stage }: {
           <SceneFxOverlay cues={model.sceneDoc.sfx} soundCues={[...(model.sceneDoc.sfx ?? []), ...worldSfxAudioCues(model.sceneDoc.worldSfx)]} seconds={model.seconds} width={model.sceneDoc.width} height={model.sceneDoc.height} duration={model.sceneDoc.duration} playing={model.playing} speed={model.speed} getSource={() => stage.current?.canvas() ?? null} />
           <KineticTextOverlay cues={model.sceneDoc.texts} seconds={model.seconds} width={model.sceneDoc.width} height={model.sceneDoc.height} />
           <LipsLayer model={model} pickKey={pickKey} stage={stage} />
-          {model.sceneDoc.clipNumber && <div className="pointer-events-none absolute right-3 top-3 z-[901] rounded bg-black/80 px-3 py-2 font-mono text-sm text-cyan-50">CLIP {String(model.sceneDoc.clipNumber).padStart(2, '0')}</div>}
-          <div className="pointer-events-none absolute left-3 top-3 rounded-lg bg-black/75 px-3 py-2 text-xs text-cyan-200">
-            {t('stage.badge')} · {editorT(`template.${model.sceneDoc.templateId}.title`)}
-            <span className="mt-1 block text-[10px] text-amber-100/90">{t('stage.previewQuality')}</span>
-          </div>
+          {model.sceneDoc.clipNumber && <div className="pointer-events-none absolute right-3 top-3 z-10 rounded bg-black/80 px-3 py-2 font-mono text-sm text-cyan-50">CLIP {String(model.sceneDoc.clipNumber).padStart(2, '0')}</div>}
         </Scene3DInteraction>
-        <Scene3DViewportTools mode={model.transformMode} disabled={model.editingLocked} onMode={model.setTransformMode} />
+        <Scene3DViewportTools
+          mode={model.transformMode}
+          disabled={model.editingLocked}
+          onMode={model.setTransformMode}
+          caption={`${t('stage.badge')} · ${editorT(`template.${model.sceneDoc.templateId}.title`)}`}
+          captionNote={t('stage.previewQuality')}
+        />
         <Scene3DEditCameraBar model={model} />
       </Scene3DPreview>
     </div>

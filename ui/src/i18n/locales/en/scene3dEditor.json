@@ -376,7 +376,7 @@
     "splat": "Gaussian splat"
   },
   "translate": "Move",
-  "rotate": "Rotate Y",
+  "rotate": "Rotate",
   "scale": "Scale",
   "size": "Size",
   "smaller": "Smaller",

@@ -201,9 +201,15 @@ test('the viewport toolbar has one Move button and a Select tool', async () => {
   const { Scene3DViewportTools } = await import('../src/features/scene3d/Scene3DViewportTools')
   const seen: string[] = []
   try {
-    render(<Scene3DViewportTools mode="translate" disabled={false} onMode={mode => seen.push(mode)} />)
+    render(<Scene3DViewportTools mode="translate" disabled={false} onMode={mode => seen.push(mode)} caption="3D stage · Shot" captionNote="Editor preview" />)
     const move = screen.getByRole('button', { name: 'Move' })
     assert.equal(move.getAttribute('aria-pressed'), 'true')
+    assert.equal(screen.getByRole('button', { name: 'Rotate', exact: true }).textContent, 'Rotate')
+    const bar = screen.getByTestId('scene3d-viewport-tools')
+    assert.match(bar.className, /\bz-10\b/)
+    assert.equal(/z-\[930\]/.test(bar.className), false)
+    assert.equal(bar.textContent?.includes('3D stage · Shot'), true)
+    assert.equal(bar.textContent?.includes('Editor preview'), true)
     fireEvent.click(screen.getByRole('button', { name: 'Select' }))
     assert.deepEqual(seen, ['select'])
   } finally {

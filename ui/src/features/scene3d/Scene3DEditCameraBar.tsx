@@ -18,7 +18,7 @@ export function Scene3DEditCameraBar({ model }: { model: Scene3DDeskModel }) {
     return () => window.removeEventListener('keydown', onKey)
   }, [model])
   return (
-    <div className="pointer-events-none absolute bottom-2 left-2 z-[930] flex flex-wrap gap-1" data-testid="scene3d-edit-camera">
+    <div className="pointer-events-none absolute bottom-2 left-2 z-10 flex flex-wrap gap-1" data-testid="scene3d-edit-camera">
       <button
         type="button"
         aria-pressed={model.freeView}

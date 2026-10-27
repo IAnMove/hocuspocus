@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Maximize2, Minimize2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { fittedPicture } from './previewFit'
 
 /** Fit the picture inside the editor, independently of the output resolution. */
 export function Scene3DPreview({ width, height, fill = false, children }: { width: number; height: number; fill?: boolean; children: ReactNode }) {
@@ -19,15 +20,13 @@ export function Scene3DPreview({ width, height, fill = false, children }: { widt
   }, [])
   useEffect(() => {
     const node = frame.current
-    if (!node) return
-    const resize = () => {
-      const rect = node.getBoundingClientRect()
-      const ratio = Math.max(1, width) / Math.max(1, height)
-      const w = Math.min(rect.width, rect.height * ratio)
-      setSize({ width: w, height: w / ratio })
-    }
-    const observer = new ResizeObserver(resize)
-    observer.observe(node); resize()
+    if (!node) return undefined
+    const observer = new ResizeObserver(entries => {
+      const rect = entries[0]?.contentRect
+      if (!rect) return
+      setSize(fittedPicture(rect.width, rect.height, width, height))
+    })
+    observer.observe(node)
     return () => observer.disconnect()
   }, [width, height])
   const toggle = async () => {
@@ -37,9 +36,9 @@ export function Scene3DPreview({ width, height, fill = false, children }: { widt
   }
   const full = expanded || fallback
   return <div ref={host} data-testid="scene3d-preview" className={`flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-black ${fill ? 'h-full min-h-0' : ''} ${fallback ? 'fixed inset-0 z-[1000]' : ''}`} style={full ? { height: '100dvh', width: '100%' } : undefined}>
-    <div className="flex shrink-0 items-center justify-between gap-3 bg-bg-secondary px-3 py-2 text-sm text-text-primary">
+    <div className="flex shrink-0 items-center justify-between gap-2 bg-bg-secondary px-2 py-1 text-xs text-text-primary">
       <span>{t('preview.title')} · {width} × {height}</span>
-      <button type="button" onClick={() => void toggle()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-border px-3" aria-pressed={full}>
+      <button type="button" onClick={() => void toggle()} className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2" aria-pressed={full}>
         {full ? <Minimize2 size={18} /> : <Maximize2 size={18} />}{full ? t('preview.exit') : t('preview.expand')}
       </button>
     </div>
