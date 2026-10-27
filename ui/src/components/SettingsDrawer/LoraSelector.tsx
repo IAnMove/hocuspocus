@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import { Search, X, Loader2, Globe, Sparkles, BookOpen, Info, ArrowUpCircle, RefreshCw, ArrowDownAZ, Clock } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
+import type { TFunction } from 'i18next'
 import { sfxModelTypes } from '../../stores/modelCatalog'
 import { generateLoraGuide, fetchLoraGuide, fetchLoraDetails, checkLoraUpdates } from '../../api/client'
 import { formatAge } from '../../lib/format'
@@ -59,11 +60,12 @@ export type LoraDates = { released?: string | null; downloaded?: string | null }
  *  (answers "how new is this LoRA?"), falls back to the download/mtime date
  *  for hand-installed files. Full dates live in the tooltip. */
 export function LoraAgeChip({ released, downloaded }: LoraDates) {
+  const { t } = useUiTranslation('settings')
   const age = formatAge(released || downloaded)
   if (!age) return null
   const tip = [
-    released ? `Released ${new Date(released).toLocaleDateString()}` : null,
-    downloaded ? `Downloaded ${new Date(downloaded).toLocaleDateString()}` : null,
+    released ? t('lora.released', { date: new Date(released).toLocaleDateString() }) : null,
+    downloaded ? t('lora.downloaded', { date: new Date(downloaded).toLocaleDateString() }) : null,
   ].filter(Boolean).join(' — ')
   return (
     <span className="text-[9px] text-text-muted shrink-0 tabular-nums" title={tip}>
@@ -75,6 +77,17 @@ export function LoraAgeChip({ released, downloaded }: LoraDates) {
 // Persistence and cross-picker sync live in the store (loraPickerSort /
 // setLoraPickerSort) — per-component state would desync simultaneously
 // mounted pickers, e.g. Director's Image + Video accordions.
+function nsfwFilterTitle(showNsfw: boolean, hidden: number, t: TFunction<'settings'>) {
+  if (showNsfw) return t('lora.nsfwShowAll')
+  if (hidden > 0) return t('lora.nsfwHidden', { count: hidden })
+  return t('lora.nsfwCheck')
+}
+
+function nsfwEmptyLabel(hidden: number, search: string, t: TFunction<'settings'>) {
+  if (hidden > 0 && !search) return t('lora.nsfwHiddenList', { count: hidden })
+  return t('lora.noMatches')
+}
+
 export type LoraPickerSort = 'name' | 'newest'
 
 /** Order picker rows. 'name' keeps the backend's alphabetical order;
@@ -383,7 +396,7 @@ export function LoraSelector() {
         {compatibilityNotice}
         <div className="text-xs text-text-muted bg-bg-tertiary border border-border rounded-lg px-3 py-4 text-center flex items-center justify-center gap-2">
           <Loader2 size={12} className="animate-spin" />
-          Loading LoRAs...
+          {t('lora.loading')}
         </div>
       </div>
     )
@@ -395,7 +408,7 @@ export function LoraSelector() {
         {loraHeader}
         {compatibilityNotice}
         <div className="text-xs text-text-muted bg-bg-tertiary border border-border rounded-lg px-3 py-4 text-center">
-          No LoRAs found for this model
+          {t('lora.noneForModel')}
         </div>
       </div>
     )
@@ -414,7 +427,7 @@ export function LoraSelector() {
             type="text"
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search LoRAs..."
+            placeholder={t('lora.search')}
             className="w-full bg-bg-tertiary border border-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
           />
         </div>
@@ -440,7 +453,7 @@ export function LoraSelector() {
             updatableOnly ? 'text-indicator-warning' : updatableCount > 0 ? 'text-text-muted' : 'text-text-muted'
           }`}>
             <ArrowUpCircle size={10} />
-            Updates
+            {t('lora.updates')}
           </span>
         </label>
         {/* NSFW filter checkbox is only rendered when the user has
@@ -451,11 +464,7 @@ export function LoraSelector() {
         {nsfwEnabled && (
         <label
           className="flex items-center gap-1 cursor-pointer shrink-0 select-none"
-          title={showNsfw
-            ? 'Showing all LoRAs (including NSFW). Uncheck to hide NSFW.'
-            : hiddenByNsfw > 0
-              ? `${hiddenByNsfw} NSFW LoRA${hiddenByNsfw === 1 ? '' : 's'} hidden — check to show.`
-              : 'Check to include NSFW LoRAs'}
+          title={nsfwFilterTitle(showNsfw, hiddenByNsfw, t)}
         >
           <input
             type="checkbox"
@@ -464,7 +473,7 @@ export function LoraSelector() {
             className="w-3 h-3 rounded border-border accent-red-500"
           />
           <span className={`text-[10px] uppercase tracking-wider ${showNsfw ? 'text-red-400' : 'text-text-muted'}`}>
-            NSFW
+            {t('lora.nsfw')}
           </span>
         </label>
         )}
@@ -512,7 +521,7 @@ export function LoraSelector() {
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                     loraWeightRecs[filename].source === 'civitai' ? 'bg-indicator-success' : 'bg-indicator-warning'
                   }`}
-                  title={loraWeightRecs[filename].source === 'civitai' ? 'CivitAI recommended settings' : 'Default settings'}
+                  title={loraWeightRecs[filename].source === 'civitai' ? t('lora.civitaiSettings') : t('lora.defaultSettings')}
                 />
               )}
               {/* Update-available badge — only when CivitAI reports a newer
@@ -523,7 +532,7 @@ export function LoraSelector() {
                 <ArrowUpCircle
                   size={11}
                   className="text-indicator-warning shrink-0"
-                  aria-label="Update available"
+                  aria-label={t('lora.updateAvailable')}
                 />
               )}
             </button>
@@ -531,9 +540,7 @@ export function LoraSelector() {
         })}
         {filtered.length === 0 && (
           <div className="px-3 py-2 text-xs text-text-muted text-center">
-            {hiddenByNsfw > 0 && !search
-              ? `${hiddenByNsfw} NSFW LoRA${hiddenByNsfw === 1 ? '' : 's'} hidden — check NSFW to show`
-              : 'No matches'}
+            {nsfwEmptyLabel(hiddenByNsfw, search, t)}
           </div>
         )}
       </div>
@@ -543,13 +550,13 @@ export function LoraSelector() {
         <div className="mt-3 space-y-2">
           <div className="flex items-center justify-between">
             <div className="text-[10px] text-text-muted uppercase tracking-wider">
-              Selected ({activatedLoras.length})
+              {t('lora.selectedCount', { count: activatedLoras.length })}
             </div>
             <button
               onClick={() => { for (const l of [...activatedLoras]) toggleLora(l) }}
               className="text-[10px] text-text-muted hover:text-red-400 transition-colors"
             >
-              Clear all
+              {t('lora.clearAll')}
             </button>
           </div>
           {activatedLoras.map(filename => {
@@ -570,13 +577,13 @@ export function LoraSelector() {
                       <ArrowUpCircle
                         size={11}
                         className="text-indicator-warning shrink-0"
-                        aria-label="Update available"
+                        aria-label={t('lora.updateAvailable')}
                       />
                     )}
                   </span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {guideStatus[filename] === 'exists' || guideStatus[filename] === 'done' ? (
-                      <span className="p-0.5 text-indicator-success" title="LoRA guide available">
+                      <span className="p-0.5 text-indicator-success" title={t('lora.guideAvailable')}>
                         <BookOpen size={11} />
                       </span>
                     ) : guideStatus[filename] === 'generating' ? (
@@ -632,14 +639,14 @@ export function LoraSelector() {
                   <div key={i} className="flex items-center gap-2">
                     {phases > 1 && (
                       <span className="text-[10px] text-text-muted w-12 shrink-0" title={phaseRec?.label || ''}>
-                        Phase {i + 1}
+                        {t('lora.phase', { n: i + 1 })}
                       </span>
                     )}
                     <div className="flex-1 relative">
                       <div
                         className={`absolute top-1/2 -translate-y-1/2 h-2 rounded-full ${zoneColor} pointer-events-none`}
                         style={{ left: `${zoneLeft}%`, width: `${zoneWidth}%` }}
-                        title={`${isCivitai ? 'CivitAI' : 'Default'}: ${recMin}-${recMax} (${recDefault})`}
+                        title={t(isCivitai ? 'lora.zoneCivitai' : 'lora.zoneDefault', { min: recMin, max: recMax, fallback: recDefault })}
                       />
                       <input
                         type="range"

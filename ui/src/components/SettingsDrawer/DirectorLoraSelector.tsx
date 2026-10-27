@@ -20,6 +20,7 @@ function serializeMultipliers(loras: string[], weights: Record<string, number[]>
  * Compact preset picker for Director mode LoRA sections.
  */
 function DirectorPresetPicker({ mode, modelType }: { mode: 'image' | 'video'; modelType: string }) {
+  const { t } = useUiTranslation('settings')
   const presets = useStore(s => s.presets)
   const loadPresets = useStore(s => s.loadPresets)
   const directorSetLora = useStore(s => s.directorSetLora)
@@ -43,14 +44,17 @@ function DirectorPresetPicker({ mode, modelType }: { mode: 'image' | 'video'; mo
 
   return (
     <div className="mb-2">
-      <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">Presets</label>
+      <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1 block">{t('lora.presets')}</label>
       <div className="flex flex-wrap gap-1">
         {modePresets.map(p => (
           <button
             key={p.id}
             onClick={() => applyPreset(p)}
             className="flex items-center gap-1 px-2 py-1 rounded text-[10px] border border-border text-text-secondary hover:bg-bg-hover hover:text-text-primary hover:border-accent-blue transition-colors"
-            title={`${p.activated_loras.length} LoRA(s): ${p.activated_loras.map(l => l.replace(/\.(safetensors|sft)$/i, '')).join(', ')}`}
+            title={t('lora.presetTitle', {
+              count: p.activated_loras.length,
+              names: p.activated_loras.map(l => l.replace(/\.(safetensors|sft)$/i, '')).join(', '),
+            })}
           >
             <FolderOpen size={9} className="shrink-0" />
             <span className="truncate max-w-[100px]">{p.name}</span>
@@ -315,7 +319,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
           type="text"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search LoRAs..."
+          placeholder={t('lora.search')}
           className="w-full bg-bg-tertiary border border-border rounded-lg pl-7 pr-3 py-1.5 text-xs text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
         />
       </div>
@@ -369,15 +373,15 @@ export function DirectorLoraSelector({ mode, modelType }: {
                   className={`w-1.5 h-1.5 rounded-full shrink-0 ${
                     loraWeightRecs[filename].source === 'civitai' ? 'bg-indicator-success' : 'bg-indicator-warning'
                   }`}
-                  title={loraWeightRecs[filename].source === 'civitai' ? 'CivitAI recommended settings' : 'Default settings'}
+                  title={loraWeightRecs[filename].source === 'civitai' ? t('lora.civitaiSettings') : t('lora.defaultSettings')}
                 />
               )}
               {isActive && phases === 1 && (
                 <label
                   className="flex items-center gap-1 shrink-0 text-[9px] text-text-muted"
-                  title="LoRA strength"
+                  title={t('lora.strengthTitle')}
                 >
-                  <span>Strength</span>
+                  <span>{t('lora.strength')}</span>
                   <input
                     type="number"
                     min={0}
@@ -389,20 +393,20 @@ export function DirectorLoraSelector({ mode, modelType }: {
                       if (Number.isFinite(value)) updateWeight(filename, 0, value)
                     }}
                     className="w-12 rounded border border-border bg-bg-secondary px-1 py-0.5 text-right text-[10px] tabular-nums text-text-primary focus:border-accent-blue focus:outline-none"
-                    aria-label={`${displayName(filename)} LoRA strength`}
+                    aria-label={t('lora.strengthOf', { name: displayName(filename) })}
                   />
                 </label>
               )}
               {isActive && phases > 1 && (
-                <span className="shrink-0 text-[9px] text-text-muted" title="Adjust each phase below">
-                  {phases} phases
+                <span className="shrink-0 text-[9px] text-text-muted" title={t('lora.adjustPhases')}>
+                  {t('lora.phaseCount', { count: phases })}
                 </span>
               )}
             </div>
           )
         })}
         {filtered.length === 0 && (
-          <div className="px-3 py-2 text-xs text-text-muted text-center">No matches</div>
+          <div className="px-3 py-2 text-xs text-text-muted text-center">{t('lora.noMatches')}</div>
         )}
       </div>
 
@@ -411,13 +415,13 @@ export function DirectorLoraSelector({ mode, modelType }: {
         <div className="mt-2 space-y-1.5">
           <div className="flex items-center justify-between">
             <div className="text-[10px] text-text-muted uppercase tracking-wider">
-              LoRA strength ({activatedLoras.length})
+              {t('lora.strengthCount', { count: activatedLoras.length })}
             </div>
             <button
               onClick={clearAll}
               className="text-[10px] text-text-muted hover:text-red-400 transition-colors"
             >
-              Clear all
+              {t('lora.clearAll')}
             </button>
           </div>
           {activatedLoras.map(filename => {
@@ -430,7 +434,7 @@ export function DirectorLoraSelector({ mode, modelType }: {
                   </span>
                   <div className="flex items-center gap-0.5 shrink-0">
                     {guideStatus[filename] === 'exists' || guideStatus[filename] === 'done' ? (
-                      <span className="p-0.5 text-indicator-success" title="LoRA guide available">
+                      <span className="p-0.5 text-indicator-success" title={t('lora.guideAvailable')}>
                         <BookOpen size={11} />
                       </span>
                     ) : guideStatus[filename] === 'generating' ? (
@@ -479,13 +483,13 @@ export function DirectorLoraSelector({ mode, modelType }: {
                         className="text-[10px] text-text-muted w-12 shrink-0"
                         title={phaseRec?.label || ''}
                       >
-                        {phases > 1 ? `Phase ${i + 1}` : 'Strength'}
+                        {phases > 1 ? t('lora.phase', { n: i + 1 }) : t('lora.strength')}
                       </span>
                       <div className="flex-1 relative">
                         <div
                           className={`absolute top-1/2 -translate-y-1/2 h-2 rounded-full ${zoneColor} pointer-events-none`}
                           style={{ left: `${zoneLeft}%`, width: `${zoneWidth}%` }}
-                          title={`${isCivitai ? 'CivitAI' : 'Default'}: ${recMin}-${recMax}`}
+                          title={t(isCivitai ? 'lora.zoneCivitaiRange' : 'lora.zoneDefaultRange', { min: recMin, max: recMax })}
                         />
                         <input
                           type="range"
@@ -495,7 +499,9 @@ export function DirectorLoraSelector({ mode, modelType }: {
                           value={w}
                           onChange={e => updateWeight(filename, i, parseFloat(e.target.value))}
                           className="w-full relative z-10"
-                          aria-label={`${displayName(filename)} ${phases > 1 ? `phase ${i + 1}` : ''} LoRA strength`.replace(/\s+/g, ' ').trim()}
+                          aria-label={phases > 1
+                            ? t('lora.strengthOfPhase', { name: displayName(filename), n: i + 1 })
+                            : t('lora.strengthOf', { name: displayName(filename) })}
                         />
                       </div>
                       <input
@@ -509,7 +515,9 @@ export function DirectorLoraSelector({ mode, modelType }: {
                           if (Number.isFinite(value)) updateWeight(filename, i, value)
                         }}
                         className={`w-12 shrink-0 rounded border border-border bg-bg-secondary px-1 py-0.5 text-right text-[10px] tabular-nums focus:border-accent-blue focus:outline-none ${valueColor}`}
-                        aria-label={`${displayName(filename)} ${phases > 1 ? `phase ${i + 1}` : ''} LoRA strength value`.replace(/\s+/g, ' ').trim()}
+                        aria-label={phases > 1
+                          ? t('lora.strengthValueOfPhase', { name: displayName(filename), n: i + 1 })
+                          : t('lora.strengthValueOf', { name: displayName(filename) })}
                       />
                     </div>
                   )

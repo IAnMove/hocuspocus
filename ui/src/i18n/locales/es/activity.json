@@ -190,6 +190,61 @@
     "submitting": "Enviando…"
   },
   "comicOpenFailed": "No se pudo abrir este cómic: {{error}}",
+  "feed": {
+    "copyOutputId": "Copiar el ID de salida {{id}}",
+    "approx": " · aprox.",
+    "approxTitle": " (marca de tiempo del archivo, aproximada)",
+    "completionTitle": "{{label}}: {{time}}{{approx}}",
+    "loading": "Cargando…"
+  },
+  "jobs": {
+    "opening": "Abriendo el espacio de trabajo…",
+    "failedTitle": "Generación fallida",
+    "failedDetail": "La generación ha fallado",
+    "queued": "En cola...",
+    "generating": "Generando...",
+    "step": "Paso {{step}}/{{total}}",
+    "h3Exact": "Prompt exacto de H3 · Ventana {{index}}/{{count}}",
+    "hideAll": "Ocultar todo",
+    "viewAll": "Ver todo",
+    "windowLine": "Ventana {{index}}: {{title}}{{now}}",
+    "beat": "Pulso {{index}}",
+    "generatingNow": " · Generando ahora",
+    "windowRange": "{{start}}–{{end}} s",
+    "dismissHint": "Pulsa × para cerrar: la tarjeta se queda para que veas qué falló",
+    "preparing": "Preparando...",
+    "stop": "Detener",
+    "pausedReview": "En pausa — revisión",
+    "director": "Director",
+    "indexing": "Indexando el espacio de trabajo...",
+    "planning": "planificación"
+  },
+  "empty": {
+    "generated": "Aquí aparecerán tus {{noun}}.",
+    "stepModel": "Elige un modelo en la barra lateral (ya hay uno recomendado seleccionado).",
+    "stepPrompt": "Escribe un prompt — p. ej.",
+    "stepGenerate": "Pulsa Generar.",
+    "headsUp": "Aviso: la primera vez que usas un modelo, sus pesos se descargan una vez (a menudo decenas de GB) antes de que empiece la generación; después va rápido. El progreso aparece abajo a la derecha.",
+    "nouns": {
+      "images": "imágenes",
+      "audio": "archivos de audio",
+      "models3d": "modelos 3D",
+      "scenes": "escenas del compositor",
+      "trailers": "tráilers",
+      "musicVideos": "vídeos musicales",
+      "chapters": "capítulos",
+      "assets3d": "recursos 3D",
+      "videos": "vídeos"
+    },
+    "examples": {
+      "model3d": "Abre Character Creator o la barra lateral 3D y genera un recurso de Hunyuan3D.",
+      "scenes": "Guarda una escena desde el compositor de Vídeo 3D.",
+      "trailers": "Monta un tráiler en Story Lab para que quede marcado como mezcla de tráiler.",
+      "image": "una calle urbana de neón de noche, cinematográfica",
+      "audio": "un tema synthwave onírico sobre el océano",
+      "video": "un golden retriever surfeando una gran ola, a cámara lenta"
+    }
+  },
   "recipes": {
     "saveTitle": "Guardar como receta",
     "saveBody": "Captura el modelo, las LoRAs y los ajustes de esta generación como un preset de un clic. La miniatura sale de este resultado. Al aplicar la receta más tarde se rellena el prompt para que solo edites el sujeto.",

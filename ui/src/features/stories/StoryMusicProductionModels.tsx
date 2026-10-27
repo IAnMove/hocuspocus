@@ -27,24 +27,24 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
           <select className={`${input} mt-1`} value={project.provider.writingProvider}
             onChange={event => setMusicWritingProvider(event.target.value as StoryWritingProvider)}>
             <option value="maestro">{t('productions.internalLlm')}</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="minimax">MiniMax</option>
-            <option value="openai">OpenAI</option>
-            <option value="openai-compatible">Custom OpenAI-compatible</option>
+            <option value="deepseek">DeepSeek</option>{/* // i18n-ok: model id */}
+            <option value="minimax">MiniMax</option>{/* // i18n-ok: model id */}
+            <option value="openai">OpenAI</option>{/* // i18n-ok: model id */}
+            <option value="openai-compatible">{t('provider.customOpenAi')}</option>
           </select>
         </label>
         {project.provider.writingProvider !== 'maestro' && (
           <label className="block text-[10px] text-text-muted">{t('productions.llmModel')}
             {project.provider.writingProvider === 'deepseek' ? (
               <select className={`${input} mt-1`} value={project.provider.writingModel || 'deepseek-v4-pro'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
-                <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>
-                <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>
+                <option value="deepseek-v4-pro">DeepSeek V4 Pro</option>{/* // i18n-ok: model id */}
+                <option value="deepseek-v4-flash">DeepSeek V4 Flash</option>{/* // i18n-ok: model id */}
               </select>
             ) : project.provider.writingProvider === 'minimax' ? (
               <select className={`${input} mt-1`} value={project.provider.writingModel || 'MiniMax-M3'} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })}>
-                <option value="MiniMax-M3">MiniMax M3</option>
-                <option value="MiniMax-M2.7">MiniMax M2.7</option>
-                <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>
+                <option value="MiniMax-M3">MiniMax M3</option>{/* // i18n-ok: model id */}
+                <option value="MiniMax-M2.7">MiniMax M2.7</option>{/* // i18n-ok: model id */}
+                <option value="MiniMax-M2.7-highspeed">MiniMax M2.7 Highspeed</option>{/* // i18n-ok: model id */}
               </select>
             ) : (
               <input className={`${input} mt-1`} value={project.provider.writingModel} onChange={event => patchMusicWritingProvider({ writingModel: event.target.value })} />

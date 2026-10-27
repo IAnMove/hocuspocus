@@ -327,8 +327,8 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
           type="button"
           onClick={handleCopyReference}
           className="absolute top-2 left-2 z-10 flex items-center gap-1.5 rounded-md border border-white/20 bg-black/70 px-2 py-1 font-mono text-[10px] text-white shadow-sm transition-colors hover:bg-black/90"
-          title={`Copy output ID ${outputReference}`}
-          aria-label={`Copy output ID ${outputReference}`}
+          title={t('feed.copyOutputId', { id: outputReference })}
+          aria-label={t('feed.copyOutputId', { id: outputReference })}
         >
           {referenceCopied ? <Check size={11} className="text-accent-green" /> : <Copy size={11} />}
           {outputReference}
@@ -369,17 +369,17 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
         {imageStartFile && file.type !== 'image' && file.type !== 'video' && (
           <img
             src={getStoredAssetUrl(imageStartFile)}
-            alt="Start"
+            alt={t('actions.start')}
             className="w-7 h-7 rounded border border-border object-cover shrink-0"
-            title="Start image"
+            title={t('actions.startImage')}
           />
         )}
         {imageEndFile && file.type !== 'image' && file.type !== 'video' && (
           <img
             src={getStoredAssetUrl(imageEndFile)}
-            alt="End"
+            alt={t('actions.end')}
             className="w-7 h-7 rounded border border-border object-cover shrink-0"
-            title="End image"
+            title={t('actions.endImage')}
           />
         )}
 
@@ -387,12 +387,16 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
           {completionTime && (
             <div
               className="flex h-4 items-center gap-1 text-[10px] text-text-muted"
-              title={`${completionLabel}: ${completionTime}${!browsingUploads && !completionTimeIsExact ? ' (file timestamp, approximate)' : ''}`}
+              title={t('feed.completionTitle', {
+                label: completionLabel,
+                time: completionTime,
+                approx: !browsingUploads && !completionTimeIsExact ? t('feed.approxTitle') : '',
+              })}
             >
               <Clock3 size={10} className="shrink-0" aria-hidden="true" />
               <span className="truncate">
                 {completionLabel} · {completionTime}
-                {!browsingUploads && !completionTimeIsExact ? ' · aprox.' : ''}
+                {!browsingUploads && !completionTimeIsExact ? t('feed.approx') : ''}
               </span>
             </div>
           )}
@@ -402,12 +406,12 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
                 {maker && <MakerBadge maker={maker} />}
                 {modelLabel && <span className="font-medium" title={modelType}>{modelLabel}</span>}
                 {resolution && <span className="text-text-muted"> &middot; {resolution}</span>}
-                {seed != null && seed >= 0 && <span className="text-text-muted"> &middot; seed {seed}</span>}
+                {seed != null && seed >= 0 && <span className="text-text-muted"> &middot; {t('actions.seed', { seed })}</span>}
                 {generationTime != null && (
-                  <span className="text-text-muted"> &middot; total {formatGenerationDuration(generationTime)}</span>
+                  <span className="text-text-muted"> &middot; {t('actions.totalTime', { time: formatGenerationDuration(generationTime) })}</span>
                 )}
                 {clipIndex != null && clipTotal != null && (
-                  <span className="text-accent-blue"> &middot; clip {clipIndex + 1}/{clipTotal}</span>
+                  <span className="text-accent-blue"> &middot; {t('actions.clipIndex', { index: clipIndex + 1, total: clipTotal })}</span>
                 )}
               </div>
               <div className="h-4 truncate text-[11px] text-text-muted" title={prompt || generationBreakdown || undefined}>
@@ -417,7 +421,7 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
           ) : metaLoaded ? (
             <div className="h-4 truncate text-[11px] text-text-muted">{maker && <MakerBadge maker={maker} />}{file.name}</div>
           ) : (
-            <div className="h-4 text-[11px] text-text-muted animate-pulse">Loading...</div>
+            <div className="h-4 text-[11px] text-text-muted animate-pulse">{t('feed.loading')}</div>
           )}
         </div>
         </div>

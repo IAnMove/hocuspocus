@@ -723,6 +723,7 @@
     "override": "Override in this project",
     "writingLlm": "Writing LLM",
     "internalLlm": "HocusPocus internal · default",
+    "customOpenAi": "Custom OpenAI-compatible",
     "writingReady": "Writing provider ready.",
     "writingMissing": "Missing provider credentials in Settings → Services.",
     "writingModel": "Writing model",

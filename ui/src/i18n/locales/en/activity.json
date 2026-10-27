@@ -190,6 +190,61 @@
     "submitting": "Submitting…"
   },
   "comicOpenFailed": "Could not open this comic: {{error}}",
+  "feed": {
+    "copyOutputId": "Copy output ID {{id}}",
+    "approx": " · approx.",
+    "approxTitle": " (file timestamp, approximate)",
+    "completionTitle": "{{label}}: {{time}}{{approx}}",
+    "loading": "Loading..."
+  },
+  "jobs": {
+    "opening": "Opening workspace…",
+    "failedTitle": "Generation Failed",
+    "failedDetail": "Generation failed",
+    "queued": "Queued...",
+    "generating": "Generating...",
+    "step": "Step {{step}}/{{total}}",
+    "h3Exact": "Exact H3 prompt · Window {{index}}/{{count}}",
+    "hideAll": "Hide all",
+    "viewAll": "View all",
+    "windowLine": "Window {{index}}: {{title}}{{now}}",
+    "beat": "Beat {{index}}",
+    "generatingNow": " · Generating now",
+    "windowRange": "{{start}}–{{end}}s",
+    "dismissHint": "Click × to dismiss — the tile stays so you can see what failed",
+    "preparing": "Preparing...",
+    "stop": "Stop",
+    "pausedReview": "Paused — Review",
+    "director": "Director",
+    "indexing": "Indexing workspace...",
+    "planning": "planning"
+  },
+  "empty": {
+    "generated": "Your generated {{noun}} will appear here.",
+    "stepModel": "Pick a model in the sidebar (a good default is already selected).",
+    "stepPrompt": "Type a prompt — e.g.",
+    "stepGenerate": "Hit Generate.",
+    "headsUp": "Heads up: the first time you use a model, its weights download once (often tens of GB) before generation starts — later runs are fast. Progress shows at the bottom-right.",
+    "nouns": {
+      "images": "images",
+      "audio": "audio",
+      "models3d": "3D models",
+      "scenes": "compositor scenes",
+      "trailers": "trailers",
+      "musicVideos": "music videos",
+      "chapters": "chapters",
+      "assets3d": "3D assets",
+      "videos": "videos"
+    },
+    "examples": {
+      "model3d": "Open Character Creator or the 3D sidebar and generate a Hunyuan3D asset.",
+      "scenes": "Save a scene from the 3D Video compositor.",
+      "trailers": "Assemble a trailer in Story Lab so it is tagged as a trailer mix.",
+      "image": "a neon city street at night, cinematic",
+      "audio": "a dreamy synthwave track about the ocean",
+      "video": "a golden retriever surfing a big wave, slow motion"
+    }
+  },
   "recipes": {
     "saveTitle": "Save as Recipe",
     "saveBody": "Captures this generation's model, LoRAs, and settings as a one-click preset. Its thumbnail comes from this output. Applying a recipe later prepopulates the prompt so you just edit the subject.",
