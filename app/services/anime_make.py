@@ -197,7 +197,7 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     for part in ("body", "head"):
         (Path(workspace_dir) / f"{base}-guide-{part}.png").write_bytes(guide_png(parts, lofted["layout"], part))
     out = {"guide_body_file": f"{base}-guide-body.png", "guide_head_file": f"{base}-guide-head.png",
-           "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over the head tiles (front left, back right, 3x the scale)"}}
+           "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over three head tiles (front, side, back; 3x the scale)"}}
     if resolved["texture"]:
         painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None

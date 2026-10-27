@@ -2,7 +2,7 @@
 
 The atlas is a square picture made of two 2:1 pictures, one above the other. The top one holds an orthographic front view on the
 left half and the back view (mirrored, as seen from behind) on the right half, in the body's T-pose. The bottom one holds the head at
-three times that scale, the front on the left and the back on the right, so a face has the pixels a face needs. Each is painted
+three times that scale in three portrait tiles, the front, the right side (the left side is its mirror) and the back, so a face has the pixels a face needs. Each is painted
 on its own guide (``body`` and ``head``) and the two are stacked. A body made with ``atlas`` gets UVs by that projection, so a picture painted over the
 guide (the same two views, shaded grey) lands on the body where it was painted, and follows it when it moves. The body itself
 never changes: to dress it differently, paint another picture over the same guide and write it in again.
@@ -16,7 +16,7 @@ import struct
 ATLAS = (2048, 2048)
 HALF_SIZE = (2048, 1024)   # the size of each of the two pictures
 BODY_ROWS = 1024   # the body views take the top 1024 rows, the head tiles the 1024 below
-TILE = 1024
+HEAD_TILES = 3   # front, side, back
 
 
 def atlas_frame(meshes, layout=None) -> dict:
@@ -35,18 +35,29 @@ def atlas_frame(meshes, layout=None) -> dict:
         # pixels of collar from the body view
         cut = shoulder_top(layout) - 0.004 * layout["h"]
         top, bottom = layout["head_y"] + layout["sy"] * 0.62, cut - 0.01 * layout["h"]
-        frame["head"] = ((top + bottom) / 2, (top - bottom) * 1.08, cut)
+        frame["head"] = ((top + bottom) / 2, (top - bottom) * 1.08, cut)   # cy, the tile's height in metres, the cut
     return frame
 
 
-def atlas_uv(point, back: bool, frame: dict, head: bool = False) -> tuple[float, float]:
+def head_tile(normal) -> int:
+    """0 front, 1 side (both sides, the left one is the mirror of the right), 2 back: the way the triangle faces."""
+    if normal[2] >= 0.45:
+        return 0
+    return 2 if normal[2] <= -0.45 else 1
+
+
+def atlas_uv(point, back: bool, frame: dict, head: bool = False, tile: int = 0) -> tuple[float, float]:
     width, height = ATLAS
     if head and "head" in frame:
-        cy, span, _chin = frame["head"]
-        u = 0.5 + point[0] / span
-        if back:
-            u = 1.0 - u
-        return ((u * TILE + (TILE if back else 0)) / width, (BODY_ROWS + (0.5 - (point[1] - cy) / span) * TILE) / height)
+        cy, span_y, _cut = frame["head"]
+        span_x = span_y / 1.5                      # a tile is 2:3, wider than a head and taller
+        if tile == 0:
+            u = 0.5 + point[0] / span_x
+        elif tile == 2:
+            u = 0.5 - point[0] / span_x            # seen from behind
+        else:
+            u = 0.5 - point[2] / span_x            # the face looks to the left of the side tile
+        return ((tile + u) / HEAD_TILES, 0.5 + (0.5 - (point[1] - cy) / span_y) * 0.5)
     cx, cy, span = frame["body"]
     u = 0.5 + (point[0] - cx) / span
     if back:
@@ -59,24 +70,24 @@ def _is_head(points, frame: dict) -> bool:
     if "head" not in frame:
         return False
     _cy, span, cut = frame["head"]
-    return sum(p[1] for p in points) / 3 >= cut and max(abs(p[0]) for p in points) <= span * 0.49
+    return sum(p[1] for p in points) / 3 >= cut and max(max(abs(p[0]), abs(p[2])) for p in points) <= span / 1.5 * 0.49
 
 
 def atlas_uvs(mesh, frame: dict) -> list[tuple[float, float]]:
     """One UV per vertex. A triangle takes the view it faces (front when its normals look toward +Z), whole, so no triangle smears
-    across the halves; a triangle at or above the chin takes the head tile instead. The edge between views is a seam on the sides,
-    like an old game's."""
+    across the halves; a triangle at or above the shoulders and inside the head tile's width takes a head tile instead (front, side
+    or back by where it faces). The edges between views are seams, like an old game's."""
     uvs: list[tuple[float, float]] = []
     for i in range(0, len(mesh.vertices), 3):
         points = mesh.vertices[i:i + 3]
-        back = sum(mesh.normals[i + k][2] for k in range(3)) < 0   # the stored normals point outward
+        normal = tuple(sum(mesh.normals[i + k][j] for k in range(3)) / 3 for j in range(3))   # the stored normals point outward
         head = _is_head(points, frame)
-        uvs.extend(atlas_uv(p, back, frame, head) for p in points)
+        uvs.extend(atlas_uv(p, normal[2] < 0, frame, head, head_tile(normal)) for p in points)
     return uvs
 
 
 def guide_png(parts, layout, part: str = "body", size=ATLAS) -> bytes:
-    """``part`` ``body`` (the two body views) or ``head`` (the two head tiles) in flat grey on a dark ground, 2048 x 1024: what Qwen
+    """``part`` ``body`` (the two body views) or ``head`` (the three head tiles) in flat grey on a dark ground, 2048 x 1024: what Qwen
     repaints. ``parts`` are ``loft_parts`` and ``layout`` the body's; the frame is the same as for the UVs."""
     import io
 
@@ -95,16 +106,27 @@ def guide_png(parts, layout, part: str = "body", size=ATLAS) -> bytes:
             pts = mesh.vertices[i:i + 3]
             nrm = tuple(sum(mesh.normals[i + k][j] for k in range(3)) / 3 for j in range(3))
             triangles.append((pts, nrm, _is_head(pts, frame)))
-    for head in (False, True):
+
+    def paint(pts, seen, uv):
+        shade = 0.6 + 0.4 * max(0.0, sum(seen[j] * light[j] for j in range(3)))
+        colour = (int(205 * shade), int(205 * shade), int(210 * shade))
+        draw.polygon([(uv(p)[0] * size[0], uv(p)[1] * size[1]) for p in pts], fill=colour)
+
+    if part == "body":
         for back in (False, True):
             facing = [t for t in triangles if (t[1][2] < 0) == back or abs(t[1][2]) < 0.15]
-            facing = [t for t in facing if t[2] or not head]   # the head tiles show the head only, the body views everything
             facing.sort(key=lambda t: sum(p[2] for p in t[0]) * (-1 if back else 1))
             for pts, nrm, _head in facing:
-                seen = (-nrm[0], nrm[1], -nrm[2]) if back else nrm
-                shade = 0.45 + 0.55 * max(0.0, sum(seen[j] * light[j] for j in range(3)))
-                colour = (int(205 * shade), int(205 * shade), int(210 * shade))
-                draw.polygon([(atlas_uv(p, back, frame, head)[0] * size[0], atlas_uv(p, back, frame, head)[1] * size[1]) for p in pts], fill=colour)
+                paint(pts, (-nrm[0], nrm[1], -nrm[2]) if back else nrm, lambda p, back=back: atlas_uv(p, back, frame))
+    else:
+        heads = [t for t in triangles if t[2]]
+        for tile in range(HEAD_TILES):
+            # the view's near side last: front by z, back by -z, the side by x (its far half is hidden anyway)
+            axis, sign = ((2, 1), (0, 1), (2, -1))[tile]
+            facing = [t for t in heads if t[1][axis] * sign > -0.15]
+            facing.sort(key=lambda t: sum(p[axis] for p in t[0]) * sign)
+            for pts, nrm, _head in facing:
+                paint(pts, nrm if tile != 2 else (-nrm[0], nrm[1], -nrm[2]), lambda p, tile=tile: atlas_uv(p, False, frame, True, tile))
     image = image.crop((0, 0, size[0], BODY_ROWS)) if part == "body" else image.crop((0, BODY_ROWS, size[0], size[1]))
     out = io.BytesIO()
     image.save(out, format="PNG")
