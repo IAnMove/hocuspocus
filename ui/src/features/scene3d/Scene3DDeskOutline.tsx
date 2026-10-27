@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { Scene3DObjectList } from './Scene3DObjectList'
+import { deskShotLibraryProps } from './deskShotLibrary'
 import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import type { Scene3DDeskModel } from './scene3dDeskModel'
 
@@ -12,18 +13,7 @@ export function Scene3DDeskOutline({ model }: { model: Scene3DDeskModel }) {
   return (
     <div className="space-y-3 p-2">
       <AddMenu model={model} full={full} />
-      <Scene3DShotLibraryCard
-        document={model.sceneDoc}
-        userTemplateId={model.selectedUserTemplateId}
-        applyDisabled={model.exporting}
-        editingLocked={model.editingLocked}
-        keepAssets={model.keepAssets}
-        onKeepAssets={model.setKeepAssets}
-        onTemplate={model.mountTemplate}
-        onUserTemplate={model.mountUserTemplate}
-        workspace={model.workspace}
-        preview={model.preview}
-      />
+      <Scene3DShotLibraryCard {...deskShotLibraryProps(model)} />
       <Scene3DObjectList
         slots={model.sceneDoc.slots}
         selectedId={model.selectedWorldSfxId ? undefined : model.selectedId || undefined}

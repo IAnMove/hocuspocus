@@ -4,6 +4,8 @@ import { useUiTranslation } from '../../i18n'
 import { RenderQualityPicker } from '../render/RenderQualityPicker'
 import { deskBarOverflow } from './deskBar'
 import { Scene3DDocumentControls } from './Scene3DDocumentControls'
+import { deskShotLibraryProps } from './deskShotLibrary'
+import { Scene3DTemplatesButton } from './Scene3DShotLibraryCard'
 import type { Scene3DDeskModel } from './scene3dDeskModel'
 
 export function Scene3DDeskTopBar({ model }: { model: Scene3DDeskModel }) {
@@ -16,6 +18,7 @@ export function Scene3DDeskTopBar({ model }: { model: Scene3DDeskModel }) {
   return (
     <div ref={bar} className="flex min-h-8 w-full min-w-0 flex-nowrap items-center gap-1 overflow-hidden">
       <span className="shrink-0 text-xs font-medium text-text-secondary">{t('stage.editorTitle')}</span>
+      <Scene3DTemplatesButton {...deskShotLibraryProps(model)} />
       <Scene3DDocumentControls
         section="library"
         document={model.sceneDoc}

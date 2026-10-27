@@ -26,7 +26,9 @@
     "frame": "Encuadrar la selección",
     "more": "Más",
     "addObject": "Objeto nuevo",
-    "addPicker": "Efecto o atrezo…"
+    "addPicker": "Efecto o atrezo…",
+    "templates": "Plantillas",
+    "templatesHint": "Elige una plantilla de plano: cambia los objetos, la cámara y el escenario"
   },
   "speech": {
     "resting": "en silencio",
@@ -349,7 +351,7 @@
   },
   "title": "Estudio de escenas 3D",
   "subtitle": "Elige un plano, coloca tus objetos y pulsa Reproducir.",
-  "templates": "Biblioteca de planos",
+  "templates": "Plantillas de plano",
   "search": "Buscar plantillas",
   "all": "Todas",
   "allSettings": "Cualquier decorado",
@@ -4221,7 +4223,7 @@
   },
   "shotLibrary": {
     "optionalExamples": "Aquí tienes los tipos de plano avanzados y todos los mundos pixel. Los aspectos adicionales de composiciones repetidas están en Ejemplos y variantes. Los recursos de ejemplo son opcionales.",
-    "change": "Cambiar plano",
+    "change": "Cambiar plantilla",
     "use": "Usar este plano",
     "cancel": "Cancelar",
     "close": "Cerrar la biblioteca de planos",
