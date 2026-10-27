@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import { useStore } from '../../stores/useStore'
 import type { EditSubMode, GenerationMode, MediaFilter } from '../../types'
 
@@ -74,13 +74,16 @@ export function useCharacterReplacementHost(): CharacterReplacementHost {
   ])
 }
 
-/** `useStore.setState({ mediaFilter: 'character-replacement' })` skips the setter, so the screen watches the filter. */
+/** `useStore.setState({ mediaFilter: 'character-replacement' })` skips the setter, so the screen watches the filter.
+ *  The redirect runs only when that filter arrives. A later Director, Settings or dashboard visit must stay there. */
 export function useCharacterReplacementRedirect(): void {
   const host = useCharacterReplacementHost()
-  const { mediaFilter, editSubMode, generationMode, sidebarMode, sidebarOpen, settingsOpen, dashboardOpen } = host
+  const previousFilter = useRef<MediaFilter | null>(null)
   useEffect(() => {
-    if (mediaFilter !== CHARACTER_REPLACEMENT_FILTER) return
-    if (characterReplacementReady(host)) return
+    const arrived = previousFilter.current !== CHARACTER_REPLACEMENT_FILTER
+      && host.mediaFilter === CHARACTER_REPLACEMENT_FILTER
+    previousFilter.current = host.mediaFilter
+    if (!arrived || characterReplacementReady(host)) return
     openCharacterReplacement(host)
-  }, [host, mediaFilter, editSubMode, generationMode, sidebarMode, sidebarOpen, settingsOpen, dashboardOpen])
+  }, [host])
 }

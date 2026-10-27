@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { JSDOM } from 'jsdom'
+import { createElement } from 'react'
+import { act, render } from '@testing-library/react'
 
 function installDom() {
   const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
@@ -76,6 +78,65 @@ test('Wizard and MCP open_tab accepts character_replacement and the old hyphen i
     const outcome = await defaultApplicationAdapters.openTab('character_replacement')
     assert.equal(characterReplacementReady(useStore.getState()), true)
     assert.equal(outcome.target?.id, 'character_replacement')
+  } finally {
+    useStore.setState({
+      ...original,
+      mediaFilter: 'all',
+      generationMode: 'image',
+      editSubMode: 'retake',
+      sidebarOpen: false,
+      settingsOpen: false,
+      dashboardOpen: false,
+      sidebarMode: 'studio',
+    })
+  }
+})
+
+test('the old filter opens Replace character once, and Director can leave it', { concurrency: false }, async () => {
+  const { useCharacterReplacementRedirect, characterReplacementReady } = await import('../src/features/characterReplacement/openCharacterReplacement.ts')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const original = {
+    setGenerationMode: useStore.getState().setGenerationMode,
+    setEditSubMode: useStore.getState().setEditSubMode,
+    setMediaFilter: useStore.getState().setMediaFilter,
+    setSidebarMode: useStore.getState().setSidebarMode,
+    setSidebarOpen: useStore.getState().setSidebarOpen,
+    setSettingsOpen: useStore.getState().setSettingsOpen,
+    setDashboardOpen: useStore.getState().setDashboardOpen,
+  }
+  function Probe() {
+    useCharacterReplacementRedirect()
+    return null
+  }
+  useStore.setState({
+    generationMode: 'video',
+    editSubMode: 'retake',
+    mediaFilter: 'images',
+    sidebarMode: 'director',
+    sidebarOpen: false,
+    settingsOpen: true,
+    dashboardOpen: true,
+    setGenerationMode: mode => { useStore.setState({ generationMode: mode }) },
+    setEditSubMode: mode => { useStore.setState({ editSubMode: mode }) },
+    setMediaFilter: filter => { useStore.setState({ mediaFilter: filter }) },
+    setSidebarMode: mode => { useStore.setState({ sidebarMode: mode }) },
+    setSidebarOpen: open => { useStore.setState({ sidebarOpen: open }) },
+    setSettingsOpen: open => { useStore.setState({ settingsOpen: open }) },
+    setDashboardOpen: open => { useStore.setState({ dashboardOpen: open }) },
+  })
+  try {
+    render(createElement(Probe))
+    assert.equal(useStore.getState().editSubMode, 'retake')
+    await act(async () => {
+      useStore.setState({ mediaFilter: 'character-replacement' })
+    })
+    assert.equal(characterReplacementReady(useStore.getState()), true)
+    await act(async () => {
+      useStore.setState({ sidebarMode: 'director' })
+    })
+    assert.equal(useStore.getState().sidebarMode, 'director')
+    assert.equal(useStore.getState().mediaFilter, 'character-replacement')
+    assert.equal(characterReplacementReady(useStore.getState()), false)
   } finally {
     useStore.setState({
       ...original,
