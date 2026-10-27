@@ -57,7 +57,7 @@ def _blur(array: np.ndarray, sigma: float) -> np.ndarray:
     return ndimage.gaussian_filter(array, sigma)
 
 
-def relief_sampler(depth: np.ndarray, frame: dict, head_height: float) -> Callable[[float, float], float]:
+def relief_sampler(depth: np.ndarray, frame: dict, head_height: float, share: float = NOSE_SHARE) -> Callable[[float, float], float]:
     """``relief(x, y)`` in metres, for a point of the face in the T-pose frame, from the front tile's depth picture. The tile is the
     front third of the head picture: ``frame["head"]`` is its (centre y, height in metres, cut), a third is as wide as it is tall / 1.5."""
     cy, span_y, _cut = frame["head"]
@@ -84,19 +84,19 @@ def relief_sampler(depth: np.ndarray, frame: dict, head_height: float) -> Callab
         i, j = int(v), int(u)
         fv, fu = v - i, u - j
         d = (smooth[i, j] * (1 - fu) + smooth[i, j + 1] * fu) * (1 - fv) + (smooth[i + 1, j] * (1 - fu) + smooth[i + 1, j + 1] * fu) * fv
-        return float(max(0.0, min(1.0, float(d))) * NOSE_SHARE * head_height)
+        return float(max(0.0, min(1.0, float(d))) * share * head_height)
 
     return relief
 
 
-def relief_from_picture(picture, frame: dict, head_height: float, span: float = PATCH_YAW):
+def relief_from_picture(picture, frame: dict, head_height: float, span: float = PATCH_YAW, share: float = NOSE_SHARE):
     """The sampler for the front tile of ``picture`` (the whole head picture, three tiles side by side), or None without the model.
     ``span`` (degrees each way from the face) is how far the face patch reaches; the sampler carries it as ``.yaw``."""
     if not CHECKPOINT.is_file():
         return None
     width, height = picture.size
     front = picture.convert("RGB").crop((0, 0, width // 3, height))
-    sampler = relief_sampler(depth_of_picture(front), frame, head_height)
+    sampler = relief_sampler(depth_of_picture(front), frame, head_height, share)
     sampler.yaw = float(span)
     return sampler
 

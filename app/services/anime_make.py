@@ -25,7 +25,7 @@ GENDERS = ("girl", "boy", "man", "woman")
 STYLES = ("anime", "real", "voxel", "roblox")
 BOTTOMS = ("trousers", "skirt", "shorts")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
-           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom", "hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather"}
+           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom", "hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth"}
 FACE_SOURCES = ("program", "qwen")
 FACE_STYLES = ("anime", "cute")
 _OUTFIT_COLORS = {"top", "bottom", "shoes", "accent", "socks"}
@@ -98,14 +98,15 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         "accessories": accessories,
     }
     look = _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style")
-    if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather")) and look != "real":
+    if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth")) and look != "real":
         _fail("invalid_traits", "hair_texture, hair_edge, upper_hold, face_span and face_feather are for style real")
     if "hair_texture" in raw:
         body["hair"] = {**body["hair"], "texture": _choice(raw["hair_texture"], ("flat", "photo"), "invalid_hair_texture", "hair_texture")}
     if "hair_edge" in raw:
         body["hair"] = {**body["hair"], "edge": _choice(raw["hair_edge"], ("smooth", "jagged"), "invalid_hair_edge", "hair_edge")}
     span, feather = raw.get("face_span", 40.0), raw.get("face_feather", 0.0)   # tests H, I, M, O, P: 40 degrees with a hard border read best; a feathered border ghosts a second face at three quarters
-    for label, value, low, high in (("face_span", span, 30.0, 58.0), ("face_feather", feather, 0.0, 30.0)):
+    depth = raw.get("face_depth", 0.06)   # tests H, R, S: 0.10 ridges the cheek at three quarters, 0.035 flattens the profile nose
+    for label, value, low, high in (("face_span", span, 30.0, 58.0), ("face_feather", feather, 0.0, 30.0), ("face_depth", depth, 0.0, 0.16)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
             _fail("invalid_" + label, f"{label} is degrees from {low:g} to {high:g}")
     if "hair_fit" in raw:
@@ -144,7 +145,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
               "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"],
               "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}), **({"face_image": face_image} if face_image else {})}
     return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None,
-            "texture": texture, "texture_head": texture_head, "style": look, "upper_hold": float(hold), "face_span": float(span), "face_feather": float(feather)}
+            "texture": texture, "texture_head": texture_head, "style": look, "upper_hold": float(hold), "face_span": float(span), "face_feather": float(feather), "face_depth": float(depth)}
 
 
 def _blocky_body(body: dict, look: str, raw: dict, skin: str, hair_color: str, colors: dict) -> dict:
@@ -275,7 +276,7 @@ def _face_relief(workspace_dir: Path, workspace: str, resolved: dict):
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
     parts = loft_parts(lofted["traits"], lofted["layout"])
     frame = atlas_frame([parts[0][0]], lofted["layout"])
-    return relief_from_picture(picture, frame, lofted["layout"]["sy"], resolved["face_span"])
+    return relief_from_picture(picture, frame, lofted["layout"]["sy"], resolved["face_span"], resolved["face_depth"])
 
 
 def _blocky_files(workspace_dir: Path, workspace: str, resolved: dict, body: dict) -> dict:
