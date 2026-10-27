@@ -8,6 +8,7 @@ import { applyAddPicker } from '../src/features/scene3d/pickerApply'
 import { createDefaultScene3DDocument } from '../src/features/scene3d/document.ts'
 import { transformPatch } from '../src/features/scene3d/transformGizmo'
 import { applyScene3DTemplate } from '../src/features/scene3d/templates.ts'
+import type { Scene3DDeskModel } from '../src/features/scene3d/scene3dDeskModel'
 import type { Scene3DDocument } from '../src/features/scene3d/types.ts'
 
 const dom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'http://localhost/' })
@@ -145,6 +146,51 @@ test('save is a split button whose menu marks the scene saved', async () => {
     fireEvent.click(screen.getByTestId('scene3d-save-menu'))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Mark saved' }))
     assert.equal(marked, 1)
+  } finally {
+    cleanup()
+  }
+})
+
+test('the outline puts the scene in the list and adds from one menu', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { Scene3DDeskOutline } = await import('../src/features/scene3d/Scene3DDeskOutline')
+  const document = createDefaultScene3DDocument()
+  const picks: string[] = []
+  const selected: string[] = []
+  const model = {
+    editingLocked: false,
+    exporting: false,
+    sceneDoc: document,
+    selectedId: '',
+    selected: undefined,
+    keepAssets: true,
+    workspace: 'demo',
+    preview: () => undefined,
+    selectSlot: (id: string) => selected.push(id),
+    openPicker: (category: string) => picks.push(category),
+    addScreen: () => picks.push('screen'),
+    removeSelected: () => undefined,
+    setKeepAssets: () => undefined,
+    mountTemplate: () => undefined,
+    mountUserTemplate: () => undefined,
+  } as unknown as Scene3DDeskModel
+  try {
+    render(<Scene3DDeskOutline model={model} />)
+    const scene = screen.getByTestId('scene3d-desk-scene')
+    assert.equal(scene.getAttribute('aria-pressed'), 'true')
+    assert.equal(screen.getByTestId('scene3d-object-list').contains(scene), true)
+    fireEvent.click(scene)
+    assert.deepEqual(selected, [''])
+    fireEvent.click(screen.getByTestId('scene3d-desk-add'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'New object' }))
+    fireEvent.click(screen.getByTestId('scene3d-desk-add'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Add screen' }))
+    fireEvent.click(screen.getByTestId('scene3d-desk-add'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Effect or prop…' }))
+    assert.deepEqual(picks, ['prop', 'screen', 'all'])
+    const card = screen.getByTestId('world3d-shot-card')
+    assert.match(card.className, /grid-cols-/)
+    assert.equal(card.contains(screen.getByTestId('world3d-open-library')), true)
   } finally {
     cleanup()
   }

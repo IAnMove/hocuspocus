@@ -24,7 +24,9 @@
     "shotCamera": "Cámara del plano",
     "useView": "Poner la cámara del plano aquí",
     "frame": "Encuadrar la selección",
-    "more": "Más"
+    "more": "Más",
+    "addObject": "Objeto nuevo",
+    "addPicker": "Efecto o atrezo…"
   },
   "speech": {
     "resting": "en silencio",

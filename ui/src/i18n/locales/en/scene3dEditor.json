@@ -24,7 +24,9 @@
     "shotCamera": "Shot camera",
     "useView": "Put the shot camera here",
     "frame": "Frame selection",
-    "more": "More"
+    "more": "More",
+    "addObject": "New object",
+    "addPicker": "Effect or prop…"
   },
   "speech": {
     "resting": "silent",
