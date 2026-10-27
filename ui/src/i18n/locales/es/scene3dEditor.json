@@ -23,7 +23,8 @@
     "freeView": "Vista libre",
     "shotCamera": "Cámara del plano",
     "useView": "Poner la cámara del plano aquí",
-    "frame": "Encuadrar la selección"
+    "frame": "Encuadrar la selección",
+    "more": "Más"
   },
   "speech": {
     "resting": "en silencio",
@@ -3944,7 +3945,10 @@
   "library": {
     "name": "Nombre de la escena",
     "save": "Guardar escena en galería",
+    "saveShort": "Guardar",
+    "saveMenu": "Más acciones al guardar",
     "open": "Abrir escena",
+    "openShort": "Abrir",
     "help": "Elige una escena de Vídeo 3D guardada, o una escena de trabajo que un agente hizo y no publicó. Al elegir reemplazas el plano actual; guárdalo antes para conservar tus cambios. También puedes importar y exportar JSON.",
     "saved": "Escena guardada en esta carpeta. Usa Abrir escena para recuperarla.",
     "changed": "La escena cambió mientras se cargaba. Vuelve a elegirla para reemplazar la actual.",

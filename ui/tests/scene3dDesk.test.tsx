@@ -116,6 +116,40 @@ test('the desk inspector hides the duplicate pose and the history bar', async ()
   }
 })
 
+test('the desk bar keeps one row by moving expand, then history, into More', async () => {
+  const { deskBarOverflow } = await import('../src/features/scene3d/deskBar')
+  assert.deepEqual(deskBarOverflow(1400), [])
+  assert.deepEqual(deskBarOverflow(860), ['expand'])
+  assert.deepEqual(deskBarOverflow(640), ['expand', 'history'])
+})
+
+test('save is a split button whose menu marks the scene saved', async () => {
+  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+  const { Scene3DLibraryControls } = await import('../src/features/scene3d/Scene3DLibraryControls')
+  const document = createDefaultScene3DDocument()
+  let marked = 0
+  try {
+    render(
+      <Scene3DLibraryControls
+        document={document}
+        workspace="demo"
+        disabled={false}
+        preview={() => undefined}
+        onLoad={() => undefined}
+        onCheckpoint={() => { marked += 1 }}
+        checkpointLabel="Mark saved"
+      />,
+    )
+    assert.equal(screen.getByRole('button', { name: 'Save scene to gallery' }).textContent, 'Save')
+    assert.equal(screen.getByRole('button', { name: 'Open scene' }).textContent, 'Open')
+    fireEvent.click(screen.getByTestId('scene3d-save-menu'))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mark saved' }))
+    assert.equal(marked, 1)
+  } finally {
+    cleanup()
+  }
+})
+
 test('the viewport toolbar has one Move button and a Select tool', async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { Scene3DViewportTools } = await import('../src/features/scene3d/Scene3DViewportTools')

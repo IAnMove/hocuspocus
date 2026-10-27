@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
+import { PanelLeft, PanelRight } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { workbenchLayout, type WorkbenchLayout } from './layout'
 
@@ -23,21 +24,24 @@ function useViewportWidth(override?: number) {
   return override ?? measured
 }
 
-function PanelToggle({ pressed, label, testId, onClick }: {
+function PanelToggle({ pressed, label, testId, onClick, icon }: {
   pressed: boolean
   label: string
   testId: string
   onClick: () => void
+  icon: ReactNode
 }) {
   return (
     <button
       type="button"
       data-testid={testId}
       aria-pressed={pressed}
+      aria-label={label}
+      title={label}
       onClick={onClick}
-      className="inline-flex min-h-10 shrink-0 items-center rounded-lg border border-border px-3 text-xs text-text-primary"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-text-primary"
     >
-      {label}
+      {icon}
     </button>
   )
 }
@@ -75,18 +79,20 @@ export function Workbench({ topBar, outline, viewport, inspector, transport, wid
       data-layout={layout}
       className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-bg-primary"
     >
-      <header className="flex shrink-0 flex-nowrap items-center gap-2 border-b border-border px-2 py-2">
+      <header className="relative z-20 flex shrink-0 flex-nowrap items-center gap-1 border-b border-border px-2 py-1">
+        <div data-slot="topBar" className="flex min-w-0 flex-1 items-center">{topBar}</div>
         <PanelToggle
           pressed={outlineOpen}
           label={outlineLabel}
           testId="workbench-toggle-outline"
+          icon={<PanelLeft size={15} aria-hidden="true" />}
           onClick={() => setOutlineCollapsed(collapsed => !collapsed)}
         />
-        <div data-slot="topBar" className="min-w-0 flex-1">{topBar}</div>
         <PanelToggle
           pressed={inspectorOpen}
           label={inspectorLabel}
           testId="workbench-toggle-inspector"
+          icon={<PanelRight size={15} aria-hidden="true" />}
           onClick={toggleInspector}
         />
       </header>

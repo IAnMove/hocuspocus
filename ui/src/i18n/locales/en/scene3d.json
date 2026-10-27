@@ -1329,7 +1329,9 @@
   },
   "history": {
     "undo": "Undo",
+    "undoHint": "Undo (Ctrl+Z)",
     "redo": "Redo",
+    "redoHint": "Redo (Ctrl+Shift+Z)",
     "checkpoint": "Mark saved",
     "saved": "Saved",
     "unsaved": "Unsaved changes",

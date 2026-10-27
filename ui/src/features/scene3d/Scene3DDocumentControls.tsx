@@ -9,7 +9,7 @@ import { Scene3DLibraryControls } from './Scene3DLibraryControls'
 import type { Scene3DDocument } from './types.ts'
 import { isWorld3DTemplateRaw } from './userTemplates.ts'
 
-export function Scene3DDocumentControls({ document, disabled, workspace, preview, identity, onChange, onLoad, onSaved, section = 'all' }: {
+export function Scene3DDocumentControls({ document, disabled, workspace, preview, identity, onChange, onLoad, onSaved, onCheckpoint, checkpointLabel, section = 'all' }: {
   document: Scene3DDocument
   disabled: boolean
   workspace: string
@@ -19,6 +19,8 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
   onChange: (document: Scene3DDocument) => void
   onLoad: (document: Scene3DDocument, source?: Scene3DDocumentRef) => void
   onSaved?: (output: ApiOutput, document: Scene3DDocument, identity: Scene3DDocumentRef) => void
+  onCheckpoint?: () => void
+  checkpointLabel?: string
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const [error, setError] = useState('')
@@ -35,8 +37,10 @@ export function Scene3DDocumentControls({ document, disabled, workspace, preview
   const library = section === 'all' || section === 'library'
   const timing = section === 'all' || section === 'timing'
   const files = section === 'all' || section === 'files'
-  return <div className="flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-    {library && <Scene3DLibraryControls document={document} workspace={workspace} disabled={disabled} preview={preview} identity={identity} onLoad={onLoad} onSaved={onSaved} />}
+  return <div className={section === 'library'
+    ? 'flex min-w-0 flex-1 flex-nowrap items-center gap-1 text-xs text-text-secondary'
+    : 'flex flex-wrap items-center gap-3 text-xs text-text-secondary'}>
+    {library && <Scene3DLibraryControls document={document} workspace={workspace} disabled={disabled} preview={preview} identity={identity} onLoad={onLoad} onSaved={onSaved} onCheckpoint={onCheckpoint} checkpointLabel={checkpointLabel} />}
     {timing && <>
     <label>{t('clipNumber')}
       <input type="number" min="1" step="1" aria-label={t('clipNumber')} disabled={disabled}

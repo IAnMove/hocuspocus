@@ -23,7 +23,8 @@
     "freeView": "Free view",
     "shotCamera": "Shot camera",
     "useView": "Put the shot camera here",
-    "frame": "Frame selection"
+    "frame": "Frame selection",
+    "more": "More"
   },
   "speech": {
     "resting": "silent",
@@ -3944,7 +3945,10 @@
   "library": {
     "name": "Scene name",
     "save": "Save scene to gallery",
+    "saveShort": "Save",
+    "saveMenu": "More save actions",
     "open": "Open scene",
+    "openShort": "Open",
     "help": "Choose a saved Video3D scene, or a working scene an agent made and did not publish. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
     "saved": "Scene saved to this workspace. Open scene to load it again.",
     "changed": "The scene changed while loading. Choose it again to replace the current scene.",
