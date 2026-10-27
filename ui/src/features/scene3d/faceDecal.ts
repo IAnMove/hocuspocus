@@ -18,11 +18,13 @@ import {
   SRGBColorSpace,
   Vector3,
   type Object3D,
+  type Texture,
   type SkinnedMesh,
 } from 'three'
 import type { CharacterKit } from '../../lib/characterKit'
 import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
 import { durableScene3DSourceUrl } from './slotSource'
+import { useMapUv } from './atlasProjection'
 import {
   loadTalkingCutout,
   parseAnchor,
@@ -383,6 +385,7 @@ export class FaceDecalRuntime {
   private spanKey = ''
   private texture?: CanvasTexture
   private context?: CanvasRenderingContext2D
+  private originalMap?: Texture | null
   private painters = new Map<string, Painter>()
   private abort?: AbortController
   private artKey = ''
@@ -399,6 +402,9 @@ export class FaceDecalRuntime {
       if (!face) { this.error = new Error('No face material on the model to paint the face into.'); this.ready = false; return }
       this.error = undefined
       this.mountMaterial(face)
+      // a kit made from a photograph has no skin colour: its keyed edges are cut out so the skull's own picture (hair, skin) shows through
+      const cut = decal.skin ? 0 : 0.5
+      if (face.alphaTest !== cut) { face.alphaTest = cut; face.needsUpdate = true }
       this.watch(decal)
       this.paint(decal, seconds)
       return
@@ -456,6 +462,8 @@ export class FaceDecalRuntime {
     }
     if (this.faceMaterial !== face) {
       this.faceMaterial = face
+      this.originalMap = face.map
+      useMapUv(face, true)
       face.map = this.texture
       face.transparent = false
       face.needsUpdate = true
@@ -522,12 +530,12 @@ export class FaceDecalRuntime {
     if (!painter || !this.context || !this.texture || !decal.art) return
     const live = cutoutOf(decal.art, pose)
     painter.paint(this.context, live ? { talk: live } : undefined, seconds)
-    if (decal.shape === 'mesh') {
+    if (decal.shape === 'mesh' && decal.skin) {
       // the face primitive is opaque: the skin goes under the drawing
       const context = this.context
       context.save()
       context.globalCompositeOperation = 'destination-over'
-      context.fillStyle = decal.skin ?? '#f3cba4'
+      context.fillStyle = decal.skin
       context.fillRect(0, 0, CANVAS, CANVAS)
       context.restore()
     }
@@ -539,7 +547,9 @@ export class FaceDecalRuntime {
     this.placeKey = ''
     this.mesh?.removeFromParent()
     if (this.faceMaterial) {
-      this.faceMaterial.map = null
+      this.faceMaterial.map = this.originalMap ?? null   // a draped atlas goes back to its picture
+      useMapUv(this.faceMaterial, false)
+      this.originalMap = undefined
       this.faceMaterial.needsUpdate = true
       this.faceMaterial = undefined
     }

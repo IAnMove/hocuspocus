@@ -222,7 +222,25 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
         body["glb"] = attach_texture(body["glb"], png, frame=frame)
         body["rigged"] = attach_texture(body["rigged"], png, frame=frame)
         out["texture_file"] = Path(resolved["texture"]).name
+        if head is not None:
+            out["face_pose_file"] = _face_pose(workspace_dir, base, head)
     return out
+
+
+def _face_pose(workspace_dir: Path, base: str, head) -> str:
+    """The front third of the head picture centred on a square 1024 canvas, the picture a face kit is made from (``characters.rig.flat``
+    with ``mouthStyle: "warp"``): its pixels are the face's own, so the closed mouth is the photograph unchanged. The relief patch's UVs
+    are this canvas (the tile is as many pixels tall as the canvas), so ``world3d.scene.face`` with ``shape: "mesh"`` lands exactly on it."""
+    from PIL import Image
+
+    from services.blob_texture import HALF_SIZE
+
+    tile = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS).crop((0, 0, HALF_SIZE[0] // 3, HALF_SIZE[1]))
+    canvas = Image.new("RGB", (1024, 1024), tile.getpixel((2, 2)))
+    canvas.paste(tile, ((1024 - tile.width) // 2, 0))
+    name = f"{base}-face-pose.png"
+    canvas.save(Path(workspace_dir) / name)
+    return name
 
 
 def _face_relief(workspace_dir: Path, workspace: str, resolved: dict):

@@ -15,7 +15,7 @@ from typing import Callable
 import numpy as np
 
 CHECKPOINT = Path(__file__).resolve().parents[1] / "ckpts" / "depth" / "depth_anything_v2_vitb.pth"
-PATCH_YAW = 46.0                 # degrees each way from the face: the patch covers the face, the skull the rest
+PATCH_YAW = 53.0                 # degrees each way from the face: the patch covers the face, the skull the rest
 PATCH_LATS = (-66.0, 46.0)       # from under the chin to the hairline
 NOSE_SHARE = 0.10                # a relief of 1 protrudes by this share of the head's height (a nose tip a little under a real one)
 

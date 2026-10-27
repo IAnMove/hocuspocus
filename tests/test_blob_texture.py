@@ -179,7 +179,7 @@ def test_the_relief_patch_moves_along_z_only_and_melts_into_the_skull_at_its_bor
     x_limit = max(abs(v[0]) for v in flat.vertices)
     rim = [(a, b) for a, b in zip(flat.vertices, raised.vertices) if abs(abs(a[0]) - x_limit) < 0.003]
     assert all(abs(b[2] - a[2]) < 0.002 for a, b in rim), "at the border the relief has faded"
-    assert all(0.0 <= u < 1 / 3 + 1e-6 and 0.5 <= v <= 1.0 for u, v in raised_uvs)
+    assert all(0.0 <= u <= 1.0 and 0.0 <= v <= 1.0 for u, v in raised_uvs), "the kit canvas"
 
 
 def test_a_head_with_a_relief_has_no_modelled_nose_and_without_the_depth_model_the_face_stays_flat(monkeypatch):

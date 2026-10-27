@@ -349,8 +349,9 @@ def _real_nose(mesh: Mesh, L: dict, skin: str) -> None:
 
 def face_relief_patch(L: dict, relief, frame: dict, steps: int = 56) -> tuple[Mesh, list]:
     """The face as a dense patch pushed forward by ``relief(x, y)`` (metres, from ``blob_face_relief``): ``steps`` x ``steps`` points
-    from under the chin to the hairline and 46 degrees each way, a hair outside the skull, white vertex colours, and the UVs of the
-    front head tile read at the point's own (x, y): the patch moves along +Z only, so the picture stays exactly on its place."""
+    from under the chin to the hairline and 53 degrees each way, a hair outside the skull, white vertex colours, and the UVs of the
+    kit canvas read at the point's own (x, y) (the front tile centred in a square 1024 picture, v up, as ``face_patch`` does): the patch
+    moves along +Z only, so the picture stays exactly on its place. The viewer drapes the atlas by position and keeps these for a face kit."""
     from services.blob_face_relief import PATCH_LATS, PATCH_YAW, edge_fade
     from services.blob_texture import atlas_uv
 
@@ -364,7 +365,7 @@ def face_relief_patch(L: dict, relief, frame: dict, steps: int = 56) -> tuple[Me
             x, y, z = skull_point(L, yaw, lat, 1.004)
             lift = relief(x, y) * edge_fade(yaw, lat)
             ring.append((x, y, z + lift))
-            row.append(atlas_uv((x, y, z), False, frame, True, 0))
+            row.append((0.5 + x / frame["head"][1], 0.5 + (y - frame["head"][0]) / frame["head"][1]))   # the kit's canvas: the front tile centred, v up
         grid.append(ring)
         colors.append([(1.0, 1.0, 1.0)] * len(ring))
         uvs.append(row)
