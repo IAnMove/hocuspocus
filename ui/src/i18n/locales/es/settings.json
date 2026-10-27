@@ -453,6 +453,8 @@
     "installedRestart": "Instalado. Reinicia HocusPocus para usarlo.",
     "removed": "Quitado.",
     "install": "Instalar",
+    "waitForCurrent": "Espera a que termine la instalación o la eliminación en curso",
+    "needLauncher": "El instalador no está disponible. Arráncalo y vuelve a intentarlo",
     "update": "Actualizar",
     "uninstall": "Quitar",
     "confirmUninstall": "Pulsa otra vez para quitar (libera unos {{size}})",
