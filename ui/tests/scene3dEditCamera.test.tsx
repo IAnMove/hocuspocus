@@ -40,10 +40,11 @@ test('a scene with only a yaw loads unchanged and a tilt round-trips', () => {
   assert.equal(loaded.slots[0].rotationY, document.slots[0].rotationY)
   const raw = JSON.parse(JSON.stringify(document))
   raw.slots[0].rotationX = 0.25
+  raw.slots[0].rotationZ = -0.15
   const tilted = parseScene3DDocument(raw)
   assert.equal(tilted?.slots[0].rotationX, 0.25)
   assert.equal(tilted?.slots[0].rotationY, document.slots[0].rotationY)
-  assert.equal(tilted?.slots[0].rotationZ, undefined)
+  assert.equal(tilted?.slots[0].rotationZ, -0.15)
 })
 
 test('object rotate writes X, Y and Z and a yaw-only gizmo writes Y', () => {

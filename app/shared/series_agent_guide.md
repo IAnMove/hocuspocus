@@ -319,7 +319,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
   `clip` name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
-  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres),
+  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationX`/`rotationY`/`rotationZ` (radians, metres; X and Z optional),
   `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, headingOffset,
   easing}. `faceTravel` turns the model's +Z along the path; a generated ship or airship whose nose is its -X needs
   `headingOffset: 1.5708` (+X: -1.5708, -Z: 3.1416):

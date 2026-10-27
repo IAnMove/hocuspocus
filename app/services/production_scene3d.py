@@ -25,10 +25,10 @@ from services.world3d_stage_documents import resolve_production_stage
 ROOT = Path(__file__).resolve().parents[2]
 EXPORT = "scenes.world3d.export"
 RECEIPT = "scenes.world3d.export.receipt"
-CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationY", "grounded",
+CONFIG_KEYS = {"template", "document", "subject", "slots", "clip", "motion", "position", "scale", "rotationX", "rotationY", "rotationZ", "grounded",
                "camera", "atmos", "environment", "light", "dressing", "pixelWorld", "renderLook", "toon", "rhythm", "width", "height",
                "fps", "playbackSpeed", "cast", "background", "floor", "world", "frame", "roomCamera", "grade", "lens", "camera_template", "scroll"}
-CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationY", "grounded", "rhythm", "appearance", "add",
+CAST_FIELDS = {"source", "clip", "clips", "motion", "position", "scale", "rotationX", "rotationY", "rotationZ", "grounded", "rhythm", "appearance", "add",
                "sources", "formation", "spacing", "imageLook", "setItem", "billboard", "inPlace"}
 GROUP_FIELDS = {"sources", "formation", "spacing", "position", "rotationY"}
 FRAMES = {"close": 0.6, "medium": 0.8, "wide": 1.35, "far": 1.8}     # the camera's distance to the subject, as a share of the template's

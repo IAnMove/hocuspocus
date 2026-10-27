@@ -82,3 +82,29 @@ def test_existing_glb_uses_inspected_world_height_without_mesh_engine(tmp_path):
     service=ItemService(lambda _:str(tmp_path),lambda:str(tmp_path/'uploads'),lambda *a:None)
     item=service._item({'workspace':'demo','item':{'glb':'object.glb'}})
     assert item['heightM']==pytest.approx(2.6)
+
+
+def test_item_commands_keep_tilt_only_when_the_caller_sets_it():
+    from services.scene3d_items import command_catalog
+    from services.series_shot3d import _object_binding, _object_entry
+    from services.series_shot3d_editor import _refreshed
+    rows, _ = change_items([], 'add', {'at': {'position': [0, 0, 0]}, 'rotationX': 0.4, 'rotationZ': -0.2, 'rotationY': 0.3}, PROP)
+    assert rows[0]['rotationX'] == 0.4 and rows[0]['rotationZ'] == -0.2 and rows[0]['rotationY'] == 0.3
+    moved, _ = change_items(rows, 'update', {'id': rows[0]['objectId'], 'at': {'position': [1, 0, 0]}})
+    assert moved[0]['rotationX'] == 0.4 and moved[0]['rotationZ'] == -0.2
+    plain, _ = change_items([], 'add', {'at': {'position': [0, 0, 0]}}, PROP)
+    assert 'rotationX' not in plain[0] and 'rotationZ' not in plain[0] and plain[0]['rotationY'] == 0
+    with pytest.raises(ValueError, match='rotationX'):
+        change_items([], 'add', {'at': {'position': [0, 0, 0]}, 'rotationX': 99}, PROP)
+    fields = command_catalog()[0]['inputSchema']['properties']['input']['properties']
+    assert 'rotationX' in fields and 'rotationZ' in fields
+    entry = _object_entry({'objectId': 'lamp', 'media': 'image', 'file': 'lamp.png', 'rotationX': 0.4, 'rotationZ': -0.2, 'rotationY': 0.1})
+    assert entry['rotationX'] == 0.4 and entry['rotationZ'] == -0.2 and entry['rotationY'] == 0.1
+    yaw = _object_entry({'objectId': 'lamp', 'media': 'image', 'file': 'lamp.png', 'rotationY': 0})
+    assert 'rotationX' not in yaw and 'rotationZ' not in yaw
+    binding = _object_binding('demo', None, entry, lambda *args, **kwargs: None)
+    assert binding['rotationX'] == 0.4 and binding['rotationZ'] == -0.2
+    kept = _refreshed({'objectId': 'lamp', 'media': 'image'}, {'rotationY': 0, 'rotationX': 0.4})
+    assert kept['rotationX'] == 0.4
+    dropped = _refreshed({'objectId': 'lamp', 'media': 'image', 'rotationX': 0.4}, {'rotationY': 0})
+    assert 'rotationX' not in dropped

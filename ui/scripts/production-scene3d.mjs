@@ -108,7 +108,9 @@ function bindSubject(document, config) {
   if (config.motion !== undefined) next.motion = config.motion
   if (config.position !== undefined) next.position = config.position
   if (config.scale !== undefined) next.scale = config.scale
+  if (config.rotationX !== undefined) next.rotationX = config.rotationX
   if (config.rotationY !== undefined) next.rotationY = config.rotationY
+  if (config.rotationZ !== undefined) next.rotationZ = config.rotationZ
   if (config.grounded !== undefined) next.grounded = config.grounded
   document.slots = document.slots.map(slot => slot.id === current.id ? next : slot)
 }
@@ -131,7 +133,7 @@ function bindCast(document, key, entry) {
   if (picture && entry.rotationY === undefined) standIns.add(next.id)
   // A generated model is centred on its origin; standing it on its feet keeps its animated legs above the floor.
   if (next.media === 'model3d' && entry.grounded === undefined) next.grounded = true
-  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationY', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard', 'inPlace']) {
+  for (const field of ['clips', 'motion', 'position', 'scale', 'rotationX', 'rotationY', 'rotationZ', 'grounded', 'rhythm', 'appearance', 'imageLook', 'setItem', 'billboard', 'inPlace']) {
     if (entry[field] !== undefined && !(picture && (field === 'scale' || field === 'imageLook'))) next[field] = structuredClone(entry[field])
   }
   document.slots = current ? document.slots.map(slot => slot.id === current.id ? next : slot) : [...document.slots, next]
