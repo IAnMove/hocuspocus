@@ -147,7 +147,7 @@ def _crown(mesh: Mesh, head: _Head, color: str) -> None:
         _clump(mesh, head, color, root, pull, tip, 0.42, 0.06, flat=0.16)
 
 
-def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 7, length: float = 0.62) -> None:
+def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float = 0.62) -> None:
     """Pointed locks from a root on the dome's hairline (outside the face patch) down over the forehead to the brows, in three lengths so
     the tips stagger, flaring a little to the sides."""
     levels = (1.0, 0.85, 0.92)
@@ -168,6 +168,8 @@ def _side_locks(mesh: Mesh, head: _Head, color: str, length: float) -> None:
         pull = head.off(head.at(sign * 74, -16, 1.13), dz=0.1)
         tip = (root[0] + sign * head.rx * 0.1, head.chin - head.ry * length, head.cz + head.rz * 0.18)
         _clump(mesh, head, color, root, pull, tip, 0.30, 0.04, flat=0.36)
+        inner = head.at(sign * 52, 42, 1.06)   # a second, shorter lock in front of it: the side of the face is hair, not a gap
+        _clump(mesh, head, color, inner, head.off(head.at(sign * 66, 0, 1.12), dz=0.12), (inner[0] + sign * head.rx * 0.05, head.chin + head.ry * 0.2, head.cz + head.rz * 0.34), 0.24, 0.04, flat=0.3)
 
 
 def _short(mesh: Mesh, head: _Head, color: str) -> None:
@@ -198,8 +200,8 @@ def _bob(mesh: Mesh, head: _Head, color: str) -> None:
 def _long(mesh: Mesh, head: _Head, color: str) -> None:
     _fringe(mesh, head, color)
     _side_locks(mesh, head, color, 1.4)
-    for i in range(9):
-        yaw = 112 + i * 17
+    for i in range(14):
+        yaw = 106 + i * 11.7
         root = head.at(yaw, 14)
         pull = head.off(head.at(yaw, -25, 1.18), dy=-0.2)
         tip = (root[0] * 0.9, head.chest, head.back_z * 1.1 + (head.rz * 0.1 if abs(yaw - 180) > 40 else 0.0))
@@ -220,7 +222,7 @@ def _twin_tails(mesh: Mesh, head: _Head, color: str) -> None:
 
 
 def _spiky(mesh: Mesh, head: _Head, color: str) -> None:
-    _fringe(mesh, head, color, count=5)
+    _fringe(mesh, head, color, count=9)
     # a mirror-symmetric crown of curved, tapered clumps swept back (toward yaw 180), none below the ear line
     spikes = ((20, 58), (-20, 58), (50, 58), (-50, 58), (85, 64), (-85, 64), (120, 62), (-120, 62), (150, 58), (-150, 58), (180, 56))
     for k, (yaw, lat) in enumerate(spikes):
