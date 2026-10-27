@@ -104,7 +104,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         body["hair"] = {**body["hair"], "texture": _choice(raw["hair_texture"], ("flat", "photo"), "invalid_hair_texture", "hair_texture")}
     if "hair_edge" in raw:
         body["hair"] = {**body["hair"], "edge": _choice(raw["hair_edge"], ("smooth", "jagged"), "invalid_hair_edge", "hair_edge")}
-    span, feather = raw.get("face_span", 36.0), raw.get("face_feather", 18.0)   # the best of the profile tests: a narrow face patch that fades into the skull
+    span, feather = raw.get("face_span", 40.0), raw.get("face_feather", 0.0)   # tests H, I, M, O, P: 40 degrees with a hard border read best; a feathered border ghosts a second face at three quarters
     for label, value, low, high in (("face_span", span, 30.0, 58.0), ("face_feather", feather, 0.0, 30.0)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
             _fail("invalid_" + label, f"{label} is degrees from {low:g} to {high:g}")
