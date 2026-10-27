@@ -194,14 +194,15 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
     parts = loft_parts(lofted["traits"], lofted["layout"])
     base = f"anime-{slug(name)}"
-    for part in ("body", "head"):
-        (Path(workspace_dir) / f"{base}-guide-{part}.png").write_bytes(guide_png(parts, lofted["layout"], part))
+    guides = {part: guide_png(parts, lofted["layout"], part) for part in ("body", "head")}
+    for part, data in guides.items():
+        (Path(workspace_dir) / f"{base}-guide-{part}.png").write_bytes(data)
     out = {"guide_body_file": f"{base}-guide-body.png", "guide_head_file": f"{base}-guide-head.png",
            "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over three head tiles (front, side, back; 3x the scale)"}}
     if resolved["texture"]:
         painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
-        png = stack_atlas(painted, head)
+        png = stack_atlas(painted, head, (guides["body"], guides["head"]))
         body["glb"] = attach_texture(body["glb"], png)
         body["rigged"] = attach_texture(body["rigged"], png)
         out["texture_file"] = Path(resolved["texture"]).name

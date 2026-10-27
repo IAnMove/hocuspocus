@@ -133,21 +133,27 @@ def guide_png(parts, layout, part: str = "body", size=ATLAS) -> bytes:
     return out.getvalue()
 
 
-def bleed(picture, radius: int = 24):
-    """The painted figure's colours pushed outward over the ground around it (and over the 2 pixels at its edge, which are half
-    ground). The mould is never exactly the painted figure: a hand a little wider, a neck a little longer, and without this its
-    pixels would sample the dark ground and show as black slivers."""
+def bleed(picture, guide: bytes, radius: int = 28, band: int = 14):
+    """The painted figure's colours pushed outward over the ground around it. The mould is never exactly the painted figure: a hand a
+    little wider, a neck a little longer, and without this its pixels would sample the dark ground and show as black slivers.
+    A pixel is trusted when it is painted (not ground-coloured) or well inside the mould's own silhouette (the ``guide``), where a
+    dark jacket is a jacket; the rest, the ring along the silhouette and beyond, takes the colour of the nearest trusted pixels."""
+    import io
+
     import numpy as np
     from PIL import Image
 
     pixels = np.asarray(picture.convert("RGB")).astype(np.float32)
     corners = np.concatenate([pixels[:12, :12].reshape(-1, 3), pixels[:12, -12:].reshape(-1, 3), pixels[-12:, :12].reshape(-1, 3), pixels[-12:, -12:].reshape(-1, 3)])
     ground = np.median(corners, axis=0)
-    figure = np.abs(pixels - ground).max(axis=2) > 26
-    for _ in range(2):   # erode: an edge pixel is half figure, half ground
-        figure = figure & np.roll(figure, 1, 0) & np.roll(figure, -1, 0) & np.roll(figure, 1, 1) & np.roll(figure, -1, 1)
+    painted = np.abs(pixels - ground).max(axis=2) > 26
+    shape = np.asarray(Image.open(io.BytesIO(guide)).convert("L").resize(picture.size)) > 80
+    inner = shape.copy()
+    for _ in range(band):
+        inner = inner & np.roll(inner, 1, 0) & np.roll(inner, -1, 0) & np.roll(inner, 1, 1) & np.roll(inner, -1, 1)
+    trusted = inner | (painted & shape)
     out = pixels.copy()
-    filled = figure.copy()
+    filled = trusted.copy()
     for _ in range(radius):
         total = np.zeros_like(out)
         count = np.zeros(filled.shape, np.float32)
@@ -161,16 +167,18 @@ def bleed(picture, radius: int = 24):
     return Image.fromarray(out.clip(0, 255).astype(np.uint8))
 
 
-def stack_atlas(body, head=None) -> bytes:
+def stack_atlas(body, head=None, guides=None) -> bytes:
     """The atlas picture (PNG bytes) from the painted ``body`` picture (2:1) and, when there is one, the painted ``head`` picture
     (2:1). Without a head picture the head tiles are cut from the body picture and enlarged, softer but the same man."""
     import io
 
     from PIL import Image
 
-    top = bleed(body.convert("RGB").resize(HALF_SIZE, Image.LANCZOS))
+    top = body.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+    top = bleed(top, guides[0]) if guides else top
     if head is not None:
-        bottom = bleed(head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS))
+        bottom = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+        bottom = bleed(bottom, guides[1]) if guides else bottom
     else:
         bottom = Image.new("RGB", HALF_SIZE, (90, 70, 60))
     atlas = Image.new("RGB", ATLAS)
