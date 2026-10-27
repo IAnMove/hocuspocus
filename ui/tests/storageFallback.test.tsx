@@ -74,12 +74,14 @@ test('PreflightBanner renders and dismisses when sessionStorage throws', { concu
       checks: [{ id: 'ffmpeg', level: 'error', message: 'ffmpeg is missing' }],
     }),
   }) as Response
+  const ffmpegNotice =
+    'ffmpeg was not found on PATH. Video and audio export will fail. Install ffmpeg and restart HocusPocus Lab.'
 
   try {
     render(<PreflightBanner />)
-    await waitFor(() => assert.ok(screen.getByText('ffmpeg is missing')))
+    await waitFor(() => assert.ok(screen.getByText(ffmpegNotice)))
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }))
-    assert.equal(screen.queryByText('ffmpeg is missing'), null)
+    assert.equal(screen.queryByText(ffmpegNotice), null)
     assert.equal(safeStorageGet('session', 'maestro_preflight_dismissed'), '1')
   } finally {
     cleanup()
