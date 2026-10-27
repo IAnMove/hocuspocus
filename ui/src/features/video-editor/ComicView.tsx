@@ -29,7 +29,7 @@ interface Props {
   onDuplicate: (id: string) => void
   onExtra: (id: string, patch: ComicExtraPatch) => void
   onRemake: (id: string, request: ClipRemake) => void
-  onChanged: () => Promise<void>
+  onChanged: (adoptedClipId?: string) => Promise<void>
   onError: (message: string | null) => void
 }
 
@@ -192,7 +192,7 @@ function ComicTools(props: {
   onDuplicate: (id: string) => void
   onExtra: (id: string, patch: ComicExtraPatch) => void
   onRemake: (id: string, request: ClipRemake) => void
-  onChanged: () => Promise<void>
+  onChanged: (adoptedClipId?: string) => Promise<void>
   onError: (message: string | null) => void
 }) {
   const { t } = useUiTranslation('videoEditor')

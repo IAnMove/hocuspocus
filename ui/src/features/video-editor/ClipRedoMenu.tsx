@@ -17,7 +17,7 @@ export function ClipRedoMenu({ workspace, file, clipId, onChanged, onError, onRe
   workspace: string
   file: string
   clipId: string
-  onChanged: () => Promise<void>
+  onChanged: (adoptedClipId?: string) => Promise<void>
   onError: (message: string | null) => void
   onRemake: (request: ClipRemake) => void
 }) {
@@ -45,10 +45,10 @@ export function ClipRedoMenu({ workspace, file, clipId, onChanged, onError, onRe
   const shot = board.shots.find(item => item.id === clipId)
   const gallery = <button type="button" className={action} onClick={() => onRemake({ kind: 'gallery' })}><Replace size={11} /> {t('comic.redo.gallery')}</button>
   if (!shot) return <div className="space-y-1">{gallery}<p className="text-[10px] text-black/60">{t('comic.redo.unsaved')}</p></div>
-  const run = (work: () => Promise<unknown>) => {
+  const run = (work: () => Promise<unknown>, adoptedClipId?: string) => {
     setBusy(true)
     onError(null)
-    void work().then(() => onChanged()).then(() => getMontageShots(workspace, file)).then(setBoard)
+    void work().then(() => onChanged(adoptedClipId)).then(() => getMontageShots(workspace, file)).then(setBoard)
       .catch(error => onError((error as Error).message)).finally(() => setBusy(false))
   }
   const origin = shot.provenance
@@ -58,7 +58,7 @@ export function ClipRedoMenu({ workspace, file, clipId, onChanged, onError, onRe
   return <div className="space-y-1">
     <p className="text-[10px] text-black/70" title={origin.prompt}>{originLine(origin, kind, t('shots.seed'))}</p>
     {shot.takes.length > 0 && <div className="flex flex-wrap gap-1">{shot.takes.map(take => <TakeChip key={take.id} take={take} busy={busy}
-      onSelect={() => run(() => selectShotTake(workspace, file, shot.id, take.id, board.revision))} />)}</div>}
+      onSelect={() => run(() => selectShotTake(workspace, file, shot.id, take.id, board.revision), shot.id)} />)}</div>}
     <div className="flex flex-wrap gap-1">
       {origin.canRegenerate && !editing && <button type="button" className={action} disabled={busy} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('comic.redo.here')}</button>}
       {origin.canRegenerate && <button type="button" className={action} disabled={busy} onClick={() => onRemake({ kind: 'creation', outputs: creationOutputs(origin) })}><Clapperboard size={11} /> {t('comic.redo.creation')}</button>}
