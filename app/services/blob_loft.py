@@ -288,6 +288,13 @@ def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
     """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
     rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
     width, back, front, box = skull_profile(lat, L.get("head_kind", "fem"))
+    fit = L.get("skull_fit")
+    if fit:   # a skull fitted to the head picture it wears (blob_head_fit): the painted silhouette's width and depths at this height
+        from services.blob_head_fit import factor_at
+
+        width *= factor_at(fit.get("width"), lat)
+        front *= factor_at(fit.get("front"), lat)
+        back *= factor_at(fit.get("back"), lat)
     t = math.radians(yaw)
     s, c = math.sin(t), math.cos(t)
     exponent = 2.0 / (2.0 + ((FACE_BOX if c >= 0 else BACK_BOX) - 2.0) * box)

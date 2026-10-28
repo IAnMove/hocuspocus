@@ -15,7 +15,7 @@ LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit", "realism", "atlas", "blocky", "blocky_colors", "sleeves", "arm_turn"}
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit", "realism", "atlas", "blocky", "blocky_colors", "sleeves", "arm_turn", "skull_fit"}
 _MESHES = ("pieces", "loft", "blocky")
 _BLOCKY = ("voxel", "roblox")
 _BLOCKY_COLORS = ("skin", "hair", "top", "bottom", "shoes")
@@ -278,6 +278,7 @@ def _normalize(traits: dict) -> dict:
         **({"outfit": outfit} if "outfit" in traits else {}),
         **({"realism": _choice(traits["realism"], _REALISMS, "invalid_realism", "realism")} if "realism" in traits else {}),
         **({"atlas": True} if traits.get("atlas") is True and mesh == "loft" else {}),
+        **({"skull_fit": _skull_fit(traits["skull_fit"])} if traits.get("skull_fit") else {}),
         **(_blocky_fields(traits) if mesh == "blocky" else {}),
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
@@ -291,6 +292,26 @@ def _normalize(traits: dict) -> dict:
         "hair": _hair(traits.get("hair")),
         "accessories": _accessory_list(traits.get("accessories")),
     }
+
+
+def _skull_fit(value) -> dict:
+    """The factors of a skull fitted to a head picture: {width, front, back}, each a list of [latitude, factor] pairs."""
+    if not isinstance(value, dict) or set(value) - {"width", "front", "back"}:
+        _fail("invalid_skull_fit", "skull_fit is {width, front, back}, each a list of [latitude, factor]")
+    out = {}
+    for key, rows in value.items():
+        if not isinstance(rows, list) or not 2 <= len(rows) <= 24:
+            _fail("invalid_skull_fit", f"skull_fit.{key} is a list of 2 to 24 [latitude, factor] pairs")
+        clean = []
+        for row in rows:
+            if (not isinstance(row, (list, tuple)) or len(row) != 2 or any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in row)
+                    or not -90 <= row[0] <= 90 or not 0.7 <= row[1] <= 1.3):
+                _fail("invalid_skull_fit", f"skull_fit.{key}: each pair is [latitude -90..90, factor 0.7..1.3]")
+            clean.append([float(row[0]), float(row[1])])
+        if clean != sorted(clean):
+            _fail("invalid_skull_fit", f"skull_fit.{key} must be sorted by latitude")
+        out[key] = clean
+    return out
 
 
 def _blocky_fields(traits: dict) -> dict:
@@ -465,7 +486,7 @@ def _layout(spec: dict) -> dict:
     # Above the belly. Higher than about half the torso swings a bent wave into the head.
     shoulder_at = _SHOULDER_AT[spec["family"]]
     return {
-        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"], "head_kind": spec["head"].get("kind", "fem"), "real": spec.get("realism") == "real",
+        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"], "head_kind": spec["head"].get("kind", "fem"), **({"skull_fit": spec["skull_fit"]} if spec.get("skull_fit") else {}), "real": spec.get("realism") == "real",
         "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
         "waist_taper": min(1.0, max(0.35, waist_w / torso_w)) if spec["family"] == "anime" else 1.0,
         "torso_y": (stack["torso_top"] + stack["torso_bottom"]) / 2,

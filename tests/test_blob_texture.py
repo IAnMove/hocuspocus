@@ -220,3 +220,31 @@ def test_a_head_with_a_painted_face_gets_a_hair_cap_and_no_fringe_or_ear_hiding_
     ear_y = layout["head_y"] + layout["sy"] / 2 * -0.28
     side = [v for v in capped.vertices if abs(abs(v[0]) - layout["sx"] / 2 * 1.04) < layout["sx"] * 0.02]
     assert all(v[1] > ear_y + layout["sy"] * 0.1 for v in side), "the flanks stay above the ears"
+
+
+def test_matching_moves_the_side_and_back_tiles_to_the_front_tiles_tones_and_leaves_the_front_alone():
+    import numpy as np
+
+    from services.blob_texture import match_tiles
+
+    picture = Image.new("RGB", (900, 600), (30, 30, 36))
+    for index, tone in enumerate(((200, 150, 120), (235, 200, 160), (170, 120, 90))):
+        for x in range(index * 300 + 60, index * 300 + 240):
+            for y in range(60, 400):
+                picture.putpixel((x, y), tone)
+    matched = np.asarray(match_tiles(picture)).astype(int)
+    original = np.asarray(picture).astype(int)
+    assert (matched[:, :300] == original[:, :300]).all(), "the front tile is the reference"
+    front, side, back = (matched[200, index * 300 + 150] for index in range(3))
+    assert abs(side - front).max() < abs(np.array((235, 200, 160)) - np.array((200, 150, 120))).max() * 0.6, "the side tile came toward the front's tone"
+    assert abs(back - front).max() < abs(np.array((170, 120, 90)) - np.array((200, 150, 120))).max() * 0.6
+
+
+def test_factor_at_interpolates_and_ramps_to_one():
+    from app.services.blob_head_fit import factor_at
+    table = [[-30, 0.9], [0, 1.0], [30, 0.8]]
+    assert abs(factor_at(table, -30) - 0.9) < 1e-9
+    assert abs(factor_at(table, 15) - 0.9) < 1e-9
+    assert abs(factor_at(table, 99) - 1.0) < 1e-9    # back to 1 well outside the fitted heights
+    assert abs(factor_at(table, -99) - 1.0) < 1e-9
+    assert factor_at(None, 10) == 1.0

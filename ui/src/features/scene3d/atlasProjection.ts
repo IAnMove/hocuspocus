@@ -8,12 +8,12 @@
 import type { Material, Mesh, Object3D } from 'three'
 import { Color, SRGBColorSpace, Vector3 } from 'three'
 
-export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number]; skin?: [number, number, number]; hold?: number; faceYaw?: number; faceFeather?: number }
+export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number]; skin?: [number, number, number]; hold?: number; faceYaw?: number; faceFeather?: number; noUpperSplit?: boolean }
 
-export const ATLAS_KEY = 'atlas-drape-6'
+export const ATLAS_KEY = 'atlas-drape-7'
 
 export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
-  const raw = (userData as { atlas?: { body?: unknown; head?: unknown; skin?: unknown; hold?: unknown; faceYaw?: unknown; faceFeather?: unknown } } | undefined)?.atlas
+  const raw = (userData as { atlas?: { body?: unknown; head?: unknown; skin?: unknown; hold?: unknown; faceYaw?: unknown; faceFeather?: unknown; noUpperSplit?: unknown } } | undefined)?.atlas
   const triple = (value: unknown): [number, number, number] | undefined =>
     Array.isArray(value) && value.length === 3 && value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [value[0], value[1], value[2]] : undefined
   const body = triple(raw?.body)
@@ -24,7 +24,7 @@ export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
   const degrees = (value: unknown, low: number, high: number) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high ? value : undefined
   const faceYaw = degrees(raw?.faceYaw, 30, 58)
   const faceFeather = degrees(raw?.faceFeather, 0, 30)
-  return { body, ...(hold !== undefined ? { hold } : {}), ...(faceYaw !== undefined ? { faceYaw } : {}), ...(faceFeather ? { faceFeather } : {}), ...(head && head[1] > 0 ? { head } : {}), ...(skin && skin.every(value => value >= 0 && value <= 1) ? { skin } : {}) }
+  return { body, ...(raw?.noUpperSplit === true ? { noUpperSplit: true } : {}), ...(hold !== undefined ? { hold } : {}), ...(faceYaw !== undefined ? { faceYaw } : {}), ...(faceFeather ? { faceFeather } : {}), ...(head && head[1] > 0 ? { head } : {}), ...(skin && skin.every(value => value >= 0 && value <= 1) ? { skin } : {}) }
 }
 
 type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string }
@@ -38,6 +38,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
   shader.uniforms.atlasSkin = { value: new Vector3(skin?.r ?? 0, skin?.g ?? 0, skin?.b ?? 0) }
   shader.uniforms.atlasHasSkin = { value: skin ? 1 : 0 }
   shader.uniforms.atlasHold = { value: frame.hold ?? 0 }
+  shader.uniforms.atlasSplit = { value: frame.noUpperSplit ? 0 : 1 }
   const patch = ((frame.faceYaw ?? 53) * Math.PI) / 180
   shader.uniforms.atlasPatchYaw = { value: patch }
   shader.uniforms.atlasFeather = { value: ((frame.faceFeather ?? 0) * Math.PI) / 180 }
@@ -46,7 +47,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;\nuniform float atlasHold;\nuniform float atlasPatchYaw;\nuniform float atlasFeather;')
+    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;\nuniform float atlasHold;\nuniform float atlasSplit;\nuniform float atlasPatchYaw;\nuniform float atlasFeather;')
     .replace('#include <map_fragment>', `#ifdef USE_MAP
 	vec3 atlasN = normalize( vAtlasNormal );
 	vec3 atlasP = vAtlasPos;
@@ -62,7 +63,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
 	float faceYaw = atan( abs( atlasP.x ), atlasP.z );
 	float crownK = smoothstep( 0.55, 0.85, abs( atlasN.y ) );
 	// above the brows the flank is hair: hair stretches well, while the side picture's forehead is bare skin, so the front picture is kept longer there
-	float upperHead = smoothstep( 0.14, 0.24, ( atlasP.y - atlasHead.x ) / atlasHead.y );
+	float upperHead = smoothstep( 0.14, 0.24, ( atlasP.y - atlasHead.x ) / atlasHead.y ) * atlasSplit;
 	float toSide = smoothstep( mix( atlasPatchYaw, atlasPatchYaw + 0.38 + atlasHold, upperHead ), mix( atlasPatchYaw + 0.38, atlasPatchYaw + 0.78 + atlasHold, upperHead ), faceYaw ) * ( 1.0 - crownK );
 	float toBack = smoothstep( 1.95, 2.45, faceYaw ) * ( 1.0 - crownK );
 	vec4 frontTile = texture2D( map, vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV ) );

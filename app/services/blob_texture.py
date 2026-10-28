@@ -167,7 +167,36 @@ def bleed(picture, guide: bytes, radius: int = 28, band: int = 14):
     return Image.fromarray(out.clip(0, 255).astype(np.uint8))
 
 
-def stack_atlas(body, head=None, guides=None) -> bytes:
+def match_tiles(head):
+    """The side and back tiles of a head picture moved to the front tile's tones (a Reinhard transfer in Lab on each tile's head pixels, the
+    background left out): the three portraits are lit differently, and where the shader goes from the front picture to the side one that
+    difference was a band across the cheek."""
+    import cv2
+    import numpy as np
+    from PIL import Image
+
+    rgb = np.asarray(head.convert("RGB"))
+    h, w = rgb.shape[:2]
+    third = w // 3
+    tiles = [rgb[:, i * third:(i + 1) * third].copy() for i in range(3)]
+    lab = [cv2.cvtColor(t, cv2.COLOR_RGB2LAB).astype(np.float32) for t in tiles]
+    corner = np.median(np.concatenate([tiles[0][:12, :12].reshape(-1, 3), tiles[0][:12, -12:].reshape(-1, 3)]).astype(np.float32), axis=0)
+    masks = [(np.abs(t.astype(np.float32) - corner).max(axis=2) > 24) for t in tiles]
+    keep = [m & (np.arange(h)[:, None] < int(h * 0.78)) for m in masks]        # the head and neck's top, not the shoulders
+    ref_mean = lab[0][keep[0]].mean(axis=0)
+    ref_std = lab[0][keep[0]].std(axis=0) + 1e-3
+    out = [tiles[0]]
+    for i in (1, 2):
+        pixels = lab[i][keep[i]]
+        mean, std = pixels.mean(axis=0), pixels.std(axis=0) + 1e-3
+        shifted = (lab[i] - mean) / std * ref_std + ref_mean
+        # only part of the way for the lightness (a profile is lit from its own side) and fully for the colour
+        shifted[..., 0] = lab[i][..., 0] * 0.4 + shifted[..., 0] * 0.6
+        out.append(cv2.cvtColor(np.clip(shifted, 0, 255).astype(np.uint8), cv2.COLOR_LAB2RGB))
+    return Image.fromarray(np.concatenate(out + [rgb[:, 3 * third:]] if rgb.shape[1] > 3 * third else out, axis=1))
+
+
+def stack_atlas(body, head=None, guides=None, match: bool = False) -> bytes:
     """The atlas picture (PNG bytes) from the painted ``body`` picture (2:1) and, when there is one, the painted ``head`` picture
     (2:1). Without a head picture the head tiles are cut from the body picture and enlarged, softer but the same man."""
     import io
@@ -178,6 +207,8 @@ def stack_atlas(body, head=None, guides=None) -> bytes:
     top = bleed(top, guides[0]) if guides else top
     if head is not None:
         bottom = head.convert("RGB").resize(HALF_SIZE, Image.LANCZOS)
+        if match:
+            bottom = match_tiles(bottom)
         bottom = bleed(bottom, guides[1]) if guides else bottom
     else:
         bottom = Image.new("RGB", HALF_SIZE, (90, 70, 60))
@@ -214,7 +245,7 @@ def hair_of(head) -> str:
     return "#%02X%02X%02X" % (r, g, b)
 
 
-def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None) -> dict:
+def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, split: bool = True) -> dict:
     """The atlas frame as numbers a viewer can read from the material's ``extras``: the body views ``[centre x, centre y, span]``,
     the head tiles ``[centre y, tile height in metres, the cut]``."""
     out = {"body": [round(v, 6) for v in frame["body"]]}
@@ -224,13 +255,15 @@ def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0
         out["skin"] = list(skin)
     if hold:
         out["hold"] = round(float(hold), 3)
+    if not split:
+        out["noUpperSplit"] = True   # one blend height for the whole head: a fitted skull needs no longer hold of the front picture above the brows
     if face:
         out["faceYaw"] = round(float(face[0]), 2)       # degrees each way the face patch reaches
         out["faceFeather"] = round(float(face[1]), 2)   # degrees over which the patch fades into the skull at its border
     return out
 
 
-def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None) -> bytes:
+def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, unlit: bool = False, split: bool = True) -> bytes:
     """The GLB with ``png`` as the base colour texture of the materials named in ``materials`` (one shared image), and no vertex
     colours on the primitives that use them (they would tint the picture). Everything else, skin and animations included, is kept
     byte for byte."""
@@ -255,9 +288,16 @@ def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body",
     document.setdefault("images", []).append({"bufferView": len(document["bufferViews"]) - 1, "mimeType": "image/png"})
     document.setdefault("samplers", []).append({"magFilter": 9728 if nearest else 9729, "minFilter": 9728 if nearest else 9729, "wrapS": 33071, "wrapT": 33071})
     document.setdefault("textures", []).append({"sampler": len(document["samplers"]) - 1, "source": len(document["images"]) - 1})
+    if unlit:
+        # the photographs carry their own light: shown unlit, the geometry adds no shading of its own, so no step of the lighting can cut across the face
+        used = document.setdefault("extensionsUsed", [])
+        if "KHR_materials_unlit" not in used:
+            used.append("KHR_materials_unlit")
+        for index in found:
+            document["materials"][index].setdefault("extensions", {})["KHR_materials_unlit"] = {}
     for index in found:
         if frame is not None:
-            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin, hold, face)
+            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin, hold, face, split)
         document["materials"][index].setdefault("pbrMetallicRoughness", {})["baseColorTexture"] = {"index": len(document["textures"]) - 1}
         document["materials"][index]["pbrMetallicRoughness"]["baseColorFactor"] = [1, 1, 1, 1]
     for mesh in document.get("meshes", []):
