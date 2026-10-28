@@ -245,7 +245,7 @@ def hair_of(head) -> str:
     return "#%02X%02X%02X" % (r, g, b)
 
 
-def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, split: bool = True) -> dict:
+def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, split: bool = True, bands: float | None = None) -> dict:
     """The atlas frame as numbers a viewer can read from the material's ``extras``: the body views ``[centre x, centre y, span]``,
     the head tiles ``[centre y, tile height in metres, the cut]``."""
     out = {"body": [round(v, 6) for v in frame["body"]]}
@@ -257,13 +257,15 @@ def frame_extras(frame: dict, skin: list[float] | None = None, hold: float = 0.0
         out["hold"] = round(float(hold), 3)
     if not split:
         out["noUpperSplit"] = True   # one blend height for the whole head: a fitted skull needs no longer hold of the front picture above the brows
+    if bands is not None:
+        out["bandDetail"] = round(float(bands), 3)   # frequency split of the head blend: fine texture cut hard, tone blended wide; this much of the fine texture is kept off the face patch
     if face:
         out["faceYaw"] = round(float(face[0]), 2)       # degrees each way the face patch reaches
         out["faceFeather"] = round(float(face[1]), 2)   # degrees over which the patch fades into the skull at its border
     return out
 
 
-def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, unlit: bool = False, split: bool = True) -> bytes:
+def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body", "face"), frame: dict | None = None, nearest: bool = False, skin: list[float] | None = None, hold: float = 0.0, face: tuple[float, float] | None = None, unlit: bool = False, split: bool = True, bands: float | None = None) -> bytes:
     """The GLB with ``png`` as the base colour texture of the materials named in ``materials`` (one shared image), and no vertex
     colours on the primitives that use them (they would tint the picture). Everything else, skin and animations included, is kept
     byte for byte."""
@@ -297,7 +299,7 @@ def attach_texture(glb: bytes, png: bytes, materials: tuple[str, ...] = ("body",
             document["materials"][index].setdefault("extensions", {})["KHR_materials_unlit"] = {}
     for index in found:
         if frame is not None:
-            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin, hold, face, split)
+            document["materials"][index].setdefault("extras", {})["atlas"] = frame_extras(frame, skin, hold, face, split, bands)
         document["materials"][index].setdefault("pbrMetallicRoughness", {})["baseColorTexture"] = {"index": len(document["textures"]) - 1}
         document["materials"][index]["pbrMetallicRoughness"]["baseColorFactor"] = [1, 1, 1, 1]
     for mesh in document.get("meshes", []):

@@ -30,6 +30,24 @@ test('the shader samples the atlas from the bind pose and blends the views by th
   assert.deepEqual(shader.uniforms.atlasHead.value.toArray(), [1.7, 0.4, 1.5])
 })
 
+test('the head blend can split tones from fine texture, and the split is only read when valid', () => {
+  assert.equal(readAtlasFrame({ atlas: { body: [0, 1, 2], bandDetail: 0.5 } })?.bandDetail, 0.5)
+  assert.equal(readAtlasFrame({ atlas: { body: [0, 1, 2], bandDetail: 3 } })?.bandDetail, undefined)
+  const shader = {
+    uniforms: {},
+    vertexShader: '#include <common>\nvoid main() {\n#include <begin_vertex>\n}',
+    fragmentShader: '#include <common>\n#include <map_pars_fragment>\nvoid main() {\n#include <map_fragment>\n}',
+  }
+  patchAtlasShader(shader, { body: [0, 0.9, 2], head: [1.7, 0.4, 1.5], bandDetail: 0 })
+  assert.ok(shader.fragmentShader.includes('uniform float atlasBand;') && shader.fragmentShader.includes('uniform float atlasDetail;'), 'the split uniforms are declared')
+  assert.ok(shader.fragmentShader.includes('vec4 atlasLow(') && shader.fragmentShader.includes('textureLod'), 'the tones come from a mip level of the picture')
+  assert.equal(shader.uniforms.atlasBand.value, 1)
+  assert.equal(shader.uniforms.atlasDetail.value, 0)
+  const plain = { uniforms: {}, vertexShader: '', fragmentShader: '#include <common>\n#include <map_fragment>' }
+  patchAtlasShader(plain, { body: [0, 0.9, 2] })
+  assert.equal(plain.uniforms.atlasBand.value, 0, 'frames without the split keep the plain blend')
+})
+
 test('only textured materials with an atlas frame are draped', () => {
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(9), 3))

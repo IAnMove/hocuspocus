@@ -8,12 +8,12 @@
 import type { Material, Mesh, Object3D } from 'three'
 import { Color, SRGBColorSpace, Vector3 } from 'three'
 
-export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number]; skin?: [number, number, number]; hold?: number; faceYaw?: number; faceFeather?: number; noUpperSplit?: boolean }
+export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number]; skin?: [number, number, number]; hold?: number; faceYaw?: number; faceFeather?: number; noUpperSplit?: boolean; bandDetail?: number }
 
-export const ATLAS_KEY = 'atlas-drape-7'
+export const ATLAS_KEY = 'atlas-drape-10'
 
 export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
-  const raw = (userData as { atlas?: { body?: unknown; head?: unknown; skin?: unknown; hold?: unknown; faceYaw?: unknown; faceFeather?: unknown; noUpperSplit?: unknown } } | undefined)?.atlas
+  const raw = (userData as { atlas?: { body?: unknown; head?: unknown; skin?: unknown; hold?: unknown; faceYaw?: unknown; faceFeather?: unknown; noUpperSplit?: unknown; bandDetail?: unknown } } | undefined)?.atlas
   const triple = (value: unknown): [number, number, number] | undefined =>
     Array.isArray(value) && value.length === 3 && value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [value[0], value[1], value[2]] : undefined
   const body = triple(raw?.body)
@@ -24,7 +24,8 @@ export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
   const degrees = (value: unknown, low: number, high: number) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high ? value : undefined
   const faceYaw = degrees(raw?.faceYaw, 30, 58)
   const faceFeather = degrees(raw?.faceFeather, 0, 30)
-  return { body, ...(raw?.noUpperSplit === true ? { noUpperSplit: true } : {}), ...(hold !== undefined ? { hold } : {}), ...(faceYaw !== undefined ? { faceYaw } : {}), ...(faceFeather ? { faceFeather } : {}), ...(head && head[1] > 0 ? { head } : {}), ...(skin && skin.every(value => value >= 0 && value <= 1) ? { skin } : {}) }
+  const bandDetail = degrees(raw?.bandDetail, 0, 1)
+  return { body, ...(bandDetail !== undefined ? { bandDetail } : {}), ...(raw?.noUpperSplit === true ? { noUpperSplit: true } : {}), ...(hold !== undefined ? { hold } : {}), ...(faceYaw !== undefined ? { faceYaw } : {}), ...(faceFeather ? { faceFeather } : {}), ...(head && head[1] > 0 ? { head } : {}), ...(skin && skin.every(value => value >= 0 && value <= 1) ? { skin } : {}) }
 }
 
 type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string }
@@ -39,6 +40,8 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
   shader.uniforms.atlasHasSkin = { value: skin ? 1 : 0 }
   shader.uniforms.atlasHold = { value: frame.hold ?? 0 }
   shader.uniforms.atlasSplit = { value: frame.noUpperSplit ? 0 : 1 }
+  shader.uniforms.atlasBand = { value: frame.bandDetail === undefined ? 0 : 1 }
+  shader.uniforms.atlasDetail = { value: frame.bandDetail ?? 1 }
   const patch = ((frame.faceYaw ?? 53) * Math.PI) / 180
   shader.uniforms.atlasPatchYaw = { value: patch }
   shader.uniforms.atlasFeather = { value: ((frame.faceFeather ?? 0) * Math.PI) / 180 }
@@ -47,7 +50,16 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;\nuniform float atlasHold;\nuniform float atlasSplit;\nuniform float atlasPatchYaw;\nuniform float atlasFeather;')
+    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;\nuniform float atlasHold;\nuniform float atlasSplit;\nuniform float atlasBand;\nuniform float atlasDetail;\nuniform float atlasPatchYaw;\nuniform float atlasFeather;')
+    .replace('#include <map_pars_fragment>', `#include <map_pars_fragment>
+#ifdef USE_MAP
+// the tile's tones without its fine texture: a mip level of the picture, its sample point kept inside the tile so the blur does not pull in the next one
+vec4 atlasLow( vec2 uv, float tile ) {
+	vec2 size = vec2( textureSize( map, 0 ) );
+	vec2 pad = vec2( exp2( 4.0 ) ) / size;
+	return textureLod( map, vec2( clamp( uv.x, tile / 3.0 + pad.x, ( tile + 1.0 ) / 3.0 - pad.x ), clamp( uv.y, 0.5 + pad.y, 1.0 - pad.y ) ), 4.0 );
+}
+#endif`)
     .replace('#include <map_fragment>', `#ifdef USE_MAP
 	vec3 atlasN = normalize( vAtlasNormal );
 	vec3 atlasP = vAtlasPos;
@@ -70,6 +82,24 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
 	vec4 sideTile = texture2D( map, vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV ) );
 	vec4 backTile = texture2D( map, vec2( ( 2.5 - atlasP.x / tileW ) / 3.0, headV ) );
 	vec4 headColor = mix( mix( frontTile, sideTile, toSide ), backTile, toBack );
+	if ( atlasBand > 0.5 && atlasFaceOnly < 0.5 ) {
+		// a seam between two pictures is seen in the fine texture (a hairline, pores, an ear that is not where the other picture has it), not in the tones:
+		// the tones blend over a wide angle and the fine texture changes at one hard cut, so no line of the face shows through on the side
+		vec2 frontUv = vec2( ( 0.5 + atlasP.x / tileW ) / 3.0, headV );
+		vec2 sideUv = vec2( ( 1.5 - atlasP.z / tileW ) / 3.0, headV );
+		vec2 backUv = vec2( ( 2.5 - atlasP.x / tileW ) / 3.0, headV );
+		// past the angle where the front picture still shows the cheek it only holds edge colour stretched sideways (the ear, the ground): keep reading the cheek
+		float frontX = sign( atlasP.x ) * min( abs( atlasP.x ), length( atlasP.xz ) * sin( atlasPatchYaw + 0.4 ) );
+		vec4 frontLow = atlasLow( vec2( ( 0.5 + frontX / tileW ) / 3.0, headV ), 0.0 );
+		vec4 sideLow = atlasLow( sideUv, 1.0 );
+		vec4 backLow = atlasLow( backUv, 2.0 );
+		// over before the front picture's last column is stretched along the side of the head (rows of the brow and the mouth smeared sideways)
+		float wide = smoothstep( atlasPatchYaw - 0.1, atlasPatchYaw + 0.55, faceYaw ) * ( 1.0 - crownK );
+		float cut = step( atlasPatchYaw + 0.3, faceYaw ) * ( 1.0 - crownK );
+		vec4 lowColor = mix( mix( frontLow, sideLow, wide ), backLow, toBack );
+		vec4 fineColor = mix( mix( frontTile - frontLow, sideTile - sideLow, cut ), backTile - backLow, step( 2.2, faceYaw ) * ( 1.0 - crownK ) );
+		headColor = lowColor + fineColor * atlasDetail;
+	}
 	if ( atlasFaceOnly > 0.5 ) headColor = frontTile;
 	// what faces down (the underside of the jaw and the chin) takes the skin of the neck under the same x, not the row of the beard
 	// that a front projection smears over it; the flat skin colour only fills in where the neck picture is missing

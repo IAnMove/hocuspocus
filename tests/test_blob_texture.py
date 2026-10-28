@@ -248,3 +248,24 @@ def test_factor_at_interpolates_and_ramps_to_one():
     assert abs(factor_at(table, 99) - 1.0) < 1e-9    # back to 1 well outside the fitted heights
     assert abs(factor_at(table, -99) - 1.0) < 1e-9
     assert factor_at(None, 10) == 1.0
+
+
+def test_frame_extras_carry_the_band_split_only_when_asked():
+    from app.services.blob_texture import frame_extras
+    frame = {"body": [0.0, 0.9, 2.0]}
+    assert "bandDetail" not in frame_extras(frame)
+    assert frame_extras(frame, bands=0.0)["bandDetail"] == 0.0
+    assert frame_extras(frame, bands=0.5)["bandDetail"] == 0.5
+
+
+def test_head_bands_default_on_and_validated():
+    import pytest
+    from services.blob_builder import BlobTraitsError
+    base = {"style": "real", "gender": "man", "hair_style": "none"}
+    assert resolve_traits(base)["head_bands"] == 1.0
+    assert resolve_traits({**base, "head_bands": False})["head_bands"] is None
+    assert resolve_traits({**base, "head_bands": 0})["head_bands"] == 0.0
+    for bad in ("yes", 2, -0.1):
+        with pytest.raises(BlobTraitsError) as refused:
+            resolve_traits({**base, "head_bands": bad})
+        assert "head_bands" in str(refused.value)

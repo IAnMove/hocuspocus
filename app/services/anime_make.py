@@ -25,7 +25,7 @@ GENDERS = ("girl", "boy", "man", "woman")
 STYLES = ("anime", "real", "voxel", "roblox")
 BOTTOMS = ("trousers", "skirt", "shorts")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
-           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom", "hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit"}
+           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom", "hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands"}
 FACE_SOURCES = ("program", "qwen")
 FACE_STYLES = ("anime", "cute")
 _OUTFIT_COLORS = {"top", "bottom", "shoes", "accent", "socks"}
@@ -98,7 +98,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         "accessories": accessories,
     }
     look = _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style")
-    if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit")) and look != "real":
+    if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands")) and look != "real":
         _fail("invalid_traits", "hair_texture, hair_edge, upper_hold, face_span and face_feather are for style real")
     if "hair_texture" in raw:
         body["hair"] = {**body["hair"], "texture": _choice(raw["hair_texture"], ("flat", "photo"), "invalid_hair_texture", "hair_texture")}
@@ -108,6 +108,13 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     head_fit = raw.get("head_fit", False)
     if not isinstance(head_fit, bool):
         _fail("invalid_head_fit", "head_fit is true or false: fit the skull's width and depth to the head picture's silhouettes")
+    head_bands = raw.get("head_bands", True)   # on by default: the face-to-side junction is a soft change of tone, not a line
+    if head_bands is True:
+        head_bands = 1.0
+    elif head_bands is False:
+        head_bands = None
+    if head_bands is not None and (isinstance(head_bands, bool) or not isinstance(head_bands, (int, float)) or not 0 <= head_bands <= 1):
+        _fail("invalid_head_bands", "head_bands is true (default), false (the plain blend of the pictures) or a number from 0 to 1: how much fine texture the side and back keep when the head blend splits tone (wide) from texture (hard)")
     head_match = raw.get("head_match", False)
     if not isinstance(head_match, bool):
         _fail("invalid_head_match", "head_match is true or false: move the side and back portraits to the front one's tones")
@@ -152,7 +159,7 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
               "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"],
               "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}), **({"face_image": face_image} if face_image else {})}
     return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None,
-            "texture": texture, "texture_head": texture_head, "style": look, "upper_hold": float(hold), "face_span": float(span), "face_feather": float(feather), "face_depth": float(depth), "lighting": lighting, "head_match": head_match, "head_fit": head_fit}
+            "texture": texture, "texture_head": texture_head, "style": look, "upper_hold": float(hold), "face_span": float(span), "face_feather": float(feather), "face_depth": float(depth), "lighting": lighting, "head_match": head_match, "head_fit": head_fit, "head_bands": None if head_bands is None else float(head_bands)}
 
 
 def _blocky_body(body: dict, look: str, raw: dict, skin: str, hair_color: str, colors: dict) -> dict:
@@ -250,8 +257,8 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
         frame = atlas_frame([parts[0][0]], lofted["layout"])
         skin = neck_skin(head) if head is not None else None
         photo_hair = ("body", "face", "hair") if resolved["body"]["hair"].get("texture") == "photo" else ("body", "face")
-        body["glb"] = attach_texture(body["glb"], png, photo_hair, frame=frame, skin=skin, hold=resolved["upper_hold"], face=(resolved["face_span"], resolved["face_feather"]), unlit=resolved["lighting"] == "baked", split=not resolved["head_fit"])
-        body["rigged"] = attach_texture(body["rigged"], png, photo_hair, frame=frame, skin=skin, hold=resolved["upper_hold"], face=(resolved["face_span"], resolved["face_feather"]), unlit=resolved["lighting"] == "baked", split=not resolved["head_fit"])
+        body["glb"] = attach_texture(body["glb"], png, photo_hair, frame=frame, skin=skin, hold=resolved["upper_hold"], face=(resolved["face_span"], resolved["face_feather"]), unlit=resolved["lighting"] == "baked", split=not resolved["head_fit"], bands=resolved["head_bands"])
+        body["rigged"] = attach_texture(body["rigged"], png, photo_hair, frame=frame, skin=skin, hold=resolved["upper_hold"], face=(resolved["face_span"], resolved["face_feather"]), unlit=resolved["lighting"] == "baked", split=not resolved["head_fit"], bands=resolved["head_bands"])
         out["texture_file"] = Path(resolved["texture"]).name
         if head is not None:
             out["face_pose_file"] = _face_pose(workspace_dir, base, head)
