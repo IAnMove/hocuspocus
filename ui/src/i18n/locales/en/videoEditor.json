@@ -292,12 +292,23 @@
     "none": "No text",
     "textStyle": "Text",
     "editText": "Line",
-    "changeTake": "Change take",
     "pickFrame": "Pick panel",
     "delete": "Delete",
     "duplicate": "Duplicate",
     "empty": "This montage has no clips yet.",
-    "frameAt": "{{time}} s"
+    "frameAt": "{{time}} s",
+    "missing": "Could not read this clip",
+    "redo": {
+      "toggle": "Remake",
+      "here": "Regenerate here",
+      "creation": "Open in Video creation",
+      "scene": "Edit the scene",
+      "gallery": "Swap for another video",
+      "hintGenerated": "“Regenerate here” makes a new take with the same prompt; then choose “Use”. Video creation has every setting: generate and press “Use in position N” to come back to this panel.",
+      "hintScene": "Edit the scene, export it and press “Use in position N” on the new video: it comes back to this panel.",
+      "hintUpload": "This clip was uploaded as it is. Pick another video in the gallery with “Use in position N”.",
+      "unsaved": "Save the montage to see how this clip was made."
+    }
   },
   "actionErrors": {
     "onlyOneDraft": "There is only one Video Editor draft per workspace: “{{name}}”. Ask explicitly to create another project if you want to replace the current draft.",

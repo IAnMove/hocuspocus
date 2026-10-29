@@ -229,3 +229,45 @@ def test_real_frame_is_printed_and_cached(tmp_path: Path):
     after = sorted((path.name, path.stat().st_mtime_ns) for path in (root / ".comic-panels").glob("*.png"))
     assert second["panels"][0]["at"] == panel["at"]
     assert before == after
+
+
+def _fake_tools(calls: list):
+    def extract(source, dest, at):
+        calls.append((Path(source).name, round(float(at), 3)))
+        Image.new("RGB", (32, 48), "white").save(dest)
+    return {"extract": extract, "score": lambda _path: 1.0, "printer": lambda source, dest, *_rest: Image.open(source).save(dest),
+            "duration_of": lambda _path: 10.0}
+
+
+def test_unsaved_editor_clips_get_panels_before_the_montage_is_saved(tmp_path: Path):
+    """A duplicated clip (new id) and a replaced clip (new source) are drawn from the editor's draft."""
+    result, _calls, _prints, root, store = _run(tmp_path)
+    (root / "other.mp4").write_bytes(b"other video")
+    calls: list = []
+    drafted = comic_panels(store, WS, "Bird.montage.json", clips=[
+        {"id": "c1-copy", "source": "shot.mp4", "trimStart": 0, "trimEnd": 10},
+        {"id": "c1", "source": "/api/v1/file/other.mp4?workspace=comicdemo", "trimStart": 1, "trimEnd": 3, "comic": {"frame": 0.5}},
+    ], **_fake_tools(calls))
+    assert [panel["clip_id"] for panel in drafted["panels"]] == ["c1-copy", "c1"]
+    assert ("other.mp4", 1.5) in calls
+    assert drafted["panels"][1]["at"] == 1.5
+    assert drafted["panels"][0]["frame"] == result["panels"][0]["frame"]
+
+
+def test_a_clip_without_media_gets_an_error_and_the_batch_still_returns(tmp_path: Path):
+    _result, _calls, _prints, _root, store = _run(tmp_path)
+    calls: list = []
+    drafted = comic_panels(store, WS, "Bird.montage.json", clips=[
+        {"id": "gone", "source": "missing.mp4", "trimStart": 0, "trimEnd": 2},
+        {"id": "c1", "source": "shot.mp4", "trimStart": 0, "trimEnd": 10},
+    ], **_fake_tools(calls))
+    assert drafted["panels"][0] == {"clip_id": "gone", "error": "Clip media missing.mp4 is not in the workspace"}
+    assert drafted["panels"][1]["clip_id"] == "c1" and "print" in drafted["panels"][1]
+
+
+@pytest.mark.parametrize("clips", [[], [{"id": "a"}], [{"id": "a", "source": "x.mp4"}, {"id": "a", "source": "y.mp4"}],
+                                   [{"id": "a", "source": "x.mp4", "trimStart": "soon"}]])
+def test_unsaved_clips_are_validated(tmp_path: Path, clips):
+    _result, _calls, _prints, _root, store = _run(tmp_path)
+    with pytest.raises(MontageError):
+        comic_panels(store, WS, "Bird.montage.json", clips=clips, **_fake_tools([]))

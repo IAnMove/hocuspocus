@@ -3,10 +3,12 @@ import { Copy, Trash2 } from 'lucide-react'
 import type { EditorClip } from './editorClipNormalization'
 import type { EditorSoundtrack } from './editorDraft'
 import { effectiveDuration } from './editorTimeline'
-import { ShotClipMenu } from './ShotBoard'
+import { ClipRedoMenu } from './ClipRedoMenu'
+import type { ClipRemake } from './comicRemake'
 import { layoutComic, PAGE_H, PAGE_W, type ComicPanelBox } from './comicView'
 import type { ClipExtra, ComicExtraPatch, ComicTextStyle } from './comicEdits'
 import { useComicPanels } from './useComicPanels'
+import type { ComicPanelResult } from '../../api/montages'
 import { useUiTranslation } from '../../i18n'
 
 const PAPER = '#F0E8D6'
@@ -21,12 +23,12 @@ interface Props {
   soundtrack: EditorSoundtrack | null
   extras: Record<string, ClipExtra | undefined>
   selectedId: string | null
-  revision: number
   onSelect: (index: number) => void
   onMove: (insertionIndex: number, id: string) => void
   onDelete: (id: string) => void
   onDuplicate: (id: string) => void
   onExtra: (id: string, patch: ComicExtraPatch) => void
+  onRemake: (id: string, request: ClipRemake) => void
   onChanged: () => Promise<void>
   onError: (message: string | null) => void
 }
@@ -82,14 +84,14 @@ function ComicPanel(props: {
   clip: EditorClip
   index: number
   printed: boolean
-  image: { frame: string; print: string; at: number } | undefined
+  image: ComicPanelResult | undefined
   extra: ClipExtra | undefined
   selected: boolean
   editing: boolean
   onArm: (id: string) => void
   hasSong: boolean
   observe: (id: string, element: Element | null) => void
-} & Pick<Props, 'workspace' | 'file' | 'onSelect' | 'onMove' | 'onDelete' | 'onDuplicate' | 'onExtra' | 'onChanged' | 'onError'>) {
+} & Pick<Props, 'workspace' | 'file' | 'onSelect' | 'onMove' | 'onDelete' | 'onDuplicate' | 'onExtra' | 'onRemake' | 'onChanged' | 'onError'>) {
   const { t } = useUiTranslation('videoEditor')
   const box = {
     left: `${(props.panel.x / PAGE_W) * 100}%`,
@@ -97,7 +99,9 @@ function ComicPanel(props: {
     width: `${(props.panel.w / PAGE_W) * 100}%`,
     height: `${(props.panel.h / PAGE_H) * 100}%`,
   }
-  const url = props.image ? (props.printed ? props.image.print : props.image.frame) : ''
+  const image = props.image
+  const failed = image && 'error' in image ? image.error : ''
+  const url = image && !('error' in image) ? (props.printed ? image.print : image.frame) : ''
   return <article data-testid="comic-panel" data-clip-id={props.clip.id} data-splash={props.panel.splash ? '1' : '0'}
     ref={element => props.observe(props.clip.id, element)} draggable
     onDragStart={event => startPanelDrag(event, props.clip.id)}
@@ -107,7 +111,7 @@ function ComicPanel(props: {
     className="absolute" style={{ ...box, outline: props.selected ? '2px solid #1d4e89' : undefined, outlineOffset: '1px' }}>
     <div className="absolute inset-0 overflow-hidden" style={{ border: `3px solid ${INK}`, background: '#e4dcc8' }}>
       {url ? <img src={url} alt="" draggable={false} className="h-full w-full" style={{ objectFit: 'cover', objectPosition: `${props.panel.focusX}% ${props.panel.focusY}%` }} />
-        : <div className="flex h-full items-center justify-center text-[10px]" style={{ color: INK }}>{t('comic.loading')}</div>}
+        : <div className="flex h-full items-center justify-center p-1 text-center text-[10px]" style={{ color: INK }} title={failed || undefined}>{failed ? t('comic.missing') : t('comic.loading')}</div>}
     </div>
     <ComicLettering clipId={props.clip.id} lyric={props.extra?.lyric} style={props.extra?.comic?.text ?? 'caption'}
       hasSong={props.hasSong} selected={props.editing} onCommit={lyric => props.onExtra(props.clip.id, { lyric })} />
@@ -187,6 +191,7 @@ function ComicTools(props: {
   onDelete: (id: string) => void
   onDuplicate: (id: string) => void
   onExtra: (id: string, patch: ComicExtraPatch) => void
+  onRemake: (id: string, request: ClipRemake) => void
   onChanged: () => Promise<void>
   onError: (message: string | null) => void
 }) {
@@ -204,13 +209,14 @@ function ComicTools(props: {
         <option value="bubble">{t('comic.bubble')}</option>
         <option value="none">{t('comic.none')}</option>
       </select>
-      <button type="button" className="rounded bg-white/90 px-1 py-0.5 text-[10px] text-black" onClick={() => setTakes(open => !open)}>{t('comic.changeTake')}</button>
+      <button type="button" className="rounded bg-white/90 px-1 py-0.5 text-[10px] text-black" data-testid="comic-redo" onClick={() => setTakes(open => !open)}>{t('comic.redo.toggle')}</button>
       <button type="button" data-testid="comic-pick" className="rounded bg-white/90 px-1 py-0.5 text-[10px] text-black" onClick={() => setPicking(open => !open)}>{t('comic.pickFrame')}</button>
       <button type="button" data-testid="comic-duplicate" className="rounded bg-white/90 p-0.5 text-black" onClick={() => props.onDuplicate(props.clip.id)} aria-label={t('comic.duplicate')}><Copy size={11} /></button>
       <button type="button" data-testid="comic-delete" className="rounded bg-white/90 p-0.5 text-black" onClick={() => props.onDelete(props.clip.id)} aria-label={t('comic.delete')}><Trash2 size={11} /></button>
     </div>
-    {takes && props.file && <div className="max-h-28 overflow-auto rounded bg-white p-1 text-black">
-      <ShotClipMenu workspace={props.workspace} file={props.file} clipId={props.clip.id} onChanged={props.onChanged} onError={props.onError} />
+    {takes && props.file && <div data-testid="comic-redo-menu" className="max-h-56 overflow-auto rounded bg-white p-1 text-black">
+      <ClipRedoMenu workspace={props.workspace} file={props.file} clipId={props.clip.id} onChanged={props.onChanged} onError={props.onError}
+        onRemake={request => props.onRemake(props.clip.id, request)} />
     </div>}
     {picking && <FramePicker clip={props.clip} value={props.extra?.comic?.frame} onCommit={frame => props.onExtra(props.clip.id, { comic: { frame } })} />}
   </div>

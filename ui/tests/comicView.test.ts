@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { duplicateClipState, frameOffset, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
+import { creationOutputs, duplicateClipState, frameOffset, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
+import { outputNameFromEditorClip } from '../src/features/video-editor/replacementHandoff.ts'
+import { comicPanelKey } from '../src/features/video-editor/useComicPanels.ts'
 import { columnCount, GUTTER, layoutComic, MARGIN, PAGE_H, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicView.ts'
 
 function clip(id: string, duration: number, width = 1080, height = 1920, focusX?: number, focusY?: number): ComicLayoutClip {
@@ -130,4 +132,22 @@ test('patch and duplicate keep lyric and comic on the montage extras', () => {
   assert.equal(duplicateClipState({ id: 'c1', name: 'shot (copy)' }, { takes: [{ id: 't1' }] }, 'c3').extra, undefined)
   assert.equal(frameOffset(1.5, 4), 2.5)
   assert.equal(frameOffset(3, 1), 0)
+})
+
+test('remake finds the settings of a copied clip under the original name, then the clip itself', () => {
+  assert.deepEqual(creationOutputs({ kind: 'generation', canRegenerate: true, sidecar: '2026-a_seed1_he roars.meta.json', generatedFrom: 'ol-o01.mp4' }),
+    ['2026-a_seed1_he roars.mp4', 'ol-o01.mp4'])
+  assert.deepEqual(creationOutputs({ kind: 'generation', canRegenerate: true, sidecar: 'shot.meta.json', generatedFrom: 'shot.mp4' }), ['shot.mp4'])
+  assert.deepEqual(creationOutputs({ kind: 'upload', canRegenerate: false }), [])
+  assert.equal(outputNameFromEditorClip('ol-o01.mp4', 'o01'), 'ol-o01.mp4')
+})
+
+test('a panel reprints when its clip is replaced, retrimmed or gets another frame', () => {
+  const clip = { id: 'o1', source: 'a.mp4', trimStart: 0, trimEnd: 4 }
+  const key = comicPanelKey('ws', clip, undefined)
+  assert.equal(comicPanelKey('ws', { ...clip }, undefined), key)
+  assert.notEqual(comicPanelKey('ws', { ...clip, source: '/api/v1/file/b.mp4?workspace=ws' }, undefined), key)
+  assert.notEqual(comicPanelKey('ws', { ...clip, trimEnd: 3 }, undefined), key)
+  assert.notEqual(comicPanelKey('ws', clip, 1.5), key)
+  assert.notEqual(comicPanelKey('other', clip, undefined), key)
 })

@@ -209,10 +209,22 @@ export interface ComicPanelImage {
   height: number
 }
 
-export async function getComicPanels(workspace: string, file: string, clipIds: string[], frames: Record<string, number> = {}): Promise<{ file: string; panels: ComicPanelImage[] }> {
+/** A clip whose media could not be read comes back with `error` instead of pictures. */
+export type ComicPanelResult = ComicPanelImage | { clip_id: string; error: string }
+
+/** The editor's clip as it is now, saved or not (a duplicate or a replacement before the montage is saved). */
+export interface ComicDraftClip {
+  id: string
+  source: string
+  trimStart: number
+  trimEnd: number
+  comic?: { frame: number }
+}
+
+export async function getComicPanels(workspace: string, file: string, clips: ComicDraftClip[]): Promise<{ file: string; panels: ComicPanelResult[] }> {
   const res = await fetch(`${BASE}/api/v1/montages/${encodeURIComponent(file)}/comic/panels`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ workspace, clip_ids: clipIds, ...(Object.keys(frames).length ? { frames } : {}) }),
+    body: JSON.stringify({ workspace, clips }),
   })
   return readJson(res, 'Could not read the comic panels')
 }

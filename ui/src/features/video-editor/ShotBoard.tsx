@@ -16,7 +16,7 @@ interface Props {
 
 const button = 'inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover disabled:opacity-50'
 
-function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onSelect: () => void }) {
+export function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onSelect: () => void }) {
   const { t } = useUiTranslation('videoEditor')
   const done = take.status === 'completed' && take.url
   return <div className="flex items-center gap-1.5 rounded border border-border bg-bg-tertiary/50 px-1.5 py-1 text-[11px]">
@@ -27,7 +27,7 @@ function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onS
   </div>
 }
 
-function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
+export function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
   shot: MontageShot; busy: boolean; onSubmit: (prompt: string, seed?: number) => void; onCancel: () => void
 }) {
   const { t } = useUiTranslation('videoEditor')
@@ -125,53 +125,4 @@ export function ShotBoard({ workspace, file, onChanged, onError }: Props) {
         onOpenScene={scene => void run(() => openSceneOutput(sceneOutput(workspace, scene)), false)} />)}
     </div>
   </section>
-}
-
-/** Take and regenerate controls for one clip. Same pieces as the shot board, not a second editor. */
-export function ShotClipMenu({ workspace, file, clipId, onChanged, onError }: {
-  workspace: string
-  file: string
-  clipId: string
-  onChanged: () => Promise<void>
-  onError: (message: string | null) => void
-}) {
-  const { t } = useUiTranslation('videoEditor')
-  const [board, setBoard] = useState<MontageShotBoard | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [editing, setEditing] = useState(false)
-  useEffect(() => {
-    let live = true
-    void getMontageShots(workspace, file).then(
-      next => { if (live) setBoard(next) },
-      error => { if (live) onError((error as Error).message) },
-    )
-    return () => { live = false }
-  }, [workspace, file, onError])
-  useEffect(() => {
-    if (!board || !hasPendingTakes(board)) return
-    const timer = window.setInterval(() => {
-      void getMontageShots(workspace, file).then(next => setBoard(next), error => onError((error as Error).message))
-    }, 8000)
-    return () => window.clearInterval(timer)
-  }, [board, workspace, file, onError])
-  const shot = board?.shots.find(item => item.id === clipId)
-  const run = (action: () => Promise<unknown>) => {
-    if (!board || !shot) return
-    setBusy(true)
-    onError(null)
-    void action().then(() => onChanged()).then(() => getMontageShots(workspace, file)).then(setBoard)
-      .catch(error => onError((error as Error).message)).finally(() => setBusy(false))
-  }
-  if (!board) return <p className="text-[10px] text-text-muted">{t('shots.loading')}</p>
-  if (!shot) return <p className="text-[10px] text-text-muted">{t('shots.notRegenerable')}</p>
-  return <div className="space-y-1">
-    {shot.takes.map(take => <TakeChip key={take.id} take={take} busy={busy}
-      onSelect={() => run(() => selectShotTake(workspace, file, shot.id, take.id, board.revision))} />)}
-    {shot.provenance.canRegenerate && !editing && <button type="button" className={button} disabled={busy} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('shots.regenerate')}</button>}
-    {editing && <RegenerateForm shot={shot} busy={busy} onCancel={() => setEditing(false)} onSubmit={(prompt, seed) => {
-      setEditing(false)
-      run(() => regenerateShot(workspace, file, shot.id, { intentId: `shot-${randomUuid()}`, expectedRevision: board.revision, prompt, seed }))
-    }} />}
-    {!shot.provenance.canRegenerate && !shot.takes.length && <p className="text-[10px] text-text-muted">{t('shots.notRegenerable')}</p>}
-  </div>
 }
