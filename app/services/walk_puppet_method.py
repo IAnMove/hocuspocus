@@ -112,11 +112,23 @@ def _names(job: dict[str, Any]) -> list[str]:
     return [f"{job['kitId']}-{definition['id']}-{pose['id']}-{suffix}.png" for pose in definition["poses"]]
 
 
-def _store_frames(frames: list[np.ndarray], size: tuple[int, int], root: str, names: list[str]) -> None:
-    """The mould draws at twice the picture. The sheet wants the picture's own size."""
+# The flat colour each screen mode of ``studio.key`` removes.
+SCREEN_RGB = {"green": (0, 255, 0), "blue": (0, 0, 255), "magenta": (255, 0, 255)}
+
+
+def _on_screen(frame: np.ndarray, screen: str) -> np.ndarray:
+    """A mould frame is transparent, but ``studio.key`` reads colour only and would keep a black rectangle. Lay the
+    frame on the screen colour the same job keys, as the pose-by-pose and the video paths draw theirs."""
+    ground = np.array(SCREEN_RGB.get(screen, SCREEN_RGB["green"]), np.float32)
+    alpha = frame[..., 3:4].astype(np.float32) / 255.0
+    return np.rint(frame[..., :3].astype(np.float32) * alpha + ground * (1.0 - alpha)).astype(np.uint8)
+
+
+def _store_frames(frames: list[np.ndarray], size: tuple[int, int], root: str, names: list[str], screen: str = "green") -> None:
+    """The mould draws at twice the picture. The sheet wants the picture's own size, on the screen colour."""
     height, width = size
     for frame, name in zip(frames, names):
-        small = cv2.resize(frame, (width, height), interpolation=cv2.INTER_AREA)
+        small = cv2.resize(_on_screen(frame, screen), (width, height), interpolation=cv2.INTER_AREA)
         Image.fromarray(small).save(os.path.join(root, name))
 
 
@@ -150,9 +162,9 @@ def fill_puppet_takes(job: dict[str, Any], tools: Any, *, workspace_root: str, u
         job["warnings"] = ["puppet_no_layers"]
     direction = contract_of(job["definition"]["id"], job["definition"]).get("dir") or "side"
     frames, info = build(rgba, direction, len(job["definition"]["poses"]), layers, find_joints(rgba))
-    names = _names(job)
-    _store_frames(frames, rgba.shape[:2], workspace_root, names)
-    _key_all(job, tools, names, _screen(job), update)
+    names, screen = _names(job), _screen(job)
+    _store_frames(frames, rgba.shape[:2], workspace_root, names, screen)
+    _key_all(job, tools, names, screen, update)
     record = {"method": "puppet", "reference": {"animation": animation, "pose": pose}, "start": float(info["start"]), "layers": used}
     job["puppet"] = record
     update(puppet=record, **({"warnings": job["warnings"]} if job.get("warnings") else {}))
