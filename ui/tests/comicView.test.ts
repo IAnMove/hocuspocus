@@ -3,7 +3,7 @@ import test from 'node:test'
 import { creationOutputs, duplicateClipState, frameOffset, mergeComicShotUpdate, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
 import { outputNameFromEditorClip } from '../src/features/video-editor/replacementHandoff.ts'
 import { comicPanelKey } from '../src/features/video-editor/useComicPanels.ts'
-import { columnCount, GUTTER, layoutComic, MARGIN, PAGE_H, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicView.ts'
+import { columnCount, GUTTER, layoutComic, MARGIN, PAGE_H, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicLayout.ts'
 
 function clip(id: string, duration: number, width = 1080, height = 1920, focusX?: number, focusY?: number): ComicLayoutClip {
   return { id, duration, width, height, focusX, focusY }

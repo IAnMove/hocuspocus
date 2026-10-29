@@ -146,9 +146,11 @@ test('3D templates, playback speed and object transforms work in the editor', as
   await page.screenshot({ path: testInfo.outputPath('video3d-editor-desktop.png'), fullPage: true })
 
   // Mobile controls must remain reachable without horizontal page overflow.
+  // A phone-width desk moves Expand editor into More so the row stays one line.
   await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Expand editor', exact: true })).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })
+  await page.getByTestId('scene3d-desk-more').click()
   await page.getByRole('button', { name: 'Expand editor', exact: true }).click()
   await expect(play).toBeVisible()
   await workspace.getByRole('button', { name: 'Scale', exact: true }).click()
