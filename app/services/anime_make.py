@@ -68,8 +68,7 @@ def darker(color: str, k: float) -> str:
     return "#%02X%02X%02X" % (min(255, int(r * k)), min(255, int(g * k)), min(255, int(b * k)))
 
 
-def resolve_traits(raw: Any) -> dict[str, Any]:
-    """Character traits -> ``{body: blob traits, face: face traits, clips, public}``. Unknown fields are refused."""
+def _trait_object(raw: Any) -> dict:
     if raw is None:
         raw = {}
     if not isinstance(raw, dict):
@@ -77,6 +76,10 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     extra = set(raw) - _FIELDS
     if extra:
         _fail("unknown_field", "Unknown trait: " + ", ".join(sorted(extra)))
+    return raw
+
+
+def _anime_body(raw: dict) -> dict:
     gender = _choice(raw.get("gender", "girl"), GENDERS, "invalid_gender", "gender")
     outfit = _choice(raw.get("outfit", "school"), OUTFITS, "invalid_outfit", "outfit")
     build, tall = BODIES[_choice(raw.get("body", "slim"), tuple(BODIES), "invalid_body", "body")]
@@ -97,41 +100,89 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         "colors": {"head": skin, "hands": skin, "top": colors["top"], "sleeves": colors["top"], "bottom": colors["bottom"], "shoes": colors["shoes"]},
         "accessories": accessories,
     }
-    look = _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style")
+    return {
+        "gender": gender, "outfit": outfit, "height": float(height), "hair_style": hair_style, "hair_color": hair_color,
+        "skin": skin, "colors": colors, "body": body,
+        "look": _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style"),
+    }
+
+
+def _reject_real_only(raw: dict, look: str) -> None:
     if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands")) and look != "real":
         _fail("invalid_traits", "hair_texture, hair_edge, upper_hold, face_span and face_feather are for style real")
+
+
+def _hair_photo(raw: dict, body: dict) -> None:
     if "hair_texture" in raw:
         body["hair"] = {**body["hair"], "texture": _choice(raw["hair_texture"], ("flat", "photo"), "invalid_hair_texture", "hair_texture")}
     if "hair_edge" in raw:
         body["hair"] = {**body["hair"], "edge": _choice(raw["hair_edge"], ("smooth", "jagged"), "invalid_hair_edge", "hair_edge")}
-    span, feather = raw.get("face_span", 40.0), raw.get("face_feather", 0.0)   # tests H, I, M, O, P: 40 degrees with a hard border read best; a feathered border ghosts a second face at three quarters
-    head_fit = raw.get("head_fit", False)
-    if not isinstance(head_fit, bool):
-        _fail("invalid_head_fit", "head_fit is true or false: fit the skull's width and depth to the head picture's silhouettes")
+
+
+def _bool_flag(raw: dict, key: str, default: bool, code: str, message: str) -> bool:
+    value = raw.get(key, default)
+    if not isinstance(value, bool):
+        _fail(code, message)
+    return value
+
+
+def _head_bands_value(raw: dict):
     head_bands = raw.get("head_bands", True)   # on by default: the face-to-side junction is a soft change of tone, not a line
     if head_bands is True:
-        head_bands = 1.0
-    elif head_bands is False:
-        head_bands = None
+        return 1.0
+    if head_bands is False:
+        return None
     if head_bands is not None and (isinstance(head_bands, bool) or not isinstance(head_bands, (int, float)) or not 0 <= head_bands <= 1):
         _fail("invalid_head_bands", "head_bands is true (default), false (the plain blend of the pictures) or a number from 0 to 1: how much fine texture the side and back keep when the head blend splits tone (wide) from texture (hard)")
-    head_match = raw.get("head_match", False)
-    if not isinstance(head_match, bool):
-        _fail("invalid_head_match", "head_match is true or false: move the side and back portraits to the front one's tones")
-    lighting = _choice(raw.get("lighting", "lit"), ("lit", "baked"), "invalid_lighting", "lighting")
+    return head_bands
+
+
+def _face_ranges(raw: dict) -> tuple[float, float, float]:
+    span, feather = raw.get("face_span", 40.0), raw.get("face_feather", 0.0)   # tests H, I, M, O, P: 40 degrees with a hard border read best; a feathered border ghosts a second face at three quarters
     depth = raw.get("face_depth", 0.06)   # tests H, R, S: 0.10 ridges the cheek at three quarters, 0.035 flattens the profile nose
     for label, value, low, high in (("face_span", span, 30.0, 58.0), ("face_feather", feather, 0.0, 30.0), ("face_depth", depth, 0.0, 0.16)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
             _fail("invalid_" + label, f"{label} is degrees from {low:g} to {high:g}")
+    return float(span), float(feather), float(depth)
+
+
+def _hair_fit(raw: dict, body: dict) -> None:
     if "hair_fit" in raw:
         body["hair"] = {**body["hair"], "fit": _choice(raw["hair_fit"], ("full", "snug"), "invalid_hair_fit", "hair_fit")}
+
+
+def _upper_hold(raw: dict) -> float:
     hold = raw.get("upper_hold", 0.0)
     if isinstance(hold, bool) or not isinstance(hold, (int, float)) or not -0.5 <= float(hold) <= 1.2:
         _fail("invalid_upper_hold", "upper_hold is radians from -0.5 to 1.2: how much longer the front picture is kept above the brows")
+    return float(hold)
+
+
+def _apply_look(body: dict, look: str, gender: str, raw: dict, skin: str, hair_color: str, colors: dict) -> dict:
     if look == "real":
-        body = _real_body(body, gender, raw, skin)
-    elif look in ("voxel", "roblox"):
-        body = _blocky_body(body, look, raw, skin, hair_color, colors)
+        return _real_body(body, gender, raw, skin)
+    if look in ("voxel", "roblox"):
+        return _blocky_body(body, look, raw, skin, hair_color, colors)
+    return body
+
+
+def _photo_options(raw: dict, chosen: dict) -> dict:
+    body, look = chosen["body"], chosen["look"]
+    _reject_real_only(raw, look)
+    _hair_photo(raw, body)
+    head_fit = _bool_flag(raw, "head_fit", False, "invalid_head_fit", "head_fit is true or false: fit the skull's width and depth to the head picture's silhouettes")
+    head_bands = _head_bands_value(raw)
+    head_match = _bool_flag(raw, "head_match", False, "invalid_head_match", "head_match is true or false: move the side and back portraits to the front one's tones")
+    lighting = _choice(raw.get("lighting", "lit"), ("lit", "baked"), "invalid_lighting", "lighting")
+    span, feather, depth = _face_ranges(raw)
+    _hair_fit(raw, body)
+    hold = _upper_hold(raw)
+    body = _apply_look(body, look, chosen["gender"], raw, chosen["skin"], chosen["hair_color"], chosen["colors"])
+    return {"body": body, "span": span, "feather": feather, "depth": depth, "hold": hold, "lighting": lighting,
+            "head_match": head_match, "head_fit": head_fit, "head_bands": head_bands}
+
+
+def _texture_names(raw: dict, look: str):
     texture, texture_head = raw.get("texture"), raw.get("texture_head")
     for given in (texture, texture_head):
         if given is not None and (not isinstance(given, str) or not given.strip() or look == "anime"):
@@ -140,26 +191,60 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         _fail("invalid_traits", "a blocky body has one picture (texture), no head picture")
     if texture_head and not texture:
         _fail("invalid_traits", "texture_head goes with texture (the body picture)")
+    return texture, texture_head
+
+
+def _require_face_image(source: str, face_image) -> None:
+    if source == "qwen" and (not isinstance(face_image, str) or not face_image.strip()):
+        _fail("face_image_required", "face_source qwen needs face_image: a keyed bald face picture in this workspace (image.remove_background output)")
+    if face_image is not None and not isinstance(face_image, str):
+        _fail("invalid_traits", "face_image must be a workspace file name or URL")
+
+
+def _face_fields(raw: dict, look: str, style: str, gender: str, hair_color: str, skin: str, face_extra: dict) -> dict:
+    return {"style": "blocky" if look in ("voxel", "roblox") else "cute" if style == "cute" else "anime_head",
+            "blocky": look if look in ("voxel", "roblox") else "voxel", "hairColor": hair_color, "skin": skin,
+            "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
+            "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
+            "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
+            "blush": raw.get("blush", gender in ("girl", "woman")) is True,
+            **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
+
+
+def _face_block(raw: dict, chosen: dict):
     face_extra = raw.get("face") or {}
     if not isinstance(face_extra, dict):
         _fail("invalid_traits", "face must be an object of face traits")
     source = _choice(raw.get("face_source", "program"), FACE_SOURCES, "invalid_face_source", "face_source")
     style = _choice(raw.get("face_style", "anime"), FACE_STYLES, "invalid_face_style", "face_style")
     face_image = raw.get("face_image")
-    if source == "qwen" and (not isinstance(face_image, str) or not face_image.strip()):
-        _fail("face_image_required", "face_source qwen needs face_image: a keyed bald face picture in this workspace (image.remove_background output)")
-    if face_image is not None and not isinstance(face_image, str):
-        _fail("invalid_traits", "face_image must be a workspace file name or URL")
-    face = {"style": "blocky" if look in ("voxel", "roblox") else "cute" if style == "cute" else "anime_head", "blocky": look if look in ("voxel", "roblox") else "voxel", "hairColor": hair_color, "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
-            "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
-            "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
-            "blush": raw.get("blush", gender in ("girl", "woman")) is True, **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
-    clips = raw.get("clips")
-    public = {"gender": gender, "outfit": outfit, "body": raw.get("body", "slim"), "height": float(height), "skin": skin, "eye_color": face["eyeColor"],
-              "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"],
-              "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}), **({"face_image": face_image} if face_image else {})}
-    return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None,
-            "texture": texture, "texture_head": texture_head, "style": look, "upper_hold": float(hold), "face_span": float(span), "face_feather": float(feather), "face_depth": float(depth), "lighting": lighting, "head_match": head_match, "head_fit": head_fit, "head_bands": None if head_bands is None else float(head_bands)}
+    _require_face_image(source, face_image)
+    face = _face_fields(raw, chosen["look"], style, chosen["gender"], chosen["hair_color"], chosen["skin"], face_extra)
+    return face, source, style, face_image
+
+
+def _public_card(raw: dict, chosen: dict, face: dict, source: str, style: str, texture, texture_head, face_image) -> dict:
+    return {"gender": chosen["gender"], "outfit": chosen["outfit"], "body": raw.get("body", "slim"), "height": chosen["height"],
+            "skin": chosen["skin"], "eye_color": face["eyeColor"], "lash_color": face["lashColor"], "hair_style": chosen["hair_style"],
+            "hair_color": chosen["hair_color"], "outfit_colors": chosen["colors"], "blush": face["blush"],
+            "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": chosen["look"],
+            **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}),
+            **({"face_image": face_image} if face_image else {})}
+
+
+def resolve_traits(raw: Any) -> dict[str, Any]:
+    """Character traits -> ``{body: blob traits, face: face traits, clips, public}``. Unknown fields are refused."""
+    raw = _trait_object(raw)
+    chosen = _anime_body(raw)
+    photo = _photo_options(raw, chosen)
+    texture, texture_head = _texture_names(raw, chosen["look"])
+    face, source, style, face_image = _face_block(raw, chosen)
+    head_bands = photo["head_bands"]
+    return {"body": photo["body"], "face": face, "clips": raw.get("clips"), "public": _public_card(raw, chosen, face, source, style, texture, texture_head, face_image),
+            "face_source": source, "face_image": face_image if source == "qwen" else None,
+            "texture": texture, "texture_head": texture_head, "style": chosen["look"], "upper_hold": photo["hold"],
+            "face_span": photo["span"], "face_feather": photo["feather"], "face_depth": photo["depth"], "lighting": photo["lighting"],
+            "head_match": photo["head_match"], "head_fit": photo["head_fit"], "head_bands": None if head_bands is None else float(head_bands)}
 
 
 def _blocky_body(body: dict, look: str, raw: dict, skin: str, hair_color: str, colors: dict) -> dict:
@@ -201,6 +286,21 @@ def slug(name: str) -> str:
     return text[:40] or "anime"
 
 
+def _paint_body_from_kit(resolved: dict, picture, kit: dict) -> None:
+    painted = (kit.get("face") or {}).get("skin")
+    if picture is not None and isinstance(painted, str):
+        resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
+        resolved["public"]["skin"] = painted.upper()
+
+
+def _photo_hair_color(workspace_dir: Path, workspace: str, resolved: dict, traits: Any, relief) -> None:
+    if relief is None or resolved["body"]["hair"]["style"] == "none" or (isinstance(traits, dict) and "hair_color" in traits):
+        return
+    from services.blob_texture import hair_of
+
+    resolved["body"]["hair"] = {**resolved["body"]["hair"], "color": hair_of(_picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head"))}
+
+
 def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, traits: Any, *, base_revision: int | None = None) -> dict[str, Any]:
     """Body, rig, kit. Writes the GLBs and the kit; returns one reply with everything a scene needs."""
     from services.blob_face import save_face_kit
@@ -213,17 +313,11 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     Path(workspace_dir).mkdir(parents=True, exist_ok=True)
     # the kit first: a painted face brings its own skin, and the body's head and hands take it so the face is not a mask
     kit = save_face_kit(str(workspace_dir), workspace, resolved["face"], name=f"{name} face", kit_id=token, base_revision=base_revision, picture=picture)
-    painted = (kit.get("face") or {}).get("skin")
-    if picture is not None and isinstance(painted, str):
-        resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
-        resolved["public"]["skin"] = painted.upper()
+    _paint_body_from_kit(resolved, picture, kit)
     if resolved["style"] == "real" and resolved["texture_head"] and resolved["head_fit"]:
         resolved["body"]["skull_fit"] = _head_fit(workspace_dir, workspace, resolved)
     relief = _face_relief(workspace_dir, workspace, resolved) if resolved["style"] == "real" and resolved["texture_head"] else None
-    if relief is not None and resolved["body"]["hair"]["style"] != "none" and not (isinstance(traits, dict) and "hair_color" in traits):
-        from services.blob_texture import hair_of
-
-        resolved["body"]["hair"] = {**resolved["body"]["hair"], "color": hair_of(_picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head"))}
+    _photo_hair_color(workspace_dir, workspace, resolved, traits, relief)
     body = build_body(resolved["body"], clips, relief=relief)
     if resolved["style"] in ("voxel", "roblox"):
         extra = _blocky_files(workspace_dir, workspace, resolved, body)

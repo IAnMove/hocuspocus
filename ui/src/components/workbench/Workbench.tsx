@@ -24,6 +24,29 @@ function useViewportWidth(override?: number) {
   return override ?? measured
 }
 
+function workbenchBodyClass(stacked: boolean) {
+  return `flex min-h-0 flex-1 ${stacked ? 'flex-col overflow-y-auto' : 'flex-row overflow-hidden'}`
+}
+
+function outlineAsideClass(open: boolean, stacked: boolean) {
+  if (!open) return 'hidden'
+  return `min-h-0 shrink-0 overflow-y-auto border-border ${stacked ? 'max-h-[40vh] w-full border-b' : 'w-64 border-r'}`
+}
+
+function inspectorAsideClass(open: boolean, stacked: boolean) {
+  if (!open) return 'hidden'
+  return `min-h-0 shrink-0 overflow-y-auto border-border ${stacked ? 'max-h-[40vh] w-full border-t' : 'w-80 border-l'}`
+}
+
+function viewportSlotClass(stacked: boolean) {
+  return `min-h-0 min-w-0 flex-1 overflow-hidden ${stacked ? 'min-h-[16rem]' : ''}`
+}
+
+function inspectorToggleLabel(open: boolean, drawer: boolean, labels: { close: string; collapse: string; open: string; expand: string }) {
+  if (open) return drawer ? labels.close : labels.collapse
+  return drawer ? labels.open : labels.expand
+}
+
 function PanelToggle({ pressed, label, testId, onClick, icon }: {
   pressed: boolean
   label: string
@@ -62,7 +85,12 @@ export function Workbench({ topBar, outline, viewport, inspector, transport, wid
   const outlineOpen = !outlineCollapsed
   const inspectorOpen = drawer ? drawerOpen : !inspectorCollapsed
   const outlineLabel = outlineCollapsed ? t('expandOutline') : t('collapseOutline')
-  const inspectorLabel = inspectorOpen ? (drawer ? t('closeInspector') : t('collapseInspector')) : (drawer ? t('openInspector') : t('expandInspector'))
+  const inspectorLabel = inspectorToggleLabel(inspectorOpen, drawer, {
+    close: t('closeInspector'),
+    collapse: t('collapseInspector'),
+    open: t('openInspector'),
+    expand: t('expandInspector'),
+  })
 
   const closeInspector = () => {
     if (drawer) setDrawerOpen(false)
@@ -96,21 +124,19 @@ export function Workbench({ topBar, outline, viewport, inspector, transport, wid
           onClick={toggleInspector}
         />
       </header>
-      <div className={`flex min-h-0 flex-1 ${stacked ? 'flex-col overflow-y-auto' : 'flex-row overflow-hidden'}`}>
+      <div className={workbenchBodyClass(stacked)}>
         <aside
           data-slot="outline"
           aria-label={t('outline')}
           hidden={!outlineOpen}
-          className={outlineOpen
-            ? `min-h-0 shrink-0 overflow-y-auto border-border ${stacked ? 'max-h-[40vh] w-full border-b' : 'w-64 border-r'}`
-            : 'hidden'}
+          className={outlineAsideClass(outlineOpen, stacked)}
         >
           {outlineOpen ? outline : null}
         </aside>
         <div
           data-slot="viewport"
           aria-label={t('viewport')}
-          className={`min-h-0 min-w-0 flex-1 overflow-hidden ${stacked ? 'min-h-[16rem]' : ''}`}
+          className={viewportSlotClass(stacked)}
         >
           {viewport}
         </div>
@@ -119,9 +145,7 @@ export function Workbench({ topBar, outline, viewport, inspector, transport, wid
             data-slot="inspector"
             aria-label={t('inspector')}
             hidden={!inspectorOpen}
-            className={inspectorOpen
-              ? `min-h-0 shrink-0 overflow-y-auto border-border ${stacked ? 'max-h-[40vh] w-full border-t' : 'w-80 border-l'}`
-              : 'hidden'}
+            className={inspectorAsideClass(inspectorOpen, stacked)}
           >
             {inspectorOpen ? inspector : null}
           </aside>

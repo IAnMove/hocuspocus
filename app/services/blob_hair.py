@@ -135,6 +135,16 @@ def _clump(mesh: Mesh, head: _Head, color: str, root, pull, tip, r0: float, r1: 
         _card(mesh, head, color, points, widths, math.pi / 2)
 
 
+def _card_faces(mesh: Mesh, grid, rows: int, cols: int) -> None:
+    for i in range(rows - 1):
+        for j in range(cols):
+            a, b, c, d = grid[i][j], grid[i][j + 1], grid[i + 1][j + 1], grid[i + 1][j]
+            for tri in ((a, b, c), (a, c, d)):
+                mesh.triangle([v[0] for v in tri], [v[1] for v in tri], [v[2] for v in tri], [v[3] for v in tri])
+                back = tri[::-1]
+                mesh.triangle([v[0] for v in back], [_mul(v[1], -1.0) for v in back], [v[2] for v in back], [v[3] for v in back])
+
+
 def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn: float, cols: int = 3) -> None:
     """A strip along ``points`` with ``cols`` segments across, bowed outward a little, with strand UVs (``u`` across, ``v``
     from the root 0 to the tip 1), roots a shade darker, both faces. ``turn`` rotates it round the path."""
@@ -157,13 +167,7 @@ def _card(mesh: Mesh, head: _Head, color: str, points: list, widths: list, turn:
             position = _add(_add(point, _mul(side, widths[i] * s)), _mul(deep, widths[i] * 0.3 * (1 - s * s)))
             row.append((position, _unit(_add(deep, _mul(side, s * 0.45))), tuple(c * shade for c in base), (t, i / (rows - 1))))
         grid.append(row)
-    for i in range(rows - 1):
-        for j in range(cols):
-            a, b, c, d = grid[i][j], grid[i][j + 1], grid[i + 1][j + 1], grid[i + 1][j]
-            for tri in ((a, b, c), (a, c, d)):
-                mesh.triangle([v[0] for v in tri], [v[1] for v in tri], [v[2] for v in tri], [v[3] for v in tri])
-                back = tri[::-1]
-                mesh.triangle([v[0] for v in back], [_mul(v[1], -1.0) for v in back], [v[2] for v in back], [v[3] for v in back])
+    _card_faces(mesh, grid, rows, cols)
 
 
 def _crown(mesh: Mesh, head: _Head, color: str) -> None:

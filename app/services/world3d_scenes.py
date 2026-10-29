@@ -349,6 +349,14 @@ def face_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
     return bind_face(workspace, scene_id, workspace_dir, changes, base_revision)
 
 
+def _talk_pose(slot, changes) -> str:
+    pose = changes.get("pose")
+    if not isinstance(pose, str) or not pose:
+        face = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
+        pose = face.get("pose") or "base"
+    return str(pose)
+
+
 def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     """Make an image object talk with a Character Kit: pose, mouths by cue, blink, and each line's audio."""
     from services.world3d_talk import TalkError, apply_talk
@@ -361,10 +369,7 @@ def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
         raise World3DSceneError("unknown_kit", f"unknown_kit:{kit_id}", 404)
     document = record["document"]
     slot = _target(document["slots"], changes)
-    pose = changes.get("pose")
-    if not isinstance(pose, str) or not pose:
-        face = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
-        pose = face.get("pose") or "base"
+    pose = _talk_pose(slot, changes)
     try:
         talked = apply_talk(document, slot, kit, changes.get("lines") or [], workspace=workspace,
                             pose=str(pose), blink=changes.get("blink") is not False)

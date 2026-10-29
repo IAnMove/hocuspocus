@@ -33,11 +33,34 @@ def _extent(mask: np.ndarray, row: int):
     return (float(xs.min()), float(xs.max())) if len(xs) else None
 
 
+def _fit_latitude(out, plain, lat, front_mask, side_mask, cy, span_y, span_x, tile_w, tile_h) -> None:
+    from services.blob_loft import skull_point
+
+    ring = [skull_point(plain, yaw, lat) for yaw in range(0, 360, 3)]
+    y = ring[0][1]
+    row = int((0.5 - (y - cy) / span_y) * tile_h)
+    mould_half = max(abs(p[0]) for p in ring) / span_x * tile_w
+    photo_half = _half_width(front_mask, row)
+    w_factor = photo_half / mould_half if mould_half > 1 and photo_half > 1 else 1.0
+    out["width"].append([float(lat), float(np.clip(w_factor, *WIDTH_RANGE))])
+    extent = _extent(side_mask, row)
+    # the side tile: the face looks to the left, a point at depth z is at column (0.5 - z / span_x) of the tile
+    z_front = max(p[2] for p in ring)
+    z_back = -min(p[2] for p in ring)
+    if extent is not None and z_front > 0 and z_back > 0:
+        centre = tile_w * 0.5
+        photo_front = (centre - extent[0]) / tile_w * span_x
+        photo_back = (extent[1] - centre) / tile_w * span_x
+        out["front"].append([float(lat), float(np.clip(photo_front / z_front, *FRONT_RANGE))])
+        out["back"].append([float(lat), float(np.clip(photo_back / z_back, *BACK_RANGE))])
+    else:
+        out["front"].append([float(lat), 1.0])
+        out["back"].append([float(lat), 1.0])
+
+
 def fit_skull(head, layout: dict, frame: dict) -> dict:
     """``{"width": [[lat, factor]...], "front": [...], "back": [...]}`` from a head picture (three tiles side by side), or {} when the
     picture does not show a head. Factors are smoothed along the height."""
-    from services.blob_loft import skull_point
-
     width, height = head.size
     third = width // 3
     rgb = np.asarray(head.convert("RGB"))
@@ -52,26 +75,7 @@ def fit_skull(head, layout: dict, frame: dict) -> dict:
     plain = {**layout}
     plain.pop("skull_fit", None)
     for lat in LATS:
-        ring = [skull_point(plain, yaw, lat) for yaw in range(0, 360, 3)]
-        y = ring[0][1]
-        row = int((0.5 - (y - cy) / span_y) * tile_h)
-        mould_half = max(abs(p[0]) for p in ring) / span_x * tile_w
-        photo_half = _half_width(front_mask, row)
-        w_factor = photo_half / mould_half if mould_half > 1 and photo_half > 1 else 1.0
-        out["width"].append([float(lat), float(np.clip(w_factor, *WIDTH_RANGE))])
-        extent = _extent(side_mask, row)
-        # the side tile: the face looks to the left, a point at depth z is at column (0.5 - z / span_x) of the tile
-        z_front = max(p[2] for p in ring)
-        z_back = -min(p[2] for p in ring)
-        if extent is not None and z_front > 0 and z_back > 0:
-            centre = tile_w * 0.5
-            photo_front = (centre - extent[0]) / tile_w * span_x
-            photo_back = (extent[1] - centre) / tile_w * span_x
-            out["front"].append([float(lat), float(np.clip(photo_front / z_front, *FRONT_RANGE))])
-            out["back"].append([float(lat), float(np.clip(photo_back / z_back, *BACK_RANGE))])
-        else:
-            out["front"].append([float(lat), 1.0])
-            out["back"].append([float(lat), 1.0])
+        _fit_latitude(out, plain, lat, front_mask, side_mask, cy, span_y, span_x, tile_w, tile_h)
     for key in out:
         values = np.array([f for _lat, f in out[key]], dtype=np.float64)
         kernel = np.array([0.25, 0.5, 0.25])

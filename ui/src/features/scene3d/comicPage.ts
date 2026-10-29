@@ -331,34 +331,54 @@ export function comicTemplateId(role: ComicRole, format: ComicFormat): ComicTemp
   return role === 'exit' ? 'comic-panel-exit' : 'comic-panel-enter'
 }
 
-/** Exit starts filling `fromPanel` and ends on the wide page. Enter starts on that same wide pose and ends filling `toPanel`. */
-export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; enter: Scene3DDocument } {
+function comicPairIndexes(input: ComicPairInput) {
   const format: ComicFormat = input.format === 'portrait' ? 'portrait' : 'landscape'
   const count = input.panels ? input.panels.length : COMIC_PANEL_COUNT
-  const fromPanel = requireIndex(input.fromPanel ?? 0, count)
-  const toPanel = requireIndex(input.toPanel ?? count - 1, count)
-  if (fromPanel === toPanel) throw new Error('same_panel')
-  const seed = input.seed ?? 0
-  const size = input.width && input.height ? { width: input.width, height: input.height } : comicCatalogueSize(format)
-  const layout = layoutOf(format, count, seed, fromPanel, toPanel)
-  const sources = panelSources(input, format, count)
-  const pageUrl = input.pageUrl || pagePicture(format)
-  const yawDeg = input.yawDeg ?? COMIC_YAW_DEG
-  const wide = comicWidePose(format, size.width / size.height, yawDeg, layout)
-  const slots = slotsOf(layout, pageUrl, sources, fromPanel, toPanel, wide, size.width / size.height, input.pop === true)
-  const yawArc = input.yawArc ?? COMIC_YAW_ARC
-  const hold = input.hold ?? COMIC_HOLD
-  const exitDuration = input.exitDuration ?? COMIC_DURATION
-  const enterDuration = input.enterDuration ?? COMIC_DURATION
-  const leave = fillPose(layout.panels[fromPanel])
-  const arrive = fillPose(layout.panels[toPanel])
-  const exitMove = comicMoveWindow('exit', exitDuration, hold), enterMove = comicMoveWindow('enter', enterDuration, hold)
+  return {
+    format,
+    count,
+    fromPanel: requireIndex(input.fromPanel ?? 0, count),
+    toPanel: requireIndex(input.toPanel ?? count - 1, count),
+  }
+}
+
+function comicPairSize(input: ComicPairInput, format: ComicFormat) {
+  if (input.width && input.height) return { width: input.width, height: input.height }
+  return comicCatalogueSize(format)
+}
+
+function comicPairMotion(input: ComicPairInput, format: ComicFormat) {
+  return {
+    seed: input.seed ?? 0,
+    pageUrl: input.pageUrl || pagePicture(format),
+    yawDeg: input.yawDeg ?? COMIC_YAW_DEG,
+    yawArc: input.yawArc ?? COMIC_YAW_ARC,
+    hold: input.hold ?? COMIC_HOLD,
+    exitDuration: input.exitDuration ?? COMIC_DURATION,
+    enterDuration: input.enterDuration ?? COMIC_DURATION,
+  }
+}
+
+/** Exit starts filling `fromPanel` and ends on the wide page. Enter starts on that same wide pose and ends filling `toPanel`. */
+export function buildComicPair(input: ComicPairInput): { exit: Scene3DDocument; enter: Scene3DDocument } {
+  const indexed = comicPairIndexes(input)
+  if (indexed.fromPanel === indexed.toPanel) throw new Error('same_panel')
+  const motion = comicPairMotion(input, indexed.format)
+  const size = comicPairSize(input, indexed.format)
+  const layout = layoutOf(indexed.format, indexed.count, motion.seed, indexed.fromPanel, indexed.toPanel)
+  const sources = panelSources(input, indexed.format, indexed.count)
+  const aspect = size.width / size.height
+  const wide = comicWidePose(indexed.format, aspect, motion.yawDeg, layout)
+  const slots = slotsOf(layout, motion.pageUrl, sources, indexed.fromPanel, indexed.toPanel, wide, aspect, input.pop === true)
+  const leave = fillPose(layout.panels[indexed.fromPanel])
+  const arrive = fillPose(layout.panels[indexed.toPanel])
+  const exitMove = comicMoveWindow('exit', motion.exitDuration, motion.hold), enterMove = comicMoveWindow('enter', motion.enterDuration, motion.hold)
   const dressed = dressComicSlots(slots, {
-    panels: sources, fromPanel, toPanel, pageScale: layout.pageScale, fov: COMIC_FOV, deskUrl: input.deskUrl,
-    exit: { duration: exitDuration, ...exitMove }, enter: { duration: enterDuration, ...enterMove },
+    panels: sources, fromPanel: indexed.fromPanel, toPanel: indexed.toPanel, pageScale: layout.pageScale, fov: COMIC_FOV, deskUrl: input.deskUrl,
+    exit: { duration: motion.exitDuration, ...exitMove }, enter: { duration: motion.enterDuration, ...enterMove },
   })
-  const exit = documentOf(comicTemplateId('exit', format), format, size, dressed.exit, layout.panels[fromPanel], fromPanel, leave, wide, exitDuration, exitMove, yawArc)
-  const enter = documentOf(comicTemplateId('enter', format), format, size, dressed.enter, layout.panels[toPanel], toPanel, wide, arrive, enterDuration, enterMove, yawArc)
+  const exit = documentOf(comicTemplateId('exit', indexed.format), indexed.format, size, dressed.exit, layout.panels[indexed.fromPanel], indexed.fromPanel, leave, wide, motion.exitDuration, exitMove, motion.yawArc)
+  const enter = documentOf(comicTemplateId('enter', indexed.format), indexed.format, size, dressed.enter, layout.panels[indexed.toPanel], indexed.toPanel, wide, arrive, motion.enterDuration, enterMove, motion.yawArc)
   // The desk runs below the page, where the studio floor would hide it.
   if (input.deskUrl) for (const doc of [exit, enter]) doc.environment = { reflectiveFloor: false, platform: false, bloom: 0, floorStyle: 'none' }
   return { exit, enter }

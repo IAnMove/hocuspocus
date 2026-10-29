@@ -341,35 +341,104 @@ function fitOf(raw: unknown): [number, number, number, number] | undefined {
   return ok ? [round(cu), round(cv), round(ru), round(rv)] : undefined
 }
 
+function decalKitId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const kitId = value.trim()
+  if (!kitId || kitId.length > 120) return undefined
+  return kitId
+}
+
+function trimmedLabel(value: unknown, limit: number): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const text = value.trim()
+  if (!text) return undefined
+  return text.slice(0, limit)
+}
+
+function boneOf(value: unknown): string {
+  return trimmedLabel(value, 80) ?? 'Head'
+}
+
+function decalSize(value: unknown): number | undefined {
+  if (typeof value === 'number' && value >= 1 && value <= 1.2) return Math.round(value * 1000) / 1000
+  return undefined
+}
+
+function decalShape(value: unknown): 'plane' | 'mesh' | undefined {
+  if (value === 'plane' || value === 'mesh') return value
+  return undefined
+}
+
+function decalSkin(value: unknown): string | undefined {
+  if (typeof value === 'string' && /^#[0-9a-fA-F]{6}$/.test(value)) return value
+  return undefined
+}
+
+function decalTaper(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 0.6) return Math.round(value * 1000) / 1000
+  return undefined
+}
+
+function optionalFace<K extends keyof Scene3DFaceDecal>(key: K, value: Scene3DFaceDecal[K] | undefined): Partial<Scene3DFaceDecal> {
+  if (value === undefined) return {}
+  return { [key]: value } as Partial<Scene3DFaceDecal>
+}
+
+function shapeFields(shape: 'plane' | 'mesh' | undefined, rawPlane: unknown): Partial<Scene3DFaceDecal> {
+  if (shape === 'plane') return { shape, plane: planeOf(rawPlane) ?? [...FACE_PLANE_DEFAULT] as [number, number, number] }
+  if (shape === 'mesh') return { shape }
+  return {}
+}
+
+function expressionFields(expressions: FaceExpressionCue[]): Partial<Scene3DFaceDecal> {
+  if (!expressions.length) return {}
+  return { expressions }
+}
+
+function assembleFaceDecal(value: Record<string, unknown>, kitId: string): Scene3DFaceDecal {
+  const pose = trimmedLabel(value.pose, 80)
+  const center = finiteTriple(value.center, false)
+  const radii = finiteTriple(value.radii, true)
+  const size = decalSize(value.size)
+  const span = spanOf(value.span)
+  const shape = decalShape(value.shape)
+  const skin = decalSkin(value.skin)
+  const taper = decalTaper(value.taper)
+  const fit = fitOf(value.fit)
+  const art = artOf(value.art)
+  return {
+    kitId,
+    bone: boneOf(value.bone),
+    ...optionalFace('pose', pose),
+    ...optionalFace('center', center),
+    ...optionalFace('radii', radii),
+    ...optionalFace('size', size),
+    ...optionalFace('span', span),
+    ...shapeFields(shape, value.plane),
+    ...optionalFace('skin', skin),
+    ...optionalFace('taper', taper),
+    ...optionalFace('fit', fit),
+    ...expressionFields(expressionsOf(value.expressions)),
+    ...optionalFace('art', art),
+  }
+}
+
 export function parseFaceDecal(raw: unknown): Scene3DFaceDecal | undefined {
   if (!raw || typeof raw !== 'object') return undefined
   const value = raw as Record<string, unknown>
-  const kitId = typeof value.kitId === 'string' ? value.kitId.trim() : ''
-  if (!kitId || kitId.length > 120) return undefined
-  const bone = typeof value.bone === 'string' && value.bone.trim() ? value.bone.trim().slice(0, 80) : 'Head'
-  const pose = typeof value.pose === 'string' && value.pose.trim() ? value.pose.trim().slice(0, 80) : undefined
-  const center = finiteTriple(value.center, false)
-  const radii = finiteTriple(value.radii, true)
-  const size = typeof value.size === 'number' && value.size >= 1 && value.size <= 1.2 ? Math.round(value.size * 1000) / 1000 : undefined
-  const span = spanOf(value.span)
-  const shape = value.shape === 'plane' ? 'plane' : value.shape === 'mesh' ? 'mesh' : undefined
-  const plane = shape === 'plane' ? planeOf(value.plane) ?? [...FACE_PLANE_DEFAULT] as [number, number, number] : undefined
-  const skin = typeof value.skin === 'string' && /^#[0-9a-fA-F]{6}$/.test(value.skin) ? value.skin : undefined
-  const taper = typeof value.taper === 'number' && Number.isFinite(value.taper) && value.taper > 0 && value.taper <= 0.6 ? Math.round(value.taper * 1000) / 1000 : undefined
-  const fit = fitOf(value.fit)
-  const expressions = expressionsOf(value.expressions)
-  const art = artOf(value.art)
-  return {
-    kitId, bone, ...(pose ? { pose } : {}), ...(center ? { center } : {}), ...(radii ? { radii } : {}),
-    ...(size !== undefined ? { size } : {}), ...(span ? { span } : {}), ...(shape === 'plane' ? { shape, plane } : shape ? { shape } : {}),
-    ...(skin ? { skin } : {}),
-    ...(taper !== undefined ? { taper } : {}), ...(fit ? { fit } : {}),
-    ...(expressions.length ? { expressions } : {}), ...(art ? { art } : {}),
-  }
+  const kitId = decalKitId(value.kitId)
+  if (!kitId) return undefined
+  return assembleFaceDecal(value, kitId)
 }
 
 function capKey(decal: Scene3DFaceDecal): string {
   return `${(decal.span ?? []).join()}|${decal.taper ?? ''}|${(decal.fit ?? []).join()}`
+}
+
+function mountedFaceKey(bone: Bone, decal: Scene3DFaceDecal, plane: boolean): string {
+  const size = decal.size ?? FACE_DECAL_OUTSET
+  const planeKey = plane ? (decal.plane ?? FACE_PLANE_DEFAULT).join() : ''
+  return `${bone.uuid}|${decal.center!.join()}|${decal.radii!.join()}|${size}|${planeKey}`
 }
 
 type Painter = {
@@ -429,23 +498,31 @@ export class FaceDecalRuntime {
 
   private mount(root: Object3D, bone: Bone, decal: Scene3DFaceDecal) {
     const plane = decal.shape === 'plane'
-    const key = `${bone.uuid}|${decal.center!.join()}|${decal.radii!.join()}|${decal.size ?? FACE_DECAL_OUTSET}|${plane ? (decal.plane ?? FACE_PLANE_DEFAULT).join() : ''}`
+    const key = mountedFaceKey(bone, decal, plane)
     if (!this.mesh) this.mesh = this.createMesh(decal)
     if (!this.mesh) return
-    const spanKey = plane ? 'plane' : capKey(decal)
-    if (spanKey !== this.spanKey) {
-      this.spanKey = spanKey
-      this.mesh.geometry.dispose()
-      this.mesh.geometry = plane ? facePlaneGeometry() : faceCapGeometry(decal.span, decal.taper ?? 0, decal.fit)
-      const material = this.mesh.material as MeshBasicMaterial
-      material.color.set(plane ? 0xffffff : 0xfff6f0)
-    }
+    this.refreshMountedSpan(this.mesh, plane, decal)
     if (this.placeKey === key && this.mesh.parent === bone) return
     const inverse = bindInverse(root, bone)
     this.placeKey = key
-    if (plane) placeFacePlane(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET, decal.plane ?? FACE_PLANE_DEFAULT)
-    else placeFaceCap(this.mesh, inverse, decal.center!, decal.radii!, decal.size ?? FACE_DECAL_OUTSET)
+    this.placeMountedFace(this.mesh, plane, inverse, decal)
     bone.add(this.mesh)
+  }
+
+  private refreshMountedSpan(mesh: Mesh, plane: boolean, decal: Scene3DFaceDecal) {
+    const spanKey = plane ? 'plane' : capKey(decal)
+    if (spanKey === this.spanKey) return
+    this.spanKey = spanKey
+    mesh.geometry.dispose()
+    mesh.geometry = plane ? facePlaneGeometry() : faceCapGeometry(decal.span, decal.taper ?? 0, decal.fit)
+    const material = mesh.material as MeshBasicMaterial
+    material.color.set(plane ? 0xffffff : 0xfff6f0)
+  }
+
+  private placeMountedFace(mesh: Mesh, plane: boolean, inverse: Matrix4, decal: Scene3DFaceDecal) {
+    const size = decal.size ?? FACE_DECAL_OUTSET
+    if (plane) placeFacePlane(mesh, inverse, decal.center!, decal.radii!, size, decal.plane ?? FACE_PLANE_DEFAULT)
+    else placeFaceCap(mesh, inverse, decal.center!, decal.radii!, size)
   }
 
   /** The picture becomes the model's own face material's map: lit by the scene, outlined with the head. */

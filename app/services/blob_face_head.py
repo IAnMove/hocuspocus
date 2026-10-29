@@ -76,6 +76,16 @@ def _iris(size, box, color, p) -> Image.Image:
     return layer
 
 
+def _eye_lid_cut(eye: Image.Image, box, sign: int, shape: str, skin) -> None:
+    if shape not in ("angry", "sad"):
+        return
+    top, h = box[1], box[3] - box[1]
+    edge = (box[2] if sign < 0 else box[0]) if shape == "angry" else (box[0] if sign < 0 else box[2])
+    far = edge + (box[0] - box[2] if edge == box[2] else box[2] - box[0]) * 0.9
+    depth = 0.42 if shape == "angry" else 0.3
+    ImageDraw.Draw(eye).polygon([(edge, top - 4), (far, top - 4), (edge, top + h * depth)], fill=skin)
+
+
 def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: dict[str, Any]) -> None:
     lash, ry = traits["lash"], _s(EYE_RY) * p["open"]
     box = _eye_box(cx, ry)
@@ -101,12 +111,7 @@ def _eye(layer: Image.Image, cx: float, sign: int, traits: dict[str, Any], p: di
     if cover:
         cut = box[1] + (box[3] - box[1]) * cover
         ImageDraw.Draw(eye).rectangle((box[0] - 4, box[1] - 4, box[2] + 4, cut), fill=skin)
-    if p["shape"] in ("angry", "sad"):
-        top, h = box[1], box[3] - box[1]
-        edge = (box[2] if sign < 0 else box[0]) if p["shape"] == "angry" else (box[0] if sign < 0 else box[2])
-        far = edge + (box[0] - box[2] if edge == box[2] else box[2] - box[0]) * 0.9
-        depth = 0.42 if p["shape"] == "angry" else 0.3
-        ImageDraw.Draw(eye).polygon([(edge, top - 4), (far, top - 4), (edge, top + h * depth)], fill=skin)
+    _eye_lid_cut(eye, box, sign, p["shape"], skin)
     layer.alpha_composite(_clip(eye, mask))
     # lower lash: a thin arc on the outer two thirds; upper lash: thick, with a flick and two small lashes
     draw.arc((box[0], box[1], box[2], box[3]), 20 if sign > 0 else 90, 90 if sign > 0 else 160, fill=lash, width=max(3, int(width * 0.9)))

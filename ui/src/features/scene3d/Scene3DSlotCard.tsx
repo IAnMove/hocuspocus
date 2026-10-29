@@ -13,6 +13,25 @@ import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture, t
 import { patchScene3DSlot } from './templates.ts'
 import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
 
+function SlotImageSurfaceControls({
+  slot, exporting, editorT, onApplyScene,
+}: {
+  slot: Scene3DSlot
+  exporting: boolean
+  editorT: TFunction<'scene3dEditor'>
+  onApplyScene: (updater: Scene3DDocument | ((current: Scene3DDocument) => Scene3DDocument), group?: string) => void
+}) {
+  if (slot.media !== 'image') return null
+  return (
+    <>
+      <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select aria-label={editorT('travel.surface')} disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>
+      {slot.surface === 'cutout' && <Scene3DImageLookControls value={slot.imageLook} disabled={exporting} onChange={imageLook => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook }))} />}
+      {slot.surface === 'cutout' && slot.sourceUrl && <Scene3DWindowControls key={`${slot.id}:${slot.sourceUrl}`} sourceUrl={slot.sourceUrl} windows={slot.imageLook?.windows} disabled={exporting} onChange={windows => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook: { ...slot.imageLook, windows } }))} />}
+      {(slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => onApplyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
+    </>
+  )
+}
+
 function numberField(label: string, value: number, onChange: (value: number) => void, step = 0.05, disabled = false) {
   return (
     <label className="flex items-center gap-1 text-sm text-text-muted">
@@ -102,10 +121,7 @@ export function Scene3DSlotCard({
         onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
       <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={duration} disabled={editingLocked}
         onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-      {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select aria-label={editorT('travel.surface')} disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
-      {slot.media === 'image' && slot.surface === 'cutout' && <Scene3DImageLookControls value={slot.imageLook} disabled={exporting} onChange={imageLook => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook }))} />}
-      {slot.media === 'image' && slot.surface === 'cutout' && slot.sourceUrl && <Scene3DWindowControls key={`${slot.id}:${slot.sourceUrl}`} sourceUrl={slot.sourceUrl} windows={slot.imageLook?.windows} disabled={exporting} onChange={windows => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook: { ...slot.imageLook, windows } }))} />}
-      {slot.media === 'image' && (slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => onApplyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
+      <SlotImageSurfaceControls slot={slot} exporting={exporting} editorT={editorT} onApplyScene={onApplyScene} />
       {slot.slot === 'background' && !slot.surface && (
         <InfiniteBackdropControls
           loop={slot.loop}

@@ -117,9 +117,39 @@ export interface AnimeMakeResult extends BlobMakeResult {
   faceAnchor?: { center: number[]; radii: number[] }
 }
 
+function filledOutfitColors(colors: AnimeMakeInput['outfitColors']): Record<string, string> {
+  return Object.fromEntries(Object.entries(colors ?? {}).filter(([, value]) => typeof value === 'string' && value))
+}
+
+function presentTrait(value: unknown, trait: Record<string, unknown>): Record<string, unknown> {
+  return value ? trait : {}
+}
+
+function presentNumber(value: number | undefined, trait: Record<string, unknown>): Record<string, unknown> {
+  return value != null ? trait : {}
+}
+
+function animeMakeTraits(input: AnimeMakeInput): Record<string, unknown> {
+  const colors = filledOutfitColors(input.outfitColors)
+  return {
+    ...presentTrait(input.gender, { gender: input.gender }),
+    ...presentTrait(input.body, { body: input.body }),
+    ...presentNumber(input.height, { height: input.height }),
+    ...presentTrait(input.skin, { skin: input.skin }),
+    ...presentTrait(input.eyeColor, { eye_color: input.eyeColor }),
+    ...presentTrait(input.hairStyle, { hair_style: input.hairStyle }),
+    ...presentTrait(input.hairColor, { hair_color: input.hairColor }),
+    ...presentTrait(input.outfit, { outfit: input.outfit }),
+    ...presentTrait(Object.keys(colors).length, { outfit_colors: colors }),
+    ...presentTrait(input.faceSource, { face_source: input.faceSource }),
+    ...presentTrait(input.faceImage, { face_image: input.faceImage }),
+    ...presentTrait(input.faceStyle, { face_style: input.faceStyle }),
+    ...presentTrait(input.faceShape, { face_shape: input.faceShape }),
+  }
+}
+
 /** One anime 3D character from traits: `model3d.anime.make` (a lofted body rigged on CPU plus its anime_head face kit). */
 export async function makeAnime(input: AnimeMakeInput): Promise<AnimeMakeResult> {
-  const colors = Object.fromEntries(Object.entries(input.outfitColors ?? {}).filter(([, value]) => typeof value === 'string' && value))
   const res = await fetch(`${BASE}/api/v1/model3d/anime`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -129,21 +159,7 @@ export async function makeAnime(input: AnimeMakeInput): Promise<AnimeMakeResult>
       input: {
         workspace: input.workspace,
         name: input.name,
-        traits: {
-          ...(input.gender ? { gender: input.gender } : {}),
-          ...(input.body ? { body: input.body } : {}),
-          ...(input.height != null ? { height: input.height } : {}),
-          ...(input.skin ? { skin: input.skin } : {}),
-          ...(input.eyeColor ? { eye_color: input.eyeColor } : {}),
-          ...(input.hairStyle ? { hair_style: input.hairStyle } : {}),
-          ...(input.hairColor ? { hair_color: input.hairColor } : {}),
-          ...(input.outfit ? { outfit: input.outfit } : {}),
-          ...(Object.keys(colors).length ? { outfit_colors: colors } : {}),
-          ...(input.faceSource ? { face_source: input.faceSource } : {}),
-          ...(input.faceImage ? { face_image: input.faceImage } : {}),
-          ...(input.faceStyle ? { face_style: input.faceStyle } : {}),
-          ...(input.faceShape ? { face_shape: input.faceShape } : {}),
-        },
+        traits: animeMakeTraits(input),
       },
     }),
   })

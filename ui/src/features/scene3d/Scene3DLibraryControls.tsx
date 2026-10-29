@@ -76,13 +76,14 @@ export function Scene3DLibraryControls({ document, workspace, disabled, preview,
     finally { setBusy(false) }
   }
   const split = Boolean(onCheckpoint && checkpointLabel)
+  const blocked = disabled || busy
   return <>
-    <input aria-label={t('library.name')} placeholder={t('library.name')} value={name} maxLength={120} disabled={disabled || busy}
+    <input aria-label={t('library.name')} placeholder={t('library.name')} value={name} maxLength={120} disabled={blocked}
       onChange={event => setName(event.target.value)} className="h-8 min-w-24 flex-1 rounded-lg border border-border bg-bg-primary px-2" />
-    <button type="button" aria-label={t('library.open')} disabled={disabled || busy} onClick={() => { setError(''); setOpen(true) }} className="inline-flex h-8 shrink-0 items-center rounded-lg border border-border px-2">{t('library.openShort')}</button>
+    <button type="button" aria-label={t('library.open')} disabled={blocked} onClick={() => { setError(''); setOpen(true) }} className="inline-flex h-8 shrink-0 items-center rounded-lg border border-border px-2">{t('library.openShort')}</button>
     <div className="relative inline-flex shrink-0">
-      <button type="button" aria-label={t('library.save')} disabled={disabled || busy} onClick={() => void save()} className={`inline-flex h-8 items-center border border-border px-2 ${split ? 'rounded-l-lg' : 'rounded-lg'}`}>{t('library.saveShort')}</button>
-      {split && <button type="button" aria-label={t('library.saveMenu')} aria-haspopup="menu" aria-expanded={menu} data-testid="scene3d-save-menu" disabled={disabled || busy} onClick={() => setMenu(open => !open)} className="inline-flex h-8 items-center rounded-r-lg border border-l-0 border-border px-1.5"><ChevronDown size={14} aria-hidden="true" /></button>}
+      <button type="button" aria-label={t('library.save')} disabled={blocked} onClick={() => void save()} className={`inline-flex h-8 items-center border border-border px-2 ${split ? 'rounded-l-lg' : 'rounded-lg'}`}>{t('library.saveShort')}</button>
+      {split && <button type="button" aria-label={t('library.saveMenu')} aria-haspopup="menu" aria-expanded={menu} data-testid="scene3d-save-menu" disabled={blocked} onClick={() => setMenu(open => !open)} className="inline-flex h-8 items-center rounded-r-lg border border-l-0 border-border px-1.5"><ChevronDown size={14} aria-hidden="true" /></button>}
       {split && menu && <div role="menu" className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-lg border border-border bg-bg-primary p-1 shadow-lg">
         <button type="button" role="menuitem" data-testid="scene3d-history-checkpoint" disabled={disabled} className="block w-full rounded px-2 py-1.5 text-left text-xs text-text-primary" onClick={() => { setMenu(false); onCheckpoint?.() }}>{checkpointLabel}</button>
       </div>}

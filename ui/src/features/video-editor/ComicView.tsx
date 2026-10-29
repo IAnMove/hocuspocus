@@ -79,6 +79,36 @@ function ComicPages(props: Props & { file: string }) {
   </div>
 }
 
+function panelImageError(image: ComicPanelResult | undefined): string {
+  if (!image || !('error' in image)) return ''
+  return image.error
+}
+
+function panelImageUrl(image: ComicPanelResult | undefined, printed: boolean): string {
+  if (!image || 'error' in image) return ''
+  return printed ? image.print : image.frame
+}
+
+function panelSplashMark(splash: boolean): '0' | '1' {
+  return splash ? '1' : '0'
+}
+
+function panelOutline(selected: boolean): string | undefined {
+  return selected ? '2px solid #1d4e89' : undefined
+}
+
+function panelPlaceholder(failed: string, missing: string, loading: string): { title: string | undefined; label: string } {
+  return { title: failed || undefined, label: failed ? missing : loading }
+}
+
+function panelLyric(extra: ClipExtra | undefined): string | undefined {
+  return extra?.lyric
+}
+
+function panelLetterStyle(extra: ClipExtra | undefined): ComicTextStyle {
+  return extra?.comic?.text ?? 'caption'
+}
+
 function ComicPanel(props: {
   panel: ComicPanelBox
   clip: EditorClip
@@ -100,20 +130,21 @@ function ComicPanel(props: {
     height: `${(props.panel.h / PAGE_H) * 100}%`,
   }
   const image = props.image
-  const failed = image && 'error' in image ? image.error : ''
-  const url = image && !('error' in image) ? (props.printed ? image.print : image.frame) : ''
-  return <article data-testid="comic-panel" data-clip-id={props.clip.id} data-splash={props.panel.splash ? '1' : '0'}
+  const failed = panelImageError(image)
+  const url = panelImageUrl(image, props.printed)
+  const placeholder = panelPlaceholder(failed, t('comic.missing'), t('comic.loading'))
+  return <article data-testid="comic-panel" data-clip-id={props.clip.id} data-splash={panelSplashMark(props.panel.splash)}
     ref={element => props.observe(props.clip.id, element)} draggable
     onDragStart={event => startPanelDrag(event, props.clip.id)}
     onDragOver={event => event.preventDefault()}
     onDrop={event => dropPanel(event, props.index, props.onMove)}
     onClick={() => { props.onArm(props.clip.id); props.onSelect(props.index) }}
-    className="absolute" style={{ ...box, outline: props.selected ? '2px solid #1d4e89' : undefined, outlineOffset: '1px' }}>
+    className="absolute" style={{ ...box, outline: panelOutline(props.selected), outlineOffset: '1px' }}>
     <div className="absolute inset-0 overflow-hidden" style={{ border: `3px solid ${INK}`, background: '#e4dcc8' }}>
       {url ? <img src={url} alt="" draggable={false} className="h-full w-full" style={{ objectFit: 'cover', objectPosition: `${props.panel.focusX}% ${props.panel.focusY}%` }} />
-        : <div className="flex h-full items-center justify-center p-1 text-center text-[10px]" style={{ color: INK }} title={failed || undefined}>{failed ? t('comic.missing') : t('comic.loading')}</div>}
+        : <div className="flex h-full items-center justify-center p-1 text-center text-[10px]" style={{ color: INK }} title={placeholder.title}>{placeholder.label}</div>}
     </div>
-    <ComicLettering clipId={props.clip.id} lyric={props.extra?.lyric} style={props.extra?.comic?.text ?? 'caption'}
+    <ComicLettering clipId={props.clip.id} lyric={panelLyric(props.extra)} style={panelLetterStyle(props.extra)}
       hasSong={props.hasSong} selected={props.editing} onCommit={lyric => props.onExtra(props.clip.id, { lyric })} />
     {props.editing && <ComicTools {...props} />}
   </article>
@@ -139,6 +170,23 @@ function dropPanel(event: ReactDragEvent<HTMLElement>, index: number, onMove: (i
   onMove(index + (after ? 1 : 0), movingId)
 }
 
+function letteringPlace(caption: boolean, selected: boolean): string {
+  if (caption) return 'left-1 top-1 max-w-[86%]'
+  return selected ? 'bottom-12 left-2 right-2' : 'bottom-2 left-2 right-2'
+}
+
+function letteringRows(draft: string): 1 | 3 {
+  return draft.trim() ? 3 : 1
+}
+
+function letteringFill(caption: boolean): string {
+  return caption ? '#fff2a8' : '#fff'
+}
+
+function letteringShape(caption: boolean): string {
+  return caption ? '' : 'rounded-2xl'
+}
+
 function ComicLettering(props: {
   clipId: string
   lyric: string | undefined
@@ -160,18 +208,18 @@ function ComicLettering(props: {
   if (props.style === 'none' && !props.selected) return null
   const shown = displayLine(props.lyric, props.style, props.hasSong)
   const caption = props.style !== 'bubble'
-  const place = caption ? 'left-1 top-1 max-w-[86%]' : props.selected ? 'bottom-12 left-2 right-2' : 'bottom-2 left-2 right-2'
+  const place = letteringPlace(caption, props.selected)
   return <div className={`absolute z-[1] ${place}`}
     onClick={event => event.stopPropagation()} onMouseDown={event => event.stopPropagation()}>
-    {props.selected ? <textarea data-testid="comic-lyric" value={draft} rows={draft.trim() ? 3 : 1} maxLength={500}
+    {props.selected ? <textarea data-testid="comic-lyric" value={draft} rows={letteringRows(draft)} maxLength={500}
       placeholder={t('comic.editText')} aria-label={t('comic.editText')}
       onChange={event => setDraft(event.target.value)}
       onBlur={() => { if (draft.trim() !== (props.lyric ?? '').trim()) props.onCommit(draft) }}
       className="w-full resize-none rounded px-1.5 py-1 text-[11px] leading-snug"
-      style={{ fontFamily: LETTER, color: INK, background: caption ? '#fff2a8' : '#fff' }} />
+      style={{ fontFamily: LETTER, color: INK, background: letteringFill(caption) }} />
       : shown ? <>
-        <p className={`line-clamp-3 overflow-hidden px-1.5 py-1 text-[11px] leading-snug ${caption ? '' : 'rounded-2xl'}`}
-          style={{ fontFamily: LETTER, color: INK, background: caption ? '#fff2a8' : '#fff' }}>{shown}</p>
+        <p className={`line-clamp-3 overflow-hidden px-1.5 py-1 text-[11px] leading-snug ${letteringShape(caption)}`}
+          style={{ fontFamily: LETTER, color: INK, background: letteringFill(caption) }}>{shown}</p>
         {!caption && <span className="absolute left-4 top-full border-x-8 border-x-transparent border-t-8 border-t-white" />}
       </> : null}
   </div>

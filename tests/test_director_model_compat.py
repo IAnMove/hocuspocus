@@ -1926,6 +1926,16 @@ class TestDirectorUICatalogContract(unittest.TestCase):
             options = handle.read()
         with open(pipeline_path, encoding="utf-8") as handle:
             pipeline_source = handle.read()
+        director_catalog_path = os.path.join(
+            _ROOT_DIR, "ui", "src", "i18n", "locales", "en", "director.json",
+        )
+        settings_catalog_path = os.path.join(
+            _ROOT_DIR, "ui", "src", "i18n", "locales", "en", "settings.json",
+        )
+        with open(director_catalog_path, encoding="utf-8") as handle:
+            director_catalog = handle.read()
+        with open(settings_catalog_path, encoding="utf-8") as handle:
+            settings_catalog = handle.read()
 
         self.assertIn("director?: DirectorModelCompatibility", client)
         self.assertIn("const backendModels: ModelDef[]", models)
@@ -1935,14 +1945,22 @@ class TestDirectorUICatalogContract(unittest.TestCase):
         self.assertIn("resolution: directorVideoResolution", store)
         self.assertIn("minimax_h3_turbo_mode: directorTurboEnabled", store)
         self.assertIn("shot_image_support?", types)
-        self.assertIn("Shot image guidance", chat)
-        self.assertIn("Maximum planned shot", chat)
+        self.assertIn("t('chat.shotImageGuidance')", chat)
+        self.assertIn('"shotImageGuidance": "Shot image guidance"', director_catalog)
+        self.assertIn("t('chat.maxPlannedShot')", chat)
+        self.assertIn('"maxPlannedShot": "Maximum planned shot"', director_catalog)
         self.assertIn("H3 Turbo", chat)
         self.assertIn('id="director-h3-reference-mode"', chat)
-        self.assertIn("Ref2VA · character, location and media refs", chat)
+        self.assertIn("t('chat.ref2vaOption')", chat)
+        self.assertIn(
+            '"ref2vaOption": "Ref2VA · character, location and media refs"',
+            director_catalog,
+        )
         self.assertIn("['minimax_h3', 'minimax_h3_legacy'].includes(selectedVideoModel)", store)
         self.assertIn("director_memory_policy", chat)
-        self.assertIn("LoRA strength", lora_selector)
+        self.assertIn("t('lora.strengthTitle')", lora_selector)
+        self.assertIn("t('lora.strength')", lora_selector)
+        self.assertIn('"strengthTitle": "LoRA strength"', settings_catalog)
         self.assertIn('type="number"', lora_selector)
         self.assertIn("updateWeight(filename", lora_selector)
         self.assertIn("usesShotImages && (atStep('review')", chat)

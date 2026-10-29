@@ -68,6 +68,21 @@ export function imageGenStatusLine(label: string, status: string) {
   return directorText('chat.clipStatus', { label, status: imageProgressStatus(status) })
 }
 
+function directorUploadPlaceholder(isMvGenerate: boolean, isShortFilm: boolean) {
+  if (isMvGenerate) return directorText('chat.generatingMusicVideo')
+  return directorText(isShortFilm ? 'chat.uploadDialogueToBegin' : 'chat.uploadAudioToBegin')
+}
+
+function directorStylePlaceholder(isStoryPath: boolean, isShortFilm: boolean, speakerCount: number) {
+  if (isStoryPath) return directorText('chat.storyExamplePlaceholder')
+  if (isShortFilm) return directorText('chat.shortFilmMoodPlaceholder')
+  return directorText(speakerCount >= 2 ? 'panel.scenePlaceholderMulti' : 'chat.sceneAndCharactersPlaceholder')
+}
+
+function directorStructurePlaceholder(isShortFilm: boolean) {
+  return directorText(isShortFilm ? 'chat.adjustScenePacing' : 'chat.adjustClipStructure')
+}
+
 export function directorChatPlaceholder(state: {
   skill: string | null | undefined
   mvGenerateSetup: boolean
@@ -81,16 +96,9 @@ export function directorChatPlaceholder(state: {
   if (!state.skill) return directorText('chat.chooseSkill')
   if (state.mvGenerateSetup) return directorText('chat.mvPromptPlaceholder')
   if (state.isShortFilm && !state.shortFilmPath) return directorText('chat.choosePath')
-  if (state.step === 'upload' || state.step === 'analyze') {
-    if (state.isMvGenerate) return directorText('chat.generatingMusicVideo')
-    return directorText(state.isShortFilm ? 'chat.uploadDialogueToBegin' : 'chat.uploadAudioToBegin')
-  }
-  if (state.step === 'style') {
-    if (state.isStoryPath) return directorText('chat.storyExamplePlaceholder')
-    if (state.isShortFilm) return directorText('chat.shortFilmMoodPlaceholder')
-    return directorText(state.speakerCount >= 2 ? 'panel.scenePlaceholderMulti' : 'chat.sceneAndCharactersPlaceholder')
-  }
-  if (state.step === 'structure') return directorText(state.isShortFilm ? 'chat.adjustScenePacing' : 'chat.adjustClipStructure')
+  if (state.step === 'upload' || state.step === 'analyze') return directorUploadPlaceholder(state.isMvGenerate, state.isShortFilm)
+  if (state.step === 'style') return directorStylePlaceholder(state.isStoryPath, state.isShortFilm, state.speakerCount)
+  if (state.step === 'structure') return directorStructurePlaceholder(state.isShortFilm)
   return directorText('chat.reviewing')
 }
 

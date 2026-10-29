@@ -443,11 +443,26 @@ function HandoffActions({ a }: { a: OutputActions }) {
   )
 }
 
+function restoreActionDisabled(busy: boolean, blocked: boolean) {
+  return busy || blocked
+}
+
+function restoreActionTitle(blocked: boolean, blockedTitle: string, actionTitle: string) {
+  return blocked ? blockedTitle : actionTitle
+}
+
+function shownClipCount(count: number | null | undefined) {
+  return count ?? 0
+}
+
 function GenerationActions({ a }: { a: OutputActions }) {
   const { clipTotal, copied, file, groupId, handleContinueFrom, handleCopyPrompt, handleOutputSettings, handleRejoin, openRetakeDialog, params, rejoining, setShowSaveRecipe, settingsBusy, settingsError, t, tStudio } = a
   // Extend/Blend sidecars cannot be restored yet (see isExtendOrBlendOutput).
   const restoreBlocked = isExtendOrBlendOutput(params)
   const restoreBlockedTitle = t('extendBlendRestoreUnavailable')
+  const loadSettingsTitle = restoreActionTitle(restoreBlocked, restoreBlockedTitle, tStudio('imageActions.loadSettings'))
+  const regenerateTitle = restoreActionTitle(restoreBlocked, restoreBlockedTitle, t('actions.regenerate'))
+  const rejoinTotal = shownClipCount(clipTotal)
   return (
     <>
         {params && (
@@ -461,17 +476,17 @@ function GenerationActions({ a }: { a: OutputActions }) {
             </button>
             <button
               onClick={event => { event.stopPropagation(); void handleOutputSettings(false) }}
-              disabled={settingsBusy || restoreBlocked}
+              disabled={restoreActionDisabled(settingsBusy, restoreBlocked)}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
-              title={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')} aria-label={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')}
+              title={loadSettingsTitle} aria-label={loadSettingsTitle}
             >
               <SlidersHorizontal size={13} />
             </button>
             <button
               onClick={event => { event.stopPropagation(); void handleOutputSettings(true) }}
-              disabled={settingsBusy || restoreBlocked}
+              disabled={restoreActionDisabled(settingsBusy, restoreBlocked)}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
-              title={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')} aria-label={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')}
+              title={regenerateTitle} aria-label={regenerateTitle}
             >
               <RefreshCw size={13} />
             </button>
@@ -499,7 +514,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
                 onClick={handleRejoin}
                 disabled={rejoining}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-accent-blue hover:text-accent-blue-hover transition-colors disabled:opacity-50"
-                title={t('actions.rejoin', { count: clipTotal ?? 0 })} aria-label={t('actions.rejoin', { count: clipTotal ?? 0 })}
+                title={t('actions.rejoin', { count: rejoinTotal })} aria-label={t('actions.rejoin', { count: rejoinTotal })}
               >
                 {rejoining ? <Loader2 size={13} className="animate-spin" /> : <Combine size={13} />}
               </button>

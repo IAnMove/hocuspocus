@@ -24,6 +24,11 @@ const DEFAULT_FACE: FacePlacement = {
   },
 }
 
+function resolveInspectorSlot(allowEmpty: boolean, found: Scene3DSlot | undefined, slots: readonly Scene3DSlot[]): Scene3DSlot | undefined {
+  if (allowEmpty) return found
+  return found ?? slots[0]
+}
+
 export type InspectorMode = 'object' | 'scene'
 
 export type SceneObjectInspectorProps = {
@@ -55,7 +60,7 @@ export function SceneObjectInspector({
   const [mode, setMode] = useInspectorMode(allowEmpty, selectedId)
   const [previewOpen, setPreviewOpen] = useState(true)
   const found = document.slots.find(slot => slot.id === selectedId)
-  const selected = allowEmpty ? found : found ?? document.slots[0]
+  const selected = resolveInspectorSlot(allowEmpty, found, document.slots)
   useInspectorHistoryKeys(locked, onUndo, onRedo)
   const commit = (next: Scene3DDocument, group?: string) => {
     if (locked) return

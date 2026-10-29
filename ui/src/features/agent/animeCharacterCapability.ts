@@ -22,6 +22,40 @@ function hex(value: unknown): string | undefined {
   return typeof value === 'string' && HEX.test(value) ? value.toUpperCase() : undefined
 }
 
+function animeHeightField(rawHeight: unknown): { height: number } | undefined {
+  const height = typeof rawHeight === 'number' ? rawHeight : Number(rawHeight)
+  if (Number.isFinite(height) && height >= 1.2 && height <= 2.2) return { height }
+  return undefined
+}
+
+function animeTraitFields(raw: Record<string, unknown>) {
+  const gender = choice(raw.gender, GENDERS)
+  const body = choice(raw.body, BODIES)
+  const skin = hex(raw.skin)
+  const eyeColor = hex(raw.eye_color)
+  const hairStyle = choice(raw.hair_style, HAIR)
+  const hairColor = hex(raw.hair_color)
+  const outfit = choice(raw.outfit, OUTFITS)
+  const faceStyle = choice(raw.face_style, FACE_STYLES)
+  const faceShape = choice(raw.face_shape, FACE_SHAPES)
+  const faceSource = choice(raw.face_source, FACE_SOURCES)
+  const faceImage = text(raw.face_image, 300)
+  return {
+    ...(gender ? { gender } : {}),
+    ...(body ? { body } : {}),
+    ...animeHeightField(raw.height),
+    ...(skin ? { skin } : {}),
+    ...(eyeColor ? { eyeColor } : {}),
+    ...(hairStyle ? { hairStyle } : {}),
+    ...(hairColor ? { hairColor } : {}),
+    ...(outfit ? { outfit } : {}),
+    ...(faceStyle ? { faceStyle } : {}),
+    ...(faceShape ? { faceShape } : {}),
+    ...(faceSource ? { faceSource } : {}),
+    ...(faceImage ? { faceImage } : {}),
+  }
+}
+
 export function registerAnimeCharacterCapability(register: typeof defineCapability) {
   register<AgentAnimeMakeAction>({
     name: 'anime_make',
@@ -51,22 +85,10 @@ export function registerAnimeCharacterCapability(register: typeof defineCapabili
     },
     risk: 'edit', confirmation: 'none', progress: 'Building the anime character…',
     resolve(raw) {
-      const height = typeof raw.height === 'number' ? raw.height : Number(raw.height)
       return {
         type: 'anime_make',
         name: text(raw.name, 64) || 'Anime',
-        ...(choice(raw.gender, GENDERS) ? { gender: choice(raw.gender, GENDERS) } : {}),
-        ...(choice(raw.body, BODIES) ? { body: choice(raw.body, BODIES) } : {}),
-        ...(Number.isFinite(height) && height >= 1.2 && height <= 2.2 ? { height } : {}),
-        ...(hex(raw.skin) ? { skin: hex(raw.skin) } : {}),
-        ...(hex(raw.eye_color) ? { eyeColor: hex(raw.eye_color) } : {}),
-        ...(choice(raw.hair_style, HAIR) ? { hairStyle: choice(raw.hair_style, HAIR) } : {}),
-        ...(hex(raw.hair_color) ? { hairColor: hex(raw.hair_color) } : {}),
-        ...(choice(raw.outfit, OUTFITS) ? { outfit: choice(raw.outfit, OUTFITS) } : {}),
-        ...(choice(raw.face_style, FACE_STYLES) ? { faceStyle: choice(raw.face_style, FACE_STYLES) } : {}),
-        ...(choice(raw.face_shape, FACE_SHAPES) ? { faceShape: choice(raw.face_shape, FACE_SHAPES) } : {}),
-        ...(choice(raw.face_source, FACE_SOURCES) ? { faceSource: choice(raw.face_source, FACE_SOURCES) } : {}),
-        ...(text(raw.face_image, 300) ? { faceImage: text(raw.face_image, 300) } : {}),
+        ...animeTraitFields(raw),
       }
     },
     validate(action) { return !action.name.trim() ? ['name is required'] : action.faceSource === 'qwen' && !action.faceImage ? ['face_image is required with face_source qwen'] : [] },

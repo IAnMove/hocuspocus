@@ -250,22 +250,34 @@ function target(tab: AgentTab): AgentExecutionTarget {
   return { kind: 'application_section', id: tab, title: TAB_LABELS[tab] }
 }
 
+function settingsTabOpen(state: { settingsOpen: boolean; dashboardOpen: boolean }) {
+  return state.settingsOpen && !state.dashboardOpen
+}
+
+function productionsTabOpen(state: { settingsOpen: boolean; dashboardOpen: boolean }) {
+  return state.dashboardOpen && !state.settingsOpen
+}
+
+function workspaceSurfaceOpen(
+  state: Parameters<typeof visibleWorkspaceSurface>[0] & { settingsOpen: boolean; dashboardOpen: boolean },
+  surface: 'director' | 'generate',
+) {
+  return visibleWorkspaceSurface(state) === surface && !state.settingsOpen && !state.dashboardOpen
+}
+
+function mediaTabOpen(state: { mediaFilter: MediaFilter; settingsOpen: boolean; dashboardOpen: boolean }, tab: AgentTab) {
+  const mediaFilter = TAB_TARGETS[tab]
+  return Boolean(mediaFilter && state.mediaFilter === mediaFilter && !state.settingsOpen && !state.dashboardOpen)
+}
+
 function isTabOpen(tab: AgentTab): boolean {
   const state = useStore.getState()
-  if (tab === 'settings') return state.settingsOpen && !state.dashboardOpen
-  if (tab === 'productions') return state.dashboardOpen && !state.settingsOpen
-  if (tab === 'director') {
-    return visibleWorkspaceSurface(state) === 'director'
-      && !state.settingsOpen && !state.dashboardOpen
-  }
-  if (tab === 'studio') {
-    return visibleWorkspaceSurface(state) === 'generate'
-      && !state.settingsOpen && !state.dashboardOpen
-  }
+  if (tab === 'settings') return settingsTabOpen(state)
+  if (tab === 'productions') return productionsTabOpen(state)
+  if (tab === 'director') return workspaceSurfaceOpen(state, 'director')
+  if (tab === 'studio') return workspaceSurfaceOpen(state, 'generate')
   if (tab === 'character_replacement') return characterReplacementReady(state)
-  const mediaFilter = TAB_TARGETS[tab]
-  return Boolean(mediaFilter && state.mediaFilter === mediaFilter
-    && !state.settingsOpen && !state.dashboardOpen)
+  return mediaTabOpen(state, tab)
 }
 
 async function navigate(tab: AgentTab): Promise<AdapterOutcome> {

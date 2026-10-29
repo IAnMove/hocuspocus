@@ -84,6 +84,18 @@ def _add_box(mesh: Mesh, uvs: list, centre, size, tile, rows=None, turn=None, pi
             uvs.extend(quad[i] for i in tri)
 
 
+def _face_board(top: float, head_h: float, head_w: float, head_d: float, height: float):
+    face, face_uvs = Mesh(), []
+    z = head_d / 2 + 0.0015 * height
+    y0, y1, x0, x1 = top, top + head_h, -head_w / 2, head_w / 2
+    quad = [(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)]
+    uv_quad = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]   # the kit painter's pictures are v-up, unlike the body picture's
+    for tri in ((0, 1, 2), (0, 2, 3)):
+        face.triangle([quad[i] for i in tri], [(0, 0, 1)] * 3, [(1.0, 1.0, 1.0)] * 3)
+        face_uvs.extend(uv_quad[i] for i in tri)
+    return face, face_uvs
+
+
 def blocky_parts(spec: dict) -> list:
     """``[(mesh, material, uvs)]``: the body (one picture) and the face quad."""
     shape = SHAPES[spec["blocky"]]
@@ -121,14 +133,7 @@ def blocky_parts(spec: dict) -> list:
             a, b = shoulder_y - arm_h * share[1], shoulder_y - arm_h * share[0]
             _add_box(body, uvs, (pivot[0], (a + b) / 2, 0.0), (arm_w, b - a, arm_d), TILES[tile], share, turn, pivot)
     _add_box(body, uvs, (0.0, top + head_h / 2, 0.0), (head_w, head_h, head_d), TILES["head"])
-    face, face_uvs = Mesh(), []
-    z = head_d / 2 + 0.0015 * spec["height"]
-    y0, y1, x0, x1 = top, top + head_h, -head_w / 2, head_w / 2
-    quad = [(x0, y0, z), (x1, y0, z), (x1, y1, z), (x0, y1, z)]
-    uv_quad = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]   # the kit painter's pictures are v-up, unlike the body picture's
-    for tri in ((0, 1, 2), (0, 2, 3)):
-        face.triangle([quad[i] for i in tri], [(0, 0, 1)] * 3, [(1.0, 1.0, 1.0)] * 3)
-        face_uvs.extend(uv_quad[i] for i in tri)
+    face, face_uvs = _face_board(top, head_h, head_w, head_d, spec["height"])
     return [(body, "body", uvs), (face, "face", face_uvs)]
 
 
@@ -140,6 +145,29 @@ def blocky_glb(spec: dict, name: str = "blob") -> bytes:
 
 def _rgb(value: str) -> tuple[int, int, int]:
     return int(value[1:3], 16), int(value[3:5], 16), int(value[5:7], 16)
+
+
+def _paint_named_part(paint, part, name, rect, skin, hair, shirt, pants, shoes, sleeves) -> None:
+    if part == "head":
+        paint(rect, skin)
+        if name == "top":
+            paint(rect, hair)
+        elif name == "back":
+            paint(rect, hair, (0.0, 0.8))
+        elif name in ("right", "left", "front"):
+            paint(rect, hair, (0.0, 0.3 if name != "front" else 0.2))
+    elif part == "torso":
+        paint(rect, shirt)
+    elif part.startswith("arm"):
+        paint(rect, shirt if name in ("top",) else skin)
+        if name not in ("top", "bottom"):
+            paint(rect, shirt, (0.0, 0.42 if sleeves == "short" else 1.0))
+    else:
+        paint(rect, pants)
+        if name not in ("top", "bottom"):
+            paint(rect, shoes, (0.82, 1.0))
+        if name == "bottom":
+            paint(rect, shoes)
 
 
 def blocky_picture(spec: dict) -> bytes:
@@ -165,26 +193,7 @@ def blocky_picture(spec: dict) -> bytes:
     for part, (tile, _) in TILES.items():
         rects = _rects(TILES[part])
         for name, rect in rects.items():
-            if part == "head":
-                paint(rect, skin)
-                if name == "top":
-                    paint(rect, hair)
-                elif name == "back":
-                    paint(rect, hair, (0.0, 0.8))
-                elif name in ("right", "left", "front"):
-                    paint(rect, hair, (0.0, 0.3 if name != "front" else 0.2))
-            elif part == "torso":
-                paint(rect, shirt)
-            elif part.startswith("arm"):
-                paint(rect, shirt if name in ("top",) else skin)
-                if name not in ("top", "bottom"):
-                    paint(rect, shirt, (0.0, 0.42 if spec.get("sleeves", "short") == "short" else 1.0))
-            else:
-                paint(rect, pants)
-                if name not in ("top", "bottom"):
-                    paint(rect, shoes, (0.82, 1.0))
-                if name == "bottom":
-                    paint(rect, shoes)
+            _paint_named_part(paint, part, name, rect, skin, hair, shirt, pants, shoes, spec.get("sleeves", "short"))
     out = io.BytesIO()
     image.save(out, format="PNG")
     return out.getvalue()

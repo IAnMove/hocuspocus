@@ -294,6 +294,13 @@ def _normalize(traits: dict) -> dict:
     }
 
 
+def _skull_pair(key: str, row) -> list:
+    if (not isinstance(row, (list, tuple)) or len(row) != 2 or any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in row)
+            or not -90 <= row[0] <= 90 or not 0.7 <= row[1] <= 1.3):
+        _fail("invalid_skull_fit", f"skull_fit.{key}: each pair is [latitude -90..90, factor 0.7..1.3]")
+    return [float(row[0]), float(row[1])]
+
+
 def _skull_fit(value) -> dict:
     """The factors of a skull fitted to a head picture: {width, front, back}, each a list of [latitude, factor] pairs."""
     if not isinstance(value, dict) or set(value) - {"width", "front", "back"}:
@@ -302,12 +309,7 @@ def _skull_fit(value) -> dict:
     for key, rows in value.items():
         if not isinstance(rows, list) or not 2 <= len(rows) <= 24:
             _fail("invalid_skull_fit", f"skull_fit.{key} is a list of 2 to 24 [latitude, factor] pairs")
-        clean = []
-        for row in rows:
-            if (not isinstance(row, (list, tuple)) or len(row) != 2 or any(isinstance(n, bool) or not isinstance(n, (int, float)) or not math.isfinite(n) for n in row)
-                    or not -90 <= row[0] <= 90 or not 0.7 <= row[1] <= 1.3):
-                _fail("invalid_skull_fit", f"skull_fit.{key}: each pair is [latitude -90..90, factor 0.7..1.3]")
-            clean.append([float(row[0]), float(row[1])])
+        clean = [_skull_pair(key, row) for row in rows]
         if clean != sorted(clean):
             _fail("invalid_skull_fit", f"skull_fit.{key} must be sorted by latitude")
         out[key] = clean

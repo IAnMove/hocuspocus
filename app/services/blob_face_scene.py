@@ -153,6 +153,14 @@ def _kit_face(kit: dict) -> dict:
     return face if isinstance(face, dict) else {}
 
 
+def _fit_values(fit) -> list[float]:
+    ok = (isinstance(fit, (list, tuple)) and len(fit) == 4
+          and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1 for v in fit) and fit[2] > 0 and fit[3] > 0)
+    if not ok:
+        raise World3DSceneError("invalid_face", "fit is [cu, cv, ru, rv]: the drawn skull's centre and half-size as fractions of the picture, 0 to 1")
+    return [round(float(v), 4) for v in fit]
+
+
 def _cap_fields(changes: dict, kept: dict, kit: dict | None = None) -> dict[str, Any]:
     """``taper`` (the jaw of the egg head the cap hugs, 0 to 0.6) and ``fit`` ([cu, cv, ru, rv], the drawn skull's centre and
     half-size as image fractions: the picture is then projected from the front over 200 x 180 degrees). Stored only when given,
@@ -167,11 +175,7 @@ def _cap_fields(changes: dict, kept: dict, kit: dict | None = None) -> dict[str,
             found["taper"] = round(float(taper), 3)
     fit = changes.get("fit", kept.get("fit", drawn.get("fit")))
     if fit is not None:
-        ok = (isinstance(fit, (list, tuple)) and len(fit) == 4
-              and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1 for v in fit) and fit[2] > 0 and fit[3] > 0)
-        if not ok:
-            raise World3DSceneError("invalid_face", "fit is [cu, cv, ru, rv]: the drawn skull's centre and half-size as fractions of the picture, 0 to 1")
-        found["fit"] = [round(float(v), 4) for v in fit]
+        found["fit"] = _fit_values(fit)
     return found
 
 
