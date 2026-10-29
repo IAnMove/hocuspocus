@@ -1,3 +1,4 @@
+import { controlLabel } from './i18n/controlLabel'
 import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import { Menu, Settings } from 'lucide-react'
 import { WizardSidebar } from './components/Sidebar/WizardSidebar'
@@ -8,8 +9,6 @@ import { StorageDashboard } from './components/StorageDashboard/StorageDashboard
 import { RetakeDialog } from './components/RetakeDialog'
 import { OomRecoveryBanner } from './components/OomRecoveryBanner'
 import { DownloadStatusBanner } from './components/DownloadStatusBanner'
-import { PreflightBanner } from './components/PreflightBanner'
-import { PlatformModeBanner } from './components/PlatformModeBanner'
 import { ActivityFooter } from './components/ActivityFooter'
 import { RuntimeUpdateNotice } from './components/RuntimeUpdateNotice'
 import { GalleryReadyToast } from './components/MainContent/GalleryReadyToast'
@@ -20,10 +19,10 @@ import { BrandIdentity } from './components/BrandIdentity'
 import { HocusPocusIntro } from './components/HocusPocusIntro'
 import { LanAuthGate } from './components/LanAuthGate'
 import { ExecutionModeBanner } from './components/ExecutionModeBanner'
-import { ProductionProfileNotice } from './components/ProductionProfileNotice'
 import { SeriesNativeBatchBanner } from './features/series/SeriesNativeBatchBanner'
 import { SeriesShotEditBanner } from './features/series/SeriesShotEditBanner'
 import { catalogFromOutputs, GenerationInspectorHost } from './features/generation-inspector'
+import { useUiTranslation } from './i18n'
 import { useStore } from './stores/useStore'
 import { useIsMobile } from './lib/useIsMobile'
 import { LazyProductionShotsOverlay } from './features/production-shots/ProductionShotsOverlay'
@@ -166,6 +165,7 @@ function AppContent() {
   const outputs = useStore(s => s.outputs)
   const params = useStore(s => s.params)
   const isMobile = useIsMobile()
+  const { t } = useUiTranslation('wizard')
 
   useEffect(() => {
     loadModels()
@@ -254,7 +254,6 @@ function AppContent() {
   return (
     <div className="flex flex-col h-full w-full bg-bg-primary">
       <ExecutionModeBanner />
-      <ProductionProfileNotice />
       <SeriesNativeBatchBanner />
       <SeriesShotEditBanner />
       {/* Mobile header */}
@@ -263,7 +262,7 @@ function AppContent() {
           <button
             onClick={() => window.dispatchEvent(new Event('hocuspocus:wizard-open'))}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-            aria-label="Ask to the Wizard"
+            aria-label={t('title')}
           >
             <Menu size={20} />
           </button>
@@ -271,7 +270,7 @@ function AppContent() {
           <button
             onClick={() => { toggleSettings() }}
             className="p-2 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          >
+           title={controlLabel('a11y.openSettings')} aria-label={controlLabel('a11y.openSettings')}>
             <Settings size={20} />
           </button>
         </header>
@@ -305,11 +304,6 @@ function AppContent() {
           Lives at the App root so it floats above whichever screen the
           user is looking at when their generation OOMs. */}
       <OomRecoveryBanner />
-      {/* PreflightBanner — fixed top overlay shown once on startup if the
-          environment is missing ffmpeg / CUDA or low on disk. Renders
-          nothing when everything checks out. */}
-      <PreflightBanner />
-      <PlatformModeBanner />
       {/* DownloadStatusBanner — fixed bottom-right overlay, polls
           /api/v1/downloads/active every 2s. Renders nothing unless
           a model file is being downloaded. Highlights stalled

@@ -117,3 +117,19 @@ def test_a_scene_without_a_camera_or_light_still_inspects(tmp_path):
     (folder / f"{SCENE}.json").write_text(json.dumps({"revision": 1, "templateId": "x", "document": {"slots": [slot("a", "model.glb")]}}), encoding="utf-8")
     viewed = inspect_scene(WORKSPACE, SCENE, workspace_dir(tmp_path))
     assert viewed["camera"] is None and viewed["light"] is None and viewed["size"] == {} and viewed["layout"]["items"][0]["boundsM"] is None
+
+
+def test_pitch_moves_the_box_and_a_yaw_only_slot_omits_the_new_angles(tmp_path):
+    model_glb(tmp_path)
+    yaw = item(scene(tmp_path, [slot("tree", "model.glb", position=[1, 0.5, -2], scale=2, rotationY=math.pi / 2)]), "tree")
+    assert "rotationX" not in yaw and "rotationZ" not in yaw
+    assert yaw["boundsM"]["min"] == pytest.approx([0.15, 0.5, -3.7])
+    pitched = scene(tmp_path, [slot("tree", "model.glb", rotationX=math.pi / 2, rotationZ=-0.4)])
+    row = item(pitched, "tree")
+    assert row["rotationX"] == pytest.approx(math.pi / 2) and row["rotationZ"] == pytest.approx(-0.4)
+    assert row["boundsM"]["bottomY"] < 0
+    assert pitched["objects"][0]["rotationX"] == pytest.approx(math.pi / 2)
+    assert pitched["objects"][0]["rotationZ"] == pytest.approx(-0.4)
+    assert {"rotationX", "rotationZ"} <= set(pitched["editable"])
+    only_yaw = scene(tmp_path, [slot("tree", "model.glb", rotationY=0.2)])
+    assert "rotationX" not in only_yaw["objects"][0] and "rotationX" not in only_yaw["layout"]["items"][0]

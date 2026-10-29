@@ -115,7 +115,7 @@ export function LanAuthGate({ children }: { children: ReactNode }) {
                 aria-hidden="true"
                 className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
               />
-              <input
+              <input aria-label={t('lan.tokenLabel')}
                 id="lan-access-token"
                 type="password"
                 value={token}

@@ -135,7 +135,23 @@ def test_the_tool_descriptions_document_fit_layout_and_the_1_7_m_rule():
     tools = {item["name"]: item for item in command_catalog()}
     patch_description = json.dumps(tools["world3d.scene.patch"]["inputSchema"]) + tools["world3d.scene.patch"]["description"]
     inspect_description = tools["world3d.scene.inspect"]["description"]
-    for word in ("fit:", "heightM", "longestM", "native", "1.7 m x scale"):
+    for word in ("fit:", "heightM", "longestM", "native", "1.7 m x scale", "rotationX", "rotationZ"):
         assert word in patch_description, word
     for word in ("layout.items", "boundsM", "boundsReason", "camera", "1.7 m x scale", "rest pose", "Open dialog"):
         assert word in inspect_description, word
+
+
+def test_a_patch_keeps_tilt_through_reload_and_a_yaw_patch_does_not_add_it(tmp_path):
+    scene(tmp_path, [slot("ship", rotationY=0.3)])
+    viewed = patch(tmp_path, [{"object_id": "ship", "rotationX": 0.4, "rotationZ": -0.2}])
+    stored = viewed["document"]["slots"][0]
+    assert stored["rotationX"] == 0.4 and stored["rotationZ"] == -0.2 and stored["rotationY"] == 0.3
+    assert viewed["objects"][0]["rotationX"] == 0.4 and viewed["layout"]["items"][0]["rotationZ"] == -0.2
+    kept = patch(tmp_path, [{"object_id": "ship", "position": [1, 0, 2]}], viewed["revision"])
+    assert kept["document"]["slots"][0]["rotationX"] == 0.4 and kept["document"]["slots"][0]["position"] == [1, 0, 2]
+    reloaded = inspect_scene(WORKSPACE, SCENE, workspace_dir(tmp_path))
+    assert reloaded["document"]["slots"][0]["rotationZ"] == -0.2
+    scene(tmp_path, [slot("ship", rotationY=0.3)])
+    plain = patch(tmp_path, [{"object_id": "ship", "position": [0, 1, 0]}])
+    assert "rotationX" not in plain["document"]["slots"][0] and "rotationZ" not in plain["document"]["slots"][0]
+    assert "rotationX" not in plain["objects"][0] and "rotationX" not in plain["layout"]["items"][0]

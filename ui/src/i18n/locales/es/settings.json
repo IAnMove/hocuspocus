@@ -7,6 +7,10 @@
     "integrations": "Integraciones",
     "installation": "Instalación"
   },
+  "modelFamilies": {
+    "enableAll": "Activar todos los modelos de {{family}}",
+    "disableAll": "Desactivar todos los modelos de {{family}}"
+  },
   "appearance": {
     "title": "Apariencia",
     "mode": "Modo",
@@ -14,7 +18,77 @@
     "light": "Claro",
     "auto": "Auto",
     "autoHint": "Sigue la apariencia del sistema — ahora {{variant}}.",
-    "theme": "Tema"
+    "theme": "Tema",
+    "themes": {
+      "golden-hour": {
+        "label": "HocusPocus Blue",
+        "description": "El tema por defecto. Paleta HocusPocus: superficies casi negras con acentos azul eléctrico y cian; papel frío de día."
+      },
+      "default": {
+        "label": "Clásico",
+        "description": "La paleta fría original, con acentos azules: carbón de noche y papel frío de día."
+      },
+      "onyx": {
+        "label": "Ónix",
+        "description": "Monocromo minimalista: negro puro de noche, blanco y gris de día. Sin tinte de color."
+      },
+      "everforest": {
+        "label": "Everforest",
+        "description": "Verdes de bosque desaturados sobre gris cálido: el más descansado del conjunto y el más amable con una galería llena."
+      },
+      "gruvbox": {
+        "label": "Gruvbox",
+        "description": "Tonos tierra retro y cálidos, de poco contraste: cómodo para sesiones largas."
+      },
+      "nord": {
+        "label": "Nord",
+        "description": "Azul gris ártico, apagado y uniforme: una habitación fría y quieta."
+      },
+      "tokyo-night": {
+        "label": "Tokyo Night",
+        "description": "Azules y violetas fríos sobre azul marino: el vecino más cercano de HocusPocus Blue."
+      },
+      "catppuccin": {
+        "label": "Catppuccin",
+        "description": "Pasteles suaves sobre carbón con tinte ciruela: la paleta más equilibrada del conjunto."
+      },
+      "rose-pine": {
+        "label": "Rosé Pine",
+        "description": "Rosa y pino apagados sobre tinta: el vacío más bonito; es el que más compite con una galería llena."
+      },
+      "studio": {
+        "label": "Estudio",
+        "description": "Una sala de etalonaje: grises sin tinte alrededor de un entorno al 18 %, para que el cromo no tire las miniaturas hacia cálido ni frío. Cian y naranja solo en los controles."
+      },
+      "phosphor": {
+        "label": "Fósforo",
+        "description": "CRT ámbar: la luz se desborda del borde en lugar de perfilarlo; de día, el papel impreso y no la pantalla."
+      },
+      "amiga": {
+        "label": "Amiga Workbench",
+        "description": "El azul del Workbench 1.3 con sus gadgets naranjas, y el escritorio gris de la 2.0 de día: un gris medio de verdad, no papel."
+      },
+      "solarized": {
+        "label": "Solarized",
+        "description": "Fondo negro verdoso con ocre y óxido: hecho de relaciones de tono medidas, y el único tema oscuro de aquí que no se lee como gris."
+      },
+      "one": {
+        "label": "One",
+        "description": "Azul gris uniforme con un acento azul claro: el más neutro del conjunto comunitario."
+      },
+      "ayu": {
+        "label": "Ayu",
+        "description": "Casi negro con un acento dorado: el de más contraste, y el único que abre con luz cálida."
+      },
+      "dracula": {
+        "label": "Dracula",
+        "description": "Púrpura y rosa saturados sobre índigo: el más ruidoso del conjunto, con Alucard como papel cálido de día."
+      },
+      "kanagawa": {
+        "label": "Kanagawa",
+        "description": "Marrones y añil de tinta a la manera de Hokusai: cálido y pictórico, con el papel Lotus de día."
+      }
+    }
   },
   "language": {
     "title": "Idioma",
@@ -283,6 +357,9 @@
     "updatesFilterTitle": "{{count}} LoRA(s) tienen actualizaciones — marca para filtrar",
     "updatesNoneTitle": "No hay actualizaciones — pulsa Comprobar para refrescar desde CivitAI",
     "sortTitle": "Ordenar LoRAs instaladas",
+    "sortResults": "Ordenar resultados",
+    "period": "Periodo",
+    "modelFilter": "Filtro de modelos",
     "sortName": "Nombre",
     "sortDownloaded": "Descarga más reciente",
     "sortReleased": "Lanzamiento más reciente",
@@ -453,6 +530,8 @@
     "installedRestart": "Instalado. Reinicia HocusPocus para usarlo.",
     "removed": "Quitado.",
     "install": "Instalar",
+    "waitForCurrent": "Espera a que termine la instalación o la eliminación en curso",
+    "needLauncher": "El instalador no está disponible. Arráncalo y vuelve a intentarlo",
     "update": "Actualizar",
     "uninstall": "Quitar",
     "confirmUninstall": "Pulsa otra vez para quitar (libera unos {{size}})",
@@ -511,5 +590,195 @@
         "summary": "El flujo original de ComfyUI para MiniMax H3. El H3 nativo de la instalación base cubre el uso normal."
       }
     }
+  },
+  "system": {
+    "enabledModels": "Modelos activados",
+    "reset": "Restablecer",
+    "all": "Todos",
+    "none": "Ninguno",
+    "linkedFolders": "Carpetas de modelos enlazadas",
+    "linkedCount_one": "{{count}} enlazada",
+    "linkedCount_other": "{{count}} enlazadas",
+    "linkedBody": "Busca en las carpetas de modelos de otras aplicaciones los checkpoints que ya tienes — por ejemplo una instalación de Wan2GP — en lugar de volver a descargarlos. Las carpetas enlazadas son de solo lectura: las descargas nuevas van siempre a la carpeta ckpts de HocusPocus.",
+    "unlink": "Desenlazar carpeta (los archivos no se borran)",
+    "scanPinokio": "Explorar apps de Pinokio",
+    "scanEmpty": "No se encontraron otras apps de Pinokio con una carpeta ckpts",
+    "scanFailed": "El escaneo falló",
+    "saveFailed": "No se pudieron guardar las carpetas",
+    "linkFolder": "Enlazar {{path}}",
+    "folderStats": "{{files}} archivos, {{folders}} carpetas",
+    "folderStatsSize": "{{files}} archivos, {{folders}} carpetas, ~{{size}} GB",
+    "pastePath": "O pega la ruta de una carpeta…",
+    "add": "Añadir",
+    "storageHint": "uso, duplicados, limpieza",
+    "noCuda": "No se detectó una GPU CUDA",
+    "vramRam": "{{vram}} GB de VRAM · {{ram}} GB de RAM",
+    "ramOnly": "{{ram}} GB de RAM",
+    "autoTuneOnTitle": "El ajuste automático está activo — pulsa para tomar el control manual",
+    "autoTuneOffTitle": "El ajuste automático está apagado — pulsa para activarlo",
+    "autoTuneOn": "Ajuste automático activado",
+    "autoTuneOff": "Ajuste automático apagado",
+    "autoAppliedProfile": "Ajuste automático aplicado — los cambios de perfil se aplican en la próxima carga del modelo",
+    "autoApplied": "Ajuste automático aplicado",
+    "autoApplyFailed": "No se pudo aplicar el ajuste automático",
+    "autoDisabled": "Ajuste automático desactivado — los ajustes no cambian y ya puedes editarlos a mano",
+    "redetect": "Volver a detectar",
+    "redetectTitle": "Vuelve a detectar el hardware (úsalo tras un cambio de hardware o de controladores)",
+    "redetectedProfile": "Detección repetida — los cambios de perfil se aplican en la próxima carga del modelo",
+    "redetectedSame": "Detección repetida — no cambió ningún ajuste",
+    "redetectFailed": "No se pudo volver a detectar el hardware",
+    "detecting": "Detectando el hardware…",
+    "loading": "Cargando los ajustes del sistema…",
+    "loadFailed": "No se pudieron cargar los ajustes del sistema",
+    "showAdvanced": "Mostrar ajustes avanzados",
+    "hideAdvanced": "Ocultar ajustes avanzados",
+    "outputCodecs": "Códecs de salida",
+    "videoCodec": "Códec de vídeo",
+    "imageCodec": "Códec de imagen",
+    "attentionMode": "Modo de atención",
+    "quantization": "Cuantización del transformer",
+    "fp8Warning": "Muchos modelos solo incluyen archivos BF16 e INT8. Con FP8, esos modelos pasan en silencio a INT8. Para un FP8 seguro, elige un modelo con «FP8» en el nombre (por ejemplo, «LTX-2.3 Distilled FP8 22B»).",
+    "vaeTiling": "Mosaico del VAE",
+    "compile": "Compilación",
+    "profilesTitle": "Perfiles",
+    "videoProfile": "Perfil de vídeo",
+    "imageProfile": "Perfil de imagen",
+    "audioProfile": "Perfil de audio",
+    "profileEffect": "Los cambios de perfil se aplican en la próxima carga del modelo",
+    "vramSafety": "Coeficiente de seguridad de VRAM",
+    "vramConservative": "0.50 (conservador)",
+    "vramDefault": "0.80 (predeterminado)",
+    "vramAggressive": "0.95 (agresivo)",
+    "vramTarget": "Objetivo máximo de VRAM: ~{{used}} GB de {{total}} GB.",
+    "vramHint": "Más bajo = más margen para los picos (vídeos largos, decodificación del VAE). Se aplica en la próxima carga del modelo.",
+    "scrollableTabs": "Pestañas desplazables",
+    "previousTabs": "Mostrar pestañas anteriores",
+    "previousTabsTitle": "Pestañas anteriores",
+    "moreTabs": "Mostrar más pestañas",
+    "moreTabsTitle": "Más pestañas",
+    "modes": {
+      "image": "Imagen",
+      "video": "Vídeo",
+      "audio": "Audio",
+      "model3d": "Modelos 3D",
+      "avatar": "Edición"
+    },
+    "codecs": {
+      "h264q8": "H.264 calidad 8",
+      "h264q10": "H.264 calidad 10",
+      "h264lossless": "H.264 sin pérdida",
+      "h265crf8": "H.265 CRF 8",
+      "h265crf28": "H.265 CRF 28 (rápido)",
+      "jpeg95": "JPEG 95 %",
+      "jpeg85": "JPEG 85 %",
+      "jpeg70": "JPEG 70 %",
+      "png": "PNG (sin pérdida)",
+      "webp95": "WebP 95 %",
+      "webp85": "WebP 85 %",
+      "webpLossless": "WebP sin pérdida"
+    },
+    "vae": {
+      "auto": "Automático",
+      "full": "Completo (rápido, mucha VRAM)",
+      "medium": "Mosaico medio",
+      "aggressive": "Mosaico agresivo (poca VRAM)"
+    },
+    "compileOptions": {
+      "none": "Ninguno",
+      "transformer": "Transformer"
+    },
+    "profileLabels": {
+      "1": "Perfil 1: mucha RAM y mucha VRAM",
+      "2": "Perfil 2: mucha RAM y poca VRAM",
+      "3": "Perfil 3: poca RAM y mucha VRAM",
+      "3_5": "Perfil 3.5: muy poca RAM y mucha VRAM",
+      "4": "Perfil 4: poca RAM y poca VRAM",
+      "4_5": "Perfil 4.5: poca RAM y poca VRAM (ahorra ~1 GB)",
+      "5": "Perfil 5: muy poca RAM y muy poca VRAM"
+    },
+    "quantOptions": {
+      "int8": "INT8",
+      "fp8": "FP8",
+      "bf16": "BF16"
+    },
+    "attentionAuto": "Automático",
+    "attentionSdpa": "SDPA"
+  },
+  "lora": {
+    "sortNewestTitle": "Ordenado por publicación más reciente. Pulsa para ordenar por nombre.",
+    "sortNameTitle": "Ordenado por nombre. Pulsa para ordenar por publicación más reciente.",
+    "sortNew": "Nuevos",
+    "sortAz": "A-Z",
+    "heading": "LoRAs",
+    "check": "Comprobar",
+    "checkTitle": "Comprobar en CivitAI si hay versiones más nuevas de LoRA",
+    "checkTitleWhen": "Comprobar en CivitAI si hay versiones más nuevas de LoRA (última comprobación {{when}})",
+    "browse": "Explorar",
+    "browseTitle": "Explorar CivitAI",
+    "justNow": "ahora mismo",
+    "minutesAgo_one": "hace {{count}} min",
+    "minutesAgo_other": "hace {{count}} min",
+    "hoursAgo_one": "hace {{count}} h",
+    "hoursAgo_other": "hace {{count}} h",
+    "daysAgo_one": "hace {{count}} d",
+    "daysAgo_other": "hace {{count}} d",
+    "loading": "Cargando LoRAs…",
+    "noneFound": "No hay LoRAs",
+    "search": "Buscar LoRAs…",
+    "noneForModel": "No hay LoRAs para este modelo",
+    "updates": "Actualizaciones",
+    "nsfw": "NSFW",
+    "nsfwShowAll": "Mostrando todas las LoRAs (incluido NSFW). Desmarca para ocultar NSFW.",
+    "nsfwHidden_one": "{{count}} LoRA NSFW oculta — marca para mostrarla.",
+    "nsfwHidden_other": "{{count}} LoRAs NSFW ocultas — marca para mostrarlas.",
+    "nsfwCheck": "Marca para incluir LoRAs NSFW",
+    "nsfwHiddenList_one": "{{count}} LoRA NSFW oculta — marca NSFW para mostrarla",
+    "nsfwHiddenList_other": "{{count}} LoRAs NSFW ocultas — marca NSFW para mostrarlas",
+    "civitaiSettings": "Ajustes recomendados de CivitAI",
+    "defaultSettings": "Ajustes por defecto",
+    "updateAvailable": "Actualización disponible",
+    "noMatches": "Sin coincidencias",
+    "selectedCount": "Seleccionadas ({{count}})",
+    "clearAll": "Quitar todas",
+    "guideAvailable": "Guía de LoRA disponible",
+    "phase": "Fase {{n}}",
+    "released": "Publicada {{date}}",
+    "downloaded": "Descargada {{date}}",
+    "zoneCivitai": "CivitAI: {{min}}-{{max}} ({{fallback}})",
+    "zoneDefault": "Por defecto: {{min}}-{{max}} ({{fallback}})",
+    "zoneCivitaiRange": "CivitAI: {{min}}-{{max}}",
+    "zoneDefaultRange": "Por defecto: {{min}}-{{max}}",
+    "presets": "Preajustes",
+    "presetTitle_one": "{{count}} LoRA: {{names}}",
+    "presetTitle_other": "{{count}} LoRAs: {{names}}",
+    "strength": "Fuerza",
+    "strengthTitle": "Fuerza del LoRA",
+    "strengthOf": "{{name}} fuerza del LoRA",
+    "strengthOfPhase": "{{name}} fase {{n}} fuerza del LoRA",
+    "strengthValueOf": "{{name}} valor de fuerza del LoRA",
+    "strengthValueOfPhase": "{{name}} fase {{n}} valor de fuerza del LoRA",
+    "adjustPhases": "Ajusta cada fase más abajo",
+    "phaseCount_one": "{{count}} fase",
+    "phaseCount_other": "{{count}} fases",
+    "strengthCount": "Fuerza del LoRA ({{count}})"
+  },
+  "panorama": {
+    "title": "Entorno A/B · paralaje frente a cilindro",
+    "close": "Cerrar",
+    "warning": "Solo vista previa: no cambia ni exporta la escena. El cilindro solo conviene para un panorama continuo en horizontal y una cámara centrada; si no, conserva el paralaje.",
+    "flatLayer": "Capa plana actual",
+    "flatAlt": "Referencia de paralaje plano",
+    "inside": "Dentro del cilindro",
+    "rotation": "Rotación {{degrees}}°",
+    "fov": "FOV vertical {{degrees}}°",
+    "webglUnavailable": "WebGL2 no está disponible aquí; usa el renderizador de paralaje existente.",
+    "loadFailed": "No se pudo cargar esta imagen de panorama para la comparación WebGL.",
+    "comparisonFailed": "La comparación del cilindro ha fallado.",
+    "shaderCreateFailed": "No se pudo crear un sombreador WebGL.",
+    "shaderCompileFailed": "El sombreador del cilindro no se compiló.",
+    "programCreateFailed": "No se pudo crear el programa del cilindro.",
+    "programLinkFailed": "El programa del cilindro no se enlazó.",
+    "geometryFailed": "No se pudo crear la geometría del cilindro.",
+    "textureFailed": "No se pudo crear la textura del panorama."
   }
 }

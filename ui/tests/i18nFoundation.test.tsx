@@ -110,8 +110,9 @@ test('required glossary keys exist in both languages', async () => {
       assert.notEqual(value, key, `${language} ${ns}:${key}`)
     }
   }
-  assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Workspace')
-  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Ask to the Wizard')
+  assert.equal(i18n.t('entities.workspace', { ns: 'navigation', lng: 'es' }), 'Espacio')
+  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'es' }), 'Pregunta al mago')
+  assert.equal(i18n.t('title', { ns: 'wizard', lng: 'en' }), 'Ask to the Wizard')
   assert.equal(i18n.t('entities.outputFolder', { ns: 'navigation', lng: 'es' }), 'Carpeta de salida')
   assert.equal(i18n.t('outputFolder.uploads', { ns: 'navigation', lng: 'es' }), 'Subidas')
   assert.equal(i18n.t('tabs.documents', { ns: 'navigation', lng: 'es' }), 'Documentos')
@@ -307,7 +308,7 @@ test('migrated chrome no longer hardcodes the pilot phrases', () => {
 
 test('resources register the extraInfo, storyLab, videoEditor, help and gameAssets namespaces', async () => {
   const { NAMESPACES, resources } = await import('../src/i18n/resources.ts')
-  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets', 'writingGuide'])
+  assert.deepEqual([...NAMESPACES], ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'workbench', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets', 'writingGuide'])
   assert.ok('extraInfo' in resources.en)
   assert.ok('extraInfo' in resources.es)
   assert.ok('storyLab' in resources.en)

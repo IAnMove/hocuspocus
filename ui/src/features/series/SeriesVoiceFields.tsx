@@ -58,43 +58,43 @@ export function SeriesVoiceFields({
           <p className="mt-2 text-[10px] text-text-muted">{kitOwnsTts ? t('canon.kitTtsHint') : t('canon.unlinkedTtsHint')}</p>
           <div className="mt-2 grid gap-2 md:grid-cols-3">
             <SeriesField label={t('canon.provider')}>
-              <input className={inputClass} value={String(kitOwnsTts ? tts.provider || '' : profile.provider || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { provider: event.target.value })} />
+              <input aria-label={t('canon.provider')} className={inputClass} value={String(kitOwnsTts ? tts.provider || '' : profile.provider || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { provider: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.voiceId')} hint={t('canon.voiceIdHint')}>
-              <input className={inputClass} value={String(kitOwnsTts ? tts.voiceId || '' : profile.voiceId || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { voiceId: event.target.value })} />
+              <input aria-label={t('canon.voiceId')} className={inputClass} value={String(kitOwnsTts ? tts.voiceId || '' : profile.voiceId || '')} disabled={kitOwnsTts} onChange={event => onPatchVoice(index, { voiceId: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.language')}>
-              <input className={inputClass} value={String(profile.language || '')} onChange={event => onPatchVoice(index, { language: event.target.value })} />
+              <input aria-label={t('canon.language')} className={inputClass} value={String(profile.language || '')} onChange={event => onPatchVoice(index, { language: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.pace')}>
-              <input className={inputClass} type="number" step="0.05" value={Number(profile.pace ?? 1)} onChange={event => onPatchVoice(index, { pace: Number(event.target.value) })} />
+              <input aria-label={t('canon.pace')} className={inputClass} type="number" step="0.05" value={Number(profile.pace ?? 1)} onChange={event => onPatchVoice(index, { pace: Number(event.target.value) })} />
             </SeriesField>
             <SeriesField label={t('canon.pitch')}>
-              <input className={inputClass} type="number" step="0.05" value={Number(profile.pitch ?? 0)} onChange={event => onPatchVoice(index, { pitch: Number(event.target.value) })} />
+              <input aria-label={t('canon.pitch')} className={inputClass} type="number" step="0.05" value={Number(profile.pitch ?? 0)} onChange={event => onPatchVoice(index, { pitch: Number(event.target.value) })} />
             </SeriesField>
             <SeriesField label={t('canon.gender')} hint={t('canon.genderHint')}>
-              <input className={inputClass} value={String(profile.gender || '')} onChange={event => onPatchVoice(index, { gender: event.target.value })} />
+              <input aria-label={t('canon.gender')} className={inputClass} value={String(profile.gender || '')} onChange={event => onPatchVoice(index, { gender: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.pitchRange')} hint={t('canon.pitchRangeHint')}>
               <span className="flex gap-2">
-                <input className={inputClass} type="number" min={40} max={600} placeholder={t('canon.pitchMin')} value={rangeValue(profile.pitchRange, 0)} onChange={event => onPatchVoice(index, { pitchRange: editedRange(profile.pitchRange, 0, event.target.value) })} />
-                <input className={inputClass} type="number" min={40} max={600} placeholder={t('canon.pitchMax')} value={rangeValue(profile.pitchRange, 1)} onChange={event => onPatchVoice(index, { pitchRange: editedRange(profile.pitchRange, 1, event.target.value) })} />
+                <input aria-label={t('canon.pitchMin')} className={inputClass} type="number" min={40} max={600} placeholder={t('canon.pitchMin')} value={rangeValue(profile.pitchRange, 0)} onChange={event => onPatchVoice(index, { pitchRange: editedRange(profile.pitchRange, 0, event.target.value) })} />
+                <input aria-label={t('canon.pitchMax')} className={inputClass} type="number" min={40} max={600} placeholder={t('canon.pitchMax')} value={rangeValue(profile.pitchRange, 1)} onChange={event => onPatchVoice(index, { pitchRange: editedRange(profile.pitchRange, 1, event.target.value) })} />
               </span>
             </SeriesField>
             <SeriesField label={t('canon.accent')}>
-              <select className={inputClass} value={profile.accent === 'castilian' ? 'castilian' : ''} onChange={event => onPatchVoice(index, { accent: event.target.value === 'castilian' ? 'castilian' : null })}>
+              <select aria-label={t('canon.accent')} className={inputClass} value={profile.accent === 'castilian' ? 'castilian' : ''} onChange={event => onPatchVoice(index, { accent: event.target.value === 'castilian' ? 'castilian' : null })}>
                 <option value="">{t('canon.accentNone')}</option>
                 <option value="castilian">{t('canon.accentCastilian')}</option>
               </select>
             </SeriesField>
             <SeriesField label={t('canon.emotion')}>
-              <input className={inputClass} value={String(profile.emotionalDefaults || '')} onChange={event => onPatchVoice(index, { emotionalDefaults: event.target.value })} />
+              <input aria-label={t('canon.emotion')} className={inputClass} value={String(profile.emotionalDefaults || '')} onChange={event => onPatchVoice(index, { emotionalDefaults: event.target.value })} />
             </SeriesField>
             <SeriesField label={t('canon.pronunciationLabel')}>
-              <textarea className={textareaClass} value={Object.entries(profile.pronunciationDictionary || {}).map(([word, pronunciation]) => `${word}=${pronunciation}`).join('\n')} placeholder={t('canon.pronunciationPlaceholder')} onChange={event => onPatchVoice(index, { pronunciationDictionary: Object.fromEntries(event.target.value.split('\n').map(line => line.split('=', 2).map(value => value.trim())).filter(parts => parts.length === 2 && parts[0])) })} />
+              <textarea aria-label={t('canon.pronunciationLabel')} className={textareaClass} value={Object.entries(profile.pronunciationDictionary || {}).map(([word, pronunciation]) => `${word}=${pronunciation}`).join('\n')} placeholder={t('canon.pronunciationPlaceholder')} onChange={event => onPatchVoice(index, { pronunciationDictionary: Object.fromEntries(event.target.value.split('\n').map(line => line.split('=', 2).map(value => value.trim())).filter(parts => parts.length === 2 && parts[0])) })} />
             </SeriesField>
             <SeriesField label={t('canon.consent')}>
-              <textarea className={textareaClass} value={String(profile.consentSourceNote || '')} onChange={event => onPatchVoice(index, { consentSourceNote: event.target.value })} />
+              <textarea aria-label={t('canon.consent')} className={textareaClass} value={String(profile.consentSourceNote || '')} onChange={event => onPatchVoice(index, { consentSourceNote: event.target.value })} />
             </SeriesField>
           </div>
         </div>

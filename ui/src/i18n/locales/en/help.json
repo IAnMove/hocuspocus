@@ -29,7 +29,7 @@
   },
   "direct": {
     "title": "Direct generation",
-    "body": "Image, Video, Audio, 3D, Edit and Tools. Submodes (Speech/Music/SFX, Frames/Multi-Shot, Upscale…) sit under those tabs.\n\nPick a model, write the prompt, press Go. The job appears in Activity. Do not start MiniMax H3 while another heavy model is loaded if RAM is already tight."
+    "body": "Image, Video, Audio, 3D, Edit and Tools. Submodes (Speech/Music/SFX, Frames/Multi-Shot, Upscale…) sit under those tabs. Edit includes Replace character, with the same three steps: source frame, new character, then video.\n\nPick a model, write the prompt, press Go. The job appears in Activity. Do not start MiniMax H3 while another heavy model is loaded if RAM is already tight."
   },
   "queue": {
     "title": "Activity and the queue",
@@ -37,7 +37,7 @@
   },
   "studios": {
     "title": "Studios",
-    "body": "Story Lab, Series Lab, Comics, Character Creator, Video 2.5D, Video 3D, Replace character and Animate. Each studio is a full workspace in the large pane.\n\nIf you only need a single image or clip, go back to Direct generation instead of fighting the studio form."
+    "body": "Story Lab, Series Lab, Comics, Character Creator, Video 2.5D, Video 3D and Animate. Each studio is a full workspace in the large pane.\n\nIf you only need a single image or clip, go back to Direct generation instead of fighting the studio form. Replace character lives under Direct generation → Edit."
   },
   "faces": {
     "title": "Talking faces (9×6 pack)",

@@ -1,7 +1,9 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { Box, Film, Music, PanelRightClose, PanelRightOpen, X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useIsMobile } from '../../lib/useIsMobile'
+import { useUiTranslation } from '../../i18n'
 import { galleryThumbnailUrl } from './galleryThumbnail'
 
 // Thumbnail dimensions: 80px wide, 16:9 aspect = 45px tall, 6px gap
@@ -32,8 +34,8 @@ function Model3dThumbnail({ src, name }: { src: string | null | undefined; name:
     return <img src={src} alt={name} className="w-full h-full object-cover" loading="lazy" />
   }
   return (
-    <div className="w-full h-full bg-bg-active flex items-center justify-center" title="3D model">
-      <Box size={15} className="text-text-muted" aria-label="3D model" />
+    <div className="w-full h-full bg-bg-active flex items-center justify-center" title={name}>
+      <Box size={15} className="text-text-muted" aria-hidden="true" />
     </div>
   )
 }
@@ -117,6 +119,8 @@ function VirtualizedThumbnailList({ activeIndex, onThumbnailClick, onMobileClick
             <button
               key={file.name}
               data-thumb-index={idx}
+              aria-label={controlLabel('a11y.openItem', { name: file.name })}
+              title={controlLabel('a11y.openItem', { name: file.name })}
               onClick={() => {
                 onThumbnailClick(idx)
                 onMobileClick?.()
@@ -163,6 +167,7 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
   const outputsLoading = useStore(s => s.outputsLoading)
   const isMobile = useIsMobile()
   const [collapsed, setCollapsed] = useState(false)
+  const { t } = useUiTranslation('activity')
   // Opened from the gallery toolbar; a floating button here used to cover
   // the last action of every card on a phone.
   const mobileOpen = useStore(s => s.mobileHistoryOpen)
@@ -187,11 +192,11 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
           mobileOpen ? 'translate-x-0' : 'translate-x-full'
         }`}>
           <div className="px-2 py-2 border-b border-border flex items-center justify-between">
-            <span className="text-[10px] text-text-muted uppercase tracking-wider">History</span>
+            <span className="text-[10px] text-text-muted uppercase tracking-wider">{t('view.history')}</span>
             <button
               onClick={() => setMobileOpen(false)}
               className="p-1 rounded hover:bg-bg-hover text-text-secondary"
-            >
+             title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
               <X size={14} />
             </button>
           </div>
@@ -217,7 +222,7 @@ export function ThumbnailGallery({ activeIndex, onThumbnailClick }: Props) {
         onClick={() => setCollapsed(!collapsed)}
         className="absolute top-1/2 z-10 -translate-y-1/2 w-5 h-10 bg-bg-secondary border border-border border-r-0 rounded-l-md flex items-center justify-center text-text-muted hover:text-text-primary transition-colors"
         style={{ right: collapsed ? 0 : 80 }}
-        title={collapsed ? 'Show thumbnails' : 'Hide thumbnails'}
+        title={collapsed ? t('actions.showThumbnails') : t('actions.hideThumbnails')} aria-label={collapsed ? t('actions.showThumbnails') : t('actions.hideThumbnails')}
       >
         {collapsed ? <PanelRightOpen size={12} /> : <PanelRightClose size={12} />}
       </button>

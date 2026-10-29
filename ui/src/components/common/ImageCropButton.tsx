@@ -7,15 +7,15 @@ import { saveCroppedImage } from '../../lib/imageCrop'
 const ImageCropDialog = lazy(() => import('./ImageCropDialog'))
 
 /** Key by input identity/scope at the caller so a late save cannot replace a new selection. */
-export function ImageCropButton({ item, disabled, onReplace }: {
-  item: ApiOutput; disabled?: boolean; onReplace: (item: ApiOutput, file: File) => void
+export function ImageCropButton({ item, disabled, title, onReplace }: {
+  item: ApiOutput; disabled?: boolean; title?: string; onReplace: (item: ApiOutput, file: File) => void
 }) {
   const { t } = useUiTranslation('common')
   const [open, setOpen] = useState(false)
   const active = useRef(false)
   useEffect(() => { active.current = true; return () => { active.current = false } }, [])
   return <>
-    <button type="button" disabled={disabled} aria-label={t('crop.editName', { name: item.name })} onClick={() => setOpen(true)} className="rounded border border-border bg-bg-secondary px-2 py-1 text-xs disabled:opacity-40">{t('actions.edit')}</button>
+    <button type="button" disabled={disabled} title={disabled ? title : undefined} aria-label={t('crop.editName', { name: item.name })} onClick={() => setOpen(true)} className="rounded border border-border bg-bg-secondary px-2 py-1 text-xs disabled:opacity-40">{t('actions.edit')}</button>
     {open && <Suspense fallback={<p role="status">{t('status.loading')}</p>}>
       <ImageCropDialog source={localEditPreview(item.url)} name={item.name} onClose={() => setOpen(false)} onSave={async file => {
         const saved = await saveCroppedImage(file)

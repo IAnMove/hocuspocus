@@ -91,14 +91,14 @@ export function CharacterFacePackMaker() {
       <h3 className="text-sm font-semibold text-text-primary">{t('facePackMaker.title')}</h3>
       <p className="text-xs leading-5 text-text-secondary">{t('facePackMaker.intro')}</p>
       <label className="block text-xs text-text-secondary">{t('facePackMaker.skin')}
-        <input value={skin} onChange={event => setSkin(event.target.value)} className={field} />
+        <input aria-label={t('facePackMaker.skin')} value={skin} onChange={event => setSkin(event.target.value)} className={field} />
       </label>
-      <label className="block text-xs text-text-secondary">{t('facePackMaker.restPrompt')}
-        <textarea readOnly value={restPrompt} rows={4} className={`${field} font-mono`} />
-      </label>
-      <button type="button" className={button} onClick={() => copy(restPrompt)}>{t('facePackMaker.copyRest')}</button>
       <details className="rounded border border-border p-2">
-        <summary className="cursor-pointer text-xs text-text-primary">{t('facePackMaker.editPrompts')}</summary>
+        <summary className="cursor-pointer text-xs text-text-primary">{t('facePackMaker.sentToModel')}</summary>
+        <label className="mt-2 block text-xs text-text-secondary">{t('facePackMaker.restPrompt')}
+          <textarea aria-label={t('facePackMaker.restPrompt')} readOnly value={restPrompt} rows={4} className={`${field} font-mono`} />
+        </label>
+        <button type="button" className={button} onClick={() => copy(restPrompt)}>{t('facePackMaker.copyRest')}</button>
         <div className="mt-2 space-y-2">
           {VISEMES.filter(id => id !== 'rest').map(id => {
             const text = visemePrompt(id, skin)
@@ -117,7 +117,7 @@ export function CharacterFacePackMaker() {
         </div>
       </details>
       <label className="block text-xs text-text-secondary">{t('facePackMaker.stills')}
-        <input type="file" accept="image/*" multiple className="mt-1 block max-w-full" onChange={event => loadFiles(event.target.files)} />
+        <input aria-label={t('facePackMaker.stills')} type="file" accept="image/*" multiple className="mt-1 block max-w-full" onChange={event => loadFiles(event.target.files)} />
       </label>
       <p className="text-[10px] text-text-muted">{t('facePackMaker.naming')}</p>
       <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">

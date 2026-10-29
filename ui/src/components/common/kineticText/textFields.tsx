@@ -8,9 +8,9 @@ export function Field({ label, children }: { label: string; children: ReactNode 
 }
 
 export function NumberField({ label, value, step, onChange }: { label: string; value: number; step?: number; onChange: (value: number) => void }) {
-  return <Field label={label}><input type="number" step={step ?? 1} value={value} onChange={event => { const next = event.target.valueAsNumber; if (Number.isFinite(next)) onChange(next) }} className={fieldClass} /></Field>
+  return <Field label={label}><input aria-label={label} type="number" step={step ?? 1} value={value} onChange={event => { const next = event.target.valueAsNumber; if (Number.isFinite(next)) onChange(next) }} className={fieldClass} /></Field>
 }
 
 export function Choice({ label, value, options, onChange }: { label: string; value: string; options: { value: string; label: string }[]; onChange: (value: string) => void }) {
-  return <Field label={label}><select value={value} onChange={event => onChange(event.target.value)} className={selectClass}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
+  return <Field label={label}><select aria-label={label} value={value} onChange={event => onChange(event.target.value)} className={selectClass}>{options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></Field>
 }

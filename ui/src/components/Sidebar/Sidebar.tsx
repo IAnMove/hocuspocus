@@ -45,6 +45,7 @@ export function DirectGenerationWorkspace() {
   const { t } = useUiTranslation('navigation')
   const { t: tCommon } = useUiTranslation('common')
   const { t: tStudio } = useUiTranslation('studio')
+  const { t: tActivity } = useUiTranslation('activity')
   const generationMode = useStore(s => s.generationMode)
   const imageMode = useStore(s => s.params.image_mode)
   const modelOptions = useStore(s => s.modelOptions)
@@ -74,6 +75,7 @@ export function DirectGenerationWorkspace() {
   const isOutpaint = isEdit && editSubMode === 'outpaint'
   const isEditAnything = isEdit && editSubMode === 'edit_anything'
   const isRecast = isEdit && editSubMode === 'recast'
+  const isReplaceCharacter = isEdit && editSubMode === 'replace_character'
   const isOmniReference = isVideo && modelOptions?.omni_reference === true
   const isMultiClip = isVideo && !isOmniReference && imageMode === 2
   const isContinue = isVideo && !isOmniReference && imageMode === 3
@@ -163,7 +165,7 @@ export function DirectGenerationWorkspace() {
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.input')}</h3>
         {/* Edit mode: sub-mode toggle + sub-controls */}
         {isEdit && <EditSubModeToggle />}
-        {isEdit && editControls}
+        {isEdit && !isReplaceCharacter && editControls}
 
         {/* Video mode */}
         {isVideo && !isOmniReference && <ModeToggle />}
@@ -206,12 +208,12 @@ export function DirectGenerationWorkspace() {
         {isAudio && audioSubMode === 'mixer' && <MixerControls />}
         {isAudio && audioSubMode === 'music' && <MusicControls />}
 
-        <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.instructions')}</h3>
+        {!isReplaceCharacter && <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.instructions')}</h3>}
         {/* Prompt area (non-edit modes, skip for SFX/Mixer/Music which have their own UI) */}
         {!isImage && !imageChooser && !isEdit && !(isAudio && (audioSubMode === 'sfx' || audioSubMode === 'mixer' || audioSubMode === 'music')) && (isMultiClip ? <MultiClipEditor /> : <PromptInput />)}
-        <StudioCommandPanels mode={generationMode} audioSubMode={audioSubMode}
+        {!isReplaceCharacter && <StudioCommandPanels mode={generationMode} audioSubMode={audioSubMode}
           workspace={workspace || 'default'} model={String(modelType)}
-          visible={studioUnobscured && (!isMobile || sidebarOpen)} />
+          visible={studioUnobscured && (!isMobile || sidebarOpen)} />}
 
         {/* Video: reference images below prompt. In Frames mode the InputsPanel
             renders them as ordered tiles instead. */}
@@ -231,7 +233,7 @@ export function DirectGenerationWorkspace() {
       {/* Bottom Bar: Advanced + LoRA Browser + Model + Generate.
           Hidden in Tools mode — ToolsPanel has its own Run button and
           owns no model. */}
-      {!isTools && !isModel3d && (
+      {!isTools && !isModel3d && !isReplaceCharacter && (
       <div className="px-3 py-2.5 border-t border-border">
         <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.model')} · {tStudio('groups.run')}</h3>
         <div className="flex items-center gap-2">
@@ -239,7 +241,7 @@ export function DirectGenerationWorkspace() {
           <button
             onClick={() => useStore.getState().setRecipesOpen(true)}
             className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-            title="Recipes — one-click presets"
+            title={tActivity('actions.recipesTitle')} aria-label={tActivity('actions.recipesTitle')}
           >
             <BookMarked size={14} />
           </button>
@@ -247,7 +249,7 @@ export function DirectGenerationWorkspace() {
             <button
               onClick={() => openLoraBrowser(true, modelType)}
               className="p-2 rounded-lg bg-bg-tertiary border border-border hover:border-border-light text-text-secondary hover:text-accent-blue transition-colors shrink-0"
-              title="Browse LoRAs on CivitAI"
+              title={tActivity('actions.browseLoras')} aria-label={tActivity('actions.browseLoras')}
             >
               <Globe size={14} />
             </button>

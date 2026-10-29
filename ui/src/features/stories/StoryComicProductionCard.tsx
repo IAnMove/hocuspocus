@@ -17,11 +17,11 @@ export function StoryComicProductionCard(props: StoryProductionsTabProps) {
       <textarea className={input} rows={4} value={comicDirection} onChange={event => setComicDirection(event.target.value)} aria-label={t('productions.comicDirectionAria')} />
       <div className="grid grid-cols-2 gap-2">
         <label className="block text-[10px] text-text-muted">{t('productions.pages')}
-          <input className={`${input} mt-1`} type="number" min={1} max={100} value={comicPageCount}
+          <input aria-label={t('productions.pages')} className={`${input} mt-1`} type="number" min={1} max={100} value={comicPageCount}
             onChange={event => setComicPageCount(Math.max(1, Math.min(100, Number(event.target.value) || 1)))} />
         </label>
         <label className="block text-[10px] text-text-muted">{t('productions.panelsPerPage')}
-          <input className={`${input} mt-1`} type="number" min={1} max={12} value={comicPanelsPerPage}
+          <input aria-label={t('productions.panelsPerPage')} className={`${input} mt-1`} type="number" min={1} max={12} value={comicPanelsPerPage}
             onChange={event => setComicPanelsPerPage(Math.max(1, Math.min(12, Number(event.target.value) || 1)))} />
         </label>
       </div>

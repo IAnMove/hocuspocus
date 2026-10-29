@@ -53,7 +53,7 @@ export function SeriesLocationStage({ workspace, series, location }: { workspace
     <p className="text-[10px] text-text-muted">{t(saved ? 'stage.active' : 'stage.hint')}</p>
     <p className="text-[10px] text-text-muted">{t('stage.depthHint')}</p>
     <div className="grid grid-cols-2 gap-2 md:grid-cols-5">{FIELDS.map(([field, label]) => <label key={field} className="text-[10px]">{t(label)}
-      <input className={inputClass} type="number" step={0.01} value={fields[field]} aria-invalid={issue?.field === field}
+      <input aria-label={t(label)} className={inputClass} type="number" step={0.01} value={fields[field]} aria-invalid={issue?.field === field}
         onChange={event => edit(field, event.target.value)} /></label>)}</div>
     {issue && <p role="alert" className="text-[10px] text-amber-300">{t(`stage.errors.${issue.key}`, { field: issue.field ? t(FIELDS.find(([name]) => name === issue.field)![1]) : '' })}</p>}
     {eye !== null && <p role={eyeOdd ? 'alert' : 'status'} data-testid="stage-eye" className={`text-[10px] ${eyeOdd ? 'text-amber-300' : 'text-text-muted'}`}>

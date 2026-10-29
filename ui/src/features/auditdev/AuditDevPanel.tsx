@@ -114,7 +114,7 @@ export function AuditDevPanel() {
           {t('banner')}
         </div>
         <label className="flex items-center gap-1 text-[11px] text-amber-100">
-          <input
+          <input aria-label={t('onlyMarked')}
             type="checkbox"
             checked={onlyMarked}
             onChange={event => setOnlyMarked(event.target.checked)}
@@ -162,7 +162,7 @@ export function AuditDevPanel() {
                       {item.name}
                     </p>
                     <label className="flex shrink-0 items-center gap-1 text-[11px] text-red-200">
-                      <input
+                      <input aria-label={t('audioBad')}
                         type="checkbox"
                         checked={Boolean(flags[item.name])}
                         onChange={() => {

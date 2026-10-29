@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import { useStore, getFamiliesForMode } from '../../stores/useStore'
@@ -16,19 +17,25 @@ import {
 } from '../../lib/productionProfileCatalog'
 
 function CatalogSelect({
-  value, options, disabled, onChange, emptyLabel,
+  label, value, options, disabled, title, onChange, emptyLabel,
 }: {
+  label: string
   value: string
   options: { id: string; label: string }[]
   disabled?: boolean
+  title?: string
   onChange: (value: string) => void
   emptyLabel?: string
 }) {
   const listed = keepCurrentOption(options, value)
+  const empty = listed.length === 0
+  const reason = disabled ? title : empty ? emptyLabel : undefined
   return (
     <select
+      aria-label={label}
       value={value}
-      disabled={disabled || listed.length === 0}
+      disabled={disabled || empty}
+      title={reason}
       onChange={e => onChange(e.target.value)}
       className="mt-1 w-full min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
     >
@@ -89,7 +96,7 @@ export function ProductionProfileSettings() {
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[10px] text-text-muted">
           {t('services.textProvider')}
-          <select
+          <select aria-label={t('services.textProvider')}
             value={productionProfile.text.provider}
             onChange={e => {
               const provider = e.target.value as typeof productionProfile.text.provider
@@ -117,7 +124,7 @@ export function ProductionProfileSettings() {
                 })
               }
             }}
-            disabled={productionProfileLoading}
+            disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
             className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
           >
             <option value="local">{t('services.providers.local')}</option>
@@ -133,9 +140,10 @@ export function ProductionProfileSettings() {
         <label className="text-[10px] text-text-muted">
           {t('services.textModel')}
           <CatalogSelect
+            label={t('services.textModel')}
             value={productionProfile.text.model}
             options={textModelOptions(llmModels, productionProfile.text.provider, productionProfile.text.model)}
-            disabled={productionProfileLoading}
+            disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
             emptyLabel={t('services.noRemoteModels')}
             onChange={value => setProductionProfile({
               ...productionProfile,
@@ -147,14 +155,14 @@ export function ProductionProfileSettings() {
           <label className="col-span-2 text-[10px] text-text-muted">
             {t('services.textServerUrl')}
             <div className="mt-1 flex gap-1">
-              <input
+              <input aria-label={t('services.textServerUrl')}
                 value={productionProfile.text.base_url || ''}
                 onChange={e => setProductionProfile({
                   ...productionProfile,
                   text: { ...productionProfile.text, base_url: e.target.value },
                 })}
                 placeholder="http://192.168.1.10:11434"
-                disabled={productionProfileLoading}
+                disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
                 className="min-w-0 flex-1 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
               />
               <button
@@ -171,7 +179,7 @@ export function ProductionProfileSettings() {
         <label className="text-[10px] text-text-muted">
           {t('services.imageProviderModel')}
           <div className="mt-1 flex gap-1">
-            <select
+            <select aria-label={t('services.imageProviderModel')}
               value={productionProfile.image.provider}
               onChange={e => {
                 const provider = e.target.value as typeof productionProfile.image.provider
@@ -185,7 +193,7 @@ export function ProductionProfileSettings() {
                   },
                 })
               }}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
             >
               <option value="minimax">{t('services.providers.minimaxImage')}</option>
@@ -193,11 +201,12 @@ export function ProductionProfileSettings() {
               <option value="maestro">{t('services.providers.maestro')}</option>
             </select>
             <CatalogSelect
+              label={t('services.imageProviderModel')}
               value={productionProfile.image.model}
               options={productionProfile.image.provider === 'minimax'
                 ? MINIMAX_IMAGE_MODELS
                 : downloadedModelOptions(installedModels, imageFamilies)}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               onChange={value => setProductionProfile({
                 ...productionProfile,
                 image: { ...productionProfile.image, model: value },
@@ -208,7 +217,7 @@ export function ProductionProfileSettings() {
         <label className="text-[10px] text-text-muted">
           {t('services.musicProviderModel')}
           <div className="mt-1 flex gap-1">
-            <select
+            <select aria-label={t('services.musicProviderModel')}
               value={productionProfile.music.provider}
               onChange={e => setProductionProfile({
                 ...productionProfile,
@@ -218,7 +227,7 @@ export function ProductionProfileSettings() {
                   model: e.target.value === 'minimax' ? 'music-3.0' : 'ace_step_v1_5_xl_sft_lm_4b',
                 },
               })}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               className="w-2/5 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
             >
               <option value="local">{t('services.providers.aceLocal')}</option>
@@ -226,12 +235,13 @@ export function ProductionProfileSettings() {
               <option value="maestro">{t('services.providers.maestro')}</option>
             </select>
             <CatalogSelect
+              label={t('services.musicProviderModel')}
               value={productionProfile.music.model}
               options={productionProfile.music.provider === 'minimax'
                 ? MINIMAX_MUSIC_MODELS
                 : downloadedModelOptions(installedModels, ['tts']).filter(option =>
                   option.id.startsWith('ace_step') || option.id.startsWith('heartmula') || option.id === 'minimax_music3')}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               onChange={value => setProductionProfile({
                 ...productionProfile,
                 music: { ...productionProfile.music, model: value },
@@ -245,7 +255,7 @@ export function ProductionProfileSettings() {
         <label className="text-[10px] text-text-muted">
           {t('services.model3dProviderModel')}
           <div className="mt-1 flex gap-1">
-            <select
+            <select aria-label={t('services.model3dProviderModel')}
               value={productionProfile.model3d?.provider || 'local'}
               onChange={e => {
                 const provider = e.target.value as NonNullable<typeof productionProfile.model3d>['provider']
@@ -266,9 +276,10 @@ export function ProductionProfileSettings() {
               <option value="hi3d">{t('services.providers.hi3d')}</option>
             </select>
             <CatalogSelect
+              label={t('services.model3dProviderModel')}
               value={productionProfile.model3d?.model || 'hunyuan3d-2mini-turbo'}
               options={model3dProfileOptions(productionProfile.model3d?.provider || 'local', hunyuanOptions)}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               onChange={value => setProductionProfile({
                 ...productionProfile,
                 model3d: {
@@ -283,9 +294,10 @@ export function ProductionProfileSettings() {
       <label className="text-[10px] text-text-muted block">
         {t('services.videoModel')}
         <CatalogSelect
+          label={t('services.videoModel')}
           value={productionProfile.video.model}
           options={downloadedModelOptions(installedModels, videoFamilies)}
-          disabled={productionProfileLoading}
+          disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
           onChange={value => setProductionProfile({
             ...productionProfile,
             video: { ...productionProfile.video, model: value },
@@ -295,13 +307,13 @@ export function ProductionProfileSettings() {
       <div className="grid grid-cols-4 gap-2">
         <label className="text-[10px] text-text-muted">
           {t('services.resolution')}
-          <select
+          <select aria-label={t('services.resolution')}
             value={productionProfile.video.settings.resolution}
             onChange={e => setProductionProfile({
               ...productionProfile,
               video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, resolution: e.target.value as typeof productionProfile.video.settings.resolution } },
             })}
-            disabled={productionProfileLoading}
+            disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
             className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
           >
             {['480p', '540p', '720p', '768p', '1080p'].map(value => <option key={value}>{value}</option>)}
@@ -309,13 +321,13 @@ export function ProductionProfileSettings() {
         </label>
         <label className="text-[10px] text-text-muted">
           {t('services.canvas')}
-          <select
+          <select aria-label={t('services.canvas')}
             value={productionProfile.video.settings.aspectRatio}
             onChange={e => setProductionProfile({
               ...productionProfile,
               video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, aspectRatio: e.target.value as typeof productionProfile.video.settings.aspectRatio } },
             })}
-            disabled={productionProfileLoading}
+            disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
             className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
           >
             {['16:9', '9:16', '1:1', '4:3', '3:4'].map(value => <option key={value}>{value}</option>)}
@@ -323,38 +335,38 @@ export function ProductionProfileSettings() {
         </label>
         <label className="text-[10px] text-text-muted">
           {t('services.steps')}
-          <input
+          <input aria-label={t('services.steps')}
             type="number"
             value={productionProfile.video.settings.steps}
             onChange={e => setProductionProfile({
               ...productionProfile,
               video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, steps: Number(e.target.value) } },
             })}
-            disabled={productionProfileLoading}
+            disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
             className="mt-1 w-full bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
           />
         </label>
         <label className="text-[10px] text-text-muted">
           {t('services.flowAudioShift')}
           <div className="mt-1 flex gap-1">
-            <input
+            <input aria-label={t('services.flowAudioShift')}
               type="number"
               value={productionProfile.video.settings.flowShift}
               onChange={e => setProductionProfile({
                 ...productionProfile,
                 video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, flowShift: Number(e.target.value) } },
               })}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               className="min-w-0 w-1/2 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
             />
-            <input
+            <input aria-label={t('services.flowAudioShift')}
               type="number"
               value={productionProfile.video.settings.audioShift}
               onChange={e => setProductionProfile({
                 ...productionProfile,
                 video: { ...productionProfile.video, settings: { ...productionProfile.video.settings, audioShift: Number(e.target.value) } },
               })}
-              disabled={productionProfileLoading}
+              disabled={productionProfileLoading} title={controlReason(productionProfileLoading, 'disabled.profileLoading')}
               className="min-w-0 w-1/2 bg-bg-tertiary border border-border rounded-lg px-2 py-1.5 text-xs text-text-primary"
             />
           </div>

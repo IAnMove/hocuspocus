@@ -30,13 +30,13 @@ export function DramaSpeechControls() {
       }} />}
     <label className="block text-xs text-text-secondary">
       {clone ? t('drama.transcript') : t('drama.direction')}
-      <textarea rows={3} required={clone} value={params.alt_prompt || ''}
+      <textarea aria-label={clone ? t('drama.transcript') : t('drama.direction')} rows={3} required={clone} value={params.alt_prompt || ''}
         className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2"
         onChange={event => setParam('alt_prompt', event.target.value)} />
     </label>
     <p className="text-xs text-text-muted">{t('drama.hint')}</p>
     <label className="block text-xs text-text-secondary">{t('drama.duration')}
-      <input type="number" min={1} max={180} value={duration}
+      <input aria-label={t('drama.duration')} type="number" min={1} max={180} value={duration}
         className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2"
         onChange={event => setDuration(Number(event.target.value))} />
     </label>

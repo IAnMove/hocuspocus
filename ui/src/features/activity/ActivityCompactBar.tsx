@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, CircleSlash2, ListVideo, Loader2 } from 'lucide-react'
 import type { RefObject } from 'react'
 import type { CanonicalTask } from '../../api/client'
@@ -21,6 +22,7 @@ import {
 import { translatedPhase as phaseText } from './taskPresentation'
 import { OriginBadge } from './AgentChangeDetail'
 import { taskOrigin } from './agentOrigin'
+import { GpuNoticeDot } from '../notices/GpuNoticeDot'
 
 interface ActivityCompactBarProps {
   detailsOpen: boolean
@@ -161,7 +163,7 @@ function CompactCancel({
   if (!primary.cancelable) return null
   const busy = busyIds.has(primary.id)
   return (
-    <button type="button" disabled={busy} onClick={() => onControl(primary, 'cancel')} className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 disabled:opacity-50">
+    <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onControl(primary, 'cancel')} className="flex shrink-0 items-center gap-1 rounded-md border border-red-400/40 px-2 py-1 text-red-300 disabled:opacity-50">
       {busy ? <Loader2 size={11} className="animate-spin" /> : null}
       <span>{busy ? t('cancelling') : tCommon('actions.cancel')}</span>
     </button>
@@ -198,8 +200,8 @@ function CompactWorkspaces({ t }: { t: Translate }) {
     <button onClick={() => {
       useStore.getState().setMediaFilter('runs')
       setVideoWorkflowsOpen(false)
-    }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title={t('workspacesTitle')}>
-      <ListVideo size={12} /><span className="hidden sm:inline">{t('workspaces')}</span>
+    }} className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-text-secondary hover:border-accent-blue/50 hover:text-accent-blue transition-colors shrink-0" title={t('runsTitle')} aria-label={t('runs')}>
+      <ListVideo size={12} /><span className="hidden sm:inline">{t('runs')}</span>
     </button>
   )
 }
@@ -244,6 +246,7 @@ export function ActivityCompactBar({
       </div>
       {isActive ? <CompactProgress primary={primary} /> : null}
       <CompactCancel primary={primary} busyIds={busyIds} onControl={onControl} t={tActivity} tCommon={tCommon} />
+      <GpuNoticeDot />
       <CompactWorkspaces t={tActivity} />
     </>
   )

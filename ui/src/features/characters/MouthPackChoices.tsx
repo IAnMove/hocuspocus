@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { downloadMouthPacks } from './downloadMouthPacks'
 
 export function MouthPackChoices({ packs, selected, disabled, onSelect, onApply }: {
-  packs: FaceRigMouthPresetPack[]; selected: string; disabled: boolean
+  packs: FaceRigMouthPresetPack[]; selected: string; disabled: boolean; title?: string
   onSelect: (id: string) => void; onApply: () => void
 }) {
   const { t } = useUiTranslation('characters')

@@ -50,7 +50,7 @@ export function ComicTransitionPanel({ workspace, disabled }: { workspace?: stri
     <fieldset disabled={disabled || busy || !workspace} className="mt-2 space-y-2 text-xs disabled:opacity-50">
       <p className="text-text-muted">{t('comicTransition.help')}</p>
       <label className="flex items-center gap-2">{t('comicTransition.format')}
-        <select className="rounded border border-border bg-bg-tertiary p-2" value={format} onChange={event => setFormat(event.target.value as 'landscape' | 'portrait')}>
+        <select aria-label={t('comicTransition.format')} className="rounded border border-border bg-bg-tertiary p-2" value={format} onChange={event => setFormat(event.target.value as 'landscape' | 'portrait')}>
           <option value="landscape">{t('comicTransition.landscape')}</option>
           <option value="portrait">{t('comicTransition.portrait')}</option>
         </select>
@@ -65,7 +65,7 @@ export function ComicTransitionPanel({ workspace, disabled }: { workspace?: stri
         </label>
         <label>{t('comicTransition.at')}<input aria-label={`${t('comicTransition.at')} ${index}`} value={times[index]} onChange={event => setTime(index, event.target.value)} className="ml-2 w-20 rounded border border-border bg-bg-tertiary p-2" /></label>
       </div>)}
-      <label className="flex items-center gap-2"><input type="checkbox" checked={exportClips} onChange={event => setExportClips(event.target.checked)} />{t('comicTransition.export')}</label>
+      <label className="flex items-center gap-2"><input aria-label={t('comicTransition.export')} type="checkbox" checked={exportClips} onChange={event => setExportClips(event.target.checked)} />{t('comicTransition.export')}</label>
       <button type="button" className="min-h-9 rounded border border-border px-3" onClick={() => void run()}>{busy ? t('comicTransition.working') : t('comicTransition.run')}</button>
       {status && <p>{status}</p>}
     </fieldset>

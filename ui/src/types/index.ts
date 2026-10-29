@@ -782,7 +782,7 @@ export type ScailResolutionProfile = '480p' | '512p' | '704p'
 /** Backward-compatible name for saved Recast/API callers. */
 export type RecastResolutionProfile = ScailResolutionProfile
 export type GenerationMode = 'image' | 'video' | 'audio' | 'model3d' | 'avatar' | 'tools'
-export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast'
+export type EditSubMode = 'retake' | 'inpaint' | 'restyle' | 'outpaint' | 'edit_anything' | 'recast' | 'replace_character'
 export type AudioSubMode = 'speech' | 'music' | 'sfx' | 'mixer'
 
 export interface RecastReferenceAsset {

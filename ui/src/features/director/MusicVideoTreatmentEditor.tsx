@@ -33,7 +33,7 @@ function CoverageField({ treatment, onChange }: { treatment: MusicVideoTreatment
   }
   return (
     <label className="block text-[9px] text-text-muted">{t('treatment.coverage')}
-      <textarea
+      <textarea aria-label={t('treatment.coverage')}
         value={draft}
         rows={4}
         onChange={event => {
@@ -52,7 +52,7 @@ function ChorusSetField({ treatment, onChange }: { treatment: MusicVideoTreatmen
   const { t } = useUiTranslation('director')
   return (
     <label className="block text-[9px] text-text-muted">{t('treatment.chorusSet')}
-      <select
+      <select aria-label={t('treatment.chorusSet')}
         value={treatment.chorus_set || 'first'}
         onChange={event => onChange({ chorus_set: event.target.value as MusicVideoChorusSet })}
         className={`${INPUT_CLASS} mt-1`}
@@ -68,7 +68,7 @@ function GenerationModeField({ treatment, onChange }: { treatment: MusicVideoTre
   return (
     <div className="rounded-lg border border-border bg-bg-tertiary/60 p-2 space-y-2">
       <label className="block text-[9px] text-text-muted">{t('directVideo.generationMode')}
-        <select
+        <select aria-label={t('directVideo.generationMode')}
           value={treatment.generation_mode}
           onChange={event => onChange({ generation_mode: event.target.value as MusicVideoTreatment['generation_mode'] })}
           className={`${INPUT_CLASS} mt-1`}
@@ -86,7 +86,7 @@ function GenerationModeField({ treatment, onChange }: { treatment: MusicVideoTre
             </p>
           </div>
           <label className="block text-[9px] text-text-muted">{t('directVideo.masterLabel')}
-            <textarea
+            <textarea aria-label={t('directVideo.masterLabel')}
               value={treatment.direct_video_master_prompt}
               rows={8}
               onChange={event => onChange({ direct_video_master_prompt: event.target.value })}
@@ -109,14 +109,14 @@ function PerformanceFields({ treatment, onChange }: { treatment: MusicVideoTreat
     <>
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[9px] text-text-muted">{t('treatment.mode')}
-          <select value={treatment.mode} onChange={event => onChange({ mode: event.target.value as MusicVideoTreatment['mode'] })} className={`${INPUT_CLASS} mt-1`}>
+          <select aria-label={t('treatment.mode')} value={treatment.mode} onChange={event => onChange({ mode: event.target.value as MusicVideoTreatment['mode'] })} className={`${INPUT_CLASS} mt-1`}>
             {(Object.keys(MODE_LABEL_KEYS) as Array<MusicVideoTreatment['mode']>).map(mode => (
               <option key={mode} value={mode}>{t(MODE_LABEL_KEYS[mode])}</option>
             ))}
           </select>
         </label>
         <label className="text-[9px] text-text-muted">{t('treatment.lipSync')}
-          <select value={treatment.lip_sync} onChange={event => onChange({ lip_sync: event.target.value as MusicVideoTreatment['lip_sync'] })} className={`${INPUT_CLASS} mt-1`}>
+          <select aria-label={t('treatment.lipSync')} value={treatment.lip_sync} onChange={event => onChange({ lip_sync: event.target.value as MusicVideoTreatment['lip_sync'] })} className={`${INPUT_CLASS} mt-1`}>
             <option value="frequent">{t('treatment.lipSyncFrequent')}</option>
             <option value="occasional">{t('treatment.lipSyncOccasional')}</option>
             <option value="none">{t('treatment.lipSyncNone')}</option>
@@ -126,7 +126,7 @@ function PerformanceFields({ treatment, onChange }: { treatment: MusicVideoTreat
 
       <label className="block text-[9px] text-text-muted">
         <span className="flex justify-between"><span>{t('treatment.artistOnScreen')}</span><b className="text-text-secondary">{treatment.performer_presence}%</b></span>
-        <input type="range" min={0} max={100} step={5} value={treatment.performer_presence}
+        <input aria-label={t('treatment.artistOnScreen')} type="range" min={0} max={100} step={5} value={treatment.performer_presence}
           onChange={event => onChange({ performer_presence: Number(event.target.value) })}
           className="mt-1 w-full accent-accent-blue" />
       </label>
@@ -140,31 +140,31 @@ function LookFields({ treatment, onChange }: { treatment: MusicVideoTreatment; o
     <>
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[9px] text-text-muted">{t('treatment.wardrobe')}
-          <input value={treatment.wardrobe} onChange={event => onChange({ wardrobe: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.wardrobePlaceholder')} />
+          <input aria-label={t('treatment.wardrobe')} value={treatment.wardrobe} onChange={event => onChange({ wardrobe: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.wardrobePlaceholder')} />
         </label>
         <label className="text-[9px] text-text-muted">{t('treatment.palette')}
-          <input value={treatment.palette} onChange={event => onChange({ palette: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.palettePlaceholder')} />
+          <input aria-label={t('treatment.palette')} value={treatment.palette} onChange={event => onChange({ palette: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.palettePlaceholder')} />
         </label>
       </div>
 
       <label className="block text-[9px] text-text-muted">{t('treatment.cameraLanguage')}
-        <input value={treatment.camera_language} onChange={event => onChange({ camera_language: event.target.value })} className={`${INPUT_CLASS} mt-1`} />
+        <input aria-label={t('treatment.cameraLanguage')} value={treatment.camera_language} onChange={event => onChange({ camera_language: event.target.value })} className={`${INPUT_CLASS} mt-1`} />
       </label>
       <label className="block text-[9px] text-text-muted">{t('treatment.motif')}
-        <input value={treatment.recurring_motif} onChange={event => onChange({ recurring_motif: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.motifPlaceholder')} />
+        <input aria-label={t('treatment.motif')} value={treatment.recurring_motif} onChange={event => onChange({ recurring_motif: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.motifPlaceholder')} />
       </label>
       <label className="block text-[9px] text-text-muted">{t('treatment.chorusSignature')}
-        <textarea value={treatment.chorus_signature} rows={2} onChange={event => onChange({ chorus_signature: event.target.value })} className={`${INPUT_CLASS} mt-1 resize-none`} />
+        <textarea aria-label={t('treatment.chorusSignature')} value={treatment.chorus_signature} rows={2} onChange={event => onChange({ chorus_signature: event.target.value })} className={`${INPUT_CLASS} mt-1 resize-none`} />
       </label>
 
       <label className="block text-[9px] text-text-muted">
         <span className="flex justify-between"><span>{t('treatment.surrealism')}</span><b className="text-text-secondary">{treatment.surrealism}%</b></span>
-        <input type="range" min={0} max={100} step={5} value={treatment.surrealism}
+        <input aria-label={t('treatment.surrealism')} type="range" min={0} max={100} step={5} value={treatment.surrealism}
           onChange={event => onChange({ surrealism: Number(event.target.value) })}
           className="mt-1 w-full accent-purple-400" />
       </label>
       <label className="block text-[9px] text-text-muted">{t('treatment.forbidden')}
-        <input value={treatment.forbidden_elements} onChange={event => onChange({ forbidden_elements: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.forbiddenPlaceholder')} />
+        <input aria-label={t('treatment.forbidden')} value={treatment.forbidden_elements} onChange={event => onChange({ forbidden_elements: event.target.value })} className={`${INPUT_CLASS} mt-1`} placeholder={t('treatment.forbiddenPlaceholder')} />
       </label>
     </>
   )
@@ -188,7 +188,7 @@ export function MusicVideoTreatmentEditor({ treatment, onChange }: { treatment: 
       <PerformanceFields treatment={treatment} onChange={onChange} />
 
       <label className="block text-[9px] text-text-muted">{t('treatment.recurringSets')}
-        <textarea value={treatment.recurring_sets.join('\n')} rows={3}
+        <textarea aria-label={t('treatment.recurringSets')} value={treatment.recurring_sets.join('\n')} rows={3}
           onChange={event => onChange({ recurring_sets: event.target.value.split('\n').map(item => item.trim()).filter(Boolean).slice(0, 5) })}
           className={`${INPUT_CLASS} mt-1 resize-none`} placeholder={t('treatment.recurringSetsPlaceholder')} />
       </label>

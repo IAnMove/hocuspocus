@@ -117,8 +117,10 @@ function LipsCreatorWorkspace({ workspace, onBusyChange }: { workspace: string; 
           </button>)}
         </div>
         {importable.length > 0 && <div className="space-y-3"><h3 className="text-sm text-text-muted">{t('lips.importFromCharacters')}</h3><div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {importable.map(kit => <button key={kit.id} type="button" onClick={() => open(undefined, kit)} className="rounded-2xl border border-border p-3 text-left hover:border-cyan-400/40">
-            <LipsThumbnail pack={kit} /><p className="mt-3 text-sm">{kit.name}</p><p className="mt-1 text-xs text-text-muted">{t('lips.importEdit')}</p>
+          {importable.map(kit => <button key={kit.id} type="button" onClick={() => open(undefined, kit)} aria-label={t('lips.importCard', { name: kit.name })} className="flex flex-col gap-1 rounded-2xl border border-border p-3 text-left hover:border-cyan-400/40">
+            <LipsThumbnail pack={kit} />
+            <p className="mt-2 text-sm">{kit.name}</p>
+            <p className="text-xs text-text-muted">{t('lips.importEdit')}</p>
           </button>)}
         </div></div>}
       </>}

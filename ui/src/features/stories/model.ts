@@ -395,7 +395,7 @@ export function createStoryProject(projectType: StoryProject['projectType'] = 'f
     sectionVersions: {
       overview: 1, world: 1, characters: 1, relationships: 1, structure: 1,
     },
-    title: 'Untitled story',
+    title: i18n.t('untitled', { ns: 'storyLab', defaultValue: 'Untitled story' }),
     projectType,
     creativeBrief: {
       generalIdea: '',

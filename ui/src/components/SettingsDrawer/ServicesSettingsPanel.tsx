@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react'
 import { RefreshCw, ShieldAlert, ShieldCheck, Lock, Loader2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -27,7 +28,7 @@ function ApiKeyField({ label, maskedValue, isSet, onSave }: {
       </label>
       {editing ? (
         <div className="flex gap-2">
-          <input
+          <input aria-label={t('services.pasteKey')}
             type="password"
             value={value}
             onChange={e => setValue(e.target.value)}
@@ -267,6 +268,8 @@ function NsfwToggleSection() {
 }
 
 export function ServicesSettingsPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('settings')
   const { t: tCommon } = useUiTranslation('common')
   const servicesConfig = useStore(s => s.servicesConfig)
@@ -378,10 +381,10 @@ export function ServicesSettingsPanel() {
 
         {/* Provider selector */}
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+          <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
             {t('services.llmProvider')}
           </label>
-          <select
+          <select aria-label={t('services.llmProvider')} id={fieldIds('f0')}
             value={provider}
             onChange={e => {
               const newProvider = e.target.value
@@ -418,10 +421,10 @@ export function ServicesSettingsPanel() {
         {/* Remote URL (for remote/openai providers) */}
         {needsUrl && (
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            <label htmlFor={fieldIds('f1')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {isOllama || isRemote ? t('services.serverUrl') : t('services.apiBaseUrl')}
             </label>
-            <input
+            <input aria-label={isOllama || isRemote ? t('services.serverUrl') : t('services.apiBaseUrl')} id={fieldIds('f1')}
               type="text"
               value={servicesConfig.llm_remote_url}
               onChange={e => {
@@ -454,7 +457,7 @@ export function ServicesSettingsPanel() {
         {/* Model selector with refresh button */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">
+            <label htmlFor={fieldIds('f2')} className="text-[11px] text-text-muted uppercase tracking-wider">
               {t('services.llmModel')}
             </label>
             {!isLocal && (
@@ -468,7 +471,7 @@ export function ServicesSettingsPanel() {
               </button>
             )}
           </div>
-          <select
+          <select aria-label={t('services.llmModel')} id={fieldIds('f2')}
             value={servicesConfig.llm_model_id}
             onChange={e => {
               void saveLlmConfig({ llm_model_id: e.target.value })
@@ -523,10 +526,10 @@ export function ServicesSettingsPanel() {
         {/* Device selector (local only) */}
         {isLocal && (
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            <label htmlFor={fieldIds('f3')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {t('services.llmDevice')}
             </label>
-            <select
+            <select aria-label={t('services.llmDevice')} id={fieldIds('f3')}
               value={servicesConfig.llm_device}
               onChange={e => {
                 updateConfig({ llm_device: e.target.value })
@@ -608,10 +611,10 @@ export function ServicesSettingsPanel() {
         </p>
 
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+          <label htmlFor={fieldIds('f4')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
             {t('services.enhanceModel')}
           </label>
-          <select
+          <select aria-label={t('services.enhanceModel')} id={fieldIds('f4')}
             value={servicesConfig.enhance_llm_model_id || ''}
             onChange={e => updateConfig({ enhance_llm_model_id: e.target.value })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -633,10 +636,10 @@ export function ServicesSettingsPanel() {
 
         {servicesConfig.enhance_llm_model_id && (
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            <label htmlFor={fieldIds('f5')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {t('services.enhanceDevice')}
             </label>
-            <select
+            <select aria-label={t('services.enhanceDevice')} id={fieldIds('f5')}
               value={servicesConfig.enhance_llm_device || 'cuda'}
               onChange={e => updateConfig({ enhance_llm_device: e.target.value })}
               className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -650,10 +653,10 @@ export function ServicesSettingsPanel() {
         <hr className="border-border/50" />
 
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+          <label htmlFor={fieldIds('f6')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
             {t('services.wan2gpTitle')}
           </label>
-          <select
+          <select aria-label={t('services.wan2gpTitle')} id={fieldIds('f6')}
             value={systemConfig?.enhancer_enabled ?? 0}
             onChange={e => updateSystemConfig({ enhancer_enabled: Number(e.target.value) })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -711,10 +714,10 @@ export function ServicesSettingsPanel() {
 
         {/* Prompt Polish Mode */}
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+          <label htmlFor={fieldIds('f7')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
             {t('services.promptPolish')}
           </label>
-          <select
+          <select aria-label={t('services.promptPolish')} id={fieldIds('f7')}
             value={servicesConfig.director_prompt_polish || 'off'}
             onChange={e => updateConfig({ director_prompt_polish: e.target.value as 'off' | 'full_guide' | 'light_guide' | 'third_pass' })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -745,18 +748,20 @@ export function ServicesSettingsPanel() {
               {t('services.rawPromptsHint')}
             </div>
           </div>
-          <div
+          <button
+            type="button"
             role="switch"
             aria-checked={servicesConfig.raw_prompts === true}
+            aria-label={t('services.rawPrompts')}
             onClick={() => updateConfig({ raw_prompts: servicesConfig.raw_prompts !== true })}
             className={`w-9 h-5 rounded-full transition-colors relative shrink-0 ${
               servicesConfig.raw_prompts ? 'bg-accent-blue' : 'bg-bg-tertiary border border-border'
             }`}
           >
-            <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
+            <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white border border-border shadow transition-transform ${
               servicesConfig.raw_prompts ? 'translate-x-4' : 'translate-x-0.5'
             }`} />
-          </div>
+          </button>
         </label>
 
         <DirectorReferenceSettings config={servicesConfig} onChange={updateConfig} />
@@ -879,8 +884,8 @@ export function ServicesSettingsPanel() {
         </p>
 
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('services.flashVariant')}</label>
-          <select
+          <label htmlFor={fieldIds('f8')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('services.flashVariant')}</label>
+          <select aria-label={t('services.flashVariant')} id={fieldIds('f8')}
             value={servicesConfig.flashvsr_mode ?? 1}
             onChange={e => updateConfig({ flashvsr_mode: Number(e.target.value) })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -900,10 +905,10 @@ export function ServicesSettingsPanel() {
 
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('services.flashTopk')}</label>
+            <label htmlFor={fieldIds('f9')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('services.flashTopk')}</label>
             <span className="text-xs text-text-secondary">{(servicesConfig.flashvsr_topk_ratio ?? 0).toFixed(2)}</span>
           </div>
-          <input
+          <input aria-label={t('services.flashTopk')} id={fieldIds('f9')}
             type="range"
             min={0}
             max={4}
@@ -917,8 +922,8 @@ export function ServicesSettingsPanel() {
         </div>
 
         <div>
-          <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('services.flashBackend')}</label>
-          <select
+          <label htmlFor={fieldIds('f10')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('services.flashBackend')}</label>
+          <select aria-label={t('services.flashBackend')} id={fieldIds('f10')}
             value={servicesConfig.flashvsr_backend || 'auto'}
             onChange={e => updateConfig({ flashvsr_backend: e.target.value })}
             className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -959,10 +964,10 @@ export function ServicesSettingsPanel() {
 
         <div className="rounded-lg border border-border bg-bg-tertiary/20 p-3 space-y-3">
           <div>
-            <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+            <label htmlFor={fieldIds('f11')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
               {t('services.compatibleUrl')}
             </label>
-            <input
+            <input aria-label={t('services.compatibleUrl')} id={fieldIds('f11')}
               type="url"
               value={servicesConfig.compatible_base_url || ''}
               onChange={event => updateConfig({ compatible_base_url: event.target.value })}

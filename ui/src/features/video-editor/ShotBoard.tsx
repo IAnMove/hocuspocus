@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useState } from 'react'
 import { Check, Film, Loader2, Pencil, RefreshCw, Sparkles, X } from 'lucide-react'
 import { getMontageShots, regenerateShot, selectShotTake, type MontageShot, type MontageShotBoard, type ShotTake } from '../../api/montages'
@@ -23,7 +24,7 @@ function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onS
     {done ? <a href={take.url} target="_blank" rel="noreferrer" className="text-accent-blue hover:underline" title={take.provenance?.prompt}>{take.note || take.id}</a>
       : <span className="text-text-muted">{take.note || take.id}</span>}
     <span className={take.status === 'failed' ? 'text-red-300' : 'text-text-muted'}>{t(`shots.status.${take.status}`, { defaultValue: take.status })}</span>
-    {done && <button type="button" className={button} disabled={busy} onClick={onSelect}><Check size={11} /> {t('shots.use')}</button>}
+    {done && <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={onSelect}><Check size={11} /> {t('shots.use')}</button>}
   </div>
 }
 
@@ -35,12 +36,12 @@ function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
   const [seed, setSeed] = useState('')
   return <div className="mt-2 space-y-2">
     <label className="block text-[11px] text-text-muted">{t('shots.prompt')}
-      <textarea value={prompt} maxLength={4000} rows={4} onChange={event => setPrompt(event.target.value)}
+      <textarea aria-label={t('shots.prompt')} value={prompt} maxLength={4000} rows={4} onChange={event => setPrompt(event.target.value)}
         className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2 text-xs text-text-primary" />
     </label>
     <div className="flex flex-wrap items-end gap-2">
       <label className="text-[11px] text-text-muted">{t('shots.seed')}
-        <input type="number" min={0} value={seed} placeholder={t('shots.seedAuto')} onChange={event => setSeed(event.target.value)}
+        <input aria-label={t('shots.seed')} type="number" min={0} value={seed} placeholder={t('shots.seedAuto')} onChange={event => setSeed(event.target.value)}
           className="ml-2 w-32 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs" />
       </label>
       <button type="button" className={button} disabled={busy || !prompt.trim()}
@@ -74,8 +75,8 @@ function ShotCard({ shot, busy, onRegenerate, onSelect, onOpenScene }: {
     {origin.prompt && <p className="mt-0.5 text-[11px] text-text-secondary" title={origin.prompt}>{shortPrompt(origin.prompt)}</p>}
     {origin.startImage && <a href={origin.startImage.url} target="_blank" rel="noreferrer" className="mt-0.5 block truncate text-[11px] text-accent-blue hover:underline">{t('shots.startImage')}</a>}
     {shot.takes.length > 0 && <div className="mt-1.5 flex flex-wrap gap-1">{shot.takes.map(take => <TakeChip key={take.id} take={take} busy={busy} onSelect={() => onSelect(take)} />)}</div>}
-    {origin.scene && <button type="button" className={`${button} mt-2`} disabled={busy} onClick={() => onOpenScene(origin.scene as string)}><Pencil size={11} /> {t('shots.openScene')}</button>}
-    {origin.canRegenerate && !editing && <button type="button" className={`${button} mt-2`} disabled={busy} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('shots.regenerate')}</button>}
+    {origin.scene && <button type="button" className={`${button} mt-2`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onOpenScene(origin.scene as string)}><Pencil size={11} /> {t('shots.openScene')}</button>}
+    {origin.canRegenerate && !editing && <button type="button" className={`${button} mt-2`} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('shots.regenerate')}</button>}
     {!origin.canRegenerate && <p className="mt-1.5 text-[10px] text-text-muted">{t(origin.scene ? 'shots.sceneHint' : 'shots.notRegenerable')}</p>}
     {editing && <RegenerateForm shot={shot} busy={busy} onCancel={() => setEditing(false)}
       onSubmit={(prompt, seed) => { setEditing(false); onRegenerate(prompt, seed) }} />}

@@ -9,7 +9,7 @@ export function Yue2Controls() {
   if (params.model_type !== 'yue2') return null
   return <div className="space-y-2 rounded border border-border p-2 text-xs text-text-secondary">
     <label className="block">{t('yue2.planning')}
-      <select className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2"
+      <select aria-label={t('yue2.planning')} className="mt-1 w-full rounded border border-border bg-bg-tertiary p-2"
         value={Number(params.model_mode ?? 0)}
         onChange={event => setParam('model_mode' as keyof GenerateParams, Number(event.target.value))}>
         <option value={0}>{t('yue2.chords')}</option>
@@ -18,7 +18,7 @@ export function Yue2Controls() {
       </select>
     </label>
     <label className="block">{t('advanced.inferenceSteps')}
-      <input className="ml-2 w-20 rounded border border-border bg-bg-tertiary p-1" type="number" min={1} max={100}
+      <input aria-label={t('advanced.inferenceSteps')} className="ml-2 w-20 rounded border border-border bg-bg-tertiary p-1" type="number" min={1} max={100}
         value={params.num_inference_steps ?? 32}
         onChange={event => setParam('num_inference_steps', Number(event.target.value))} />
     </label>

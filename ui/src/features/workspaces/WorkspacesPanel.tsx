@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useState } from 'react'
 import { useSerializedPoll } from '../../hooks/useSerializedPoll'
 import {
@@ -153,11 +154,12 @@ export function RunsPanel() {
                 {tWs('runs.intro')}
               </p>
             </div>
-            <button type="button" className={button} onClick={() => void loadPipelineList()} title={tWs('runs.reload')}>
+            <button type="button" className={button} onClick={() => void loadPipelineList()} title={tWs('runs.reload')} aria-label={tWs('runs.reload')}>
               <RefreshCw size={13} />
             </button>
           </div>
           <input
+            aria-label={tWs('runs.search')}
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
@@ -421,7 +423,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
           <h3 className="text-[11px] font-medium uppercase tracking-wider text-violet-100">{t('rewrite.title')}</h3>
           <span className="text-[10px] text-text-muted">{t('rewrite.selected', { selected: selectedCount, proposals: proposalCount })}</span>
         </div>
-        <textarea
+        <textarea aria-label={t('rewrite.placeholder')}
           value={instruction}
           onChange={event => setInstruction(event.target.value)}
           rows={3}
@@ -429,7 +431,7 @@ function ProcessingView({ pipeline }: { pipeline: SavedPipelineState }) {
           className="w-full resize-y rounded-md border border-border bg-bg-primary px-2 py-1.5 text-[11px] text-text-primary"
         />
         <label className="flex items-center gap-2 text-[11px] text-text-secondary">
-          <input type="checkbox" checked={shorten} onChange={event => setShorten(event.target.checked)} />
+          <input aria-label={t('rewrite.shorten')} type="checkbox" checked={shorten} onChange={event => setShorten(event.target.checked)} />
           {t('rewrite.shorten')}
         </label>
         <div className="flex flex-wrap gap-2">
@@ -551,7 +553,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
     <article className="rounded-xl border border-border bg-bg-secondary p-3">
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-1.5 text-xs text-text-secondary">
-          <input type="checkbox" checked={selected} onChange={onToggleSelected} />
+          <input aria-label={t('queue.shot', { n: clip.index + 1 })} type="checkbox" checked={selected} onChange={onToggleSelected} />
           <span className="font-semibold text-text-primary">{t('queue.shot', { n: clip.index + 1 })}</span>
         </label>
         {duration != null && <span className="text-[10px] text-text-muted">{duration.toFixed(1)}s</span>}
@@ -599,6 +601,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
         <div className="min-w-0 space-y-2">
           {editing ? (
             <textarea
+              aria-label={t('queue.shot', { n: clip.index + 1 })}
               value={draft}
               onChange={event => setDraft(event.target.value)}
               rows={7}
@@ -643,7 +646,7 @@ function QueueShotCard({ pipeline, clip, selected, proposal, onToggleSelected }:
                 <button
                   key={item.id || item.filename}
                   type="button"
-                  disabled={busy}
+                  disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
                   onClick={() => void selectClipVideo(pipeline.pipeline_id, clip.index, item.filename).catch(reason => setError(reason instanceof Error ? reason.message : String(reason)))}
                   className={`overflow-hidden rounded border text-left ${selected ? 'border-emerald-400 bg-emerald-500/10' : 'border-border bg-bg-tertiary hover:border-violet-400/60'}`}
                 >

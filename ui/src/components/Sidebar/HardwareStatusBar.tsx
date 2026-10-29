@@ -184,7 +184,7 @@ export function HardwareStatusBar() {
         <span className="text-[9px] uppercase tracking-wider text-text-muted">{t('hardware.system')}</span>
         <button
           onClick={toggle}
-          title={t('hardware.collapse')}
+          title={t('hardware.collapse')} aria-label={t('hardware.collapse')}
           className="p-0.5 rounded hover:bg-bg-hover text-text-muted hover:text-text-secondary transition-colors"
         >
           <ChevronDown size={13} />
@@ -222,7 +222,7 @@ export function HardwareStatusBar() {
           {(modelLoaded || llmStatus?.loaded) && !confirmUnload && !unloading && (
             <button
               onClick={() => setConfirmUnload(true)}
-              title={t('hardware.unloadTitle')}
+              title={t('hardware.unloadTitle')} aria-label={t('hardware.unloadTitle')}
               className="ml-auto p-0.5 rounded shrink-0 text-text-muted hover:text-text-secondary hover:bg-bg-hover transition-colors"
             >
               <Power size={11} />
