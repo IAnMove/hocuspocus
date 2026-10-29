@@ -18,7 +18,8 @@ test('a screen upload, dimensions and fit survive saving and reopening the shot'
   await page.getByRole('button', { name: 'Close Ask to the Wizard' }).click()
   await page.getByRole('button', { name: 'Expand editor', exact: true }).click()
   const workspace = page.getByTestId('scene3d-workspace')
-  await workspace.getByRole('button', { name: 'Add screen', exact: true }).click()
+  await workspace.getByTestId('scene3d-desk-add').click()
+  await workspace.getByRole('menuitem', { name: 'Add screen', exact: true }).click()
   const controls = workspace.getByTestId('scene3d-screen-controls').filter({ has: page.getByRole('button', { name: 'Remove screen', exact: true }) })
   await controls.getByTestId('asset-input-file').setInputFiles({ name: 'media-screen-test.png', mimeType: 'image/png', buffer: png })
   await expect(controls.getByText('media-screen-test.png', { exact: true })).toBeVisible()
@@ -43,7 +44,7 @@ test('a screen upload, dimensions and fit survive saving and reopening the shot'
   await expect(controls.getByText('media-screen-test.png', { exact: true })).toBeVisible()
   await workspace.getByRole('button', { name: 'Play', exact: true }).click()
   await expect(controls.getByLabel('Content fit', { exact: true })).toBeDisabled()
-  await expect(workspace.getByRole('button', { name: 'Add screen', exact: true })).toBeDisabled()
+  await expect(workspace.getByTestId('scene3d-desk-add')).toBeDisabled()
   await closeApp(page, session)
 })
 

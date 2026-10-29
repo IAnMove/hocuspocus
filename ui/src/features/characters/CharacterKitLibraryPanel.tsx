@@ -104,7 +104,7 @@ export function CharacterKitLibraryPanel({
       <p className="text-[10px] leading-relaxed text-text-secondary">
         {t('library.subtitle')}
       </p>
-      {workspace && <BlobFaceMaker workspace={workspace} library={library} disabled={locked} onLibrary={onLibrary} onSelect={kit => onSelectKit(kit, 'kit')} />}
+      {workspace && <BlobFaceMaker workspace={workspace} library={library} disabled={locked} title={controlReason(locked, 'disabled.panelLocked')} onLibrary={onLibrary} onSelect={kit => onSelectKit(kit, 'kit')} />}
       {kits.length > 0 && (
         <div className="grid grid-cols-2 gap-1">
           {kits.map(kit => (

@@ -320,7 +320,7 @@ export const MediaFeedItem = memo(function MediaFeedItem({ file, index, isActive
       {/* Media player */}
       <div
         data-testid="media-feed-viewport"
-        className={`relative flex w-full shrink-0 items-center justify-center overflow-hidden bg-media-canvas ${isAudio ? 'py-4' : ''}`}
+        className="relative flex w-full shrink-0 items-center justify-center overflow-hidden bg-media-canvas"
         style={{ height: mediaHeight }}
       >
         <button

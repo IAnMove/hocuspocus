@@ -10,7 +10,7 @@ test('portrait preview fits, paused resizes repaint, and covered image objects r
   const scene = applyScene3DTemplate('creative-ocean-window')
   await workspace.getByTestId('world3d-load-shot').setInputFiles({ name: 'portrait.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(scene)) })
   const list = workspace.getByTestId('scene3d-object-list')
-  await expect(list.getByRole('button')).toHaveCount(scene.slots.length)
+  await expect(list.locator('[data-slot-id]')).toHaveCount(scene.slots.length)
   // A rear image can be selected without raycasting through the foreground.
   await list.locator('[data-slot-id="background"]').click()
   await expect(list.locator('[data-slot-id="background"]')).toHaveAttribute('aria-pressed', 'true')

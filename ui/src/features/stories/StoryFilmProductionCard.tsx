@@ -90,7 +90,7 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
         </span>
       </label>
       <label className="block text-[10px] text-text-muted">{t('productions.videoModel')}
-        <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} />
+        <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} label={t('productions.videoModel')} />
         <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
           {!storyVideoOptionsReady
             ? t('productions.checkingFormats')

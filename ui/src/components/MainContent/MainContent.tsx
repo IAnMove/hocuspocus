@@ -39,6 +39,7 @@ import {
   anchorOffset,
   buildGalleryLayout,
   gridColumns,
+  galleryOverscan,
   neighborIndex,
   visibleBlocks,
   type BlockRange,
@@ -580,7 +581,7 @@ export function MainContent() {
     const current = layoutRef.current
     // Mount rows ahead of a fast fling. Cards are memoized, so rows that stay
     // mounted do not re-render while the reader scrolls.
-    const overscan = el.clientHeight * (current.view === 'feed' ? 1.5 : 1)
+    const overscan = galleryOverscan(current.view, el.clientHeight, current.blocks)
     const next = visibleBlocks(current, listOffset(), el.clientHeight, overscan)
     setRange(prev => (prev.first === next.first && prev.last === next.last ? prev : next))
   }, [listOffset])

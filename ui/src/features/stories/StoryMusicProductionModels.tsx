@@ -74,7 +74,7 @@ export function StoryMusicProductionModels(props: StoryProductionsTabProps & { r
           </label>
         )}
         <label className="block text-[10px] text-text-muted">{t('trailer.videoModel')}
-          <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="music_video" allowSeamless={false} preserveSelection showModeLabel={false} />
+          <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="music_video" allowSeamless={false} preserveSelection showModeLabel={false} label={t('trailer.videoModel')} />
           <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
             {!storyVideoOptionsReady
               ? t('productions.checkingFormats')

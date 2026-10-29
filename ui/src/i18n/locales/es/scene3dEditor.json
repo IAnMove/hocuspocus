@@ -1,7 +1,7 @@
 {
   "faceDecal": {
     "title": "Cara 2D",
-    "kit": "Personaje",
+    "kit": "Kit de cara",
     "expression": "Expresión",
     "empty": "Sin cara todavía",
     "place": "La colocación llega con el comando de cara de la escena hasta que haya un centro de cabeza.",

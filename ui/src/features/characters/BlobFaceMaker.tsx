@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { BASE } from '../../api/http'
 import { useUiTranslation } from '../../i18n'
+import { controlReason } from '../../i18n/controlLabel'
 import type { CharacterKit, CharacterKitLibrary } from '../../lib/characterKit'
 
 const EYES = ['dot', 'oval', 'halflid', 'wide'] as const
@@ -28,11 +29,12 @@ type Traits = {
 
 /** The same POST as `characters.face.make`: a parametric face, saved as a Character Kit. */
 export function BlobFaceMaker({
-  workspace, library, disabled, onLibrary, onSelect,
+  workspace, library, disabled, title, onLibrary, onSelect,
 }: {
   workspace: string
   library: CharacterKitLibrary
   disabled?: boolean
+  title?: string
   onLibrary?: (library: CharacterKitLibrary) => void
   onSelect: (kit: CharacterKit) => void
 }) {
@@ -71,10 +73,11 @@ export function BlobFaceMaker({
   }
 
   const field = 'mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[8px]'
+  const blocked = Boolean(disabled) || busy
   return (
-    <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1" data-testid="blob-face-maker">
+    <details className="rounded border border-border/70 bg-black/10 px-1.5 py-1" data-testid="blob-face-maker" title={title}>
       <summary className="cursor-pointer text-[9px] text-text-muted">{t('library.blobFace.summary')}</summary>
-      <input value={name} onChange={event => setName(event.target.value)} placeholder={t('library.namePlaceholder')} className={`${field} mt-1`} />
+      <input aria-label={t('library.blobFace.name')} value={name} onChange={event => setName(event.target.value)} placeholder={t('library.namePlaceholder')} className={`${field} mt-1`} />
       <div className="mt-1 grid grid-cols-2 gap-1">
         <label className="text-[8px] text-text-muted">{t('library.blobFace.style')}<select aria-label={t('library.blobFace.style')} value={traits.style} onChange={event => set('style', event.target.value as Traits['style'])} className={field}>{STYLES.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
         <label className="text-[8px] text-text-muted">{t('library.blobFace.eyes')}<select aria-label={t('library.blobFace.eyes')} value={traits.eyes} onChange={event => set('eyes', event.target.value as Traits['eyes'])} className={field}>{EYES.map(item => <option key={item} value={item}>{item}</option>)}</select></label>
@@ -89,7 +92,7 @@ export function BlobFaceMaker({
       </label>
       <label className="mt-1 flex items-center gap-1 text-[8px] text-text-muted"><input type="checkbox" checked={traits.freckles} onChange={event => set('freckles', event.target.checked)} />{t('library.blobFace.freckles')}</label>
       <label className="mt-1 flex items-center gap-1 text-[8px] text-text-muted"><input type="checkbox" checked={traits.stubble} onChange={event => set('stubble', event.target.checked)} />{t('library.blobFace.stubble')}</label>
-      <button type="button" disabled={disabled || busy} onClick={() => void make()} className="mt-1 w-full rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[9px] text-emerald-100 disabled:opacity-40">{busy ? t('library.blobFace.working') : t('library.blobFace.make')}</button>
+      <button type="button" disabled={blocked} title={controlReason(blocked, 'disabled.actionInProgress')} onClick={() => void make()} className="mt-1 w-full rounded border border-emerald-300/50 bg-emerald-400/10 px-1 py-1 text-[9px] text-emerald-100 disabled:opacity-40">{busy ? t('library.blobFace.working') : t('library.blobFace.make')}</button>
       {error && <p className="mt-1 text-[8px] text-red-300">{error}</p>}
     </details>
   )

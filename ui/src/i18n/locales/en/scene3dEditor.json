@@ -1,7 +1,7 @@
 {
   "faceDecal": {
     "title": "2D face",
-    "kit": "Character",
+    "kit": "Face kit",
     "expression": "Expression",
     "empty": "No face yet",
     "place": "Placement comes from the scene face command until a head center is saved.",

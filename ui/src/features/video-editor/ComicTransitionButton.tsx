@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BASE } from '../../api/http'
 import { useUiTranslation } from '../../i18n'
+import { controlReason } from '../../i18n/controlLabel'
 import { comicMontageBody, type ComicMontageMode } from '../scene3d/comicTransition'
 import { loadMontageIntoEditor } from './montageLoader'
 
@@ -51,12 +52,14 @@ export function ComicTransitionButton({
       .catch(reason => onError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setBusy(false))
   }
+  const unavailable = !file || busy
   return (
     <div className="mb-3 flex flex-wrap items-center gap-2">
       <select
         aria-label={t('inspector.comicTransition')}
         value={mode}
         disabled={busy}
+        title={controlReason(busy, 'disabled.actionInProgress')}
         onChange={event => setMode(event.target.value as ComicMontageMode)}
         className="rounded border border-border bg-bg-tertiary px-2 py-1 text-xs"
       >
@@ -66,7 +69,8 @@ export function ComicTransitionButton({
       <button
         type="button"
         onClick={go}
-        disabled={!file || busy}
+        disabled={unavailable}
+        title={controlReason(unavailable, 'disabled.actionInProgress')}
         className="rounded border border-border px-2 py-1 text-xs hover:bg-bg-hover disabled:opacity-40"
       >
         {busy ? t('inspector.comicWorking') : t('inspector.comicTransition')}

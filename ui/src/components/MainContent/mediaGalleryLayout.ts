@@ -252,6 +252,20 @@ export function visibleBlocks(layout: GalleryLayout, offset: number, viewportHei
   return { first, last }
 }
 
+/** Pixels mounted beyond the scroller. A one-up card can be taller than the
+ *  feed on a short landscape window, so the first three cards stay mounted. */
+export function galleryOverscan(
+  view: GalleryLayoutView,
+  clientHeight: number,
+  blocks: readonly { top: number }[],
+): number {
+  const base = clientHeight * (view === 'feed' ? 1.5 : 1)
+  if (view !== 'feed' || blocks.length < 3) return base
+  const stride = blocks[1].top - blocks[0].top
+  if (stride <= 0) return base
+  return Math.max(base, stride * 2)
+}
+
 export interface GalleryAnchor {
   /** Output name, so the anchor survives inserts above it. */
   name: string

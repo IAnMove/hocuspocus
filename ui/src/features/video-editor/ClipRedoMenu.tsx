@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Clapperboard, Pencil, RefreshCw, Replace } from 'lucide-react'
 import { getMontageShots, regenerateShot, selectShotTake, type MontageShotBoard, type ShotProvenance } from '../../api/montages'
 import { useUiTranslation } from '../../i18n'
+import { controlReason } from '../../i18n/controlLabel'
 import { randomUuid } from '../../lib/uuid'
 import { RegenerateForm, TakeChip } from './ShotBoard'
 import { hasPendingTakes, shortPrompt } from './shotBoardModel'
@@ -60,9 +61,9 @@ export function ClipRedoMenu({ workspace, file, clipId, onChanged, onError, onRe
     {shot.takes.length > 0 && <div className="flex flex-wrap gap-1">{shot.takes.map(take => <TakeChip key={take.id} take={take} busy={busy}
       onSelect={() => run(() => selectShotTake(workspace, file, shot.id, take.id, board.revision), shot.id)} />)}</div>}
     <div className="flex flex-wrap gap-1">
-      {origin.canRegenerate && !editing && <button type="button" className={action} disabled={busy} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('comic.redo.here')}</button>}
-      {origin.canRegenerate && <button type="button" className={action} disabled={busy} onClick={() => onRemake({ kind: 'creation', outputs: creationOutputs(origin) })}><Clapperboard size={11} /> {t('comic.redo.creation')}</button>}
-      {scene && <button type="button" className={action} disabled={busy} onClick={() => onRemake({ kind: 'scene', scene })}><Pencil size={11} /> {t('comic.redo.scene')}</button>}
+      {origin.canRegenerate && !editing && <button type="button" className={action} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => setEditing(true)}><RefreshCw size={11} /> {t('comic.redo.here')}</button>}
+      {origin.canRegenerate && <button type="button" className={action} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onRemake({ kind: 'creation', outputs: creationOutputs(origin) })}><Clapperboard size={11} /> {t('comic.redo.creation')}</button>}
+      {scene && <button type="button" className={action} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => onRemake({ kind: 'scene', scene })}><Pencil size={11} /> {t('comic.redo.scene')}</button>}
       {gallery}
     </div>
     {editing && <RegenerateForm shot={shot} busy={busy} onCancel={() => setEditing(false)} onSubmit={(prompt, seed) => {

@@ -97,6 +97,7 @@
     "blobFace": {
       "style": "Estilo",
       "summary": "Crear cara",
+      "name": "Nombre",
       "eyes": "Ojos",
       "brows": "Cejas",
       "nose": "Nariz",

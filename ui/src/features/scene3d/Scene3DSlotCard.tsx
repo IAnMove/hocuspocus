@@ -1,4 +1,5 @@
 import type { TFunction } from 'i18next'
+import { controlReason } from '../../i18n/controlLabel'
 import type { ApiOutput } from '../../api/client'
 import { AssetInput } from '../asset-picker/AssetInput.tsx'
 import { AppearanceControls } from './CinematicControls'
@@ -87,7 +88,7 @@ export function Scene3DSlotCard({
     <div className={`rounded-xl border p-3 text-xs text-text-secondary ${selected ? 'border-cyan-300 bg-cyan-400/5' : 'border-border bg-bg-primary'}`}>
       <button type="button" className="block min-h-10 font-semibold text-text-primary" onClick={() => onSelect(slot.id)}>{t(`stage.slot.${slot.slot}`)}</button>
       {slot.media === 'model3d' && <button type="button" className="mb-2 min-h-9 rounded-lg border border-border px-3 text-xs hover:bg-bg-hover" onClick={onSpeech}>{editorT('speech.option')}{slot.speech?.enabled ? ' · ✓' : ''}</button>}
-      {slot.media === 'model3d' && selected && <FaceDecalControls slot={slot} workspace={workspace} disabled={editingLocked} onChange={faceDecal => onApplyScene(current => patchScene3DSlot(current, slot.id, { faceDecal }))} />}
+      {slot.media === 'model3d' && selected && <FaceDecalControls slot={slot} workspace={workspace} disabled={editingLocked} title={controlReason(editingLocked, 'disabled.panelLocked')} onChange={faceDecal => onApplyScene(current => patchScene3DSlot(current, slot.id, { faceDecal }))} />}
       {slot.media !== 'screen' && <div className="mt-1">
         <AssetInput
           label={t(`stage.slot.${slot.slot}`)}

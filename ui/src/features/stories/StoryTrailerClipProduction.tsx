@@ -59,7 +59,7 @@ export function StoryTrailerClipProduction(props: StoryTrailerTabProps) {
             </select>
           </label>
           <label className="block text-[10px] text-text-muted">{t('trailer.videoModel')}
-            <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} />
+            <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} label={t('trailer.videoModel')} />
           </label>
         </div>
       </div>

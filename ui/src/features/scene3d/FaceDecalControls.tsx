@@ -1,17 +1,19 @@
 import { useState } from 'react'
 import { fetchCharacterKitLibrary } from '../../api/characters'
 import { useUiTranslation } from '../../i18n'
+import { controlReason } from '../../i18n/controlLabel'
 import type { CharacterKit } from '../../lib/characterKit'
 import { artFromKit, type Scene3DFaceDecal } from './faceDecal'
 import type { Scene3DSlot } from './types'
 
 /** Kit and expression for the 2D face on the selected model. Placement stays whatever the scene already stored. */
 export function FaceDecalControls({
-  slot, workspace, disabled, onChange,
+  slot, workspace, disabled, title, onChange,
 }: {
   slot: Scene3DSlot
   workspace: string
   disabled?: boolean
+  title?: string
   onChange: (faceDecal: Scene3DFaceDecal) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
@@ -20,6 +22,8 @@ export function FaceDecalControls({
   const [error, setError] = useState('')
   const decal = slot.faceDecal
   const poses = Object.keys(decal?.art?.poses || {})
+  const kitLocked = Boolean(disabled) || !kits
+  const poseLocked = Boolean(disabled) || poses.length === 0
 
   async function load() {
     if (kits) return
@@ -50,16 +54,16 @@ export function FaceDecalControls({
   }
 
   return (
-    <details data-testid="scene3d-face-decal" className="mt-2 rounded border border-border px-2 py-1" onToggle={event => { if ((event.currentTarget as HTMLDetailsElement).open) void load() }}>
+    <details data-testid="scene3d-face-decal" title={title} className="mt-2 rounded border border-border px-2 py-1" onToggle={event => { if ((event.currentTarget as HTMLDetailsElement).open) void load() }}>
       <summary className="cursor-pointer text-[11px] text-text-primary">{t('faceDecal.title')}</summary>
       <label className="mt-1 block text-[8px] text-text-muted">{t('faceDecal.kit')}
-        <select aria-label={t('faceDecal.kit')} value={decal?.kitId || ''} disabled={disabled || !kits} onChange={event => choose(event.target.value, decal?.pose || 'neutral')} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[10px]">
+        <select aria-label={t('faceDecal.kit')} value={decal?.kitId || ''} disabled={kitLocked} title={controlReason(kitLocked, 'disabled.actionInProgress')} onChange={event => choose(event.target.value, decal?.pose || 'neutral')} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[10px]">
           <option value="">{kits ? t('faceDecal.empty') : '…'}</option>
           {(kits || []).map(kit => <option key={kit.id} value={kit.id}>{kit.name}</option>)}
         </select>
       </label>
       <label className="mt-1 block text-[8px] text-text-muted">{t('faceDecal.expression')}
-        <select aria-label={t('faceDecal.expression')} value={decal?.pose || ''} disabled={disabled || poses.length === 0} onChange={event => { if (decal?.kitId) choose(decal.kitId, event.target.value) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[10px]">
+        <select aria-label={t('faceDecal.expression')} value={decal?.pose || ''} disabled={poseLocked} title={controlReason(poseLocked, 'disabled.actionInProgress')} onChange={event => { if (decal?.kitId) choose(decal.kitId, event.target.value) }} className="mt-0.5 w-full rounded border border-border bg-bg-primary px-1 py-1 text-[10px]">
           {poses.map(pose => <option key={pose} value={pose}>{pose}</option>)}
         </select>
       </label>
