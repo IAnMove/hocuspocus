@@ -42,8 +42,27 @@ the requested number. A blob head stays wider than its chest. An anime body is
 about 7 heads tall, with shoulders wider than the small head and a narrower
 neck between them. A chibi is about 2.5–3 heads tall. Blob and chibi arms are
 drawn no longer than 0.30 and 0.26 of the height: a longer arm's wave meets
-the wide head. The stored trait keeps the requested length. Pieces overlap,
-the arms are a T, and the feet sit on y = 0.
+the wide head; anime arms no longer than 0.42, and they are one smooth tube
+(the elbow sphere and the forearm keep the upper arm's diameter, the shoulder
+sphere stays inside the sleeve) so no ink ring marks the elbow. The stored
+trait keeps the requested length. Pieces overlap, the arms are a T, and the
+feet sit on y = 0.
+
+`mesh: "loft"` (anime family only) replaces the primitives with one smooth
+lofted mesh in the spirit of a PS2 humanoid: elliptical rings strung along
+each limb, so an elbow or a knee is a run of rings the rig blends, a torso that
+tapers to the waist and out at the hips, a short real neck, an egg head with a
+jaw and ears (`blob_loft.egg_scale`, the same formula as the face cap's
+`taper`), hands with four fingers and a thumb, shoes with a sole, and hair as
+curved clumps in `hair.color` (`blob_hair`: a helmet, a fringe, side locks, a
+back fall, tails, spikes or a bun per style, `bob` included), written as the
+GLB's second primitive (material `hair`) so the toon look can gloss it.
+`outfit` (`school`, `casual`, `sport`, loft only) sets sleeve and leg lengths,
+socks and the shoe style; the accessories become colour regions: `skirt` (one
+closed pleated tube, knee socks), `shorts`, `school_collar` (a collar and a
+bow, or the shirt V of a `jacket`), `tie`. About 3k body + 2k hair triangles.
+The default body is unchanged. `model3d.anime.make` wraps all of this with the
+face (docs/agents/ANIME_CHARACTERS.md).
 
 Accessories, each at most once, up to six: `cap`, `sailor_cap`, `top_hat`,
 `beanie`, `bucket_hat`, `apron`, `tie`, `collar`, `belt`, `backpack`, `scarf`,

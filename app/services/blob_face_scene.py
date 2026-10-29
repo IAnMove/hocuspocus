@@ -1,0 +1,251 @@
+"""Bind a Character Kit face onto a Video 3D model slot, and the art the cap paints."""
+from __future__ import annotations
+
+from typing import Any
+
+from services.blob_face import BlobFaceError
+from services.blob_face_place import anchor_radii, head_placement
+from services.character_kit_library import read_character_kit_library
+from services.flat_rig import STATES, FlatRigError, _workspace_file
+from services.world3d_scenes import World3DSceneError, _read, _target, _view, _write
+
+MOUTH_ANCHOR = {"offsetX": 0.0, "offsetY": 0.0, "scale": 0.16, "rotation": 0.0}
+EYE_ANCHOR = {"offsetX": 0.0, "offsetY": 0.0, "scale": 1.0, "rotation": 0.0}
+
+
+def _approved(asset: Any) -> bool:
+    return isinstance(asset, dict) and asset.get("reviewState") == "approved" and bool(asset.get("source"))
+
+
+def _nine(kit: dict) -> dict[str, str]:
+    mouths = {}
+    missing = []
+    for state in STATES:
+        item = (kit.get("mouth") or {}).get(state)
+        if _approved(item):
+            mouths[state] = item["source"]
+        else:
+            missing.append(state)
+    if missing:
+        raise World3DSceneError("mouths_not_ready", "The kit needs nine approved mouths: " + ", ".join(missing))
+    return mouths
+
+
+def _pose_art(kit: dict, name: str, asset: dict) -> dict[str, Any]:
+    group = (kit.get("anchors") or {}).get(name) or (kit.get("anchors") or {}).get("base") or {}
+    entry = {"base": asset["source"], "mouth": dict(group.get("mouth") or MOUTH_ANCHOR),
+             "eyes": dict(group.get("eyes") or EYE_ANCHOR)}
+    if group.get("blink") is not False:
+        blink = group.get("blinkSource") or ((kit.get("eyes") or {}).get("blink") or {}).get("source")
+        if isinstance(blink, str) and blink:
+            entry["blink"] = blink
+    return entry
+
+
+def face_art(kit: dict) -> dict[str, Any]:
+    """What the cap paints: each approved pose, the nine mouths, and the rest mouth. Cues arrive with talk."""
+    mouths = _nine(kit)
+    poses = {}
+    if _approved(kit.get("base")):
+        poses["base"] = _pose_art(kit, "base", kit["base"])
+    for name, asset in (kit.get("poses") or {}).items():
+        if isinstance(name, str) and _approved(asset):
+            poses[name] = _pose_art(kit, name, asset)
+    if not poses:
+        raise World3DSceneError("pose_not_ready", "The kit has no approved pose to paint")
+    rest = (kit.get("mouthMapping") or {}).get("rest") if isinstance(kit.get("mouthMapping"), dict) else None
+    return {"poses": poses, "mouths": mouths, "rest": rest if rest in mouths else "closed"}
+
+
+def _names(kit: dict) -> set[str]:
+    names = {name for name, asset in (kit.get("poses") or {}).items() if _approved(asset)}
+    if _approved(kit.get("base")):
+        names.add("base")
+    return names
+
+
+def _pose_name(changes: dict, kit: dict) -> str:
+    names = _names(kit)
+    pose = changes.get("pose")
+    if isinstance(pose, str) and pose in names:
+        return pose
+    if "neutral" in names:
+        return "neutral"
+    return "base" if "base" in names else sorted(names)[0]
+
+
+def _expressions(changes: dict, kit: dict) -> list[dict[str, Any]]:
+    raw = changes.get("expressions") or []
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or len(raw) > 32:
+        raise World3DSceneError("invalid_expression", "expressions must be a list of at most 32")
+    names = _names(kit)
+    found = []
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict) or not isinstance(item.get("pose"), str) or item["pose"] not in names:
+            raise World3DSceneError("unknown_pose", f"expressions[{index}] needs a pose the kit has")
+        start = item.get("start", 0)
+        if isinstance(start, bool) or not isinstance(start, (int, float)) or not 0 <= float(start) <= 600:
+            raise World3DSceneError("invalid_expression", f"expressions[{index}].start must be seconds from 0 to 600")
+        found.append({"start": round(float(start), 3), "pose": item["pose"]})
+    return sorted(found, key=lambda item: item["start"])
+
+
+def _outset(value: Any) -> float:
+    if value is None:
+        return 1.04
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not 1 <= float(value) <= 1.2:
+        raise World3DSceneError("invalid_face", "size is how far the cap sits outside the head, from 1 to 1.2")
+    return round(float(value), 3)
+
+
+ANIME_SPAN = [96.0, 116.0]
+
+
+def _span(changes: dict, kept: dict, kit: dict) -> list[float] | None:
+    """Degrees of head the face covers, horizontal then vertical. ``None`` is the client default (80 x 80).
+    An anime face is drawn for a wider and taller cap, so its eyes land lower on the head."""
+    raw = changes.get("span", kept.get("span"))
+    if raw is None:
+        provenance = kit.get("provenance") if isinstance(kit.get("provenance"), list) else []
+        traits = (provenance[0] or {}).get("traits") if provenance and isinstance(provenance[0], dict) else {}
+        return list(ANIME_SPAN) if isinstance(traits, dict) and traits.get("style") == "anime" else None
+    ok = isinstance(raw, (list, tuple)) and len(raw) == 2 and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 60 <= v <= 150 for v in raw)
+    if not ok:
+        raise World3DSceneError("invalid_face", "span is [horizontal, vertical] degrees of head, each from 60 to 150")
+    return [round(float(raw[0]), 2), round(float(raw[1]), 2)]
+
+
+PLANE_DEFAULT = [3.3, 3.3, -0.5]
+
+
+def _plane(changes: dict, kept: dict, kit: dict | None = None) -> dict[str, Any]:
+    """``shape: "plane"`` hangs a flat picture (a painted head with its hair) on the Head bone instead of the cap;
+    ``shape: "mesh"`` paints the picture into the model's own ``face`` material (a lofted head), with ``skin`` under it.
+    ``plane`` is [width, height, lift] in head radii. A kit drawn for a head (``anime_head``) defaults to its own shape.
+    Nothing is stored for the default cap."""
+    drawn = _kit_face(kit or {})
+    shape = changes.get("shape", kept.get("shape") or ("plane" if "plane" in changes else drawn.get("shape")))
+    if shape not in (None, "cap", "plane", "mesh"):
+        raise World3DSceneError("invalid_face", "shape is cap, plane or mesh")
+    if shape == "mesh":
+        skin = changes.get("skin", kept.get("skin", drawn.get("skin")))
+        if skin is not None and not (isinstance(skin, str) and len(skin) == 7 and skin[0] == "#" and all(c in "0123456789abcdefABCDEF" for c in skin[1:])):
+            raise World3DSceneError("invalid_face", "skin is #rrggbb, the colour under the drawing")
+        return {"shape": "mesh", **({"skin": skin.upper()} if skin else {})}
+    if shape != "plane":
+        return {}
+    raw = changes.get("plane", kept.get("plane"))
+    if raw is None:
+        return {"shape": "plane", "plane": list(PLANE_DEFAULT)}
+    numbers = isinstance(raw, (list, tuple)) and 2 <= len(raw) <= 3 and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in raw)
+    if not numbers or not all(1 <= v <= 8 for v in raw[:2]) or (len(raw) == 3 and not -3 <= raw[2] <= 3):
+        raise World3DSceneError("invalid_face", "plane is [width, height, lift] in head radii: width and height from 1 to 8, lift from -3 to 3")
+    lift = raw[2] if len(raw) == 3 else PLANE_DEFAULT[2]
+    return {"shape": "plane", "plane": [round(float(raw[0]), 3), round(float(raw[1]), 3), round(float(lift), 3)]}
+
+
+def _kit_face(kit: dict) -> dict:
+    """What the kit was drawn for: ``provenance[0].face`` of an ``anime_head`` kit gives its ``fit`` and ``taper``."""
+    provenance = kit.get("provenance") if isinstance(kit.get("provenance"), list) else []
+    face = (provenance[0] or {}).get("face") if provenance and isinstance(provenance[0], dict) else None
+    return face if isinstance(face, dict) else {}
+
+
+def _cap_fields(changes: dict, kept: dict, kit: dict | None = None) -> dict[str, Any]:
+    """``taper`` (the jaw of the egg head the cap hugs, 0 to 0.6) and ``fit`` ([cu, cv, ru, rv], the drawn skull's centre and
+    half-size as image fractions: the picture is then projected from the front over 200 x 180 degrees). Stored only when given,
+    or when the kit was drawn for a head (``anime_head``), whose own values are the default."""
+    found = {}
+    drawn = _kit_face(kit or {})
+    taper = changes.get("taper", kept.get("taper", drawn.get("taper")))
+    if taper is not None:
+        if isinstance(taper, bool) or not isinstance(taper, (int, float)) or not 0 <= float(taper) <= 0.6:
+            raise World3DSceneError("invalid_face", "taper is the jaw of the head the cap hugs, from 0 to 0.6")
+        if float(taper) > 0:
+            found["taper"] = round(float(taper), 3)
+    fit = changes.get("fit", kept.get("fit", drawn.get("fit")))
+    if fit is not None:
+        ok = (isinstance(fit, (list, tuple)) and len(fit) == 4
+              and all(isinstance(v, (int, float)) and not isinstance(v, bool) and 0 <= v <= 1 for v in fit) and fit[2] > 0 and fit[3] > 0)
+        if not ok:
+            raise World3DSceneError("invalid_face", "fit is [cu, cv, ru, rv]: the drawn skull's centre and half-size as fractions of the picture, 0 to 1")
+        found["fit"] = [round(float(v), 4) for v in fit]
+    return found
+
+
+def _explicit(changes: dict) -> dict[str, Any] | None:
+    if "center" not in changes and "radii" not in changes:
+        return None
+    found = anchor_radii({"center": changes.get("center"), "radii": changes.get("radii")})
+    if found is None:
+        raise World3DSceneError("invalid_face", "center and radii are three metres each; radii must be greater than 0")
+    return found
+
+
+def _placement(changes: dict, slot: dict, workspace: str, folder: str) -> dict[str, Any]:
+    explicit = _explicit(changes)
+    if explicit:
+        return explicit
+    raw = changes.get("face_anchor") if isinstance(changes.get("face_anchor"), dict) else slot.get("faceAnchor")
+    declared = anchor_radii(raw) if isinstance(raw, dict) else None
+    if declared:
+        return declared
+    source = changes.get("source_url") or slot.get("sourceUrl") or ""
+    if not isinstance(source, str) or not source.startswith("/"):
+        raise World3DSceneError("head_not_found", "Pass center and radii, face_anchor, or a model file with a Head bone")
+    try:
+        return head_placement(_workspace_file(source, workspace, folder))
+    except (BlobFaceError, FlatRigError) as error:
+        raise World3DSceneError(error.code, str(error), error.status) from error
+
+
+def _carry(art: dict, kept: dict) -> dict:
+    previous = kept.get("art") if isinstance(kept.get("art"), dict) else {}
+    for key in ("cues", "blinks"):
+        if key in previous:
+            art[key] = previous[key]
+    if previous.get("rest") in art["mouths"]:
+        art["rest"] = previous["rest"]
+    return art
+
+
+def _bone(changes: dict, kept: dict) -> str:
+    bone = changes.get("bone") or kept.get("bone") or "Head"
+    if not isinstance(bone, str) or not bone.strip():
+        raise World3DSceneError("invalid_face", "bone must name a bone, usually Head")
+    return bone.strip()[:80]
+
+
+def bind_face(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
+    """Write ``slot.faceDecal`` on a model. The slot stays a model."""
+    record = _read(workspace, scene_id, workspace_dir)
+    if type(base_revision) is not int or base_revision != record["revision"]:
+        raise World3DSceneError("revision_conflict", "The scene changed since this revision. Reload before editing.", 409)
+    kit_id = changes.get("kit_id")
+    kit = (read_character_kit_library(str(workspace_dir(workspace))).get("kits") or {}).get(kit_id) if isinstance(kit_id, str) else None
+    if kit is None:
+        raise World3DSceneError("unknown_kit", f"unknown_kit:{kit_id}", 404)
+    document = record["document"]
+    slot = _target(document.get("slots") or [], changes)
+    if slot.get("media") not in (None, "model3d"):
+        raise World3DSceneError("not_a_model", f"Object {slot.get('id')} is {slot.get('media')}; a 2D face needs a model")
+    slot["media"] = "model3d"
+    placement = _placement(changes, slot, workspace, str(workspace_dir(workspace)))
+    kept = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
+    art = _carry(face_art(kit), kept)
+    span = _span(changes, kept, kit)
+    slot["faceDecal"] = {"kitId": kit["id"], "pose": _pose_name(changes, kit), "bone": _bone(changes, kept),
+                         "center": placement["center"], "radii": placement["radii"], "size": _outset(changes.get("size", kept.get("size"))),
+                         "expressions": _expressions(changes, kit), "art": art, **({"span": span} if span else {}), **_plane(changes, kept, kit),
+                         **_cap_fields(changes, kept, kit)}
+    character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
+    slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
+    record["revision"] += 1
+    record["warnings"] = []
+    _write(workspace, scene_id, record, workspace_dir)
+    viewed = _view(scene_id, record, workspace, workspace_dir)
+    viewed["face"] = {"objectId": slot.get("id"), "kitId": kit["id"], "pose": slot["faceDecal"]["pose"],
+                      "center": placement["center"], "radii": placement["radii"], "method": placement.get("method", "given")}
+    return viewed

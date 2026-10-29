@@ -146,17 +146,22 @@ def _jacket(layout, color):
     short = {**layout, "torso_bottom": layout["torso_bottom"] + drop, "torso_h": layout["torso_h"] - drop}
     body_taper = layout["waist_taper"]
     body_at_hem = body_taper + 0.14 * (1.0 - body_taper)
-    taper = min(1.0, body_at_hem * 1.06 / 1.08)
-    return torso_shell(short, color, grow=1.08, taper=None if taper > 0.97 else taper)
+    # An anime jacket hugs the slim torso (4 percent bigger); a blob's hangs looser (8).
+    grow = 1.04 if body_taper != 1.0 else 1.08
+    taper = min(1.0, body_at_hem * 1.06 / grow)
+    return torso_shell(short, color, grow=grow, taper=None if taper > 0.97 else taper)
 
 
 def _sleeves_long(layout, color):
     turn = (0.0, 0.0, math.pi / 2)
     y = layout["shoulder_y"]
     thick = layout["arm_d"] * 1.16
+    # One diameter from the shoulder to the cuff on an anime body (see blob_builder._arms); others narrow at the elbow.
+    anime = layout.get("waist_taper", 1.0) != 1.0
+    elbow_k, fore_k = (1.0, 1.0) if anime else (0.82, 0.88)
     upper = _piece("capsule", (layout["upper_x"], y, 0), (thick, layout["upper_len"], thick), color, turn, _LIMB)
-    fore = _piece("capsule", (layout["fore_x"], y, 0), (thick * 0.88, layout["fore_len"], thick * 0.88), color, turn, _LIMB)
-    elbow = _piece("sphere", (layout["elbow_x"], y, 0), (thick * 0.82, thick * 0.82, thick * 0.82), color, segments=_LIMB)
+    fore = _piece("capsule", (layout["fore_x"], y, 0), (thick * fore_k, layout["fore_len"], thick * fore_k), color, turn, _LIMB)
+    elbow = _piece("sphere", (layout["elbow_x"], y, 0), (thick * elbow_k, thick * elbow_k, thick * elbow_k), color, segments=_LIMB)
     return _pair(upper) + _pair(elbow) + _pair(fore)
 
 
@@ -188,7 +193,7 @@ def _cape(layout, color):
 
 _HAIR_BUILDERS = {
     "short": _short, "bangs": _bangs, "spiky": _spiky, "long": _long,
-    "ponytail": _ponytail, "twin_tails": _twin_tails, "bun": _bun,
+    "ponytail": _ponytail, "twin_tails": _twin_tails, "bun": _bun, "bob": _bangs,
 }
 
 CLOTHES = {

@@ -477,3 +477,84 @@ def test_school_collar_hangs_below_the_chin_and_the_jacket_hem_covers_the_body()
     f = (low - (body["position"][1] - body["scale"][1] / 2)) / body["scale"][1]
     body_w = body["scale"][0] * (body["taper"] + (1 - body["taper"]) * f)
     assert coat["scale"][0] * coat["taper"] >= body_w
+
+
+def test_an_anime_arm_is_one_tube_while_blob_and_chibi_keep_their_joints():
+    """Anime: the elbow sphere and the forearm keep the upper arm's diameter and the shoulder sphere stays inside the sleeve,
+    so the toon ink draws no ring at the elbow. Blob and chibi are unchanged: a thinner forearm and a smaller elbow."""
+    for name, elbow_k, fore_k in (("anime_girl", 1.0, 1.0), ("anime_boy", 1.0, 1.0), ("blob_scout", 0.82, 0.86), ("chibi_kid", 0.82, 0.86)):
+        spec = {**PRESETS[name], "accessories": []}
+        pieces = blob_pieces(spec)["pieces"]
+        rights = sorted((piece for piece in _arm_capsules(pieces) if piece["position"][0] > 0), key=lambda piece: piece["scale"][1], reverse=True)
+        upper, fore = rights[0], rights[1]
+        assert fore["scale"][0] == pytest.approx(upper["scale"][0] * fore_k, rel=1e-6), name
+        y = upper["position"][1]
+        spheres = [piece for piece in pieces if piece["type"] == "sphere" and abs(piece["position"][1] - y) < 1e-4 and piece["position"][0] > 0]
+        elbow = min(spheres, key=lambda piece: abs(piece["position"][0] - (upper["position"][0] + upper["scale"][1] / 2)))
+        assert elbow["scale"][0] == pytest.approx(upper["scale"][0] * elbow_k, rel=1e-6), name
+        shoulder = min(spheres, key=lambda piece: piece["position"][0])
+        if spec.get("family") == "anime":
+            assert shoulder["scale"][0] == pytest.approx(upper["scale"][0], rel=1e-6), name
+        else:
+            assert shoulder["scale"][0] > upper["scale"][0], name
+
+
+def test_a_lofted_anime_body_rigs_with_its_head_in_the_egg_and_leaves_the_default_untouched():
+    """mesh loft is one smooth tube mesh. The humanoid rig still finds a T-posed person in it, its Head joint lands inside
+    the egg the face cap hugs, and a body without the field is the same pieces as before."""
+    import json, struct
+    from services.blob_loft import loft_mesh, egg_scale
+    from services.blob_make import build_body
+
+    girl = {**PRESETS["anime_girl"], "accessories": [{"kind": "skirt", "color": "#1B2350"}, {"kind": "school_collar", "color": "#F7F4EF"}]}
+    plain = blob_pieces(girl)
+    assert "mesh" not in plain["traits"] and "layout" not in plain
+    lofted = blob_pieces({**girl, "mesh": "loft"})
+    assert lofted["traits"]["mesh"] == "loft" and lofted["faceAnchor"] == plain["faceAnchor"]
+    mesh = loft_mesh(lofted["traits"], lofted["layout"])
+    assert 3000 <= len(mesh.vertices) // 3 <= 12000 and len(mesh.normals) == len(mesh.vertices) == len(mesh.colors)
+    assert egg_scale(0.5) == 1.0 and abs(egg_scale(-1.0) - 0.65) < 1e-9
+    with pytest.raises(BlobTraitsError) as refused:
+        blob_pieces({**PRESETS["blob_scout"], "mesh": "loft"})
+    assert refused.value.code == "invalid_mesh"
+
+    body = build_body({**girl, "mesh": "loft"}, ["idle"])
+    glb = body["rigged"]
+    length = struct.unpack("<I", glb[12:16])[0]
+    nodes = json.loads(glb[20:20 + length])["nodes"]
+    parent = {child: index for index, node in enumerate(nodes) for child in node.get("children", [])}
+    head = next(index for index, node in enumerate(nodes) if node.get("name") == "Head")
+    y = 0.0
+    while head is not None:
+        y += nodes[head].get("translation", [0, 0, 0])[1]
+        head = parent.get(head)
+    center, radii = plain["faceAnchor"]["center"], plain["faceAnchor"]["radii"]
+    assert center[1] - radii[1] < y < center[1] + radii[1]
+
+
+def test_anime_make_builds_a_rigged_body_and_its_head_face_kit_in_one_call(tmp_path):
+    """model3d.anime.make: traits -> lofted body rigged on CPU + an anime_head kit (eleven poses, nine visemes, blink) whose
+    fit and taper world3d.scene.face takes as defaults."""
+    from services.anime_make import resolve_traits
+    from services.blob_face_scene import _cap_fields
+    from services.character_kit_library import read_character_kit_library
+
+    resolved = resolve_traits({"gender": "boy", "body": "tall", "hair_style": "spiky", "hair_color": "#392E21", "outfit": "school", "eye_color": "#3FA66B"})
+    assert resolved["body"]["mesh"] == "loft" and resolved["body"]["family"] == "anime" and resolved["body"]["outfit"] == "school"
+    assert resolved["body"]["height"] > 1.8 and resolved["face"]["style"] == "anime_head" and resolved["face"]["lashColor"] != "#392E21"
+    with pytest.raises(BlobTraitsError) as refused:
+        resolve_traits({"hair_style": "mohawk"})
+    assert refused.value.code == "invalid_hair"
+    handlers = _handlers(tmp_path)
+    reply = asyncio.run(handlers["model3d.anime.make"]({"version": 1, "intent_id": "anime-1", "input": {
+        "workspace": "studio", "name": "Hana", "traits": {"gender": "girl", "hair_style": "long", "hair_color": "#282945", "skin": "#F3CBA4"}}}))
+    result = reply["result"]
+    assert reply["status"] == "completed" and result["rigged_file"].endswith("-rigged.glb") and result["kit_id"].startswith("anime-")
+    assert len(result["poses"]) == 11 and "smug" in result["poses"] and result["face"]["taper"] == 0.35 and len(result["face"]["fit"]) == 4
+    kits = read_character_kit_library(str(tmp_path / "studio"))["kits"]
+    kit = kits[result["kit_id"]]
+    assert len(kit["mouth"]) == 9 and kit["eyes"]["blink"]["source"]
+    assert _cap_fields({}, {}, kit) == {"taper": 0.35, "fit": [round(v, 4) for v in result["face"]["fit"]]}
+    again = asyncio.run(handlers["model3d.anime.make"]({"version": 1, "intent_id": "anime-1", "input": {
+        "workspace": "studio", "name": "Hana", "traits": {"gender": "girl", "hair_style": "long", "hair_color": "#282945", "skin": "#F3CBA4"}}}))
+    assert again["result"]["kit_id"] == result["kit_id"]

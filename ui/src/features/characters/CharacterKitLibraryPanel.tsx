@@ -1,6 +1,7 @@
 import { Loader2, Trash2 } from 'lucide-react'
 import type { CharacterKit, CharacterKitAlphaStatus, CharacterKitLibrary, CharacterMouthState } from '../../lib/characterKit'
 import { useUiTranslation } from '../../i18n'
+import { BlobFaceMaker } from './BlobFaceMaker'
 import { CharacterKitFaceRigPanel } from './CharacterKitFaceRigPanel'
 import { characterKitStillSource } from '../../lib/characterKit'
 import {
@@ -40,6 +41,8 @@ type Props = {
   onClose: () => void
   onCommit?: (kit: CharacterKit) => void
   onStatus?: (message: string) => void
+  workspace?: string
+  onLibrary?: (library: CharacterKitLibrary) => void
 }
 
 export function CharacterKitLibraryPanel({
@@ -71,6 +74,8 @@ export function CharacterKitLibraryPanel({
   onClose,
   onCommit,
   onStatus,
+  workspace,
+  onLibrary,
 }: Props) {
   const { t } = useUiTranslation('characters')
   const { t: tCommon } = useUiTranslation('common')
@@ -89,6 +94,7 @@ export function CharacterKitLibraryPanel({
       <p className="text-[10px] leading-relaxed text-text-secondary">
         {t('library.subtitle')}
       </p>
+      {workspace && <BlobFaceMaker workspace={workspace} library={library} disabled={locked} onLibrary={onLibrary} onSelect={kit => onSelectKit(kit, 'kit')} />}
       {kits.length > 0 && (
         <div className="grid grid-cols-2 gap-1">
           {kits.map(kit => (

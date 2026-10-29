@@ -14,13 +14,15 @@ LIMB_SEGMENTS = 12
 BODY_SEGMENTS = 16
 _HALF_TURN = round(math.pi / 2, 6)
 
-_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair"}
+_FIELDS = {"height", "build", "family", "head", "arms", "legs", "hands", "feet", "colors", "accessories", "hair", "mesh", "outfit"}
+_MESHES = ("pieces", "loft")
+_OUTFITS = ("school", "casual", "sport")
 _BUILDS = ("slim", "average", "round", "pear")
 _FAMILIES = ("blob", "anime", "chibi")
 _HANDS = ("ball", "mitten")
 _FEET = ("shoe", "ball", "boot")
 _SHAPES = ("sphere", "egg", "anime", "chibi")
-_HAIR_STYLES = ("none", "short", "bangs", "spiky", "long", "ponytail", "twin_tails", "bun")
+_HAIR_STYLES = ("none", "short", "bangs", "spiky", "long", "ponytail", "twin_tails", "bun", "bob")
 _HAIR_COLOR = "#2A211C"
 # Torso width and depth, and the belly, as fractions of the head. The torso stays
 # narrower than the head. The belly carries the round and pear silhouettes.
@@ -48,14 +50,16 @@ _FAMILY = {
     "chibi": {"head": dict(_CHIBI_HEAD), "arms": dict(_CHIBI_ARMS), "legs": dict(_CHIBI_LEGS)},
 }
 # Shoulder width as a fraction of height (anime) or of the head (chibi). Waist and hip are fractions of that shoulder.
-_ANIME_SHOULDER = {"slim": 0.21, "average": 0.24, "round": 0.27, "pear": 0.23}
+# Narrow: an anime shoulder line is about a head and a half wide, so a painted bust on the head plane covers it.
+_ANIME_SHOULDER = {"slim": 0.18, "average": 0.22, "round": 0.27, "pear": 0.23}
 _ANIME_WAIST = {"slim": 0.58, "average": 0.66, "round": 0.84, "pear": 0.72}
 _CHIBI_SHOULDER = {"slim": 0.62, "average": 0.70, "round": 0.78, "pear": 0.74}
 # Fraction of the torso height, measured from the hip. Blob and chibi stay low:
 # 0.46 already swings lanky's wave through the egg. Anime sits up at the shoulder.
 _SHOULDER_AT = {"blob": 0.40, "anime": 0.74, "chibi": 0.46}
 # Drawn reach as a fraction of height. The stored trait can be longer; a wave folds that reach up.
-_ARM_CAP = {"blob": 0.30, "anime": 0.50, "chibi": 0.26}
+# Anime arms end near the hip, not the knee: 0.42 of the height from the shoulder.
+_ARM_CAP = {"blob": 0.30, "anime": 0.42, "chibi": 0.26}
 _COLOR_DEFAULT = {
     "head": "#F2C7A0", "top": "#3A6EA5", "sleeves": "#F2C7A0",
     "bottom": "#2C3340", "shoes": "#201A18", "hands": "#F2C7A0",
@@ -204,6 +208,8 @@ def trait_catalog() -> dict:
         "legs": {"limits": _LEG_LIMITS, "default": dict(_LEG_DEFAULT)},
         "hands": list(_HANDS), "feet": list(_FEET),
         "hair": {"style": list(_HAIR_STYLES), "default": {"style": "none", "color": _HAIR_COLOR}},
+        "mesh": {"choices": list(_MESHES), "default": "pieces", "note": "loft (anime only) is one smooth lofted body: tapered limbs, a jaw, hair geometry, clothes as colour regions."},
+        "outfit": {"choices": list(_OUTFITS), "default": "school", "note": "With mesh loft: school (collar, bow or tie, skirt or trousers), casual (short sleeves, shorts or skirt, sneakers), sport (tracksuit, sneakers)."},
         "colors": {"fields": list(_COLOR_DEFAULT), "default": dict(_COLOR_DEFAULT), "format": "#RRGGBB"},
         "accessories": {"kinds": list(_ACCESSORY_KINDS), "max": _MAX_ACCESSORIES, "defaultColor": dict(_ACCESSORY_COLOR),
                         "notHere": ["moustache", "glasses", "eyebrows", "freckles"]},
@@ -215,6 +221,8 @@ def blob_pieces(traits: dict | None = None) -> dict:
     """``{pieces, faceAnchor, traits}`` for one body. Unknown fields raise ``BlobTraitsError``."""
     spec = _normalize({} if traits is None else traits)
     pieces, anchor = _assemble(spec)
+    if spec.get("mesh") == "loft":
+        return {"pieces": pieces, "faceAnchor": anchor, "traits": spec, "layout": _layout(spec)}
     if not 1 <= len(pieces) <= 128:
         raise BlobTraitsError("too_many_pieces", f"A body has {len(pieces)} pieces; the limit is 128")
     return {"pieces": pieces, "faceAnchor": anchor, "traits": spec}
@@ -240,7 +248,15 @@ def _normalize(traits: dict) -> dict:
         _fail("unknown_field", "Unknown trait: " + ", ".join(sorted(extra)))
     family = _choice(traits.get("family", "blob"), _FAMILIES, "invalid_family", "family")
     stock = _FAMILY[family]
+    mesh = _choice(traits.get("mesh", "pieces"), _MESHES, "invalid_mesh", "mesh")
+    if mesh == "loft" and family != "anime":
+        _fail("invalid_mesh", "mesh loft is for the anime family")
+    outfit = _choice(traits.get("outfit", "school"), _OUTFITS, "invalid_outfit", "outfit")
+    if "outfit" in traits and mesh != "loft":
+        _fail("invalid_outfit", "outfit is for a lofted body (mesh loft)")
     return {
+        **({"mesh": mesh} if "mesh" in traits else {}),
+        **({"outfit": outfit} if "outfit" in traits else {}),
         "height": _height(traits.get("height", 1.8)),
         "build": _choice(traits.get("build", "average"), _BUILDS, "invalid_build", "build"),
         "family": family,
@@ -560,7 +576,8 @@ def torso_shell(layout: dict, color: str, grow: float = 1.0, taper: float | None
 
 
 def _shoulders(spec: dict, layout: dict) -> list:
-    diameter = max(layout["arm_d"] * 1.35, layout["h"] * 0.045)
+    # An anime shoulder is the sleeve's own round end, not a ball wider than the arm: the sphere stays inside the sleeve.
+    diameter = layout["arm_d"] if spec["family"] == "anime" else max(layout["arm_d"] * 1.35, layout["h"] * 0.045)
     item = _p("sphere", (layout["torso_w"] / 2, layout["shoulder_y"], 0), (diameter, diameter, diameter), spec["colors"]["top"], segments=LIMB_SEGMENTS)
     return _pair(item)
 
@@ -575,11 +592,15 @@ def _arms(spec: dict, layout: dict) -> list:
     sleeve, skin = spec["colors"]["sleeves"], spec["colors"]["hands"]
     diameter, y = layout["arm_d"], layout["shoulder_y"]
     turn = (0.0, 0.0, _HALF_TURN)
-    elbow = (diameter * 0.82, diameter * 0.82, diameter * 0.82)
+    # An anime arm is one smooth tube: the elbow sphere and the forearm keep the upper arm's diameter, so no ball and no step
+    # draw an ink ring at the elbow. Blob and chibi keep their thinner forearm and smaller elbow.
+    anime = spec["family"] == "anime"
+    elbow_k, fore_k = (1.0, 1.0) if anime else (0.82, 0.86)
+    elbow = (diameter * elbow_k, diameter * elbow_k, diameter * elbow_k)
     arm = [
         *_pair(_p("capsule", (layout["upper_x"], y, 0), (diameter, layout["upper_len"], diameter), sleeve, turn, LIMB_SEGMENTS)),
         *_pair(_p("sphere", (layout["elbow_x"], y, 0), elbow, sleeve, segments=LIMB_SEGMENTS)),
-        *_pair(_p("capsule", (layout["fore_x"], y, 0), (diameter * 0.86, layout["fore_len"], diameter * 0.86), sleeve, turn, LIMB_SEGMENTS)),
+        *_pair(_p("capsule", (layout["fore_x"], y, 0), (diameter * fore_k, layout["fore_len"], diameter * fore_k), sleeve, turn, LIMB_SEGMENTS)),
     ]
     return arm + _hands(spec, layout, skin, diameter, y, turn)
 

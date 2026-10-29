@@ -172,10 +172,34 @@ def _replace_tracks(document: dict, prefix: str, lines: list[dict], workspace: s
     return [track["id"] for track in added]
 
 
+def _nine_mouths(kit: dict) -> None:
+    missing = [state for state in ("closed", "small", "wide", "round", "pressed", "medium", "pucker", "bite", "tongue")
+               if not _approved((kit.get("mouth") or {}).get(state))]
+    if missing:
+        raise TalkError("mouths_not_ready", "The kit needs nine approved mouths before it can talk on a model: " + ", ".join(missing))
+
+
+def _apply_model_face(document: dict, slot: dict, kit: dict, lines: list[dict], *, workspace: str, pose: str, blink: bool) -> dict:
+    """Same cues, blink and soundtrack as a cutout. The slot stays a model; the cap reads ``faceDecal.art``."""
+    _nine_mouths(kit)
+    talk = talk_block(kit, lines, pose=pose, duration=float(document.get("duration") or 10), blink=blink)
+    decal = slot["faceDecal"]
+    art = dict(decal.get("art") or {})
+    art.update({"mouths": talk["mouths"], "rest": talk["rest"], "cues": talk["cues"], "blinks": talk.get("blinks") or []})
+    decal["art"] = art
+    tracks = _replace_tracks(document, f"{TRACK_PREFIX}{slot.get('id')}-", lines, workspace)
+    character = slot.get("character") if isinstance(slot.get("character"), dict) else {}
+    slot["character"] = {**character, "id": str(kit.get("id")), "name": str(kit.get("name") or kit.get("id"))[:300]}
+    return {"objectId": slot.get("id"), "cues": len(talk["cues"]), "mouths": sorted(talk["mouths"]),
+            "blinks": len(talk.get("blinks") or []), "tracks": tracks, "talk": deepcopy(talk)}
+
+
 def apply_talk(document: dict, slot: dict, kit: dict, lines: list[dict], *, workspace: str, pose: str = "base", blink: bool = True) -> dict:
-    """Make an image object talk: its screen paints the kit, the soundtrack plays each line's audio."""
+    """Make an image object talk, or a model that already wears a 2D face (``world3d.scene.face``)."""
     if slot.get("media") != "image":
-        raise TalkError("not_a_cutout", f"Object {slot.get('id')} is {slot.get('media')}; a talking cutout needs an image object")
+        if slot.get("media") == "model3d" and isinstance(slot.get("faceDecal"), dict):
+            return _apply_model_face(document, slot, kit, lines, workspace=workspace, pose=pose, blink=blink)
+        raise TalkError("not_a_cutout", f"Object {slot.get('id')} is {slot.get('media')}; a talking cutout needs an image, or world3d.scene.face on a model first")
     talk = talk_block(kit, lines, pose=pose, duration=float(document.get("duration") or 10), blink=blink)
     tracks = _replace_tracks(document, f"{TRACK_PREFIX}{slot.get('id')}-", lines, workspace)
     _bind_screen(slot, kit, talk)

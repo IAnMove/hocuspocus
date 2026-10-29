@@ -51,6 +51,7 @@ import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditC
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
 import { executeCheckSeriesLocationStage, executeSetSeriesLocationStage } from './seriesStageCapabilities'
 import { executeMakeCharacterAnimation, executeMakeCharacterAnimationSet, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
+import { executeMakeCharacterFace } from './characterFaceCapabilities'
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
@@ -63,6 +64,7 @@ import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
 import { setupSpeechAnalysis } from './speechAnalysisAdapter'
 import { executeBlobMake } from './blobBodyAdapter'
+import { executeAnimeMake } from './animeCharacterAdapter'
 
 export interface AdapterOutcome {
   commandResult?: CommandResult
@@ -212,11 +214,13 @@ export interface WizardApplicationAdapters {
     checkStage(action: import('./seriesStageCapabilities').AgentCheckSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
   }
   blobBody: { make(action: import('./agentActions').AgentBlobMakeAction, workspace?: string): Promise<AdapterOutcome> }
+  animeCharacter: { make(action: import('./agentActions').AgentAnimeMakeAction, workspace?: string): Promise<AdapterOutcome> }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
     makeSet(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationSetAction, workspace?: string): Promise<AdapterOutcome>
     review(action: import('./characterAnimationCapabilities').AgentReviewCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
   }
+  characterFaces: { make(action: import('./characterFaceCapabilities').AgentMakeCharacterFaceAction, workspace?: string): Promise<AdapterOutcome> }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
   lipsyncRedo: { command(action: import('./lipsyncRedoCapabilities').AgentLipsyncRedoAction, context: import('./capabilityRegistry').CapabilityExecutionContext): Promise<AdapterOutcome> }
   queue: QueueAdapter
@@ -814,10 +818,16 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
   adapters.blobBody = {
     async make(action, workspace) { return executeBlobMake(action, workspace) },
   }
+  adapters.animeCharacter = {
+    async make(action, workspace) { return executeAnimeMake(action, workspace) },
+  }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },
     async makeSet(action, workspace) { return executeMakeCharacterAnimationSet(action, workspace) },
     async review(action, workspace) { return executeReviewCharacterAnimation(action, workspace) },
+  }
+  adapters.characterFaces = {
+    async make(action, workspace) { return executeMakeCharacterFace(action, workspace) },
   }
   adapters.mediaTools = {
     async command(action, workspace, commandId) { return executeMediaTool(action, workspace, commandId) },

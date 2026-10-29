@@ -90,3 +90,64 @@ export async function makeBlob(input: BlobMakeInput): Promise<BlobMakeResult> {
   if (!res.ok) throw new Error(detailMessage(body, 'Could not build the blob'))
   return (body as { result: BlobMakeResult }).result
 }
+
+export interface AnimeMakeInput {
+  workspace: string
+  name: string
+  gender?: string
+  body?: string
+  height?: number
+  skin?: string
+  eyeColor?: string
+  hairStyle?: string
+  hairColor?: string
+  outfit?: string
+  outfitColors?: { top?: string; bottom?: string; shoes?: string; accent?: string }
+  faceSource?: string
+  faceImage?: string
+  faceStyle?: string
+  faceShape?: string
+}
+
+export interface AnimeMakeResult extends BlobMakeResult {
+  kit_id: string
+  poses: string[]
+  preview: string
+  face?: { fit: number[]; taper: number }
+  faceAnchor?: { center: number[]; radii: number[] }
+}
+
+/** One anime 3D character from traits: `model3d.anime.make` (a lofted body rigged on CPU plus its anime_head face kit). */
+export async function makeAnime(input: AnimeMakeInput): Promise<AnimeMakeResult> {
+  const colors = Object.fromEntries(Object.entries(input.outfitColors ?? {}).filter(([, value]) => typeof value === 'string' && value))
+  const res = await fetch(`${BASE}/api/v1/model3d/anime`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      version: 1,
+      intent_id: randomUuid(),
+      input: {
+        workspace: input.workspace,
+        name: input.name,
+        traits: {
+          ...(input.gender ? { gender: input.gender } : {}),
+          ...(input.body ? { body: input.body } : {}),
+          ...(input.height != null ? { height: input.height } : {}),
+          ...(input.skin ? { skin: input.skin } : {}),
+          ...(input.eyeColor ? { eye_color: input.eyeColor } : {}),
+          ...(input.hairStyle ? { hair_style: input.hairStyle } : {}),
+          ...(input.hairColor ? { hair_color: input.hairColor } : {}),
+          ...(input.outfit ? { outfit: input.outfit } : {}),
+          ...(Object.keys(colors).length ? { outfit_colors: colors } : {}),
+          ...(input.faceSource ? { face_source: input.faceSource } : {}),
+          ...(input.faceImage ? { face_image: input.faceImage } : {}),
+          ...(input.faceStyle ? { face_style: input.faceStyle } : {}),
+          ...(input.faceShape ? { face_shape: input.faceShape } : {}),
+        },
+      },
+    }),
+  })
+  const body = await res.json().catch(() => null)
+  if (!res.ok) throw new Error(detailMessage(body, 'Could not build the anime character'))
+  return (body as { result: AnimeMakeResult }).result
+}

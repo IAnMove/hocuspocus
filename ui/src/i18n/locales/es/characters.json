@@ -93,6 +93,22 @@
   "library": {
     "title": "Personajes recortables",
     "subtitle": "Un personaje es un cuerpo + bocas que se colocan encima. También puedes prepararlo en Character Creator → Preparar habla 2D.",
+    "blobFace": {
+      "style": "Estilo",
+      "summary": "Crear cara",
+      "eyes": "Ojos",
+      "brows": "Cejas",
+      "nose": "Nariz",
+      "moustache": "Bigote",
+      "glasses": "Gafas",
+      "freckles": "Pecas",
+      "stubble": "Barba corta",
+      "ink": "Tinta",
+      "mouth": "Boca",
+      "make": "Crear cara",
+      "working": "Dibujando…",
+      "failed": "No se pudo dibujar la cara."
+    },
     "savedCount_zero": "vacío",
     "savedCount_one": "{{count}} guardado",
     "savedCount_other": "{{count}} guardados",

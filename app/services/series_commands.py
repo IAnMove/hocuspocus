@@ -34,7 +34,7 @@ REVIEW_CHANGE = {"type": "object", "additionalProperties": False, "required": ["
     "shot_id": ID, "plan": REVIEW_STATUS, "preview": REVIEW_STATUS, "attempt_id": ID, "note": REVIEW_NOTE,
     "remove_note_id": ID}}
 # Mutations that take an envelope intent_id: a retried call replays the first result instead of writing again.
-INTENT_OPERATIONS = frozenset({"series.episode.review.set", "series.shot.review.set"})
+INTENT_OPERATIONS = frozenset({"series.episode.review.set", "series.shot.review.set", "characters.face.make"})
 LANGUAGE = {"type": "string", "enum": ["english", "spanish", "french", "german", "italian", "portuguese", "japanese", "korean", "chinese", "russian"]}
 
 # A shot by id ("e1s04") or by its number in the episode (5 = the fifth shot, the #5 Series Lab shows).
@@ -1033,6 +1033,10 @@ _RUNNERS.update(_STAGE_RUNNERS)
 from services.voice_band_commands import OPERATIONS as _VOICE_BAND_OPERATIONS, RUNNERS as _VOICE_BAND_RUNNERS  # noqa: E402
 OPERATIONS.update(_VOICE_BAND_OPERATIONS)
 _RUNNERS.update(_VOICE_BAND_RUNNERS)
+# So is the parametric blob face (services/blob_face_commands.py).
+from services.blob_face_commands import OPERATIONS as _FACE_OPERATIONS, RUNNERS as _FACE_RUNNERS  # noqa: E402
+OPERATIONS.update(_FACE_OPERATIONS)
+_RUNNERS.update(_FACE_RUNNERS)
 
 
 def _run_operation(name: str, data: dict[str, Any], request: Callable[..., Any], workspace_file: Callable[[str, str], Path], uploads_dir: Callable[[], str], workspace_dir: Callable[[str], str] | None = None) -> Any:
