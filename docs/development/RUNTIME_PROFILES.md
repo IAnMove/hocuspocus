@@ -115,7 +115,16 @@ so it does not change install fingerprints.
 Hunyuan and UniRig still need a compatible CUDA compiler; Hunyuan on Windows
 needs Visual Studio Build Tools. The installer actually imports Torch and runs
 a small CUDA calculation before accepting each environment. It does not execute
-models as part of this check.
+models as part of this check. Windows WanGP also runs one xFormers attention
+call when the recipe lists `xformers.ops`. The pinned xFormers build treats
+FlashAttention-3 as usable on every GPU of compute capability 9.0 or newer, but
+that kernel is Hopper-only. On Blackwell (compute capability 10.0 and 12.0,
+including the RTX 5090) the launch aborts the process, so the probe runs only
+through compute capability 9.0. A newer GPU still imports `xformers.ops` and
+still runs the plain CUDA calculation. WanGP uses SageAttention or SDPA there.
+`scripts/runtime_verify.py` is part of every engine's install fingerprint, so
+the next Update reinstalls the main studio, and any optional engine whose
+environment is already present, once.
 
 UniRig pins Blender's Python module to `bpy==4.2.22`, within the 4.2 LTS
 API. The 4.2 Linux wheels name CPython 3.11 but their embedded `WHEEL` metadata
