@@ -8,6 +8,7 @@ import {
   MeshToonMaterial,
   NearestFilter,
   RedFormat,
+  ShaderChunk,
   ShaderMaterial,
   SkinnedMesh,
   UniformsLib,
@@ -21,21 +22,29 @@ import {
   type Object3D,
 } from 'three'
 import type { Scene3DDocument, Scene3DToon } from './types'
+import { isFaceDecal } from './faceDecal'
 
 /** Cel shading and ink outlines for model slots (`renderLook: 'toon'`).
 
 The look is swapped in only around a draw: `ToonLook.draw` gives every mesh under the model roots a `MeshToonMaterial`
 and an inverted-hull ink outline, renders, and puts the authored materials back. Code that runs between frames
 (speech faces, materialization, picking, bounds, shadows) never sees a toon material or an outline mesh, and
-switching the look off leaves the scene exactly as authored.
+switching the look off leaves the scene exactly as authored. A 2D face cap stays flat: no cel shader and no ink hull.
 */
 
-export type ToonSettings = { steps: number; outline: number; ink: string }
+export type ToonShade = 'classic' | 'anime'
+export type ToonSettings = { steps: number; outline: number; ink: string; shade: ToonShade }
 export type ToonTarget = { root: Object3D; outline: boolean }
 
-export const DEFAULT_TOON: ToonSettings = { steps: 3, outline: 3, ink: '#141018' }
+export const DEFAULT_TOON: ToonSettings = { steps: 3, outline: 3, ink: '#141018', shade: 'classic' }
+/** Hair strands are inked at this share of the outline width. */
+export const HAIR_INK = 0.4
 /** Light of the darkest band; the others are spread evenly up to full light. */
 const SHADOW_BAND = 0.3
+/** The anime shade keeps its shadow close to the lit colour and gives it a cool tint, as cel shadows are painted. */
+const ANIME_SHADOW_BAND = 0.74
+const ANIME_SHADOW_TINT = 'vec3( 0.80, 0.72, 0.95 )'
+const ANIME_RIM = 0.32
 /** Ink widths are pixels of a 1080-pixel-high frame, so preview and any export size match. */
 const REFERENCE_HALF_HEIGHT = 540
 /** Lines keep their full width up to this distance in metres and thin out beyond it, down to INK_FLOOR. */
@@ -60,10 +69,12 @@ export function parseToon(raw: unknown): Scene3DToon | undefined {
   const steps = bounded(value.steps, 2, 4)
   const outline = bounded(value.outline, 0, 8)
   const ink = typeof value.ink === 'string' && HEX.test(value.ink) ? value.ink.toLowerCase() : undefined
+  const shade = value.shade === 'anime' || value.shade === 'classic' ? value.shade : undefined
   return {
     ...(steps !== undefined ? { steps: Math.round(steps) } : {}),
     ...(outline !== undefined ? { outline: Math.round(outline * 100) / 100 } : {}),
     ...(ink ? { ink } : {}),
+    ...(shade ? { shade } : {}),
   }
 }
 
@@ -78,9 +89,9 @@ export function resolveToon(document: Pick<Scene3DDocument, 'renderLook' | 'toon
 }
 
 /** `steps` flat bands of light, sampled without filtering so the terminator stays a hard edge. */
-export function toonGradient(steps: number): DataTexture {
+export function toonGradient(steps: number, band = SHADOW_BAND): DataTexture {
   const data = new Uint8Array(steps)
-  for (let i = 0; i < steps; i += 1) data[i] = Math.round(255 * (SHADOW_BAND + (1 - SHADOW_BAND) * i / (steps - 1)))
+  for (let i = 0; i < steps; i += 1) data[i] = Math.round(255 * (band + (1 - band) * i / (steps - 1)))
   const texture = new DataTexture(data, steps, 1, RedFormat)
   texture.minFilter = NearestFilter
   texture.magFilter = NearestFilter
@@ -151,14 +162,49 @@ export function withEnvironmentFill(shader: { uniforms: Record<string, unknown>;
     .replace('#include <lights_fragment_end>', '#include <lights_fragment_end>\n\treflectedLight.indirectDiffuse += toonFill * BRDF_Lambert( material.diffuseColor );')
 }
 
+/** The anime shade, patched into three's toon shader:
+ * - the hemisphere light is dropped (it adds a smooth gradient that blurs the bands; the flat fill replaces it);
+ * - a shadow band is tinted cool instead of only darker;
+ * - a thin hard rim of light shows on the edge turned towards the key light. */
+export function withAnimeShade(shader: { fragmentShader: string }) {
+  const hemisphere = 'irradiance += getHemisphereLightIrradiance( hemisphereLights[ i ], geometryNormal );'
+  const gradient = 'return vec3( texture2D( gradientMap, coord ).r );'
+  shader.fragmentShader = shader.fragmentShader
+    .replace('#include <lights_fragment_begin>', ShaderChunk.lights_fragment_begin.replace(hemisphere, ''))
+    .replace('#include <gradientmap_pars_fragment>', ShaderChunk.gradientmap_pars_fragment.replace(gradient,
+      `float g = texture2D( gradientMap, coord ).r;
+		float lit = clamp( ( g - ${ANIME_SHADOW_BAND.toFixed(2)} ) / ${(1 - ANIME_SHADOW_BAND).toFixed(2)}, 0.0, 1.0 );
+		return vec3( g ) * mix( ${ANIME_SHADOW_TINT}, vec3( 1.0 ), lit );`))
+    .replace('#include <opaque_fragment>', `#if NUM_DIR_LIGHTS > 0
+	float rimFacing = clamp( dot( geometryNormal, directionalLights[ 0 ].direction ) + 0.3, 0.0, 1.0 );
+	#else
+	float rimFacing = 1.0;
+	#endif
+	float rimEdge = smoothstep( 0.62, 0.68, 1.0 - clamp( dot( geometryNormal, geometryViewDir ), 0.0, 1.0 ) );
+	outgoingLight += vec3( 1.0, 0.97, 0.92 ) * rimEdge * rimFacing * ${ANIME_RIM.toFixed(2)};
+	#include <opaque_fragment>`)
+}
+
+/** The anime hair gloss: a light band where the surface tilts up in view space, the "angel ring" of anime hair, on a
+ * material named `hair` (the lofted body writes its hair as that primitive). It follows the camera, not the lamp. */
+export function withHairGloss(shader: { fragmentShader: string }) {
+  shader.fragmentShader = shader.fragmentShader.replace('#include <opaque_fragment>', `float hairBand = smoothstep( 0.46, 0.54, geometryNormal.y ) * ( 1.0 - smoothstep( 0.62, 0.72, geometryNormal.y ) ) * ( 1.0 - smoothstep( 0.9, 0.97, geometryNormal.y ) );
+	float hairLum = dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
+	outgoingLight += mix( diffuseColor.rgb, vec3( 1.0 ), 0.45 ) * hairBand * 0.35 * ( 0.4 + hairLum );
+	#include <opaque_fragment>`)
+}
+
 /** A toon copy that also runs the authored material's shader patches (speech faces, materialization). */
-export function toonMaterialFor(source: LitMaterial, fill: ToonFill = { value: new Color(0) }): MeshToonMaterial {
+export function toonMaterialFor(source: LitMaterial, fill: ToonFill = { value: new Color(0) }, shade: ToonShade = 'classic'): MeshToonMaterial {
   const toon = new MeshToonMaterial()
+  const hair = shade === 'anime' && source.name === 'hair'
   toon.onBeforeCompile = (shader, renderer) => {
     source.onBeforeCompile(shader, renderer)
     withEnvironmentFill(shader, fill)
+    if (shade === 'anime') withAnimeShade(shader)
+    if (hair) withHairGloss(shader)
   }
-  toon.customProgramCacheKey = () => `toon-fill:${source.customProgramCacheKey()}`
+  toon.customProgramCacheKey = () => `toon-${shade}${hair ? '-hair' : ''}-fill:${source.customProgramCacheKey()}`
   mirror(source, toon)
   return toon
 }
@@ -326,16 +372,17 @@ function lendNormals(geometry: BufferGeometry): BufferGeometry | undefined {
   return geometry
 }
 
-type Converted = { toon: MeshToonMaterial; key: string; pass: number }
+type Converted = { toon: MeshToonMaterial; key: string; pass: number; shade: ToonShade }
 type Swap = { mesh: Mesh; material: Mesh['material']; hull?: Mesh; normals?: BufferGeometry }
 
 export class ToonLook {
   private settings: ToonSettings | null = null
   private targets: readonly ToonTarget[] = []
-  private gradient?: { steps: number; texture: DataTexture }
+  private gradient?: { steps: number; shade: ToonShade; texture: DataTexture }
   private converted = new Map<Material, Converted>()
   private hulls = new Map<Mesh, { hull: Mesh; pass: number }>()
   private ink?: ShaderMaterial
+  private thinInk?: ShaderMaterial
   private hidden?: MeshBasicMaterial
   private pass = 0
   private fill: ToonFill = { value: new Color(0) }
@@ -372,6 +419,7 @@ export class ToonLook {
     this.converted.clear()
     this.hulls.clear()
     this.ink?.dispose(); this.ink = undefined
+    this.thinInk?.dispose(); this.thinInk = undefined
     this.hidden?.dispose(); this.hidden = undefined
     this.gradient?.texture.dispose(); this.gradient = undefined
   }
@@ -380,7 +428,7 @@ export class ToonLook {
     const meshes: { mesh: Mesh; outline: boolean }[] = []
     for (const target of this.targets) {
       target.root.traverse(object => {
-        if ((object as Mesh).isMesh && !HULLS.has(object)) meshes.push({ mesh: object as Mesh, outline: target.outline && settings.outline > 0 })
+        if ((object as Mesh).isMesh && !HULLS.has(object) && !isFaceDecal(object)) meshes.push({ mesh: object as Mesh, outline: target.outline && settings.outline > 0 })
       })
     }
     const swaps: Swap[] = []
@@ -399,14 +447,15 @@ export class ToonLook {
   private convert(source: Material, settings: ToonSettings): Material {
     if (!isLitMaterial(source)) return source
     let entry = this.converted.get(source)
+    if (entry && entry.shade !== settings.shade) { entry.toon.dispose(); this.converted.delete(source); entry = undefined }
     if (!entry) {
-      entry = { toon: toonMaterialFor(source, this.fill), key: programKey(source), pass: 0 }
+      entry = { toon: toonMaterialFor(source, this.fill, settings.shade), key: programKey(source), pass: 0, shade: settings.shade }
       this.converted.set(source, entry)
     }
     if (entry.pass !== this.pass) {
       entry.pass = this.pass
       mirror(source, entry.toon)
-      entry.toon.gradientMap = this.gradientFor(settings.steps)
+      entry.toon.gradientMap = this.gradientFor(settings.steps, settings.shade)
       const key = programKey(source)
       if (key !== entry.key) { entry.key = key; entry.toon.needsUpdate = true }
     }
@@ -417,7 +466,9 @@ export class ToonLook {
     const skinned = mesh as Mesh & { isInstancedMesh?: boolean; isBatchedMesh?: boolean }
     if (skinned.isInstancedMesh || skinned.isBatchedMesh) return undefined
     const materials = Array.isArray(material) ? material : [material]
-    const inked = materials.map(inkable)
+    // the lofted head's face primitive sits a hair outside the skull: the skull's own hull carries the jaw line,
+    // a second hull on the face patch would ink the chin, cheeks and hairline twice
+    const inked = materials.map(item => inkable(item) && item.name !== 'face')
     if (!inked.some(Boolean)) return undefined
     let entry = this.hulls.get(mesh)
     if (!entry || entry.hull.geometry !== mesh.geometry || Boolean((entry.hull as SkinnedMesh).isSkinnedMesh) !== Boolean((mesh as SkinnedMesh).isSkinnedMesh)) {
@@ -425,18 +476,25 @@ export class ToonLook {
       this.hulls.set(mesh, entry)
     }
     entry.pass = this.pass
-    const ink = this.inkFor(settings)
-    entry.hull.material = Array.isArray(material) ? inked.map(ok => ok ? ink : this.hiddenMaterial()) : ink
+    // hair strands take a thinner line than the body, or every clump reads as licorice
+    const inkOf = (item: Material) => this.inkFor(settings, item.name === 'hair' ? HAIR_INK : 1)
+    entry.hull.material = Array.isArray(material) ? inked.map((ok, index) => ok ? inkOf(materials[index]) : this.hiddenMaterial()) : inkOf(materials[0])
     followMesh(entry.hull, mesh)
     mesh.add(entry.hull)
     return entry.hull
   }
 
-  private inkFor(settings: ToonSettings): ShaderMaterial {
-    this.ink ??= inkMaterial()
-    this.ink.uniforms.inkWidth.value = settings.outline / REFERENCE_HALF_HEIGHT
-    ;(this.ink.uniforms.inkColor.value as Color).set(settings.ink)
-    return this.ink
+  private inkFor(settings: ToonSettings, scale = 1): ShaderMaterial {
+    if (scale === 1) {
+      this.ink ??= inkMaterial()
+      this.ink.uniforms.inkWidth.value = settings.outline / REFERENCE_HALF_HEIGHT
+      ;(this.ink.uniforms.inkColor.value as Color).set(settings.ink)
+      return this.ink
+    }
+    this.thinInk ??= inkMaterial()
+    this.thinInk.uniforms.inkWidth.value = settings.outline * scale / REFERENCE_HALF_HEIGHT
+    ;(this.thinInk.uniforms.inkColor.value as Color).set(settings.ink)
+    return this.thinInk
   }
 
   private hiddenMaterial(): MeshBasicMaterial {
@@ -444,10 +502,10 @@ export class ToonLook {
     return this.hidden
   }
 
-  private gradientFor(steps: number): DataTexture {
-    if (this.gradient?.steps !== steps) {
+  private gradientFor(steps: number, shade: ToonShade): DataTexture {
+    if (this.gradient?.steps !== steps || this.gradient.shade !== shade) {
       this.gradient?.texture.dispose()
-      this.gradient = { steps, texture: toonGradient(steps) }
+      this.gradient = { steps, shade, texture: toonGradient(steps, shade === 'anime' ? ANIME_SHADOW_BAND : SHADOW_BAND) }
     }
     return this.gradient.texture
   }

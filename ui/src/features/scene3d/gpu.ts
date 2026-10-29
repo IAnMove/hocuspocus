@@ -8,6 +8,7 @@ import { framingFov, framingPose } from './framing'
 import { shakeCamera } from './cameraShake.ts'
 import { SpeechFaceRuntime, speechFace } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
+import { FaceDecalRuntime } from './faceDecal'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
 import { framingAnchor, markRestPose } from './framingAnchor'
@@ -100,6 +101,7 @@ export type SlotGpu = {
   appearance?: MaterializationRuntime
   speechFace?: SpeechFaceRuntime
   facePack?: FacePackRuntime
+  faceDecal?: FaceDecalRuntime
   screen?: ScreenMediaRuntime
   screenAbort?: AbortController
   screenError?: Error
@@ -351,6 +353,7 @@ export function dropSlot(world: GpuWorld, slotId: string) {
   current.appearance?.clear()
   current.speechFace?.dispose()
   current.facePack?.dispose()
+  current.faceDecal?.dispose()
   current.screenAbort?.abort()
   current.screen?.dispose()
   world.scene.remove(current.root)
@@ -425,11 +428,20 @@ function screenAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean
   return true
 }
 
+function faceDecalAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean {
+  const decal = slot.faceDecal
+  if (!decal || slot.media !== 'model3d') return true
+  if (!decal.center || !decal.radii || !decal.art) throw new Error('A 2D face needs a center, radii and art before export.')
+  if (!gpu?.loaded) return false
+  if (gpu.faceDecal?.error) throw gpu.faceDecal.error
+  return Boolean(gpu.faceDecal?.ready)
+}
+
 export function worldAssetsReady(world: GpuWorld, slots: readonly Scene3DSlot[]): boolean {
   if (!world.dressingReady || (world.room && !world.room.ready)) return false
   return slots.every(slot => {
     const gpu = world.slots.get(slot.id)
-    if (!speechAssetsReady(gpu, slot) || !screenAssetsReady(gpu, slot)) return false
+    if (!speechAssetsReady(gpu, slot) || !screenAssetsReady(gpu, slot) || !faceDecalAssetsReady(gpu, slot)) return false
     if (!slot.sourceUrl) return true
     return Boolean(gpu && gpu.mountKey === slotMountKey(slot) && gpu.loaded)
   })
@@ -465,6 +477,10 @@ function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, scene
   if (gpu.loaded && gpu.kind === 'model' && (slot.speech?.facePack || gpu.facePack)) {
     gpu.facePack ??= new FacePackRuntime(() => renderWorld(world))
     gpu.facePack.sync(gpu.root, slot.speech, slot.screen, sceneSeconds)
+  }
+  if (gpu.loaded && gpu.kind === 'model' && (slot.faceDecal || gpu.faceDecal)) {
+    gpu.faceDecal ??= new FaceDecalRuntime(() => renderWorld(world))
+    gpu.faceDecal.sync(gpu.root, slot.faceDecal, sceneSeconds)
   }
 }
 

@@ -93,6 +93,22 @@
   "library": {
     "title": "Cutout characters",
     "subtitle": "A character is a body + mouths placed on top. You can also prepare it in Character Creator → Prepare 2D speech.",
+    "blobFace": {
+      "style": "Style",
+      "summary": "Create face",
+      "eyes": "Eyes",
+      "brows": "Brows",
+      "nose": "Nose",
+      "moustache": "Moustache",
+      "glasses": "Glasses",
+      "freckles": "Freckles",
+      "stubble": "Stubble",
+      "ink": "Ink",
+      "mouth": "Mouth",
+      "make": "Create face",
+      "working": "Drawing…",
+      "failed": "Could not draw the face."
+    },
     "savedCount_zero": "empty",
     "savedCount_one": "{{count}} saved",
     "savedCount_other": "{{count}} saved",

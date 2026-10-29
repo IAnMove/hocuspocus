@@ -853,12 +853,14 @@ Set `scene3d.renderLook: "toon"` (or `document.renderLook`, or `renderLook` in
 `world3d.scene.patch`) to draw 3D model slots as cels: flat light bands and an
 ink outline, so GLB characters, vehicles and props match flat anime cutouts and
 painted backgrounds. Image slots and cutouts are not changed. Optional
-`toon: {"steps": 2-4, "outline": 0-8, "ink": "#rrggbb"}` sets the number of
+`toon: {"steps": 2-4, "outline": 0-8, "ink": "#rrggbb", "shade": "classic"|"anime"}` sets the number of
 light bands (default 3), the ink width in pixels of a 1080p frame (default 3;
 0 draws no line) and the ink colour (default `#141018`). Rigged models keep
 their clips: the outline follows the skeleton. Transparent and alpha-cut
 materials get no ink, and a materializing model gets its ink once it has
-arrived. Preview and export match. `renderLook: "none"` in a patch returns to
+arrived. `shade: "anime"` keeps the shadow band close to the lit colour with a cool tint, drops the smooth
+ambient gradient that blurs the bands and adds a thin hard rim of light on the edge turned to the key light.
+Preview and export match. `renderLook: "none"` in a patch returns to
 the authored materials and keeps the `toon` settings. An unknown look or an
 out-of-range toon value is refused (`invalid_render_look`).
 

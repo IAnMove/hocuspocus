@@ -31,6 +31,7 @@ import type { AgentCheckSeriesLocationStageAction, AgentSetSeriesLocationStageAc
 import type { AgentMediaToolAction } from './mediaToolCapabilities'
 import type { AgentLipsyncRedoAction } from './lipsyncRedoCapabilities'
 import type { AgentMakeCharacterAnimationAction, AgentMakeCharacterAnimationSetAction, AgentReviewCharacterAnimationAction } from './characterAnimationCapabilities'
+import type { AgentMakeCharacterFaceAction } from './characterFaceCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import type { AgentWorld3DTemplatesAction } from './world3dTemplateCapabilities'
 import type { AgentRoomSetsAction } from './roomSetsCapabilities'
@@ -641,8 +642,40 @@ export interface AgentUpdateWorkspaceCollectionAction {
 
 export interface AgentSpeechAnalysisEngineAction { type: 'speech_analysis_engine'; install: boolean }
 
+export interface AgentBlobMakeAction {
+  type: 'blob_make'
+  name: string
+  preset: string
+  height?: number
+  build?: string
+  headWidth?: number
+  hands?: string
+  feet?: string
+  family?: string
+  hairStyle?: string
+}
+
+export interface AgentAnimeMakeAction {
+  type: 'anime_make'
+  name: string
+  gender?: string
+  body?: string
+  height?: number
+  skin?: string
+  eyeColor?: string
+  hairStyle?: string
+  hairColor?: string
+  outfit?: string
+  faceSource?: string
+  faceImage?: string
+  faceStyle?: string
+  faceShape?: string
+}
+
 export type AgentAction = AgentOpenTabAction
   | AgentSpeechAnalysisEngineAction
+  | AgentBlobMakeAction
+  | AgentAnimeMakeAction
   | AgentLipsCreatorAction
   | AgentGenerateLipsAction
   | AgentWorld3DTemplatesAction
@@ -657,6 +690,7 @@ export type AgentAction = AgentOpenTabAction
   | AgentCheckSeriesLocationStageAction
   | AgentMakeCharacterAnimationAction
   | AgentMakeCharacterAnimationSetAction
+  | AgentMakeCharacterFaceAction
   | AgentReviewCharacterAnimationAction
   | AgentSetVoiceBandAction
   | AgentMediaToolAction

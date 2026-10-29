@@ -1,0 +1,291 @@
+{
+ "name": "blob2",
+ "note": "scale is the DIAMETER/size in metres; rig humanoid accepted it (25 joints). Head sphere centre (0,1.50,0), size (0.62,0.58,0.55): front surface at z=0.275.",
+ "pieces": [
+  {
+   "type": "sphere",
+   "position": [
+    0,
+    1.5,
+    0
+   ],
+   "scale": [
+    0.62,
+    0.58,
+    0.55
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0,
+    1.78,
+    0
+   ],
+   "scale": [
+    0.66,
+    0.07,
+    0.58
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0,
+    1.87,
+    0
+   ],
+   "scale": [
+    0.5,
+    0.16,
+    0.44
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#1b2350"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0,
+    0.95,
+    0
+   ],
+   "scale": [
+    0.52,
+    0.62,
+    0.36
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#1b2350"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0,
+    0.95,
+    0.1
+   ],
+   "scale": [
+    0.34,
+    0.56,
+    0.3
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    -0.4,
+    1.15,
+    0
+   ],
+   "scale": [
+    0.11,
+    0.34,
+    0.11
+   ],
+   "rotation": [
+    0,
+    0,
+    1.5707963267948966
+   ],
+   "color": "#1b2350"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    -0.74,
+    1.15,
+    0
+   ],
+   "scale": [
+    0.1,
+    0.34,
+    0.1
+   ],
+   "rotation": [
+    0,
+    0,
+    1.5707963267948966
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "sphere",
+   "position": [
+    -0.97,
+    1.15,
+    0
+   ],
+   "scale": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0.4,
+    1.15,
+    0
+   ],
+   "scale": [
+    0.11,
+    0.34,
+    0.11
+   ],
+   "rotation": [
+    0,
+    0,
+    1.5707963267948966
+   ],
+   "color": "#1b2350"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0.74,
+    1.15,
+    0
+   ],
+   "scale": [
+    0.1,
+    0.34,
+    0.1
+   ],
+   "rotation": [
+    0,
+    0,
+    1.5707963267948966
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "sphere",
+   "position": [
+    0.97,
+    1.15,
+    0
+   ],
+   "scale": [
+    0.15,
+    0.15,
+    0.15
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#f2f1ec"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    -0.12,
+    0.38,
+    0
+   ],
+   "scale": [
+    0.14,
+    0.62,
+    0.14
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#1b2350"
+  },
+  {
+   "type": "cylinder",
+   "position": [
+    0.12,
+    0.38,
+    0
+   ],
+   "scale": [
+    0.14,
+    0.62,
+    0.14
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#1b2350"
+  },
+  {
+   "type": "box",
+   "position": [
+    -0.12,
+    0.04,
+    0.05
+   ],
+   "scale": [
+    0.14,
+    0.08,
+    0.26
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#201a18"
+  },
+  {
+   "type": "box",
+   "position": [
+    0.12,
+    0.04,
+    0.05
+   ],
+   "scale": [
+    0.14,
+    0.08,
+    0.26
+   ],
+   "rotation": [
+    0,
+    0,
+    0
+   ],
+   "color": "#201a18"
+  }
+ ]
+}

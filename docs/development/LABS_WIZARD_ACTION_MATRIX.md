@@ -1166,6 +1166,7 @@ These IDs are in `AGENT_ACTION_TYPES`. They are listed so L0 can prove every Wiz
 | `other.prepare_video` | `prepare_video` | `prepareVideo` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareVideo` |
 | `other.prepare_programmatic_video` | `prepare_programmatic_video` | `prepareProgrammaticVideo` | `ui/src/features/agent/programmaticVideo.ts` | `video3d.prepareProgrammaticVideo` |
 | `other.speech_analysis_engine` | other | condicional | out_of_scope | `speech_analysis_engine` | disponible | `setupSpeechAnalysis` | `ui/tests/speechAnalysisParity.test.tsx` |
+| `other.blob_make` | `blob_make` | `executeBlobMake` | `ui/src/features/agent/blobBodyAdapter.ts` | `blobBody.make` |
 | `other.prepare_image` | `prepare_image` | `prepareImage` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareImage` |
 | `other.prepare_audio` | `prepare_audio` | `prepareAudio` | `ui/src/features/agent/studioCapabilities.ts` | `studio.prepareAudio` |
 | `other.download_model` | `download_model` | `downloadModel` | `ui/src/features/agent/studioCapabilities.ts` | `studio.downloadModel` |

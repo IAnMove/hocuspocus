@@ -343,6 +343,12 @@ def _check_shake(shake) -> None:
                                     "frequency 0-60 Hz, and optional integer seed and decay 0-60")
 
 
+def face_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
+    """Paint a 2D Character Kit on a model slot (``slot.faceDecal``)."""
+    from services.blob_face_scene import bind_face
+    return bind_face(workspace, scene_id, workspace_dir, changes, base_revision)
+
+
 def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     """Make an image object talk with a Character Kit: pose, mouths by cue, blink, and each line's audio."""
     from services.world3d_talk import TalkError, apply_talk
@@ -355,9 +361,13 @@ def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
         raise World3DSceneError("unknown_kit", f"unknown_kit:{kit_id}", 404)
     document = record["document"]
     slot = _target(document["slots"], changes)
+    pose = changes.get("pose")
+    if not isinstance(pose, str) or not pose:
+        face = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
+        pose = face.get("pose") or "base"
     try:
         talked = apply_talk(document, slot, kit, changes.get("lines") or [], workspace=workspace,
-                            pose=str(changes.get("pose") or "base"), blink=changes.get("blink") is not False)
+                            pose=str(pose), blink=changes.get("blink") is not False)
     except TalkError as error:
         raise World3DSceneError(error.code, str(error), error.status) from error
     record["revision"] += 1

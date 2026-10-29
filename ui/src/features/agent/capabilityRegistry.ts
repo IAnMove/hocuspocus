@@ -51,6 +51,7 @@ import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities
 import { registerSeriesShotCardCapabilities } from './seriesShotCardCapabilities'
 import { registerSeriesStageCapabilities } from './seriesStageCapabilities'
 import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
+import { registerCharacterFaceCapabilities } from './characterFaceCapabilities'
 import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerLipsyncRedoCapabilities } from './lipsyncRedoCapabilities'
@@ -64,6 +65,8 @@ import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 import { registerToolCapabilities } from './toolCapabilities'
 import { registerProgrammaticVideoCapability } from './programmaticVideo'
 import { registerSpeechAnalysisCapability } from './speechAnalysisCapability'
+import { registerBlobBodyCapability } from './blobBodyCapability'
+import { registerAnimeCharacterCapability } from './animeCharacterCapability'
 export { reconcileProgrammaticVideoRequest, type AgentPrepareProgrammaticVideoAction } from './programmaticVideo'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import {
@@ -1221,6 +1224,7 @@ registerSeriesShotEditCapabilities(defineCapability)
 registerSeriesShotCardCapabilities(defineCapability)
 registerSeriesStageCapabilities(defineCapability)
 registerCharacterAnimationCapabilities(defineCapability)
+registerCharacterFaceCapabilities(defineCapability)
 registerVoiceBandCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)
 registerLipsyncRedoCapabilities(defineCapability)
@@ -1230,6 +1234,8 @@ registerEditorAuxCapabilities(defineCapability)
 registerToolCapabilities(defineCapability)
 registerProgrammaticVideoCapability(defineCapability)
 registerSpeechAnalysisCapability(defineCapability)
+registerBlobBodyCapability(defineCapability)
+registerAnimeCharacterCapability(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)
