@@ -1,0 +1,182 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import { creationOutputs, duplicateClipState, frameOffset, mergeComicShotUpdate, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
+import { outputNameFromEditorClip } from '../src/features/video-editor/replacementHandoff.ts'
+import { comicPanelKey } from '../src/features/video-editor/useComicPanels.ts'
+import { columnCount, GUTTER, layoutComic, MARGIN, PAGE_H, type ComicLayoutClip, type ComicPage } from '../src/features/video-editor/comicView.ts'
+
+function clip(id: string, duration: number, width = 1080, height = 1920, focusX?: number, focusY?: number): ComicLayoutClip {
+  return { id, duration, width, height, focusX, focusY }
+}
+
+function panelsOf(pages: ComicPage[]) {
+  return pages.flatMap(page => page.tiers.flatMap(tier => tier.panels))
+}
+
+function assertTiersFill(pages: ComicPage[]) {
+  const tiers = pages.flatMap(page => page.tiers.map(tier => ({ columns: page.columns, sum: tier.panels.reduce((total, panel) => total + panel.span, 0) })))
+  tiers.slice(0, -1).forEach(tier => assert.equal(tier.sum, tier.columns))
+  assert.ok(tiers.at(-1)!.sum <= tiers.at(-1)!.columns)
+  assert.ok(tiers.every(tier => tier.sum > 0))
+}
+
+test('tiers fill, a long clip spans two columns, and the longest clip is a splash', () => {
+  const pages = layoutComic([clip('a', 2), clip('b', 1), clip('c', 1), clip('d', 1), clip('e', 5)])
+  assert.equal(pages.length, 2)
+  assert.equal(pages[0].columns, 3)
+  assertTiersFill(pages)
+  const panels = panelsOf(pages)
+  assert.deepEqual(panels.map(panel => panel.id), ['a', 'b', 'c', 'd', 'e'])
+  assert.equal(panels[0].span, 2)
+  assert.equal(panels[0].splash, false)
+  const splash = panels.find(panel => panel.splash)
+  assert.equal(splash?.id, 'e')
+  assert.equal(splash?.span, 3)
+  // Vertical frames: the splash is a whole page, so it keeps most of the frame.
+  assert.equal(pages[1].tiers.length, 1)
+  assert.equal(splash?.h, PAGE_H - 2 * MARGIN)
+  // The page the splash left early stretches its two tiers down to the foot of the paper.
+  const last = pages[0].tiers.at(-1)!
+  assert.equal(pages[0].tiers.length, 2)
+  assert.ok(Math.abs(last.y + last.h - (PAGE_H - MARGIN)) < 0.01)
+})
+
+test('an even median does not mark a merely longer clip as wide', () => {
+  const pages = layoutComic([clip('a', 2), clip('b', 1), clip('c', 1), clip('d', 4), clip('e', 1), clip('f', 10)])
+  const panels = panelsOf(pages)
+  assert.equal(panels.find(panel => panel.id === 'a')?.span, 1)
+  assert.equal(panels.find(panel => panel.id === 'd')?.span, 2)
+  assert.equal(panels.find(panel => panel.splash)?.id, 'f')
+})
+
+test('a splash waits for the next tier and the row it left is filled', () => {
+  const pages = layoutComic([clip('a', 1), clip('b', 1), clip('c', 9)])
+  const [first] = pages[0].tiers
+  const [second] = pages[1].tiers
+  assert.equal(first.panels.reduce((total, panel) => total + panel.span, 0), 3)
+  assert.deepEqual(second.panels.map(panel => panel.id), ['c'])
+  assert.equal(second.panels[0].span, 3)
+})
+
+test('the layout is deterministic and cover-crops with focus', () => {
+  const input = [clip('a', 1, 1080, 1920, 120, -4), clip('b', 3, 1920, 1080, undefined, 80)]
+  assert.deepEqual(layoutComic(input), layoutComic(input))
+  const panels = panelsOf(layoutComic(input))
+  assert.equal(panels[0].focusX, 100)
+  assert.equal(panels[0].focusY, 0)
+  assert.equal(panels[1].focusX, 50)
+  assert.equal(panels[1].focusY, 80)
+})
+
+test('one, seven and a hundred vertical clips', () => {
+  const one = layoutComic([clip('only', 4)])
+  assert.equal(one.length, 1)
+  assert.equal(one[0].tiers.length, 1)
+  assert.equal(one[0].tiers[0].panels[0].span, 3)
+  assert.equal(one[0].tiers[0].panels[0].splash, true)
+
+  const seven = layoutComic(Array.from({ length: 7 }, (_, index) => clip(`c${index}`, 2)))
+  assert.equal(seven.length, 2)
+  assert.equal(seven[0].tiers.length, 1)
+  assert.equal(seven[0].tiers[0].panels[0].id, 'c0')
+  assert.equal(seven[0].tiers[0].panels[0].splash, true)
+  assert.equal(seven[1].tiers.length, 2)
+  assert.equal(panelsOf(seven).length, 7)
+  assertTiersFill(seven)
+
+  const hundred = layoutComic(Array.from({ length: 100 }, (_, index) => clip(`c${index}`, 1)))
+  assert.equal(hundred.length, 12)
+  assert.equal(hundred[0].columns, 3)
+  assert.equal(hundred.at(-1)?.tiers.length, 3)
+  assert.equal(panelsOf(hundred).length, 100)
+  assert.deepEqual(panelsOf(hundred).map(panel => panel.id), Array.from({ length: 100 }, (_, index) => `c${index}`))
+  assertTiersFill(hundred)
+})
+
+test('horizontal frames use two columns and a zero duration is not wide', () => {
+  const horizontal = layoutComic([clip('a', 1, 1920, 1080), clip('b', 1, 1920, 1080), clip('c', 1, 1920, 1080), clip('d', 1, 1920, 1080)])
+  assert.equal(columnCount([clip('s', 1, 100, 100)]), 3)
+  assert.equal(horizontal[0].columns, 2)
+  assert.equal(horizontal[0].tiers[0].panels[0].span, 2)
+  // Horizontal frames: four tiers a page, and the splash takes two of them.
+  assert.equal(horizontal.length, 1)
+  const [splash, next] = horizontal[0].tiers
+  assert.ok(Math.abs(splash.h - (2 * next.h + GUTTER)) < 0.01)
+  const flat = layoutComic([clip('a', 0), clip('b', 0), clip('c', 0), clip('d', 0)])
+  const spans = panelsOf(flat).map(panel => panel.span)
+  assert.deepEqual(spans, [3, 1, 1, 1])
+})
+
+test('moveClip matches a timeline drop before or after another clip', () => {
+  const clips = [{ id: 'a' }, { id: 'b' }, { id: 'c' }, { id: 'd' }]
+  assert.deepEqual(moveClip(clips, 'a', 3).map(item => item.id), ['b', 'c', 'a', 'd'])
+  assert.deepEqual(moveClip(clips, 'd', 0).map(item => item.id), ['d', 'a', 'b', 'c'])
+  assert.deepEqual(moveClip(clips, 'b', 2).map(item => item.id), ['a', 'b', 'c', 'd'])
+  assert.deepEqual(moveClip(clips, 'missing', 1), clips)
+})
+
+test('patch and duplicate keep lyric and comic on the montage extras', () => {
+  const extra = patchClipExtra({ takes: [{ id: 't1' }], lyric: '  old  ' }, { lyric: '  new line  ', comic: { text: 'bubble', frame: -2 } })
+  assert.equal(extra?.lyric, 'new line')
+  assert.equal(extra?.comic?.text, 'bubble')
+  assert.equal(extra?.comic?.frame, 0)
+  assert.equal(extra?.takes?.length, 1)
+  assert.equal(patchClipExtra(extra, { lyric: '   ' })?.lyric, undefined)
+  assert.equal(patchClipExtra({ lyric: 'x' }, { lyric: 'x'.repeat(600) })?.lyric?.length, 500)
+  assert.equal(patchClipExtra({ comic: { text: 'caption', frame: 1 } }, { comic: { text: null, frame: null } }), undefined)
+
+  const copied = duplicateClipState({ id: 'c1', name: 'shot', source: 'a.mp4' }, { lyric: 'hi', comic: { text: 'caption' }, takes: [{ id: 't1' }] }, 'c2')
+  assert.equal(copied.clip.id, 'c2')
+  assert.equal(copied.clip.name, 'shot (copy)')
+  assert.deepEqual(copied.extra, { lyric: 'hi', comic: { text: 'caption' } })
+  assert.equal(duplicateClipState({ id: 'c1', name: 'shot (copy)' }, { takes: [{ id: 't1' }] }, 'c3').extra, undefined)
+  assert.equal(frameOffset(1.5, 4), 2.5)
+  assert.equal(frameOffset(3, 1), 0)
+})
+
+test('remake finds the settings of a copied clip under the original name, then the clip itself', () => {
+  assert.deepEqual(creationOutputs({ kind: 'generation', canRegenerate: true, sidecar: '2026-a_seed1_he roars.meta.json', generatedFrom: 'ol-o01.mp4' }),
+    ['2026-a_seed1_he roars.mp4', 'ol-o01.mp4'])
+  assert.deepEqual(creationOutputs({ kind: 'generation', canRegenerate: true, sidecar: 'shot.meta.json', generatedFrom: 'shot.mp4' }), ['shot.mp4'])
+  assert.deepEqual(creationOutputs({ kind: 'upload', canRegenerate: false }), [])
+  assert.equal(outputNameFromEditorClip('ol-o01.mp4', 'o01'), 'ol-o01.mp4')
+})
+
+test('a comic remake keeps unsaved clips and only adopts the selected take', () => {
+  const clips = [
+    { id: 'a', source: 'draft-a.mp4', trimStart: 1, trimEnd: 8 },
+    { id: 'copy', source: 'draft-a.mp4', trimStart: 1, trimEnd: 8 },
+    { id: 'b', source: 'replaced.mp4', trimStart: 0, trimEnd: 3 },
+  ]
+  const extras = {
+    a: { lyric: 'hola', comic: { text: 'bubble' as const } },
+    copy: { lyric: 'hola', comic: { text: 'bubble' as const } },
+  }
+  const saved = [
+    { id: 'a', source: 'saved-a.mp4', takes: [{ id: 'take-1' }, { id: 'take-new' }] },
+    { id: 'b', source: 'saved-b.mp4' },
+  ]
+
+  const regenerated = mergeComicShotUpdate(clips, extras, saved, undefined)
+  assert.deepEqual(regenerated.clips, clips)
+  assert.deepEqual(regenerated.extras.a, { lyric: 'hola', comic: { text: 'bubble' }, takes: saved[0].takes })
+  assert.deepEqual(regenerated.extras.copy, extras.copy)
+  assert.equal(regenerated.extras.b, undefined)
+
+  const selected = mergeComicShotUpdate(clips, extras, saved, { id: 'a', source: 'take.mp4', trimStart: 0, trimEnd: 7 })
+  assert.deepEqual(selected.clips.map(clip => clip.id), ['a', 'copy', 'b'])
+  assert.deepEqual(selected.clips[0], { id: 'a', source: 'take.mp4', trimStart: 0, trimEnd: 7 })
+  assert.equal(selected.clips[1].source, 'draft-a.mp4')
+  assert.equal(selected.clips[2].source, 'replaced.mp4')
+  assert.equal(selected.extras.a?.lyric, 'hola')
+})
+
+test('a panel reprints when its clip is replaced, retrimmed or gets another frame', () => {
+  const clip = { id: 'o1', source: 'a.mp4', trimStart: 0, trimEnd: 4 }
+  const key = comicPanelKey('ws', clip, undefined)
+  assert.equal(comicPanelKey('ws', { ...clip }, undefined), key)
+  assert.notEqual(comicPanelKey('ws', { ...clip, source: '/api/v1/file/b.mp4?workspace=ws' }, undefined), key)
+  assert.notEqual(comicPanelKey('ws', { ...clip, trimEnd: 3 }, undefined), key)
+  assert.notEqual(comicPanelKey('ws', clip, 1.5), key)
+  assert.notEqual(comicPanelKey('other', clip, undefined), key)
+})

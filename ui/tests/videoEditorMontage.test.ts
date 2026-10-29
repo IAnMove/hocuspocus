@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { MontageDocument } from '../src/api/montages.ts'
-import { editorFromMontage, exportLayerFields, montageFromEditor, resolutionFor } from '../src/features/video-editor/montage.ts'
+import { editorFromMontage, exportLayerFields, montageFromEditor, playableUrl, resolutionFor } from '../src/features/video-editor/montage.ts'
 
 const montage: MontageDocument = {
   version: 1, name: 'Bird', width: 1920, height: 1080, fps: 24,
@@ -52,4 +52,28 @@ test('editor saves keep takes, lyric and notes of each clip', () => {
   assert.equal(saved.clips[0].takes?.length, 2)
   assert.equal(saved.clips[0].lyric, 'fly')
   assert.equal(saved.notes, 'rebuilt')
+  assert.equal('comic' in saved.clips[0], false)
+})
+
+test('a lyric and a comic choice survive save and reload', async () => {
+  const probe = async () => ({ duration: 5, width: 1080, height: 1920, fps: 24, has_audio: false, pixel_format: 'yuv420p', has_alpha: false })
+  const withLine = { ...montage, width: 1080, height: 1920, clips: [{ ...montage.clips[0], lyric: ' fly / high ', comic: { frame: 1.25, text: 'bubble' as const } }] }
+  const opened = await editorFromMontage(withLine, probe, async () => ({ duration: 1 }), () => 'thumb')
+  assert.equal(opened.extras.c1.lyric, ' fly / high ')
+  assert.deepEqual(opened.extras.c1.comic, { frame: 1.25, text: 'bubble' })
+  const saved = montageFromEditor({ projectName: 'Bird', resolution: resolutionFor(1080, 1920), fps: 24, clips: opened.clips,
+    soundtrack: null, layers: { overlays: [], audioCues: [], duck: 0 }, origins: opened.origins, extras: opened.extras })
+  assert.equal(saved.clips[0].lyric, ' fly / high ')
+  assert.deepEqual(saved.clips[0].comic, { frame: 1.25, text: 'bubble' })
+  const again = await editorFromMontage(saved, probe, async () => ({ duration: 1 }), () => 'thumb')
+  assert.deepEqual(again.extras.c1, opened.extras.c1)
+  const plain = await editorFromMontage(montage, probe, async () => ({ duration: 171 }), source => `thumb:${source}`)
+  assert.equal(plain.extras.c1, undefined)
+})
+
+test('a bare montage source plays from the workspace; URLs and paths stay as they are', () => {
+  assert.equal(playableUrl('ol-o01.mp4', 'orcos libres'), '/api/v1/file/ol-o01.mp4?workspace=orcos%20libres')
+  assert.equal(playableUrl('/api/v1/file/a.mp4?workspace=w', 'w'), '/api/v1/file/a.mp4?workspace=w')
+  assert.equal(playableUrl('https://x/a.mp4', 'w'), 'https://x/a.mp4')
+  assert.equal(playableUrl('a.mp4', ''), 'a.mp4')
 })

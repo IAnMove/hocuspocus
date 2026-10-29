@@ -16,7 +16,7 @@ interface Props {
 
 const button = 'inline-flex items-center gap-1 rounded border border-border px-2 py-1 text-[11px] hover:bg-bg-hover disabled:opacity-50'
 
-function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onSelect: () => void }) {
+export function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onSelect: () => void }) {
   const { t } = useUiTranslation('videoEditor')
   const done = take.status === 'completed' && take.url
   return <div className="flex items-center gap-1.5 rounded border border-border bg-bg-tertiary/50 px-1.5 py-1 text-[11px]">
@@ -27,7 +27,7 @@ function TakeChip({ take, busy, onSelect }: { take: ShotTake; busy: boolean; onS
   </div>
 }
 
-function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
+export function RegenerateForm({ shot, busy, onSubmit, onCancel }: {
   shot: MontageShot; busy: boolean; onSubmit: (prompt: string, seed?: number) => void; onCancel: () => void
 }) {
   const { t } = useUiTranslation('videoEditor')

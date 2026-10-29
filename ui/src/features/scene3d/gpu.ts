@@ -72,6 +72,7 @@ import { DirectionMemory } from './directionalSprite.ts'
 import { awaitsView, cameraPass, walkedSlot } from './directionalPaint.ts'
 import { tintSprite } from './directionalLight.ts'
 import { createSplatMount, poseSplatMount, releaseSpark, studioFloorHiddenForSplat } from './splatItem.ts'
+import { paintImageFades } from './imageFade.ts'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -618,6 +619,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)
+  paintImageFades(world.slots, posedSlots, sceneSeconds)
   hideEmptyCutoutsInExport(world, document.slots)
   carryHeldProps(world, posedSlots, sceneSeconds)
   stabilizeSceneSurfaces(document.slots, world.slots)

@@ -28,6 +28,8 @@ export type MediaScreen = MediaLoop & {
   loop: boolean
   flipY: boolean
   transparent?: boolean
+  /** Canvas rows (default 1080, width capped at 1920). A 9:16 picture that must fill the frame 1:1 asks for 1920. */
+  lines?: number
   poseSequence?: ImagePose[]
   /** A Character Kit cutout that talks: pose, mouths by cue and blink. */
   talk?: TalkingCutout
@@ -135,6 +137,7 @@ export function parseMediaScreen(raw: unknown): MediaScreen | undefined {
     loop: value.loop !== false, flipY: value.flipY === true,
     ...(transparent ? { transparent: true } : {}),
     ...parseHue(value.hue),
+    ...(typeof value.lines === 'number' && Number.isFinite(value.lines) ? { lines: Math.round(Math.max(120, Math.min(2160, value.lines))) } : {}),
     ...art,
     ...parseMediaLoop(value),
   }
@@ -160,5 +163,6 @@ export function mediaScreenMountKey(screen?: MediaScreen) {
     Boolean(screen.transparent), screen.poseSequence?.map(pose => pose.sourceUrl), screen.hue ?? 0,
     screen.talk ? [screen.talk.base, screen.talk.mouths, screen.talk.blink?.source] : null,
     screen.directional?.sheets.length ? screen.directional.sheets.map(sheet => sheet.source) : null,
+    ...(screen.lines ? [screen.lines] : []),
   ])
 }
