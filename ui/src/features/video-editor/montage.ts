@@ -1,7 +1,7 @@
 // Conversions between the Video Editor draft and a server-side montage document.
 // A montage keeps captions (image overlays) and narration (audio cues) as timed,
 // editable layers instead of burning them into clips.
-import type { MontageAudioCue, MontageClip, MontageDocument, MontageOverlay } from '../../api/montages'
+import { saveMontage, type MontageAudioCue, type MontageClip, type MontageDocument, type MontageOverlay } from '../../api/montages'
 import type { VideoEditorProbe } from '../../api/client'
 import type { ResolutionOption, EditorSoundtrack } from './editorDraft'
 import { RESOLUTIONS } from './editorDraft'
@@ -170,6 +170,28 @@ export const MONTAGE_REF_EVENT = 'hocuspocus:video-editor-montage-ref'
 export function announceMontageRef(workspace: string, layers: MontageLayers, ref: MontageRef): void {
   persistMontageState(workspace, layers, ref)
   if (typeof window !== 'undefined') window.dispatchEvent(new window.CustomEvent(MONTAGE_REF_EVENT, { detail: { workspace, ref } }))
+}
+
+/** Write the editor draft onto the open montage file so a later server cut sees the same clips. */
+export async function persistOpenMontage(input: {
+  workspace: string
+  state: { projectName: string; resolution: ResolutionOption; fps: number; clips: EditorClip[]; soundtrack: EditorSoundtrack | null }
+  layers: MontageLayers
+  ref: MontageRef | null
+}, write: typeof saveMontage = saveMontage): Promise<MontageRef> {
+  const montage = montageFromEditor({
+    ...input.state,
+    layers: input.layers,
+    origins: input.ref?.origins,
+    extras: input.ref?.extras,
+    notes: input.ref?.notes,
+  })
+  const saved = await write({
+    workspace: input.workspace,
+    montage,
+    ...(input.ref ? { file: input.ref.file, expected_revision: input.ref.revision } : {}),
+  })
+  return { ...input.ref, file: saved.file, revision: saved.revision, origins: input.ref?.origins ?? {} }
 }
 
 export function persistMontageState(workspace: string, layers: MontageLayers, ref: MontageRef | null): void {
