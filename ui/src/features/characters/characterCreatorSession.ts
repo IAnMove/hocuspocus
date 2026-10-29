@@ -9,7 +9,7 @@ import type { SpokenLanguage } from '../../lib/speechLanguage'
 import { randomUuid } from '../../lib/uuid'
 import { CANDIDATE_COUNT, candidateCount, generateKeyedCandidates, keyCandidate, type CandidateDependencies, type KeyedCandidate } from './characterCandidates'
 
-export type RigShown = Pick<FlatRigResult, 'review' | 'unwipedPoses' | 'warnings'>
+export type RigShown = Pick<FlatRigResult, 'review' | 'unwipedPoses' | 'warnings' | 'notices'>
 export type Step = 'options' | 'keying' | 'rig' | 'pose' | 'addPose' | 'generate' | 'save'
 /** The options of the character, or the options of a new pose of it. */
 export type Lane = 'candidates' | 'poseCandidates'

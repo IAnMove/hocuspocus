@@ -1137,8 +1137,11 @@ def rig_character(workspace_dir: str, workspace: str, kit_id: str, *, base_revis
         **({"layers": layer_missing} if layer_missing else {}),
     }]
     saved = patch_character_kit(workspace_dir, kit_id, kit, base_revision=base_revision)
+    missing = face_landmarks.models_missing()
     return {
         "revision": saved.get("revision"), "character": saved["kits"][kit_id],
         "review": _url(sheet, workspace), "unwipedPoses": unwiped, "warnings": warnings, "style": look,
         "poses": _pose_reports(rigs, placed),
+        # Said once per rig, not per pose: without the DWPose files every mouth is placed by the painted-mark search only.
+        **({"notices": [{"code": "landmark_models_missing", "files": missing}]} if missing else {}),
     }
