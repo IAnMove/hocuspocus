@@ -10,8 +10,11 @@ import type { FacePlacement, Scene3DSpeech } from './types'
  *  a scene written without the browser (an agent, a headless export) speak, since nobody is there to press Add lips. */
 export function speechFace(root: Object3D, speech: Scene3DSpeech | undefined): FacePlacement | undefined {
   if (!speech?.enabled) return undefined
+  if (speech.face) return speech.face
+  // A face pack paints the mouth. The Head-bone estimate must not paint a second pair of lips on the mesh.
+  if (speech.facePack) return undefined
   const estimates = root.userData.speechPlacements as { generic?: FacePlacement } | undefined
-  return speech.face ?? estimates?.generic
+  return estimates?.generic
 }
 
 export class SpeechFaceRuntime {

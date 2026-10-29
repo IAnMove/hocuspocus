@@ -152,7 +152,7 @@ function VersionTitle({ version, draft, marked, blocked, onChange, onCheck }: {
   const { t } = useUiTranslation('seriesLab')
   return <div className="text-xs">
     <label className="block">{t('languages.versionTitle')}
-      <input className={`mt-1 ${field}`} disabled={blocked} value={draft ?? version.title ?? ''} onChange={event => onChange(event.target.value)} /></label>
+      <input aria-label={t('languages.versionTitle')} className={`mt-1 ${field}`} disabled={blocked} value={draft ?? version.title ?? ''} onChange={event => onChange(event.target.value)} /></label>
     <MachineMark marked={marked && draft === null} blocked={blocked} label="title" onCheck={onCheck} />
   </div>
 }
@@ -191,7 +191,7 @@ function AddLanguage({ available, adding, blocked, onChoose, onCreate }: {
   const { t } = useUiTranslation('seriesLab')
   return <>
     <label className="text-xs">{t('languages.add')}
-      <select className="ml-1 min-h-10 rounded border border-border bg-bg-primary px-2" value={adding} disabled={blocked}
+      <select aria-label={t('languages.add')} className="ml-1 min-h-10 rounded border border-border bg-bg-primary px-2" value={adding} disabled={blocked}
         onChange={event => onChoose(event.target.value as SpokenLanguage | '')}>
         <option value="">{t('languages.choose')}</option>
         {available.map(language => <option key={language} value={language}>{t(`languages.names.${language}`)}</option>)}

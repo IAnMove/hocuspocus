@@ -18,7 +18,7 @@ test('pixel worlds: a TV wall template relights, adds TVs and shares one recordi
   for (const id of ['pixel-tv-wall', 'pixel-moon-lake', 'pixel-tv-lake', 'pixel-aurora-peaks']) {
     await expect(library.getByTestId(`world3d-template-${id}`)).toBeVisible()
   }
-  // A click only picks and previews; the scene changes on "Use this shot".
+  // A click only picks and previews; the scene changes on "Use this template".
   await library.getByTestId('world3d-template-pixel-tv-wall').click()
   await expect(library.getByTestId('world3d-shot-preview')).toContainText('TV wall')
   await library.getByTestId('world3d-use-shot').click()

@@ -8,7 +8,8 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 
 - **Crear → Generación directa (Studio):** un recurso por trabajo. Modos
   **Imagen**, **Vídeo**, **Audio** (voz, música, efectos, mezcla), **3D**,
-  **Editar** (retake, outpaint, repaint, recast, edit anything) y
+  **Editar** (retake, outpaint, repaint, recast, edit anything y Cambiar
+  personaje: fotograma de origen, personaje nuevo y vídeo) y
   **Herramientas** (upscale, revoice, quitar fondo).
 - **Crear → Estudios:** los laboratorios de la tabla siguiente.
 - **Producción:** Director, Producciones, Producciones musicales, Obras y Video Editor.
@@ -23,8 +24,10 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
   opcionales (FLUX 3 / Drama 3, Hunyuan3D, TRELLIS.2, SAM, UniRig y H3 Legacy) con
   su estado y su tamaño: instala, actualiza o quita cada uno con un botón y sigue
   la salida del instalador en vivo. Instalar necesita que la app esté abierta
-  desde Pinokio; quitar solo borra el entorno, no los modelos descargados (esos
-  se gestionan en el Gestor de almacenamiento). En el servidor completo, al compartir en LAN
+  desde Pinokio; quitar solo borra el entorno (y avisa lo que realmente libera:
+  uv comparte ruedas con la caché de Pinokio), no los modelos descargados (esos
+  se gestionan en el Gestor de almacenamiento). Guía: [Installation](install/HOWUSEIT.md).
+  En el servidor completo, al compartir en LAN
   la autenticación está encendida por defecto; el servidor core no tiene esa
   puerta: [LAN_AUTH](development/LAN_AUTH.md).
 - **Ayuda:** el tutorial dentro de la app, con capturas de la interfaz actual.
@@ -43,7 +46,6 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 | **Vídeo 2,5D** (Scene Animator) | Escenas de capas e imágenes: cámara, movimientos, rótulos, letra, efectos y exportación MP4. |
 | **Vídeo 3D** | Monta GLB, kits y escenarios procedurales en un mundo 3D; biblioteca de planos, luz, atmósfera, voz y exportación con niveles de calidad. |
 | **Animate** (Rig y Animate) | Rig humanoide para mallas reales y clips de animación por cuerpo. |
-| **Reemplazar personaje** | Sustituye a un personaje en un vídeo a partir de un fotograma editado. |
 | **Hoja de estilos** | Estilos H3 importados con su atribución, para que los planos compartan un mismo look. |
 
 ## Producción
@@ -53,10 +55,12 @@ Los **Workspaces** son colecciones de referencias y notas, no carpetas.
 | **Director** | Planifica y supervisa producciones de varios planos a partir de una historia o canción. |
 | **Producciones** / **Obras** | Todas las obras del workspace (videoclip, tráiler, capítulo, historia) con su progreso y **Revisar planos**. |
 | **Producciones musicales** | Planos, tomas y montaje de un videoclip; otra toma, usar toma, abrir escena. |
-| **Video Editor** | Recorta, divide y reordena clips existentes; la exportación es una tarea FFmpeg en cola. |
+| **Video Editor** | Recorta, divide y reordena clips existentes; la exportación es una tarea FFmpeg en cola. **Vista cómic** es el mismo montaje en páginas. |
 
 Si algo se interrumpe a mitad, entra en **Producciones** y reanuda: no hace falta
 empezar de cero.
+
+see a montage as a comic with `montages.comic.panels`; edits are `montages.save`.
 
 ## Agentes y MCP
 

@@ -51,6 +51,7 @@ const AGENT_ACTIONS_IMPORTS = [
   './capabilityRunner',
   // Action type only. Execution stays on the characterAnimations adapter.
   './characterAnimationCapabilities',
+  './characterFaceCapabilities',
   './characterKitActions',
   './commandContract',
   // Action type only. Execution stays on the lipsyncRedo adapter.
@@ -231,7 +232,7 @@ test('capabilities execute through adapters except the frozen legacy executors',
     'New capabilities must call context.adapters.*. Moving a legacy executor onto an adapter must shrink this list. '
       + `added=${JSON.stringify(added)} removed=${JSON.stringify(removed)}`,
   )
-  assert.equal(registered.length, 99) // room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band and make_character_animation_set use the Character Kit adapter; the two stage actions use the Series stage adapter; lipsync_redo uses the lipsyncRedo adapter.
+  assert.equal(registered.length, 102) // make_character_face, blob_make and anime_make use the Character Kit and model3d doors; room_sets stores a metric room; speech_analysis_engine uses the Video3D adapter; set_voice_band and make_character_animation_set use the Character Kit adapter; the two stage actions use the Series stage adapter; lipsync_redo uses the lipsyncRedo adapter.
   assert.ok(registered.some(item => item.name === 'set_voice_band'))
   assert.equal(legacy.length, 0)
 })

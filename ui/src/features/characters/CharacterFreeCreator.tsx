@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Loader2, RotateCcw, Save, WandSparkles } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { controlReason, firstControlReason } from '../../i18n/controlLabel'
 import type { CharacterKitAsset } from '../../lib/characterKit'
 import { useCreatorSession, type CharacterCreatorSession, type CreatorView } from './characterCreatorSession'
 
@@ -19,11 +20,11 @@ function FreeForm({ session, view, model, modelPicker, blocked, onPictures }: {
   const { t } = useUiTranslation('characters')
   const { name, description, draft, saved } = view.free
   return <div className="space-y-3">
-    <label className="block text-xs text-text-secondary">{t('imageCreator.name')}<input value={name} maxLength={80} disabled={blocked || saved} onChange={event => session.editFree({ name: event.target.value })} className={`${control} mt-1 w-full`} /></label>
-    <label className="block text-xs text-text-secondary">{t('imageCreator.description')}<textarea value={description} maxLength={2000} rows={3} disabled={blocked} onChange={event => session.editFree({ description: event.target.value })} placeholder={t('imageCreator.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-3 text-sm" /></label>
+    <label className="block text-xs text-text-secondary">{t('imageCreator.name')}<input aria-label={t('imageCreator.name')} value={name} maxLength={80} disabled={blocked || saved} title={firstControlReason([[blocked, 'disabled.actionInProgress'], [saved, 'disabled.alreadySaved']])} onChange={event => session.editFree({ name: event.target.value })} className={`${control} mt-1 w-full`} /></label>
+    <label className="block text-xs text-text-secondary">{t('imageCreator.description')}<textarea aria-label={t('imageCreator.description')} value={description} maxLength={2000} rows={3} disabled={blocked} title={controlReason(blocked, 'disabled.actionInProgress')} onChange={event => session.editFree({ description: event.target.value })} placeholder={t('imageCreator.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-3 text-sm" /></label>
     {modelPicker(blocked)}
     <div className="flex flex-wrap gap-2">
-      <button type="button" disabled={blocked || !model || !name.trim() || !description.trim()} onClick={() => void session.generateFree({ model, onPictures })} className={`${control} inline-flex items-center gap-2 text-cyan-200`}>
+      <button type="button" disabled={blocked || !model || !name.trim() || !description.trim()} title={firstControlReason([[blocked, 'disabled.actionInProgress'], [!model, 'disabled.chooseModel'], [!name.trim(), 'disabled.writeName'], [!description.trim(), 'disabled.writeDescription']])} onClick={() => void session.generateFree({ model, onPictures })} className={`${control} inline-flex items-center gap-2 text-cyan-200`}>
         {view.busy === 'generate' ? <Loader2 size={15} className="animate-spin" /> : <WandSparkles size={15} />}{t(draft ? 'imageCreator.regenerate' : 'imageCreator.generate')}</button>
       {view.busy === 'generate' && <button type="button" onClick={() => session.cancel()} className={control}>{t('lips.cancel')}</button>}
       {!blocked && (draft || name || description) && <button type="button" onClick={() => session.resetFree()} className={`${control} inline-flex items-center gap-2`}><RotateCcw size={14} />{t('styleCreator.startOver')}</button>}
@@ -40,9 +41,9 @@ function FreeResult({ session, view, blocked, onCreateMouths, onReference }: {
   if (!draft?.base) return <div className="flex min-h-36 items-center justify-center rounded-lg border border-dashed border-border p-4 text-center text-xs text-text-muted">{t('imageCreator.empty')}</div>
   return <div className="space-y-3">
     <img src={draft.base.source} alt={draft.name} className="aspect-square w-full rounded-lg border border-border object-contain" />
-    <button type="button" disabled={blocked || saved || !name.trim()} onClick={() => void session.saveFree()} className={`${control} inline-flex w-full items-center justify-center gap-2`}><Save size={15} />{t('imageCreator.save')}</button>
-    {saved && <button type="button" disabled={blocked} onClick={onCreateMouths} className={`${control} w-full text-cyan-200`}>{t('imageCreator.createMouths')}</button>}
-    <button type="button" disabled={blocked} onClick={onReference} className={`${control} w-full`}>{t('imageCreator.useReference')}</button>
+    <button type="button" disabled={blocked || saved || !name.trim()} title={firstControlReason([[blocked, 'disabled.actionInProgress'], [saved, 'disabled.alreadySaved'], [!name.trim(), 'disabled.writeName']])} onClick={() => void session.saveFree()} className={`${control} inline-flex w-full items-center justify-center gap-2`}><Save size={15} />{t('imageCreator.save')}</button>
+    {saved && <button type="button" disabled={blocked} title={controlReason(blocked, 'disabled.actionInProgress')} onClick={onCreateMouths} className={`${control} w-full text-cyan-200`}>{t('imageCreator.createMouths')}</button>}
+    <button type="button" disabled={blocked} title={controlReason(blocked, 'disabled.actionInProgress')} onClick={onReference} className={`${control} w-full`}>{t('imageCreator.useReference')}</button>
   </div>
 }
 

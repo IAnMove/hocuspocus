@@ -35,7 +35,7 @@ export function WritingProposal({ data, onChange, onApply }: {
       const question = catalog.questions[row.field]?.question[language] || row.field
       return <div key={row.field} className="space-y-2 border-t border-border pt-3">
         <label className="flex items-start gap-2 text-sm text-text-primary">
-          <input type="checkbox" checked={pending.selected.includes(row.field)} onChange={event => select(row.field, event.target.checked)} />
+          <input aria-label={t('include', { question })} type="checkbox" checked={pending.selected.includes(row.field)} onChange={event => select(row.field, event.target.checked)} />
           {t('include', { question })}
         </label>
         {data.values[row.field] && <p className="whitespace-pre-wrap text-xs text-text-muted">{t('current')}: {data.values[row.field]}</p>}

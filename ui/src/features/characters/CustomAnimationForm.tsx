@@ -22,14 +22,14 @@ export function CustomAnimationForm({ disabled, freeId, onCreate }: { disabled: 
     <p className="text-[11px] text-text-muted">{t('animations.custom.hint', { max: MAX_CUSTOM_POSES })}</p>
     <div className="grid gap-2 sm:grid-cols-2">
       <label className="text-xs text-text-secondary">{t('animations.custom.name')}
-        <input value={name} maxLength={40} disabled={disabled} onChange={event => setName(event.target.value)} className={`${field} min-h-9`} /></label>
+        <input aria-label={t('animations.custom.name')} value={name} maxLength={40} disabled={disabled} onChange={event => setName(event.target.value)} className={`${field} min-h-9`} /></label>
       <label className="text-xs text-text-secondary">{t('animations.custom.view')}
-        <select value={view} disabled={disabled} onChange={event => setView(event.target.value as CustomView)} className={`${field} min-h-9`}>
+        <select aria-label={t('animations.custom.view')} value={view} disabled={disabled} onChange={event => setView(event.target.value as CustomView)} className={`${field} min-h-9`}>
           {customViews.map(item => <option key={item} value={item}>{t(`animations.view.${item}`)}</option>)}
         </select></label>
     </div>
     <label className="block text-xs text-text-secondary">{t('animations.custom.poses')}
-      <textarea value={poses} rows={4} disabled={disabled} onChange={event => setPoses(event.target.value)} placeholder={t('animations.custom.placeholder')} className={`${field} p-3`} /></label>
+      <textarea aria-label={t('animations.custom.poses')} value={poses} rows={4} disabled={disabled} onChange={event => setPoses(event.target.value)} placeholder={t('animations.custom.placeholder')} className={`${field} p-3`} /></label>
     {(tooMany || tooLong) && <p role="alert" className="text-[11px] text-red-300">{t(tooMany ? 'animations.custom.tooMany' : 'animations.custom.tooLong', { max: tooMany ? MAX_CUSTOM_POSES : MAX_CUSTOM_TEXT })}</p>}
     <button type="submit" disabled={disabled || !ready} className="inline-flex min-h-8 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-cyan-200 disabled:opacity-40">
       <WandSparkles size={12} />{t('animations.custom.create', { count: lines.length })}</button>

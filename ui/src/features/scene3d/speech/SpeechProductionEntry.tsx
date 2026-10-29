@@ -69,7 +69,7 @@ function ScopedSpeechProductionEntry({ kind, title, sourceId, audio, cast: initi
         workspaceId={workspace} disabled={busy} constraints={{ kinds: ['audio'], maxCount: 1, optional: false }} onChoose={item => setVoice(item ?? undefined)} />
       <SpeechNumber label={t('speech.offset')} value={offset} min={0} max={599} step={.1} onChange={setOffset} />
       <SpeechNumber label={t('duration')} value={duration} min={.1} max={90} step={.1} onChange={setDuration} />
-      <label className="flex items-center gap-2"><input type="checkbox" checked={phonetic} onChange={e => setPhonetic(e.target.checked)} />{t('speech.analyze')}</label>
+      <label className="flex items-center gap-2"><input aria-label={t('speech.analyze')} type="checkbox" checked={phonetic} onChange={e => setPhonetic(e.target.checked)} />{t('speech.analyze')}</label>
       <p className="text-text-muted">{t('speech.phoneticHint')}</p>
       {phonetic && <><SpeechAnalysisControls settings={analysis} disabled={busy} onChange={setAnalysis} onBusyChange={setBusy} />
         <VocalIsolationOption checked={isolateVocals} onChange={setIsolateVocals} /></>}
@@ -106,7 +106,7 @@ function audioOutput(audio?: Scene3DSourceRef): ApiOutput | undefined {
 function ProductionCharacterSelect({ options, value, onChange }: { options: ProductionEntryProps['castOptions']; value: string; onChange: (id: string) => void }) {
   const { t } = useUiTranslation('scene3dEditor')
   if (!options?.length) return null
-  return <label className="block">{t('speech.sourceCharacter')}<select className={speechInput + ' w-full'} value={value} onChange={e => onChange(e.target.value)}>
+  return <label className="block">{t('speech.sourceCharacter')}<select aria-label={t('speech.sourceCharacter')} className={speechInput + ' w-full'} value={value} onChange={e => onChange(e.target.value)}>
     <option value="">{t('speech.manualCharacter')}</option>
     {options.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
   </select></label>

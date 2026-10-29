@@ -15,6 +15,7 @@ type Props = {
   poseId: string
   workspace: string
   disabled?: boolean
+  title?: string
   /** Other Face Rig work is running: the editor waits. */
   busy?: boolean
   /** Saving re-rigs the saved kit on the server; the parent takes the result (reloads its library). Without it the

@@ -14,6 +14,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from fastapi import HTTPException
+
 from services import audio_trim, media_compose, media_frame, shot_lipsync_redo, workspace_asset_import
 from services.production_media_common import handler, workspace_folder
 
@@ -31,7 +33,27 @@ def command_handlers(workspace_dir: Callable[[str], str], uploads_dir: Callable[
     def bind(tool) -> Callable[[dict], dict]:
         return lambda arguments: tool.run(arguments, workspace_dir=workspace_dir, uploads_dir=uploads_dir)
 
-    return {tool.OPERATION: handler(tool.OPERATION, bind(tool), folder_for) for tool in _TOOLS}
+    handlers = {tool.OPERATION: handler(tool.OPERATION, bind(tool), folder_for) for tool in _TOOLS}
+    handlers[shot_lipsync_redo.OPERATION] = _one_lipsync(handlers[shot_lipsync_redo.OPERATION])
+    return handlers
+
+
+def _one_lipsync(raw: Callable) -> Callable:
+    """Refuse a second redo of the same take while the first request is still inside ``_wait_job``."""
+    async def guarded(arguments: Any) -> dict:
+        key = shot_lipsync_redo.flight_key(arguments)
+        if key is not None and not shot_lipsync_redo.claim_flight(key):
+            raise HTTPException(409, {
+                "code": "already_running",
+                "message": "A lip redo of this take is already running.",
+                "retryable": True,
+            })
+        try:
+            return await raw(arguments)
+        finally:
+            if key is not None:
+                shot_lipsync_redo.release_flight(key)
+    return guarded
 
 
 __all__ = ["command_catalog", "command_handlers"]

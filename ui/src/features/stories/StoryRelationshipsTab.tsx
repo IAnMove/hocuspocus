@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { Plus, Trash2 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -52,12 +53,12 @@ function RelationshipEditor({
     <div className={`${panel} grid md:grid-cols-2 gap-3`}>
       <div className="md:col-span-2"><StoryWritingGuide projectId={project.id} scope="relationship" targetId={relationship.id} /></div>
       <label className="text-[10px] text-text-muted">{t('relationships.from')}
-        <select className={`${input} mt-1`} value={relationship.fromCharacterId} onChange={event => set({ fromCharacterId: event.target.value })}>
+        <select aria-label={t('relationships.from')} className={`${input} mt-1`} value={relationship.fromCharacterId} onChange={event => set({ fromCharacterId: event.target.value })}>
           {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
         </select>
       </label>
       <label className="text-[10px] text-text-muted">{t('relationships.to')}
-        <select className={`${input} mt-1`} value={relationship.toCharacterId} onChange={event => set({ toCharacterId: event.target.value })}>
+        <select aria-label={t('relationships.to')} className={`${input} mt-1`} value={relationship.toCharacterId} onChange={event => set({ toCharacterId: event.target.value })}>
           {project.characters.map(character => <option key={character.id} value={character.id}>{character.name}</option>)}
         </select>
       </label>
@@ -65,7 +66,7 @@ function RelationshipEditor({
       <button className="text-red-400 justify-self-end" onClick={() => update(current => {
         current.relationships = current.relationships.filter(item => item.id !== relationship.id)
         return current
-      })}><Trash2 size={14} /></button>
+      })} title={controlLabel('a11y.removeRelationship')} aria-label={controlLabel('a11y.removeRelationship')}><Trash2 size={14} /></button>
       <Field label={t('relationships.dynamic')} value={relationship.dynamic} onChange={dynamic => set({ dynamic })} rows={3} />
       <Field label={t('relationships.evolution')} value={relationship.evolution} onChange={evolution => set({ evolution })} rows={3} />
     </div>

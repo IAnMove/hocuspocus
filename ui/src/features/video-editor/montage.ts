@@ -7,6 +7,7 @@ import type { ResolutionOption, EditorSoundtrack } from './editorDraft'
 import { RESOLUTIONS } from './editorDraft'
 import type { EditorClip, Transition } from './editorClipNormalization'
 import { editorFrameFields, montageFrameFields } from './clipFrame'
+import { BASE } from '../../api/http'
 
 export interface MontageLayers {
   overlays: MontageOverlay[]
@@ -18,8 +19,8 @@ export interface MontageRef {
   file: string
   revision: number
   origins: Record<string, MontageClip['origin']>
-  /** Takes and lyric per clip id, kept untouched by editor saves. */
-  extras?: Record<string, Pick<MontageClip, 'takes' | 'lyric'>>
+  /** Takes, lyric and comic-view choice per clip id, kept untouched by editor saves. */
+  extras?: Record<string, Pick<MontageClip, 'takes' | 'lyric' | 'comic'>>
   notes?: string
 }
 
@@ -81,12 +82,14 @@ export function resolutionFor(width: number, height: number): ResolutionOption {
     ?? { label: `${width}×${height}`, width, height }
 }
 
-/** Build editor clips from a montage; `probe` reads real media facts per source. */
+/** Build editor clips from a montage; `probe` reads real media facts per source, `playable` gives the URL the
+ * player loads (a montage written by a production names its clips by bare workspace file name). */
 export async function editorFromMontage(
   montage: MontageDocument,
   probe: (source: string) => Promise<VideoEditorProbe>,
   probeAudio: (source: string) => Promise<{ duration: number }>,
   thumbnail: (source: string) => string,
+  playable: (source: string) => string = source => source,
 ): Promise<{ clips: EditorClip[]; soundtrack: EditorSoundtrack | null; layers: MontageLayers; origins: MontageRef['origins']; extras: NonNullable<MontageRef['extras']> }> {
   const clips: EditorClip[] = []
   const origins: MontageRef['origins'] = {}
@@ -99,7 +102,7 @@ export async function editorFromMontage(
       id: clip.id,
       name: clip.name,
       source: clip.source,
-      previewUrl: clip.source,
+      previewUrl: playable(clip.source),
       thumbnailUrl: thumbnail(clip.source),
       trimStart: clip.trimStart,
       trimEnd,
@@ -112,7 +115,8 @@ export async function editorFromMontage(
       transitionTextSize: clip.transitionTextSize,
     })
     if (clip.origin) origins[clip.id] = clip.origin
-    if (clip.takes?.length || clip.lyric) extras[clip.id] = { ...(clip.takes?.length ? { takes: clip.takes } : {}), ...(clip.lyric ? { lyric: clip.lyric } : {}) }
+    const extra = clipExtra(clip)
+    if (extra) extras[clip.id] = extra
   }
   let soundtrack: EditorSoundtrack | null = null
   if (montage.soundtrack) {
@@ -128,6 +132,15 @@ export async function editorFromMontage(
     }
   }
   return { clips, soundtrack, layers: { overlays: montage.overlays ?? [], audioCues: montage.audioCues ?? [], duck: montage.duck ?? 0 }, origins, extras }
+}
+
+function clipExtra(clip: MontageClip): Pick<MontageClip, 'takes' | 'lyric' | 'comic'> | undefined {
+  const extra: Pick<MontageClip, 'takes' | 'lyric' | 'comic'> = {}
+  if (clip.takes?.length) extra.takes = clip.takes
+  if (clip.lyric) extra.lyric = clip.lyric
+  if (clip.comic && (clip.comic.text || clip.comic.frame !== undefined)) extra.comic = { ...clip.comic }
+  if (!extra.takes && !extra.lyric && !extra.comic) return undefined
+  return extra
 }
 
 /** Snake-case layer fields for POST /api/v1/video-editor/export. */
@@ -165,4 +178,10 @@ export function persistMontageState(workspace: string, layers: MontageLayers, re
   } catch {
     // Browser storage is a convenience; the server montage is the durable copy.
   }
+}
+
+/** A bare file name is a file of the workspace; URLs and paths play as they are. */
+export function playableUrl(source: string, workspace: string): string {
+  if (!/^[^/\\:?#]+$/.test(source) || !workspace) return source
+  return `${BASE}/api/v1/file/${encodeURIComponent(source)}?workspace=${encodeURIComponent(workspace)}`
 }

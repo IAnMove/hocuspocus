@@ -33,7 +33,7 @@ export function GameCastPanel() {
       <form className={`${panelClass} flex flex-wrap items-end gap-2`} onSubmit={event => { event.preventDefault(); void submit() }}>
         <label className="block text-sm">
           {t('characterName')}
-          <input className={fieldClass} value={name} onChange={event => setName(event.target.value)} />
+          <input aria-label={t('characterName')} className={fieldClass} value={name} onChange={event => setName(event.target.value)} />
         </label>
         <button type="submit" className={buttonClass} disabled={busy || !name.trim()}>{t('newCharacter')}</button>
       </form>

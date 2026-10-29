@@ -21,6 +21,7 @@ const unit = (value: unknown) => typeof value === 'number' && Number.isFinite(va
 function validMoveWindow(f: Scene3DFraming) {
   if ((f.moveStart != null && !unit(f.moveStart)) || (f.moveEnd != null && !unit(f.moveEnd))) return false
   if ((f.moveStart ?? 0) >= (f.moveEnd ?? 1)) return false
+  if (f.yawArc != null && (typeof f.yawArc !== 'number' || !Number.isFinite(f.yawArc) || Math.abs(f.yawArc) > 30)) return false
   return f.ease == null || f.ease === 'smooth' || f.ease === 'snap'
 }
 
@@ -49,8 +50,9 @@ function turn(vector: Vec3, yaw: number, scale: number): Vec3 {
 export function framingPose(f: Scene3DFraming, anchor: Vec3, slot: Scene3DSlot, seconds: number, duration: number) {
   const t = framingProgress(f, seconds, duration)
   const yaw = f.relativeToFacing === false ? 0 : slot.rotationY
-  const offset = turn(lerp3(f.from, f.to, t), yaw + (f.orbitTurns ?? 0) * Math.PI * 2 * t, slot.scale)
-  const look = turn(lerp3(f.lookFrom ?? [0, 0, 0], f.lookTo ?? f.lookFrom ?? [0, 0, 0], t), yaw, slot.scale)
+  const bulge = Math.sin(Math.PI * t) * ((f.yawArc ?? 0) * Math.PI / 180)
+  const offset = turn(lerp3(f.from, f.to, t), yaw + (f.orbitTurns ?? 0) * Math.PI * 2 * t + bulge, slot.scale)
+  const look = turn(lerp3(f.lookFrom ?? [0, 0, 0], f.lookTo ?? f.lookFrom ?? [0, 0, 0], t), yaw + bulge, slot.scale)
   return {
     eye: vecAdd(anchor, offset), look: vecAdd(anchor, look),
     roll: ((f.rollFrom ?? 0) + ((f.rollTo ?? f.rollFrom ?? 0) - (f.rollFrom ?? 0)) * t) * Math.PI / 180,

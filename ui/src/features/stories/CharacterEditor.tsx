@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { StoryWritingGuide } from '../writing-guide/StoryWritingGuide'
 import { Check, ChevronDown, ChevronUp, ImagePlus, Loader2, Trash2, Upload } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -38,11 +39,11 @@ export function CharacterEditor({
           </button>
         </div>
         <div className="flex items-center gap-1">
-          <button className={button} disabled={index === 0} title={t('characters.moveUp')} onClick={() => update(current => {
+          <button className={button} disabled={index === 0} title={t('characters.moveUp')} aria-label={t('characters.moveUp')} onClick={() => update(current => {
             moveItem(current.characters, index, index - 1)
             return current
           })}><ChevronUp size={13} /></button>
-          <button className={button} disabled={index === total - 1} title={t('characters.moveDown')} onClick={() => update(current => {
+          <button className={button} disabled={index === total - 1} title={t('characters.moveDown')} aria-label={t('characters.moveDown')} onClick={() => update(current => {
             moveItem(current.characters, index, index + 1)
             return current
           })}><ChevronDown size={13} /></button>
@@ -51,7 +52,7 @@ export function CharacterEditor({
             current.relationships = current.relationships.filter(item => item.fromCharacterId !== character.id && item.toCharacterId !== character.id)
             pruneUnusedAssets(current)
             return current
-          })}><Trash2 size={14} /></button>
+          })} title={controlLabel('a11y.removeCharacter')} aria-label={controlLabel('a11y.removeCharacter')}><Trash2 size={14} /></button>
         </div>
       </div>
       <StoryWritingGuide projectId={project.id} scope="character" targetId={character.id} />

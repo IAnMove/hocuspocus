@@ -5,8 +5,14 @@ import { prepareWorldSfxMedia, worldSfxMediaReady } from '../sceneFx/worldRuntim
 import { worldSfxAtTime } from '../sceneFx/worldMotion'
 import { namedSceneMeshes, namedSceneNodes } from './screenPlane'
 import { slotMountKey } from './backdrop'
+import { applyHairStrands } from './hairStrands.ts'
+import { applyAtlasProjection } from './atlasProjection.ts'
 import { SPLAT_CLOUD_NAME, createSplatMount, ensureSparkRenderer, loadSplatCloud, poseSplatMount } from './splatItem.ts'
 import { createTransformGizmo, type TransformMode, type TransformPatch } from './transformGizmo.ts'
+import { createEditOrbit } from './editOrbit'
+import { createSelectionHighlight } from './selectionHighlight'
+import { pickSceneId } from './scenePick'
+import type { EditView } from './editCamera'
 import { Box3, Frustum, Matrix4, TextureLoader } from 'three'
 import { estimateFace, manualFace, FACE_PROFILES, type PlacementMode } from './speech/calibration'
 import type { FacePlacement } from './speech/types'
@@ -51,6 +57,7 @@ type Props = {
   selectedWorldSfxId?: string
   transformMode?: TransformMode
   editing?: boolean
+  freeView?: boolean
   onTransform?: (slotId: string, patch: TransformPatch) => void
   onSelect?: (slotId: string) => void
   onSlotClips?: (slotId: string, clips: Scene3DClipCatalogEntry[]) => void
@@ -75,6 +82,10 @@ export type Scene3DStageHandle = {
   modelSpacePoint?: (slotId: string, point: Vec3) => [number, number, number] | undefined
   /** World boxes of every loaded model and the camera at one scene time, for the geometry checks. */
   geometrySample?: (seconds: number, document: Scene3DDocument) => GeometrySample | undefined
+  /** The edit camera, when free view is on. Null while the shot camera is showing. */
+  editViewPose?: () => EditView | null
+  /** Aim the edit camera at one slot, or at the stage when nothing is selected. */
+  frameSelection?: (slotId?: string) => void
 }
 
 /** Boxes of the loaded models after a paint. Skinned meshes are measured in their current pose. */
@@ -138,6 +149,8 @@ function loadSlotGltf(
         disposeObject(gltf.scene)
         return
       }
+      applyHairStrands(gltf.scene)
+      applyAtlasProjection(gltf.scene)
       gltf.scene.userData.speechPlacements = { ...Object.fromEntries(FACE_PROFILES.map(profile => [profile, estimateFace(gltf.scene, profile)])), bounds: manualFace(gltf.scene) }
       const baseScale = fitGltf(gltf.scene, live)
       placeSlot(world, live, gltf.scene, gltf.animations, baseScale, true)
@@ -206,8 +219,20 @@ function loadSlotImage(
   )
 }
 
+function paintHighlight(
+  world: GpuWorld,
+  highlight: ReturnType<typeof createSelectionHighlight> | null,
+  selectedId?: string,
+  hoverId?: string,
+) {
+  highlight?.sync(
+    selectedId ? world.slots.get(selectedId)?.root : undefined,
+    hoverId ? world.slots.get(hoverId)?.root : undefined,
+  )
+}
+
 export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene3DStage(
-  { document, sceneSeconds, onSlotClips, onSlotMeshes, selectedId, selectedWorldSfxId, transformMode = 'translate', editing = false, onTransform, onSelect },
+  { document, sceneSeconds, onSlotClips, onSlotMeshes, selectedId, selectedWorldSfxId, transformMode = 'translate', editing = false, freeView = false, onTransform, onSelect },
   ref,
 ) {
   const { t } = useUiTranslation('scene3dEditor')
@@ -224,6 +249,11 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
   const onSlotClipsRef = useRef(onSlotClips)
   const onSlotMeshesRef = useRef(onSlotMeshes)
   const exportLockRef = useRef<Scene3DDocument | null>(null)
+  const orbitRef = useRef<ReturnType<typeof createEditOrbit> | null>(null)
+  const highlightRef = useRef<ReturnType<typeof createSelectionHighlight> | null>(null)
+  const hoverRef = useRef('')
+  const selectedRef = useRef(selectedId)
+  useEffect(() => { selectedRef.current = selectedId }, [selectedId])
 
   useEffect(() => {
     if (exportLockRef.current) return
@@ -270,7 +300,13 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     restoreSize() {
       const world = worldRef.current
       const host = hostRef.current
-      if (world && host) { resizeWorld(world, host); paintWorld(world, documentRef.current, secondsRef.current) }
+      if (!world || !host) return
+      resizeWorld(world, host)
+      world.freeView = false
+      paintWorld(world, documentRef.current, secondsRef.current)
+      orbitRef.current?.resume()
+      paintHighlight(world, highlightRef.current, selectedRef.current, hoverRef.current)
+      renderWorld(world)
     },
     canvas() {
       return worldRef.current?.renderer.domElement ?? null
@@ -302,6 +338,8 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       return world && root ? pickFace(root, world.camera, world.renderer.domElement, x, y, previous) : undefined
     },
     beginExport(next) {
+      orbitRef.current?.hold()
+      highlightRef.current?.sync()
       gizmoRef.current?.hide()
       exportLockRef.current = next
       documentRef.current = next
@@ -310,6 +348,16 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       exportLockRef.current = null
       documentRef.current = document
     },
+    editViewPose() {
+      return orbitRef.current?.pose() ?? null
+    },
+    frameSelection(slotId) {
+      const world = worldRef.current
+      const orbit = orbitRef.current
+      if (!world || !orbit) return
+      orbit.frame(slotId ? world.slots.get(slotId)?.root : undefined)
+      renderWorld(world)
+    },
   }))
 
   useEffect(() => {
@@ -317,7 +365,26 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     if (!host) return
     const world = createWorld(host, documentRef.current.light, documentRef.current.camera.fov)
     worldRef.current = world
-    gizmoRef.current = createTransformGizmo(world, (id, patch) => interactionRef.current.onTransform?.(id, patch), id => interactionRef.current.onSelect?.(id))
+    let orbit: ReturnType<typeof createEditOrbit> | null = null
+    gizmoRef.current = createTransformGizmo(
+      world,
+      (id, patch) => interactionRef.current.onTransform?.(id, patch),
+      id => interactionRef.current.onSelect?.(id),
+      dragging => orbit?.setGizmoDragging(dragging),
+    )
+    orbit = createEditOrbit(world)
+    orbitRef.current = orbit
+    const highlight = createSelectionHighlight(world.scene)
+    highlightRef.current = highlight
+    const hover = (event: PointerEvent) => {
+      if (exportLockRef.current) return
+      const id = pickSceneId(world, event.clientX, event.clientY)
+      if (id === hoverRef.current) return
+      hoverRef.current = id
+      paintHighlight(world, highlight, selectedRef.current, id)
+      renderWorld(world)
+    }
+    host.addEventListener('pointermove', hover)
     const resize = () => {
       if (exportLockRef.current) return
       resizeWorld(world, host)
@@ -328,6 +395,11 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
     observer.observe(host)
     return () => {
       observer.disconnect()
+      host.removeEventListener('pointermove', hover)
+      orbit?.dispose()
+      orbitRef.current = null
+      highlight.dispose()
+      highlightRef.current = null
       gizmoRef.current?.dispose()
       gizmoRef.current = null
       disposeWorld(world)
@@ -420,7 +492,12 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
   useEffect(() => {
     const world = worldRef.current
     if (!world || exportLockRef.current) return
+    const orbit = orbitRef.current
+    if (!freeView) orbit?.setFree(false)
     paintWorld(world, document, sceneSeconds)
+    if (freeView) orbit?.setFree(true)
+    paintHighlight(world, highlightRef.current, selectedId, hoverRef.current)
+    renderWorld(world)
     const worldCue = document.worldSfx?.find(cue => cue.id === selectedWorldSfxId)
     gizmoRef.current?.sync(
       selectedWorldSfxId ? undefined : document.slots.find(slot => slot.id === selectedId),
@@ -428,7 +505,7 @@ export const Scene3DStage = forwardRef<Scene3DStageHandle, Props>(function Scene
       editing,
       worldCue ? worldSfxAtTime(worldCue, sceneSeconds) : undefined,
     )
-  }, [document, sceneSeconds, selectedId, selectedWorldSfxId, transformMode, editing])
+  }, [document, sceneSeconds, selectedId, selectedWorldSfxId, transformMode, editing, freeView])
 
   return <><div ref={hostRef} className="absolute inset-0" data-testid="scene3d-stage" />
     {screenError && <p role="alert" className="absolute bottom-2 left-2 z-10 rounded bg-black/90 p-2 text-xs text-red-200">{t('screens.failed')}</p>}</>

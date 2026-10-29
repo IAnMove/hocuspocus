@@ -1,109 +1,48 @@
-import { PropLibraryPanel } from './PropLibraryPanel'
-import { propSlot, PROP_DRAG_TYPE, type LibraryProp } from './propLibrary'
-import { ExampleDownloads } from './ExampleDownloads'
+import { propSlot, type LibraryProp } from './propLibrary'
 import { useDocumentRoundtrip } from './documentRoundtrip'
 import { safeSessionStorage, safeStorageGet, safeStorageSet } from '../../lib/safeStorage'
-import { exampleCollections, isBuiltinScene3DTemplate } from './templateCatalog'
-import { CinematicControls, AppearanceControls, RenderLookControls } from './CinematicControls'
-import { PixelWorldControls } from './PixelWorldControls'
-import { addTv, applyScreenToAllTvs } from './pixel/pixelEdits'
+import { isBuiltinScene3DTemplate } from './templateCatalog'
 import { useSceneDocumentHandoff } from '../sceneFx/handoff'
-import { SceneFxControls } from '../sceneFx/SceneFxControls'
-import { SceneFxOverlay } from '../sceneFx/SceneFxOverlay'
 import { adoptPreparedSceneDocument, withFxShowcase } from '../sceneFx/showcase'
-import { WorldSfxControls } from '../sceneFx/WorldSfxControls'
-import { worldSfxAudioCues } from '../sceneFx/world'
 import { applyWorldSfxDemo } from '../sceneFx/worldDemo'
-import { WORLD_SFX_SELECT_PREFIX } from './transformGizmo'
-import { Scene3DMotionControls } from './Scene3DMotionControls'
+import { WORLD_SFX_SELECT_PREFIX, type TransformMode } from './transformGizmo'
 import { useWalkBake } from './useWalkBake'
-import { Scene3DSpeakerControls } from './speech/Scene3DSpeakerControls'
-import { Scene3DSpeechStatus } from './speech/Scene3DSpeechStatus'
-import { Scene3DSpeechSelector } from './speech/Scene3DSpeechSelector'
-import { LipsPickOverlay } from './speech/LipsPickOverlay'
-import { defaultSpeech } from './speech/types'
-import { speechEnd } from './speech/timeline'
 import { useSpeechProfiles } from './speech/useSpeechProfiles'
 import { SPEECH_HANDOFF_EVENT, takeSpeechProduction, preserveSpeechDraft } from './speech/production'
-import { Scene3DSoundtrackControls } from './speech/Scene3DSoundtrackControls'
-import { SceneSpeechAudio } from './speech/preview'
-import { MotionLabAudio } from './motionlab/previewAudio'
-import { MotionLabControls } from './motionlab/controls'
-import { Scene3DScreenControls } from './Scene3DScreenControls'
 import { defaultMediaScreen } from './mediaScreen'
-import { Scene3DFramingControls } from './Scene3DFramingControls'
-import { ComicTransitionPanel } from './ComicTransitionPanel'
-import { Scene3DRoomCameraPicker } from './Scene3DRoomCameraPicker'
-import { withRoomCamera } from './roomCamera'
-import { AtmosClearingControls } from './AtmosClearingControls.tsx'
-import { KineticTextControls } from '../../components/common/KineticTextControls'
-import { KineticTextOverlay } from '../../components/common/KineticTextOverlay'
-import type { TFunction } from 'i18next'
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { fetchOutputs, type ApiOutput } from '../../api/client'
-import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { useUiTranslation } from '../../i18n'
 import { useStore } from '../../stores/useStore'
-import { Scene3DShotLibraryCard } from './Scene3DShotLibraryCard'
 import { remountUserTemplate, type World3DUserTemplate } from './userTemplates.ts'
-import { Scene3DAnimationControls } from './Scene3DAnimationControls'
-import { Scene3DHoldControls } from './Scene3DHoldControls'
-import { ExportReviewPanel } from '../render/ExportReviewPanel.tsx'
-import { RenderQualityPicker } from '../render/RenderQualityPicker'
 import type { ExportReviewInput } from '../render/exportReview.ts'
 import type { RenderChoice } from '../render/renderEstimate.ts'
-import { Scene3DDocumentControls } from './Scene3DDocumentControls'
-import { Scene3DTransport } from './Scene3DTransport'
-import { Scene3DTransformPanel } from './Scene3DTransformPanel'
-import { Scene3DPreview } from './Scene3DPreview'
-import { Scene3DObjectList } from './Scene3DObjectList'
-import { Scene3DInteraction } from './Scene3DInteraction'
-import type { TransformMode } from './transformGizmo'
 import { clipBindingError, resolveScene3DClip, retainSlotClipCatalogs } from './clips.ts'
 import { scene3dFrameCount, scene3dFrameTime, scene3dPlaybackSpeed } from './clock.ts'
 import { parseScene3DDocument } from './document.ts'
-import { applyScene3DGizmoPatch, createDocumentId, useScene3DHistory, type Scene3DHistorySession } from './documentHistory.ts'
-import { SceneObjectInspector } from './SceneObjectInspector.tsx'
+import { createDocumentId, useScene3DHistory, type Scene3DDocumentRef } from './documentHistory.ts'
 import { canMutateWorld3DScene } from './exportLock.ts'
 import { applyAssignedSlotSource, exportWorkspaceDocument } from './workspaceMutations.ts'
-import { Scene3DStage, type Scene3DStageHandle } from './Scene3DStage.tsx'
-import { Scene3DGeometryReview } from './Scene3DGeometryReview.tsx'
+import type { Scene3DStageHandle } from './Scene3DStage.tsx'
 import { applyScene3DTemplate, patchScene3DSlot, remountScene3DTemplate, type Scene3DTemplateId } from './templates.ts'
-import { Scene3DImageLookControls } from './Scene3DImageLookControls'
-import { Scene3DWindowControls } from './Scene3DWindowControls'
-import { commitSlotSourceChoice, pickerOutputFromSlot, type SlotSourceCapture, type SlotSourceLive } from './slotSource.ts'
-import type { Scene3DCameraFamily, Scene3DClipCatalogEntry, Scene3DDocument, Scene3DLoop, Scene3DSlot } from './types.ts'
+import type { SlotSourceCapture, SlotSourceLive } from './slotSource.ts'
+import type { Scene3DClipCatalogEntry, Scene3DDocument, Scene3DSlot } from './types.ts'
 import { documentFromWorld3DRequest, listenForWorld3DDocument, listenForWorld3DWorkflow } from './world3dAgent.ts'
-
-const FAMILIES = ['fixed', 'establishment', 'orbit', 'follow', 'pursuit', 'side', 'front', 'chase', 'hood', 'wing', 'product', 'reveal', 'encounter', 'musical'] as const satisfies readonly Scene3DCameraFamily[]
+import { Scene3DDesk } from './Scene3DDesk'
+import { applyEditCamera } from './editCamera'
+import { dispatchAddPicker } from './pickerApply'
+import type { AddPickerCategory } from './addPickerCatalog'
 
 type Props = {
   width: number
   height: number
   initialDocument?: Scene3DDocument
+  fill?: boolean
+  topBarExtra?: ReactNode
 }
 
 function revokeIfBlob(url: string) {
   if (url.startsWith('blob:')) URL.revokeObjectURL(url)
-}
-
-function numberField(label: string, value: number, onChange: (value: number) => void, step = 0.05, disabled = false) {
-  return (
-    <label className="flex items-center gap-1 text-sm text-text-muted">
-      {label}
-      <input
-        type="number"
-        step={step}
-        disabled={disabled}
-        value={Number.isFinite(value) ? value : 0}
-        onChange={event => {
-          const next = Number(event.target.value)
-          if (Number.isFinite(next)) onChange(next)
-        }}
-        className="w-16 rounded border border-border bg-bg-tertiary px-1 py-0.5 text-sm text-text-primary disabled:opacity-40"
-      />
-    </label>
-  )
 }
 
 function seekWorkspaceTime(
@@ -119,7 +58,7 @@ function seekWorkspaceTime(
   setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps))))
 }
 
-export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
+export function Scene3DWorkspace({ width, height, initialDocument, fill = false, topBarExtra }: Props) {
   const { t } = useUiTranslation('scene3d')
   const { t: editorT } = useUiTranslation('scene3dEditor')
   const workspace = useStore(s => s.activeWorkspace)
@@ -131,6 +70,8 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const [playing, setPlaying] = useState(false)
   const [frame, setFrame] = useState(0)
   const [selectedId, setSelectedId] = useState('subject_1')
+  const [picker, setPicker] = useState<{ open: boolean; category: AddPickerCategory }>({ open: false, category: 'all' })
+  const [freeView, setFreeView] = useState(false)
   const [selectedWorldSfxId, setSelectedWorldSfxId] = useState<string | undefined>()
   const [exporting, setExporting] = useState(false)
   const exportingRef = useRef(false)
@@ -174,7 +115,7 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
   const speed = scene3dPlaybackSpeed(sceneDoc.playbackSpeed)
   const count = scene3dFrameCount(sceneDoc.duration, fps)
   const seconds = scene3dFrameTime(frame, sceneDoc.duration, fps)
-  const selected = sceneDoc.slots.find(slot => slot.id === selectedId) ?? sceneDoc.slots[0]
+  const selected = selectedId ? (sceneDoc.slots.find(slot => slot.id === selectedId) ?? sceneDoc.slots[0]) : undefined
   const editingLocked = exporting || playing
   useSceneDocumentHandoff('3d', raw => {
     if (exportingRef.current || playing) throw new Error('Stop playback/export before replacing the scene.')
@@ -382,442 +323,120 @@ export function Scene3DWorkspace({ width, height, initialDocument }: Props) {
     )
   }
 
-  return (
-    <div className="flex w-full flex-col gap-2" data-testid="scene3d-workspace">
-      <ExampleDownloads required={exampleCollections(sceneDoc)} disabled={editingLocked} onInstalled={() => { if (!exportingRef.current) bumpGeneration() }} />
-      <SceneSpeechAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} />
-      <MotionLabAudio document={sceneDoc} seconds={seconds} playing={playing && !exporting} speed={speed} />
-      {sceneDoc.production && <p className="rounded-lg border border-border bg-bg-secondary p-3 text-sm" data-testid="speech-production-origin">
-        {editorT(`speech.kind.${sceneDoc.production.kind}`)} · {sceneDoc.production.title}
-        <span className="mt-1 block text-xs text-text-muted">{editorT('speech.productionReady')}</span>
-        <button className="mt-2 underline" disabled={editingLocked} onClick={() => {
-          try {
-            const raw = safeStorageGet('session', 'hocuspocus:world3d-before-speech:' + workspace)
-            const previous = raw && parseScene3DDocument(JSON.parse(raw))
-            if (!previous) return
-            preserveSpeechDraft(workspace, sceneDoc)
-            bumpGeneration()
-            setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, previous.slots, current))
-            setFrame(0); applyScene(previous)
-          } catch (error) { setExportNote(error instanceof Error ? error.message : String(error)) }
-        }}>{editorT('speech.previousShot')}</button>
-      </p>}
-      <Scene3DSpeechStatus document={sceneDoc} seconds={seconds} />
-      <Scene3DSoundtrackControls tracks={sceneDoc.soundtrack} disabled={editingLocked}
-        onChange={soundtrack => applyScene(current => ({ ...current, soundtrack }))} />
-      <Scene3DShotLibraryCard document={sceneDoc} userTemplateId={selectedUserTemplateId} applyDisabled={exporting} editingLocked={editingLocked}
-        keepAssets={keepAssets} onKeepAssets={setKeepAssets} onTemplate={mountTemplate} onUserTemplate={mountUserTemplate}
-        workspace={workspace} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')} />
-      <Scene3DDocumentControls document={sceneDoc} disabled={editingLocked}
-        workspace={workspace} identity={session.identity} preview={() => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')}
-        onChange={next => { applyScene(next); setFrame(0) }}
-        onSaved={(output, document, identity) => session.acknowledgeSave(document, identity, Math.max(identity.revision + 1, Math.trunc(output.created_at) || 0))}
-        onLoad={(next, source) => {
-          if (!canMutateWorld3DScene(exportingRef.current)) return
-          bumpGeneration()
-          const keptUrls = new Set(next.slots.map(slot => slot.sourceUrl))
-          for (const slot of sceneDoc.slots) if (!keptUrls.has(slot.sourceUrl)) revokeIfBlob(slot.sourceUrl)
-          setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, next.slots, current))
-          setPlaying(false); setFrame(0)
-          session.open(next, source ?? { workspace: workspace || 'default', documentId: createDocumentId(), revision: 0 })
-          selectSlot(next.slots[0]?.id ?? 'subject_1')
-          setSpeechOpen(next.slots.some(slot => Boolean(slot.speech)))
-          setSelectedUserTemplateId(undefined)
-        }} />
-      <Scene3DSpeechSelector slots={sceneDoc.slots} selected={selected} open={speechOpen}
-        onToggle={() => { setPickTarget(undefined); setSpeechOpen(open => !open) }} onSelect={selectSlot} />
-      <CinematicControls environment={sceneDoc.environment} disabled={editingLocked} onChange={environment => applyScene(current => ({ ...current, environment }))} />
-      <RenderLookControls document={sceneDoc} disabled={editingLocked} onChange={look => applyScene(current => ({ ...current, ...look }))} />
-      <MotionLabControls document={sceneDoc} disabled={editingLocked} onChange={motionLab => applyScene(current => ({ ...current, motionLab }))} />
-      <PixelWorldControls pixelWorld={sceneDoc.pixelWorld} dressing={sceneDoc.dressing} tvs={sceneDoc.slots.filter(slot => slot.screen?.style === 'crt').length} slots={sceneDoc.slots.length} disabled={editingLocked}
-        onChange={patch => applyScene(current => ({ ...current, ...patch }))} onAddTv={() => applyScene(current => addTv(current))} />
-      <SceneFxControls cues={sceneDoc.sfx} duration={sceneDoc.duration} disabled={editingLocked} onChange={sfx => applyScene(current => ({ ...current, sfx }))} onShowcase={collection => applyScene(current => withFxShowcase(current, collection))} />
-      <WorldSfxControls cues={sceneDoc.worldSfx} duration={sceneDoc.duration} selectedId={selectedWorldSfxId} disabled={editingLocked}
-        onSelect={id => { setPickTarget(undefined); setSelectedWorldSfxId(id) }}
-        onChange={worldSfx => applyScene(current => ({ ...current, worldSfx }))}
-        onDemo={id => {
-          if (!canMutateWorld3DScene(exportingRef.current)) return
-          const adopted = applyWorldSfxDemo(sceneDoc, id)
-          if (adopted.mode === 'replace') adoptMountedScene(adopted.document)
-          else applyScene(adopted.document)
-          setPlaying(false); setFrame(0)
-          setSelectedWorldSfxId(adopted.document.worldSfx?.[adopted.mode === 'replace' ? 0 : (sceneDoc.worldSfx?.length ?? 0)]?.id)
-        }} />
-      <KineticTextControls cues={sceneDoc.texts} duration={sceneDoc.duration} disabled={editingLocked} onChange={texts => applyScene(current => ({ ...current, texts }))} />
-      <Scene3DTransport playing={playing} disabled={exporting} seconds={seconds} duration={sceneDoc.duration} speed={speed}
-        onToggle={() => { if (canMutateWorld3DScene(exportingRef.current)) { setPickTarget(undefined); setPlaying(current => !current) } }}
-        onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }}
-        onSpeed={playbackSpeed => applyScene(current => ({ ...current, playbackSpeed }))} />
-      <WorkspaceStageColumn
-        speechVisible={speechVisible}
-        sceneDoc={sceneDoc}
-        playing={playing}
-        exporting={exporting}
-        selected={selected}
-        selectedId={selectedId}
-        selectedWorldSfxId={selectedWorldSfxId}
-        pickTarget={pickTarget}
-        generation={generation}
-        transformMode={transformMode}
-        seconds={seconds}
-        speed={speed}
-        editingLocked={editingLocked}
-        workspace={workspace}
-        session={session}
-        stageRef={stageRef}
-        t={t}
-        editorT={editorT}
-        setTransformMode={setTransformMode}
-        setPickTarget={setPickTarget}
-        setSelectedWorldSfxId={setSelectedWorldSfxId}
-        setSelectedId={setSelectedId}
-        setCatalogs={setCatalogs}
-        setScreenTargets={setScreenTargets}
-        setPlaying={setPlaying}
-        selectSlot={selectSlot}
-        applyScene={applyScene}
-      />
-      {sceneDoc.dressing === 'workshop' && <label className="flex items-center gap-2 text-xs">{editorT('travel.screen')}<select disabled={exporting} value={sceneDoc.workshopScreen ?? 'code'} onChange={event => applyScene(current => ({ ...current, workshopScreen: event.target.value as 'code' | 'error' | 'success' }))} className="min-h-10 rounded border border-border bg-bg-tertiary px-2">{(['code', 'error', 'success'] as const).map(state => <option key={state} value={state}>{editorT(`travel.${state}`)}</option>)}</select></label>}
-      <AtmosClearingControls document={sceneDoc} disabled={exporting} label={key => editorT(key as 'atmos.time')} onChange={atmos => applyScene(current => ({ ...current, atmos }))} />
-      <Scene3DFramingControls framing={sceneDoc.camera.framing} slots={sceneDoc.slots} disabled={editingLocked || sceneDoc.camera.family === 'fixed'} onChange={framing => applyScene(current => ({ ...current, camera: { ...current.camera, framing } }))} />
-      <ComicTransitionPanel workspace={workspace || undefined} disabled={editingLocked} />
-      <RenderQualityPicker
-        width={sceneDoc.width}
-        height={sceneDoc.height}
-        fps={fps}
-        duration={sceneDoc.duration}
-        disabled={exporting}
-        capabilitiesUrl="/api/v1/scenes/world3d/export/capabilities"
-        onChange={choice => { renderChoiceRef.current = choice }}
-      />
-      <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-sm text-text-primary">{editorT('camera')}
-          <select disabled={exporting} value={sceneDoc.camera.family} onChange={event => applyScene(current => ({ ...current, camera: { ...current.camera, family: event.target.value as Scene3DCameraFamily, framing: undefined } }))}
-            className="min-h-11 rounded-lg border border-border bg-bg-primary px-3 text-xs disabled:opacity-40">
-            {FAMILIES.map(family => <option key={family} value={family}>{t(`stage.family.${family}`)}</option>)}
-          </select>
-        </label>
-        <Scene3DRoomCameraPicker document={sceneDoc} disabled={exporting} onChange={id => applyScene(current => withRoomCamera(current, id))} />
-        <button
-          type="button"
-          data-testid="world3d-export"
-          disabled={editingLocked || Boolean(clipIssue)}
-          onClick={() => void exportScene()}
-          className="ml-auto min-h-11 rounded-lg border border-cyan-400/50 bg-cyan-400/10 px-4 text-xs font-semibold text-cyan-100 disabled:opacity-40"
-        >
-          {exporting ? t('stage.exporting') : t('stage.export')}
-        </button>
-        {exporting && <button
-          type="button"
-          data-testid="world3d-export-cancel"
-          onClick={() => exportAbortRef.current?.abort()}
-          className="min-h-11 rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 text-xs font-semibold text-amber-100"
-        >{t('stage.exportCancel')}</button>}
-      </div>
-      <p className="text-xs text-text-muted">{t('stage.exportQualityHint')}</p>
-      <Scene3DGeometryReview stageRef={stageRef} document={sceneDoc} seconds={seconds} disabled={exporting}
-        onSeek={time => { if (exportingRef.current) return; setPlaying(false); setFrame(Math.min(count - 1, Math.max(0, Math.round(time * fps)))) }} />
-      <ExportReviewPanel review={receiptReview} duration={sceneDoc.duration} onSeek={time => seekWorkspaceTime(time, exportingRef.current, fps, count, setPlaying, setFrame)} />
-      {selected && (selected.media !== 'image' || selected.surface === 'cutout') && <Scene3DMotionControls slot={selected} duration={sceneDoc.duration / speed} disabled={editingLocked} onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
-        walk={walkBake.control(selected)} />}
-      <button type="button" disabled={editingLocked || sceneDoc.slots.length >= 64} className="min-h-11 self-start rounded-lg border border-cyan-400/50 px-4 text-sm text-text-primary" onClick={() => {
-        if (!canMutateWorld3DScene(exportingRef.current)) return
-        const id = `screen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-        applyScene(current => ({ ...current, slots: [...current.slots, { id, slot: 'prop', media: 'screen', sourceUrl: '', clip: null, position: [0, 0, -2], rotationY: 0, scale: 1, screen: defaultMediaScreen() }] }))
-        selectSlot(id)
-      }}>{editorT('screens.add')}</button>
-      <div className="grid gap-1.5 md:grid-cols-2">
-        {sceneDoc.slots.map(slot => (
-          <Scene3DSlotCard
-            key={slot.id}
-            slot={slot}
-            selected={selectedId === slot.id}
-            catalogs={catalogs}
-            slots={sceneDoc.slots}
-            duration={sceneDoc.duration}
-            templateId={sceneDoc.templateId}
-            workspace={workspace}
-            exporting={exporting}
-            editingLocked={editingLocked}
-            imageItems={imageItems}
-            modelItems={modelItems}
-            videoItems={videoItems}
-            meshes={screenTargets[slot.id]?.meshes ?? []}
-            nodes={screenTargets[slot.id]?.nodes ?? []}
-            t={t}
-            editorT={editorT}
-            onSelect={selectSlot}
-            onSpeech={() => {
-              selectSlot(slot.id); setSpeechOpen(true)
-              window.requestAnimationFrame(() => window.document.getElementById('world3d-speech-inspector')?.scrollIntoView({ block: 'nearest' }))
-            }}
-            onAssign={assignChoice}
-            onApplyScene={applyScene}
-            onBumpGeneration={bumpGeneration}
-            liveSource={() => ({
-              generation: generationRef.current,
-              slotId: slot.id,
-              templateId: sceneDocRef.current.templateId,
-              workspaceId: workspaceRef.current || workspace,
-              exporting: exportingRef.current,
-            })}
-          />
-        ))}
-      </div>
-      {clipIssue && <p className="text-xs text-red-300">{clipIssue}</p>}
-      {exportNote && <p className="text-xs text-cyan-100" data-testid="world3d-export-note">{exportNote}</p>}
-      <p className="text-xs text-text-muted">{sceneDoc.templateId === 'run-loop' ? t('stage.runHelp') : t('stage.help')}</p>
-      <span data-testid="scene3d-roundtrip" className="hidden">{roundtrip ? 'ok' : 'bad'}</span>
-    </div>
-  )
-}
-
-function WorkspaceStageColumn({
-  speechVisible, sceneDoc, playing, exporting, selected, selectedId, selectedWorldSfxId, pickTarget, generation,
-  transformMode, seconds, speed, editingLocked, workspace, session, stageRef, t, editorT,
-  setTransformMode, setPickTarget, setSelectedWorldSfxId, setSelectedId, setCatalogs, setScreenTargets, setPlaying,
-  selectSlot, applyScene,
-}: {
-  speechVisible: boolean
-  sceneDoc: Scene3DDocument
-  playing: boolean
-  exporting: boolean
-  selected?: Scene3DSlot
-  selectedId: string
-  selectedWorldSfxId?: string
-  pickTarget?: string
-  generation: number
-  transformMode: TransformMode
-  seconds: number
-  speed: number
-  editingLocked: boolean
-  workspace: string
-  session: Scene3DHistorySession
-  stageRef: MutableRefObject<Scene3DStageHandle | null>
-  t: TFunction<'scene3d'>
-  editorT: TFunction<'scene3dEditor'>
-  setTransformMode: Dispatch<SetStateAction<TransformMode>>
-  setPickTarget: Dispatch<SetStateAction<string | undefined>>
-  setSelectedWorldSfxId: Dispatch<SetStateAction<string | undefined>>
-  setSelectedId: Dispatch<SetStateAction<string>>
-  setCatalogs: Dispatch<SetStateAction<Record<string, Scene3DClipCatalogEntry[]>>>
-  setScreenTargets: Dispatch<SetStateAction<Record<string, { meshes: string[]; nodes: string[] }>>>
-  setPlaying: Dispatch<SetStateAction<boolean>>
-  selectSlot: (id: string) => void
-  applyScene: (updater: Scene3DDocument | ((current: Scene3DDocument) => Scene3DDocument), group?: string) => void
-}) {
-  const pickKey = selected ? `${generation}/${selected.id}/${selected.sourceUrl}` : ''
-  return (
-    <div className={`grid items-start gap-3 ${speechVisible ? '2xl:grid-cols-[minmax(0,1fr)_21rem]' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes(PROP_DRAG_TYPE)) event.preventDefault() }} onDrop={event => {
-            const raw = event.dataTransfer.getData(PROP_DRAG_TYPE)
-            if (!raw || editingLocked) return
-            event.preventDefault()
-            try { const prop = JSON.parse(raw) as LibraryProp; if (prop.approved && prop.heightM > 0) applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] })) } catch { /* Ignore foreign drag data. */ }
-          }}>
-      <div className="grid min-w-0 items-start gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <Scene3DPreview width={sceneDoc.width} height={sceneDoc.height}>
-          <Scene3DInteraction enabled={!playing && !exporting && (Boolean(selectedWorldSfxId) || Boolean(selected))}
-            width={sceneDoc.width} height={sceneDoc.height} onMode={setTransformMode}>
-            <Scene3DStage
-              key={generation}
-              ref={stageRef}
-              document={sceneDoc}
-              sceneSeconds={seconds}
-              selectedId={selectedId}
-              selectedWorldSfxId={selectedWorldSfxId}
-              transformMode={transformMode}
-              editing={!playing && !exporting}
-              onSelect={id => {
-                setPickTarget(undefined)
-                if (id.startsWith(WORLD_SFX_SELECT_PREFIX)) { setSelectedWorldSfxId(id.slice(WORLD_SFX_SELECT_PREFIX.length)); return }
-                setSelectedWorldSfxId(undefined)
-                setSelectedId(id)
-              }}
-              onTransform={(id, patch) => applyScene(current => applyScene3DGizmoPatch(current, id, patch, seconds), `drag:${id}`)}
-              onSlotClips={(slotId, clips) => setCatalogs(current => ({ ...current, [slotId]: clips }))}
-              onSlotMeshes={(slotId, meshes, nodes) => setScreenTargets(current => ({ ...current, [slotId]: { meshes, nodes } }))}
-            />
-            <SceneFxOverlay cues={sceneDoc.sfx} soundCues={[...(sceneDoc.sfx ?? []), ...worldSfxAudioCues(sceneDoc.worldSfx)]} seconds={seconds} width={sceneDoc.width} height={sceneDoc.height} duration={sceneDoc.duration} playing={playing} speed={speed} getSource={() => stageRef.current?.canvas() ?? null} />
-            <KineticTextOverlay cues={sceneDoc.texts} seconds={seconds} width={sceneDoc.width} height={sceneDoc.height} />
-            {speechVisible && !playing && !exporting && selected && pickTarget === pickKey &&
-              <LipsPickOverlay onCancel={() => setPickTarget(undefined)} onPick={(x, y) => {
-                const face = stageRef.current?.pickFace?.(selected.id, x, y, selected.speech?.face)
-                if (!face) return false
-                applyScene(current => patchScene3DSlot(current, selected.id, {
-                  speech: { ...defaultSpeech(), ...selected.speech, face, enabled: true, eyes: selected.speech?.face ? selected.speech.eyes : false, clean: selected.speech?.face ? selected.speech.clean : false },
-                }))
-                setPickTarget(undefined); return true
-              }} />}
-            {sceneDoc.clipNumber && <div className="pointer-events-none absolute right-3 top-3 z-[901] rounded bg-black/80 px-3 py-2 font-mono text-sm text-cyan-50">CLIP {String(sceneDoc.clipNumber).padStart(2, '0')}</div>}
-            <div className="pointer-events-none absolute left-3 top-3 rounded-lg bg-black/75 px-3 py-2 text-xs text-cyan-200">
-              {t('stage.badge')} · {editorT(`template.${sceneDoc.templateId}.title`)}
-              <span className="mt-1 block text-[10px] text-amber-100/90">{t('stage.previewQuality')}</span>
-            </div>
-          </Scene3DInteraction>
-        </Scene3DPreview>
-        <div className="min-w-0 space-y-3">
-          <PropLibraryPanel workspace={workspace} disabled={editingLocked} onAdd={prop => applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))} />
-          <Scene3DObjectList slots={sceneDoc.slots} selectedId={selectedWorldSfxId ? undefined : selectedId} onSelect={selectSlot} />
-          {selected?.slot === 'prop' && <button disabled={editingLocked} className="min-h-11 rounded-lg border border-border px-3" onClick={() => applyScene(current => ({ ...current, slots: current.slots.filter(slot => slot.id !== selected.id) }))}>{editorT('props.remove')}</button>}
-          {selected && !selectedWorldSfxId && <Scene3DTransformPanel slot={selected} mode={transformMode} disabled={editingLocked} onMode={setTransformMode}
-            onChange={patch => applyScene(current => patchScene3DSlot(current, selected.id, patch))}
-            onReset={() => {
-              const pose = isBuiltinScene3DTemplate(sceneDoc.templateId)
-                ? applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id) : undefined
-              if (pose) applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
-            }} />}
-        </div>
-      </div>
-      <SceneObjectInspector
-        document={sceneDoc}
-        selectedId={selectedId}
-        locked={editingLocked}
-        saveState={session.saveState}
-        canUndo={session.canUndo}
-        canRedo={session.canRedo}
-        conflict={session.conflict}
-        preview={<p className="p-3 text-xs text-cyan-100">{t('inspector.previewHint')}</p>}
-        onChange={(next, group) => applyScene(next, group)}
-        onUndo={session.undo}
-        onRedo={session.redo}
-        onCheckpoint={session.checkpoint}
-        onResolveConflict={session.resolveConflict}
-      />
-      {speechVisible && selected && <div id="world3d-speech-inspector" className="min-w-0 xl:max-h-[38rem] xl:overflow-y-auto">
-        <Scene3DSpeakerControls
-          key={`${workspace}/${generation}/${selected.id}/${selected.sourceUrl}`} // remount when a shot load bumps generation so Advanced details reset
-
-          slot={selected} workspace={workspace} disabled={editingLocked}
-          onPick={() => { setPlaying(false); setPickTarget(`${generation}/${selected.id}/${selected.sourceUrl}`) }}
-          calibrate={profile => stageRef.current?.facePlacement?.(selected.id, profile)}
-          onChange={speech => applyScene(current => current.slots.find(item => item.id === selected.id)?.sourceUrl === selected.sourceUrl
-            ? patchScene3DSlot(current, selected.id, { speech }) : current)}
-          onImport={patch => applyScene(current => current.slots.find(item => item.id === selected.id)?.sourceUrl === selected.sourceUrl
-            ? patchScene3DSlot(current, selected.id, patch) : current)}
-          onFit={duration => applyScene(current => ({ ...current, duration: Math.min(600, Math.max(duration, ...current.slots.map(item =>
-            item.speech?.enabled ? speechEnd(item.speech) : 0), ...(current.soundtrack ?? []).map(track => track.end ?? 0))) }))} />
-      </div>}
-    </div>
-  )
-}
-
-function Scene3DSlotCard({
-  slot, selected, catalogs, slots, duration, templateId, workspace,
-  exporting, editingLocked, imageItems, modelItems, videoItems, meshes, nodes, t, editorT,
-  onSelect, onSpeech, onAssign, onApplyScene, onBumpGeneration, liveSource,
-}: {
-  slot: Scene3DSlot
-  selected: boolean
-  catalogs: Record<string, Scene3DClipCatalogEntry[]>
-  slots: readonly Scene3DSlot[]
-  duration: number
-  templateId: string
-  workspace: string
-  exporting: boolean
-  editingLocked: boolean
-  imageItems: ApiOutput[]
-  modelItems: ApiOutput[]
-  videoItems: ApiOutput[]
-  meshes: string[]
-  nodes: string[]
-  t: TFunction<'scene3d'>
-  editorT: TFunction<'scene3dEditor'>
-  onSelect: (id: string) => void
-  onSpeech: () => void
-  onAssign: (slot: Scene3DSlot, capture: SlotSourceCapture, item: ApiOutput | null) => void
-  onApplyScene: (updater: Scene3DDocument | ((current: Scene3DDocument) => Scene3DDocument), group?: string) => void
-  onBumpGeneration: () => void
-  liveSource: () => SlotSourceLive
-}) {
-  const captureFromLive = (): SlotSourceCapture => {
-    const live = liveSource()
-    return { generation: live.generation, slotId: slot.id, templateId, workspaceId: workspace }
+  const loadDocument = (next: Scene3DDocument, source?: Scene3DDocumentRef) => {
+    if (!canMutateWorld3DScene(exportingRef.current)) return
+    bumpGeneration()
+    const keptUrls = new Set(next.slots.map(slot => slot.sourceUrl))
+    for (const slot of sceneDoc.slots) if (!keptUrls.has(slot.sourceUrl)) revokeIfBlob(slot.sourceUrl)
+    setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, next.slots, current))
+    setPlaying(false)
+    setFrame(0)
+    session.open(next, source ?? { workspace: workspace || 'default', documentId: createDocumentId(), revision: 0 })
+    selectSlot(next.slots[0]?.id ?? 'subject_1')
+    setSpeechOpen(next.slots.some(slot => Boolean(slot.speech)))
+    setSelectedUserTemplateId(undefined)
   }
-  return (
-    <div className={`rounded-xl border p-3 text-xs text-text-secondary ${selected ? 'border-cyan-300 bg-cyan-400/5' : 'border-border bg-bg-primary'}`}>
-      <button type="button" className="block min-h-10 font-semibold text-text-primary" onClick={() => onSelect(slot.id)}>{t(`stage.slot.${slot.slot}`)}</button>
-      {slot.media === 'model3d' && <button type="button" className="mb-2 min-h-9 rounded-lg border border-border px-3 text-xs hover:bg-bg-hover" onClick={onSpeech}>{editorT('speech.option')}{slot.speech?.enabled ? ' · ✓' : ''}</button>}
-      {slot.media !== 'screen' && <div className="mt-1">
-        <AssetInput
-          label={t(`stage.slot.${slot.slot}`)}
-          placeholder={t('stage.fromApp')}
-          items={slot.media === 'image' ? imageItems : modelItems}
-          value={pickerOutputFromSlot(slot.sourceUrl, slot.media, slot.sourceRef)}
-          accept={slot.media === 'image' ? 'image/*' : '.glb,model/gltf-binary'}
-          optional
-          disabled={exporting}
-          constraints={{ kinds: slot.media === 'image' ? ['image'] : ['model3d'], maxCount: 1, optional: true }}
-          onChoose={item => onAssign(slot, captureFromLive(), item)}
-        />
-      </div>}
-      <Scene3DScreenControls slot={slot} meshes={meshes} nodes={nodes} items={[...imageItems, ...videoItems]} disabled={editingLocked} workspace={workspace}
-        onChange={screen => onApplyScene(current => patchScene3DSlot(current, slot.id, { screen }))}
-        onApplyToAll={() => onApplyScene(current => applyScreenToAllTvs(current, slot.id))}
-        onChoose={item => {
-          if (item && item.type !== 'image' && item.type !== 'video') return
-          const commit = commitSlotSourceChoice(liveSource(), captureFromLive(), item)
-          if (commit.action === 'ignore') return
-          onApplyScene(current => {
-            const live = current.slots.find(value => value.id === slot.id)
-            if (!live?.screen) return current
-            return patchScene3DSlot(current, slot.id, { screen: { ...live.screen, sourceUrl: commit.action === 'clear' ? '' : commit.sourceUrl,
-              sourceRef: commit.action === 'clear' ? undefined : commit.sourceRef, poseSequence: undefined, media: item?.type === 'video' ? 'video' : 'image' } })
-          })
-        }}
-        onRemove={() => { onBumpGeneration(); onApplyScene(current => ({ ...current, slots: current.slots.filter(value => value.id !== slot.id), camera: current.camera.framing?.targetSlot === slot.id ? { ...current.camera, framing: undefined } : current.camera })) }} />
-      <AppearanceControls slot={slot} disabled={editingLocked} onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-      <Scene3DHoldControls slot={slot} slots={slots} disabled={editingLocked}
-        onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-      <Scene3DAnimationControls slot={slot} clips={catalogs[slot.id]} duration={duration} disabled={editingLocked}
-        onChange={patch => onApplyScene(current => patchScene3DSlot(current, slot.id, patch))} />
-      {slot.media === 'image' && <label className="my-2 flex min-h-9 items-center gap-2 text-xs"><span>{editorT('travel.surface')}</span><select disabled={exporting} value={slot.surface ?? 'backdrop'} onChange={event => onApplyScene(current => patchScene3DSlot(current, slot.id, { surface: event.target.value === 'backdrop' ? undefined : event.target.value as Scene3DSlot['surface'], loop: undefined }))} className="rounded border border-border bg-bg-tertiary p-2"><option value="backdrop">{editorT('travel.backdrop')}</option><option value="cutout">{editorT('travel.cutout')}</option><option value="environment">{editorT('cinematic.background')}</option><option value="wall">{editorT('travel.wall')}</option><option value="floor">{editorT('travel.floor')}</option></select></label>}
-      {slot.media === 'image' && slot.surface === 'cutout' && <Scene3DImageLookControls value={slot.imageLook} disabled={exporting} onChange={imageLook => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook }))} />}
-      {slot.media === 'image' && slot.surface === 'cutout' && slot.sourceUrl && <Scene3DWindowControls key={`${slot.id}:${slot.sourceUrl}`} sourceUrl={slot.sourceUrl} windows={slot.imageLook?.windows} disabled={exporting} onChange={windows => onApplyScene(current => patchScene3DSlot(current, slot.id, { imageLook: { ...slot.imageLook, windows } }))} />}
-      {slot.media === 'image' && (slot.surface === 'floor' || slot.surface === 'wall') && numberField(editorT('travel.repeat'), slot.textureRepeat ?? (slot.surface === 'floor' ? 4 : 2), value => onApplyScene(current => patchScene3DSlot(current, slot.id, { textureRepeat: Math.max(1, Math.min(16, value)) })), 1, exporting)}
-      {slot.slot === 'background' && !slot.surface && (
-        <InfiniteBackdropControls
-          loop={slot.loop}
-          disabled={exporting}
-          infiniteLabel={t('stage.infinite')}
-          speedLabel={t('stage.loopSpeed')}
-          onChange={loop => onApplyScene(current => patchScene3DSlot(current, slot.id, {
-            media: 'image',
-            loop,
-            ...(loop.cylinder && slot.scale > 2 ? { scale: 1 } : {}),
-          }))}
-        />
-      )}
-    </div>
-  )
-}
+  const acknowledgeSave = (output: ApiOutput, document: Scene3DDocument, identity: Scene3DDocumentRef) => {
+    session.acknowledgeSave(document, identity, Math.max(identity.revision + 1, Math.trunc(output.created_at) || 0))
+  }
+  const onDemo = (id: 'depth' | 'duel' | 'mixed') => {
+    if (!canMutateWorld3DScene(exportingRef.current)) return
+    const adopted = applyWorldSfxDemo(sceneDoc, id)
+    if (adopted.mode === 'replace') adoptMountedScene(adopted.document)
+    else applyScene(adopted.document)
+    setPlaying(false)
+    setFrame(0)
+    setSelectedWorldSfxId(adopted.document.worldSfx?.[adopted.mode === 'replace' ? 0 : (sceneDoc.worldSfx?.length ?? 0)]?.id)
+  }
+  const onShowcase = (collection?: 'all' | 'anime' | 'retro') => {
+    applyScene(current => withFxShowcase(current, collection))
+  }
+  const onPick = (item: Parameters<typeof dispatchAddPicker>[0]) => {
+    dispatchAddPicker(item, { applyScene, onDemo, onShowcase })
+  }
+  const openPicker = (category: AddPickerCategory) => setPicker({ open: true, category })
+  const closePicker = () => setPicker(current => ({ ...current, open: false }))
+  const addProp = (prop: LibraryProp) => {
+    applyScene(current => ({ ...current, slots: [...current.slots, propSlot(prop, workspace, `${prop.id}-${Date.now()}`)] }))
+  }
+  const addScreen = () => {
+    if (!canMutateWorld3DScene(exportingRef.current) || sceneDoc.slots.length >= 64) return
+    const id = `screen_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+    applyScene(current => ({
+      ...current,
+      slots: [...current.slots, { id, slot: 'prop', media: 'screen', sourceUrl: '', clip: null, position: [0, 0, -2] as Scene3DSlot['position'], rotationY: 0, scale: 1, screen: defaultMediaScreen() }],
+    }))
+    selectSlot(id)
+  }
+  const removeSelected = () => {
+    if (!selected || selected.slot !== 'prop') return
+    applyScene(current => ({ ...current, slots: current.slots.filter(slot => slot.id !== selected.id) }))
+  }
+  const resetSelectedPose = () => {
+    if (!selected) return
+    const pose = isBuiltinScene3DTemplate(sceneDoc.templateId)
+      ? applyScene3DTemplate(sceneDoc.templateId).slots.find(item => item.id === selected.id)
+      : undefined
+    if (!pose) return
+    applyScene(current => patchScene3DSlot(current, selected.id, { position: pose.position, scale: pose.scale, rotationY: pose.rotationY }))
+  }
+  const onStageSelect = (id: string) => {
+    setPickTarget(undefined)
+    if (id.startsWith(WORLD_SFX_SELECT_PREFIX)) {
+      setSelectedWorldSfxId(id.slice(WORLD_SFX_SELECT_PREFIX.length))
+      return
+    }
+    setSelectedWorldSfxId(undefined)
+    setSelectedId(id)
+  }
+  const seek = (time: number) => seekWorkspaceTime(time, exportingRef.current, fps, count, setPlaying, setFrame)
+  const togglePlay = () => {
+    if (!canMutateWorld3DScene(exportingRef.current)) return
+    setPickTarget(undefined)
+    setPlaying(current => !current)
+  }
+  const onSpeed = (playbackSpeed: number) => applyScene(current => ({ ...current, playbackSpeed }))
+  const restorePreviousShot = () => {
+    try {
+      const raw = safeStorageGet('session', 'hocuspocus:world3d-before-speech:' + workspace)
+      const previous = raw && parseScene3DDocument(JSON.parse(raw))
+      if (!previous) return
+      preserveSpeechDraft(workspace, sceneDoc)
+      bumpGeneration()
+      setCatalogs(current => retainSlotClipCatalogs(sceneDoc.slots, previous.slots, current))
+      setFrame(0)
+      applyScene(previous)
+    } catch (error) { setExportNote(error instanceof Error ? error.message : String(error)) }
+  }
+  const liveSource = (): SlotSourceLive => ({
+    generation: generationRef.current,
+    slotId: selected?.id ?? '',
+    templateId: sceneDocRef.current.templateId,
+    workspaceId: workspaceRef.current || workspace,
+    exporting: exportingRef.current,
+  })
+  const preview = () => stageRef.current?.paint(seconds, sceneDoc)?.toDataURL('image/png')
+  const commitFreeView = () => {
+    const pose = stageRef.current?.editViewPose?.() ?? null
+    if (!pose) return
+    applyScene(current => applyEditCamera(current, pose), 'edit-camera')
+  }
+  const frameSelection = () => stageRef.current?.frameSelection?.(selected?.id)
 
-function InfiniteBackdropControls({
-  loop,
-  infiniteLabel,
-  speedLabel,
-  onChange,
-  disabled = false,
-}: {
-  loop: Scene3DLoop | undefined
-  infiniteLabel: string
-  speedLabel: string
-  onChange: (loop: Scene3DLoop) => void
-  disabled?: boolean
-}) {
-  const speed = loop?.speed ?? 0.18
   return (
-    <div className="mt-1 flex flex-wrap items-center gap-1">
-      <label className="flex items-center gap-1 text-sm text-text-muted">
-        <input
-          type="checkbox"
-          data-testid="scene3d-infinite"
-          disabled={disabled}
-          checked={loop?.cylinder === true}
-          onChange={event => onChange({ cylinder: event.target.checked, speed })}
-        />
-        {infiniteLabel}
-      </label>
-      {loop?.cylinder === true && numberField(speedLabel, speed, value => onChange({ cylinder: true, speed: value }), 0.01, disabled)}
-    </div>
+    <Scene3DDesk stage={stageRef} model={{
+      fill, topBarExtra, sceneDoc, editingLocked, exporting, playing, selected, selectedId, selectedWorldSfxId,
+      speechVisible, speechOpen, pickTarget, generation, transformMode, seconds, speed, fps, count, workspace,
+      session, stageRef, catalogs, modelItems, imageItems, videoItems, screenTargets, keepAssets, selectedUserTemplateId,
+      clipIssue, exportNote, receiptReview, roundtrip, pickerOpen: picker.open, pickerCategory: picker.category,
+      setKeepAssets, mountTemplate, mountUserTemplate, applyScene, loadDocument, acknowledgeSave, selectSlot,
+      setTransformMode, setPlaying, setFrame, setPickTarget, setSelectedWorldSfxId, setCatalogs, setScreenTargets,
+      setSpeechOpen, exportScene, abortExport: () => exportAbortRef.current?.abort(), assignChoice, bumpGeneration,
+      onExamplesInstalled: () => { if (!exportingRef.current) bumpGeneration() },
+      liveSource, walkFor: walkBake.control, onPick, openPicker, closePicker, addProp, addScreen, removeSelected,
+      resetSelectedPose, onStageSelect, onDemo, onShowcase, seek, setRenderChoice: choice => { renderChoiceRef.current = choice },
+      onSpeed, togglePlay, restorePreviousShot, preview,
+      freeView, setFreeView, commitFreeView, frameSelection,
+    }} />
   )
 }

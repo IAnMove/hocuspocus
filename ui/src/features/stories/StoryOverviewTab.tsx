@@ -48,7 +48,7 @@ function Choice({
   return (
     <label className={`block text-[10px] ${required ? 'text-violet-200' : 'text-text-muted'}`}>
       {label}{required && <span className="ml-1 text-violet-300" title={t('chrome.required')}>●</span>}
-      <select
+      <select aria-label={label}
         className={`${input} ${required ? requiredInput : ''} mt-1`}
         value={custom ? '__other__' : value}
         onChange={event => onChange(event.target.value === '__other__' ? '' : event.target.value)}
@@ -58,7 +58,7 @@ function Choice({
         {options.map(([stored, key]) => <option key={stored} value={stored}>{t(`overview.genreTone.${key}`)}</option>)}
         <option value="__other__">{t('overview.other')}</option>
       </select>
-      {custom && <input className={`${input} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={label} />}
+      {custom && <input aria-label={label} className={`${input} mt-1`} value={value} onChange={event => onChange(event.target.value)} placeholder={label} />}
     </label>
   )
 }
@@ -120,7 +120,7 @@ export function StoryOverviewTab({
           <div className="md:col-span-2"><Field required label={t('overview.songStory')} value={project.creativeBrief.songStory} onChange={songStory => patch({ creativeBrief: { ...project.creativeBrief, songStory }, music: { ...project.music, brief: songStory } })} rows={5} placeholder={t('overview.songStoryPlaceholder')} /></div>
           <label className="block text-[10px] text-text-muted">
             {t('overview.targetDuration', { seconds: project.creativeBrief.durationSeconds })}
-            <input type="range" min={30} max={360} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
+            <input aria-label={t('overview.targetDuration', { seconds: project.creativeBrief.durationSeconds })} type="range" min={30} max={360} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
               onChange={event => {
                 const durationSeconds = Number(event.target.value)
                 patch({ creativeBrief: { ...project.creativeBrief, durationSeconds }, music: { ...project.music, targetDurationSeconds: durationSeconds } })
@@ -137,7 +137,7 @@ export function StoryOverviewTab({
           <div className="md:col-span-2"><Field required label={t('overview.trailerAction')} value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder={t('overview.trailerActionPlaceholder')} /></div>
           <label className="block text-[10px] text-text-muted">
             {t('overview.targetDuration', { seconds: project.creativeBrief.durationSeconds })}
-            <input type="range" min={15} max={180} step={5} className="mt-2 w-full accent-amber-400" value={project.creativeBrief.durationSeconds}
+            <input aria-label={t('overview.targetDuration', { seconds: project.creativeBrief.durationSeconds })} type="range" min={15} max={180} step={5} className="mt-2 w-full accent-amber-400" value={project.creativeBrief.durationSeconds}
               onChange={event => {
                 const durationSeconds = Number(event.target.value)
                 setTrailerDuration(durationSeconds)
@@ -154,7 +154,7 @@ export function StoryOverviewTab({
           <Field required label={t('overview.quickSetting')} value={project.creativeBrief.setting} onChange={setting => patch({ creativeBrief: { ...project.creativeBrief, setting } })} rows={3} placeholder={t('overview.quickSettingPlaceholder')} />
           <div className="md:col-span-2"><Field required label={t('overview.quickAction')} value={project.creativeBrief.action} onChange={action => patch({ creativeBrief: { ...project.creativeBrief, action } })} rows={5} placeholder={t('overview.quickActionPlaceholder')} /></div>
           <label className="block text-[10px] text-text-muted">{t('overview.quickFormat')}
-            <select className={`${input} mt-1`} value={project.creativeBrief.quickFormat}
+            <select aria-label={t('overview.quickFormat')} className={`${input} mt-1`} value={project.creativeBrief.quickFormat}
               onChange={event => patch({ creativeBrief: { ...project.creativeBrief, quickFormat: event.target.value as StoryProject['creativeBrief']['quickFormat'] } })}>
               <option value="dialogue">{t('overview.formatDialogue')}</option><option value="meme">{t('overview.formatMeme')}</option><option value="parody">{t('overview.formatParody')}</option>
               <option value="sketch">{t('overview.formatSketch')}</option><option value="viral">{t('overview.formatViral')}</option><option value="announcement">{t('overview.formatAnnouncement')}</option>
@@ -162,7 +162,7 @@ export function StoryOverviewTab({
           </label>
           <label className="block text-[10px] text-text-muted">
             {t('overview.targetDuration', { seconds: project.creativeBrief.durationSeconds })}
-            <input type="range" min={5} max={120} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
+            <input aria-label={t('overview.targetDuration', { seconds: project.creativeBrief.durationSeconds })} type="range" min={5} max={120} step={5} className="mt-2 w-full accent-accent-blue" value={project.creativeBrief.durationSeconds}
               onChange={event => patch({ creativeBrief: { ...project.creativeBrief, durationSeconds: Number(event.target.value) } })} />
           </label>
         </div>
@@ -176,29 +176,30 @@ export function StoryOverviewTab({
               className={`${input} ${requiredInput} mt-1`}
               value={project.language}
               onChange={language => patch(storyContentLanguagePatch(project, language))}
+              label={t('overview.language')}
               required
             />
           </label>
           <label className="block text-[10px] text-violet-200">
             {t('overview.spokenLanguage')}
-            <select className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch(storySpokenLanguagePatch(project, event.target.value))}>
+            <select aria-label={t('overview.spokenLanguage')} className={`${input} mt-1`} value={project.spokenLanguage} onChange={event => patch(storySpokenLanguagePatch(project, event.target.value))}>
               <SpokenLanguageOptions />
             </select>
             <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">{t('overview.spokenHint')}</span>
           </label>
           {project.projectType === 'music_video' && <label className="block text-[10px] text-violet-200">
             {t('overview.locationVariety')}
-            <select className={`${input} mt-1`} value={project.locationVariety} onChange={event => patch({ locationVariety: event.target.value as StoryProject['locationVariety'] })}>
+            <select aria-label={t('overview.locationVariety')} className={`${input} mt-1`} value={project.locationVariety} onChange={event => patch({ locationVariety: event.target.value as StoryProject['locationVariety'] })}>
               <option value="balanced">{t('overview.locationBalanced')}</option>
               <option value="single_location">{t('overview.locationSingle')}</option>
             </select>
           </label>}
           <div className="md:col-span-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3 space-y-2">
             <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
-              <input type="checkbox" checked={project.protagonistConsistency} onChange={event => patch({ protagonistConsistency: event.target.checked, protagonistCharacterId: event.target.checked ? (project.protagonistCharacterId || project.characters[0]?.id || '') : project.protagonistCharacterId, ...(event.target.checked && project.musicVideoGenerationMode === 'direct_video' ? { musicVideoGenerationMode: 'image_guided' as const } : {}) })} className="mt-0.5 accent-violet-400" />
+              <input aria-label={t('overview.fixProtagonist')} type="checkbox" checked={project.protagonistConsistency} onChange={event => patch({ protagonistConsistency: event.target.checked, protagonistCharacterId: event.target.checked ? (project.protagonistCharacterId || project.characters[0]?.id || '') : project.protagonistCharacterId, ...(event.target.checked && project.musicVideoGenerationMode === 'direct_video' ? { musicVideoGenerationMode: 'image_guided' as const } : {}) })} className="mt-0.5 accent-violet-400" />
               <span><span className="block text-violet-200">{t('overview.fixProtagonist')}</span><span className="block text-[9px] text-text-muted">{t('overview.fixProtagonistHint')}</span></span>
             </label>
-            {project.protagonistConsistency && <select className={input} value={project.protagonistCharacterId} onChange={event => patch({ protagonistCharacterId: event.target.value })}>
+            {project.protagonistConsistency && <select aria-label={t('overview.fixProtagonist')} className={input} value={project.protagonistCharacterId} onChange={event => patch({ protagonistCharacterId: event.target.value })}>
               <option value="">{t('overview.selectProtagonist')}</option>
               {project.characters.map(character => <option key={character.id} value={character.id}>{character.name || t('overview.unnamed')}</option>)}
             </select>}
@@ -242,7 +243,7 @@ export function StoryOverviewTab({
           </div>
           <div className="md:col-span-2 rounded-lg border border-border bg-bg-tertiary/50 p-3 space-y-2">
             <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
-              <input
+              <input aria-label={t('overview.enforceStyles')}
                 type="checkbox"
                 className="mt-0.5"
                 checked={project.enforceVisualStyle}
@@ -254,7 +255,7 @@ export function StoryOverviewTab({
               </span>
             </label>
             <label className="flex items-start gap-2 text-xs text-text-secondary cursor-pointer">
-              <input
+              <input aria-label={t('overview.allowClipText')}
                 type="checkbox"
                 className="mt-0.5"
                 checked={project.allowClipText}

@@ -70,25 +70,25 @@ export function CharacterVoiceDesigner({ workspace, characterName, initialLangua
       <button type="button" disabled={blocked} onClick={() => void download()} className={`${control} inline-flex items-center gap-1`}><Download size={14} />{t('voiceDesigner.download')}</button>
     </div>}
     <label className="block text-xs text-text-secondary">{t('voiceDesigner.engine')}
-      <select value={engine} disabled={blocked} data-testid="voice-design-engine" onChange={event => { setEngine(event.target.value as VoiceEngine); setVoices([]) }}
+      <select aria-label={t('voiceDesigner.engine')} value={engine} disabled={blocked} data-testid="voice-design-engine" onChange={event => { setEngine(event.target.value as VoiceEngine); setVoices([]) }}
         className={`${control} mt-1 w-full md:w-auto`}>
         {(Object.keys(VOICE_ENGINES) as VoiceEngine[]).map(key => <option key={key} value={key}>{t(`voiceDesigner.engines.${key}`)}</option>)}
       </select></label>
     <div className="grid gap-3 md:grid-cols-[12rem_12rem_minmax(0,1fr)]">
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.language')}
-        <select value={language} disabled={blocked} onChange={event => changeLanguage(event.target.value as SpokenLanguage)} className={`${control} mt-1 w-full`}>
+        <select aria-label={t('voiceDesigner.language')} value={language} disabled={blocked} onChange={event => changeLanguage(event.target.value as SpokenLanguage)} className={`${control} mt-1 w-full`}>
           {SPOKEN_LANGUAGES.map(code => <option key={code} value={code}>{t(`voiceDesigner.languages.${code}`)}</option>)}
         </select></label>
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.accent')}
-        <select value={accent} disabled={blocked} onChange={event => setAccent(event.target.value as '' | 'castilian')} className={`${control} mt-1 w-full`}>
+        <select aria-label={t('voiceDesigner.accent')} value={accent} disabled={blocked} onChange={event => setAccent(event.target.value as '' | 'castilian')} className={`${control} mt-1 w-full`}>
           <option value="">{t('voiceDesigner.accentNone')}</option>
           <option value="castilian">{t('voiceDesigner.accentCastilian')}</option>
         </select></label>
       <label className="block text-xs text-text-secondary">{t('voiceDesigner.description')}
-        <textarea value={description} maxLength={600} rows={2} disabled={blocked} onChange={event => setDescription(event.target.value)} placeholder={t('voiceDesigner.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
+        <textarea aria-label={t('voiceDesigner.description')} value={description} maxLength={600} rows={2} disabled={blocked} onChange={event => setDescription(event.target.value)} placeholder={t('voiceDesigner.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
     </div>
     <label className="block text-xs text-text-secondary">{t('voiceDesigner.text')}
-      <textarea value={text} maxLength={600} rows={2} disabled={blocked} onChange={event => setText(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
+      <textarea aria-label={t('voiceDesigner.text')} value={text} maxLength={600} rows={2} disabled={blocked} onChange={event => setText(event.target.value)} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-2 text-sm" /></label>
     <button type="button" disabled={blocked || missing.includes(designModel) || !description.trim() || !text.trim()} onClick={() => void design()} className={`${control} inline-flex items-center gap-2 text-cyan-200`}>
       {busy === 'design' ? <Loader2 size={15} className="animate-spin" /> : <Mic size={15} />}{t('voiceDesigner.create')}</button>
     {voices.length > 0 && <ol className="space-y-2">

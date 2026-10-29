@@ -106,7 +106,7 @@ character's ink.
 `characters.animations` lists them. `characters.animation.make` {character_id, animation | custom {title, view, poses}}
 makes one on the server, as the Characters panel does; poll `characters.animation.status`. Saved pending: a person
 approves it in Characters › Animaciones. `characters.animation.make_set` {character_id, set `walk-directions`} makes the
-twelve-pose walks of five directions (for 3D sets) as one resumable job. A walk can use method puppet.
+twelve-pose walks of five directions (for 3D sets) as one resumable job. `characters.face.make` draws a 2D blob face.
 Decide yourself only if the owner turned on «Modo un solo disparo» (`agent_autonomy` = `one_shot`): `make` with
 `autoApprove: true` approves a sheet that passes the automatic checks (status: `autoApproved`, `checks`; else it stays
 pending); look at the sheet, then `characters.animation.review` {character_id, animation, decision approve | reject, note}.
@@ -319,7 +319,7 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
   The template's own effects, texts and clip cues are stretched to the shot's length (`"retime": false` keeps their
   seconds). `objects` places what does not speak: a 3D model from `model3d.generate`/`model3d.animate` (`file`, its
   `clip` name, `clipPlayback` {speed, start, loop}) or an image cutout (`"media": "image"`), on a template object
-  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationY` (radians, metres),
+  (`objectId`) or added to the scene (`"add": true`), with `position`/`scale`/`rotationX`/`rotationY`/`rotationZ` (radians, metres; X/Z if set),
   `grounded: true` for a character standing on the floor, and a `motion` {to, via, points, faceTravel, headingOffset,
   easing}. `faceTravel` turns the model's +Z along the path; a generated ship or airship whose nose is its -X needs
   `headingOffset: 1.5708` (+X: -1.5708, -Z: 3.1416):
@@ -348,6 +348,10 @@ What `from_script` writes on each shot, and what `series.episode.update` takes (
 
 With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GLB. Poll `model3d.status`. Models other people published come from https://www.meshy.ai/discover (a paid account, no extra credit on that page). Do not call the showcase API: it is Enterprise-only and any other plan answers 403. A downloaded GLB is a model we made. Place it with `scene3d.item.add` (`item: {glb}`) or a script `objects` entry (`file`). If it already has clips, play those. If it has no skeleton and is one standing person, `model3d.rig` with `engine: "humanoid"`.
 
+## A round-headed body
+
+`model3d.blob.make` builds one round-headed person and rigs it in the same call (Wizard `blob_make`, the Studio 3D panel, or `POST /api/v1/model3d/blob`). Pass a `preset` (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`, `blob_chef`, `blob_pirate`, `blob_scout`, `anime_girl`, `anime_boy`, `anime_senpai`, `chibi_kid`, `chibi_mage`, `chibi_knight`) and optional `traits`. `family` is `blob`, `anime` or `chibi`. Hair: `none`, `short`, `bangs`, `spiky`, `long`, `ponytail`, `twin_tails`, `bun`. The default clips are `idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point` and `run`. `model3d.blob.presets` lists the limits. A moustache, glasses and the 2D face are not this body. Put the rigged file on `subject_1` (not `add: true`) and play `Wave`.
+
 ## 3D sets: molds, skins and props
 
 1. Read `scene3d.sets.catalog` to choose a mold, size, camera, character marks and prop anchors.
@@ -369,7 +373,7 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 5. Add an approved prop to one shot with `scene3d.item.add`:
    `input: {workspace, target: {series_id, episode_id, shot: 1}, item: {prop: "<approved-id>"}, at: {anchor: "desk_left"}}`.
    A working Video 3D scene uses `target: {scene_id}`; direct media uses `item: {image: "lamp.png"}` or an existing `{glb: "lamp.glb"}` with `heightM`.
-   `scene3d.item.list` gives ids; `scene3d.item.update` (`id`, `at: {position: [x, y, z]}` m, `heightM`, `rotationY` radians,
+   `scene3d.item.list` gives ids; `scene3d.item.update` (`id`, `at: {position: [x, y, z]}` m, `heightM`, `rotationX/Y/Z` radians,
    `billboard`, `shadow`) changes one, `scene3d.item.remove` (`id`) removes it.
    For every shot at the location, put `{prop: "<approved-id>", anchor: "desk_left"}` in `set3d.props`.
 6. Every mutation takes a new `intent_id` (reuse one only to retry a call); read each result first.

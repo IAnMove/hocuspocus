@@ -280,6 +280,15 @@ test('a painted character is rigged with warp mouths and the poses whose mouth l
   assert.match(view.getByTestId('character-rig-mouth-line').textContent ?? '', /mouth line of base.*Prepare 2D speech.*Kevin.*Mouth line/)
   assert.match(view.getByTestId('character-rig-review').textContent ?? '', /the drawing's own/)
   assert.doesNotMatch(view.getByTestId('character-rig-review').textContent ?? '', /No painted mouth/, 'a warp mouth is placed by its line')
+  assert.equal(view.queryByTestId('character-rig-models-missing'), null, 'no notice when the reply has none')
+})
+
+test('a rig made without the DWPose files says so', async t => {
+  const { cleanup } = await import('@testing-library/react')
+  t.after(cleanup)
+  creatorServer(t, () => ({ notices: [{ code: 'landmark_models_missing', files: ['pose/yolox_l.onnx'] }] }))
+  const view = await createAndRig(characterStyle('graphic-novel')!)
+  assert.match(view.getByTestId('character-rig-models-missing').textContent ?? '', /DWPose.*missing/)
 })
 
 test('a language voice is designed in place, in that language', async t => {

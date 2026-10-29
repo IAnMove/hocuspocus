@@ -15,6 +15,7 @@
   "delete": "Delete",
   "confirmDelete": "Delete this game? This cannot be undone.",
   "empty": "No game yet.",
+  "emptyExplain": "This studio turns a style, a cast and an asset list into a game you can review, play and export.",
   "title": "Title",
   "genre": "Genre",
   "view": "View",

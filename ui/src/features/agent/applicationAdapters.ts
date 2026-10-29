@@ -46,11 +46,13 @@ import type {
 } from './characterKitActions'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import { announceWizardNavigation } from '../../lib/navigationCategories'
+import { characterReplacementReady, openCharacterReplacement } from '../characterReplacement/openCharacterReplacement'
 import { executeProductionWorks } from './productionWorkCapabilities'
 import { executeSeriesLineVoice, executeSeriesShotEdit } from './seriesShotEditCapabilities'
 import { executeApplySeriesShotCard } from './seriesShotCardCapabilities'
 import { executeCheckSeriesLocationStage, executeSetSeriesLocationStage } from './seriesStageCapabilities'
 import { executeMakeCharacterAnimation, executeMakeCharacterAnimationSet, executeReviewCharacterAnimation } from './characterAnimationCapabilities'
+import { executeMakeCharacterFace } from './characterFaceCapabilities'
 import { executeSetVoiceBand } from './voiceBandCapabilities'
 import type { AgentSetVoiceBandAction } from './voiceBandCapabilities'
 import { executeMediaTool } from './mediaToolCapabilities'
@@ -62,6 +64,8 @@ import { createToolsAdapter } from './toolsAdapter'
 import { createWorkspaceCollectionAdapter } from './workspaceCollectionAdapter'
 import { downloadModel as requestModelDownload, fetchModelDownloads } from '../../api/generation'
 import { setupSpeechAnalysis } from './speechAnalysisAdapter'
+import { executeBlobMake } from './blobBodyAdapter'
+import { executeAnimeMake } from './animeCharacterAdapter'
 
 export interface AdapterOutcome {
   commandResult?: CommandResult
@@ -210,11 +214,14 @@ export interface WizardApplicationAdapters {
     setStage(action: import('./seriesStageCapabilities').AgentSetSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
     checkStage(action: import('./seriesStageCapabilities').AgentCheckSeriesLocationStageAction, workspace?: string): Promise<AdapterOutcome>
   }
+  blobBody: { make(action: import('./agentActions').AgentBlobMakeAction, workspace?: string): Promise<AdapterOutcome> }
+  animeCharacter: { make(action: import('./agentActions').AgentAnimeMakeAction, workspace?: string): Promise<AdapterOutcome> }
   characterAnimations: {
     make(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
     makeSet(action: import('./characterAnimationCapabilities').AgentMakeCharacterAnimationSetAction, workspace?: string): Promise<AdapterOutcome>
     review(action: import('./characterAnimationCapabilities').AgentReviewCharacterAnimationAction, workspace?: string): Promise<AdapterOutcome>
   }
+  characterFaces: { make(action: import('./characterFaceCapabilities').AgentMakeCharacterFaceAction, workspace?: string): Promise<AdapterOutcome> }
   mediaTools: { command(action: import('./mediaToolCapabilities').AgentMediaToolAction, workspace?: string, commandId?: string): Promise<AdapterOutcome> }
   lipsyncRedo: { command(action: import('./lipsyncRedoCapabilities').AgentLipsyncRedoAction, context: import('./capabilityRegistry').CapabilityExecutionContext): Promise<AdapterOutcome> }
   queue: QueueAdapter
@@ -235,28 +242,42 @@ const TAB_LABELS: Record<AgentTab, string> = {
   videos: 'Videos', audio: 'Audio', '3d': '3D', story_lab: 'Story Lab',
   series_lab: 'Series Lab', comics: 'Comics', video_editor: 'Video Editor',
   video_3d: '3D Video', animate_3d: 'Animate 3D', character_creator: 'Character Creator',
-  character_kit: 'CharacterKit', lips_creator: 'Lips Creator', game_assets: 'Game assets', workspaces: 'Workspaces', settings: 'Settings',
+  character_kit: 'CharacterKit', lips_creator: 'Lips Creator', game_assets: 'Game assets',
+  character_replacement: 'Replace character', workspaces: 'Workspaces', settings: 'Settings',
 }
 
 function target(tab: AgentTab): AgentExecutionTarget {
   return { kind: 'application_section', id: tab, title: TAB_LABELS[tab] }
 }
 
+function settingsTabOpen(state: { settingsOpen: boolean; dashboardOpen: boolean }) {
+  return state.settingsOpen && !state.dashboardOpen
+}
+
+function productionsTabOpen(state: { settingsOpen: boolean; dashboardOpen: boolean }) {
+  return state.dashboardOpen && !state.settingsOpen
+}
+
+function workspaceSurfaceOpen(
+  state: Parameters<typeof visibleWorkspaceSurface>[0] & { settingsOpen: boolean; dashboardOpen: boolean },
+  surface: 'director' | 'generate',
+) {
+  return visibleWorkspaceSurface(state) === surface && !state.settingsOpen && !state.dashboardOpen
+}
+
+function mediaTabOpen(state: { mediaFilter: MediaFilter; settingsOpen: boolean; dashboardOpen: boolean }, tab: AgentTab) {
+  const mediaFilter = TAB_TARGETS[tab]
+  return Boolean(mediaFilter && state.mediaFilter === mediaFilter && !state.settingsOpen && !state.dashboardOpen)
+}
+
 function isTabOpen(tab: AgentTab): boolean {
   const state = useStore.getState()
-  if (tab === 'settings') return state.settingsOpen && !state.dashboardOpen
-  if (tab === 'productions') return state.dashboardOpen && !state.settingsOpen
-  if (tab === 'director') {
-    return visibleWorkspaceSurface(state) === 'director'
-      && !state.settingsOpen && !state.dashboardOpen
-  }
-  if (tab === 'studio') {
-    return visibleWorkspaceSurface(state) === 'generate'
-      && !state.settingsOpen && !state.dashboardOpen
-  }
-  const mediaFilter = TAB_TARGETS[tab]
-  return Boolean(mediaFilter && state.mediaFilter === mediaFilter
-    && !state.settingsOpen && !state.dashboardOpen)
+  if (tab === 'settings') return settingsTabOpen(state)
+  if (tab === 'productions') return productionsTabOpen(state)
+  if (tab === 'director') return workspaceSurfaceOpen(state, 'director')
+  if (tab === 'studio') return workspaceSurfaceOpen(state, 'generate')
+  if (tab === 'character_replacement') return characterReplacementReady(state)
+  return mediaTabOpen(state, tab)
 }
 
 async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
@@ -281,6 +302,8 @@ async function navigate(tab: AgentTab): Promise<AdapterOutcome> {
     state.setSidebarMode('studio')
     state.setMediaFilter(DIRECT_GENERATION_MEDIA[state.generationMode] || 'videos')
     state.setSidebarOpen(true)
+  } else if (tab === 'character_replacement') {
+    openCharacterReplacement(state)
   } else {
     const mediaFilter = TAB_TARGETS[tab]
     state.setSettingsOpen(false)
@@ -809,10 +832,19 @@ export function createDefaultApplicationAdapters(): WizardApplicationAdapters {
     async setStage(action, workspace) { return executeSetSeriesLocationStage(action, workspace) },
     async checkStage(action, workspace) { return executeCheckSeriesLocationStage(action, workspace) },
   }
+  adapters.blobBody = {
+    async make(action, workspace) { return executeBlobMake(action, workspace) },
+  }
+  adapters.animeCharacter = {
+    async make(action, workspace) { return executeAnimeMake(action, workspace) },
+  }
   adapters.characterAnimations = {
     async make(action, workspace) { return executeMakeCharacterAnimation(action, workspace) },
     async makeSet(action, workspace) { return executeMakeCharacterAnimationSet(action, workspace) },
     async review(action, workspace) { return executeReviewCharacterAnimation(action, workspace) },
+  }
+  adapters.characterFaces = {
+    async make(action, workspace) { return executeMakeCharacterFace(action, workspace) },
   }
   adapters.mediaTools = {
     async command(action, workspace, commandId) { return executeMediaTool(action, workspace, commandId) },

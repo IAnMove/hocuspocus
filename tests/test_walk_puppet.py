@@ -108,3 +108,73 @@ def test_a_drawing_with_no_separated_arm_is_refused_and_builds_nothing():
         assert "no arm" in str(error)
     else:
         raise AssertionError("a single stroke is not a walk")
+
+
+def test_a_stored_frame_lies_on_the_screen_colour_so_the_real_key_removes_the_background(tmp_path):
+    """studio.key reads colour only: a transparent frame with black under its alpha came back as an opaque black rectangle."""
+    from PIL import Image
+
+    from services import studio_key
+    from services.walk_puppet_method import _store_frames
+
+    frame = np.zeros((80, 60, 4), np.uint8)
+    cv2.circle(frame, (30, 40), 14, (200, 90, 60, 255), -1)
+    _store_frames([frame], (40, 30), str(tmp_path), ["f.png"], "green")
+    stored = np.array(Image.open(tmp_path / "f.png"))
+    assert tuple(stored[2, 2]) == (0, 255, 0)
+    keyer = studio_key._Keyer("green", None, studio_key._options({}, "green"))
+    studio_key._key_image(str(tmp_path / "f.png"), str(tmp_path / "k.png"), keyer)
+    keyed = np.array(Image.open(tmp_path / "k.png"))[..., 3]
+    assert keyed[2, 2] < 10 and keyed[20, 15] > 245
+    assert float((keyed < 10).mean()) > 0.5
+
+
+def test_garment_layers_take_the_local_gpu_lane(tmp_path, monkeypatch):
+    """See-through for the puppet uses the same GPU lane as the face layers."""
+    from PIL import Image
+    from services import resource_scheduler
+    from services.walk_puppet_method import garment_layers
+    acquired: list[str] = []
+    real = resource_scheduler.coordinator.acquire
+
+    def spy(lane, *args, **kwargs):
+        acquired.append(lane.key)
+        return real(lane, *args, **kwargs)
+
+    monkeypatch.setattr(resource_scheduler.coordinator, "acquire", spy)
+    rgba = np.zeros((8, 8, 4), np.uint8)
+    rgba[..., 3] = 255
+
+    def decompose(image, label):
+        assert isinstance(image, Image.Image) and label == "puppet"
+        return {"images": {}}
+
+    _layers, used = garment_layers(
+        rgba, str(tmp_path), "hero", "cast", installed_fn=lambda: True, decompose=decompose)
+    assert acquired == ["local_gpu:0"]
+    assert used is True
+
+
+def test_a_half_written_layer_folder_is_not_a_cache(tmp_path):
+    from PIL import Image
+    from services.walk_puppet_method import _cached_layers
+    folder = tmp_path / "layers"
+    folder.mkdir()
+    Image.new("RGBA", (4, 4), (1, 2, 3, 255)).save(folder / "topwear.png")
+    assert _cached_layers(str(folder)) is None
+
+
+def test_finished_garment_layers_are_marked_complete(tmp_path):
+    from PIL import Image
+    from services.walk_puppet_method import _cached_layers, garment_layers
+    image = Image.new("RGBA", (4, 4), (9, 8, 7, 255))
+
+    def decompose(_image, label):
+        assert label == "puppet"
+        return {"images": {"topwear": image}}
+
+    garment_layers(np.array(image), str(tmp_path), "hero", "cast", installed_fn=lambda: True, decompose=decompose)
+    folder = next((tmp_path / "puppet-layers").iterdir())
+    assert (folder / ".complete").is_file()
+    cached = _cached_layers(str(folder))
+    assert cached is not None and "topwear" in cached

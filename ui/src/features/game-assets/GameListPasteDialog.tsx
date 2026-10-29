@@ -83,11 +83,11 @@ export function GameListPasteDialog({ onClose }: { onClose: () => void }) {
               {LIST_FORMATS.map(item => <option key={item} value={item}>{t(`listFormats.${item}`)}</option>)}
             </select>
           </label>
-          <label className={buttonClass}>{t('importCsv')}<input className="sr-only" type="file" accept=".csv,text/csv" onChange={event => { void readFile(event.currentTarget, 'csv') }} /></label>
-          <label className={buttonClass}>{t('importJson')}<input className="sr-only" type="file" accept=".json,application/json" onChange={event => { void readFile(event.currentTarget, 'json') }} /></label>
+          <label className={buttonClass}>{t('importCsv')}<input aria-label={t('importCsv')} className="sr-only" type="file" accept=".csv,text/csv" onChange={event => { void readFile(event.currentTarget, 'csv') }} /></label>
+          <label className={buttonClass}>{t('importJson')}<input aria-label={t('importJson')} className="sr-only" type="file" accept=".json,application/json" onChange={event => { void readFile(event.currentTarget, 'json') }} /></label>
         </div>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={replace} onChange={event => { setReplace(event.target.checked); reset() }} />
+          <input aria-label={t('replaceList')} type="checkbox" checked={replace} onChange={event => { setReplace(event.target.checked); reset() }} />
           {t('replaceList')}
         </label>
         <div className="flex flex-wrap gap-2">

@@ -17,10 +17,10 @@ export function PixelWorldControls({ pixelWorld, dressing, tvs, slots, disabled,
   const { t } = useUiTranslation('scene3dEditor')
   const set = (value: Partial<PixelWorld>) => pixelWorld && onChange({ pixelWorld: { ...pixelWorld, ...value } })
   return <fieldset disabled={disabled} className="rounded-lg border border-border p-3 text-xs" data-testid="pixel-world-controls">
-    <label className="flex min-h-9 items-center gap-2 font-semibold"><input type="checkbox" checked={Boolean(pixelWorld)} onChange={e => onChange({ pixelWorld: e.target.checked ? defaultPixelWorld() : undefined })} />{t('pixelWorld.enable')}</label>
+    <label className="flex min-h-9 items-center gap-2 font-semibold"><input aria-label={t('pixelWorld.enable')} type="checkbox" checked={Boolean(pixelWorld)} onChange={e => onChange({ pixelWorld: e.target.checked ? defaultPixelWorld() : undefined })} />{t('pixelWorld.enable')}</label>
     {pixelWorld && <div className="mt-2 space-y-3">
       <label className="flex items-center gap-2">{t('pixelWorld.setting')}
-        <select className="min-h-9 rounded border border-border bg-bg-tertiary px-2" value={isPixelDressing(dressing) ? dressing : ''} onChange={e => onChange({ dressing: (e.target.value || undefined) as Scene3DDocument['dressing'] })}>
+        <select aria-label={t('pixelWorld.setting')} className="min-h-9 rounded border border-border bg-bg-tertiary px-2" value={isPixelDressing(dressing) ? dressing : ''} onChange={e => onChange({ dressing: (e.target.value || undefined) as Scene3DDocument['dressing'] })}>
           <option value="">{t('pixelWorld.noSet')}</option>
           {PIXEL_DRESSINGS.map(kind => <option key={kind} value={kind}>{t(`pixelWorld.set.${kind}`)}</option>)}
         </select></label>

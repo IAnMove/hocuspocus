@@ -335,11 +335,11 @@ export function ArchitectureViewer() {
         <label className="flex items-center gap-2 rounded-md border border-border bg-bg-tertiary px-2 py-1.5">
           <Search size={13} className="shrink-0 text-text-muted" />
           <span className="sr-only">{t('architecture.search')}</span>
-          <input value={query} onChange={event => setQuery(event.target.value)} placeholder={t('architecture.search')} className="min-w-0 flex-1 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted" />
+          <input aria-label={t('architecture.search')} value={query} onChange={event => setQuery(event.target.value)} placeholder={t('architecture.search')} className="min-w-0 flex-1 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted" />
         </label>
         <label className="flex items-center gap-2 rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-muted">
           <span className="shrink-0">{t('architecture.layer')}</span>
-          <select value={layer} onChange={event => setLayer(event.target.value)} className="min-w-0 flex-1 bg-transparent text-text-secondary outline-none">
+          <select aria-label={t('architecture.layer')} value={layer} onChange={event => setLayer(event.target.value)} className="min-w-0 flex-1 bg-transparent text-text-secondary outline-none">
             <option value="all">{t('architecture.allLayers')}</option>
             {layers.map(item => <option key={item} value={item}>{item}</option>)}
           </select>

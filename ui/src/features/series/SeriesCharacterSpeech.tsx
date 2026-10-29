@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState } from 'react'
 import { useUiTranslation } from '../../i18n'
 import type { CharacterKit } from '../../lib/characterKit'
@@ -35,10 +36,10 @@ export function SeriesCharacterSpeech({ workspace, series, character, onPatch, s
   return <section aria-label={t('speech.characterTitle', { name: character.name })} className="mt-3 space-y-2 rounded-lg border border-cyan-500/30 p-3">
     <h4 className="text-xs font-semibold">{t('speech.title')}</h4>
     <CharacterSpeechStatus kit={kit} language={series.spokenLanguage || series.language} />
-    <button type="button" className={secondaryButton} disabled={busy}
+    <button type="button" className={secondaryButton} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
       onClick={() => void configure()}>{t('speech.openCreator')}</button>
     <div className="space-y-1"><p className="text-xs text-text-muted">{t('speech.linkExisting')}</p>
-      <CharacterKitLink workspace={workspace} value={ref} kits={kits} error={libraryError} disabled={busy}
+      <CharacterKitLink workspace={workspace} value={ref} kits={kits} error={libraryError} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         onChange={next => { void link(next).catch(cause => setError(cause.message)) }} />
     </div>
     <p className="text-[11px] text-text-muted">{t('speech.reuseHint')}</p>

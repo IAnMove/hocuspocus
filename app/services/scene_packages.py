@@ -69,7 +69,7 @@ KNOWN_WRAPPER_KEYS = frozenset({
     "createdAt", "document",
 })
 KNOWN_SLOT_KEYS = frozenset({
-    "id", "slot", "position", "rotationY", "scale", "sourceUrl", "sourceRef",
+    "id", "slot", "position", "rotationX", "rotationY", "rotationZ", "scale", "sourceUrl", "sourceRef",
     "speech", "media", "screen", "surface", "appearance", "textureRepeat",
     "performance", "grounded", "clip", "clipPlayback", "motion", "loop",
     "character",

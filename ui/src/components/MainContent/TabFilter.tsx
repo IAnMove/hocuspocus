@@ -11,6 +11,8 @@ import {
 import { useStore } from '../../stores/useStore'
 import type { GenerationMode, MediaFilter } from '../../types'
 import { OutputFolderSelector } from './OutputFolderSelector'
+import { NoticeTray } from '../../features/notices/NoticeTray'
+import { useCharacterReplacementRedirect } from '../../features/characterReplacement/openCharacterReplacement'
 
 interface MenuItem {
   value?: MediaFilter
@@ -59,9 +61,10 @@ function PrimaryButton({ active, expanded, icon, label, onClick, ariaLabel, cate
 }
 
 function NavigationBar({ category, title, items, activeValue, barRef }: { category: NavigationCategory; title: string; items: MenuItem[]; activeValue: MediaFilter; barRef: (element: HTMLDivElement | null) => void }) {
+  const wraps = category === 'media'
   return (
-    <div ref={barRef} className="hp-navigation-children relative flex min-w-0 items-center gap-1 overflow-x-auto rounded-lg border px-1.5 py-1" data-navigation-category={category} aria-label={title} role="tablist">
-      <div className="flex min-w-max items-center gap-1">
+    <div ref={barRef} className={`hp-navigation-children relative flex min-w-0 items-center gap-1 rounded-lg border px-1.5 py-1 ${wraps ? 'w-full flex-wrap' : 'overflow-x-auto'}`} data-navigation-category={category} aria-label={title} role="tablist">
+      <div className={`flex items-center gap-1 ${wraps ? 'w-full flex-wrap' : 'min-w-max'}`}>
         {items.map(item => (
           <button
             key={item.label}
@@ -92,6 +95,7 @@ export function TabFilter() {
   const sidebarMode = useStore(s => s.sidebarMode)
   const sidebarOpen = useStore(s => s.sidebarOpen)
   const dashboardOpen = useStore(s => s.dashboardOpen)
+  useCharacterReplacementRedirect()
   const searchQuery = useStore(s => s.outputSearchQuery)
   const setSearchQuery = useStore(s => s.setOutputSearchQuery)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -247,7 +251,6 @@ export function TabFilter() {
     { value: 'gameAssets', label: t('tabs.gameAssets'), description: t('descriptions.gameAssets'), icon: <Gamepad2 size={15} />, action: () => openFilter('gameAssets') },
     { value: 'scene3d', label: t('tabs.scene3d'), description: t('descriptions.video3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('scene3d') },
     { value: 'world3d', label: t('tabs.world3d'), description: t('descriptions.world3d'), icon: <Boxes size={15} />, action: () => openFilter('world3d') },
-    { value: 'character-replacement', featured: true, label: t('tabs.characterReplacement'), description: t('descriptions.characterReplacement'), icon: <WandSparkles size={15} />, action: () => openFilter('character-replacement') },
     { value: 'animate3d', label: t('tabs.animate3d'), description: t('descriptions.animate3d'), icon: <MonitorPlay size={15} />, action: () => openFilter('animate3d') },
   ]
   const productionItems: MenuItem[] = [
@@ -350,11 +353,12 @@ export function TabFilter() {
         </div>
 
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-1 md:shrink-0 md:flex-nowrap">
+          <NoticeTray />
           <OutputFolderSelector />
           {searchOpen ? (
             <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary px-2 py-0.5">
               <Search size={12} className="shrink-0 text-text-muted" />
-              <input ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
+              <input aria-label={t('search.placeholder')} ref={searchRef} value={draftQuery} onChange={event => handleSearchChange(event.target.value)} placeholder={t('search.placeholder')} className="w-24 bg-transparent text-xs text-text-primary outline-none placeholder:text-text-muted md:w-36" />
               <button type="button" onClick={closeSearch} aria-label={t('search.close')} className="text-text-muted hover:text-text-secondary"><X size={12} /></button>
             </div>
           ) : (

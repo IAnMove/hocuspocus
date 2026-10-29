@@ -51,6 +51,7 @@ import { registerSeriesShotEditCapabilities } from './seriesShotEditCapabilities
 import { registerSeriesShotCardCapabilities } from './seriesShotCardCapabilities'
 import { registerSeriesStageCapabilities } from './seriesStageCapabilities'
 import { registerCharacterAnimationCapabilities } from './characterAnimationCapabilities'
+import { registerCharacterFaceCapabilities } from './characterFaceCapabilities'
 import { registerVoiceBandCapabilities } from './voiceBandCapabilities'
 import { registerMediaToolCapabilities } from './mediaToolCapabilities'
 import { registerLipsyncRedoCapabilities } from './lipsyncRedoCapabilities'
@@ -64,6 +65,8 @@ import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 import { registerToolCapabilities } from './toolCapabilities'
 import { registerProgrammaticVideoCapability } from './programmaticVideo'
 import { registerSpeechAnalysisCapability } from './speechAnalysisCapability'
+import { registerBlobBodyCapability } from './blobBodyCapability'
+import { registerAnimeCharacterCapability } from './animeCharacterCapability'
 export { reconcileProgrammaticVideoRequest, type AgentPrepareProgrammaticVideoAction } from './programmaticVideo'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import {
@@ -91,7 +94,7 @@ export const currentAgentInterfaceLanguage = detectUiLanguage
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
   'story_lab', 'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d',
-  'character_creator', 'character_kit', 'lips_creator', 'game_assets', 'workspaces', 'settings',
+  'character_creator', 'character_kit', 'lips_creator', 'game_assets', 'character_replacement', 'workspaces', 'settings',
 ] as const
 
 export type AgentTab = typeof AGENT_TABS[number]
@@ -308,7 +311,8 @@ defineCapability<AgentOpenTabAction>({
   confirmation: 'none',
   progress: 'wizard:progress.openingHocuspocusSection',
   resolve(raw) {
-    const tab = text(raw.tab, 40)
+    const requested = text(raw.tab, 40)
+    const tab = requested === 'character-replacement' ? 'character_replacement' : requested
     return tabSet.has(tab) ? { type: 'open_tab', tab: tab as AgentTab } : null
   },
   validate(action) {
@@ -1221,6 +1225,7 @@ registerSeriesShotEditCapabilities(defineCapability)
 registerSeriesShotCardCapabilities(defineCapability)
 registerSeriesStageCapabilities(defineCapability)
 registerCharacterAnimationCapabilities(defineCapability)
+registerCharacterFaceCapabilities(defineCapability)
 registerVoiceBandCapabilities(defineCapability)
 registerMediaToolCapabilities(defineCapability)
 registerLipsyncRedoCapabilities(defineCapability)
@@ -1230,6 +1235,8 @@ registerEditorAuxCapabilities(defineCapability)
 registerToolCapabilities(defineCapability)
 registerProgrammaticVideoCapability(defineCapability)
 registerSpeechAnalysisCapability(defineCapability)
+registerBlobBodyCapability(defineCapability)
+registerAnimeCharacterCapability(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)

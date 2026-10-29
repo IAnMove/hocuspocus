@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { lazy, Suspense, useRef, useCallback, useState, useEffect, useLayoutEffect, useMemo, type JSX } from 'react'
 import { Film, Play, Square, Loader2, X, BookMarked, ChevronDown, ChevronUp, RefreshCw, Trash2 } from 'lucide-react'
 import { TabFilter } from './TabFilter'
@@ -30,6 +31,7 @@ import {
   readDirectorClipReplacementTarget,
 } from '../../features/stories/directorClipHandoff'
 import { useUiTranslation } from '../../i18n'
+import type { TFunction } from 'i18next'
 import {
   FEED_CARD_BORDER,
   FEED_INFO_BAR_HEIGHT,
@@ -37,6 +39,7 @@ import {
   anchorOffset,
   buildGalleryLayout,
   gridColumns,
+  galleryOverscan,
   neighborIndex,
   visibleBlocks,
   type BlockRange,
@@ -84,10 +87,11 @@ const WorkspaceCollectionsPanel = lazy(() => import('../../features/workspaceCol
   .then(module => ({ default: module.WorkspaceCollectionsPanel })))
 
 function PanelLoadingFallback() {
+  const { t } = useUiTranslation('activity')
   return (
     <div className="flex flex-1 items-center justify-center text-text-muted">
       <Loader2 size={22} className="animate-spin text-accent-blue" />
-      <span className="ml-2 text-xs">Opening workspace…</span>
+      <span className="ml-2 text-xs">{t('jobs.opening')}</span>
     </div>
   )
 }
@@ -112,10 +116,16 @@ const JOB_TILE_TEXT: Record<JobTileTone, string> = {
   interrupted: 'text-amber-300',
 }
 
-function jobTileTitle(job: GenerationJob, tone: JobTileTone, interruptedLabel: string): string {
-  if (tone === 'interrupted') return interruptedLabel
-  if (tone === 'failed') return job.status === 'cancelled' ? 'Cancelled' : 'Generation Failed'
-  return job.status === 'queued' ? 'Queued...' : 'Generating...'
+function jobTileTitle(job: GenerationJob, tone: JobTileTone, label: {
+  interrupted: string
+  cancelled: string
+  failed: string
+  queued: string
+  generating: string
+}): string {
+  if (tone === 'interrupted') return label.interrupted
+  if (tone === 'failed') return job.status === 'cancelled' ? label.cancelled : label.failed
+  return job.status === 'queued' ? label.queued : label.generating
 }
 
 /** Resume/Discard for a job the recovery queue holds after a restart. */
@@ -123,12 +133,12 @@ function JobRecoveryActions({ busy, onResume, onDiscard }: { busy: boolean; onRe
   const { t: tCommon } = useUiTranslation('common')
   return (
     <div className="flex items-center gap-3 shrink-0 ml-2">
-      <button type="button" onClick={onDiscard} disabled={busy}
+      <button type="button" onClick={onDiscard} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         className="flex items-center gap-1 text-xs text-text-secondary hover:text-red-300 disabled:opacity-50">
         <Trash2 size={12} />
         {tCommon('actions.discard')}
       </button>
-      <button type="button" onClick={onResume} disabled={busy}
+      <button type="button" onClick={onResume} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         className="flex items-center gap-1 text-xs text-accent-blue disabled:opacity-50">
         {busy ? <Loader2 size={12} className="animate-spin" /> : <Play size={12} />}
         {tCommon('actions.resume')}
@@ -143,6 +153,7 @@ function stripTimeSuffix(msg: string): string {
 
 export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob; onStop: () => void; onDismiss: () => void }) {
   const { t: tCommon } = useUiTranslation('common')
+  const { t: tActivity } = useUiTranslation('activity')
   const reconnectJobs = useStore(s => s.reconnectJobs)
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState('')
@@ -182,7 +193,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
   const tone = jobTileTone(job)
   const isInterrupted = tone === 'interrupted'
   const isFailed = tone !== 'active'
-  const errorText = job.error || job.message || (job.status === 'cancelled' ? 'Cancelled' : 'Generation failed')
+  const errorText = job.error || job.message || (job.status === 'cancelled' ? tCommon('status.cancelled') : tActivity('jobs.failedDetail'))
   const completedPanelTimings = (job.taskTimings ?? [])
     .filter(item => typeof item.total_seconds === 'number')
     .slice(-4)
@@ -206,7 +217,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
           <button
             onClick={onDismiss}
             className="absolute top-2 right-2 p-1.5 rounded-full bg-bg-active text-text-secondary hover:bg-red-600 hover:text-white transition-colors z-10"
-            title="Dismiss"
+            title={tCommon('a11y.dismiss')} aria-label={tCommon('a11y.dismiss')}
           >
             <X size={14} />
           </button>
@@ -216,14 +227,20 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
 
           <div className="text-center w-full">
             <p className={`text-sm font-medium ${JOB_TILE_TEXT[tone]}`}>
-              {jobTileTitle(job, tone, tCommon('status.interrupted'))}
+              {jobTileTitle(job, tone, {
+                interrupted: tCommon('status.interrupted'),
+                cancelled: tCommon('status.cancelled'),
+                failed: tActivity('jobs.failedTitle'),
+                queued: tActivity('jobs.queued'),
+                generating: tActivity('jobs.generating'),
+              })}
             </p>
             {!isFailed && phase && (
               <p className="text-xs mt-1 truncate">{phase}</p>
             )}
             {hasSteps && !isFailed && (
               <p className="text-[10px] text-text-muted mt-0.5">
-                Step {job.step}/{job.totalSteps}
+                {tActivity('jobs.step', { step: job.step, total: job.totalSteps })}
               </p>
             )}
             {!isFailed && completedPanelTimings.length > 0 && (
@@ -262,14 +279,14 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
         <div className="border-t border-border bg-bg-secondary/60 px-3 py-2">
           <div className="flex items-center justify-between gap-2 text-[10px] text-text-muted">
             <span className="font-medium text-text-secondary">
-              Exact H3 prompt · Window {activeH3PlanWindow.index}/{job.h3WindowPlan.window_count}
+              {tActivity('jobs.h3Exact', { index: activeH3PlanWindow.index, count: job.h3WindowPlan.window_count })}
             </span>
             <button
               type="button"
               onClick={() => setShowH3Prompts(open => !open)}
               className="flex items-center gap-1 text-accent-blue hover:text-accent-blue/80"
             >
-              {showH3Prompts ? 'Hide all' : 'View all'}
+              {showH3Prompts ? tActivity('jobs.hideAll') : tActivity('jobs.viewAll')}
               {showH3Prompts ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
             </button>
           </div>
@@ -289,10 +306,16 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
                 >
                   <div className="mb-1 flex items-center justify-between text-[9px] text-text-muted">
                     <span>
-                      Window {window.index}: {window.title || `Beat ${window.index}`}
-                      {window.index === activeH3Window ? ' · Generating now' : ''}
+                      {tActivity('jobs.windowLine', {
+                        index: window.index,
+                        title: window.title || tActivity('jobs.beat', { index: window.index }),
+                        now: window.index === activeH3Window ? tActivity('jobs.generatingNow') : '',
+                      })}
                     </span>
-                    <span>{window.start_seconds.toFixed(1)}–{window.end_seconds.toFixed(1)}s</span>
+                    <span>{tActivity('jobs.windowRange', {
+                      start: window.start_seconds.toFixed(1),
+                      end: window.end_seconds.toFixed(1),
+                    })}</span>
                   </div>
                   <pre className="whitespace-pre-wrap break-words font-sans text-[10px] leading-relaxed text-text-secondary">
                     {window.prompt}
@@ -309,7 +332,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
         <div className="text-[11px] text-text-muted truncate flex-1">
           {isInterrupted
             ? tCommon('status.interruptedHint')
-            : isFailed ? 'Click × to dismiss — the tile stays so you can see what failed' : phase || 'Preparing...'}
+            : isFailed ? tActivity('jobs.dismissHint') : phase || tActivity('jobs.preparing')}
         </div>
         {isInterrupted && (
           <JobRecoveryActions busy={retrying} onResume={() => void resumeInterrupted()} onDiscard={() => void discardInterrupted()} />
@@ -327,7 +350,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
             className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors shrink-0 ml-2"
           >
             <Square size={11} />
-            Stop
+            {tActivity('jobs.stop')}
           </button>
         )}
       </div>
@@ -336,6 +359,7 @@ export function JobPlaceholder({ job, onStop, onDismiss }: { job: GenerationJob;
 }
 
 function PipelinePlaceholder() {
+  const { t } = useUiTranslation('activity')
   const pipelineStatus = useStore(s => s.pipelineStatus)
   const pipelineId = useStore(s => s.pipelineId)
   const stopPipeline = useStore(s => s.stopPipeline)
@@ -343,7 +367,7 @@ function PipelinePlaceholder() {
   if (!pipelineId || !pipelineStatus) return null
   if (pipelineStatus.status === 'completed' || pipelineStatus.status === 'failed' || pipelineStatus.status === 'cancelled') return null
 
-  const phase = pipelineStatus.phase || 'planning'
+  const phase = pipelineStatus.phase || t('jobs.planning')
   const progress = pipelineStatus.progress
   const message = progress?.message || phase
 
@@ -363,12 +387,12 @@ function PipelinePlaceholder() {
 
           <div className="text-center w-full">
             <p className="text-sm font-medium text-text-secondary">
-              {pipelineStatus?.status === 'paused' ? 'Paused — Review' : 'Director'}
+              {pipelineStatus?.status === 'paused' ? t('jobs.pausedReview') : t('jobs.director')}
             </p>
             <p className="text-xs mt-1 truncate">{phaseLabel}</p>
             {hasSteps && (
               <p className="text-[10px] text-text-muted mt-0.5">
-                Step {progress!.step}/{progress!.total_steps}
+                {t('jobs.step', { step: progress!.step, total: progress!.total_steps })}
               </p>
             )}
           </div>
@@ -390,14 +414,73 @@ function PipelinePlaceholder() {
       {/* Bottom bar with stop button */}
       <div className="px-3 py-2 min-h-[40px] flex items-center justify-between">
         <div className="text-[11px] text-text-muted truncate flex-1">
-          {phaseLabel || 'Preparing...'}
+          {phaseLabel || t('jobs.preparing')}
         </div>
         <button
           onClick={() => stopPipeline()}
           className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 transition-colors shrink-0 ml-2"
         >
           <Square size={11} />
-          Stop
+          {t('jobs.stop')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+const FILTER_NOUN = {
+  images: 'empty.nouns.images',
+  audio: 'empty.nouns.audio',
+  model3d: 'empty.nouns.models3d',
+  scenes: 'empty.nouns.scenes',
+  trailers: 'empty.nouns.trailers',
+  videoclips: 'empty.nouns.musicVideos',
+  series_episodes: 'empty.nouns.chapters',
+} as const
+
+const FILTER_EXAMPLE = {
+  model3d: 'empty.examples.model3d',
+  scenes: 'empty.examples.scenes',
+  trailers: 'empty.examples.trailers',
+} as const
+
+function galleryEmptyNoun(mediaFilter: string, generationMode: string, t: TFunction<'activity'>) {
+  if (mediaFilter in FILTER_NOUN) return t(FILTER_NOUN[mediaFilter as keyof typeof FILTER_NOUN])
+  if (generationMode === 'image') return t('empty.nouns.images')
+  if (generationMode === 'audio') return t('empty.nouns.audio')
+  if (generationMode === 'model3d') return t('empty.nouns.assets3d')
+  return t('empty.nouns.videos')
+}
+
+function galleryEmptyExample(mediaFilter: string, generationMode: string, t: TFunction<'activity'>) {
+  if (mediaFilter in FILTER_EXAMPLE) return t(FILTER_EXAMPLE[mediaFilter as keyof typeof FILTER_EXAMPLE])
+  if (generationMode === 'image') return t('empty.examples.image')
+  if (generationMode === 'audio') return t('empty.examples.audio')
+  return t('empty.examples.video')
+}
+
+function GalleryEmptyState({ mediaFilter, generationMode }: { mediaFilter: string; generationMode: string }) {
+  const { t } = useUiTranslation('activity')
+  const noun = galleryEmptyNoun(mediaFilter, generationMode, t)
+  const example = galleryEmptyExample(mediaFilter, generationMode, t)
+  return (
+    <div className="flex items-center justify-center min-h-[300px] px-6">
+      <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+        <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center text-text-muted">
+          <Play size={24} />
+        </div>
+        <p className="text-sm text-text-secondary">{t('empty.generated', { noun })}</p>
+        <ol className="text-xs text-text-muted space-y-1.5 text-left">
+          <li><span className="text-accent-blue font-medium">1.</span> {t('empty.stepModel')}</li>
+          <li><span className="text-accent-blue font-medium">2.</span> {t('empty.stepPrompt')} <span className="text-text-secondary italic">“{example}”</span></li>
+          <li><span className="text-accent-blue font-medium">3.</span> {t('empty.stepGenerate')}</li>
+        </ol>
+        <p className="text-[11px] text-text-muted leading-snug">{t('empty.headsUp')}</p>
+        <button
+          onClick={() => useStore.getState().setRecipesOpen(true)}
+          className="mt-1 flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent-blue/10 border border-accent-blue/30 rounded-lg text-accent-blue hover:bg-accent-blue/20 transition-colors"
+        >
+          <BookMarked size={13} /> {t('actions.browseRecipes')}
         </button>
       </div>
     </div>
@@ -410,6 +493,7 @@ export function MainContent() {
   const outputsLoading = useStore(s => s.outputsLoading)
   const jobs = useStore(s => s.jobs)
   const generationMode = useStore(s => s.generationMode)
+  const editSubMode = useStore(s => s.editSubMode)
   const stopGeneration = useStore(s => s.stopGeneration)
   const dismissJob = useStore(s => s.dismissJob)
   const setSelectedOutput = useStore(s => s.setSelectedOutput)
@@ -497,7 +581,7 @@ export function MainContent() {
     const current = layoutRef.current
     // Mount rows ahead of a fast fling. Cards are memoized, so rows that stay
     // mounted do not re-render while the reader scrolls.
-    const overscan = el.clientHeight * (current.view === 'feed' ? 1.5 : 1)
+    const overscan = galleryOverscan(current.view, el.clientHeight, current.blocks)
     const next = visibleBlocks(current, listOffset(), el.clientHeight, overscan)
     setRange(prev => (prev.first === next.first && prev.last === next.last ? prev : next))
   }, [listOffset])
@@ -791,7 +875,7 @@ export function MainContent() {
           <ProjectsPanel />
         ) : mediaFilter === 'workspaces' ? (
           <WorkspaceCollectionsPanel />
-        ) : mediaFilter === 'character-replacement' ? (
+        ) : (mediaFilter === 'character-replacement' || (generationMode === 'avatar' && editSubMode === 'replace_character')) ? (
           <div className="flex-1 min-w-0 overflow-y-auto">
             <CharacterReplacementWorkspace />
           </div>
@@ -802,10 +886,8 @@ export function MainContent() {
             </div>
           </div>
         ) : mediaFilter === 'world3d' ? (
-          <div className="flex-1 overflow-y-auto p-4 md:p-8">
-            <div className="max-w-[1600px] mx-auto">
-              <Scene3DEditorPanel />
-            </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <Scene3DEditorPanel />
           </div>
         ) : mediaFilter === 'animate3d' ? (
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
@@ -981,7 +1063,7 @@ export function MainContent() {
             <div className="flex items-center justify-center min-h-[300px]">
               <div className="flex flex-col items-center gap-3 text-text-muted">
                 <Loader2 size={24} className="animate-spin text-accent-blue" />
-                <p className="text-sm">Indexing workspace...</p>
+                <p className="text-sm">{tActivity('jobs.indexing')}</p>
               </div>
             </div>
           )}
@@ -991,55 +1073,9 @@ export function MainContent() {
               surprises new users: the first run of each model downloads
               its weights (tens of GB) before anything appears. */}
           <GallerySearchEmpty count={outputs.length} />
-          {!outputsLoading && outputs.length === 0 && visibleJobs.length === 0 && !searchQuery.trim() && (() => {
-            const noun = mediaFilter === 'images' ? 'images'
-              : mediaFilter === 'audio' ? 'audio'
-              : mediaFilter === 'model3d' ? '3D models'
-              : mediaFilter === 'scenes' ? 'compositor scenes'
-              : mediaFilter === 'trailers' ? 'trailers'
-              : mediaFilter === 'videoclips' ? 'music videos'
-              : mediaFilter === 'series_episodes' ? 'chapters'
-              : generationMode === 'image' ? 'images'
-              : generationMode === 'audio' ? 'audio'
-              : generationMode === 'model3d' ? '3D assets' : 'videos'
-            const example = mediaFilter === 'model3d'
-              ? 'Open Character Creator or the 3D sidebar and generate a Hunyuan3D asset.'
-              : mediaFilter === 'scenes'
-              ? 'Save a scene from the 3D Video compositor.'
-              : mediaFilter === 'trailers'
-              ? 'Assemble a trailer in Story Lab so it is tagged as a trailer mix.'
-              : generationMode === 'image'
-              ? 'a neon city street at night, cinematic'
-              : generationMode === 'audio'
-              ? 'a dreamy synthwave track about the ocean'
-              : 'a golden retriever surfing a big wave, slow motion'
-            return (
-              <div className="flex items-center justify-center min-h-[300px] px-6">
-                <div className="flex flex-col items-center gap-4 text-center max-w-sm">
-                  <div className="w-16 h-16 rounded-2xl bg-bg-active flex items-center justify-center text-text-muted">
-                    <Play size={24} />
-                  </div>
-                  <p className="text-sm text-text-secondary">Your generated {noun} will appear here.</p>
-                  <ol className="text-xs text-text-muted space-y-1.5 text-left">
-                    <li><span className="text-accent-blue font-medium">1.</span> Pick a model in the sidebar (a good default is already selected).</li>
-                    <li><span className="text-accent-blue font-medium">2.</span> Type a prompt — e.g. <span className="text-text-secondary italic">“{example}”</span></li>
-                    <li><span className="text-accent-blue font-medium">3.</span> Hit Generate.</li>
-                  </ol>
-                  <p className="text-[11px] text-text-muted leading-snug">
-                    Heads up: the first time you use a model, its weights download
-                    once (often tens of GB) before generation starts — later runs
-                    are fast. Progress shows at the bottom-right.
-                  </p>
-                  <button
-                    onClick={() => useStore.getState().setRecipesOpen(true)}
-                    className="mt-1 flex items-center gap-1.5 px-3 py-1.5 text-xs bg-accent-blue/10 border border-accent-blue/30 rounded-lg text-accent-blue hover:bg-accent-blue/20 transition-colors"
-                  >
-                    <BookMarked size={13} /> Browse recipes
-                  </button>
-                </div>
-              </div>
-            )
-          })()}
+          {!outputsLoading && outputs.length === 0 && visibleJobs.length === 0 && !searchQuery.trim() && (
+            <GalleryEmptyState mediaFilter={mediaFilter} generationMode={generationMode} />
+          )}
         </div>
 
         </div>

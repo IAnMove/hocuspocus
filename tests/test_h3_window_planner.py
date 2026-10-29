@@ -390,6 +390,7 @@ class H3WindowPlannerTests(unittest.TestCase):
         prompt_input = (ROOT / "ui" / "src" / "components" / "Sidebar" / "PromptInput.tsx").read_text(encoding="utf-8")
         main_content = (ROOT / "ui" / "src" / "components" / "MainContent" / "MainContent.tsx").read_text(encoding="utf-8")
         studio = json.loads((ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "studio.json").read_text(encoding="utf-8"))
+        activity = json.loads((ROOT / "ui" / "src" / "i18n" / "locales" / "en" / "activity.json").read_text(encoding="utf-8"))
         guide = APP / "services" / "llm_guides" / "enhance" / "minimax_h3_sliding_windows.md"
         self.assertIn("h3_window_prompts=None", handler)
         self.assertIn("Using {len(prompts)} explicit", handler)
@@ -404,7 +405,8 @@ class H3WindowPlannerTests(unittest.TestCase):
         self.assertIn("textarea.scrollHeight", prompt_input)
         self.assertNotIn("max-h-[360px] overflow-y-auto", prompt_input)
         self.assertNotIn("min-h-[118px] resize-y", prompt_input)
-        self.assertIn("Exact H3 prompt", main_content)
+        self.assertIn("tActivity('jobs.h3Exact'", main_content)
+        self.assertIn("Exact H3 prompt", activity["jobs"]["h3Exact"])
         self.assertIn('"h3_window_plan"', preparation)
         self.assertTrue(guide.is_file())
         guide_text = guide.read_text(encoding="utf-8")

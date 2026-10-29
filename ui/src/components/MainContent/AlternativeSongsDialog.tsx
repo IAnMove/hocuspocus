@@ -211,7 +211,7 @@ export function AlternativeSongsDialog({ name, onClose }: { name: string; onClos
                     disabled={busy !== null || song.status === 'mounting'}
                     onClick={() => void remove(song)}
                     className="ml-auto rounded-md p-1 text-text-muted hover:bg-red-500/10 hover:text-red-400 disabled:opacity-40"
-                    title={t('alternativeSongs.removeTitle')}
+                    title={t('alternativeSongs.removeTitle')} aria-label={t('alternativeSongs.removeTitle')}
                   >
                     <Trash2 size={12} />
                   </button>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { fetchOutputs, type ApiOutput } from '../../api/outputs'
 import { AssetExplorerDialog } from '../../components/common/AssetExplorerDialog'
 import { useUiTranslation } from '../../i18n'
@@ -8,19 +9,21 @@ import { loadLibraryItem, workingSceneItem } from './workingScenes'
 import type { Scene3DDocumentRef } from './documentHistory.ts'
 import type { Scene3DDocument } from './types'
 
-export function Scene3DLibraryControls({ document, workspace, disabled, preview, identity, onLoad, onSaved }: {
+export function Scene3DLibraryControls({ document, workspace, disabled, preview, identity, onLoad, onSaved, onCheckpoint, checkpointLabel }: {
   document: Scene3DDocument; workspace: string; disabled: boolean
   preview: () => string | undefined
   identity?: Scene3DDocumentRef
   onLoad: (document: Scene3DDocument, source?: Scene3DDocumentRef) => void
   onSaved?: (output: ApiOutput, document: Scene3DDocument, identity: Scene3DDocumentRef) => void
+  onCheckpoint?: () => void
+  checkpointLabel?: string
 }) {
   const { t } = useUiTranslation('scene3dEditor')
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false)
   const [items, setItems] = useState<ApiOutput[]>([])
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [retry, setRetry] = useState(0), [name, setName] = useState('')
-  const [note, setNote] = useState(''), [error, setError] = useState('')
+  const [note, setNote] = useState(''), [error, setError] = useState(''), [menu, setMenu] = useState(false)
   const current = useRef({ document, workspace, disabled, identity })
   current.current = { document, workspace, disabled, identity }
   const loading = useRef<AbortController | null>(null)
@@ -72,14 +75,22 @@ export function Scene3DLibraryControls({ document, workspace, disabled, preview,
     } catch (cause) { setError(cause instanceof Error ? cause.message : t('library.saveFailed')) }
     finally { setBusy(false) }
   }
+  const split = Boolean(onCheckpoint && checkpointLabel)
+  const blocked = disabled || busy
   return <>
-    <input aria-label={t('library.name')} placeholder={t('library.name')} value={name} maxLength={120} disabled={disabled || busy}
-      onChange={event => setName(event.target.value)} className="min-h-10 rounded-lg border border-border bg-bg-primary px-3" />
-    <button type="button" disabled={disabled || busy} onClick={() => void save()} className="min-h-10 rounded-lg border border-border px-3">{t('library.save')}</button>
-    <button type="button" disabled={disabled || busy} onClick={() => { setError(''); setOpen(true) }} className="min-h-10 rounded-lg border border-border px-3">{t('library.open')}</button>
+    <input aria-label={t('library.name')} placeholder={t('library.name')} value={name} maxLength={120} disabled={blocked}
+      onChange={event => setName(event.target.value)} className="h-8 min-w-24 flex-1 rounded-lg border border-border bg-bg-primary px-2" />
+    <button type="button" aria-label={t('library.open')} disabled={blocked} onClick={() => { setError(''); setOpen(true) }} className="inline-flex h-8 shrink-0 items-center rounded-lg border border-border px-2">{t('library.openShort')}</button>
+    <div className="relative inline-flex shrink-0">
+      <button type="button" aria-label={t('library.save')} disabled={blocked} onClick={() => void save()} className={`inline-flex h-8 items-center border border-border px-2 ${split ? 'rounded-l-lg' : 'rounded-lg'}`}>{t('library.saveShort')}</button>
+      {split && <button type="button" aria-label={t('library.saveMenu')} aria-haspopup="menu" aria-expanded={menu} data-testid="scene3d-save-menu" disabled={blocked} onClick={() => setMenu(open => !open)} className="inline-flex h-8 items-center rounded-r-lg border border-l-0 border-border px-1.5"><ChevronDown size={14} aria-hidden="true" /></button>}
+      {split && menu && <div role="menu" className="absolute right-0 top-full z-30 mt-1 min-w-52 rounded-lg border border-border bg-bg-primary p-1 shadow-lg">
+        <button type="button" role="menuitem" data-testid="scene3d-history-checkpoint" disabled={disabled} className="block w-full rounded px-2 py-1.5 text-left text-xs text-text-primary" onClick={() => { setMenu(false); onCheckpoint?.() }}>{checkpointLabel}</button>
+      </div>}
+    </div>
     {busy && loading.current && <button type="button" className="min-h-10 rounded-lg border border-border px-3"
       onClick={() => { loading.current?.abort(); loading.current = null; setBusy(false) }}>{t('library.cancelLoad')}</button>}
-    {note && <span role="status">{note}</span>}{error && <span role="alert">{error}</span>}
+    {note && <span role="status" className="max-w-32 shrink truncate">{note}</span>}{error && <span role="alert" className="max-w-32 shrink truncate text-amber-200">{error}</span>}
     <AssetExplorerDialog open={open} title={t('library.open')} subtitle={t('library.help')} items={items}
       workspaceId={workspace} remote={false} constraints={{ kinds: ['scene'], maxCount: 1, optional: false }} status={busy ? 'loading' : status}
       onRetry={() => setRetry(value => value + 1)} onChoose={item => { if (!busy && !disabled) void choose(item) }}

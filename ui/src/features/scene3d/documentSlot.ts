@@ -12,6 +12,7 @@ import { parseClipCues } from './clipCues.ts'
 import { parseHold } from './handHold.ts'
 import { parseSplatFloor } from './splatItem.ts'
 import type { Scene3DDressing, Scene3DSlot } from './types.ts'
+import { parseFaceDecal } from './faceDecal'
 import { isMotionLab } from './motionlab/types'
 
 const DRESSINGS = new Set<Scene3DDressing>(['none', 'street', 'space', 'treadmill', 'cafe', 'drive-city', 'drive-coast', 'drive-tunnel', 'citadel', 'workshop', 'chase-street', 'retro-lab', 'observatory', 'broadcast-plaza', 'open-sea', 'lunar', 'rooftop', 'hangar', 'desert', 'train', 'space-lane', 'jungle', 'snow', 'casino', 'pixel-lake', 'pixel-peaks', 'pixel-gallery', 'pixel-city', 'pixel-desert', 'pixel-coast', 'pixel-forest', 'pixel-viaduct', 'pixel-volcano', 'pixel-drivein', 'pixel-garden', 'pixel-reef', 'pixel-valley', 'pixel-fair', 'pixel-village', 'pixel-falls', 'pixel-orbit', 'pixel-tulips', 'pixel-alley', 'pixel-castle', 'pixel-beach', 'pixel-lanterns', 'pixel-window', 'pixel-express', 'pixel-daycycle', 'pixel-eclipse', 'pixel-seasons', 'pixel-cathedral', 'pixel-koi', 'pixel-caravan', 'pixel-synthwave', 'pixel-monsoon', 'pixel-marsh', 'pixel-launch', 'pixel-grotto', 'pixel-starry', 'pixel-dawnmist', 'pixel-motel', 'pixel-tidal', 'pixel-mirage', 'pixel-meadow', 'pixel-fjord', 'pixel-clockwork', 'pixel-orrery', 'pixel-rainbow', 'pixel-risingcity', 'pixel-abyss', 'pixel-blizzard', 'pixel-lantern', 'pixel-empire', 'pixel-startrails', 'pixel-wheat', 'pixel-pool', 'pixel-piazza', ...ATMOS_SET_IDS])
@@ -68,6 +69,7 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
     surface: parseSurface(slot.surface),
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat), drift: drift(slot.drift),
+    ...tiltField(slot.rotationX, 'rotationX'), ...tiltField(slot.rotationZ, 'rotationZ'),
     inPlace: slot.inPlace === true ? true : undefined,
     performance: parsePerformance(slot.performance),
     rhythm: parseSlotRhythm(slot.rhythm),
@@ -81,7 +83,17 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   else delete next.hold
   if (next.media === 'splat') next.splat = parseSplatFloor(slot.splat)
   else delete next.splat
+  const faceDecal = parseFaceDecal(slot.faceDecal)
+  if (faceDecal && next.media === 'model3d') next.faceDecal = faceDecal
+  else delete next.faceDecal
+  if (typeof next.rotationX !== 'number' || !Number.isFinite(next.rotationX)) delete next.rotationX
+  if (typeof next.rotationZ !== 'number' || !Number.isFinite(next.rotationZ)) delete next.rotationZ
   return next
+}
+
+function tiltField(value: number | undefined, key: 'rotationX' | 'rotationZ'): Pick<Scene3DSlot, 'rotationX' | 'rotationZ'> {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return {}
+  return { [key]: value }
 }
 
 function holdable(slot: Scene3DSlot) {

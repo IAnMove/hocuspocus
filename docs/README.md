@@ -20,6 +20,7 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 ## Guías de operador (por subsistema)
 
 - [generation/FLUX3_DRAMA3.md](generation/FLUX3_DRAMA3.md) — guía · FLUX 3 Klein con referencias y Drama 3 con voz en español/inglés y clonación; runtime caliente, cgroup de memoria y cuelgues.
+- [install/HOWUSEIT.md](install/HOWUSEIT.md) — guía · pestaña Ajustes → Installation: extras opcionales, qué libera Quitar, Pinokio y la API `/api/v1/system/install`.
 
 - [3d-video-compositor/HOWUSEIT.md](3d-video-compositor/HOWUSEIT.md) — guía · compositor 3D programático (Scene Animator).
 - [character-kits/HOWUSEIT.md](character-kits/HOWUSEIT.md) — guía · kits de personaje 2D y Face Rig.
@@ -51,6 +52,7 @@ tienen su propio índice en [`development/README.md`](development/README.md).
 - [agents/VIDEO2D_MCP_GUIDE.md](agents/VIDEO2D_MCP_GUIDE.md) — guía · montar una escena Video 2D por MCP.
 - [agents/MODEL3D_MCP.md](agents/MODEL3D_MCP.md) — guía · Model3D por MCP.
 - [agents/MODEL3D_COMPOSE.md](agents/MODEL3D_COMPOSE.md) — guía · componer un modelo low-poly en CPU.
+- [agents/MODEL3D_BLOB.md](agents/MODEL3D_BLOB.md) — guía · un cuerpo de cabeza redonda ya riggeado.
 - [agents/HUMANOID_RIG.md](agents/HUMANOID_RIG.md) — guía · rig humanoide para mallas reales.
 
 ## Contratos de producto

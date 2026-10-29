@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Download, RefreshCw, X } from 'lucide-react'
 import { isSameProduction } from './activityOpen.ts'
@@ -122,7 +123,7 @@ function DecisionBar({
           defaultValue={shot.notes}
           placeholder={copy.notesPlaceholder}
           aria-label={copy.notes}
-          disabled={busy}
+          disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
           onBlur={event => { if (event.target.value !== shot.notes) onNotes(event.target.value) }}
         />
       </label>
@@ -250,9 +251,9 @@ export function ProductionReviewDesk({
         <button type="button" className={action} onClick={runExport} disabled={busy || !onExport}><Download size={12} />{copy.export}</button>
       </header>
       {exportNote && <p role="status" className="mb-2 text-[10px]">{exportNote}</p>}
-      {confirm && <fieldset disabled={busy}><ConfirmRegen copy={copy} count={picked.length} onCancel={() => setConfirm(false)} onConfirm={() => void runRegen()} /></fieldset>}
+      {confirm && <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}><ConfirmRegen copy={copy} count={picked.length} onCancel={() => setConfirm(false)} onConfirm={() => void runRegen()} /></fieldset>}
       <div className="grid min-h-72 overflow-hidden rounded-lg border border-border lg:grid-cols-[16rem_minmax(0,1fr)]">
-        <fieldset disabled={busy}><ShotRail desk={current} copy={copy} focusId={shot.id} picked={picked} onFocus={setFocusId} onToggle={togglePick} /></fieldset>
+        <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}><ShotRail desk={current} copy={copy} focusId={shot.id} picked={picked} onFocus={setFocusId} onToggle={togglePick} /></fieldset>
         <div className="p-2">
           <p className="mb-2 text-[11px]">{copy.compare}</p>
           <div className="grid gap-2 sm:grid-cols-2">

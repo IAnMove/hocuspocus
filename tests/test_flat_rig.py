@@ -721,3 +721,18 @@ def test_an_eye_white_cut_away_by_its_limits_has_no_opening_instead_of_failing_t
     empty = np.zeros((20, 20), bool)
     opening = _eye_opening(rgb, alpha, empty, np.array([200.0, 150.0, 120.0]), (0, 20), False)
     assert opening.shape == (20, 20) and not opening.any()
+
+
+def test_a_rig_says_so_when_the_pose_model_files_are_missing(tmp_path, monkeypatch):
+    """Without DWPose the mouths are placed by the painted-mark search alone: the reply must say so, once."""
+    from services import face_landmarks
+    files = list(face_landmarks.MODELS)
+    monkeypatch.setattr(face_landmarks, "models_missing", lambda: files)
+    first = rig_character(str(_workspace(tmp_path)), WORKSPACE, "kevin", base_revision=1)
+    assert first["notices"] == [{"code": "landmark_models_missing", "files": files}]
+
+
+def test_a_rig_with_the_pose_model_files_has_no_notice(tmp_path, monkeypatch):
+    from services import face_landmarks
+    monkeypatch.setattr(face_landmarks, "models_missing", lambda: [])
+    assert "notices" not in rig_character(str(_workspace(tmp_path)), WORKSPACE, "kevin", base_revision=1)

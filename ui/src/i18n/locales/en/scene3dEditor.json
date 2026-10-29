@@ -1,4 +1,43 @@
 {
+  "faceDecal": {
+    "title": "2D face",
+    "kit": "Face kit",
+    "expression": "Expression",
+    "empty": "No face yet",
+    "place": "Placement comes from the scene face command until a head center is saved.",
+    "mouths": "This character needs nine approved mouths."
+  },
+  "addPicker": {
+    "title": "Add to the scene",
+    "search": "Search",
+    "searchHelp": "Effect, text or demo name",
+    "empty": "Nothing matches the search.",
+    "close": "Close",
+    "category": {
+      "all": "All",
+      "world": "3D effects",
+      "overlay": "Screen effects",
+      "demo": "Demos and samples",
+      "text": "Animated text",
+      "prop": "Props"
+    }
+  },
+  "desk": {
+    "scene": "Scene",
+    "add": "Add",
+    "select": "Select",
+    "tools": "Viewport tools",
+    "objectSfx": "Effects on this object",
+    "freeView": "Free view",
+    "shotCamera": "Shot camera",
+    "useView": "Put the shot camera here",
+    "frame": "Frame selection",
+    "more": "More",
+    "addObject": "New object",
+    "addPicker": "Effect or prop…",
+    "templates": "Templates",
+    "templatesHint": "Pick a shot template: it changes the objects, the camera and the set"
+  },
   "speech": {
     "resting": "silent",
     "speaking": "speaking",
@@ -320,7 +359,7 @@
   },
   "title": "3D scene studio",
   "subtitle": "Choose a shot, place your objects and press Play.",
-  "templates": "Shot library",
+  "templates": "Shot templates",
   "search": "Search templates",
   "all": "All",
   "allSettings": "Any set",
@@ -347,19 +386,21 @@
     "splat": "Gaussian splat"
   },
   "translate": "Move",
-  "rotate": "Rotate Y",
+  "rotate": "Rotate",
   "scale": "Scale",
   "size": "Size",
   "smaller": "Smaller",
   "larger": "Larger",
   "reset": "Reset transform",
-  "gizmoHelp": "Inside the scene, press G to move, R to rotate around Y, or S to scale. Drag the gizmo; use its centre to scale proportionally.",
+  "gizmoHelp": "Inside the scene, press G to move, R to rotate on X, Y and Z, or S to scale. Drag the gizmo; use its centre to scale proportionally.",
   "viewport": "3D scene",
-  "transformShortcuts": "Inside the scene: R to rotate around Y · S to scale · G to move. Drag the gizmo to adjust the object.",
+  "transformShortcuts": "Inside the scene: R to rotate on X, Y and Z · S to scale · G to move. Drag the gizmo to adjust the object.",
   "selectObject": "Select an object",
   "position": "Position (m)",
+  "rotationX": "Rotation X (°)",
   "yaw": "Rotation Y (°)",
-  "keepAssets": "Keep my objects when changing shots",
+  "rotationZ": "Rotation Z (°)",
+  "keepAssets": "Keep my objects when changing templates",
   "userTemplates": {
     "title": "My templates",
     "noDescription": "Camera, set and layout of a scenario.",
@@ -3916,7 +3957,10 @@
   "library": {
     "name": "Scene name",
     "save": "Save scene to gallery",
+    "saveShort": "Save",
+    "saveMenu": "More save actions",
     "open": "Open scene",
+    "openShort": "Open",
     "help": "Choose a saved Video3D scene, or a working scene an agent made and did not publish. Choosing replaces the current shot; save it first to keep your edits. JSON import and export remain available.",
     "saved": "Scene saved to this workspace. Open scene to load it again.",
     "changed": "The scene changed while loading. Choose it again to replace the current scene.",
@@ -4187,19 +4231,19 @@
   },
   "shotLibrary": {
     "optionalExamples": "Advanced shot types and all Pixel worlds stay here. Additional looks for repeated compositions are under Examples and variants. Example media is optional.",
-    "change": "Change shot",
-    "use": "Use this shot",
+    "change": "Change template",
+    "use": "Use this template",
     "cancel": "Cancel",
     "close": "Close the shot library",
     "examples": "Examples",
     "recent": "Recent",
     "current": "Current",
     "pickOne": "Pick a shot to see it here.",
-    "hint": "Double-click or press Enter to use a shot straight away"
+    "hint": "Double-click or press Enter to use a template straight away"
   },
   "workspaceTemplates": {
     "title": "Saved in this workspace",
-    "help": "Templates an agent, the Wizard or you saved in this workspace (world3d.templates.user.put). Pick one and press “Use this shot”: it opens as an editable shot.",
+    "help": "Templates an agent, the Wizard or you saved in this workspace (world3d.templates.user.put). Pick one and press “Use this template”: it opens as an editable shot.",
     "objects_one": "{{count}} object",
     "objects_other": "{{count}} objects",
     "pending_one": "{{count}} empty slot",
@@ -4213,7 +4257,7 @@
   },
   "stages": {
     "title": "Stages",
-    "help": "Rooms and open places with marks for the cast and named cameras. Pick one and press “Use this shot”: it opens with its room, then bind your characters and choose a room camera.",
+    "help": "Rooms and open places with marks for the cast and named cameras. Pick one and press “Use this template”: it opens with its room, then bind your characters and choose a room camera.",
     "loading": "Loading the stages",
     "noWorkspace": "Open a workspace to see the stages.",
     "error": "Could not load the stages: {{reason}}",

@@ -44,7 +44,7 @@ export function CharacterVoiceFields({ workspace, value, onChange, disabled, sav
   }
   return <fieldset disabled={disabled} className="space-y-2 text-xs">
     <label className="block">{t('speech.libraryVoice')}
-      <select data-testid="character-voice" disabled={capturing} className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2" value={value?.voiceId ?? ''}
+      <select aria-label={t('speech.libraryVoice')} data-testid="character-voice" disabled={capturing} className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2" value={value?.voiceId ?? ''}
         onChange={e => select(e.target.value)}>
         <option value="">{t('speech.noPreferredVoice')}</option>
         {custom && <option value="reference">{custom.name || t('speech.customVoice.selected')}</option>}
@@ -61,7 +61,7 @@ export function CharacterVoiceFields({ workspace, value, onChange, disabled, sav
     </div>}
     {custom && <CustomCharacterVoiceFields value={custom} onChange={onChange} onBusyChange={captureBusy}
       languages={language ? [language, 'auto'] : undefined} />}
-    {value?.model === 'qwen3_tts_customvoice' && <label className="block">{t('speech.voiceDirection')}<textarea maxLength={1000} rows={2}
+    {value?.model === 'qwen3_tts_customvoice' && <label className="block">{t('speech.voiceDirection')}<textarea aria-label={t('speech.voiceDirection')} maxLength={1000} rows={2}
       className="mt-1 w-full rounded border border-border bg-bg-primary p-2" value={value.instructions ?? ''}
       onChange={e => onChange({ ...value, instructions: e.target.value })} /></label>}
     {!custom && <p className="text-text-muted">{t('speech.voiceHint')}</p>}

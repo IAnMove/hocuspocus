@@ -1,4 +1,5 @@
 {
+  "untitled": "Historia sin título",
   "chrome": {
     "required": "Obligatorio",
     "regeneratePlaceholder": "Instrucción opcional de regeneración…",
@@ -722,6 +723,7 @@
     "override": "Override en este proyecto",
     "writingLlm": "LLM de escritura",
     "internalLlm": "HocusPocus interno · por defecto",
+    "customOpenAi": "Compatible con OpenAI personalizado",
     "writingReady": "Proveedor de escritura listo.",
     "writingMissing": "Faltan credenciales del proveedor en Settings → Services.",
     "writingModel": "Modelo de escritura",

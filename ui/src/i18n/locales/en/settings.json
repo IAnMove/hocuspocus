@@ -7,6 +7,10 @@
     "integrations": "Integrations",
     "installation": "Installation"
   },
+  "modelFamilies": {
+    "enableAll": "Enable all {{family}} models",
+    "disableAll": "Disable all {{family}} models"
+  },
   "appearance": {
     "title": "Appearance",
     "mode": "Mode",
@@ -14,7 +18,77 @@
     "light": "Light",
     "auto": "Auto",
     "autoHint": "Follows your system's appearance — currently {{variant}}.",
-    "theme": "Theme"
+    "theme": "Theme",
+    "themes": {
+      "golden-hour": {
+        "label": "HocusPocus Blue",
+        "description": "Default. HocusPocus palette — near-black surfaces with electric blue and cyan accents; cool paper in daylight."
+      },
+      "default": {
+        "label": "Classic",
+        "description": "The original cool palette with blue accents — charcoal at night, cool paper in daylight."
+      },
+      "onyx": {
+        "label": "Onyx",
+        "description": "Minimalist monochrome — pure black at night, white and grey in daylight. No color tint."
+      },
+      "everforest": {
+        "label": "Everforest",
+        "description": "Desaturated forest greens on warm grey — the most restful of the set, and the kindest to a full gallery."
+      },
+      "gruvbox": {
+        "label": "Gruvbox",
+        "description": "Warm retro earth tones with low contrast — easy on the eyes over long sessions."
+      },
+      "nord": {
+        "label": "Nord",
+        "description": "Arctic blue-grey, muted and even — a cold, quiet room."
+      },
+      "tokyo-night": {
+        "label": "Tokyo Night",
+        "description": "Cool blues and violets on deep navy — the closest neighbour to HocusPocus Blue."
+      },
+      "catppuccin": {
+        "label": "Catppuccin",
+        "description": "Soft pastels on plum-tinted charcoal — the most carefully balanced palette of the set."
+      },
+      "rose-pine": {
+        "label": "Rosé Pine",
+        "description": "Muted rose and pine on ink — the prettiest empty; it competes hardest with a full gallery."
+      },
+      "studio": {
+        "label": "Studio",
+        "description": "A grading suite: untinted greys around an 18% surround, so nothing in the chrome pulls your thumbnails warm or cool. Teal and orange on the controls only."
+      },
+      "phosphor": {
+        "label": "Phosphor",
+        "description": "Amber CRT — light that blooms past the edge instead of outlining it, with the printout rather than the screen by day."
+      },
+      "amiga": {
+        "label": "Amiga Workbench",
+        "description": "Workbench 1.3 blue with its orange gadgets, and the 2.0 grey desktop by day — a true mid-grey, not paper."
+      },
+      "solarized": {
+        "label": "Solarized",
+        "description": "Teal-black ground with ochre and rust — built from measured hue relationships, and the only dark theme here that does not read as grey."
+      },
+      "one": {
+        "label": "One",
+        "description": "Even blue-grey with a clear blue accent — the most neutral of the community set."
+      },
+      "ayu": {
+        "label": "Ayu",
+        "description": "Near-black with a gold accent — the highest contrast of the set, and the only one that leads with warm light."
+      },
+      "dracula": {
+        "label": "Dracula",
+        "description": "Saturated purple and pink on indigo — the loudest of the set, with Alucard as its own warm paper by day."
+      },
+      "kanagawa": {
+        "label": "Kanagawa",
+        "description": "Ink-wash browns and indigo after Hokusai — warm and painterly, with the Lotus paper in daylight."
+      }
+    }
   },
   "language": {
     "title": "Language",
@@ -283,6 +357,9 @@
     "updatesFilterTitle": "{{count}} LoRA(s) have updates available — check to filter",
     "updatesNoneTitle": "No updates available — click Check to refresh from CivitAI",
     "sortTitle": "Sort installed LoRAs",
+    "sortResults": "Sort results",
+    "period": "Time period",
+    "modelFilter": "Model filter",
     "sortName": "Name",
     "sortDownloaded": "Newest download",
     "sortReleased": "Newest release",
@@ -453,6 +530,8 @@
     "installedRestart": "Installed. Restart HocusPocus to use it.",
     "removed": "Removed.",
     "install": "Install",
+    "waitForCurrent": "Wait until the current install or removal finishes",
+    "needLauncher": "The installer is not available. Start it, then try again",
     "update": "Update",
     "uninstall": "Remove",
     "confirmUninstall": "Click again to remove (frees about {{size}})",
@@ -511,5 +590,195 @@
         "summary": "The original ComfyUI workflow for MiniMax H3. The native H3 in the base install covers normal use."
       }
     }
+  },
+  "system": {
+    "enabledModels": "Enabled Models",
+    "reset": "Reset",
+    "all": "All",
+    "none": "None",
+    "linkedFolders": "Linked Model Folders",
+    "linkedCount_one": "{{count}} linked",
+    "linkedCount_other": "{{count}} linked",
+    "linkedBody": "Search other apps' model folders for checkpoints you already have — e.g. an existing Wan2GP install — instead of re-downloading them. Linked folders are read-only: new downloads always go to HocusPocus's own ckpts folder.",
+    "unlink": "Unlink folder (files are not deleted)",
+    "scanPinokio": "Scan Pinokio apps",
+    "scanEmpty": "No other Pinokio apps with a ckpts folder found",
+    "scanFailed": "Scan failed",
+    "saveFailed": "Failed to save folders",
+    "linkFolder": "Link {{path}}",
+    "folderStats": "{{files}} files, {{folders}} folders",
+    "folderStatsSize": "{{files}} files, {{folders}} folders, ~{{size}} GB",
+    "pastePath": "Or paste a folder path...",
+    "add": "Add",
+    "storageHint": "usage, duplicates, cleanup",
+    "noCuda": "No CUDA GPU detected",
+    "vramRam": "{{vram}} GB VRAM · {{ram}} GB RAM",
+    "ramOnly": "{{ram}} GB RAM",
+    "autoTuneOnTitle": "Auto-tune is on — click to take manual control",
+    "autoTuneOffTitle": "Auto-tune is off — click to enable",
+    "autoTuneOn": "Auto-tune on",
+    "autoTuneOff": "Auto-tune off",
+    "autoAppliedProfile": "Auto-tune applied — profile changes take effect on next model load",
+    "autoApplied": "Auto-tune applied",
+    "autoApplyFailed": "Failed to apply auto-tune",
+    "autoDisabled": "Auto-tune disabled — settings unchanged, you can edit them manually now",
+    "redetect": "Re-detect",
+    "redetectTitle": "Re-run hardware detection (use after a hardware change or driver update)",
+    "redetectedProfile": "Re-detected — profile changes take effect on next model load",
+    "redetectedSame": "Re-detected — no settings changed",
+    "redetectFailed": "Failed to re-detect hardware",
+    "detecting": "Detecting hardware...",
+    "loading": "Loading system settings...",
+    "loadFailed": "Failed to load system settings",
+    "showAdvanced": "Show advanced settings",
+    "hideAdvanced": "Hide advanced settings",
+    "outputCodecs": "Output Codecs",
+    "videoCodec": "Video Codec",
+    "imageCodec": "Image Codec",
+    "attentionMode": "Attention Mode",
+    "quantization": "Transformer Quantization",
+    "fp8Warning": "Many models ship only BF16 + INT8 files. FP8 silently falls back to INT8 for those. For guaranteed FP8, pick a model with “FP8” in its name (e.g. “LTX-2.3 Distilled FP8 22B”).",
+    "vaeTiling": "VAE Tiling",
+    "compile": "Compile",
+    "profilesTitle": "Profiles",
+    "videoProfile": "Video Profile",
+    "imageProfile": "Image Profile",
+    "audioProfile": "Audio Profile",
+    "profileEffect": "Profile changes take effect on next model load",
+    "vramSafety": "VRAM Safety Coefficient",
+    "vramConservative": "0.50 (conservative)",
+    "vramDefault": "0.80 (default)",
+    "vramAggressive": "0.95 (aggressive)",
+    "vramTarget": "Max VRAM target: ~{{used}} GB of {{total}} GB.",
+    "vramHint": "Lower = more headroom for spikes (long videos, VAE decode). Takes effect on next model load.",
+    "scrollableTabs": "Scrollable tabs",
+    "previousTabs": "Show previous tabs",
+    "previousTabsTitle": "Previous tabs",
+    "moreTabs": "Show more tabs",
+    "moreTabsTitle": "More tabs",
+    "modes": {
+      "image": "Image",
+      "video": "Video",
+      "audio": "Audio",
+      "model3d": "3D Models",
+      "avatar": "Edit"
+    },
+    "codecs": {
+      "h264q8": "H.264 Quality 8",
+      "h264q10": "H.264 Quality 10",
+      "h264lossless": "H.264 Lossless",
+      "h265crf8": "H.265 CRF 8",
+      "h265crf28": "H.265 CRF 28 (Fast)",
+      "jpeg95": "JPEG 95%",
+      "jpeg85": "JPEG 85%",
+      "jpeg70": "JPEG 70%",
+      "png": "PNG (Lossless)",
+      "webp95": "WebP 95%",
+      "webp85": "WebP 85%",
+      "webpLossless": "WebP Lossless"
+    },
+    "vae": {
+      "auto": "Auto",
+      "full": "Full (Fast, High VRAM)",
+      "medium": "Medium Tiling",
+      "aggressive": "Aggressive Tiling (Low VRAM)"
+    },
+    "compileOptions": {
+      "none": "None",
+      "transformer": "Transformer"
+    },
+    "profileLabels": {
+      "1": "Profile 1: High RAM + High VRAM",
+      "2": "Profile 2: High RAM + Low VRAM",
+      "3": "Profile 3: Low RAM + High VRAM",
+      "3_5": "Profile 3.5: Very Low RAM + High VRAM",
+      "4": "Profile 4: Low RAM + Low VRAM",
+      "4_5": "Profile 4.5: Low RAM + Low VRAM (saves ~1GB)",
+      "5": "Profile 5: Very Low RAM + Low VRAM"
+    },
+    "quantOptions": {
+      "int8": "INT8",
+      "fp8": "FP8",
+      "bf16": "BF16"
+    },
+    "attentionAuto": "Auto",
+    "attentionSdpa": "SDPA"
+  },
+  "lora": {
+    "sortNewestTitle": "Sorted by newest release first. Click to sort by name.",
+    "sortNameTitle": "Sorted by name. Click to sort by newest release first.",
+    "sortNew": "New",
+    "sortAz": "A-Z",
+    "heading": "LoRAs",
+    "check": "Check",
+    "checkTitle": "Check CivitAI for newer LoRA versions",
+    "checkTitleWhen": "Check CivitAI for newer LoRA versions (last checked {{when}})",
+    "browse": "Browse",
+    "browseTitle": "Browse CivitAI",
+    "justNow": "just now",
+    "minutesAgo_one": "{{count}}m ago",
+    "minutesAgo_other": "{{count}}m ago",
+    "hoursAgo_one": "{{count}}h ago",
+    "hoursAgo_other": "{{count}}h ago",
+    "daysAgo_one": "{{count}}d ago",
+    "daysAgo_other": "{{count}}d ago",
+    "loading": "Loading LoRAs...",
+    "noneFound": "No LoRAs found",
+    "search": "Search LoRAs...",
+    "noneForModel": "No LoRAs found for this model",
+    "updates": "Updates",
+    "nsfw": "NSFW",
+    "nsfwShowAll": "Showing all LoRAs (including NSFW). Uncheck to hide NSFW.",
+    "nsfwHidden_one": "{{count}} NSFW LoRA hidden — check to show.",
+    "nsfwHidden_other": "{{count}} NSFW LoRAs hidden — check to show.",
+    "nsfwCheck": "Check to include NSFW LoRAs",
+    "nsfwHiddenList_one": "{{count}} NSFW LoRA hidden — check NSFW to show",
+    "nsfwHiddenList_other": "{{count}} NSFW LoRAs hidden — check NSFW to show",
+    "civitaiSettings": "CivitAI recommended settings",
+    "defaultSettings": "Default settings",
+    "updateAvailable": "Update available",
+    "noMatches": "No matches",
+    "selectedCount": "Selected ({{count}})",
+    "clearAll": "Clear all",
+    "guideAvailable": "LoRA guide available",
+    "phase": "Phase {{n}}",
+    "released": "Released {{date}}",
+    "downloaded": "Downloaded {{date}}",
+    "zoneCivitai": "CivitAI: {{min}}-{{max}} ({{fallback}})",
+    "zoneDefault": "Default: {{min}}-{{max}} ({{fallback}})",
+    "zoneCivitaiRange": "CivitAI: {{min}}-{{max}}",
+    "zoneDefaultRange": "Default: {{min}}-{{max}}",
+    "presets": "Presets",
+    "presetTitle_one": "{{count}} LoRA(s): {{names}}",
+    "presetTitle_other": "{{count}} LoRA(s): {{names}}",
+    "strength": "Strength",
+    "strengthTitle": "LoRA strength",
+    "strengthOf": "{{name}} LoRA strength",
+    "strengthOfPhase": "{{name}} phase {{n}} LoRA strength",
+    "strengthValueOf": "{{name}} LoRA strength value",
+    "strengthValueOfPhase": "{{name}} phase {{n}} LoRA strength value",
+    "adjustPhases": "Adjust each phase below",
+    "phaseCount_one": "{{count}} phase",
+    "phaseCount_other": "{{count}} phases",
+    "strengthCount": "LoRA strength ({{count}})"
+  },
+  "panorama": {
+    "title": "Environment A/B · parallax vs cylinder",
+    "close": "Close",
+    "warning": "Preview only — it never changes or exports the scene. Cylinder is appropriate only for a horizontally seamless panorama and a centred camera; otherwise keep parallax.",
+    "flatLayer": "Current flat layer",
+    "flatAlt": "Flat parallax reference",
+    "inside": "Inside cylinder",
+    "rotation": "Rotation {{degrees}}°",
+    "fov": "Vertical FOV {{degrees}}°",
+    "webglUnavailable": "WebGL2 is unavailable here; use the existing parallax renderer.",
+    "loadFailed": "Could not load this panorama image for WebGL comparison.",
+    "comparisonFailed": "Cylinder comparison failed.",
+    "shaderCreateFailed": "Could not create a WebGL shader.",
+    "shaderCompileFailed": "Cylinder shader failed to compile.",
+    "programCreateFailed": "Could not create the cylinder program.",
+    "programLinkFailed": "Cylinder program failed to link.",
+    "geometryFailed": "Could not create cylinder geometry.",
+    "textureFailed": "Could not create panorama texture."
   }
 }

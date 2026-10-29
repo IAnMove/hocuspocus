@@ -7,7 +7,10 @@ y MiniMax H3.
 
 ## Instalar
 
-1. En Pinokio abre **Advanced → Install FLUX 3 / Drama 3 Support**.
+1. Instala el runtime opcional: en la app, **Settings → Installation → Install**
+   junto a FLUX 3 / Drama 3, o en Pinokio **Advanced → Install FLUX 3 / Drama 3
+   Support**. Las dos vías ejecutan el mismo `creation_models_install.js`.
+   Guía de la pestaña: [Installation](../install/HOWUSEIT.md).
 2. Para FLUX, acepta el acceso en el [repositorio de pesos de BFL](https://huggingface.co/black-forest-labs/flux-3-image-klein-comfy).
    Configura `HF_TOKEN` en el entorno de **esta aplicación** en Pinokio. El token
    debe pertenecer a la cuenta que obtuvo el acceso; aceptar con otra cuenta no

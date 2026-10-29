@@ -129,8 +129,21 @@ def test_layers_place_the_blink_and_the_mouth_and_a_rerig_keeps_them(tmp_path, m
     assert (folder / name).is_file()
     assert json.loads((folder / name).with_suffix(".meta.json").read_text())["params"]["role"].endswith("eyewhite")
     again = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=rigged["revision"])
-    assert again["style"]["faceSource"] == "layers"
-    assert calls == ["base", "shrug", "base", "shrug"]
+    assert "faceSource" not in again["style"]
+    assert "faceSource" not in again["character"]["provenance"][-1]["style"]
+    assert calls == ["base", "shrug"]
+
+
+def test_a_rerig_without_style_does_not_keep_layers_or_call_see_through(tmp_path, monkeypatch):
+    """A click asks for layers once. The next rig, with no style, must not run See-through again."""
+    calls = _patch_worker(monkeypatch)
+    folder = _workspace(tmp_path, shrug=False)
+    rigged = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=1,
+                           style={"mouthStyle": "warp", "faceSource": "layers"})
+    assert calls == ["base"]
+    again = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=rigged["revision"])
+    assert "faceSource" not in again["style"]
+    assert calls == ["base"]
 
 
 def _assert_blink_covers_layer_eyes(folder: Path, rigged: dict) -> None:
@@ -145,6 +158,17 @@ def _assert_blink_covers_layer_eyes(folder: Path, rigged: dict) -> None:
     assert cy > 220
 
 
+def test_a_layer_mouth_is_not_stored_as_a_user_hint(tmp_path, monkeypatch):
+    """The mouth See-through measured is for this rig. It is not an exact hint the next rig must obey."""
+    _patch_worker(monkeypatch)
+    folder = _workspace(tmp_path, shrug=False)
+    rigged = rig_character(str(folder), WORKSPACE, "gorthak", base_revision=1,
+                           style={"mouthStyle": "warp", "faceSource": "layers"})
+    saved = (rigged["character"]["provenance"][-1]["hints"] or {}).get("base") or {}
+    assert saved.get("exact") is not True
+    assert "mouth" not in saved and "mouthWidth" not in saved
+
+
 def test_a_user_mouth_hint_is_not_replaced_by_the_layer(tmp_path, monkeypatch):
     _patch_worker(monkeypatch)
     folder = _workspace(tmp_path, shrug=False)
@@ -153,6 +177,73 @@ def test_a_user_mouth_hint_is_not_replaced_by_the_layer(tmp_path, monkeypatch):
                            hints={"base": {"mouth": [12, 12], "mouthWidth": 8, "exact": True}})
     saved = rigged["character"]["provenance"][-1]["hints"]["base"]
     assert saved["mouth"] == [12, 12] and saved["mouthWidth"] == 8 and saved["exact"] is True
+
+
+def _blink_rig(blinks: bool = True) -> dict:
+    return {
+        "warnings": [], "blink": "keep", "eyes": {"offsetY": -10}, "blinks": blinks,
+        "width": 80, "height": 40, "frame": (0, 0, 80, 40),
+        "mouth": {"offsetX": 0, "offsetY": 0, "scale": 0.1, "rotation": 0},
+        "skin": (200, 160, 130), "before": Image.new("RGBA", (80, 40), (230, 190, 160, 255)),
+    }
+
+
+def _eye_layer(kind: str) -> Image.Image:
+    image = Image.new("RGBA", (80, 40), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    draw.ellipse((8, 8, 28, 28), fill=(255, 255, 255, 255))
+    if kind == "pair":
+        draw.ellipse((48, 8, 68, 28), fill=(255, 255, 255, 255))
+    elif kind == "speck":
+        draw.rectangle((70, 2, 72, 4), fill=(255, 255, 255, 255))
+    return image
+
+
+def _apply_eyes(kind: str, blinks: bool = True) -> dict:
+    rig = _blink_rig(blinks)
+    apply_face_layers(
+        {"base": rig},
+        {"base": {"images": {"eyewhite": _eye_layer(kind)}, "missing": ["mouth"], "mouth_box": None}},
+        {"mouthStyle": "paper", "screen": False}, {})
+    return rig
+
+
+def test_a_speck_beside_one_eye_is_not_a_second_eye():
+    rig = _apply_eyes("speck")
+    assert rig["blink"] == "keep"
+
+
+def test_one_eye_component_is_not_split_into_two():
+    rig = _apply_eyes("one")
+    assert rig["blink"] == "keep"
+
+
+def test_layers_do_not_turn_blinks_on_when_the_rig_said_no():
+    rig = _apply_eyes("pair", blinks=False)
+    assert rig["blinks"] is False
+
+
+def test_an_ink_layer_mouth_hangs_from_the_median_row():
+    """The ink openings hang from the painted line, and the sprite holds that line in INK_SPAN of its width."""
+    from services.flat_rig_base import SPRITE
+    from services.flat_rig_ink import INK_SPAN
+    image = Image.new("RGBA", (100, 80), (0, 0, 0, 0))
+    ImageDraw.Draw(image).rectangle((20, 10, 60, 10), fill=(40, 20, 20, 255))
+    ImageDraw.Draw(image).point((20, 50), fill=(40, 20, 20, 255))
+    rig = {
+        "warnings": [], "blink": "keep", "eyes": {"offsetY": -10}, "blinks": True,
+        "width": 100, "height": 80, "frame": (0, 0, 100, 80),
+        "mouth": {"offsetX": 0, "offsetY": 0, "scale": 0.1, "rotation": 0},
+        "skin": (1, 2, 3), "before": Image.new("RGBA", (100, 80), (0, 0, 0, 0)),
+        "eyes_box": [10, 0, 90, 8],
+    }
+    apply_face_layers(
+        {"base": rig},
+        {"base": {"images": {"mouth": image}, "missing": [], "mouth_box": (20, 10, 61, 51)}},
+        {"mouthStyle": "ink", "screen": False}, {})
+    assert rig["mouth"]["offsetY"] == -30.0
+    painted = 41
+    assert rig["mouth"]["scale"] == round(painted / INK_SPAN * SPRITE[1] / SPRITE[0] / 100, 5)
 
 
 def test_missing_eye_layers_keep_the_guessed_blink():
@@ -188,6 +279,35 @@ def test_layers_on_windows_are_refused_even_when_the_files_exist(tmp_path, monke
     assert error.value.code == "see_through_unsupported"
     assert "Linux" in str(error.value)
     assert _names(folder) == before
+
+
+def test_prepare_marks_see_through_in_use_and_clears_it(monkeypatch):
+    seen = []
+
+    def fake_decompose(*_args, **_kwargs):
+        seen.append(see_through_layers.is_running())
+        return {}, {}
+
+    monkeypatch.setattr(see_through_layers, "ensure_available", lambda: None)
+    monkeypatch.setattr(see_through_layers, "_pose_list", lambda *_args, **_kwargs: ["base"])
+    monkeypatch.setattr(see_through_layers, "_decompose_all", fake_decompose)
+    assert see_through_layers.is_running() is False
+    see_through_layers.prepare_face_layers({"id": "k"}, {"faceSource": "layers"}, "cast", "/tmp", None, {})
+    assert seen == [True]
+    assert see_through_layers.is_running() is False
+    assert see_through_layers.prepare_face_layers({"id": "k"}, {}, "cast", "/tmp", None, {"keep": 1}) == ({"keep": 1}, {})
+    assert see_through_layers.is_running() is False
+
+
+def test_prepare_clears_in_use_when_the_component_is_missing(monkeypatch):
+    def refuse():
+        raise FlatRigError("see_through_not_installed", "missing")
+
+    monkeypatch.setattr(see_through_layers, "ensure_available", refuse)
+    with pytest.raises(FlatRigError) as error:
+        see_through_layers.prepare_face_layers({}, {"faceSource": "layers"}, "cast", "/tmp", None, {})
+    assert error.value.code == "see_through_not_installed"
+    assert see_through_layers.is_running() is False
 
 
 def test_face_source_is_layers_or_absent():

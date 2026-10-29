@@ -37,9 +37,12 @@ declare Linux, NVIDIA >=24 GB and recommend CUDA Toolkit 12.4.
 
 ## Install, download and select
 
-1. Stop HocusPocus, then choose **Advanced > Install TRELLIS.2** in Pinokio.
-   Source and CUDA extension builds can take a while (`MAX_JOBS=2`). This
-   installs the runtime only; the standard Install never includes TRELLIS.
+1. Install the runtime only: **Settings > Installation > Install** next to
+   TRELLIS.2 (HocusPocus must stay open; restart afterwards), or stop the app
+   and choose **Advanced > Install TRELLIS.2** in Pinokio. Both run
+   `trellis2_install.js`. Source and CUDA extension builds can take a while
+   (`MAX_JOBS=2`). The standard first Install never includes TRELLIS unless
+   you tick it. Operator guide: [Installation](../install/HOWUSEIT.md).
 2. Restart HocusPocus. Under **Settings > Model Visibility > 3D**, enable
    **TRELLIS.2 · Official Microsoft 4B** and click its download icon.
    The icon stays disabled on incompatible hardware or before runtime setup.

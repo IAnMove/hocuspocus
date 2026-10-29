@@ -631,7 +631,7 @@ export function StoryLabPanel() {
     const writer = project.provider.writingProvider === 'maestro'
       ? 'HocusPocus internal'
       : project.provider.writingModel || project.provider.writingProvider
-    const title = `Story Lab · ${project.title.trim() || 'Untitled story'} · ${writer}`
+    const title = `Story Lab · ${project.title.trim() || t('untitled')} · ${writer}`
     const lifecycle = createStoryActivityLifecycle({
       id,
       title,
@@ -3846,7 +3846,7 @@ export function StoryLabPanel() {
                     <p className="text-xs font-semibold text-amber-200">{t('draft.title', { scope: pendingDraft.scope })}</p>
                     <p className="text-[10px] text-text-muted mt-1">{t('draft.hint')}</p>
                     <label className="mt-2 flex items-center gap-2 text-[10px] text-text-secondary">
-                      <input
+                      <input aria-label={t('draft.replaceCollections')}
                         type="checkbox"
                         checked={pendingDraft.replaceCollections}
                         onChange={event => setPendingDraft(current => current ? {
@@ -3859,7 +3859,7 @@ export function StoryLabPanel() {
                   <div className="flex-1 grid sm:grid-cols-2 lg:grid-cols-3 gap-1 max-h-36 overflow-y-auto">
                     {draftPaths(pendingDraft.result).map(path => (
                       <label key={path} className="flex items-center gap-2 rounded bg-bg-tertiary px-2 py-1 text-[10px] text-text-secondary">
-                        <input
+                        <input aria-label={path}
                           type="checkbox"
                           checked={pendingDraft.selected.includes(path)}
                           onChange={event => setPendingDraft(current => {
@@ -4229,7 +4229,7 @@ export function StoryLabPanel() {
         </div>
       </div>
 
-      <input ref={smartAssetRef} type="file" accept="image/*" multiple className="hidden"
+      <input ref={smartAssetRef} aria-label={t('library.smartAssets')} type="file" accept="image/*" multiple className="hidden"
         onChange={event => void analyzeSmartAssets(Array.from(event.target.files || []))} />
     </div>
     </StoryLabVisualsProvider>

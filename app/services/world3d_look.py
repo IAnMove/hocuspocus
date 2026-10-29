@@ -22,13 +22,14 @@ _TOON_RULES = {
     "outline": (lambda value: type(value) in (int, float) and 0 <= value <= 8, "toon.outline must be between 0 and 8 pixels",
                 lambda value: round(float(value), 2)),
     "ink": (lambda value: isinstance(value, str) and _INK.fullmatch(value) is not None, "toon.ink must be a #rrggbb colour", str.lower),
+    "shade": (lambda value: value in ("classic", "anime"), "toon.shade must be classic or anime", str),
 }
 
 
 def normalize_toon(raw) -> dict:
-    """Toon settings: ``steps`` 2-4 light bands, ``outline`` 0-8 px of a 1080p frame, ``ink`` as #rrggbb."""
+    """Toon settings: ``steps`` 2-4 light bands, ``outline`` 0-8 px of a 1080p frame, ``ink`` as #rrggbb, ``shade`` classic or anime."""
     if not isinstance(raw, dict) or set(raw) - set(_TOON_RULES):
-        raise ValueError("toon takes only steps, outline and ink")
+        raise ValueError("toon takes only steps, outline, ink and shade")
     toon = {}
     for key, value in raw.items():
         valid, message, clean = _TOON_RULES[key]

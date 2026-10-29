@@ -31,7 +31,7 @@ function WangpSoundtrack() {
   const options = useStore(s => s.modelOptions?.audio_prompt_type_sources)
   return <div className="space-y-2">
     <label className="block text-xs">{t('wangp.audioSource')}
-      <select className="w-full bg-bg-tertiary rounded p-2" value={String(params.audio_prompt_type || '')} onChange={event => setParam('audio_prompt_type', event.target.value)}>
+      <select aria-label={t('wangp.audioSource')} className="w-full bg-bg-tertiary rounded p-2" value={String(params.audio_prompt_type || '')} onChange={event => setParam('audio_prompt_type', event.target.value)}>
         {options?.selection?.map(value => <option key={value} value={value}>{options.labels?.[value] || value}</option>)}
       </select>
     </label>
@@ -46,6 +46,6 @@ export function WangpInjectedFrame() {
   const setParam = useStore(s => s.setParam)
   return <div className="space-y-2">
     <WangpMediaInput label={t('wangp.injectedFrame')} kind="image" path={String(params.image_refs?.[0] || '')} onChoose={item => setParams({ image_refs: item ? [item.url] : [] })} />
-    <label className="block text-xs">{t('wangp.framePosition')}<input className="w-full bg-bg-tertiary rounded p-2" type="number" min="0" step="1" value={String(params.frames_positions || '0')} onChange={event => setParam('frames_positions', event.target.value)} /></label>
+    <label className="block text-xs">{t('wangp.framePosition')}<input aria-label={t('wangp.framePosition')} className="w-full bg-bg-tertiary rounded p-2" type="number" min="0" step="1" value={String(params.frames_positions || '0')} onChange={event => setParam('frames_positions', event.target.value)} /></label>
   </div>
 }

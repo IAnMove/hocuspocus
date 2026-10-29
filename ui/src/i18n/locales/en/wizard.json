@@ -1,6 +1,10 @@
 {
   "paidMusicDisabled": "Paid MiniMax music is disabled ({{model}}); use a local model: {{local}}. The MiniMax API runs only when you pick it in Story Lab and confirm the cost.",
   "title": "Ask to the Wizard",
+  "short": "Wizard",
+  "expand": "Expand Ask to the Wizard",
+  "backdrop": "Close Wizard backdrop",
+  "opening": "Opening the Wizard…",
   "open": "Ask to the Wizard about the app or current task queue",
   "placeholder": "Ask HocusPocus for a spell…",
   "close": "Close Ask to the Wizard",
@@ -70,7 +74,25 @@
     "partial": "Partially completed",
     "failed": "Failed",
     "cancelled": "Cancelled",
-    "reported": "Reported"
+    "reported": "Reported",
+    "waiting": "Waiting",
+    "retrying": "Retrying"
+  },
+  "workflowTypes": {
+    "create_rhythmic_3d_video": "Rhythmic 3D video",
+    "image_then_upscale": "Image, then upscale"
+  },
+  "workflowSteps": {
+    "prepareSong": "Prepare or generate the song",
+    "createScene": "Create an editable 3D scene",
+    "addLayers": "Add the visual layers and the camera",
+    "attachAudio": "Resolve and attach the exact audio",
+    "analyzeAudio": "Analyze the audio once",
+    "bakeChoreography": "Bake the editable beat choreography",
+    "saveScene": "Save the editable scene",
+    "exportMp4": "Export and publish the MP4",
+    "generateImage": "Generate image",
+    "upscale": "Upscale"
   },
   "rejectionReason": {
     "invalid_intent": "The assistant did not return a valid interpretation of your intent. Retry your request.",
@@ -301,6 +323,7 @@
     "programmaticPrepared": "I am preparing Video3D from your request word for word and without generative video. I will not create new resources unless you explicitly allow it. Review the assets and the recipe in the form before building or exporting; there is no finished video yet.",
     "characterAnimationStarted": "Starting the “{{animation}}” animation of {{name}} ({{poses}} poses, job {{jobId}}). It is made on the server, one pose after another with Qwen: it takes a few minutes. You will see it in Characters › Animaciones, where you can review and approve it.",
     "characterAnimationQueued": "The “{{animation}}” animation of {{name}} is queued (job {{jobId}}): it is made when the GPU is free. You will see it in Characters › Animaciones, where you can review and approve it.",
+    "characterFaceMade": "Drew the 2D face of {{name}}. It is in Characters, ready to put on a model.",
     "characterAnimationSetStarted": "Starting “{{set}}” for {{name}} ({{sheets}} sheets, job {{jobId}}). It is made on the server, one sheet after another with Qwen, and takes many minutes. You will see each sheet in Characters › Animaciones, where you review and approve it. If it stops, ask again and it continues.",
     "characterAnimationSetQueued": "“{{set}}” for {{name}} is queued (job {{jobId}}): it starts when the GPU is free. You will see each sheet in Characters › Animaciones, where you review and approve it.",
     "characterAnimationSetNothing": "{{name}} already has every sheet of “{{set}}”. Nothing to make: review them in Characters › Animaciones.",
@@ -360,6 +383,7 @@
     "linkingVisualReferences": "Linking and approving visual references…",
     "makingCharacterAnimation": "Making the character animation on the server…",
     "makingCharacterAnimationSet": "Making the character's full walks on the server…",
+    "makingCharacterFace": "Drawing the 2D face…",
     "reviewingCharacterAnimation": "Reviewing the character animation…",
     "mountingVideoclipAlternateSong": "Assembling the music video with the alternative song…",
     "openingCharacterKit": "Opening Character Kit…",
