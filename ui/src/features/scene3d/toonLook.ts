@@ -38,7 +38,7 @@ export type ToonTarget = { root: Object3D; outline: boolean }
 
 export const DEFAULT_TOON: ToonSettings = { steps: 3, outline: 3, ink: '#141018', shade: 'classic' }
 /** Hair strands are inked at this share of the outline width. */
-export const HAIR_INK = 0.6
+export const HAIR_INK = 0.4
 /** Light of the darkest band; the others are spread evenly up to full light. */
 const SHADOW_BAND = 0.3
 /** The anime shade keeps its shadow close to the lit colour and gives it a cool tint, as cel shadows are painted. */

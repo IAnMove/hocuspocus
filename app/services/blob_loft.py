@@ -17,12 +17,14 @@ Metres, Y up, +Z forward. Pure: no files, no rig.
 """
 from __future__ import annotations
 
+import bisect
 import math
 
 from services.procedural_3d.compose import linear_color
 
 RING = 16
 _JAW = 0.35
+FACE_BOX, BACK_BOX = 2.7, 2.2
 OUTFITS = ("school", "casual", "sport")
 
 
@@ -143,16 +145,27 @@ def bezier(p0, p1, p2, count: int) -> list:
     return out
 
 
-def curve_tube(mesh: Mesh, points: list, radii: list, color: str, ring: int = 8, flat: float = 1.0, caps: bool = True) -> None:
-    """A clump along ``points``: rings in the plane normal to the curve, ``radii[i]`` across and ``flat`` times that deep."""
+def curve_tube(mesh: Mesh, points: list, radii: list, color: str, ring: int = 8, flat: float = 1.0, caps: bool = True, hug=None) -> None:
+    """A clump along ``points``: rings in the plane normal to the curve, ``radii[i]`` across and ``flat`` times that deep.
+    ``hug`` is a centre the clump lies against (the head's): the thin side then faces away from it and the wide side lies
+    along the surface, a ribbon on the skull, not a blade seen edge-on."""
     count = len(points)
     grid, colors = [], []
     up = (0.0, 1.0, 0.0)
     for i, p in enumerate(points):
         tangent = _unit(_sub(points[min(i + 1, count - 1)], points[max(i - 1, 0)]))
-        ref = (1.0, 0.0, 0.0) if abs(_dot(tangent, up)) > 0.9 else up
-        side = _unit(_cross(ref, tangent))
-        deep = _unit(_cross(tangent, side))
+        if hug is not None:
+            out = _sub(p, hug)
+            out = _sub(out, _mul(tangent, _dot(out, tangent)))
+            if _dot(out, out) > 1e-12:
+                deep = _unit(out)
+                side = _unit(_cross(tangent, deep))
+            else:
+                hug = None
+        if hug is None:
+            ref = (1.0, 0.0, 0.0) if abs(_dot(tangent, up)) > 0.9 else up
+            side = _unit(_cross(ref, tangent))
+            deep = _unit(_cross(tangent, side))
         r = radii[i]
         grid.append([_add(p, _add(_mul(side, r * math.cos(t)), _mul(deep, r * flat * math.sin(t)))) for t in (j * math.tau / ring for j in range(ring))])
         colors.append([linear_color(color)] * ring)
@@ -210,54 +223,97 @@ def _lerp(a: float, b: float, u: float) -> float:
     return a + (b - a) * max(0.0, min(1.0, u))
 
 
-def skull_profile(lat: float) -> tuple[float, float, float, float]:
-    """The human skull at latitude ``lat`` (degrees, -90 chin to 90 crown): ``(width, back depth, front depth, flatness)``
-    as shares of the head radii. A wide cranium, a brow ridge, cheeks that taper to a small chin pushed a little
-    forward, and a face that is flatter than the back (``flatness`` < 1 pushes the front rings toward a plane)."""
-    phi = math.radians(lat)
-    c = math.cos(phi)
-    if lat >= 0:
-        width = c * (0.94 + 0.08 * min(1.0, lat / 60.0))            # not a balloon: temples narrower than the crown
-        back = c * (1.08 + 0.02 * math.sin(phi))                      # a longer back of the skull
-        brow = 0.08 * math.exp(-((lat - 18) / 14) ** 2)
-        front = _lerp(0.86 + brow, c, (lat - 30) / 60) if lat > 30 else 0.86 + brow
-        flat = _lerp(0.55, 1.0, (lat - 25) / 50)
-        return width, back, front, flat
-    u = -lat / 90.0
-    width = c * (0.94 - 0.5 * u ** 1.15)                        # a V from the cheekbones to a small chin
-    back = c * (1.08 - 0.2 * u)
-    front = _lerp(0.86, 0.62, u ** 1.2) + 0.08 * max(0.0, u - 0.72) / 0.28
-    flat = _lerp(0.55, 0.8, u ** 2)
-    return width, back, front, flat
+# The anime skull, measured from Qwen-drawn bald anime head sheets (front and side), crown ``v`` = 1 to chin ``v`` = 0:
+# half-width (share of the widest ring), front depth and back depth (shares of the head's half depth, centre at the widest
+# ring). The widest ring sits at 60 % of the height, the crown is a flat dome, the jaw is a V down to a small chin.
+SKULL = (
+    (0.00, 0.150, 0.853, 0.475), (0.05, 0.420, 0.876, 0.460), (0.10, 0.580, 0.900, 0.465), (0.15, 0.700, 0.924, 0.490),
+    (0.20, 0.820, 0.936, 0.560), (0.25, 0.870, 0.940, 0.656), (0.30, 0.900, 0.940, 0.758), (0.35, 0.920, 0.941, 0.840),
+    (0.40, 0.945, 0.948, 0.900), (0.45, 0.955, 0.964, 0.940), (0.50, 0.978, 0.997, 0.964), (0.55, 0.993, 1.023, 0.975),
+    (0.60, 1.000, 1.027, 0.973), (0.65, 0.990, 1.019, 0.962), (0.70, 0.971, 0.997, 0.935), (0.75, 0.936, 0.962, 0.898),
+    (0.80, 0.877, 0.905, 0.846), (0.85, 0.797, 0.822, 0.772), (0.90, 0.684, 0.706, 0.662), (0.93, 0.590, 0.610, 0.575),
+    (0.95, 0.500, 0.520, 0.500), (0.96, 0.456, 0.463, 0.468), (0.97, 0.400, 0.404, 0.415), (0.98, 0.330, 0.332, 0.350),
+    (0.99, 0.240, 0.236, 0.254), (1.00, 0.000, 0.000, 0.000),
+)
+_SKULL_V = [row[0] for row in SKULL]
+# Masculine heads, measured the same way from Qwen bald sheets of a teenage boy (a long head, a clean V to a point) and a
+# heroic young man (a longer, narrower head, a brow ridge, straight jaw lines to a flat chin). Same rows as SKULL.
+SKULL_BOY = (
+    (0.00, 0.080, 0.900, 0.620), (0.05, 0.250, 0.920, 0.600), (0.10, 0.440, 0.940, 0.585), (0.15, 0.580, 0.960, 0.580),
+    (0.20, 0.690, 0.980, 0.595), (0.25, 0.800, 0.990, 0.650), (0.30, 0.900, 0.990, 0.745), (0.35, 0.960, 0.990, 0.835),
+    (0.40, 0.980, 0.990, 0.900), (0.45, 0.975, 0.980, 0.950), (0.50, 0.970, 0.980, 0.975), (0.55, 0.985, 0.995, 0.995),
+    (0.60, 0.996, 1.000, 1.000), (0.65, 1.000, 0.990, 0.990), (0.70, 0.985, 0.968, 0.971), (0.75, 0.953, 0.933, 0.933),
+    (0.80, 0.900, 0.880, 0.880), (0.85, 0.820, 0.810, 0.810), (0.90, 0.705, 0.695, 0.705), (0.93, 0.605, 0.600, 0.620),
+    (0.95, 0.520, 0.515, 0.546), (0.96, 0.470, 0.460, 0.500), (0.97, 0.410, 0.400, 0.440), (0.98, 0.335, 0.325, 0.375),
+    (0.99, 0.235, 0.220, 0.275), (1.00, 0.000, 0.000, 0.000),
+)
+SKULL_MAN = (
+    (0.00, 0.230, 0.930, 0.720), (0.05, 0.340, 0.950, 0.710), (0.10, 0.460, 0.960, 0.700), (0.15, 0.570, 0.970, 0.690),
+    (0.20, 0.660, 0.980, 0.690), (0.25, 0.730, 0.990, 0.700), (0.30, 0.790, 1.000, 0.745), (0.35, 0.840, 1.020, 0.820),
+    (0.40, 0.885, 1.030, 0.895), (0.45, 0.925, 1.040, 0.945), (0.50, 0.960, 1.010, 0.975), (0.55, 0.980, 1.000, 0.995),
+    (0.60, 0.995, 1.000, 1.000), (0.65, 1.000, 0.985, 0.990), (0.70, 0.985, 0.965, 0.972), (0.75, 0.955, 0.940, 0.934),
+    (0.80, 0.905, 0.896, 0.883), (0.85, 0.825, 0.826, 0.810), (0.90, 0.715, 0.712, 0.700), (0.93, 0.620, 0.618, 0.611),
+    (0.95, 0.540, 0.530, 0.530), (0.96, 0.490, 0.480, 0.488), (0.97, 0.430, 0.420, 0.431), (0.98, 0.355, 0.343, 0.365),
+    (0.99, 0.250, 0.245, 0.276), (1.00, 0.000, 0.000, 0.000),
+)
+SKULLS = {"fem": SKULL, "boy": SKULL_BOY, "man": SKULL_MAN}
+HEAD_KINDS = tuple(SKULLS)
+
+
+def _catmull(p0: float, p1: float, p2: float, p3: float, t: float) -> float:
+    return 0.5 * ((2 * p1) + (-p0 + p2) * t + (2 * p0 - 5 * p1 + 4 * p2 - p3) * t * t + (-p0 + 3 * p1 - 3 * p2 + p3) * t ** 3)
+
+
+def skull_profile(lat: float, kind: str = "fem") -> tuple[float, float, float, float]:
+    """The anime skull at latitude ``lat`` (degrees, -90 chin to 90 crown): ``(width, back depth, front depth, boxiness)``
+    as shares of the head radii, read from the measured ``SKULL`` table. ``boxiness`` is 0 at the poles and 1 at the widest
+    ring: the rings are superellipses, round at the crown and chin and a little squarer where the face is."""
+    table = SKULLS.get(kind, SKULL)
+    v = (math.sin(math.radians(lat)) + 1.0) / 2.0
+    i = min(len(table) - 2, max(0, bisect.bisect_right(_SKULL_V, v) - 1))
+    t = (v - table[i][0]) / (table[i + 1][0] - table[i][0])
+    out = []
+    for column in (1, 2, 3):
+        a, b = table[i][column], table[i + 1][column]
+        p0, p3 = table[max(0, i - 1)][column], table[min(len(table) - 1, i + 2)][column]
+        out.append(max(0.0, min(_catmull(p0, a, b, p3, t), max(a, b) * 1.04 + 0.02)))
+    return out[0], out[2], out[1], 1.0 - abs(2 * v - 1) ** 3
+
+
+def _spow(x: float, e: float) -> float:
+    return math.copysign(abs(x) ** e, x)
 
 
 def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
     """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
     rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
-    width, back, front, flat = skull_profile(lat)
+    width, back, front, box = skull_profile(lat, L.get("head_kind", "fem"))
     t = math.radians(yaw)
-    s = math.cos(t)
-    depth = front * (s ** flat) if s >= 0 else -back * (-s)
-    return (rx * width * math.sin(t), L["head_y"] + ry * math.sin(math.radians(lat)), rz * depth)
+    s, c = math.sin(t), math.cos(t)
+    exponent = 2.0 / (2.0 + ((FACE_BOX if c >= 0 else BACK_BOX) - 2.0) * box)
+    return (rx * width * _spow(s, exponent), L["head_y"] + ry * math.sin(math.radians(lat)), rz * (front if c >= 0 else back) * _spow(c, exponent))
 
 
 def _skull_ring(L: dict, lat: float, out: float, yaws) -> list:
     return [skull_point(L, yaw, lat, out) for yaw in yaws]
 
 
-def _head(mesh: Mesh, L: dict, skin: str) -> None:
+EARS_HIDDEN = ("long", "bob", "twin_tails")   # hair that falls over the ears: no ear to poke through it
+
+
+def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
     yaws = [j * 360.0 / 24 for j in range(24)]
-    lats = [-90 + 180 * k / 20 for k in range(21)]
+    lats = [-90 + 180 * k / 28 for k in range(29)]
     grid, colors = [], []
     for lat in lats:
         ring = _skull_ring(L, lat, 1.0, yaws)
-        if abs(lat) >= 89.9:
-            centre = (0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0)
-            ring = [centre] * len(yaws)
+        if lat >= 89.9:
+            ring = [(0.0, L["head_y"] + L["sy"] / 2, 0.0)] * len(yaws)
         grid.append(ring)
         colors.append([linear_color(skin)] * len(yaws))
     centers = [(0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0) for lat in lats]
     _emit(mesh, grid, colors, centers, True, None)
+    _cap(mesh, grid[0], colors[0], centers[0], (0.0, -1.0, 0.0))   # the chin is a flat plate, not a point: a man's chin is square
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
     # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
     base = skull_point(L, 0, -36, 1.0)
@@ -265,8 +321,8 @@ def _head(mesh: Mesh, L: dict, skin: str) -> None:
             _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
     _tube(mesh, nose, "z", ring=8)
     # ears at the eye line, as tall as a fifth of the head
-    for sign in (-1, 1):
-        at = skull_point(L, sign * 90, -22, 1.0)
+    for sign in ((-1, 1) if ears else ()):
+        at = skull_point(L, sign * 90, -16, 1.0)
         ear = [_st((at[0] * 0.94, at[1], at[2] - rz * 0.06), rx * 0.12, ry * 0.2, skin),
                _st((at[0] * 1.08, at[1] + ry * 0.02, at[2] - rz * 0.07), rx * 0.1, ry * 0.17, skin),
                _st((at[0] * 1.14, at[1] + ry * 0.02, at[2] - rz * 0.08), rx * 0.01, ry * 0.03, skin)]
@@ -289,7 +345,7 @@ def face_patch(L: dict, fit) -> tuple[Mesh, list]:
         ring = _skull_ring(L, lat, 1.012, FACE_YAWS)
         grid.append(ring)
         colors.append([(1.0, 1.0, 1.0)] * len(ring))
-        uvs.append([(cu + (p[0] / rx) * ru, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
+        uvs.append([(cu + (p[0] / ry) * rv, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
     centers = [(0.0, L["head_y"] + ry * math.sin(math.radians(lat)), 0.0) for lat in FACE_LATS]
     _emit(mesh, grid, colors, centers, False, None)
     out = []
@@ -315,20 +371,23 @@ def shoulder_top(L: dict) -> float:
     return L["head_y"] - L["sy"] / 2 - 0.035 * L["h"]
 
 
+NECK_SHARE = {"fem": 0.42, "boy": 0.46, "man": 0.58}   # a man's neck is as wide as most of his head
+
+
 def neck_width(L: dict) -> float:
-    return min(L["sx"] * 0.42, L["torso_w"] * 0.46)
+    return min(L["sx"] * NECK_SHARE.get(L.get("head_kind", "fem"), 0.42), L["torso_w"] * 0.52)
 
 
 def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     top, bottom = wear["top"], wear["bottom"]
     h, w, d = L["h"], L["torso_w"], L["torso_d"]
-    hip_w = L["waist_w"] * (1.16 if wear["legs"] == "skirt" else 1.06)
+    hip_w = max(L["waist_w"] * (1.16 if wear["legs"] == "skirt" else 1.06), 2 * L["leg_x"] + 1.2 * L["leg_d"])   # the pelvis covers the thighs' tops
     neck_w = neck_width(L)
     chest = L["torso_bottom"] + L["torso_h"] * 0.64
     closing = shoulder_top(L)
     arm_y = wear["arm_y"]
     shirt = wear.get("shirt")
-    lapel = lambda half: {"front": (shirt, half)} if shirt else {}
+    lapel = lambda half: {}   # the shirt V is its own panel (below), so its edges stay crisp
     lower = bottom if wear["legs"] != "skirt" else wear["legs_color"]
     stations = [
         _st((0, L["leg_top"] - 0.01 * h, 0), hip_w / 2 * 0.94, d / 2 * 0.86, lower),
@@ -343,11 +402,25 @@ def _torso(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
         _st((0, closing - 0.008 * h, 0), w / 2 * 0.5, d / 2 * 0.66, top, **lapel(38)),
         _st((0, closing + 0.004 * h, 0), neck_w / 2 * 1.25, d / 2 * 0.42, top, **lapel(44)),
     ]
-    _tube(mesh, stations, "y")
+    _tube(mesh, stations, "y", ring=48)
+    if shirt:
+        _shirt_v(mesh, stations[5:9], (10, 22, 30, 34), shirt)
     skin = spec["colors"]["head"]
     neck = [_st((0, closing - 0.02 * h, 0), neck_w / 2, neck_w / 2 * 0.92, skin),
             _st((0, L["head_y"] - L["sy"] * 0.3, 0), neck_w / 2 * 0.96, neck_w / 2 * 0.9, skin)]
     _tube(mesh, neck, "y")
+
+
+def _shirt_v(mesh: Mesh, rows: list, halves: tuple, color: str) -> None:
+    """The shirt under an open jacket: a V panel a hair outside the torso, wider toward the collar, with its own sharp edges
+    (a colour change by vertex blurs across a quad, which read as a glow on the chest)."""
+    grid, colors = [], []
+    for st, half in zip(rows, halves):
+        ring = [(st["p"][0] + st["a"] * 1.006 * math.cos(t), st["p"][1], st["p"][2] + st["b"] * 1.006 * math.sin(t))
+                for t in (math.radians(90 - half + 2 * half * j / 10) for j in range(11))]
+        grid.append(ring)
+        colors.append([linear_color(color)] * len(ring))
+    _emit(mesh, grid, colors, [st["p"] for st in rows], False, None)
 
 
 def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
@@ -360,42 +433,44 @@ def _arms(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     for sign in (-1, 1):
         def at(x, k, color):
             return _st((sign * x, y, 0), r * k, r * k, color)
-        arm = [at(x0, 1.0, sleeve), at(x0 + (elbow - x0) * 0.35, 1.0, sleeve)]
+        arm = [at(x0 - 0.01 * L["h"], 1.18, sleeve), at(x0, 1.2, sleeve), at(x0 + (elbow - x0) * 0.22, 1.12, sleeve), at(x0 + (elbow - x0) * 0.55, 1.0, sleeve)]
         if short:
             arm += [at(cuff, 1.04, sleeve), at(cuff + 0.001, 0.9, skin)]
         lower = skin if short else sleeve
-        arm += [at(elbow - bend, 0.93, lower), at(elbow, 0.9, lower), at(elbow + bend, 0.88, lower),
-                at(elbow + (wrist - elbow) * 0.6, 0.8, lower), at(wrist, 0.68, lower)]
+        arm += [at(elbow - bend, 0.92, lower), at(elbow, 0.9, lower), at(elbow + bend, 0.9, lower),
+                at(elbow + (wrist - elbow) * 0.35, 0.86, lower), at(elbow + (wrist - elbow) * 0.75, 0.7, lower), at(wrist, 0.58, lower)]
         _tube(mesh, arm, "x")
         d = r * 2
         palm_end = wrist + (tip - wrist) * 0.52
-        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.36, d * 0.3, skin), _st((sign * (wrist + (tip - wrist) * 0.25), y, 0), d * 0.52, d * 0.28, skin),
-                _st((sign * palm_end, y, 0), d * 0.5, d * 0.24, skin)]
+        hand = [_st((sign * (wrist - 0.004), y, 0), d * 0.34, d * 0.22, skin), _st((sign * (wrist + (tip - wrist) * 0.22), y, 0), d * 0.5, d * 0.24, skin),
+                _st((sign * palm_end, y, 0), d * 0.5, d * 0.22, skin), _st((sign * (palm_end + (tip - palm_end) * 0.55), y, 0), d * 0.44, d * 0.2, skin),
+                _st((sign * (palm_end + (tip - palm_end) * 0.92), y, 0), d * 0.2, d * 0.12, skin)]
         _tube(mesh, hand, "x")
         # four fingers fanned from the palm's end, the thumb from its side
-        for k, (dy, length) in enumerate(((0.3, 0.86), (0.1, 1.0), (-0.1, 0.96), (-0.3, 0.8))):
-            fx0 = sign * (palm_end - 0.004)
+        for k, (dy, length) in enumerate(((0.18, 0.86), (0.06, 1.0), (-0.06, 0.96), (-0.18, 0.8))):
+            fx0 = sign * (palm_end + (tip - palm_end) * 0.3)
             fx1 = sign * (palm_end + (tip - palm_end) * length)
-            finger = [_st((fx0, y + d * dy, 0), d * 0.11, d * 0.1, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.1, d * 0.09, skin),
-                      _st((fx1, y + d * dy * 1.1, 0), d * 0.06, d * 0.06, skin)]
+            finger = [_st((fx0, y + d * dy, 0), d * 0.15, d * 0.08, skin), _st(((fx0 + fx1) / 2, y + d * dy * 1.05, 0), d * 0.13, d * 0.08, skin),
+                      _st((fx1, y + d * dy * 1.1, 0), d * 0.08, d * 0.06, skin)]
             _tube(mesh, finger, "x", ring=6)
         px = sign * (wrist + (tip - wrist) * 0.2)
-        thumb = [_st((px, y + d * 0.1, d * 0.16), d * 0.13, d * 0.12, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.42), d * 0.1, d * 0.1, skin),
-                 _st((px + sign * d * 0.22, y + d * 0.2, d * 0.58), d * 0.05, d * 0.05, skin)]
+        thumb = [_st((px, y + d * 0.1, d * 0.12), d * 0.13, d * 0.1, skin), _st((px + sign * d * 0.12, y + d * 0.16, d * 0.32), d * 0.1, d * 0.09, skin),
+                 _st((px + sign * d * 0.22, y + d * 0.2, d * 0.46), d * 0.05, d * 0.05, skin)]
         _tube(mesh, thumb, "z", ring=6)
 
 
 def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
     skin, shoes = spec["colors"]["head"], wear["shoes"]
     r, x = L["leg_d"] / 2, L["leg_x"]
-    top, knee, ankle = L["leg_top"] + 0.06 * L["h"], L["knee"], L["leg_bottom"] + L["foot"] * 0.55
+    top, knee, ankle = L["leg_top"] + 0.02 * L["h"], L["knee"], L["leg_bottom"] + L["foot"] * 0.55
     legs, legs_color, sock = wear["legs"], wear["legs_color"], wear.get("socks")
     for sign in (-1, 1):
         def at(y, k, color):
             return _st((sign * x, y, 0), r * k, r * k * 0.95, color)
         upper = skin if legs in ("skirt", "shorts") else legs_color
         low = sock or (skin if legs in ("skirt", "shorts") else legs_color)
-        leg = [at(top, 1.15, legs_color), at(top - 0.0005, 1.15, legs_color if legs == "shorts" else upper), at(top - (top - knee) * 0.3, 1.1, legs_color if legs == "shorts" else upper)]
+        under = legs_color if legs in ("skirt", "shorts") else upper   # under a skirt or shorts the thigh is hidden: never skin beside the waist
+        leg = [at(top, 1.15, legs_color), at(top - 0.0005, 1.15, under), at(top - (top - knee) * 0.3, 1.1, under)]
         if legs == "shorts":
             hem = top - (top - knee) * 0.42
             leg += [at(hem, 1.12, legs_color), at(hem - 0.001, 1.0, skin)]
@@ -403,7 +478,7 @@ def _legs(mesh: Mesh, L: dict, spec: dict, wear: dict) -> None:
                 at(knee - (knee - ankle) * 0.1 - 0.0005, 0.84, low),
                 at(knee - (knee - ankle) * 0.35, 0.88, low), at(knee - (knee - ankle) * 0.7, 0.68, low), at(ankle, 0.55, low)]
         _tube(mesh, leg, "y")
-        sole_d, sole_h = L["leg_d"] * 1.9, L["foot"] * 0.42
+        sole_d, sole_h = L["leg_d"] * 2.5, L["foot"] * 0.42
         sneaker = wear["shoe_style"] == "sneaker"
         shoe = [_st((sign * x, sole_h * 0.95, -sole_d * 0.42), r * 1.0, sole_h * 0.95, shoes), _st((sign * x, sole_h * 1.15, -sole_d * 0.1), r * 1.14, sole_h * 1.15, shoes),
                 _st((sign * x, sole_h * 1.05, sole_d * 0.3), r * 1.08, sole_h * 1.05, shoes), _st((sign * x, sole_h * 0.75, sole_d * 0.58), r * 0.62, sole_h * 0.62, shoes)]
@@ -502,12 +577,12 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
     if wear["legs"] == "skirt":
         _skirt(mesh, layout, wear["legs_color"])
     _collar_and_ribbon(mesh, layout, wear)
-    _head(mesh, layout, spec["colors"]["head"])
+    _head(mesh, layout, spec["colors"]["head"], spec["hair"]["style"] not in EARS_HIDDEN)
     face, uvs = face_patch(layout, fit or DEFAULT_FIT)
     hair = hair_mesh(layout, spec["hair"])
     parts = [(mesh, "body", None), (face, "face", uvs)]
     if hair.vertices:
-        parts.append((hair, "hair", None))
+        parts.append((hair, "hair", hair.uvs))
     return parts
 
 

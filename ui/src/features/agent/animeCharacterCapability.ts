@@ -1,7 +1,7 @@
 import type { defineCapability } from './capabilityRegistry'
 import type { AgentAnimeMakeAction } from './agentActions'
 
-const GENDERS = ['girl', 'boy']
+const GENDERS = ['girl', 'boy', 'man']
 const BODIES = ['slim', 'average', 'tall']
 const HAIR = ['none', 'short', 'bangs', 'bob', 'long', 'twin_tails', 'spiky', 'ponytail', 'bun']
 const OUTFITS = ['school', 'casual', 'sport']

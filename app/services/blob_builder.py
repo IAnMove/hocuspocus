@@ -33,9 +33,9 @@ _BUILD = {
     "pear": (0.70, 0.90, 1.04, 0.28, 0.74),
 }
 _HEAD_DEFAULT = {"width": 0.31, "height": 0.28, "depth": 0.26, "shape": "sphere"}
-_ANIME_HEAD = {"width": 0.138, "height": 0.140, "depth": 0.128, "shape": "anime"}
+_ANIME_HEAD = {"width": 0.116, "height": 0.140, "depth": 0.128, "shape": "anime"}
 _CHIBI_HEAD = {"width": 0.42, "height": 0.38, "depth": 0.36, "shape": "chibi"}
-_HEAD_LIMITS = {"width": (0.12, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
+_HEAD_LIMITS = {"width": (0.10, 0.46), "height": (0.12, 0.44), "depth": (0.11, 0.42)}
 _ARM_DEFAULT = {"length": 0.36, "thickness": 0.055}
 _ANIME_ARMS = {"length": 0.44, "thickness": 0.040}
 _CHIBI_ARMS = {"length": 0.30, "thickness": 0.070}
@@ -290,10 +290,13 @@ def _head(value, default: dict) -> dict:
         return dict(default)
     if not isinstance(value, dict):
         _fail("invalid_head", "head must be an object with width, height, depth and shape")
-    extra = set(value) - set(_HEAD_DEFAULT)
+    extra = set(value) - set(_HEAD_DEFAULT) - {"kind"}
     if extra:
         _fail("unknown_field", "Unknown head field: " + ", ".join(sorted(extra)))
     found = dict(default)
+    if "kind" in value:
+        from services.blob_loft import HEAD_KINDS
+        found["kind"] = _choice(value["kind"], HEAD_KINDS, "invalid_head", "head.kind")
     for key, limits in _HEAD_LIMITS.items():
         if key not in value:
             continue
@@ -417,7 +420,7 @@ def _layout(spec: dict) -> dict:
     # Above the belly. Higher than about half the torso swings a bent wave into the head.
     shoulder_at = _SHOULDER_AT[spec["family"]]
     return {
-        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"],
+        "h": height, "sx": sx, "sy": sy, "sz": sz, "head_y": stack["head_y"], "head_kind": spec["head"].get("kind", "fem"),
         "torso_w": torso_w, "torso_d": torso_d, "torso_h": torso_h, "waist_w": waist_w,
         "waist_taper": min(1.0, max(0.35, waist_w / torso_w)) if spec["family"] == "anime" else 1.0,
         "torso_y": (stack["torso_top"] + stack["torso_bottom"]) / 2,
@@ -438,7 +441,7 @@ def _widths(spec: dict, sx: float, sz: float, height: float):
     width, depth, belly, forward, drop = _BUILD[spec["build"]]
     if spec["family"] == "anime":
         shoulder = height * _ANIME_SHOULDER[spec["build"]]
-        return shoulder, height * 0.115, shoulder * _ANIME_WAIST[spec["build"]], belly, forward, drop
+        return shoulder, min(height * 0.115, shoulder * 0.56), shoulder * _ANIME_WAIST[spec["build"]], belly, forward, drop
     if spec["family"] == "chibi":
         shoulder = sx * _CHIBI_SHOULDER[spec["build"]]
         return shoulder, min(sz * 0.82, sx * 0.78), shoulder * 0.90, belly, forward, drop
@@ -462,7 +465,7 @@ def _head_size(head: dict, height: float) -> tuple[float, float, float]:
     if head["shape"] == "egg":
         sy, sz = max(sy, sx * 1.12), min(sz, sx * 0.92)
     elif head["shape"] == "anime":
-        sy, sz = max(sy, sx * 1.08), min(sz, sx * 0.96)
+        sy, sz = max(sy, sx * 1.08), min(sz, sx * 1.3)   # a long masculine head is deeper than it is wide
     return sx, sy, sz
 
 
