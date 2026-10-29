@@ -24,7 +24,7 @@ MAKE = "model3d.blob.make"
 PRESETS_OP = "model3d.blob.presets"
 DEFAULT_CLIPS = ("idle", "walk", "talk", "nod", "wave", "shrug", "point", "run")
 _INPUT_FIELDS = {"workspace", "name", "traits", "preset", "clips"}
-_NESTED = ("colors", "head", "arms", "legs")
+_NESTED = ("colors", "head", "arms", "legs", "hair")
 _CLIP_KEYS = ("index", "id", "name", "duration", "loop")
 
 
