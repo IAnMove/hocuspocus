@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the puppet walk no longer keys to an opaque black rectangle.** `studio.key` reads colour only, and the puppet frames were transparent with black under the alpha. The frames now lie on the screen colour of the job before they are keyed; a test runs the real keyer on a stored frame.
+
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).
 
 **Added: Meshy can rig a textured humanoid in the cloud (`engine: "meshy"`).** The user's own key spends 5 credits to rig and 3 per library animation; walking and running clips are free. The model must face +Z. Make-It-Animatable stays the local engine for a pose the standard rig refuses.
