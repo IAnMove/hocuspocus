@@ -24,7 +24,7 @@ import {
 import type { CharacterKit } from '../../lib/characterKit'
 import { CHARACTER_MOUTH_STATES } from '../../lib/characterMouthStates'
 import { durableScene3DSourceUrl } from './slotSource'
-import { useMapUv } from './atlasProjection'
+import { applyMapUv } from './atlasProjection'
 import {
   loadTalkingCutout,
   parseAnchor,
@@ -463,7 +463,7 @@ export class FaceDecalRuntime {
     if (this.faceMaterial !== face) {
       this.faceMaterial = face
       this.originalMap = face.map
-      useMapUv(face, true)
+      applyMapUv(face, true)
       face.map = this.texture
       face.transparent = Boolean(face.userData.atlas?.faceFeather)   // a feathered border needs the blend
       face.needsUpdate = true
@@ -548,7 +548,7 @@ export class FaceDecalRuntime {
     this.mesh?.removeFromParent()
     if (this.faceMaterial) {
       this.faceMaterial.map = this.originalMap ?? null   // a draped atlas goes back to its picture
-      useMapUv(this.faceMaterial, false)
+      applyMapUv(this.faceMaterial, false)
       this.originalMap = undefined
       this.faceMaterial.needsUpdate = true
       this.faceMaterial = undefined

@@ -45,7 +45,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
   const patch = ((frame.faceYaw ?? 53) * Math.PI) / 180
   shader.uniforms.atlasPatchYaw = { value: patch }
   shader.uniforms.atlasFeather = { value: ((frame.faceFeather ?? 0) * Math.PI) / 180 }
-  shader.uniforms.atlasUseUv = { value: useUv ? 1 : 0 }   // 1 while a face kit paints the material's own map (see `useMapUv`)
+  shader.uniforms.atlasUseUv = { value: useUv ? 1 : 0 }   // 1 while a face kit paints the material's own map (see `applyMapUv`)
   shader.vertexShader = shader.vertexShader
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
@@ -140,7 +140,7 @@ export function applyAtlasProjection(root: Object3D): void {
 }
 
 /** A face kit painted the material's own map (`faceDecal` mesh mode): sample it by the patch's UVs, not the atlas. ``on`` false goes back. */
-export function useMapUv(material: Material, on: boolean): void {
+export function applyMapUv(material: Material, on: boolean): void {
   const uniforms = material.userData.atlasUniforms as Record<string, { value: unknown }> | undefined
   if (uniforms?.atlasUseUv) uniforms.atlasUseUv.value = on ? 1 : 0
   material.userData.atlasUseUv = on
