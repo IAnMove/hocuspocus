@@ -288,6 +288,13 @@ def skull_point(L: dict, yaw: float, lat: float, out: float = 1.0):
     """A point on the skull at ``yaw`` degrees from the face (+Z) and ``lat`` degrees up, ``out`` times outside it."""
     rx, ry, rz = L["sx"] / 2 * out, L["sy"] / 2 * out, L["sz"] / 2 * out
     width, back, front, box = skull_profile(lat, L.get("head_kind", "fem"))
+    fit = L.get("skull_fit")
+    if fit:   # a skull fitted to the head picture it wears (blob_head_fit): the painted silhouette's width and depths at this height
+        from services.blob_head_fit import factor_at
+
+        width *= factor_at(fit.get("width"), lat)
+        front *= factor_at(fit.get("front"), lat)
+        back *= factor_at(fit.get("back"), lat)
     t = math.radians(yaw)
     s, c = math.sin(t), math.cos(t)
     exponent = 2.0 / (2.0 + ((FACE_BOX if c >= 0 else BACK_BOX) - 2.0) * box)
@@ -315,7 +322,9 @@ def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
     _emit(mesh, grid, colors, centers, True, None)
     _cap(mesh, grid[0], colors[0], centers[0], (0.0, -1.0, 0.0))   # the chin is a flat plate, not a point: a man's chin is square
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    if L.get("real"):
+    if L.get("relief"):
+        pass
+    elif L.get("real"):
         _real_nose(mesh, L, skin)
     else:
         # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
@@ -343,6 +352,46 @@ def _real_nose(mesh: Mesh, L: dict, skin: str) -> None:
         at = surface(v)
         mesh_stations.append(_st((0, at[1], at[2] - depth * sy * 0.35 + out * sy), half * sy, depth * sy, skin))
     _tube(mesh, mesh_stations, "y", ring=10)
+
+
+def face_relief_patch(L: dict, relief, frame: dict, steps: int = 56) -> tuple[Mesh, list]:
+    """The face as a dense patch pushed forward by ``relief(x, y)`` (metres, from ``blob_face_relief``): ``steps`` x ``steps`` points
+    from under the chin to the hairline and 53 degrees each way, a hair outside the skull, white vertex colours, and the UVs of the
+    kit canvas read at the point's own (x, y) (the front tile centred in a square 1024 picture, v up, as ``face_patch`` does): the patch
+    moves along +Z only, so the picture stays exactly on its place. The viewer drapes the atlas by position and keeps these for a face kit."""
+    from services.blob_face_relief import PATCH_LATS, PATCH_YAW, edge_fade
+
+    PATCH_YAW = float(getattr(relief, "yaw", PATCH_YAW))   # the patch's reach is the sampler's (``face_span``), 53 degrees by default
+    mesh = Mesh()
+    yaws = [-PATCH_YAW + 2 * PATCH_YAW * j / steps for j in range(steps + 1)]
+    lats = [PATCH_LATS[0] + (PATCH_LATS[1] - PATCH_LATS[0]) * k / steps for k in range(steps + 1)]
+    grid, colors, uvs = [], [], []
+    for lat in lats:
+        ring, row = [], []
+        for yaw in yaws:
+            x, y, z = skull_point(L, yaw, lat, 1.004)
+            lift = relief(x, y) * edge_fade(yaw, lat, PATCH_LATS, PATCH_YAW)
+            ring.append((x, y, z + lift))
+            row.append((0.5 + x / frame["head"][1], 0.5 + (y - frame["head"][0]) / frame["head"][1]))   # the kit's canvas: the front tile centred, v up
+        grid.append(ring)
+        colors.append([(1.0, 1.0, 1.0)] * len(ring))
+        uvs.append(row)
+    centers = [(0.0, L["head_y"] + L["sy"] / 2 * math.sin(math.radians(lat)), 0.0) for lat in lats]
+    _emit(mesh, grid, colors, centers, False, None)
+    out = []
+    for i in range(steps):
+        for j in range(steps):
+            a, b, c, d = grid[i][j], grid[i][j + 1], grid[i + 1][j + 1], grid[i + 1][j]
+            ua, ub, uc, ud = uvs[i][j], uvs[i][j + 1], uvs[i + 1][j + 1], uvs[i + 1][j]
+            if _degenerate(a, b, c) and _degenerate(a, c, d):
+                continue
+            na = _normal_at(grid, i, j, False, centers[i])
+            if _dot(_cross(_sub(b, a), _sub(c, a)), na) < 0:
+                out += [ua, uc, ub, ua, ud, uc]
+            else:
+                out += [ua, ub, uc, ua, uc, ud]
+    assert len(out) == len(mesh.vertices)
+    return mesh, out
 
 
 FACE_YAWS = [-100 + 200.0 * j / 24 for j in range(25)]
@@ -584,7 +633,7 @@ def wear_of(spec: dict, L: dict) -> dict:
 DEFAULT_FIT = [0.5, 0.458984375, 0.29296875, 0.3369140625]
 
 
-def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list | None]]:
+def loft_parts(spec: dict, layout: dict, fit=None, relief=None) -> list[tuple[Mesh, str, list | None]]:
     """The body, the face patch and the hair: ``[(mesh, material, uvs or None)]``. ``spec`` is a normalized anime body;
     ``fit`` is the face picture's skull box, so the face UVs and the kit agree."""
     from services.blob_hair import hair_mesh
@@ -597,6 +646,8 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
     if wear["legs"] == "skirt":
         _skirt(mesh, layout, wear["legs_color"])
     _collar_and_ribbon(mesh, layout, wear)
+    if relief is not None:
+        layout = {**layout, "relief": True}   # the painted face brings its own nose: no modelled one under it
     _head(mesh, layout, spec["colors"]["head"], spec["hair"]["style"] not in EARS_HIDDEN)
     atlas = bool(spec.get("atlas"))
     face, uvs = face_patch(layout, fit or DEFAULT_FIT, 52.0 if atlas else 100.0)
@@ -607,10 +658,16 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
         frame = atlas_frame([mesh], layout)
         body_uvs = atlas_uvs(mesh, frame)
         # without a kit the face patch shows the atlas too: the front tile whole (the patch is only the face, 52 degrees each way), not a white mask
-        uvs = [atlas_uv(p, False, frame, True, 0) for p in face.vertices]
+        if relief is not None:
+            face, uvs = face_relief_patch(layout, relief, frame)
+        else:
+            uvs = [atlas_uv(p, False, frame, True, 0) for p in face.vertices]
     parts = [(mesh, "body", body_uvs), (face, "face", uvs)]
     if hair.vertices:
-        parts.append((hair, "hair", hair.uvs))
+        hair_uvs = hair.uvs
+        if atlas and spec["hair"].get("texture") == "photo":
+            hair_uvs = atlas_uvs(hair, frame)   # the cap takes the head picture's own hair, draped like the skull
+        parts.append((hair, "hair", hair_uvs))
     return parts
 
 
@@ -622,7 +679,7 @@ def loft_mesh(spec: dict, layout: dict) -> Mesh:
     return whole
 
 
-def loft_glb(spec: dict, layout: dict, name: str = "blob", fit=None) -> bytes:
+def loft_glb(spec: dict, layout: dict, name: str = "blob", fit=None, relief=None) -> bytes:
     from services.procedural_3d.compose import pack_parts
 
-    return pack_parts(name, [(part.vertices, part.normals, part.colors, material, uvs) for part, material, uvs in loft_parts(spec, layout, fit)])
+    return pack_parts(name, [(part.vertices, part.normals, part.colors, material, uvs) for part, material, uvs in loft_parts(spec, layout, fit, relief)])
