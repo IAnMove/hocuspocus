@@ -51,7 +51,9 @@ def test_activity_footer_places_exact_model_and_recipe_next_to_cancel():
     assert "flow shift" in source
     assert "audio shift" in source
     assert "profile ${details.profile}" in source
-    assert "Turbo ${details.turbo ? 'on' : 'off'}" in source
+    assert "details.turbo" in source
+    assert "footer.turboOn" in source and "Turbo on" in source
+    assert "footer.turboOff" in source and "Turbo off" in source
     assert "Cache off" in source
     assert "LoRAs off" in source
     assert "primary.model" in source
