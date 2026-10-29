@@ -88,11 +88,15 @@ def test_a_transition_saves_two_editable_scenes_and_exports_through_the_bound_ex
         assert scene["sceneId"].startswith("w3d-") and len(scene["sceneId"]) == 16
         assert (tmp_path / "studio" / "world3d-edits" / f"{scene['sceneId']}.json").is_file()
         assert (tmp_path / "studio" / scene["file"]).is_file()
-    assert [clip["name"] for clip in reply["result"]["clips"]] == ["comic-panel-exit.mp4", "comic-panel-enter.mp4"]
     stored = json.loads((tmp_path / "studio" / "world3d-edits" / f"{scenes[0]['sceneId']}.json").read_text())
     ids = [slot["id"] for slot in stored["document"]["slots"]]
     assert ids == ["page", "panel-0", "panel-1", "panel-2", "panel-3", "cutout-1"]
-    assert stored["document"]["slots"][0]["sourceUrl"].startswith("/api/v1/file/comic-page-landscape.png")
+    page_url = stored["document"]["slots"][0]["sourceUrl"]
+    assert page_url.startswith("/api/v1/file/comic-") and "-page-landscape.png" in page_url
+    token = page_url.split("/api/v1/file/comic-", 1)[1].split("-page-", 1)[0]
+    assert [clip["name"] for clip in reply["result"]["clips"]] == [f"comic-{token}-exit.mp4", f"comic-{token}-enter.mp4"]
+    assert (tmp_path / "studio" / f"comic-{token}-panel-0.png").is_file()
+    assert (tmp_path / "studio" / f"comic-{token}-cutout-1.png").is_file()
 
 
 def test_a_missing_source_and_a_missing_exporter_write_nothing(tmp_path):
@@ -106,6 +110,35 @@ def test_a_missing_source_and_a_missing_exporter_write_nothing(tmp_path):
         _call(tmp_path, _panels(), export=True, intent="comic-offline")
     assert offline.value.status_code == 503 and offline.value.detail["code"] == "export_unavailable"
     assert _written(tmp_path) == []
+
+
+def _panel_url(tmp_path, scene_id: str, slot_id: str) -> str:
+    stored = json.loads((tmp_path / "studio" / "world3d-edits" / f"{scene_id}.json").read_text())
+    slot = next(item for item in stored["document"]["slots"] if item["id"] == slot_id)
+    return slot["sourceUrl"]
+
+
+def _file_of(url: str) -> str:
+    return url.split("/api/v1/file/", 1)[1].split("?", 1)[0]
+
+
+def test_a_second_transition_keeps_the_first_scene_pictures(tmp_path):
+    first = _call(tmp_path, _panels(), intent="comic-first")
+    first_id = first["result"]["scenes"][0]["sceneId"]
+    first_panel = _file_of(_panel_url(tmp_path, first_id, "panel-0"))
+    first_bytes = (tmp_path / "studio" / first_panel).read_bytes()
+    other = []
+    for index in range(4):
+        dest = tmp_path / "studio" / f"other-{index}.png"
+        dest.write_bytes((FILLER / f"panel-landscape-{3 - index}.png").read_bytes())
+        other.append(f"/api/v1/file/other-{index}.png?workspace=studio")
+    second = _call(tmp_path, other, intent="comic-second")
+    second_id = second["result"]["scenes"][0]["sceneId"]
+    second_panel = _file_of(_panel_url(tmp_path, second_id, "panel-0"))
+    assert first_panel != second_panel
+    assert (tmp_path / "studio" / first_panel).read_bytes() == first_bytes
+    assert (tmp_path / "studio" / first_panel).read_bytes() != (tmp_path / "studio" / second_panel).read_bytes()
+    assert _panel_url(tmp_path, first_id, "panel-0") == f"/api/v1/file/{first_panel}?workspace=studio"
 
 
 def test_five_panels_are_rejected(tmp_path):

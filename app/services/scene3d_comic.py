@@ -77,12 +77,13 @@ def comic_transition(data: dict, workspace_dir) -> dict:
     sources = [_locate(spec, root, index) for index, spec in enumerate(specs)]
     width, height = _same_frame(sources, fmt)
     root.mkdir(parents=True, exist_ok=True)
-    page_url = _stage_page(fmt, workspace, root)
-    panels = [_stage_panel(item, index, workspace, root) for index, item in enumerate(sources)]
+    token = uuid.uuid4().hex[:10]
+    page_url = _stage_page(fmt, workspace, root, token)
+    panels = [_stage_panel(item, index, workspace, root, token) for index, item in enumerate(sources)]
     built = run_template_tool("comic", _payload(fmt, width, height, page_url, panels, from_panel, to_panel))
     documents = [("exit", built.get("exit")), ("enter", built.get("enter"))]
     scenes = [_save(workspace, workspace_dir, role, document) for role, document in documents]
-    clips = [_clip(workspace, role, document, scene) for (role, document), scene in zip(documents, scenes)] if exporting else []
+    clips = [_clip(workspace, role, document, scene, token) for (role, document), scene in zip(documents, scenes)] if exporting else []
     return {"status": "completed", "scenes": scenes, "clips": clips}
 
 
@@ -212,17 +213,17 @@ def _ffprobe_size(path: Path):
     return None
 
 
-def _stage_page(fmt: str, workspace: str, root: Path) -> str:
+def _stage_page(fmt: str, workspace: str, root: Path, token: str) -> str:
     source = _PAGE[fmt]
     if not source.is_file():
         raise World3DSceneError("missing_source", "The comic page picture is missing")
-    name = f"comic-page-{fmt}.png"
+    name = f"comic-{token}-page-{fmt}.png"
     _copy(source, root / name)
     return _url(name, workspace)
 
 
-def _stage_panel(item: dict, index: int, workspace: str, root: Path) -> dict:
-    name = f"comic-panel-{index}.png"
+def _stage_panel(item: dict, index: int, workspace: str, root: Path, token: str) -> dict:
+    name = f"comic-{token}-panel-{index}.png"
     dest = root / name
     if "video" in item:
         extract_frame(str(item["path"]), str(dest), item["at"])
@@ -230,7 +231,7 @@ def _stage_panel(item: dict, index: int, workspace: str, root: Path) -> dict:
         _copy(item["path"], dest)
     staged = {"url": _url(name, workspace)}
     if item.get("cutout_path"):
-        cutout_name = f"comic-cutout-{index}.png"
+        cutout_name = f"comic-{token}-cutout-{index}.png"
         _copy(item["cutout_path"], root / cutout_name)
         staged["cutout"] = _url(cutout_name, workspace)
     return staged
@@ -266,11 +267,11 @@ def _save(workspace: str, workspace_dir, role: str, document) -> dict:
     }
 
 
-def _clip(workspace: str, role: str, document, scene: dict) -> dict:
+def _clip(workspace: str, role: str, document, scene: dict, token: str) -> dict:
     exporter = _EXPORTER
     if exporter is None or not isinstance(document, dict):
         raise World3DSceneError("export_unavailable", "Video 3D export is not available on this server", 503)
-    clip = exporter.export_clip(workspace, document, f"comic-panel-{role}")
+    clip = exporter.export_clip(workspace, document, f"comic-{token}-{role}")
     return {"role": role, "sceneId": scene["sceneId"], "name": clip.get("name"), "url": clip.get("url")}
 
 
