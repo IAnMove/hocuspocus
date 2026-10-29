@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useUiTranslation } from '../../i18n'
 
 interface HorizontalScrollTabsProps {
   children: ReactNode
@@ -14,10 +15,12 @@ export function HorizontalScrollTabs({
   activeKey,
   className = '',
   viewportClassName = '',
-  ariaLabel = 'Scrollable tabs',
+  ariaLabel,
 }: HorizontalScrollTabsProps) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const [edges, setEdges] = useState({ left: false, right: false })
+  const { t } = useUiTranslation('settings')
+  const tabsLabel = ariaLabel ?? t('system.scrollableTabs')
 
   const updateEdges = useCallback(() => {
     const viewport = viewportRef.current
@@ -70,8 +73,8 @@ export function HorizontalScrollTabs({
           type="button"
           className={arrowClass}
           onClick={() => move(-1)}
-          aria-label="Show previous tabs"
-          title="Previous tabs"
+          aria-label={t('system.previousTabs')}
+          title={t('system.previousTabsTitle')}
         >
           <ChevronLeft size={14} />
         </button>
@@ -79,7 +82,7 @@ export function HorizontalScrollTabs({
       <div
         ref={viewportRef}
         role="tablist"
-        aria-label={ariaLabel}
+        aria-label={tabsLabel}
         className={`min-w-0 flex-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${viewportClassName}`}
       >
         {children}
@@ -89,8 +92,8 @@ export function HorizontalScrollTabs({
           type="button"
           className={arrowClass}
           onClick={() => move(1)}
-          aria-label="Show more tabs"
-          title="More tabs"
+          aria-label={t('system.moreTabs')}
+          title={t('system.moreTabsTitle')}
         >
           <ChevronRight size={14} />
         </button>

@@ -94,7 +94,7 @@ export const currentAgentInterfaceLanguage = detectUiLanguage
 export const AGENT_TABS = [
   'studio', 'director', 'productions', 'images', 'videos', 'audio', '3d',
   'story_lab', 'series_lab', 'comics', 'video_editor', 'video_3d', 'animate_3d',
-  'character_creator', 'character_kit', 'lips_creator', 'game_assets', 'workspaces', 'settings',
+  'character_creator', 'character_kit', 'lips_creator', 'game_assets', 'character_replacement', 'workspaces', 'settings',
 ] as const
 
 export type AgentTab = typeof AGENT_TABS[number]
@@ -311,7 +311,8 @@ defineCapability<AgentOpenTabAction>({
   confirmation: 'none',
   progress: 'wizard:progress.openingHocuspocusSection',
   resolve(raw) {
-    const tab = text(raw.tab, 40)
+    const requested = text(raw.tab, 40)
+    const tab = requested === 'character-replacement' ? 'character_replacement' : requested
     return tabSet.has(tab) ? { type: 'open_tab', tab: tab as AgentTab } : null
   },
   validate(action) {

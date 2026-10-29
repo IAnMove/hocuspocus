@@ -61,7 +61,7 @@ export function StoryMusicProductionGuide(props: StoryProductionsTabProps) {
               </button>
             )}
           </div>
-          <textarea className={`${input} ${requiredInput} mt-1 min-h-36 resize-y leading-relaxed`}
+          <textarea aria-label={t('productions.masterPlaceholder')} className={`${input} ${requiredInput} mt-1 min-h-36 resize-y leading-relaxed`}
             value={project.directVideoMasterPrompt}
             onChange={event => patch({ directVideoMasterPromptMode: 'custom', directVideoMasterPrompt: event.target.value })}
             placeholder={t('productions.masterPlaceholder')} required aria-required="true" />

@@ -1,65 +1,59 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
+import { useSyncExternalStore } from 'react'
 import { AlertTriangle, X } from 'lucide-react'
-import { fetchPreflight, type PreflightCheck } from '../api/client'
 import { useUiTranslation } from '../i18n'
-import { safeStorageGet, safeStorageSet } from '../lib/safeStorage'
+import { preflightText } from './preflightCopy'
+import {
+  dismissPreflight,
+  loadPreflight,
+  preflightRevision,
+  subscribePreflight,
+  visiblePreflightChecks,
+} from '../features/notices/preflightNotices'
 
 /**
- * PreflightBanner — one-time environment sanity check shown at the top
- * of the app on first load. Surfaces the three failures that otherwise
- * only appear as a cryptic traceback mid-generation: ffmpeg missing, no
- * CUDA GPU, and low disk on the output drive.
- *
- * Renders nothing when everything is fine. Dismissible; stays dismissed
- * for the session (sessionStorage) so it doesn't nag after the user has
- * acknowledged it, but returns next launch if the problem persists.
+ * Environment checks (ffmpeg, CUDA, disk, torch). The CUDA row cannot be
+ * dismissed. The others share the old session dismissal.
  */
 export function PreflightBanner() {
   const { t } = useUiTranslation('shell')
-  const [checks, setChecks] = useState<PreflightCheck[]>([])
-  const [dismissed, setDismissed] = useState(
-    () => safeStorageGet('session', 'maestro_preflight_dismissed') === '1'
-  )
-
-  useEffect(() => {
-    let cancelled = false
-    fetchPreflight()
-      .then(r => { if (!cancelled) setChecks(r.checks || []) })
-      .catch(() => { /* older backend / transient — say nothing */ })
-    return () => { cancelled = true }
-  }, [])
-
-  if (dismissed || checks.length === 0) return null
-
-  const hasError = checks.some(c => c.level === 'error')
+  const revision = useSyncExternalStore(subscribePreflight, preflightRevision, preflightRevision)
+  useEffect(() => { void loadPreflight() }, [])
+  const checks = visiblePreflightChecks()
+  void revision
+  if (checks.length === 0) return null
 
   return (
-    <div className={`fixed top-0 inset-x-0 z-50 px-4 py-2 flex items-start gap-2.5 border-b backdrop-blur-sm ${
-      hasError
-        ? 'bg-red-500/20 border-red-500/40'
-        : 'bg-amber-500/20 border-amber-500/40'
-    }`}>
-      <AlertTriangle
-        size={15}
-        className={`shrink-0 mt-0.5 ${hasError ? 'text-chip-red' : 'text-indicator-warning'}`}
-      />
-      <div className="flex-1 min-w-0 space-y-0.5">
-        {checks.map(c => (
-          <div key={c.id} className="text-[11px] leading-snug text-text-primary">
-            {c.message}
+    <div className="space-y-2" data-testid="preflight-notices">
+      {checks.map(check => {
+        const cuda = check.id === 'cuda'
+        const error = check.level === 'error'
+        return (
+          <div
+            key={check.id}
+            data-testid={`preflight-notice-${check.id}`}
+            className={`flex items-start gap-2.5 rounded-lg border px-3 py-2 ${
+              error ? 'border-red-500/40 bg-red-500/15' : 'border-amber-500/40 bg-amber-500/15'
+            }`}
+          >
+            <AlertTriangle
+              size={15}
+              className={`mt-0.5 shrink-0 ${error ? 'text-chip-red' : 'text-indicator-warning'}`}
+            />
+            <p className="min-w-0 flex-1 text-[11px] leading-snug text-text-primary">{preflightText(check)}</p>
+            {!cuda && (
+              <button
+                type="button"
+                onClick={() => dismissPreflight()}
+                className="shrink-0 rounded p-0.5 text-text-muted hover:text-text-primary"
+                aria-label={t('preflight.dismiss')}
+              >
+                <X size={13} />
+              </button>
+            )}
           </div>
-        ))}
-      </div>
-      <button
-        onClick={() => {
-          safeStorageSet('session', 'maestro_preflight_dismissed', '1')
-          setDismissed(true)
-        }}
-        className="shrink-0 p-0.5 rounded text-text-muted hover:text-text-primary transition-colors"
-        aria-label={t('preflight.dismiss')}
-      >
-        <X size={13} />
-      </button>
+        )
+      })}
     </div>
   )
 }

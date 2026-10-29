@@ -29,7 +29,7 @@
   },
   "direct": {
     "title": "Generación directa",
-    "body": "Imagen, Vídeo, Audio, 3D, Edición y Herramientas. Los submodos (Locución/Música/SFX, Frames/Multi-Shot, Ampliar…) cuelgan de esas pestañas.\n\nElige modelo, escribe el prompt, pulsa Go. El trabajo sale en Activity. No arranques MiniMax H3 si otro modelo pesado sigue cargado y la RAM ya va justa."
+    "body": "Imagen, Vídeo, Audio, 3D, Edición y Herramientas. Los submodos (Locución/Música/SFX, Frames/Multi-Shot, Ampliar…) cuelgan de esas pestañas. Editar incluye Cambiar personaje, con los mismos tres pasos: fotograma de origen, personaje nuevo y vídeo.\n\nElige modelo, escribe el prompt, pulsa Go. El trabajo sale en Activity. No arranques MiniMax H3 si otro modelo pesado sigue cargado y la RAM ya va justa."
   },
   "queue": {
     "title": "Activity y la cola",
@@ -37,7 +37,7 @@
   },
   "studios": {
     "title": "Estudios",
-    "body": "Story Lab, Series Lab, Cómics, Character Creator, Video 2.5D, Video 3D, Reemplazar personaje y Animate. Cada estudio ocupa el área grande.\n\nSi solo quieres una imagen o un clip suelto, vuelve a Generación directa."
+    "body": "Story Lab, Series Lab, Cómics, Character Creator, Video 2.5D, Video 3D y Animate. Cada estudio ocupa el área grande.\n\nSi solo quieres una imagen o un clip suelto, vuelve a Generación directa. Cambiar personaje está en Generación directa → Editar."
   },
   "faces": {
     "title": "Caras que hablan (pack 9×6)",

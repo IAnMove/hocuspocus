@@ -11,17 +11,18 @@ function parseScene2D(value: unknown): Scene2DDocument | undefined {
 }
 
 /** "My templates" for Video 2D: the server template library in a dialog. */
-export function Scene2DTemplateDialog({ scene, workspace, preview, disabled, onApply, onClose }: {
+export function Scene2DTemplateDialog({ scene, workspace, preview, disabled, title, onApply, onClose }: {
   scene: { name?: string; duration?: number }
   workspace: string
   preview: () => string | undefined
   disabled: boolean
+  title?: string
   onApply: (summary: TemplateSummary, document: Scene2DDocument) => void
   onClose: () => void
 }) {
   const { t } = useUiTranslation('common')
   return <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 p-4" onClick={onClose}>
-    <div role="dialog" aria-modal="true" aria-label={t('templateLibrary.title')} onClick={event => event.stopPropagation()}
+    <div role="dialog" aria-modal="true" aria-label={t('templateLibrary.title')} title={title} onClick={event => event.stopPropagation()}
       className="max-h-[88vh] w-[64rem] max-w-[96vw] overflow-y-auto rounded-2xl border border-border bg-bg-secondary p-4 shadow-2xl">
       <div className="flex justify-end">
         <button type="button" onClick={onClose} aria-label={t('templateLibrary.cancel')} className="rounded p-1 text-text-muted hover:text-text-primary"><X size={16} /></button>

@@ -39,13 +39,13 @@ export function ImageBatchControls() {
         <option value="lines">{t('imageBatch.lines')}</option>
       </select>
     </label>
-    {edit && <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={enabled} onChange={event => patch({ enabled: event.target.checked })} />{t('imageBatch.enable')}</label>}
+    {edit && <label className="flex items-center gap-2 text-xs"><input aria-label={t('imageBatch.enable')} type="checkbox" checked={enabled} onChange={event => patch({ enabled: event.target.checked })} />{t('imageBatch.enable')}</label>}
     {enabled && <>
       <div className="flex gap-2 text-xs">
         <button type="button" className="rounded border border-border p-2" onClick={() => input.current?.click()}>{common('picker.fromDevice')}</button>
         <button type="button" className="rounded border border-border p-2" onClick={() => setOpen(true)}>{common('picker.fromLibrary')}</button>
       </div>
-      <input ref={input} type="file" accept="image/*" multiple className="hidden" data-testid="image-batch-files" onChange={event => {
+      <input ref={input} aria-label={common('picker.fromDevice')} type="file" accept="image/*" multiple className="hidden" data-testid="image-batch-files" onChange={event => {
         const files = [...(event.target.files || [])].filter(file => file.type.startsWith('image/'))
         add(files.map(file => ({ name: file.name, type: 'image', mode: null, size: file.size, created_at: Date.now() / 1000, url: rememberLocalImage(file) })))
         event.target.value = ''

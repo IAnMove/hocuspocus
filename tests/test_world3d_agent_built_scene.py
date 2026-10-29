@@ -42,6 +42,11 @@ def test_the_blank_document_is_what_the_editor_accepts_and_the_mirror_says_why_i
     assert editor_shape_problems("nope") and editor_shape_problems({})
     with pytest.raises(ValueError, match="fps must be"):
         blank_document(fps=25)
+    slot = marker_slot("a")
+    assert editor_shape_problems({**blank_document(), "slots": [{**slot, "rotationX": 0.2, "rotationZ": -0.1}]}) == []
+    assert any("rotationX" in problem for problem in editor_shape_problems({**blank_document(), "slots": [{**slot, "rotationX": "no"}]}))
+    assert editor_shape_problems({**blank_document(), "slots": [slot]}) == []
+    assert "rotationX" not in slot
 
 
 def test_a_blank_stage_instantiates_inspects_patches_and_publishes(tmp_path):

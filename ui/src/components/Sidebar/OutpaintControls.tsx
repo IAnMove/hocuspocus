@@ -144,7 +144,7 @@ export function OutpaintControls() {
             <button
               onClick={() => clearEditVideo()}
               className="shrink-0 p-1 rounded text-text-muted hover:bg-bg-hover hover:text-red-400 transition-colors"
-              title={t('outpaint.removeClip')}
+              title={t('outpaint.removeClip')} aria-label={t('outpaint.removeClip')}
             >
               <X size={14} />
             </button>
@@ -220,7 +220,7 @@ export function OutpaintControls() {
             className="flex items-start gap-2 cursor-pointer"
             title={t('outpaint.preserveTitle')}
           >
-            <input
+            <input aria-label={t('outpaint.preserveScene')}
               type="checkbox"
               checked={outpaintMaskPreserving}
               onChange={e => setOutpaintMaskPreserving(e.target.checked)}
@@ -240,7 +240,7 @@ export function OutpaintControls() {
           </label>
 
           <label className="flex items-start gap-2 cursor-pointer">
-            <input
+            <input aria-label={t('outpaint.preserveAudio')}
               type="checkbox"
               checked={outpaintPreserveSourceAudio}
               onChange={e => setOutpaintPreserveSourceAudio(e.target.checked)}
@@ -255,7 +255,7 @@ export function OutpaintControls() {
           </label>
 
           <label className="flex items-start gap-2 cursor-pointer">
-            <input
+            <input aria-label={t('outpaint.trimSmear')}
               type="checkbox"
               checked={outpaintTrimSmear}
               onChange={e => setOutpaintTrimSmear(e.target.checked)}

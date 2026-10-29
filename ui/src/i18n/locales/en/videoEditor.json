@@ -80,6 +80,7 @@
     "noAlpha": "No alpha · {{format}}",
     "unmute": "Unmute clip",
     "mute": "Mute clip",
+    "volume": "Volume",
     "fit": "Fit · no crop",
     "fill": "Fill · crop",
     "blur": "Blur · fill the frame",

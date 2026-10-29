@@ -17,7 +17,7 @@ export function Scene3DHoldControls({ slot, slots, disabled, onChange }: {
   if (!carriers.length && !hold) return null
   return <div className="mt-3 space-y-2">
     <label className="flex min-h-10 items-center gap-2 text-xs">
-      <input type="checkbox" disabled={disabled || (!hold && !carriers.length)} checked={Boolean(hold)}
+      <input aria-label={t('holdInHand')} type="checkbox" disabled={disabled || (!hold && !carriers.length)} checked={Boolean(hold)}
         onChange={event => onChange({ hold: event.target.checked ? { carrier: carriers[0]?.id ?? hold?.carrier ?? '', hand: 'right' } : undefined })} />
       {t('holdInHand')}
     </label>

@@ -12,7 +12,7 @@ export function H3SemanticBridgeControls() {
   if (!supported || !supportsSemanticBridge(model)) return null
   return <div className="space-y-2 border-t border-border pt-2">
     <label className="flex items-center gap-2">
-      <input type="checkbox" checked={alpha > 0} onChange={e => setParam('minimax_h3_semantic_bridge_alpha', e.target.checked ? 0.1 : 0)} />
+      <input aria-label={t('h3Bridge.label')} type="checkbox" checked={alpha > 0} onChange={e => setParam('minimax_h3_semantic_bridge_alpha', e.target.checked ? 0.1 : 0)} />
       {t('h3Bridge.label')}
     </label>
     <p className="text-text-muted">{t('h3Bridge.hint')}</p>

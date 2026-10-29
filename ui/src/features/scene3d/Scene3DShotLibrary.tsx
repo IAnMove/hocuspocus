@@ -134,7 +134,7 @@ function ShotLibraryBody(props: ShotLibraryProps) {
     </div>
     <footer className="flex flex-wrap items-center gap-3 border-t border-border px-4 py-3">
       <label className="mr-auto flex min-h-10 items-center gap-2 text-xs text-text-secondary">
-        <input type="checkbox" checked={props.keepAssets} onChange={event => props.onKeepAssets(event.target.checked)} />{t('keepAssets')}
+        <input aria-label={t('keepAssets')} type="checkbox" checked={props.keepAssets} onChange={event => props.onKeepAssets(event.target.checked)} />{t('keepAssets')}
       </label>
       <span className="hidden text-xs text-text-muted sm:inline">{t('shotLibrary.hint')}</span>
       <button type="button" onClick={props.onClose} className="min-h-10 rounded-lg border border-border px-4 text-sm hover:bg-bg-hover">{t('shotLibrary.cancel')}</button>

@@ -7,7 +7,7 @@ import { LipsThumbnail } from './LipsThumbnail'
 
 /** Collections share the existing placement controls and the character's save operation. */
 export function LipsPackChoices({ workspace, kit, poseId, disabled, onApply }: {
-  workspace: string; kit: CharacterKit; poseId: string; disabled: boolean; onApply: (kit: CharacterKit) => void
+  workspace: string; kit: CharacterKit; poseId: string; disabled: boolean; title?: string; onApply: (kit: CharacterKit) => void
 }) {
   const { t } = useUiTranslation('characters')
   const [reload, setReload] = useState(0), [expanded, setExpanded] = useState(false)

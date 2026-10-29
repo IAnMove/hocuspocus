@@ -183,7 +183,7 @@ export function RestyleControls() {
               resetPreview()
             }}
             className="absolute top-1.5 right-1.5 z-20 p-1 rounded-full bg-black/60 text-white/80 hover:text-white hover:bg-black/80 transition-colors"
-            title={t('repaint.removeSource')}
+            title={t('repaint.removeSource')} aria-label={t('repaint.removeSource')}
           >
             <X size={14} />
           </button>
@@ -226,7 +226,7 @@ export function RestyleControls() {
                 resetPreview()
               }}
               className="absolute top-1.5 right-1.5 p-1 rounded-full bg-black/65 text-white/80 hover:text-white"
-              title={t('repaint.removeFrame')}
+              title={t('repaint.removeFrame')} aria-label={t('repaint.removeFrame')}
             >
               <X size={12} />
             </button>
@@ -286,19 +286,19 @@ export function RestyleControls() {
                     <button
                       onClick={() => removeMapping(index)}
                       className="ml-auto p-0.5 text-text-muted hover:text-status-error"
-                      title={t('repaint.removeRegion')}
+                      title={t('repaint.removeRegion')} aria-label={t('repaint.removeRegion')}
                     >
                       <X size={11} />
                     </button>
                   </div>
-                  <input
+                  <input aria-label={t('repaint.sourcePlaceholder')}
                     type="text"
                     value={mapping.source}
                     onChange={event => updateMapping(index, { source: event.target.value })}
                     placeholder={t('repaint.sourcePlaceholder')}
                     className="w-full bg-bg-tertiary border border-border rounded px-2 py-1.5 text-[10px] text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-blue"
                   />
-                  <input
+                  <input aria-label={t('repaint.targetPlaceholder')}
                     type="text"
                     value={mapping.target}
                     onChange={event => updateMapping(index, { target: event.target.value })}

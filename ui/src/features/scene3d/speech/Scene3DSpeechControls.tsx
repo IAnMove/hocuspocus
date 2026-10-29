@@ -163,7 +163,7 @@ export function Scene3DSpeechControls({ slot, workspace, disabled, calibrate, on
           <button type="button" className={speechInput} onClick={() => jsonInput.current?.click()}>{t('speech.importCues')}</button>
         </div>
       </details>
-      <input ref={jsonInput} type="file" accept=".json,application/json" className="hidden" data-testid="speech-cues-file" onChange={event => {
+      <input ref={jsonInput} aria-label={t('speech.importCues')} type="file" accept=".json,application/json" className="hidden" data-testid="speech-cues-file" onChange={event => {
         const file = event.target.files?.[0]; event.target.value = ''
         if (file) void run(async () => {
           if (file.size > 2 * 1024 * 1024) throw new Error('Cues JSON exceeds 2 MB.')
@@ -171,7 +171,7 @@ export function Scene3DSpeechControls({ slot, workspace, disabled, calibrate, on
           return () => onChange({ ...speech, cues, driver: 'imported' })
         })
       }} />
-      <input ref={kitInput} type="file" accept=".zip,application/zip" className="hidden" data-testid="speech-kit-file" onChange={event => {
+      <input ref={kitInput} aria-label={t('speech.importKit')} type="file" accept=".zip,application/zip" className="hidden" data-testid="speech-kit-file" onChange={event => {
         const file = event.target.files?.[0]; event.target.value = ''
         if (file) void run(async signal => {
           const patch = await importSpeechKit(file, workspace, signal)

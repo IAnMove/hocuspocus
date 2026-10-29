@@ -29,7 +29,7 @@ test('the notice is one sentence and a link, and it is absent without excluded t
   const shown = render(<LicenceNotice licence={hunyuan} />)
   try {
     const notice = shown.getByTestId('licence-notice')
-    assert.match(notice.textContent || '', /This license does not apply in EU, UK, KR\./)
+    assert.match(notice.textContent || '', /This license does not apply in the EU, the UK, and South Korea\./)
     const link = shown.getByRole('link', { name: 'License' })
     assert.equal(link.getAttribute('href'), hunyuan.url)
     assert.equal(licenceNoticeLine(hunyuan), line)
@@ -78,7 +78,7 @@ test('the model picker shows the notice once per family and leaves other familie
     assert.equal(view.getByRole('button', { name: 'Hunyuan Video' }).textContent?.includes('EU'), false)
     fireEvent.click(view.getByRole('button', { name: 'Hunyuan Video' }))
     assert.equal(view.getAllByTestId('licence-notice').length, 2)
-    assert.match(view.container.textContent || '', /This license does not apply in EU, UK, KR\./)
+    assert.match(view.container.textContent || '', /This license does not apply in the EU, the UK, and South Korea\./)
     assert.equal(view.getAllByRole('link', { name: 'License' })[0].getAttribute('href'), hunyuan.url)
   } finally {
     cleanup()

@@ -75,12 +75,12 @@ export function ViggleControls() {
           })}</p>
           : <p className="text-xs text-text-muted">{dimensions.width} × {dimensions.height} → {dimensions.frameWidth} × {dimensions.frameHeight}</p>)}
     <label className="block text-xs">{t('wangp.resolution')}
-      <select className="w-full bg-bg-tertiary border border-border rounded-lg p-2" value={resolution} onChange={event => setResolution(event.target.value as '480p' | '512p' | '704p')}>
+      <select aria-label={t('wangp.resolution')} className="w-full bg-bg-tertiary border border-border rounded-lg p-2" value={resolution} onChange={event => setResolution(event.target.value as '480p' | '512p' | '704p')}>
         <option value="480p">480p</option><option value="512p">512p</option><option value="704p">704p</option>
       </select>
     </label>
     <label className="block text-xs">{t('wangp.audio')}
-      <select className="w-full bg-bg-tertiary border border-border rounded-lg p-2" value={audio === 'generated' ? 'generated' : 'source'} onChange={event => setParam('viggle_audio_mode', event.target.value === 'generated' ? 'generated' : 'source')}>
+      <select aria-label={t('wangp.audio')} className="w-full bg-bg-tertiary border border-border rounded-lg p-2" value={audio === 'generated' ? 'generated' : 'source'} onChange={event => setParam('viggle_audio_mode', event.target.value === 'generated' ? 'generated' : 'source')}>
         <option value="source">{t('wangp.sourceAudio')}</option><option value="generated">{t('wangp.generatedAudio')}</option>
       </select>
     </label>

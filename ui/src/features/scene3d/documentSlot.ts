@@ -69,6 +69,7 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
     imageLook: slot.media === 'image' && slot.surface === 'cutout' ? parseImageLook(slot.imageLook) : undefined,
     surface: parseSurface(slot.surface),
     grounded: slot.grounded === true, textureRepeat: textureRepeat(slot.textureRepeat), drift: drift(slot.drift),
+    ...tiltField(slot.rotationX, 'rotationX'), ...tiltField(slot.rotationZ, 'rotationZ'),
     inPlace: slot.inPlace === true ? true : undefined,
     performance: parsePerformance(slot.performance),
     rhythm: parseSlotRhythm(slot.rhythm),
@@ -85,7 +86,14 @@ export function normalizeScene3DSlot(slot: Scene3DSlot): Scene3DSlot {
   const faceDecal = parseFaceDecal(slot.faceDecal)
   if (faceDecal && next.media === 'model3d') next.faceDecal = faceDecal
   else delete next.faceDecal
+  if (typeof next.rotationX !== 'number' || !Number.isFinite(next.rotationX)) delete next.rotationX
+  if (typeof next.rotationZ !== 'number' || !Number.isFinite(next.rotationZ)) delete next.rotationZ
   return next
+}
+
+function tiltField(value: number | undefined, key: 'rotationX' | 'rotationZ'): Pick<Scene3DSlot, 'rotationX' | 'rotationZ'> {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return {}
+  return { [key]: value }
 }
 
 function holdable(slot: Scene3DSlot) {

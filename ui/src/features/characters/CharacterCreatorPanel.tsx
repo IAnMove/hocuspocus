@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import { Box, Camera, Loader2, PersonStanding } from 'lucide-react'
@@ -26,6 +27,8 @@ import { CharacterImageCreator } from './CharacterImageCreator'
 import { Character3DLibraryEntry } from './Character3DLibraryEntry'
 import { useCharacterEditorHandoff } from './characterEditorHandoff'
 import { CharacterEditorSession } from './CharacterEditorSession'
+import { FaceRigOpenButton } from './FaceRigOpenButton'
+import { faceRigHasSubject } from './faceRigSubject'
 import {
   buildCharacterOrbitPrompt,
   CHARACTER_ORBIT_VIEWS,
@@ -313,6 +316,10 @@ function CharacterCreatorWorkshop() {
       setError(t('creator.errors.faceRigKitsOnly'))
       return
     }
+    if (!faceRigHasSubject(views, refs, selectedViewId)) {
+      setError(t('creator.errors.needViewOrUpload'))
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -550,14 +557,11 @@ function CharacterCreatorWorkshop() {
           {t('creator.subtitle')}
         </p>
         {kind === 'character' && (
-          <button
-            type="button"
-            className={`${button} mt-2`}
-            disabled={busy}
+          <FaceRigOpenButton
+            hasSubject={faceRigHasSubject(views, refs, selectedViewId)}
+            busy={busy}
             onClick={() => void openFaceRigFromCreator()}
-          >
-            {t('creator.openFaceRig')}
-          </button>
+          />
         )}
         {history.length > 0 && (
           <div className="mt-2 space-y-1">
@@ -567,7 +571,7 @@ function CharacterCreatorWorkshop() {
                 <button
                   key={entry.id}
                   type="button"
-                  disabled={busy}
+                  disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
                   onClick={() => {
                     setKind(entry.kind)
                     setVideoName(entry.videoName)
@@ -590,7 +594,7 @@ function CharacterCreatorWorkshop() {
         )}
       </header>
       <div className="flex-1 overflow-y-auto p-3 md:p-4">
-        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} onUseReference={async (asset, description, signal) => {
+        <CharacterImageCreator key={activeWorkspace} workspace={activeWorkspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onUseReference={async (asset, description, signal) => {
           const workspace = activeWorkspace
           const response = await fetch(asset.source, { signal })
           if (!response.ok) throw new Error(t('creator.errors.needViewOrUpload'))
@@ -651,7 +655,7 @@ function CharacterCreatorWorkshop() {
                 {showAPrompt ? t('creator.hideAPrompt') : t('creator.optionalAPrompt')}
               </button>
               {showAPrompt && (
-                <textarea
+                <textarea aria-label={t('creator.aPromptPlaceholder')}
                   value={aPrompt}
                   onChange={event => setAPrompt(event.target.value)}
                   rows={5}
@@ -682,8 +686,8 @@ function CharacterCreatorWorkshop() {
             </button>
             {jobMessage && <p className="text-[11px] text-text-secondary">{jobMessage}</p>}
             {interruptedJobId && <div className="flex gap-2">
-              <button type="button" className={button + ' flex-1'} disabled={busy} onClick={() => void recoverOrbit('resume')}>{tCommon('actions.resume')}</button>
-              <button type="button" className={button + ' flex-1'} disabled={busy} onClick={() => void recoverOrbit('discard')}>{tCommon('actions.discard')}</button>
+              <button type="button" className={button + ' flex-1'} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void recoverOrbit('resume')}>{tCommon('actions.resume')}</button>
+              <button type="button" className={button + ' flex-1'} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void recoverOrbit('discard')}>{tCommon('actions.discard')}</button>
             </div>}
             {hunyuanMessage && <p className="text-[11px] text-text-secondary">{hunyuanMessage}</p>}
             {error && <p className="text-[11px] text-red-300">{error}</p>}
@@ -723,7 +727,7 @@ function CharacterCreatorWorkshop() {
                   className="mt-3 w-full accent-violet-400"
                   aria-label={t('creator.captureTimeAria')}
                 />
-                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} onClick={() => void replaceSelectedView()}>
+                <button type="button" className={button + ' mt-2 w-full'} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void replaceSelectedView()}>
                   <Camera size={13} /> {t('creator.replaceView')}
                 </button>
               </div>
@@ -802,6 +806,7 @@ function RefPicker({
       <p className="mb-2 text-[10px] text-text-muted">{hint}</p>
       {!roleLocked && value && onRole && (
         <select
+          aria-label={t('creator.referenceRole')}
           value={value.role}
           onChange={event => onRole(event.target.value as OrbitRefRole)}
           className="mb-2 w-full rounded-md border border-border bg-bg-primary px-2 py-1 text-[11px] text-text-primary"

@@ -455,7 +455,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
             <button
               onClick={(e) => { e.stopPropagation(); setShowSaveRecipe(true) }}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
-              title="Save as Recipe — reuse this look with one click"
+              title={t('actions.saveRecipe')} aria-label={t('actions.saveRecipe')}
             >
               <BookMarked size={13} />
             </button>
@@ -463,7 +463,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
               onClick={event => { event.stopPropagation(); void handleOutputSettings(false) }}
               disabled={settingsBusy || restoreBlocked}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
-              title={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')}
+              title={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')} aria-label={restoreBlocked ? restoreBlockedTitle : tStudio('imageActions.loadSettings')}
             >
               <SlidersHorizontal size={13} />
             </button>
@@ -471,7 +471,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
               onClick={event => { event.stopPropagation(); void handleOutputSettings(true) }}
               disabled={settingsBusy || restoreBlocked}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors disabled:opacity-40"
-              title={restoreBlocked ? restoreBlockedTitle : 'Re-generate with same settings'}
+              title={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')} aria-label={restoreBlocked ? restoreBlockedTitle : t('actions.regenerate')}
             >
               <RefreshCw size={13} />
             </button>
@@ -481,14 +481,14 @@ function GenerationActions({ a }: { a: OutputActions }) {
                 <button
                   onClick={() => openRetakeDialog(file.name)}
                   className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-indicator-warning transition-colors"
-                  title="Retake — regenerate a time region"
+                  title={t('actions.retake')} aria-label={t('actions.retake')}
                 >
                   <Scissors size={13} />
                 </button>
                 <button
                   onClick={handleContinueFrom}
                   className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue transition-colors"
-                  title="Extend this video with new content"
+                  title={t('actions.extend')} aria-label={t('actions.extend')}
                 >
                   <FastForward size={13} />
                 </button>
@@ -499,7 +499,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
                 onClick={handleRejoin}
                 disabled={rejoining}
                 className="p-1.5 rounded-lg hover:bg-bg-hover text-accent-blue hover:text-accent-blue-hover transition-colors disabled:opacity-50"
-                title={`Rejoin all ${clipTotal} clips in this group`}
+                title={t('actions.rejoin', { count: clipTotal ?? 0 })} aria-label={t('actions.rejoin', { count: clipTotal ?? 0 })}
               >
                 {rejoining ? <Loader2 size={13} className="animate-spin" /> : <Combine size={13} />}
               </button>
@@ -507,7 +507,7 @@ function GenerationActions({ a }: { a: OutputActions }) {
             <button
               onClick={handleCopyPrompt}
               className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-              title="Copy prompt"
+              title={t('actions.copyPrompt')} aria-label={t('actions.copyPrompt')}
             >
               {copied ? <Check size={13} className="text-accent-green" /> : <Copy size={13} />}
             </button>
@@ -524,7 +524,7 @@ function InputActions({ a }: { a: OutputActions }) {
         {file.type === 'image' && (
           <button onClick={event => { event.stopPropagation(); void handleEditImage() }} disabled={settingsBusy}
             className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-accent-blue disabled:opacity-40"
-            title={tStudio('imageActions.edit')}><Pencil size={13} /></button>
+            title={tStudio('imageActions.edit')} aria-label={tStudio('imageActions.edit')}><Pencil size={13} /></button>
         )}
         {file.type === 'image' && (
           <button
@@ -534,7 +534,8 @@ function InputActions({ a }: { a: OutputActions }) {
                 ? 'text-accent-green'
                 : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
             }`}
-            title={generationMode === 'image' ? tStudio('imageActions.reference') : 'Use as start frame'}
+            title={generationMode === 'image' ? tStudio('imageActions.reference') : t('actions.startFrame')}
+            aria-label={generationMode === 'image' ? tStudio('imageActions.reference') : t('actions.startFrame')}
           >
             {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
           </button>
@@ -548,14 +549,14 @@ function InputActions({ a }: { a: OutputActions }) {
                   ? 'text-accent-green'
                   : 'hover:bg-bg-hover text-text-secondary hover:text-accent-blue'
               }`}
-              title="Use current frame as reference image"
+              title={t('actions.referenceFrame')} aria-label={t('actions.referenceFrame')}
             >
               {sentToInput ? <Check size={13} /> : <ArrowLeftToLine size={13} />}
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); setShowExtraInfo(true) }}
               className="flex items-center gap-1 rounded-lg px-2 py-1.5 text-[10px] text-text-secondary transition-colors hover:bg-bg-hover hover:text-accent-blue"
-              title="Generate descriptions and social copy from saved prompts"
+              title={t('actions.extraInfoHint')}
             >
               <BadgeInfo size={13} />
               {t('extraInfo')}
@@ -581,7 +582,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
             document.body.removeChild(link)
           }}
           className="p-1.5 rounded-lg hover:bg-bg-hover text-text-secondary hover:text-text-primary transition-colors"
-          title="Download"
+          title={t('actions.download')} aria-label={t('actions.download')}
         >
           <Download size={13} />
         </button>
@@ -594,7 +595,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
             className={`flex min-h-11 min-w-11 items-center justify-center p-1.5 rounded-lg transition-colors ${
               moving ? 'text-accent-blue animate-pulse' : 'hover:bg-bg-hover text-text-secondary hover:text-text-primary'
             }`}
-            title="Move to workspace"
+            title={t('moveOutput.title')} aria-label={t('moveOutput.title')}
           >
             <FolderInput size={13} />
           </button>
@@ -611,7 +612,7 @@ function LibraryActions({ a }: { a: OutputActions }) {
               ? 'text-red-400 hover:text-red-300'
               : 'hover:bg-bg-hover text-text-secondary hover:text-red-400'
           }`}
-          title={file.favorite ? 'Remove from favorites' : 'Add to favorites'}
+          title={file.favorite ? t('actions.removeFavorite') : t('actions.addFavorite')} aria-label={file.favorite ? t('actions.removeFavorite') : t('actions.addFavorite')}
         >
           <Heart size={13} fill={file.favorite ? 'currentColor' : 'none'} />
         </button>

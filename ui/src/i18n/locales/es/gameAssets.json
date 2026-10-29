@@ -10,11 +10,12 @@
     "export": "Exportar"
   },
   "soon": "Próximamente",
-  "new": "Nuevo",
+  "new": "Nuevo juego",
   "duplicate": "Duplicar",
   "delete": "Borrar",
   "confirmDelete": "¿Borrar este juego? No se puede deshacer.",
   "empty": "Todavía no hay un juego.",
+  "emptyExplain": "Este estudio convierte un estilo, un reparto y una lista de recursos en un juego que puedes revisar, probar y exportar.",
   "title": "Título",
   "genre": "Género",
   "view": "Vista",

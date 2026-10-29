@@ -6,6 +6,8 @@ import kineticTextEn from './locales/en/kineticText.json'
 import kineticTextEs from './locales/es/kineticText.json'
 import scene3dEditorEn from './locales/en/scene3dEditor.json'
 import scene3dEditorEs from './locales/es/scene3dEditor.json'
+import workbenchEn from './locales/en/workbench.json'
+import workbenchEs from './locales/es/workbench.json'
 import commonEn from './locales/en/common.json'
 import navigationEn from './locales/en/navigation.json'
 import settingsEn from './locales/en/settings.json'
@@ -53,7 +55,7 @@ import productionShotsEs from './locales/es/productionShots.json'
 import productionCatalogEs from './locales/es/productionCatalog.json'
 import gameAssetsEs from './locales/es/gameAssets.json'
 
-export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets', 'writingGuide'] as const
+export const NAMESPACES = ['common', 'navigation', 'settings', 'wizard', 'activity', 'extraInfo', 'storyLab', 'director', 'seriesLab', 'videoEditor', 'workspaces', 'styleSheet', 'projects', 'auditDev', 'scene3d', 'scene3dEditor', 'workbench', 'kineticText', 'sceneFx', 'shell', 'characters', 'comics', 'studio', 'help', 'productionShots', 'productionCatalog', 'gameAssets', 'writingGuide'] as const
 export type I18nNamespace = (typeof NAMESPACES)[number]
 
 export const resources = {
@@ -75,6 +77,7 @@ export const resources = {
     auditDev: auditDevEn,
     scene3d: scene3dEn,
     scene3dEditor: scene3dEditorEn,
+    workbench: workbenchEn,
     kineticText: kineticTextEn,
     shell: shellEn,
     characters: charactersEn,
@@ -104,6 +107,7 @@ export const resources = {
     auditDev: auditDevEs,
     scene3d: scene3dEs,
     scene3dEditor: scene3dEditorEs,
+    workbench: workbenchEs,
     kineticText: kineticTextEs,
     shell: shellEs,
     characters: charactersEs,

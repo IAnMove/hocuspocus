@@ -155,6 +155,9 @@ def _slot_problems(slot) -> list[str]:
     problems = []
     if not _vector(slot.get("position")) or not _positive(slot.get("scale")) or not _finite(slot.get("rotationY")):
         problems.append("needs position [x, y, z], a scale above 0 and a rotationY")
+    for key in ("rotationX", "rotationZ"):
+        if key in slot and not _finite(slot.get(key)):
+            problems.append(f"{key} must be a finite number of radians")
     if slot.get("slot") not in ROLES:
         problems.append(f"slot must be one of {', '.join(ROLES)}")
     if _motion_lost(slot.get("motion")):

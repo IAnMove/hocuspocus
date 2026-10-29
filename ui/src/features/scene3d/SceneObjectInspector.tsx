@@ -35,6 +35,10 @@ export type SceneObjectInspectorProps = {
   canRedo: boolean
   conflict: Scene3DDocument | null
   preview?: ReactNode
+  showHistory?: boolean
+  showPreview?: boolean
+  showPose?: boolean
+  allowEmpty?: boolean
   onChange: (document: Scene3DDocument, group?: string) => void
   onUndo: () => void
   onRedo: () => void
@@ -44,12 +48,14 @@ export type SceneObjectInspectorProps = {
 
 export function SceneObjectInspector({
   document, selectedId, locked, saveState, canUndo, canRedo, conflict, preview,
+  showHistory = true, showPreview = true, showPose = true, allowEmpty = false,
   onChange, onUndo, onRedo, onCheckpoint, onResolveConflict,
 }: SceneObjectInspectorProps) {
   const { t } = useUiTranslation('scene3d')
-  const [mode, setMode] = useState<InspectorMode>('object')
+  const [mode, setMode] = useInspectorMode(allowEmpty, selectedId)
   const [previewOpen, setPreviewOpen] = useState(true)
-  const selected = document.slots.find(slot => slot.id === selectedId) ?? document.slots[0]
+  const found = document.slots.find(slot => slot.id === selectedId)
+  const selected = allowEmpty ? found : found ?? document.slots[0]
   useInspectorHistoryKeys(locked, onUndo, onRedo)
   const commit = (next: Scene3DDocument, group?: string) => {
     if (locked) return
@@ -57,7 +63,7 @@ export function SceneObjectInspector({
   }
   return (
     <section className="flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-bg-secondary p-3" data-testid="scene3d-inspector">
-      <HistoryBar
+      {showHistory && <HistoryBar
         saveState={saveState}
         canUndo={canUndo}
         canRedo={canRedo}
@@ -65,23 +71,23 @@ export function SceneObjectInspector({
         onUndo={onUndo}
         onRedo={onRedo}
         onCheckpoint={onCheckpoint}
-      />
+      />}
       {conflict && <ConflictBanner onKeep={() => onResolveConflict('mine')} onLoad={() => onResolveConflict('theirs')} />}
       <div className="flex flex-wrap gap-2">
         <ModeButton id="object" mode={mode} onMode={setMode} label={t('inspector.object')} />
         <ModeButton id="scene" mode={mode} onMode={setMode} label={t('inspector.scene')} />
-        <button type="button" className="min-h-11 rounded-lg border border-border px-3 text-xs lg:hidden" data-testid="scene3d-inspector-preview-toggle"
+        {showPreview && <button type="button" className="min-h-11 rounded-lg border border-border px-3 text-xs lg:hidden" data-testid="scene3d-inspector-preview-toggle"
           onClick={() => setPreviewOpen(open => !open)}>
           {previewOpen ? t('inspector.hidePreview') : t('inspector.showPreview')}
-        </button>
+        </button>}
       </div>
-      {previewOpen && (
+      {showPreview && previewOpen && (
         <div data-testid="scene3d-inspector-preview" className="min-h-16 overflow-hidden rounded-lg border border-border bg-black/40 lg:hidden">
           {preview ?? <p className="p-3 text-xs text-text-muted">{t('inspector.previewHint')}</p>}
         </div>
       )}
       {mode === 'object'
-        ? <ObjectPanel slot={selected} document={document} locked={locked} onChange={commit} />
+        ? <ObjectPanel slot={selected} document={document} locked={locked} showPose={showPose} onChange={commit} />
         : <ScenePanel document={document} locked={locked} onChange={commit} />}
     </section>
   )
@@ -123,8 +129,8 @@ function ModeButton({ id, mode, onMode, label }: { id: InspectorMode; mode: Insp
   )
 }
 
-function ObjectPanel({ slot, document, locked, onChange }: {
-  slot: Scene3DSlot | undefined; document: Scene3DDocument; locked: boolean
+function ObjectPanel({ slot, document, locked, showPose, onChange }: {
+  slot: Scene3DSlot | undefined; document: Scene3DDocument; locked: boolean; showPose: boolean
   onChange: (document: Scene3DDocument, group?: string) => void
 }) {
   const { t } = useUiTranslation('scene3d')
@@ -133,6 +139,7 @@ function ObjectPanel({ slot, document, locked, onChange }: {
   return (
     <fieldset disabled={locked} className="space-y-3 text-xs disabled:opacity-50" data-testid="scene3d-inspector-object-fields">
       <p className="font-semibold text-text-primary">{slot.id}</p>
+      {showPose && <>
       <AxisFields label={t('inspector.position')} values={slot.position} onChange={(position, group) => onChange(patchScene3DSlot(document, slot.id, { position }), group)} group={`pos:${slot.id}`} />
       <label className="flex items-center gap-2">{t('inspector.yaw')}
         <input type="number" step="1" aria-label={t('inspector.yaw')} className={fieldClass} value={Number((slot.rotationY * 180 / Math.PI).toFixed(1))}
@@ -142,6 +149,7 @@ function ObjectPanel({ slot, document, locked, onChange }: {
         <input type="number" min="0.05" step="0.05" aria-label={t('inspector.scale')} className={fieldClass} value={Number(slot.scale.toFixed(3))}
           onChange={event => { const value = Number(event.target.value); if (Number.isFinite(value) && value >= 0.05) onChange(patchScene3DSlot(document, slot.id, { scale: Math.min(100, value) }), `scale:${slot.id}`) }} />
       </label>
+      </>}
       <label className="block">{t('inspector.source')}
         <input data-testid="scene3d-inspector-source" aria-label={t('inspector.source')} className={`${fieldClass} mt-1 w-full`} value={slot.sourceUrl}
           onChange={event => onChange(patchScene3DSlot(document, slot.id, { sourceUrl: event.target.value }))} />
@@ -210,15 +218,15 @@ function ScenePanel({ document, locked, onChange }: {
           onChange={event => { const fov = Number(event.target.value); if (Number.isFinite(fov) && fov > 0 && fov < 180) onChange({ ...document, camera: { ...document.camera, fov } }) }} />
       </label>
       <label className="flex min-h-11 items-center gap-2">
-        <input type="checkbox" checked={Boolean(environment)} onChange={event => onChange({ ...document, environment: event.target.checked ? { reflectiveFloor: true, platform: false, bloom: 0.48 } : undefined })} />
+        <input aria-label={t('inspector.environment')} type="checkbox" checked={Boolean(environment)} onChange={event => onChange({ ...document, environment: event.target.checked ? { reflectiveFloor: true, platform: false, bloom: 0.48 } : undefined })} />
         {t('inspector.environment')}
       </label>
       <details data-testid="scene3d-inspector-scene-advanced" className="rounded-lg border border-border p-2">
         <summary className="cursor-pointer font-semibold">{t('inspector.advanced')}</summary>
         {environment && (
           <div className="mt-2 space-y-2">
-            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={environment.reflectiveFloor} onChange={event => onChange({ ...document, environment: { ...environment, reflectiveFloor: event.target.checked } })} />{t('inspector.floor')}</label>
-            <label className="flex min-h-11 items-center gap-2"><input type="checkbox" checked={environment.platform} onChange={event => onChange({ ...document, environment: { ...environment, platform: event.target.checked } })} />{t('inspector.platform')}</label>
+            <label className="flex min-h-11 items-center gap-2"><input aria-label={t('inspector.floor')} type="checkbox" checked={environment.reflectiveFloor} onChange={event => onChange({ ...document, environment: { ...environment, reflectiveFloor: event.target.checked } })} />{t('inspector.floor')}</label>
+            <label className="flex min-h-11 items-center gap-2"><input aria-label={t('inspector.platform')} type="checkbox" checked={environment.platform} onChange={event => onChange({ ...document, environment: { ...environment, platform: event.target.checked } })} />{t('inspector.platform')}</label>
             <label className="flex items-center gap-2">{t('inspector.bloom')}
               <input type="number" min="0" max="1.5" step="0.05" aria-label={t('inspector.bloom')} className={fieldClass} value={environment.bloom}
                 onChange={event => { const bloom = Number(event.target.value); if (Number.isFinite(bloom)) onChange({ ...document, environment: { ...environment, bloom: Math.max(0, Math.min(1.5, bloom)) } }) }} />
@@ -252,6 +260,18 @@ function AxisFields({ label, values, onChange, group }: {
       ))}
     </div>
   )
+}
+
+/** Follows the desk selection without an effect. A manual mode click sticks until the selection changes. */
+function useInspectorMode(allowEmpty: boolean, selectedId?: string) {
+  const [mode, setMode] = useState<InspectorMode>('object')
+  const track = allowEmpty ? (selectedId ?? '') : undefined
+  const [seenTrack, setSeenTrack] = useState<string | undefined>(undefined)
+  if (track !== undefined && track !== seenTrack) {
+    setSeenTrack(track)
+    setMode(track ? 'object' : 'scene')
+  }
+  return [mode, setMode] as const
 }
 
 function useInspectorHistoryKeys(locked: boolean, onUndo: () => void, onRedo: () => void) {

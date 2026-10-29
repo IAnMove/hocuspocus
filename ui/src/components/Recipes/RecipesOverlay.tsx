@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState } from 'react'
 import { X, BookMarked, Trash2, Upload, Play, Loader2, AlertTriangle, Download, ExternalLink, Layers } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
@@ -87,7 +88,7 @@ export function RecipesOverlay() {
           <Upload size={12} /> {tCommon('actions.import')}
         </button>
         <button onClick={() => setOpen(false)}
-          className="p-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover transition-colors border border-border">
+          className="p-1.5 rounded-lg bg-bg-secondary hover:bg-bg-hover transition-colors border border-border" title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
           <X size={16} />
         </button>
       </div>
@@ -185,7 +186,7 @@ function RecipeGridCard({ card, applying, onApply, onDelete }: {
         <div className="flex items-start justify-between gap-1.5">
           <div className="text-xs font-medium text-text-primary leading-tight">{card.name}</div>
           {onDelete && (
-            <button onClick={onDelete} title={t('recipes.deleteTitle')}
+            <button onClick={onDelete} title={t('recipes.deleteTitle')} aria-label={t('recipes.deleteTitle')}
               className="shrink-0 p-0.5 rounded text-text-muted hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100">
               <Trash2 size={12} />
             </button>

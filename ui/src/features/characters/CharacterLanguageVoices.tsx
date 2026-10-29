@@ -45,7 +45,7 @@ export function CharacterLanguageVoices({ workspace, value, onChange, savedKits,
     </div>)}
     {available.length > 0 && <div className="flex flex-wrap items-end gap-2">
       <label className="block">{t('speech.languageVoices.add')}
-        <select data-testid="add-language-voice" className="mt-1 min-h-10 rounded border border-border bg-bg-primary px-2"
+        <select aria-label={t('speech.languageVoices.add')} data-testid="add-language-voice" className="mt-1 min-h-10 rounded border border-border bg-bg-primary px-2"
           value={adding} onChange={event => setAdding(event.target.value as SpokenLanguage | '')}>
           <option value="">{t('speech.languageVoices.choose')}</option>
           {available.map(language => <option key={language} value={language}>{t(`speech.customVoice.languages.${language}`)}</option>)}

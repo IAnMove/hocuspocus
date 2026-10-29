@@ -1,8 +1,10 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState } from 'react'
 import { ModalShell } from '../../components/common/ModalShell'
 import { useUiTranslation } from '../../i18n'
 import type { Scene } from '../../types'
 import { COMPOSER_SCENE_TEMPLATES, getCandidateSceneTemplate, requiredSlots, type ControlSpec, type ControlValue, type SceneTemplateDefinition, type TemplateSlotName } from './catalog'
+import { templateDisplay } from './templateDisplay'
 import { catalogBindingIssue, resolveCatalogBindings, type CatalogSelections } from './catalogBindings'
 import { compileCandidateScene } from './compile'
 import { TemplateAssetPicker } from './TemplateAssetPicker'
@@ -50,7 +52,7 @@ export function TemplateComposerDialog({ workspace, onClose, onApply }: Props) {
       <p className="text-xs text-text-secondary">{t('composer.intro', { count: COMPOSER_SCENE_TEMPLATES.length })}</p>
       <label className="block text-xs">{t('composer.action')}
         <select aria-label={t('composer.action')} value={id} onChange={event => setId(event.target.value)} className={inputClass}>
-          {COMPOSER_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.family} · {item.title}</option>)}
+          {COMPOSER_SCENE_TEMPLATES.map(item => <option key={item.id} value={item.id}>{item.family} · {templateDisplay(item).title}</option>)}
         </select>
       </label>
       <TemplateComposerForm key={`${workspace}:${id}`} template={template} workspace={workspace} onClose={onClose} onApply={onApply} />
@@ -135,12 +137,13 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
     }
   }
 
+  const shown = templateDisplay(template)
   return <div className="space-y-4">
-    <p className="text-xs">{template.description}</p>
+    <p className="text-xs">{shown.description}</p>
     <TemplateReferencePanel templateId={template.id} disabled={busy || !replaceConfirmed} onOpen={file => void openOriginal(file)} />
     <TemplateComponentHelp templateId={template.id} />
     <ul className="list-disc pl-5 text-xs text-text-muted">{template.limits.map(limit => <li key={limit}>{limit}</li>)}</ul>
-    <fieldset disabled={busy} className="space-y-3 disabled:opacity-60">
+    <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="space-y-3 disabled:opacity-60">
       <legend className="mb-2 text-xs">{t('composer.assetsOf', { workspace })}</legend>
       <div className="grid gap-2 sm:grid-cols-2">{template.slots.map(item => <div key={item.id} className={`rounded border p-2 text-xs ${activeSlot === item.id ? 'border-cyan-400' : 'border-border'}`}>
         <button type="button" aria-pressed={activeSlot === item.id} onClick={() => setActiveSlot(item.id)} className="block w-full text-left font-medium">{t(SLOT_COPY[item.id])} {needed.has(item.id) ? t('composer.required') : t('composer.optional')}</button>
@@ -160,7 +163,7 @@ function TemplateComposerForm({ template, workspace, onClose, onApply }: Props &
       {extraControls.length > 0 && <div className="grid gap-3 sm:grid-cols-3">{extraControls.map(([name, spec]) => <ControlField key={name} name={name} spec={spec} value={values[name]} onChange={setValue(name)} />)}</div>}
       <p className="text-xs text-text-muted">{rhythmic ? t('composer.pulseHelp') : t('composer.noPulseHelp')}</p>
       <p className="text-xs text-amber-100">{t('composer.stillWarning')}</p>
-      <label className="flex items-start gap-2 text-xs"><input type="checkbox" checked={replaceConfirmed} onChange={event => setReplaceConfirmed(event.target.checked)} />{t('composer.replaceConfirm')}</label>
+      <label className="flex items-start gap-2 text-xs"><input aria-label={t('composer.replaceConfirm')} type="checkbox" checked={replaceConfirmed} onChange={event => setReplaceConfirmed(event.target.checked)} />{t('composer.replaceConfirm')}</label>
     </fieldset>
     {error && <p role="alert" className="text-xs text-rose-200">{error}</p>}
     <button type="button" onClick={() => void apply()} disabled={busy || missing || !replaceConfirmed} className="rounded border border-cyan-300/50 bg-cyan-400/10 px-4 py-2 text-sm disabled:opacity-40">{busy ? t('composer.checking') : t('composer.createOpen')}</button>

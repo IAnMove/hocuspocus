@@ -74,6 +74,7 @@ import { awaitsView, cameraPass, walkedSlot } from './directionalPaint.ts'
 import { tintSprite } from './directionalLight.ts'
 import { createSplatMount, poseSplatMount, releaseSpark, studioFloorHiddenForSplat } from './splatItem.ts'
 import { paintImageFades } from './imageFade.ts'
+import { applySlotTilt } from './slotTilt'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -134,6 +135,8 @@ export type GpuWorld = {
   exportRender?: ExportRenderQuality
   /** Set while an export paints frames (any quality); the editor preview leaves it unset. */
   exporting?: boolean
+  /** The edit camera is orbiting. Preview paints leave the shot camera document alone. */
+  freeView?: boolean
   /** A template thumbnail export keeps the editor's placeholders for empty slots. */
   exportPlaceholders?: boolean
   /** Environment light of scenes that ask for it (`document.lighting`). */
@@ -309,7 +312,7 @@ export function placeholderMesh(slot: Scene3DSlot) {
   )
   mesh.position.fromArray(slot.position)
   mesh.scale.setScalar(slot.scale)
-  mesh.rotation.y = slot.rotationY
+  applySlotTilt(mesh, slot)
   return mesh
 }
 
@@ -320,7 +323,7 @@ export function fitGltf(root: Object3D, slot: Scene3DSlot) {
   const baseScale = 1.7 / Math.max(size.y, 0.001)
   root.scale.setScalar(baseScale * slot.scale)
   root.position.set(slot.position[0], slot.position[1], slot.position[2])
-  root.rotation.y = slot.rotationY
+  applySlotTilt(root, slot)
   return baseScale
 }
 
@@ -648,15 +651,17 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const posed = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
   const shaken = shakeCamera(document.camera.shake, sceneSeconds, posed, look)
-  world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
-  world.camera.position.set(...shaken.eye)
-  world.camera.lookAt(...shaken.look)
-  world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
+  if (!(world.freeView && !world.exporting)) {
+    world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
+    world.camera.position.set(...shaken.eye)
+    world.camera.lookAt(...shaken.look)
+    world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
+    applyLensShift(world.camera, document.camera.lensShift)
+  }
   cameraPass(document, posedSlots, { memory: world.directions ??= new DirectionMemory(), eye: shaken.eye, t: sceneSeconds }, (painted, tint) => {
     paintActor(world, painted, sceneSeconds, document.duration)
     tintSprite(world.slots.get(painted.id)?.root, tint)
   })
-  applyLensShift(world.camera, document.camera.lensShift)
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
@@ -942,7 +947,7 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
     return
   }
   current.root.position.set(slot.position[0], slot.position[1], slot.position[2])
-  current.root.rotation.y = slot.rotationY
+  applySlotTilt(current.root, slot)
   current.root.scale.setScalar(current.baseScale * slot.scale)
 }
 

@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import { Music } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
@@ -8,6 +9,8 @@ import { useUiTranslation } from '../../i18n'
 // small choices: instrumental + length. The LLM writes the Style + Lyrics
 // internally — power users who want to hand-edit those use Studio → Audio → Music.
 export function DirectorSongSetup() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('director')
   const instrumental = useStore(s => s.directorSongInstrumental)
   const setInstrumental = useStore(s => s.setDirectorSongInstrumental)
@@ -21,7 +24,7 @@ export function DirectorSongSetup() {
           <Music size={12} /> {t('song.title')}
         </label>
         <label className="flex items-center gap-1.5 cursor-pointer text-[10px] text-text-secondary hover:text-text-primary transition-colors">
-          <input
+          <input aria-label={t('song.instrumental')}
             type="checkbox"
             checked={instrumental}
             onChange={e => setInstrumental(e.target.checked)}
@@ -33,10 +36,10 @@ export function DirectorSongSetup() {
 
       <div>
         <div className="flex items-center justify-between mb-1">
-          <label className="text-[11px] text-text-muted uppercase tracking-wider">{t('song.length')}</label>
+          <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('song.length')}</label>
           <span className="text-[10px] text-text-secondary tabular-nums">{t('song.duration', { count: duration })}</span>
         </div>
-        <input
+        <input aria-label={t('song.length')} id={fieldIds('f0')}
           type="range"
           min={30}
           max={300}

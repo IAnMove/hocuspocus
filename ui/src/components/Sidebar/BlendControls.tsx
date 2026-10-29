@@ -1,3 +1,5 @@
+import { useFieldIds } from '../common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { X, ArrowRight } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -26,7 +28,7 @@ function ClipDropZone({ label, file, url, duration, items, workspaceId, onChoose
         <button
           onClick={onClear}
           className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
-        >
+         title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}>
           <X size={10} />
         </button>
         <div className="absolute bottom-0.5 left-0.5 text-[8px] bg-black/60 text-white px-1 py-0.5 rounded">
@@ -51,6 +53,8 @@ function ClipDropZone({ label, file, url, duration, items, workspaceId, onChoose
 }
 
 export function BlendControls() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const blendClipA = useStore(s => s.blendClipA)
   const blendClipAUrl = useStore(s => s.blendClipAUrl)
@@ -161,10 +165,10 @@ export function BlendControls() {
       {blendMode === 'insert' && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted">{t('blend.transition')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted">{t('blend.transition')}</label>
             <span className="text-[10px] text-text-secondary">{transitionSec}s</span>
           </div>
-          <input
+          <input aria-label={t('blend.transition')} id={fieldIds('f0')}
             type="range"
             min={2} max={10} step={1}
             value={transitionSec}
@@ -178,10 +182,10 @@ export function BlendControls() {
       {blendMode === 'overlap' && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted">{t('blend.overlapDuration')}</label>
+            <label htmlFor={fieldIds('f1')} className="text-[10px] text-text-muted">{t('blend.overlapDuration')}</label>
             <span className="text-[10px] text-text-secondary">{overlapSec}s</span>
           </div>
-          <input
+          <input aria-label={t('blend.overlapDuration')} id={fieldIds('f1')}
             type="range"
             min={1} max={Math.min(8, Math.floor(Math.min(blendClipADuration || 99, blendClipBDuration || 99) / 2))}
             step={1}
@@ -200,10 +204,10 @@ export function BlendControls() {
         <div className="space-y-2">
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted">{t('blend.motionPrefix')}</label>
+              <label htmlFor={fieldIds('f2')} className="text-[10px] text-text-muted">{t('blend.motionPrefix')}</label>
               <span className="text-[10px] text-text-secondary">{motionPrefixSec.toFixed(1)}s</span>
             </div>
-            <input
+            <input aria-label={t('blend.motionPrefix')} id={fieldIds('f2')}
               type="range"
               min={0} max={Math.min(3, Math.floor(overlapSec * 0.7))} step={0.5}
               value={motionPrefixSec}
@@ -218,10 +222,10 @@ export function BlendControls() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted">{t('blend.motionSuffix')}</label>
+              <label htmlFor={fieldIds('f3')} className="text-[10px] text-text-muted">{t('blend.motionSuffix')}</label>
               <span className="text-[10px] text-text-secondary">{motionSuffixSec.toFixed(1)}s</span>
             </div>
-            <input
+            <input aria-label={t('blend.motionSuffix')} id={fieldIds('f3')}
               type="range"
               min={0} max={Math.min(3, Math.floor(overlapSec * 0.7))} step={0.5}
               value={motionSuffixSec}
@@ -236,10 +240,10 @@ export function BlendControls() {
           </div>
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="text-[10px] text-text-muted">{t('blend.anchor')}</label>
+              <label htmlFor={fieldIds('f4')} className="text-[10px] text-text-muted">{t('blend.anchor')}</label>
               <span className="text-[10px] text-text-secondary">{anchorStrength.toFixed(2)}</span>
             </div>
-            <input
+            <input aria-label={t('blend.anchor')} id={fieldIds('f4')}
               type="range"
               min={0.3} max={1.0} step={0.05}
               value={anchorStrength}

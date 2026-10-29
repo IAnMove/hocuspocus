@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useState, type ReactNode } from 'react'
 import { ArrowLeft, Film, Loader2, Save, X } from 'lucide-react'
 import type { ApiOutput } from '../../api/client'
@@ -20,13 +21,13 @@ function ResultActions({ session, mediaFilter, busy, run, onChoices, onDone }: {
   const spinner = (icon: ReactNode) => busy ? <Loader2 size={13} className="animate-spin" /> : icon
   if (session.target === 'plan') {
     return session.dimension === '3d' && mediaFilter === 'world3d'
-      ? <button type="button" className={button} disabled={busy} onClick={() => void run(async () => { await saveScene3DPlan(session) })}>
+      ? <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void run(async () => { await saveScene3DPlan(session) })}>
         {spinner(<Save size={13} />)}{t('approval.editor.savePlan')}</button> : null
   }
   return <>
-    {session.dimension === '2d' && mediaFilter === 'scene3d' && <button type="button" className={button} disabled={busy}
+    {session.dimension === '2d' && mediaFilter === 'scene3d' && <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
       onClick={() => void run(async () => { await exportEditorTake(session); await onDone() })}>{spinner(<Film size={13} />)}{t('approval.editor.exportTake')}</button>}
-    <button type="button" className={button} disabled={busy} onClick={() => void run(async () => onChoices(await recentExports(session)))}>{t('approval.editor.chooseExport')}</button>
+    <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void run(async () => onChoices(await recentExports(session)))}>{t('approval.editor.chooseExport')}</button>
   </>
 }
 
@@ -35,7 +36,7 @@ function RecentExports({ session, choices, busy, run, onDone }: { session: ShotE
   return <div className="flex w-full flex-wrap gap-2" aria-label={t('approval.editor.recent')}>
     {!choices.length && <p className="text-xs text-text-muted">{t('approval.editor.noExports')}</p>}
     {choices.map(item => <button key={item.name} type="button" className="flex w-40 flex-col gap-1 rounded border border-border p-1 text-left text-[10px] disabled:opacity-40"
-      disabled={busy} onClick={() => void run(async () => { await importExportAsTake(session, item); await onDone() })}>
+      disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void run(async () => { await importExportAsTake(session, item); await onDone() })}>
       {item.thumbnail_url && <img src={item.thumbnail_url} alt="" className="aspect-video w-full rounded object-cover" />}
       <span className="truncate">{t('approval.editor.useThis', { name: item.name })}</span>
     </button>)}
@@ -59,7 +60,7 @@ export function SeriesShotEditBanner() {
   return <div role="region" aria-label={t('approval.editor.title', { order: session.order })} className="z-50 flex shrink-0 flex-wrap items-center gap-2 border-b border-violet-500/40 bg-bg-secondary p-2 text-sm">
     <strong className="mr-auto min-w-0 truncate">{t(session.target === 'plan' ? 'approval.editor.planTitle' : 'approval.editor.title', { order: session.order })} · {session.episodeTitle}</strong>
     <ResultActions session={session} mediaFilter={mediaFilter} busy={busy} run={run} onChoices={setChoices} onDone={done} />
-    <button type="button" className={button} disabled={busy} onClick={() => void run(() => returnToShot(session))}><ArrowLeft size={13} />{t('approval.editor.back')}</button>
+    <button type="button" className={button} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onClick={() => void run(() => returnToShot(session))}><ArrowLeft size={13} />{t('approval.editor.back')}</button>
     <button type="button" className={button} disabled={busy} aria-label={t('approval.editor.discard')} title={t('approval.editor.discard')} onClick={() => setShotEditSession(null)}><X size={13} /></button>
     {choices && <RecentExports session={session} choices={choices} busy={busy} run={run} onDone={done} />}
     {error && <p role="alert" className="w-full text-xs text-red-300">{error}</p>}

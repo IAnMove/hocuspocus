@@ -18,6 +18,7 @@ import {
   type RigProfileId,
 } from '../../api/client'
 import { DEFAULT_BPM, clipIsRecommended, clipsForEngine, humanoidClipSelection, isRigSource, previewAsset, profileForEngine, recommendedClipIds, rigFooterKey, rigHelpKey, rigJobBody } from './humanoidRig'
+import { proceduralCategory, rigEngineCopy, rigProfileCopy } from '../../lib/catalogLabels'
 import { useClipText } from './humanoidClipText'
 import { HumanoidAnimateSlot, HumanoidClipGroups, HumanoidEngineIntro, HumanoidJobNotes } from './HumanoidRigParts'
 
@@ -55,10 +56,12 @@ function RigPreviewCard({ asset, title, selected, onSelect, children }: { asset:
 
 function RigProfilePreview({ profile, selected, onSelect }: { profile: RigProfile; selected: boolean; onSelect: () => void }) {
   const { t } = useUiTranslation('scene3d')
+  const { t: tStudio } = useUiTranslation('studio')
+  const copy = rigProfileCopy(tStudio, profile)
   return (
-    <RigPreviewCard asset={`profile-${profile.id}`} title={profile.label} selected={selected} onSelect={onSelect}>
+    <RigPreviewCard asset={`profile-${profile.id}`} title={copy.label} selected={selected} onSelect={onSelect}>
       <div className="flex min-h-11 items-start justify-between gap-1 px-1.5 py-1.5">
-        <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{profile.label}</span>
+        <span className="line-clamp-2 text-[9px] font-medium leading-tight text-text-secondary">{copy.label}</span>
         <span className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[7px] uppercase text-emerald-300">{t('rig.joints', { count: profile.default_spine_joints })}</span>
       </div>
     </RigPreviewCard>
@@ -67,7 +70,13 @@ function RigProfilePreview({ profile, selected, onSelect }: { profile: RigProfil
 
 function RigAnimationPreview({ animation, engineId, selected, recommended, onSelect }: { animation: RigAnimation; engineId: string; selected: boolean; recommended: boolean; onSelect: () => void }) {
   const { t } = useUiTranslation('scene3d')
+  const { t: tStudio } = useUiTranslation('studio')
   const text = useClipText()(animation, engineId)
+  const category = animation.category
+    ? (engineId === 'humanoid'
+      ? t(`rig.clipCategory.${animation.category}` as ParseKeys<'scene3d'>, { defaultValue: animation.category })
+      : proceduralCategory(tStudio, animation.category))
+    : ''
   return (
     <RigPreviewCard asset={previewAsset(engineId, animation.id)} title={text.label} selected={selected} onSelect={onSelect}>
       <div className="space-y-1 px-1.5 py-1.5">
@@ -77,7 +86,7 @@ function RigAnimationPreview({ animation, engineId, selected, recommended, onSel
         </div>
         <div className="flex items-center justify-between gap-1">
           <span className="line-clamp-2 text-[8px] leading-tight text-text-muted">{text.description}</span>
-          {animation.category && <span className="shrink-0 rounded bg-accent-blue/10 px-1 py-0.5 text-[6px] uppercase text-accent-blue">{t(`rig.clipCategory.${animation.category}` as ParseKeys<'scene3d'>, { defaultValue: animation.category })}</span>}
+          {category && <span className="shrink-0 rounded bg-accent-blue/10 px-1 py-0.5 text-[6px] uppercase text-accent-blue">{category}</span>}
         </div>
       </div>
     </RigPreviewCard>
@@ -86,14 +95,15 @@ function RigAnimationPreview({ animation, engineId, selected, recommended, onSel
 
 function ProfileSection({ engineId, profiles, rigProfileId, selectedProfile, onChoose }: { engineId: string; profiles: RigProfile[] | undefined; rigProfileId: RigProfileId; selectedProfile: RigProfile | undefined; onChoose: (id: RigProfileId) => void }) {
   const { t } = useUiTranslation('scene3d')
+  const { t: tStudio } = useUiTranslation('studio')
   if (engineId === 'humanoid') return null
   return (
     <div>
       <div className="mb-1.5 flex items-center justify-between gap-2"><label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.profile')}</label><span className="text-[8px] text-text-muted">{t('rig.hoverFocus')}</span></div>
-      {profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => onChoose(profile.id)} />)}</div> : <select value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
+      {profiles?.length ? <div className="grid grid-cols-2 gap-1.5">{profiles.map(profile => <RigProfilePreview key={profile.id} profile={profile} selected={rigProfileId === profile.id} onSelect={() => onChoose(profile.id)} />)}</div> : <select aria-label={t('rig.profile')} value={rigProfileId} disabled className="w-full rounded-lg border border-border bg-bg-tertiary px-2.5 py-2 text-xs text-text-primary opacity-60"><option value="prop">{t('rig.legacyBackend')}</option></select>}
       {selectedProfile && (
         <div className="mt-1.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
-          <p className="text-[9px] leading-relaxed text-text-muted">{selectedProfile.description}</p>
+          <p className="text-[9px] leading-relaxed text-text-muted">{rigProfileCopy(tStudio, selectedProfile).description}</p>
           <p className="mt-1 text-[9px] text-text-muted/80">{t(rigHelpKey(engineId))}</p>
         </div>
       )}
@@ -127,6 +137,7 @@ function ClipSection({ engineId, profileLabel, animations, renderClip, onRecomme
  *  scene animator (which moves the camera, not the mesh). */
 export function RigAnimatePanel() {
   const { t } = useUiTranslation('scene3d')
+  const { t: tStudio } = useUiTranslation('studio')
   const activeWorkspace = useStore(state => state.activeWorkspace)
   const [sources, setSources] = useState<RigSource[]>([])
   const [sourcesLoading, setSourcesLoading] = useState(true)
@@ -368,7 +379,7 @@ export function RigAnimatePanel() {
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-[10px] text-text-muted uppercase tracking-wider">{t('rig.object')}</label>
-              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title={t('rig.refreshOutputs')}>
+              <button onClick={() => void loadSources()} className="text-text-muted hover:text-text-primary transition-colors" title={t('rig.refreshOutputs')} aria-label={t('rig.refreshOutputs')}>
                 <RefreshCw size={11} />
               </button>
             </div>
@@ -402,22 +413,25 @@ export function RigAnimatePanel() {
           <div>
             <label className="text-[10px] text-text-muted uppercase tracking-wider mb-1.5 block">{t('rig.engine')}</label>
             <div className="space-y-1">
-              {capabilities.engines.map(item => (
+              {capabilities.engines.map(item => {
+                const copy = rigEngineCopy(tStudio, item)
+                return (
                 <label key={item.id} className={`flex items-start gap-2 rounded-lg border px-2.5 py-1.5 ${item.installed ? 'border-border bg-bg-tertiary cursor-pointer hover:border-border-light' : 'border-border/60 bg-bg-tertiary/50 cursor-not-allowed opacity-70'}`}>
-                  <input type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => chooseEngine(item.id)} className="mt-0.5" />
+                  <input aria-label={copy.label} type="radio" name="rig-engine" checked={engineId === item.id} disabled={!item.installed} onChange={() => chooseEngine(item.id)} className="mt-0.5" />
                   <span>
-                    <span className="block text-[11px] text-text-primary">{item.label}</span>
-                    <span className="block text-[9px] text-text-muted">{item.description}</span>
-                    {!item.installed && item.install_hint && <span className="block text-[9px] text-amber-400 mt-0.5">{item.install_hint}</span>}
+                    <span className="block text-[11px] text-text-primary">{copy.label}</span>
+                    <span className="block text-[9px] text-text-muted">{copy.description}</span>
+                    {!item.installed && copy.installHint && <span className="block text-[9px] text-amber-400 mt-0.5">{copy.installHint}</span>}
                   </span>
                 </label>
-              ))}
+                )
+              })}
             </div>
           </div>
 
           <HumanoidEngineIntro engineId={engineId} bpm={bpm} onBpm={setBpm} />
 
-          <ClipSection engineId={engineId} profileLabel={selectedProfile?.label} animations={profileAnimations} renderClip={renderClip}
+          <ClipSection engineId={engineId} profileLabel={selectedProfile ? rigProfileCopy(tStudio, selectedProfile).label : undefined} animations={profileAnimations} renderClip={renderClip}
             onRecommended={() => setSelectedClips(new Set(recommendedAnimationIds))} onAll={() => setSelectedClips(new Set(profileAnimations.map(animation => animation.id)))} />
 
           {engineId === 'procedural' && (
@@ -427,7 +441,7 @@ export function RigAnimatePanel() {
                 <p className="mt-0.5 text-[9px] text-text-muted">{t('rig.manualFitHelp')}</p>
               </div>
               <label className="block text-[10px] text-text-muted">{t('rig.skeletonDirection')}
-                <select value={axisMode} onChange={event => setAxisMode(event.target.value as typeof axisMode)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">
+                <select aria-label={t('rig.skeletonDirection')} value={axisMode} onChange={event => setAxisMode(event.target.value as typeof axisMode)} className="mt-1 w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs">
                   <option value="auto">{t('rig.axisAuto')}</option>
                   <option value="y">{t('rig.axisY')}</option>
                   <option value="x">{t('rig.axisX')}</option>
@@ -436,11 +450,11 @@ export function RigAnimatePanel() {
               </label>
               <label className="block text-[10px] text-text-muted uppercase tracking-wider">
                 <span className="flex items-center justify-between"><span>{t('rig.spineJoints')}</span><span className="text-text-primary">{spineJoints}</span></span>
-                <input type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
+                <input aria-label={t('rig.spineJoints')} type="range" min={2} max={9} value={spineJoints} onChange={event => setSpineJoints(Number(event.target.value))} className="mt-1.5 w-full" />
               </label>
               <label className="block text-[10px] text-text-muted uppercase tracking-wider">
                 <span className="flex items-center justify-between"><span>{t('rig.skinStiffness')}</span><span className="text-text-primary">{weightFalloff.toFixed(1)}</span></span>
-                <input type="range" min={1} max={6} step={.25} value={weightFalloff} onChange={event => setWeightFalloff(Number(event.target.value))} className="mt-1.5 w-full" />
+                <input aria-label={t('rig.skinStiffness')} type="range" min={1} max={6} step={.25} value={weightFalloff} onChange={event => setWeightFalloff(Number(event.target.value))} className="mt-1.5 w-full" />
                 <span className="mt-0.5 block normal-case tracking-normal text-[9px] text-text-muted/80">{t('rig.stiffnessHelp')}</span>
               </label>
             </div>

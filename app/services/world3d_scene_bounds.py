@@ -2,7 +2,7 @@
 
 The renderer draws a model object like this (ui/src/features/scene3d/gpu.ts ``fitGltf``): the loaded scene is scaled
 about its own origin by ``1.7 / (bounding-box height)`` times the object's ``scale``, then moved to ``position`` and
-turned ``rotationY`` about y. So a model is always ``1.7 m x scale`` tall, whatever its length, and a whole-environment
+turned by Euler XYZ (``rotationX``, ``rotationY``, ``rotationZ``; omitted X and Z are 0, the same as a yaw-only turn). So a model is always ``1.7 m x scale`` tall, whatever its length, and a whole-environment
 GLB is a 1.7 m object until ``scale`` says otherwise. A ``grounded`` object is then lowered or lifted so the lowest point
 of the model sits at ``position[1]`` (``groundLoadedSlot``). Nothing re-centres the model, so x and z stay wherever the
 GLB put its origin.
@@ -112,24 +112,45 @@ def normalisation(box: dict) -> float:
     return MODEL_HEIGHT / max(box["size"][1], _MIN_HEIGHT)
 
 
+def _tilt(slot: dict, key: str) -> float:
+    value = slot.get(key)
+    return float(value) if type(value) in (int, float) and math.isfinite(value) else 0.0
+
+
+def _euler_xyz(rx: float, ry: float, rz: float):
+    """Three.js Euler order XYZ. Each tuple is one matrix row (elements 0/4/8, 1/5/9, 2/6/10)."""
+    a, b = math.cos(rx), math.sin(rx)
+    c, d = math.cos(ry), math.sin(ry)
+    e, f = math.cos(rz), math.sin(rz)
+    return (
+        (c * e, -c * f, d),
+        (a * f + b * e * d, a * e - b * f * d, -b * c),
+        (b * f - a * e * d, b * e + a * f * d, a * c),
+    )
+
+
+def _apply(matrix, x: float, y: float, z: float) -> tuple[float, float, float]:
+    (m0, m4, m8), (m1, m5, m9), (m2, m6, m10) = matrix
+    return (m0 * x + m4 * y + m8 * z, m1 * x + m5 * y + m9 * z, m2 * x + m6 * y + m10 * z)
+
+
 def placed_bounds(box: dict, slot: dict) -> dict:
     """The model's size and place in the scene. ``size`` is its own width, height and depth in metres (x, y, z of the
-    GLB, before ``rotationY``). ``min``, ``max`` and ``center`` are world coordinates after position and ``rotationY``;
+    GLB, before rotation). ``min``, ``max`` and ``center`` are world coordinates after position and Euler XYZ
+    (``rotationX``, ``rotationY``, ``rotationZ``). Omitted X and Z are 0, which matches a yaw-only turn.
     ``bottomY`` is the lowest point. ``grounded`` puts that point at ``position[1]``."""
     scale = float(slot.get("scale") or 1)
     factor = normalisation(box) * scale
     px, py, pz = (float(v) for v in (slot.get("position") or [0, 0, 0]))
-    angle = float(slot.get("rotationY") or 0)
-    cos, sin = math.cos(angle), math.sin(angle)
     low = [value * factor for value in box["min"]]
     high = [value * factor for value in box["max"]]
-    lift = py - low[1] if slot.get("grounded") else py
-    xs, zs = [], []
-    for x in (low[0], high[0]):
-        for z in (low[2], high[2]):
-            xs.append(px + x * cos + z * sin)      # three.js rotation.y: x' = x cos + z sin, z' = -x sin + z cos
-            zs.append(pz - x * sin + z * cos)
-    world_low, world_high = [min(xs), low[1] + lift, min(zs)], [max(xs), high[1] + lift, max(zs)]
+    matrix = _euler_xyz(_tilt(slot, "rotationX"), _tilt(slot, "rotationY"), _tilt(slot, "rotationZ"))
+    corners = [_apply(matrix, x, y, z) for x in (low[0], high[0]) for y in (low[1], high[1]) for z in (low[2], high[2])]
+    lowest = min(point[1] for point in corners)
+    lift = py - lowest if slot.get("grounded") else py
+    world = [(px + point[0], lift + point[1], pz + point[2]) for point in corners]
+    world_low = [min(point[axis] for point in world) for axis in range(3)]
+    world_high = [max(point[axis] for point in world) for axis in range(3)]
     return {"size": _round(high[axis] - low[axis] for axis in range(3)),
             "center": _round((world_low[axis] + world_high[axis]) / 2 for axis in range(3)),
             "bottomY": round(world_low[1], 4), "min": _round(world_low), "max": _round(world_high)}

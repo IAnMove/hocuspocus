@@ -1,11 +1,13 @@
+import { useFieldIds } from '../common/fieldIds'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { ChevronDown, ChevronRight, RotateCcw, Check, Download, Trash2, Cpu, RefreshCw, Loader2, FolderOpen, Plus, HardDrive } from 'lucide-react'
 import type { ModelFolderCandidate } from '../../types'
 import { useStore, getFamiliesForMode, getModelsForFamily } from '../../stores/useStore'
 import * as api from '../../api/client'
 import type { GenerationMode, ModelLicence } from '../../types'
-import { FAMILIES, resolveVariant, onOsThemeChange, type FamilyId, type ThemeMode } from '../../lib/theme'
+import { FAMILIES, resolveVariant, onOsThemeChange, themeTextKey, type FamilyId, type ThemeMode } from '../../lib/theme'
 import { setUiLanguage, useUiTranslation, type UiLanguage } from '../../i18n'
+import { controlLabel } from '../../i18n/controlLabel'
 import { H3ModelName } from '../Sidebar/H3ModelInfo'
 import { ModelCatalogInfo } from '../Sidebar/ModelCatalogInfo'
 import { LicenceNotice } from '../common/LicenceNotice'
@@ -14,59 +16,25 @@ import { catalogVramGb, isRemoteModel } from '../../lib/modelCatalog'
 import { showsCudaControls, usePlatformCapabilities } from '../../lib/usePlatformCapabilities'
 import { MINIMAX_MUSIC_COMMUNITY_MODELS, modelRequirementsText } from '../../lib/minimaxMusicCatalog'
 
-const profileLabels: Record<string, string> = {
-  '1': 'Profile 1: High RAM + High VRAM',
-  '2': 'Profile 2: High RAM + Low VRAM',
-  '3': 'Profile 3: Low RAM + High VRAM',
-  '3.5': 'Profile 3.5: Very Low RAM + High VRAM',
-  '4': 'Profile 4: Low RAM + Low VRAM',
-  '4.5': 'Profile 4.5: Low RAM + Low VRAM (saves ~1GB)',
-  '5': 'Profile 5: Very Low RAM + Low VRAM',
+const VISIBILITY_MODES: GenerationMode[] = ['image', 'video', 'audio', 'model3d', 'avatar']
+
+interface DownloadModelState {
+  model_type: string
+  runtime?: { installed?: boolean; compatible?: boolean; install_hint?: string | null } | null
 }
 
-const quantizationOptions = [
-  { value: 'int8', label: 'INT8' },
-  { value: 'fp8', label: 'FP8' },
-  { value: 'bf16', label: 'BF16' },
-]
+function modelDownloadLabel(model: DownloadModelState, error?: string) {
+  const blocked = model.model_type === 'trellis2' && (!model.runtime?.installed || model.runtime?.compatible === false)
+  if (blocked) return model.runtime?.install_hint || controlLabel('disabled.modelNotInstalled')
+  if (error) return controlLabel('a11y.downloadFailed', { error })
+  return controlLabel('a11y.downloadModel')
+}
 
-const vaeOptions = [
-  { value: 0, label: 'Auto' },
-  { value: 1, label: 'Full (Fast, High VRAM)' },
-  { value: 2, label: 'Medium Tiling' },
-  { value: 3, label: 'Aggressive Tiling (Low VRAM)' },
-]
-
-const compileOptions = [
-  { value: '', label: 'None' },
-  { value: 'transformer', label: 'Transformer' },
-]
-
-const videoCodecOptions = [
-  { value: 'libx264_8', label: 'H.264 Quality 8' },
-  { value: 'libx264_10', label: 'H.264 Quality 10' },
-  { value: 'libx264_lossless', label: 'H.264 Lossless' },
-  { value: 'libx265_8', label: 'H.265 CRF 8' },
-  { value: 'libx265_28', label: 'H.265 CRF 28 (Fast)' },
-]
-
-const imageCodecOptions = [
-  { value: 'jpeg_95', label: 'JPEG 95%' },
-  { value: 'jpeg_85', label: 'JPEG 85%' },
-  { value: 'jpeg_70', label: 'JPEG 70%' },
-  { value: 'png', label: 'PNG (Lossless)' },
-  { value: 'webp_95', label: 'WebP 95%' },
-  { value: 'webp_85', label: 'WebP 85%' },
-  { value: 'webp_lossless', label: 'WebP Lossless' },
-]
-
-const MODE_LABELS: { mode: GenerationMode; label: string }[] = [
-  { mode: 'image', label: 'Image' },
-  { mode: 'video', label: 'Video' },
-  { mode: 'audio', label: 'Audio' },
-  { mode: 'model3d', label: '3D Models' },
-  { mode: 'avatar', label: 'Edit' },
-]
+function modelDeleteLabel(deleting: boolean, confirming: boolean) {
+  if (deleting) return controlLabel('disabled.deletingModel')
+  if (confirming) return controlLabel('a11y.confirmDeleteModel')
+  return controlLabel('a11y.deleteModel')
+}
 
 // Family collapse state persists so "collapse the families I never use"
 // (issue #14) sticks across sessions — unlike the mode groups, which are
@@ -75,6 +43,7 @@ const COLLAPSED_FAMILIES_KEY = 'maestro-collapsed-model-families'
 
 function ModelVisibilitySection() {
   const { t } = useUiTranslation('studio')
+  const { t: tSettings } = useUiTranslation('settings')
   const models = useStore(s => s.models)
   const families = useStore(s => s.families)
   const enabledModels = useStore(s => s.enabledModels)
@@ -226,7 +195,7 @@ function ModelVisibilitySection() {
     licenceId?: string
   }
   const modelsByMode = new Map<GenerationMode, { familyId: string; familyLabel: string; licence?: ModelLicence | null; models: ModelRow[] }[]>()
-  for (const { mode } of MODE_LABELS) {
+  for (const mode of VISIBILITY_MODES) {
     const modeFamilies = getFamiliesForMode(mode, families)
     const groups: { familyId: string; familyLabel: string; licence?: ModelLicence | null; models: ModelRow[] }[] = []
     for (const fam of modeFamilies) {
@@ -281,7 +250,7 @@ function ModelVisibilitySection() {
         className="flex items-center gap-1.5 text-[11px] text-text-secondary uppercase tracking-wider font-medium hover:text-text-primary transition-colors w-full"
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span className="flex-1 text-left">Enabled Models</span>
+        <span className="flex-1 text-left">{tSettings('system.enabledModels')}</span>
         <span className="text-[10px] text-text-muted font-normal normal-case flex items-center gap-1.5">
           {enabledCount}/{totalCount}
           <span className="text-text-muted">|</span>
@@ -300,23 +269,28 @@ function ModelVisibilitySection() {
           className="flex items-center gap-1 px-2 py-1 text-[10px] border border-border rounded text-text-secondary hover:text-text-primary hover:border-border-light transition-colors"
         >
           <RotateCcw size={10} />
-          Reset
+          {tSettings('system.reset')}
         </button>
         <button
           onClick={() => setAllModelsEnabled(true)}
           className="px-2 py-1 text-[10px] border border-border rounded text-text-secondary hover:text-text-primary hover:border-border-light transition-colors"
         >
-          All
+          {tSettings('system.all')}
         </button>
         <button
           onClick={() => setAllModelsEnabled(false)}
           className="px-2 py-1 text-[10px] border border-border rounded text-text-secondary hover:text-text-primary hover:border-border-light transition-colors"
         >
-          None
+          {tSettings('system.none')}
         </button>
       </div>
 
-      {MODE_LABELS.map(({ mode, label }) => {
+      {VISIBILITY_MODES.map(mode => {
+        const label = mode === 'image' ? tSettings('system.modes.image')
+          : mode === 'video' ? tSettings('system.modes.video')
+          : mode === 'audio' ? tSettings('system.modes.audio')
+          : mode === 'model3d' ? tSettings('system.modes.model3d')
+          : tSettings('system.modes.avatar')
         const groups = modelsByMode.get(mode) ?? []
         const modeModels = groups.flatMap(g => g.models)
         const modeEnabled = modeModels.filter(m => enabledModels.has(m.model_type)).length
@@ -363,7 +337,8 @@ function ModelVisibilitySection() {
                           ref={el => { if (el) el.indeterminate = famEnabled > 0 && !famAllEnabled }}
                           onChange={() => setModelsEnabled(group.models.map(m => m.model_type), !famAllEnabled)}
                           className="w-3 h-3 rounded border-border bg-bg-tertiary accent-accent-blue shrink-0"
-                          title={famAllEnabled ? `Disable all ${group.familyLabel} models` : `Enable all ${group.familyLabel} models`}
+                          aria-label={famAllEnabled ? tSettings('modelFamilies.disableAll', { family: group.familyLabel }) : tSettings('modelFamilies.enableAll', { family: group.familyLabel })}
+                          title={famAllEnabled ? tSettings('modelFamilies.disableAll', { family: group.familyLabel }) : tSettings('modelFamilies.enableAll', { family: group.familyLabel })}
                         />
                         <button
                           onClick={() => toggleFamily(famKey)}
@@ -417,9 +392,8 @@ function ModelVisibilitySection() {
                                   ? 'text-red-400 hover:text-red-300'
                                   : 'text-text-muted hover:text-accent-blue'
                               }`}
-                              title={m.runtime?.install_hint || (downloadErrors[m.model_type]
-                                ? `Download failed: ${downloadErrors[m.model_type]} — click to retry`
-                                : 'Download model files now')}
+                              title={modelDownloadLabel(m, downloadErrors[m.model_type])}
+                              aria-label={modelDownloadLabel(m, downloadErrors[m.model_type])}
                             >
                               <Download size={10} />
                             </button>
@@ -449,7 +423,8 @@ function ModelVisibilitySection() {
                                   ? 'text-text-muted cursor-wait'
                                   : 'text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400'
                             }`}
-                            title={confirmDelete === m.model_type ? 'Click again to confirm delete' : 'Delete model files'}
+                            title={modelDeleteLabel(deleting === m.model_type, confirmDelete === m.model_type)}
+                            aria-label={modelDeleteLabel(deleting === m.model_type, confirmDelete === m.model_type)}
                           >
                             <Trash2 size={11} />
                           </button>
@@ -542,6 +517,7 @@ function CommunityMusicModelsSection() {
 }
 
 function LinkedModelFoldersSection() {
+  const { t } = useUiTranslation('settings')
   const systemConfig = useStore(s => s.systemConfig)
   const loadSystemConfig = useStore(s => s.loadSystemConfig)
   const loadModels = useStore(s => s.loadModels)
@@ -568,7 +544,7 @@ function LinkedModelFoldersSection() {
       await loadModels()
       return true
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to save folders')
+      setError(e instanceof Error ? e.message : t('system.saveFailed'))
       return false
     } finally {
       setSaving(false)
@@ -581,9 +557,9 @@ function LinkedModelFoldersSection() {
     try {
       const res = await api.scanModelFolders()
       setCandidates(res.candidates)
-      if (res.candidates.length === 0) setError('No other Pinokio apps with a ckpts folder found')
+      if (res.candidates.length === 0) setError(t('system.scanEmpty'))
     } catch {
-      setError('Scan failed')
+      setError(t('system.scanFailed'))
     } finally {
       setScanning(false)
     }
@@ -606,16 +582,14 @@ function LinkedModelFoldersSection() {
         className="flex items-center gap-1.5 text-[11px] text-text-secondary uppercase tracking-wider font-medium hover:text-text-primary transition-colors w-full"
       >
         {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        <span className="flex-1 text-left">Linked Model Folders</span>
-        <span className="text-[10px] text-text-muted font-normal normal-case">{folders.length} linked</span>
+        <span className="flex-1 text-left">{t('system.linkedFolders')}</span>
+        <span className="text-[10px] text-text-muted font-normal normal-case">{t('system.linkedCount', { count: folders.length })}</span>
       </button>
 
       {open && (
         <div className="mt-3 space-y-3">
           <p className="text-[10px] text-text-muted leading-relaxed">
-            Search other apps&apos; model folders for checkpoints you already have — e.g. an existing
-            Wan2GP install — instead of re-downloading them. Linked folders are read-only:
-            new downloads always go to HocusPocus&apos;s own ckpts folder.
+            {t('system.linkedBody')}
           </p>
 
           {folders.length > 0 && (
@@ -628,7 +602,7 @@ function LinkedModelFoldersSection() {
                     onClick={() => save(folders.filter(x => x !== f))}
                     disabled={saving}
                     className="p-1 rounded text-text-muted opacity-0 group-hover:opacity-100 hover:text-red-400 transition-colors shrink-0"
-                    title="Unlink folder (files are not deleted)"
+                    title={t('system.unlink')} aria-label={t('system.unlink')}
                   >
                     <Trash2 size={11} />
                   </button>
@@ -644,7 +618,7 @@ function LinkedModelFoldersSection() {
               className="flex items-center gap-1 px-2 py-1 text-[10px] border border-border rounded text-text-secondary hover:text-text-primary hover:border-border-light transition-colors disabled:opacity-50"
             >
               {scanning ? <Loader2 size={10} className="animate-spin" /> : <RefreshCw size={10} />}
-              Scan Pinokio apps
+              {t('system.scanPinokio')}
             </button>
           </div>
 
@@ -656,14 +630,16 @@ function LinkedModelFoldersSection() {
                     onClick={() => addFolder(c.path)}
                     disabled={saving}
                     className="p-1 rounded text-accent-blue hover:text-accent-blue-hover shrink-0 disabled:opacity-50"
-                    title={`Link ${c.path}`}
+                    title={t('system.linkFolder', { path: c.path })} aria-label={t('system.linkFolder', { path: c.path })}
                   >
                     <Plus size={12} />
                   </button>
                   <div className="flex-1 min-w-0">
                     <div className="text-[11px] text-text-primary truncate">{c.app}</div>
                     <div className="text-[10px] text-text-muted truncate" title={c.path}>
-                      {c.files} files, {c.folders} folders{c.size_gb > 0 ? `, ~${c.size_gb} GB` : ''}
+                      {c.size_gb > 0
+                        ? t('system.folderStatsSize', { files: c.files, folders: c.folders, size: c.size_gb })
+                        : t('system.folderStats', { files: c.files, folders: c.folders })}
                     </div>
                   </div>
                 </div>
@@ -672,12 +648,12 @@ function LinkedModelFoldersSection() {
           )}
 
           <div className="flex gap-1.5">
-            <input
+            <input aria-label={t('system.pastePath')}
               type="text"
               value={manualPath}
               onChange={e => setManualPath(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addFolder(manualPath)}
-              placeholder="Or paste a folder path..."
+              placeholder={t('system.pastePath')}
               className="flex-1 bg-bg-tertiary border border-border rounded px-2 py-1 text-[11px] text-text-primary focus:outline-none focus:border-accent-blue"
             />
             <button
@@ -685,7 +661,7 @@ function LinkedModelFoldersSection() {
               disabled={saving || !manualPath.trim()}
               className="px-2 py-1 text-[10px] border border-border rounded text-text-secondary hover:text-text-primary hover:border-border-light transition-colors disabled:opacity-50"
             >
-              Add
+              {t('system.add')}
             </button>
           </div>
 
@@ -702,12 +678,14 @@ function SelectField({ label, value, options, onChange }: {
   options: { value: string | number; label: string }[]
   onChange: (val: string) => void
 }) {
+  const fieldIds = useFieldIds()
+
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+      <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
         {label}
       </label>
-      <select
+      <select aria-label={label} id={fieldIds('f0')}
         value={value}
         onChange={e => onChange(e.target.value)}
         className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
@@ -745,6 +723,8 @@ function LanguageSection() {
 }
 
 function ThemeSection() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('settings')
   const prefs = useStore(s => s.themePrefs)
   const setThemeMode = useStore(s => s.setThemeMode)
@@ -794,7 +774,7 @@ function ThemeSection() {
         )}
       </div>
       <div>
-        <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+        <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
           {t('appearance.theme')}
         </label>
         <div className="flex items-center gap-2">
@@ -806,18 +786,18 @@ function ThemeSection() {
             <div className="w-3 h-7" style={{ background: swatch.surface }} />
             <div className="w-3 h-7" style={{ background: swatch.accent }} />
           </div>
-          <select
+          <select aria-label={t('appearance.theme')} id={fieldIds('f0')}
             value={family.id}
             onChange={e => setThemeFamily(e.target.value as FamilyId)}
             className="flex-1 bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"
           >
             {FAMILIES.map(f => (
-              <option key={f.id} value={f.id}>{f.label}</option>
+              <option key={f.id} value={f.id}>{t(themeTextKey(f.id, 'label'))}</option>
             ))}
           </select>
         </div>
         <p className="text-[10px] text-text-muted mt-1.5">
-          {family.description}
+          {t(themeTextKey(family.id, 'description'))}
         </p>
       </div>
     </div>
@@ -830,7 +810,7 @@ function DeveloperModeSection() {
   const setDeveloperMode = useStore(s => s.setDeveloperMode)
   return (
     <label className="flex items-start gap-2 rounded-lg border border-border bg-bg-tertiary/40 px-3 py-2">
-      <input
+      <input aria-label={t('developerMode.label')}
         type="checkbox"
         checked={developerMode}
         onChange={event => setDeveloperMode(event.target.checked)}
@@ -868,6 +848,7 @@ function DeveloperModeSection() {
  *                  applies fresh recommendation. Only enabled when auto is on)
  */
 function AutoPerformanceCard() {
+  const { t } = useUiTranslation('settings')
   const servicesConfig = useStore(s => s.servicesConfig)
   const updateServicesConfig = useStore(s => s.updateServicesConfig)
   const loadServicesConfig = useStore(s => s.loadServicesConfig)
@@ -912,17 +893,17 @@ function AutoPerformanceCard() {
       const res = await api.applySystemDetect()
       await Promise.all([loadServicesConfig(), loadSystemConfig()])
       if (res.profile_changed) {
-        showToast('Auto-tune applied — profile changes take effect on next model load')
+        showToast(t('system.autoAppliedProfile'))
       } else {
-        showToast('Auto-tune applied')
+        showToast(t('system.autoApplied'))
       }
     } catch (e) {
       console.error('apply failed:', e)
-      showToast('Failed to apply auto-tune')
+      showToast(t('system.autoApplyFailed'))
     } finally {
       setApplying(false)
     }
-  }, [loadServicesConfig, loadSystemConfig])
+  }, [loadServicesConfig, loadSystemConfig, t])
 
   // Toggle OFF → just flip the flag. Preserves current settings so
   // the user has the same config they were just running, just no
@@ -931,13 +912,13 @@ function AutoPerformanceCard() {
     setApplying(true)
     try {
       await updateServicesConfig({ auto_performance: false })
-      showToast('Auto-tune disabled — settings unchanged, you can edit them manually now')
+      showToast(t('system.autoDisabled'))
     } catch (e) {
       console.error('toggle off failed:', e)
     } finally {
       setApplying(false)
     }
-  }, [updateServicesConfig])
+  }, [updateServicesConfig, t])
 
   // Re-detect = same as toggle-on, just runs the apply again. Useful
   // after a hardware change (new GPU, more RAM) or driver update.
@@ -951,24 +932,24 @@ function AutoPerformanceCard() {
       // the newly-applied recommendation.
       await Promise.all([loadSystemDetect(), loadServicesConfig(), loadSystemConfig()])
       if (res.profile_changed) {
-        showToast('Re-detected — profile changes take effect on next model load')
+        showToast(t('system.redetectedProfile'))
       } else {
-        showToast('Re-detected — no settings changed')
+        showToast(t('system.redetectedSame'))
       }
     } catch (e) {
       console.error('re-detect failed:', e)
-      showToast('Failed to re-detect hardware')
+      showToast(t('system.redetectFailed'))
     } finally {
       setApplying(false)
     }
-  }, [loadServicesConfig, loadSystemConfig, loadSystemDetect])
+  }, [loadServicesConfig, loadSystemConfig, loadSystemDetect, t])
 
   if (loading) {
     return (
       <div className="space-y-3">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Performance</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('tabs.performance')}</h3>
         <div className="rounded-lg bg-bg-tertiary border border-border p-3 text-xs text-text-muted flex items-center gap-2">
-          <Loader2 size={12} className="animate-spin" /> Detecting hardware...
+          <Loader2 size={12} className="animate-spin" /> {t('system.detecting')}
         </div>
       </div>
     )
@@ -980,7 +961,7 @@ function AutoPerformanceCard() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Performance</h3>
+      <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('tabs.performance')}</h3>
 
       <div className="rounded-lg bg-bg-tertiary border border-border p-3 space-y-2.5">
         {/* Hardware readout — GPU name, VRAM, RAM */}
@@ -988,10 +969,12 @@ function AutoPerformanceCard() {
           <Cpu size={16} className="text-text-secondary shrink-0 mt-0.5" />
           <div className="min-w-0 flex-1">
             <div className="text-sm text-text-primary truncate" title={hw?.gpu_name || ''}>
-              {cudaOK ? hw!.gpu_name : 'No CUDA GPU detected'}
+              {cudaOK ? hw!.gpu_name : t('system.noCuda')}
             </div>
             <div className="text-[11px] text-text-muted">
-              {cudaOK ? `${hw!.gpu_vram_gb} GB VRAM · ${hw!.ram_gb} GB RAM` : `${hw?.ram_gb ?? 0} GB RAM`}
+              {cudaOK
+                ? t('system.vramRam', { vram: hw!.gpu_vram_gb, ram: hw!.ram_gb })
+                : t('system.ramOnly', { ram: hw?.ram_gb ?? 0 })}
             </div>
           </div>
         </div>
@@ -1014,7 +997,7 @@ function AutoPerformanceCard() {
               className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                 autoOn ? 'bg-amber-500' : 'bg-bg-tertiary border border-border'
               } ${applying ? 'opacity-50 cursor-wait' : ''}`}
-              title={autoOn ? 'Auto-tune is on — click to take manual control' : 'Auto-tune is off — click to enable'}
+              title={autoOn ? t('system.autoTuneOnTitle') : t('system.autoTuneOffTitle')}
             >
               <span
                 className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white border border-border transition-transform ${
@@ -1023,7 +1006,7 @@ function AutoPerformanceCard() {
               />
             </button>
             <span className="text-xs text-text-secondary">
-              Auto-tune {autoOn ? 'on' : 'off'}
+              {autoOn ? t('system.autoTuneOn') : t('system.autoTuneOff')}
             </span>
           </div>
           {/* Re-detect only relevant in auto mode. In manual mode, a
@@ -1034,9 +1017,9 @@ function AutoPerformanceCard() {
               onClick={handleRedetect}
               disabled={applying}
               className="text-[11px] text-text-secondary hover:text-text-primary flex items-center gap-1 disabled:opacity-50"
-              title="Re-run hardware detection (use after a hardware change or driver update)"
+              title={t('system.redetectTitle')}
             >
-              <RefreshCw size={11} className={applying ? 'animate-spin' : ''} /> Re-detect
+              <RefreshCw size={11} className={applying ? 'animate-spin' : ''} /> {t('system.redetect')}
             </button>
           )}
         </div>
@@ -1053,6 +1036,8 @@ function AutoPerformanceCard() {
 }
 
 export function SystemSettingsPanel() {
+  const fieldIds = useFieldIds()
+
   const systemConfig = useStore(s => s.systemConfig)
   const systemConfigLoading = useStore(s => s.systemConfigLoading)
   const updateConfig = useStore(s => s.updateSystemConfig)
@@ -1066,24 +1051,61 @@ export function SystemSettingsPanel() {
   // System extremely fast), we fall back to 24 GB.
   const systemDetect = useStore(s => s.systemDetect)
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  const { t } = useUiTranslation('settings')
 
   if (systemConfigLoading && !systemConfig) {
-    return <div className="text-xs text-text-muted py-4 text-center">Loading system settings...</div>
+    return <div className="text-xs text-text-muted py-4 text-center">{t('system.loading')}</div>
   }
 
   if (!systemConfig) {
-    return <div className="text-xs text-text-muted py-4 text-center">Failed to load system settings</div>
+    return <div className="text-xs text-text-muted py-4 text-center">{t('system.loadFailed')}</div>
   }
 
   const attentionOptions = (systemConfig.attention_modes_available || ['auto', 'sdpa']).map(m => ({
     value: m,
-    label: m === 'auto' ? 'Auto' : m === 'sdpa' ? 'SDPA' : m.charAt(0).toUpperCase() + m.slice(1),
+    label: m === 'auto' ? t('system.attentionAuto') : m === 'sdpa' ? t('system.attentionSdpa') : m.charAt(0).toUpperCase() + m.slice(1),
   }))
 
-  const profileOptions = Object.entries(profileLabels).map(([k, label]) => ({
-    value: k,
-    label,
-  }))
+  const profileOptions = [
+    { value: '1', label: t('system.profileLabels.1') },
+    { value: '2', label: t('system.profileLabels.2') },
+    { value: '3', label: t('system.profileLabels.3') },
+    { value: '3.5', label: t('system.profileLabels.3_5') },
+    { value: '4', label: t('system.profileLabels.4') },
+    { value: '4.5', label: t('system.profileLabels.4_5') },
+    { value: '5', label: t('system.profileLabels.5') },
+  ]
+  const quantizationOptions = [
+    { value: 'int8', label: t('system.quantOptions.int8') },
+    { value: 'fp8', label: t('system.quantOptions.fp8') },
+    { value: 'bf16', label: t('system.quantOptions.bf16') },
+  ]
+  const vaeOptions = [
+    { value: 0, label: t('system.vae.auto') },
+    { value: 1, label: t('system.vae.full') },
+    { value: 2, label: t('system.vae.medium') },
+    { value: 3, label: t('system.vae.aggressive') },
+  ]
+  const compileOptions = [
+    { value: '', label: t('system.compileOptions.none') },
+    { value: 'transformer', label: t('system.compileOptions.transformer') },
+  ]
+  const videoCodecOptions = [
+    { value: 'libx264_8', label: t('system.codecs.h264q8') },
+    { value: 'libx264_10', label: t('system.codecs.h264q10') },
+    { value: 'libx264_lossless', label: t('system.codecs.h264lossless') },
+    { value: 'libx265_8', label: t('system.codecs.h265crf8') },
+    { value: 'libx265_28', label: t('system.codecs.h265crf28') },
+  ]
+  const imageCodecOptions = [
+    { value: 'jpeg_95', label: t('system.codecs.jpeg95') },
+    { value: 'jpeg_85', label: t('system.codecs.jpeg85') },
+    { value: 'jpeg_70', label: t('system.codecs.jpeg70') },
+    { value: 'png', label: t('system.codecs.png') },
+    { value: 'webp_95', label: t('system.codecs.webp95') },
+    { value: 'webp_85', label: t('system.codecs.webp85') },
+    { value: 'webp_lossless', label: t('system.codecs.webpLossless') },
+  ]
 
   const autoOn = !!servicesConfig?.auto_performance
 
@@ -1107,11 +1129,11 @@ export function SystemSettingsPanel() {
       {/* Performance */}
       <div className="space-y-4">
         {!autoOn && (
-          <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Performance</h3>
+          <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('tabs.performance')}</h3>
         )}
 
         <SelectField
-          label="Attention Mode"
+          label={t('system.attentionMode')}
           value={systemConfig.attention_mode}
           options={attentionOptions}
           onChange={val => updateConfigWithAutoFlip({ attention_mode: val })}
@@ -1119,7 +1141,7 @@ export function SystemSettingsPanel() {
 
         <div>
           <SelectField
-            label="Transformer Quantization"
+            label={t('system.quantization')}
             value={systemConfig.transformer_quantization}
             options={quantizationOptions}
             onChange={val => updateConfigWithAutoFlip({ transformer_quantization: val })}
@@ -1135,21 +1157,20 @@ export function SystemSettingsPanel() {
               feels like INT8 — must be broken." */}
           {systemConfig.transformer_quantization === 'fp8' && (
             <p className="text-[10px] text-indicator-warning mt-1">
-              ⚠ Many models ship only BF16 + INT8 files. FP8 silently falls back to INT8 for those.
-              For guaranteed FP8, pick a model with "FP8" in its name (e.g. "LTX-2.3 Distilled FP8 22B").
+              ⚠ {t('system.fp8Warning')}
             </p>
           )}
         </div>
 
         <SelectField
-          label="VAE Tiling"
+          label={t('system.vaeTiling')}
           value={systemConfig.vae_config}
           options={vaeOptions}
           onChange={val => updateConfigWithAutoFlip({ vae_config: Number(val) })}
         />
 
         <SelectField
-          label="Compile"
+          label={t('system.compile')}
           value={systemConfig.compile}
           options={compileOptions}
           onChange={val => updateConfigWithAutoFlip({ compile: val })}
@@ -1160,49 +1181,49 @@ export function SystemSettingsPanel() {
 
       {/* Profiles */}
       <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Profiles</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('system.profilesTitle')}</h3>
 
         <SelectField
-          label="Video Profile"
+          label={t('system.videoProfile')}
           value={String(systemConfig.video_profile)}
           options={profileOptions}
           onChange={val => updateConfigWithAutoFlip({ video_profile: parseFloat(val) })}
         />
 
         <SelectField
-          label="Image Profile"
+          label={t('system.imageProfile')}
           value={String(systemConfig.image_profile)}
           options={profileOptions}
           onChange={val => updateConfigWithAutoFlip({ image_profile: parseFloat(val) })}
         />
 
         <SelectField
-          label="Audio Profile"
+          label={t('system.audioProfile')}
           value={String(systemConfig.audio_profile)}
           options={profileOptions}
           onChange={val => updateConfigWithAutoFlip({ audio_profile: parseFloat(val) })}
         />
 
         <p className="text-[10px] text-text-muted">
-          Profile changes take effect on next model load
+          {t('system.profileEffect')}
         </p>
 
         {/* VRAM Safety Coefficient */}
         <div>
           <div className="flex items-center justify-between mb-1.5">
-            <label className="text-[11px] text-text-muted uppercase tracking-wider">VRAM Safety Coefficient</label>
+            <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider">{t('system.vramSafety')}</label>
             <span className="text-xs text-text-secondary">{(systemConfig.vram_safety_coefficient ?? 0.8).toFixed(2)}</span>
           </div>
-          <input
+          <input aria-label={t('system.vramSafety')} id={fieldIds('f0')}
             type="range" min={0.5} max={0.95} step={0.05}
             value={systemConfig.vram_safety_coefficient ?? 0.8}
             onChange={e => updateConfigWithAutoFlip({ vram_safety_coefficient: parseFloat(e.target.value) })}
             className="w-full"
           />
           <div className="flex justify-between text-[8px] text-text-muted mt-0.5 px-0.5">
-            <span>0.50 (conservative)</span>
-            <span>0.80 (default)</span>
-            <span>0.95 (aggressive)</span>
+            <span>{t('system.vramConservative')}</span>
+            <span>{t('system.vramDefault')}</span>
+            <span>{t('system.vramAggressive')}</span>
           </div>
           <p className="text-[10px] text-text-muted mt-1">
             {(() => {
@@ -1211,8 +1232,8 @@ export function SystemSettingsPanel() {
               // — the auto card populates the store on mount.
               const totalVram = systemDetect?.hardware?.gpu_vram_gb ?? 24
               const coef = systemConfig.vram_safety_coefficient ?? 0.8
-              return `Max VRAM target: ~${(totalVram * coef).toFixed(1)} GB of ${totalVram} GB.`
-            })()} Lower = more headroom for spikes (long videos, VAE decode). Takes effect on next model load.
+              return t('system.vramTarget', { used: (totalVram * coef).toFixed(1), total: totalVram })
+            })()} {t('system.vramHint')}
           </p>
         </div>
       </div>
@@ -1236,8 +1257,8 @@ export function SystemSettingsPanel() {
         className="flex items-center gap-2 w-full px-3 py-2 rounded-lg border border-border text-xs text-text-secondary hover:text-text-primary hover:border-border-light transition-colors"
       >
         <HardDrive size={13} className="text-accent-blue" />
-        <span className="flex-1 text-left">Storage Manager</span>
-        <span className="text-[10px] text-text-muted">usage, duplicates, cleanup</span>
+        <span className="flex-1 text-left">{t('installation.storageManager')}</span>
+        <span className="text-[10px] text-text-muted">{t('system.storageHint')}</span>
       </button>
 
       <hr className="border-border" />
@@ -1268,7 +1289,7 @@ export function SystemSettingsPanel() {
             className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text-secondary transition-colors"
           >
             {advancedOpen ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
-            {advancedOpen ? 'Hide' : 'Show'} advanced settings
+            {advancedOpen ? t('system.hideAdvanced') : t('system.showAdvanced')}
           </button>
           {advancedOpen && (
             <div className="mt-4 space-y-5 pl-2 border-l-2 border-border/30">
@@ -1286,17 +1307,17 @@ export function SystemSettingsPanel() {
 
       {/* Output Codecs */}
       <div className="space-y-4">
-        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">Output Codecs</h3>
+        <h3 className="text-[11px] text-text-secondary uppercase tracking-wider font-medium">{t('system.outputCodecs')}</h3>
 
         <SelectField
-          label="Video Codec"
+          label={t('system.videoCodec')}
           value={systemConfig.video_output_codec}
           options={videoCodecOptions}
           onChange={val => updateConfig({ video_output_codec: val })}
         />
 
         <SelectField
-          label="Image Codec"
+          label={t('system.imageCodec')}
           value={systemConfig.image_output_codec}
           options={imageCodecOptions}
           onChange={val => updateConfig({ image_output_codec: val })}

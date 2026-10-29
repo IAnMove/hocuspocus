@@ -1,3 +1,5 @@
+import { useFieldIds } from '../../components/common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import {
   ArrowDown,
   ArrowUp,
@@ -704,6 +706,8 @@ function viewToggleClass(open: boolean): string {
 }
 
 export function VideoEditorPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('videoEditor')
   const { t: tCommon } = useUiTranslation('common')
   const tRef = useRef(t)
@@ -2041,6 +2045,7 @@ export function VideoEditorPanel() {
     >
       <input
         ref={fileInputRef}
+        aria-label={t('toolbar.import')}
         type="file"
         accept={VIDEO_ACCEPT}
         multiple
@@ -2056,10 +2061,10 @@ export function VideoEditorPanel() {
         <input
           value={projectName}
           onChange={event => setProjectName(event.target.value)}
-          className="min-w-0 w-32 sm:w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
+          className="min-w-0 flex-1 basis-40 truncate bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
           aria-label={t('toolbar.projectName')}
+          title={projectName || undefined}
         />
-        <div className="hidden flex-1 sm:block" />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={adding}
@@ -2261,7 +2266,7 @@ export function VideoEditorPanel() {
                 onClick={() => startSequenceAt(0, undefined, false)}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                title={t('playback.restartTitle')}
+                title={t('playback.restartTitle')} aria-label={t('playback.restartTitle')}
               >
                 <RotateCcw size={13} />
               </button>
@@ -2344,8 +2349,8 @@ export function VideoEditorPanel() {
 
         <aside aria-label={t('inspector.aria')} className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
-            <select
+            <label htmlFor={fieldIds('f0')} className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
+            <select aria-label={t('inspector.output')} id={fieldIds('f0')}
               value={`${resolution.width}x${resolution.height}`}
               onChange={event => {
                 const next = RESOLUTIONS.find(option => `${option.width}x${option.height}` === event.target.value)
@@ -2362,7 +2367,7 @@ export function VideoEditorPanel() {
             <div className="mt-2">
               <label className="text-[10px] text-text-muted">
                 {t('inspector.frameRate')}
-                <select
+                <select aria-label={t('inspector.frameRate')}
                   value={fps}
                   onChange={event => setFps(Number(event.target.value))}
                   className="block w-full mt-1 bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary"
@@ -2386,7 +2391,7 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => setSelectedTransitionIndex(null)}
                   className="ml-auto p-0.5 text-text-muted hover:text-text-primary"
-                >
+                 title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
                   <X size={12} />
                 </button>
               </div>
@@ -2480,7 +2485,7 @@ export function VideoEditorPanel() {
                     <div className="space-y-3">
                       <label className="block text-[10px] text-text-muted">
                         {t('timeCard.label')}
-                        <textarea
+                        <textarea aria-label={t('timeCard.label')}
                           rows={3}
                           maxLength={240}
                           value={clips[selectedTransitionIndex].transitionText}
@@ -2496,7 +2501,7 @@ export function VideoEditorPanel() {
                       </label>
                       <label className="block text-[10px] text-text-muted">
                         {t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
-                        <input
+                        <input aria-label={t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
                           type="range"
                           min={50}
                           max={160}
@@ -2512,7 +2517,7 @@ export function VideoEditorPanel() {
                   )}
                   <label className="block text-[10px] text-text-muted">
                     {t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
-                    <input
+                    <input aria-label={t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
                       type="range"
                       min={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 0.5 : 0.1}
                       max={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 5 : 2}
@@ -2599,7 +2604,7 @@ export function VideoEditorPanel() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">
                   {t('trim.exactIn')}
-                  <input
+                  <input aria-label={t('trim.exactIn')}
                     type="number"
                     min={0}
                     max={selected.trimEnd - 0.05}
@@ -2613,7 +2618,7 @@ export function VideoEditorPanel() {
                 </label>
                 <label className="text-[10px] text-text-muted">
                   {t('trim.exactOut')}
-                  <input
+                  <input aria-label={t('trim.exactOut')}
                     type="number"
                     min={selected.trimStart + 0.05}
                     max={selected.duration}
@@ -2640,11 +2645,12 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => patchClip(selected.id, { muted: !selected.muted })}
                   className={`p-1.5 rounded border ${selected.muted ? 'border-red-500/40 text-red-400' : 'border-border text-text-secondary'}`}
-                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
+                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')} aria-label={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
                 >
                   {selected.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
                 </button>
                 <input
+                  aria-label={t('inspector.volume')}
                   type="range"
                   min={0}
                   max={2}
@@ -2689,7 +2695,7 @@ export function VideoEditorPanel() {
                     setSelectedId(duplicate.id)
                   }}
                   className="p-1.5 border border-border rounded hover:bg-bg-hover"
-                  title={t('actions.duplicate')}
+                  title={t('actions.duplicate')} aria-label={t('actions.duplicate')}
                 >
                   <Copy size={11} />
                 </button>

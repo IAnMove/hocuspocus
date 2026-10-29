@@ -53,7 +53,7 @@ export function NumberField({ label, value, min, onValue }: { label: string; val
   return (
     <label className="block text-sm">
       {label}
-      <input className={fieldClass} type="number" min={min} value={draft ?? String(value)}
+      <input aria-label={label} className={fieldClass} type="number" min={min} value={draft ?? String(value)}
         onChange={event => change(event.target.value)} onBlur={() => setDraft(null)} />
     </label>
   )

@@ -74,7 +74,7 @@ function DefinitionIdentity({ library, initialKit, id, disabled, onSelect }: {
   onSelect: (id: string, kit?: CharacterKit) => void
 }) {
   const { t } = useUiTranslation('scene3dEditor')
-  return <label className="block">{t('speech.savedCharacter')}<select data-testid="saved-character" value={id} disabled={disabled}
+  return <label className="block">{t('speech.savedCharacter')}<select aria-label={t('speech.savedCharacter')} data-testid="saved-character" value={id} disabled={disabled}
     className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2"
     onChange={event => onSelect(event.target.value, library?.kits[event.target.value])}>
     <option value="">{t('speech.newCharacter')}</option>
@@ -156,7 +156,7 @@ function ScopedDefinition({ workspace, slot, disabled, initialKit, initialPoseId
           const patch = await characterSlotPatch(kit!, workspace, library!.revision, slot)
           if (alive.current) { setVoice(kit!.voice); setName(kit!.name); onApply?.(patch); setNotice(t('speech.characterApplied')) }
         })}>{t('speech.useCharacter')}</button>}
-      <label className="block">{t('speech.definitionName')}<input data-testid="character-name" maxLength={240}
+      <label className="block">{t('speech.definitionName')}<input aria-label={t('speech.definitionName')} data-testid="character-name" maxLength={240}
         className="mt-1 min-h-10 w-full rounded border border-border bg-bg-primary px-2" value={name} onChange={e => setName(e.target.value)} /></label>
       <DefinitionModelInput slot={slot} kit={kit} items={items} model={model} workspace={workspace} onChoose={setModel} />
       <CharacterVoiceFields key={id} workspace={workspace} value={voice} savedKits={Object.values(library?.kits ?? {})} onBusyChange={setVoiceBusy} onChange={next => {

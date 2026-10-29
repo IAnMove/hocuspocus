@@ -71,7 +71,7 @@ export function WritingGuide({ scope, data, language, context, provider, onChang
           {visible.map((item, i) => <option key={item.id} value={item.id}>{i + 1}. {catalog.questions[item.id].question[uiLanguage]}</option>)}
         </select>
         {fields.some(item => item.advanced) && <label className="flex items-center gap-2 text-xs text-text-secondary">
-          <input type="checkbox" checked={advanced} onChange={event => { setAdvanced(event.target.checked); setPosition(0) }} />{t('deeper')}
+          <input aria-label={t('deeper')} type="checkbox" checked={advanced} onChange={event => { setAdvanced(event.target.checked); setPosition(0) }} />{t('deeper')}
         </label>}
       </div>
       <WritingAnswer key={field.id} question={question.question[uiLanguage]} hint={question.hint[uiLanguage]}

@@ -1,5 +1,6 @@
 import { BoxGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry } from 'three'
 import { defaultMediaScreen } from './mediaScreen.ts'
+import { applySlotTilt } from './slotTilt'
 import type { Scene3DSlot } from './types.ts'
 
 /** A real world-space prop; its content shares camera, transforms and occlusion. */
@@ -23,7 +24,7 @@ export function screenGeometry(slot: Scene3DSlot) {
   }
   const face = new Mesh(new PlaneGeometry(width, height), new MeshBasicMaterial({ color: 0x10202c, toneMapped: false }))
   face.name = 'SCREEN_CONTENT'; face.position.y = center; root.add(face)
-  root.position.fromArray(slot.position); root.rotation.y = slot.rotationY; root.scale.setScalar(slot.scale)
+  root.position.fromArray(slot.position); applySlotTilt(root, slot); root.scale.setScalar(slot.scale)
   return root
 }
 
@@ -45,6 +46,6 @@ function crtSet(slot: Scene3DSlot, root: Group, width: number, height: number) {
   for (const x of [.28, .38]) box(width * .05, width * .05, .02, width * x, chin * .55, .01, knob)
   const face = new Mesh(new PlaneGeometry(width, height), new MeshBasicMaterial({ color: 0x0c1418, toneMapped: false }))
   face.name = 'SCREEN_CONTENT'; face.position.set(0, chin + bezel + height / 2, .012); root.add(face)
-  root.position.fromArray(slot.position); root.rotation.y = slot.rotationY; root.scale.setScalar(slot.scale)
+  root.position.fromArray(slot.position); applySlotTilt(root, slot); root.scale.setScalar(slot.scale)
   return root
 }

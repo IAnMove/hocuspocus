@@ -1,4 +1,13 @@
+import type { ParseKeys } from 'i18next'
+import i18n from 'i18next'
 import { isLiveStatus, type ActivityTaskLike } from './lineage'
+
+const footerKey = (value: string) => value as ParseKeys<'activity'>
+
+/** Composed footer phrases. ``defaultValue`` keeps the previous English if a catalog is not loaded. */
+function footer(key: string, options: Record<string, unknown> & { defaultValue: string }): string {
+  return i18n.t(footerKey(key), { ns: 'activity', ...options })
+}
 
 export const PHASE_KEYS: Record<string, string> = {
   loading_model: 'loadingModel',
@@ -143,11 +152,14 @@ function firstDefined(...values: unknown[]): unknown {
   return undefined
 }
 
-function pushUniqueModel(parts: string[], label: string, value: unknown): void {
+function pushUniqueModel(parts: string[], kind: '' | 'text' | 'image' | 'video', value: unknown): void {
   if (!value) return
   const model = String(value)
   if (parts.some(part => part === model || part.endsWith(` ${model}`))) return
-  parts.push(label ? `${label} ${model}` : model)
+  if (kind === 'text') parts.push(footer('footer.textModel', { model, defaultValue: `text ${model}` }))
+  else if (kind === 'image') parts.push(footer('footer.imageModel', { model, defaultValue: `image ${model}` }))
+  else if (kind === 'video') parts.push(footer('footer.videoModel', { model, defaultValue: `video ${model}` }))
+  else parts.push(model)
 }
 
 function appendRecipeModels(parts: string[], details: Record<string, unknown>): void {
@@ -163,61 +175,78 @@ function appendDefined(parts: string[], value: unknown, label: (item: unknown) =
 }
 
 function appendRecipeCore(parts: string[], details: Record<string, unknown>): void {
-  if (details.simulated === true) parts.push('SIMULATED')
-  else if (details.execution_mode === 'simulate') parts.push('SIMULATED')
+  if (details.simulated === true || details.execution_mode === 'simulate') {
+    parts.push(footer('footer.simulated', { defaultValue: 'SIMULATED' }))
+  }
   const resolution = firstDefined(details.video_resolution, details.image_resolution, details.resolution)
   if (resolution) parts.push(String(resolution))
-  appendDefined(parts, details.seed, value => `seed ${value}`)
+  appendDefined(parts, details.seed, value => footer('footer.seed', { value, defaultValue: `seed ${value}` }))
   const steps = firstDefined(details.video_steps, details.image_steps, details.steps, details.numInferenceSteps)
-  appendDefined(parts, steps, value => `${value} steps`)
-  appendDefined(parts, details.guidance, value => `guidance ${value}`)
-  appendDefined(parts, details.frames, value => `${value} frames`)
+  appendDefined(parts, steps, value => footer('footer.steps', { value, defaultValue: `${value} steps` }))
+  appendDefined(parts, details.guidance, value => footer('footer.guidance', { value, defaultValue: `guidance ${value}` }))
+  appendDefined(parts, details.frames, value => footer('footer.frames', { value, defaultValue: `${value} frames` }))
   appendDefined(parts, details.duration_seconds, value => `${value}s`)
 }
 
 function h3Minimum(details: Record<string, unknown>): string {
-  if (details.dialogue_duration_minimum_limited) return ' · H3 minimum applied'
+  if (details.dialogue_duration_minimum_limited) return footer('footer.h3Minimum', { defaultValue: ' · H3 minimum applied' })
   return ''
 }
 
 function dialogueLine(details: Record<string, unknown>): string {
+  const minimum = h3Minimum(details)
+  const calculated = details.dialogue_duration_calculated
   if (details.dialogue_syllables !== undefined) {
-    return `dialogue ${details.dialogue_syllables} syllables × ${details.dialogue_seconds_per_syllable}s → ${details.dialogue_duration_calculated}s calculated${h3Minimum(details)}`
+    const syllables = details.dialogue_syllables
+    const rate = details.dialogue_seconds_per_syllable
+    return footer('footer.dialogueSyllables', {
+      syllables, rate, calculated, minimum,
+      defaultValue: `dialogue ${syllables} syllables × ${rate}s → ${calculated}s calculated${minimum}`,
+    })
   }
   if (details.dialogue_words !== undefined) {
-    return `dialogue ${details.dialogue_words} words → ${details.dialogue_duration_calculated}s calculated${h3Minimum(details)}`
+    const words = details.dialogue_words
+    return footer('footer.dialogueWords', {
+      words, calculated, minimum,
+      defaultValue: `dialogue ${words} words → ${calculated}s calculated${minimum}`,
+    })
   }
   return ''
 }
 
 function cacheLine(details: Record<string, unknown>): string {
   if (details.cache === undefined) return ''
-  if (!details.cache) return 'Cache off'
-  if (details.cache_type) return `Cache on (${details.cache_type})`
-  return 'Cache on'
+  if (!details.cache) return footer('footer.cacheOff', { defaultValue: 'Cache off' })
+  if (details.cache_type) return footer('footer.cacheOnTyped', { type: details.cache_type, defaultValue: `Cache on (${details.cache_type})` })
+  return footer('footer.cacheOn', { defaultValue: 'Cache on' })
 }
 
 function loraLine(details: Record<string, unknown>): string {
   if (details.lora_count === undefined) return ''
-  if (!details.lora_count) return 'LoRAs off'
+  if (!details.lora_count) return footer('footer.lorasOff', { defaultValue: 'LoRAs off' })
+  const count = Number(details.lora_count)
   const loras = Array.isArray(details.loras) ? details.loras.map(String).filter(Boolean) : []
-  const suffix = Number(details.lora_count) === 1 ? '' : 's'
   const names = loras.length ? ` (${loras.join(', ')})` : ''
-  return `${details.lora_count} LoRA${suffix}${names}`
+  const base = footer('footer.lora', { count, defaultValue: count === 1 ? `${count} LoRA` : `${count} LoRAs` })
+  return `${base}${names}`
 }
 
 function appendRecipeFlags(parts: string[], details: Record<string, unknown>): void {
-  if (details.profile) parts.push(`profile ${details.profile}`)
+  if (details.profile) parts.push(footer('footer.profile', { name: details.profile, defaultValue: `profile ${details.profile}` }))
   const flow = firstDefined(details.flow_shift, details.flowShift)
-  appendDefined(parts, flow, value => `flow shift ${value}`)
+  appendDefined(parts, flow, value => footer('footer.flowShift', { value, defaultValue: `flow shift ${value}` }))
   const audio = firstDefined(details.audio_shift, details.audioShift)
-  appendDefined(parts, audio, value => `audio shift ${value}`)
-  if (details.turbo !== undefined) parts.push(`Turbo ${details.turbo ? 'on' : 'off'}`)
+  appendDefined(parts, audio, value => footer('footer.audioShift', { value, defaultValue: `audio shift ${value}` }))
+  if (details.turbo !== undefined) {
+    parts.push(details.turbo
+      ? footer('footer.turboOn', { defaultValue: 'Turbo on' })
+      : footer('footer.turboOff', { defaultValue: 'Turbo off' }))
+  }
   const cache = cacheLine(details)
   if (cache) parts.push(cache)
   const loras = loraLine(details)
   if (loras) parts.push(loras)
-  appendDefined(parts, details.clip_count, value => `${value} clips`)
+  appendDefined(parts, details.clip_count, value => footer('footer.clips', { value, defaultValue: `${value} clips` }))
 }
 
 export function generationRecipe(task: ActivityTaskLike): string {
@@ -245,16 +274,41 @@ function directorInitiator(task: ActivityTaskLike, mode: string): string {
   return ''
 }
 
+function namedMode(english: string, key: string): string {
+  return footer(key, { defaultValue: english })
+}
+
+function directorModeName(mode: string): string {
+  if (mode === 'short film') return namedMode('short film', 'footer.modes.shortFilm')
+  if (mode === 'comic') return namedMode('comic', 'footer.modes.comic')
+  if (mode === 'video podcast') return namedMode('video podcast', 'footer.modes.videoPodcast')
+  if (mode === 'viral video') return namedMode('viral video', 'footer.modes.viralVideo')
+  return mode
+}
+
+function studioModeName(mode: string): string {
+  if (mode === 'image') return namedMode('Image', 'footer.modes.image')
+  if (mode === 'video') return namedMode('Video', 'footer.modes.video')
+  if (mode === 'audio') return namedMode('Audio', 'footer.modes.audio')
+  if (mode === 'avatar') return namedMode('Avatar', 'footer.modes.avatar')
+  return `${mode[0].toUpperCase()}${mode.slice(1)}`
+}
+
 function directorLabel(mode: string): string {
-  if (!mode) return 'Director'
-  if (mode === 'music video') return 'Director · Music video'
-  return `Director · ${mode}`
+  if (!mode) return footer('footer.director', { defaultValue: 'Director' })
+  if (mode === 'music video') return footer('footer.directorMusic', { defaultValue: 'Director · Music video' })
+  const name = directorModeName(mode)
+  return footer('footer.directorMode', { mode: name, defaultValue: `Director · ${mode}` })
 }
 
 function studioInitiator(mode: string): string {
-  if (mode === 'model3d') return 'Studio · 3D'
-  if (mode) return `Studio · ${mode[0].toUpperCase()}${mode.slice(1)}`
-  return 'Studio · Generation'
+  if (mode === 'model3d') return footer('footer.studio3d', { defaultValue: 'Studio · 3D' })
+  if (mode) {
+    const name = studioModeName(mode)
+    const english = `${mode[0].toUpperCase()}${mode.slice(1)}`
+    return footer('footer.studioMode', { mode: name, defaultValue: `Studio · ${english}` })
+  }
+  return footer('footer.studioGeneration', { defaultValue: 'Studio · Generation' })
 }
 
 export function generationInitiator(task: ActivityTaskLike): string {
@@ -263,11 +317,12 @@ export function generationInitiator(task: ActivityTaskLike): string {
   const explicit = firstDefined(details.initiator, metadata.initiator)
   if (typeof explicit === 'string' && explicit.trim()) return explicit.trim()
   const mode = String(firstDefined(details.generation_mode, task.kind, '')).replaceAll('_', ' ')
-  if (task.parent_id?.startsWith('task-series-')) return 'Series Lab · Chapter'
-  if ((task.workflow || '').startsWith('series')) return 'Series Lab · Chapter'
+  if (task.parent_id?.startsWith('task-series-') || (task.workflow || '').startsWith('series')) {
+    return footer('footer.seriesChapter', { defaultValue: 'Series Lab · Chapter' })
+  }
   const director = directorInitiator(task, mode)
   if (director) return director
-  if (task.workflow === 'audio-analysis') return 'Story/Director · Audio analysis'
+  if (task.workflow === 'audio-analysis') return footer('footer.audioAnalysis', { defaultValue: 'Story/Director · Audio analysis' })
   if (task.workflow === 'generation') return studioInitiator(mode)
   if (task.workflow) return task.workflow.replaceAll('_', ' ')
   return ''

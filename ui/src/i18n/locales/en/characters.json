@@ -22,6 +22,7 @@
     "title": "Lipsync face (cube plane)",
     "intro": "For a talking character: generate a square face texture (skin fills the cube front — eyes, nose, rest mouth). Then edit only the mouth (visemes) or only the eyes (expressions). Drop the stills here to build the 9×6 pack. Skin color is locked to rest so talking does not flash.",
     "skin": "Skin / material",
+    "sentToModel": "What is sent to the model",
     "restPrompt": "Rest plane prompt (1:1, any image generator)",
     "copyRest": "Copy rest prompt",
     "editPrompts": "Viseme and expression prompts",
@@ -277,7 +278,7 @@
       "bite": "F/V · teeth on lip",
       "tongue": "L · raised tongue"
     },
-    "promptUsed": "Prompt used for {{name}}",
+    "promptUsed": "What is sent to the model",
     "cleaningCutout": "Cleaning cutout…",
     "cleanMouthBackground": "Clean this mouth’s background",
     "hideMouth": "Hide mouth",
@@ -455,6 +456,7 @@
     "noPhoto": "No photo",
     "selectViewAria": "Select {{label}} view",
     "hunyuanAlt": "Hunyuan3D",
+    "referenceRole": "Reference role",
     "dropOrChoose": "Drop or choose an image",
     "removeRefAria": "Remove {{label}}",
     "roles": {
@@ -530,6 +532,7 @@
     "mouthCount_other": "{{count}} approved mouths",
     "importFromCharacters": "Mouths from your characters",
     "importEdit": "Import and edit",
+    "importCard": "{{name}}. Import and edit",
     "name": "Collection name",
     "save": "Save",
     "saving": "Saving…",

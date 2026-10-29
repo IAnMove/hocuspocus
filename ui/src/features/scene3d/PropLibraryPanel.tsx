@@ -48,9 +48,9 @@ export function PropLibraryPanel({ workspace, disabled = false, onAdd }: { works
           <button disabled={disabled || busy} onClick={() => void mutate('reject', { id: prop.id, base_revision: revision })}>{t('props.reject')}</button></>}
     </li>)}</ul>
     <details><summary>{t('props.new')}</summary><form onSubmit={e => { e.preventDefault(); void mutate('create', { name: description.slice(0, 80), description, heightM: height, style }) }}>
-      <label>{t('props.description')}<input required value={description} onChange={e => setDescription(e.target.value)} /></label>
-      <label>{t('props.height')}<input type="number" min="0.01" max="30" step="0.01" required value={height} onChange={e => setHeight(Number(e.target.value))} /></label>
-      <label>{t('props.style')}<input value={style} onChange={e => setStyle(e.target.value)} /></label>
+      <label>{t('props.description')}<input aria-label={t('props.description')} required value={description} onChange={e => setDescription(e.target.value)} /></label>
+      <label>{t('props.height')}<input aria-label={t('props.height')} type="number" min="0.01" max="30" step="0.01" required value={height} onChange={e => setHeight(Number(e.target.value))} /></label>
+      <label>{t('props.style')}<input aria-label={t('props.style')} value={style} onChange={e => setStyle(e.target.value)} /></label>
       <button disabled={disabled || busy}>{t('props.generate')}</button>
     </form></details>
     {busy && <p role="status">{t('props.generating')}</p>}{error && <p role="alert">{error}</p>}

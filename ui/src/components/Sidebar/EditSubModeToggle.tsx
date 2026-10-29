@@ -3,6 +3,7 @@ import type { ParseKeys } from 'i18next'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { EditSubMode } from '../../types'
+import { leaveCharacterReplacement, openCharacterReplacement, useCharacterReplacementHost } from '../../features/characterReplacement/openCharacterReplacement'
 
 const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experimental?: boolean }[] = [
   { value: 'retake', labelKey: 'editSubModes.retake' },
@@ -10,6 +11,7 @@ const ALL_SUB_MODES: { value: EditSubMode; labelKey: ParseKeys<'studio'>; experi
   { value: 'outpaint', labelKey: 'editSubModes.outpaint' },
   { value: 'restyle', labelKey: 'editSubModes.restyle' },
   { value: 'recast', labelKey: 'editSubModes.recast' },
+  { value: 'replace_character', labelKey: 'editSubModes.replaceCharacter' },
   { value: 'inpaint', labelKey: 'editSubModes.inpaint', experimental: true },
 ]
 
@@ -18,6 +20,7 @@ export function EditSubModeToggle() {
   const editSubMode = useStore(s => s.editSubMode)
   const setEditSubMode = useStore(s => s.setEditSubMode)
   const showExperimental = useStore(s => !!s.servicesConfig?.show_experimental)
+  const replacement = useCharacterReplacementHost()
 
   // When experimental features are gated off, hide the experimental
   // sub-modes from the toggle. If the user happened to be in one of
@@ -39,7 +42,13 @@ export function EditSubModeToggle() {
       {subModes.map(m => (
         <button
           key={m.value}
-          onClick={() => setEditSubMode(m.value, m.value === 'recast' ? 'scail' : undefined)}
+          onClick={() => {
+            if (m.value === 'replace_character') {
+              openCharacterReplacement(replacement)
+              return
+            }
+            leaveCharacterReplacement(replacement, m.value, m.value === 'recast' ? 'scail' : undefined)
+          }}
           aria-pressed={editSubMode === m.value}
           className={`flex-1 text-[10px] py-1.5 rounded-md transition-all whitespace-nowrap ${
             editSubMode === m.value

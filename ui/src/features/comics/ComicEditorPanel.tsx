@@ -1,3 +1,4 @@
+import { controlLabel, controlReason, controlChoice, firstControlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ParseKeys } from 'i18next'
 import {
@@ -6,6 +7,7 @@ import {
   Maximize2, Type, Undo2, Unlock, Upload, WandSparkles, X,
 } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
+import { displayLanguageName } from '../../i18n/displayLanguage'
 import { contentLanguageForUi } from '../../lib/contentLanguage'
 import { getModelMode, useStore } from '../../stores/useStore'
 import * as api from '../../api/client'
@@ -126,7 +128,7 @@ function PanelScriptEditor({
   const [draft, setDraft] = useState({ canonical, value: canonical })
   const value = draft.canonical === canonical ? draft.value : canonical
   return (
-    <textarea
+    <textarea aria-label={t('lettering.placeholder')}
       className={input}
       rows={3}
       value={value}
@@ -192,7 +194,7 @@ const TRANSLATION_LANGUAGES = [
 ]
 
 function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
-  const { t } = useUiTranslation('comics')
+  const { t, i18n } = useUiTranslation('comics')
   const projectLanguage = useComicStore(state => state.project.language)
   const hasDirectorPlan = useComicStore(state => Boolean(state.project.director?.plan))
   const [language, setLanguage] = useState(projectLanguage || contentLanguageForUi().language)
@@ -272,7 +274,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
 
   return (
     <div className="flex items-center gap-1">
-      <input
+      <input aria-label={t('export.language')}
         className={`${input} w-28`}
         list="comic-toolbar-languages"
         value={language}
@@ -292,7 +294,7 @@ function TranslatedPdfExport({ notify }: { notify: (notice: Notice) => void }) {
           : t('export.needDirector')}
       >
         {busy ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-        {progress || t('export.inLanguage', { language: language.trim() || t('export.languageFallback') })}
+        {progress || t('export.inLanguage', { language: displayLanguageName(language.trim(), i18n.language) || t('export.languageFallback') })}
       </button>
     </div>
   )
@@ -333,8 +335,8 @@ function PagesRail() {
             <div className="flex justify-center gap-1 mt-1">
               <button title={t('pages.moveUp')} disabled={index === 0} onClick={() => movePage(page.id, -1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↑</button>
               <button title={t('pages.moveDown')} disabled={index === project.pages.length - 1} onClick={() => movePage(page.id, 1)} className="p-1 text-text-muted hover:text-text-primary disabled:opacity-30">↓</button>
-              <button title={tCommon('actions.duplicate')} onClick={() => duplicate(page.id)} className="p-1 text-text-muted hover:text-text-primary"><Copy size={11} /></button>
-              <button title={tCommon('actions.delete')} disabled={project.pages.length === 1} onClick={() => remove(page.id)} className="p-1 text-text-muted hover:text-red-400 disabled:opacity-30"><Trash2 size={11} /></button>
+              <button title={tCommon('actions.duplicate')} aria-label={tCommon('actions.duplicate')} onClick={() => duplicate(page.id)} className="p-1 text-text-muted hover:text-text-primary"><Copy size={11} /></button>
+              <button title={tCommon('actions.delete')} aria-label={tCommon('actions.delete')} disabled={project.pages.length === 1} onClick={() => remove(page.id)} className="p-1 text-text-muted hover:text-red-400 disabled:opacity-30"><Trash2 size={11} /></button>
             </div>
           </div>
         ))}
@@ -400,7 +402,7 @@ function AssetsPanel() {
         placeholder={t('assets.hint')}
         items={pickerItems}
         accept="image/*"
-        disabled={busy}
+        disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
         onChoose={insertPicked}
       />
@@ -409,8 +411,8 @@ function AssetsPanel() {
           <button className={`${button} ${provider === 'maestro' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('maestro')}>{t('assets.local')}</button>
           <button className={`${button} ${provider === 'minimax' ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setProvider('minimax')}>{t('assets.minimax')}</button>
         </div>
-        <textarea className={input} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={t('assets.promptPlaceholder')} />
-        <button className={`${button} w-full`} disabled={busy || !prompt.trim()} onClick={generateOne}>
+        <textarea aria-label={t('assets.promptPlaceholder')} className={input} rows={3} value={prompt} onChange={event => setPrompt(event.target.value)} placeholder={t('assets.promptPlaceholder')} />
+        <button className={`${button} w-full`} disabled={busy || !prompt.trim()} title={firstControlReason([[busy, 'disabled.actionInProgress'], [!prompt.trim(), 'disabled.writePrompt']])} onClick={generateOne}>
           {busy ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />} {t('assets.generateInto')}
         </button>
         {generationError && <p className="text-[10px] text-red-400">{generationError}</p>}
@@ -418,6 +420,10 @@ function AssetsPanel() {
       <p className="text-[10px] text-text-muted">{t('assets.hint')}</p>
     </div>
   )
+}
+
+function noPlanToRecover(pendingPlan: unknown, recoveryJobId: string) {
+  return !pendingPlan && !recoveryJobId.trim()
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -501,7 +507,7 @@ function InspectorPanel() {
             {t('inspector.empty')}
           </div>
           <Field label={t('inspector.pagePreset')}>
-            <select
+            <select aria-label={t('inspector.pagePreset')}
               className={input}
               value=""
               onChange={event => {
@@ -525,13 +531,13 @@ function InspectorPanel() {
           </Field>
           {page && (
             <div className="grid grid-cols-2 gap-2">
-              <Field label={t('inspector.width')}><input className={input} type="number" value={page.width} onChange={event => updatePage(page.id, { width: Math.max(200, Number(event.target.value)) })} /></Field>
-              <Field label={t('inspector.height')}><input className={input} type="number" value={page.height} onChange={event => updatePage(page.id, { height: Math.max(200, Number(event.target.value)) })} /></Field>
-              <Field label={t('inspector.background')}><input className="h-8 w-full" type="color" value={page.background} onChange={event => updatePage(page.id, { background: event.target.value })} /></Field>
+              <Field label={t('inspector.width')}><input aria-label={t('inspector.width')} className={input} type="number" value={page.width} onChange={event => updatePage(page.id, { width: Math.max(200, Number(event.target.value)) })} /></Field>
+              <Field label={t('inspector.height')}><input aria-label={t('inspector.height')} className={input} type="number" value={page.height} onChange={event => updatePage(page.id, { height: Math.max(200, Number(event.target.value)) })} /></Field>
+              <Field label={t('inspector.background')}><input aria-label={t('inspector.background')} className="h-8 w-full" type="color" value={page.background} onChange={event => updatePage(page.id, { background: event.target.value })} /></Field>
             </div>
           )}
           <Field label={t('inspector.pageNumbers')}>
-            <select className={input} value={project.pageNumbering.style} onChange={event => patchProject({ pageNumbering: { style: event.target.value as 'none' | 'plain' | 'circle' } })}>
+            <select aria-label={t('inspector.pageNumbers')} className={input} value={project.pageNumbering.style} onChange={event => patchProject({ pageNumbering: { style: event.target.value as 'none' | 'plain' | 'circle' } })}>
               <option value="none">{t('inspector.none')}</option>
               <option value="plain">{t('inspector.plain')}</option>
               <option value="circle">{t('inspector.circle')}</option>
@@ -543,22 +549,22 @@ function InspectorPanel() {
           <div className="flex items-center justify-between">
             <strong className="text-xs capitalize text-text-primary">{t(comicsKey(`inspector.type${element.type.charAt(0).toUpperCase()}${element.type.slice(1)}`))}</strong>
             <div className="flex gap-1">
-              <button className={button} title={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
-              <button className={button} onClick={() => patch({ locked: !element.locked })}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
-              <button className={`${button} hover:text-red-400`} onClick={() => remove(pageId, element.id)}><Trash2 size={12} /></button>
+              <button className={button} title={t('inspector.duplicateTitle')} aria-label={t('inspector.duplicateTitle')} onClick={() => useComicStore.getState().duplicateElement(pageId, element.id)}><Copy size={12} /></button>
+              <button className={button} onClick={() => patch({ locked: !element.locked })} title={controlChoice(element.locked, 'a11y.unlock', 'a11y.lock')} aria-label={controlChoice(element.locked, 'a11y.unlock', 'a11y.lock')}>{element.locked ? <Unlock size={12} /> : <Lock size={12} />}</button>
+              <button className={`${button} hover:text-red-400`} onClick={() => remove(pageId, element.id)} title={controlLabel('a11y.removeElement')} aria-label={controlLabel('a11y.removeElement')}><Trash2 size={12} /></button>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             {(['x', 'y', 'width', 'height', 'rotation', 'zIndex'] as const).map(key => (
               <Field key={key} label={t(comicsKey(`inspector.field${key.charAt(0).toUpperCase()}${key.slice(1)}`))}>
-                <input className={input} type="number" value={Math.round(Number(element[key]))}
+                <input aria-label={t(comicsKey(`inspector.field${key.charAt(0).toUpperCase()}${key.slice(1)}`))} className={input} type="number" value={Math.round(Number(element[key]))}
                   onChange={event => patch({ [key]: Number(event.target.value) } as Partial<ComicElement>)} />
               </Field>
             ))}
           </div>
           <label className="flex items-center justify-between text-xs text-text-secondary">
             {t('inspector.visible')}
-            <button onClick={() => patch({ visible: element.visible === false })}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+            <button onClick={() => patch({ visible: element.visible === false })} title={controlChoice(element.visible === false, 'a11y.show', 'a11y.hide')} aria-label={controlChoice(element.visible === false, 'a11y.show', 'a11y.hide')}>{element.visible === false ? <EyeOff size={15} /> : <Eye size={15} />}</button>
           </label>
           <div className="grid grid-cols-2 gap-1">
             <button className={button} onClick={() => patch({ zIndex: Math.max(...(page?.elements.map(item => item.zIndex) ?? [0])) + 1 })}>{t('inspector.bringFront')}</button>
@@ -566,10 +572,10 @@ function InspectorPanel() {
           </div>
           {element.type === 'panel' && (
             <div className="space-y-2">
-              <Field label={t('inspector.borderWidth')}><input className={input} type="number" min={0} max={30} value={element.borderWidth} onChange={event => patch({ borderWidth: Number(event.target.value) })} /></Field>
-              <Field label={t('inspector.borderColor')}><input className="w-full h-8" type="color" value={element.borderColor} onChange={event => patch({ borderColor: event.target.value })} /></Field>
-              <Field label={t('inspector.cornerRadius')}><input className={input} type="number" value={element.borderRadius} onChange={event => patch({ borderRadius: Number(event.target.value) })} /></Field>
-              <Field label={t('inspector.background')}><input className="w-full h-8" type="color" value={element.background === 'transparent' ? '#ffffff' : element.background} onChange={event => patch({ background: event.target.value })} /></Field>
+              <Field label={t('inspector.borderWidth')}><input aria-label={t('inspector.borderWidth')} className={input} type="number" min={0} max={30} value={element.borderWidth} onChange={event => patch({ borderWidth: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.borderColor')}><input aria-label={t('inspector.borderColor')} className="w-full h-8" type="color" value={element.borderColor} onChange={event => patch({ borderColor: event.target.value })} /></Field>
+              <Field label={t('inspector.cornerRadius')}><input aria-label={t('inspector.cornerRadius')} className={input} type="number" value={element.borderRadius} onChange={event => patch({ borderRadius: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.background')}><input aria-label={t('inspector.background')} className="w-full h-8" type="color" value={element.background === 'transparent' ? '#ffffff' : element.background} onChange={event => patch({ background: event.target.value })} /></Field>
               <div className="grid grid-cols-2 gap-1">
                 <button className={button} onClick={() => patch({ background: 'transparent' })}>{t('inspector.transparent')}</button>
                 <button
@@ -592,7 +598,10 @@ function InspectorPanel() {
                     element.width / parentPanel.width,
                     element.height / parentPanel.height,
                   ) * 100) })}>
-                    <input
+                    <input aria-label={t('inspector.cropZoom', { percent: Math.round(Math.max(
+                    element.width / parentPanel.width,
+                    element.height / parentPanel.height,
+                  ) * 100) })}
                       className={input}
                       type="range"
                       min={1}
@@ -640,9 +649,9 @@ function InspectorPanel() {
                   </div>
                 </div>
               )}
-              <Field label={t('inspector.fit')}><select className={input} value={element.objectFit} onChange={event => patch({ objectFit: event.target.value as ComicImageElement['objectFit'] })}><option value="cover">{t('inspector.fillPanel')}</option><option value="contain">{t('inspector.showEntire')}</option></select></Field>
-              <Field label={t('inspector.filter')}><select className={input} value={element.filter} onChange={event => patch({ filter: event.target.value as ComicImageElement['filter'] })}><option value="none">{t('inspector.filterNone')}</option><option value="bw">{t('inspector.bw')}</option><option value="sepia">{t('inspector.sepia')}</option><option value="contrast">{t('inspector.contrast')}</option><option value="posterize">{t('inspector.posterize')}</option><option value="halftone">{t('inspector.halftone')}</option></select></Field>
-              <Field label={t('inspector.opacity')}><input className={input} type="range" min={0} max={1} step={.05} value={element.opacity ?? 1} onChange={event => patch({ opacity: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.fit')}><select aria-label={t('inspector.fit')} className={input} value={element.objectFit} onChange={event => patch({ objectFit: event.target.value as ComicImageElement['objectFit'] })}><option value="cover">{t('inspector.fillPanel')}</option><option value="contain">{t('inspector.showEntire')}</option></select></Field>
+              <Field label={t('inspector.filter')}><select aria-label={t('inspector.filter')} className={input} value={element.filter} onChange={event => patch({ filter: event.target.value as ComicImageElement['filter'] })}><option value="none">{t('inspector.filterNone')}</option><option value="bw">{t('inspector.bw')}</option><option value="sepia">{t('inspector.sepia')}</option><option value="contrast">{t('inspector.contrast')}</option><option value="posterize">{t('inspector.posterize')}</option><option value="halftone">{t('inspector.halftone')}</option></select></Field>
+              <Field label={t('inspector.opacity')}><input aria-label={t('inspector.opacity')} className={input} type="range" min={0} max={1} step={.05} value={element.opacity ?? 1} onChange={event => patch({ opacity: Number(event.target.value) })} /></Field>
               <div className="grid grid-cols-2 gap-1">
                 <button className={`${button} ${element.flipH ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => patch({ flipH: !element.flipH })}>{t('inspector.flipH')}</button>
                 <button className={`${button} ${element.flipV ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => patch({ flipV: !element.flipV })}>{t('inspector.flipV')}</button>
@@ -654,8 +663,8 @@ function InspectorPanel() {
           )}
           {element.type === 'text' && (
             <div className="space-y-2">
-              <Field label={t('inspector.text')}><textarea className={input} rows={4} value={element.content} onChange={event => patch({ content: event.target.value })} /></Field>
-              <Field label={t('inspector.bubble')}><select className={input} value={element.bubble} onChange={event => {
+              <Field label={t('inspector.text')}><textarea aria-label={t('inspector.text')} className={input} rows={4} value={element.content} onChange={event => patch({ content: event.target.value })} /></Field>
+              <Field label={t('inspector.bubble')}><select aria-label={t('inspector.bubble')} className={input} value={element.bubble} onChange={event => {
                 const bubble = event.target.value as ComicTextElement['bubble']
                 patch({
                   bubble,
@@ -668,16 +677,16 @@ function InspectorPanel() {
                         : 'dialogue',
                 })
               }}><option value="none">{t('inspector.bubbleNone')}</option><option value="speech">{t('inspector.speech')}</option><option value="ellipse">{t('inspector.ellipse')}</option><option value="rect">{t('inspector.rect')}</option><option value="thought">{t('inspector.thought')}</option><option value="whisper">{t('inspector.whisper')}</option><option value="caption">{t('inspector.caption')}</option><option value="scream">{t('inspector.scream')}</option><option value="electric">{t('inspector.electric')}</option><option value="burst">{t('inspector.burst')}</option><option value="cloud">{t('inspector.cloud')}</option></select></Field>
-              <Field label={t('inspector.fontSize')}><input className={input} type="number" value={element.fontSize} onChange={event => patch({ fontSize: Number(event.target.value) })} /></Field>
-              <Field label={t('inspector.font')}><select className={input} value={element.fontFamily} onChange={event => patch({ fontFamily: event.target.value })}><option value='"Comic Sans MS", "Trebuchet MS", sans-serif'>{t('inspector.fontComic')}</option><option value='"Arial Black", Impact, sans-serif'>{t('inspector.fontImpact')}</option><option value='Georgia, serif'>{t('inspector.fontSerif')}</option><option value='"Courier New", monospace'>{t('inspector.fontTypewriter')}</option><option value='Arial, sans-serif'>{t('inspector.fontSans')}</option></select></Field>
+              <Field label={t('inspector.fontSize')}><input aria-label={t('inspector.fontSize')} className={input} type="number" value={element.fontSize} onChange={event => patch({ fontSize: Number(event.target.value) })} /></Field>
+              <Field label={t('inspector.font')}><select aria-label={t('inspector.font')} className={input} value={element.fontFamily} onChange={event => patch({ fontFamily: event.target.value })}><option value='"Comic Sans MS", "Trebuchet MS", sans-serif'>{t('inspector.fontComic')}</option><option value='"Arial Black", Impact, sans-serif'>{t('inspector.fontImpact')}</option><option value='Georgia, serif'>{t('inspector.fontSerif')}</option><option value='"Courier New", monospace'>{t('inspector.fontTypewriter')}</option><option value='Arial, sans-serif'>{t('inspector.fontSans')}</option></select></Field>
               <div className="grid grid-cols-2 gap-2">
-                <Field label={t('inspector.lineHeight')}><input className={input} type="number" min={0.7} max={2} step={.05} value={element.lineHeight ?? 1.08} onChange={event => patch({ lineHeight: Number(event.target.value) })} /></Field>
-                <Field label={t('inspector.spacing')}><input className={input} type="number" min={-8} max={30} value={element.letterSpacing ?? 0} onChange={event => patch({ letterSpacing: Number(event.target.value) })} /></Field>
-                <Field label={t('inspector.textColor')}><input className="w-full h-8" type="color" value={element.color} onChange={event => patch({ color: event.target.value })} /></Field>
-                <Field label={t('inspector.outline')}><input className={input} type="number" min={0} max={8} value={element.textStrokeWidth ?? 0} onChange={event => patch({ textStrokeWidth: Number(event.target.value) })} /></Field>
+                <Field label={t('inspector.lineHeight')}><input aria-label={t('inspector.lineHeight')} className={input} type="number" min={0.7} max={2} step={.05} value={element.lineHeight ?? 1.08} onChange={event => patch({ lineHeight: Number(event.target.value) })} /></Field>
+                <Field label={t('inspector.spacing')}><input aria-label={t('inspector.spacing')} className={input} type="number" min={-8} max={30} value={element.letterSpacing ?? 0} onChange={event => patch({ letterSpacing: Number(event.target.value) })} /></Field>
+                <Field label={t('inspector.textColor')}><input aria-label={t('inspector.textColor')} className="w-full h-8" type="color" value={element.color} onChange={event => patch({ color: event.target.value })} /></Field>
+                <Field label={t('inspector.outline')}><input aria-label={t('inspector.outline')} className={input} type="number" min={0} max={8} value={element.textStrokeWidth ?? 0} onChange={event => patch({ textStrokeWidth: Number(event.target.value) })} /></Field>
               </div>
-              <Field label={t('inspector.textEffect')}><select className={input} value={element.textEffect ?? 'none'} onChange={event => patch({ textEffect: event.target.value as ComicTextElement['textEffect'] })}><option value="none">{t('inspector.effectNone')}</option><option value="shadow">{t('inspector.shadow')}</option><option value="extrude">{t('inspector.extrude')}</option><option value="glow">{t('inspector.glow')}</option></select></Field>
-              <Field label={t('inspector.fill')}><select className={input} value={element.textFill ?? 'solid'} onChange={event => patch({ textFill: event.target.value as ComicTextElement['textFill'] })}><option value="solid">{t('inspector.solid')}</option><option value="gradient">{t('inspector.gradient')}</option></select></Field>
+              <Field label={t('inspector.textEffect')}><select aria-label={t('inspector.textEffect')} className={input} value={element.textEffect ?? 'none'} onChange={event => patch({ textEffect: event.target.value as ComicTextElement['textEffect'] })}><option value="none">{t('inspector.effectNone')}</option><option value="shadow">{t('inspector.shadow')}</option><option value="extrude">{t('inspector.extrude')}</option><option value="glow">{t('inspector.glow')}</option></select></Field>
+              <Field label={t('inspector.fill')}><select aria-label={t('inspector.fill')} className={input} value={element.textFill ?? 'solid'} onChange={event => patch({ textFill: event.target.value as ComicTextElement['textFill'] })}><option value="solid">{t('inspector.solid')}</option><option value="gradient">{t('inspector.gradient')}</option></select></Field>
               <div className="grid grid-cols-2 gap-1">
                 <button className={`${button} ${element.bold ? 'border-accent-blue' : ''}`} onClick={() => patch({ bold: !element.bold })}>{t('inspector.bold')}</button>
                 <button className={`${button} ${element.italic ? 'border-accent-blue' : ''}`} onClick={() => patch({ italic: !element.italic })}>{t('inspector.italic')}</button>
@@ -745,6 +754,7 @@ function SuggestedChoice({
   return (
     <div className="space-y-1.5">
       <select
+        aria-label={t(optionKey === 'genre' ? 'planning.genre' : 'planning.tone')}
         className={input}
         value={custom ? '__other__' : value}
         onChange={event => onChange(event.target.value === '__other__' ? '' : event.target.value)}
@@ -753,7 +763,7 @@ function SuggestedChoice({
         <option value="__other__">{t('planning.other')}</option>
       </select>
       {custom && (
-        <input
+        <input aria-label={customPlaceholder}
           className={input}
           value={value}
           onChange={event => onChange(event.target.value)}
@@ -772,7 +782,7 @@ export function ComicDirectorPanel({
   notify?: (notice: Notice) => void
   createCompleteComic?: boolean
 }) {
-  const { t } = useUiTranslation('comics')
+  const { t, i18n } = useUiTranslation('comics')
   const project = useComicStore(state => state.project)
   const [request, setRequest] = useState<ComicDirectorRequest>(() =>
     project.director?.input
@@ -1525,14 +1535,14 @@ export function ComicDirectorPanel({
       <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-bg-tertiary/30 p-1">
         <button
           className={`${button} ${request.productionMode !== 'storyboard' ? 'border-accent-blue text-accent-blue' : ''}`}
-          disabled={busy !== null}
+          disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
           onClick={() => patch('productionMode', 'comic')}
         >
           {t('planning.comic')}
         </button>
         <button
           className={`${button} ${request.productionMode === 'storyboard' ? 'border-purple-400 text-purple-300' : ''}`}
-          disabled={busy !== null}
+          disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
           onClick={() => {
             patch('productionMode', 'storyboard')
             patch('panelsPerPage', 1)
@@ -1568,8 +1578,8 @@ export function ComicDirectorPanel({
                 : t('planning.autoLoads')}
         </div>
       </div>
-      <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} />
-      <Field label={t('planning.premise')}><textarea className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder={t('planning.premisePlaceholder')} /></Field>
+      <ComicWritingProviderFields value={request} onChange={patch} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} />
+      <Field label={t('planning.premise')}><textarea aria-label={t('planning.premise')} className={input} rows={5} value={request.premise} onChange={event => patch('premise', event.target.value)} placeholder={t('planning.premisePlaceholder')} /></Field>
       {request.sourceStory && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5 text-[10px] text-emerald-200">
           {t('planning.fromStory', { title: request.sourceStory.title, revision: request.sourceStory.revision })}
@@ -1586,7 +1596,7 @@ export function ComicDirectorPanel({
         </div>
       )}
       <Field label={t('planning.brief')}>
-        <textarea
+        <textarea aria-label={t('planning.brief')}
           className={input}
           rows={8}
           value={request.storyContext || ''}
@@ -1595,10 +1605,10 @@ export function ComicDirectorPanel({
         />
       </Field>
       <div className="grid grid-cols-2 gap-2">
-        <Field label={request.productionMode === 'storyboard' ? t('planning.shots') : t('planning.pages')}><input className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
+        <Field label={request.productionMode === 'storyboard' ? t('planning.shots') : t('planning.pages')}><input aria-label={request.productionMode === 'storyboard' ? t('planning.shots') : t('planning.pages')} className={input} type="number" min={1} max={100} value={request.pageCount} onChange={event => patch('pageCount', Math.max(1, Number(event.target.value)))} /></Field>
         {request.productionMode === 'storyboard' ? (
           <Field label={t('planning.screen')}>
-            <select
+            <select aria-label={t('planning.screen')}
               className={input}
               value={request.storyboardAspect || 'landscape'}
               onChange={event => patch('storyboardAspect', event.target.value as ComicDirectorRequest['storyboardAspect'])}
@@ -1608,14 +1618,14 @@ export function ComicDirectorPanel({
             </select>
           </Field>
         ) : (
-          <Field label={t('planning.panelsPerPage')}><input className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
+          <Field label={t('planning.panelsPerPage')}><input aria-label={t('planning.panelsPerPage')} className={input} type="number" min={1} max={12} value={request.panelsPerPage} onChange={event => patch('panelsPerPage', Math.max(1, Number(event.target.value)))} /></Field>
         )}
         <Field label={t('planning.language')}>
-          <EditableLanguageInput className={input} value={request.language} onChange={value => patch('language', value)} />
+          <EditableLanguageInput className={input} label={t('planning.language')} value={request.language} onChange={value => patch('language', value)} />
         </Field>
         {request.productionMode === 'storyboard' ? (
           <Field label={t('planning.frameQuality')}>
-            <select
+            <select aria-label={t('planning.frameQuality')}
               className={input}
               value={request.storyboardQuality || 'draft'}
               onChange={event => patch('storyboardQuality', event.target.value as ComicDirectorRequest['storyboardQuality'])}
@@ -1625,7 +1635,7 @@ export function ComicDirectorPanel({
             </select>
           </Field>
         ) : (
-          <Field label={t('planning.format')}><select className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id]) => <option key={id} value={id}>{t(comicsKey(`format.${id}`))}</option>)}</select></Field>
+          <Field label={t('planning.format')}><select aria-label={t('planning.format')} className={input} value={request.format} onChange={event => patch('format', event.target.value as ComicDirectorRequest['format'])}>{Object.entries(COMIC_FORMATS).map(([id]) => <option key={id} value={id}>{t(comicsKey(`format.${id}`))}</option>)}</select></Field>
         )}
         <Field label={t('planning.genre')}>
           <SuggestedChoice
@@ -1646,7 +1656,7 @@ export function ComicDirectorPanel({
           />
         </Field>
         {request.productionMode !== 'storyboard' && <Field label={t('planning.density')}>
-          <select
+          <select aria-label={t('planning.density')}
             className={input}
             value={request.dialogueDensity}
             onChange={event => patch('dialogueDensity', event.target.value as ComicDirectorRequest['dialogueDensity'])}
@@ -1657,14 +1667,14 @@ export function ComicDirectorPanel({
           </select>
         </Field>}
       </div>
-      <Field label={t('planning.artStyle')}><input
+      <Field label={t('planning.artStyle')}><input aria-label={t('planning.artStyle')}
         className={input}
         value={request.artStyle}
         onChange={event => patch('artStyle', event.target.value)}
         placeholder={t('planning.artStylePlaceholder')}
       /></Field>
       <Field label={t('planning.world')}>
-        <textarea
+        <textarea aria-label={t('planning.world')}
           className={input}
           rows={3}
           value={request.worldContext || ''}
@@ -1673,7 +1683,7 @@ export function ComicDirectorPanel({
         />
       </Field>
       <Field label={t('planning.forbidden')}>
-        <textarea
+        <textarea aria-label={t('planning.forbidden')}
           className={input}
           rows={2}
           value={request.forbiddenElements || ''}
@@ -1684,8 +1694,8 @@ export function ComicDirectorPanel({
       <p className="text-[9px] text-text-muted">
         {t('planning.blankHint')}
       </p>
-      <Field label={t('planning.imageGenerator')}><select
-        disabled={busy !== null}
+      <Field label={t('planning.imageGenerator')}><select aria-label={t('planning.imageGenerator')}
+        disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
         className={input}
         value={request.provider === 'minimax'
           ? 'minimax:image-01'
@@ -1719,7 +1729,7 @@ export function ComicDirectorPanel({
         {maestroImageModels.some(model => model.is_downloaded === false) && (
           <optgroup label={t('planning.notDownloaded')}>
             {maestroImageModels.filter(model => model.is_downloaded === false).map(model => (
-              <option disabled key={model.model_type} value={`maestro:${model.model_type}`}>
+              <option disabled title={controlLabel('disabled.modelNotDownloaded')} key={model.model_type} value={`maestro:${model.model_type}`}>
                 {model.name}
               </option>
             ))}
@@ -1748,7 +1758,7 @@ export function ComicDirectorPanel({
         <strong className="text-[10px] uppercase tracking-wide text-text-muted">{t('characters.heading')}</strong>
         {request.characters.map(character => (
           <div key={character.id} className="rounded border border-border p-2 text-[10px]">
-            <div className="flex justify-between"><b className="text-text-primary">{character.name}</b><button onClick={() => patch('characters', request.characters.filter(item => item.id !== character.id))}><Trash2 size={11} /></button></div>
+            <div className="flex justify-between"><b className="text-text-primary">{character.name}</b><button onClick={() => patch('characters', request.characters.filter(item => item.id !== character.id))} title={controlLabel('a11y.removeCharacter')} aria-label={controlLabel('a11y.removeCharacter')}><Trash2 size={11} /></button></div>
             <p className="text-text-muted mt-1">{character.description}</p>
             <AssetInput
               label={t('characters.noIdentity')}
@@ -1769,20 +1779,20 @@ export function ComicDirectorPanel({
             </p>
           </div>
         ))}
-        <input className={input} value={newCharacter.name} onChange={event => setNewCharacter(value => ({ ...value, name: event.target.value }))} placeholder={t('characters.name')} />
-        <textarea className={input} value={newCharacter.description} onChange={event => setNewCharacter(value => ({ ...value, description: event.target.value }))} placeholder={t('characters.visual')} />
+        <input aria-label={t('characters.name')} className={input} value={newCharacter.name} onChange={event => setNewCharacter(value => ({ ...value, name: event.target.value }))} placeholder={t('characters.name')} />
+        <textarea aria-label={t('characters.visual')} className={input} value={newCharacter.description} onChange={event => setNewCharacter(value => ({ ...value, description: event.target.value }))} placeholder={t('characters.visual')} />
         <button className={`${button} w-full`} onClick={addCharacter}><Plus size={12} /> {t('characters.add')}</button>
       </div>
       <button
         className={`${button} w-full border-accent-blue text-accent-blue`}
-        disabled={busy !== null || !request.premise.trim()}
+        disabled={busy !== null || !request.premise.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!request.premise.trim(), 'disabled.writePremise']])}
         onClick={() => makePlan(createCompleteComic)}
       >
         {busy !== null ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
         {createCompleteComic ? t('planning.createComplete') : t('planning.createPlan')}
       </button>
       {createCompleteComic && (
-        <button className={`${button} w-full`} disabled={busy !== null || !request.premise.trim()} onClick={() => makePlan(false)}>
+        <button className={`${button} w-full`} disabled={busy !== null || !request.premise.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!request.premise.trim(), 'disabled.writePremise']])} onClick={() => makePlan(false)}>
           {t('planning.createPlanOnly')}
         </button>
       )}
@@ -1793,7 +1803,7 @@ export function ComicDirectorPanel({
         <p className="mt-2 text-[9px] text-text-muted">
           {t('planning.resumeHint')}
         </p>
-        <input
+        <input aria-label={t('planning.jobPlaceholder')}
           className={`${input} mt-2`}
           value={recoveryJobId}
           onChange={event => setRecoveryJobId(event.target.value)}
@@ -1801,7 +1811,7 @@ export function ComicDirectorPanel({
         />
         <button
           className={`${button} mt-2 w-full border-amber-500/50 text-amber-300`}
-          disabled={busy !== null || (!pendingPlan && !recoveryJobId.trim())}
+          disabled={busy !== null || noPlanToRecover(pendingPlan, recoveryJobId)} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [noPlanToRecover(pendingPlan, recoveryJobId), 'disabled.nothingToRecover']])}
           onClick={recoverPlan}
         >
           {busy === 'plan' ? <Loader2 size={12} className="animate-spin" /> : <Redo2 size={12} />}
@@ -1842,7 +1852,7 @@ export function ComicDirectorPanel({
         )}
       </div>
       {project.director && (
-        <button className={`${button} w-full border-emerald-500/50 text-emerald-400`} disabled={busy !== null} onClick={() => generateAll()}>
+        <button className={`${button} w-full border-emerald-500/50 text-emerald-400`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={() => generateAll()}>
           {busy === 'images' ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
           {progress || (remainingPanels > 0
             ? t('generate.allQueued', { count: remainingPanels })
@@ -1852,13 +1862,13 @@ export function ComicDirectorPanel({
       {project.director && (
         <div className="border-t border-border pt-3 space-y-3">
           <div className="grid grid-cols-2 gap-2">
-            <button className={`${button} border-amber-500/50 text-amber-300`} disabled={busy !== null} onClick={cleanUpCurrentComicText}>
+            <button className={`${button} border-amber-500/50 text-amber-300`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={cleanUpCurrentComicText}>
               <Type size={12} /> {t('lettering.repair')}
             </button>
-            <button className={`${button} border-accent-blue/50 text-accent-blue`} disabled={busy !== null} onClick={regenerateAllArtwork}>
+            <button className={`${button} border-accent-blue/50 text-accent-blue`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={regenerateAllArtwork}>
               <ImagePlus size={12} /> {t('generate.regenerateAll')}
             </button>
-            <button className={`${button} col-span-2`} disabled={busy !== null} onClick={varyCurrentLayouts}>
+            <button className={`${button} col-span-2`} disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')} onClick={varyCurrentLayouts}>
               <PanelTop size={12} /> {t('generate.varyLayouts')}
             </button>
           </div>
@@ -1872,16 +1882,16 @@ export function ComicDirectorPanel({
             </p>
             <button
               className={`${button} w-full border-amber-500/50 text-amber-300`}
-              disabled={busy !== null}
+              disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
               onClick={() => applyTextOperation(
                 'translate',
                 project.language || project.director?.plan.language || project.director?.input.language,
               )}
             >
               {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <WandSparkles size={12} />}
-              {t('lettering.fixMixed', { language: project.language || project.director?.plan.language || project.director?.input.language })}
+              {t('lettering.fixMixed', { language: displayLanguageName(project.language || project.director?.plan.language || project.director?.input.language || '', i18n.language) })}
             </button>
-            <textarea
+            <textarea aria-label={t('lettering.rewritePlaceholder')}
               className={input}
               rows={2}
               value={textInstruction}
@@ -1890,13 +1900,13 @@ export function ComicDirectorPanel({
             />
             <button
               className={`${button} w-full`}
-              disabled={busy !== null}
+              disabled={busy !== null} title={controlReason(busy !== null, 'disabled.actionInProgress')}
               onClick={() => applyTextOperation('rewrite')}
             >
               {busy === 'text' ? <Loader2 size={12} className="animate-spin" /> : <Type size={12} />}
               {t('lettering.rewrite')}
             </button>
-            <input
+            <input aria-label={t('lettering.targetLanguage')}
               className={input}
               list="comic-export-languages"
               value={targetLanguage}
@@ -1910,14 +1920,14 @@ export function ComicDirectorPanel({
             <div className="grid grid-cols-2 gap-2">
               <button
                 className={button}
-                disabled={busy !== null || !targetLanguage.trim()}
+                disabled={busy !== null || !targetLanguage.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!targetLanguage.trim(), 'disabled.writeLanguage']])}
                 onClick={() => applyTextOperation('translate')}
               >
                 {t('lettering.translateEditor')}
               </button>
               <button
                 className={`${button} border-emerald-500/50 text-emerald-400`}
-                disabled={busy !== null || !targetLanguage.trim()}
+                disabled={busy !== null || !targetLanguage.trim()} title={firstControlReason([[busy !== null, 'disabled.actionInProgress'], [!targetLanguage.trim(), 'disabled.writeLanguage']])}
                 onClick={exportTranslatedPdf}
               >
                 {busy === 'translation' ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
@@ -1979,13 +1989,13 @@ export function ComicDirectorPanel({
                       <span className="text-text-muted">{panel.framing}</span>
                     </div>
                     <Field label={t('planning.imagePrompt')}>
-                      <textarea className={input} rows={5} value={panel.imagePrompt}
+                      <textarea aria-label={t('planning.imagePrompt')} className={input} rows={5} value={panel.imagePrompt}
                         onChange={event => updatePlanPanel(pageIndex, panelIndex, { imagePrompt: event.target.value })} />
                     </Field>
                     {project.director?.input.productionMode === 'storyboard' ? (
                       <>
                         <Field label={t('planning.videoPrompt')}>
-                          <textarea
+                          <textarea aria-label={t('planning.videoPrompt')}
                             className={input}
                             rows={7}
                             value={panel.videoPrompt || ''}
@@ -1996,7 +2006,7 @@ export function ComicDirectorPanel({
                         </Field>
                         <div className="grid grid-cols-[1fr_90px] gap-2">
                           <Field label={t('planning.camera')}>
-                            <select
+                            <select aria-label={t('planning.camera')}
                               className={input}
                               value={panel.cameraMove || 'none'}
                               onChange={event => updatePlanPanel(pageIndex, panelIndex, {
@@ -2011,7 +2021,7 @@ export function ComicDirectorPanel({
                             </select>
                           </Field>
                           <Field label={t('planning.seconds')}>
-                            <input
+                            <input aria-label={t('planning.seconds')}
                               className={input}
                               type="number"
                               min={.8}
@@ -2033,7 +2043,7 @@ export function ComicDirectorPanel({
                         />
                       </Field>
                     )}
-                    <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} onClick={() => generateSingle(pageIndex, panelIndex)}>
+                    <button className={`${button} w-full`} disabled={singleBusy !== null || busy !== null} title={firstControlReason([[singleBusy !== null, 'disabled.actionInProgress'], [busy !== null, 'disabled.actionInProgress']])} onClick={() => generateSingle(pageIndex, panelIndex)}>
                       {singleBusy === panel.id ? <Loader2 size={12} className="animate-spin" /> : <ImagePlus size={12} />}
                       {project.director!.completedPanelIds.includes(panel.id) ? t('generate.regeneratePanel') : t('generate.panel')}
                     </button>
@@ -2476,6 +2486,7 @@ export function ComicEditorPanel() {
         ) : (
           <>
             <input
+              aria-label={t('toolbar.projectTitle')}
               value={project.title}
               onChange={event => patchProject({ title: event.target.value })}
               className="w-48 bg-transparent text-sm font-semibold text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
@@ -2483,15 +2494,15 @@ export function ComicEditorPanel() {
             {dirty && <span className="text-[10px] text-yellow-400">{t('toolbar.unsaved')}</span>}
             <div className="h-5 border-l border-border mx-1" />
             <button className={button} onClick={() => void newProject()}><Plus size={13} /> {t('toolbar.new')}</button>
-            <select className={`${input} w-36`} value="" onChange={event => applyLayout(event.target.value)} title={t('toolbar.layoutTitle')}>
+            <select aria-label={t('toolbar.layoutTitle')} className={`${input} w-36`} value="" onChange={event => applyLayout(event.target.value)} title={t('toolbar.layoutTitle')}>
               <option value="">{t('toolbar.layouts')}</option>
               {COMIC_LAYOUTS.map(layout => <option key={layout.name} value={layout.name}>{t(`layout.${layout.name}`)}</option>)}
             </select>
-            <select className={`${input} w-32`} value="" onChange={event => addEffect(event.target.value)} title={t('toolbar.effectTitle')}>
+            <select aria-label={t('toolbar.effectTitle')} className={`${input} w-32`} value="" onChange={event => addEffect(event.target.value)} title={t('toolbar.effectTitle')}>
               <option value="">{t('toolbar.effects')}</option>
               {COMIC_EFFECTS.map(effect => <option key={effect.name} value={effect.name}>{effect.name}</option>)}
             </select>
-            <select className={`${input} w-40`} value="" onChange={event => openSaved(event.target.value)} title={t('toolbar.openTitle')}>
+            <select aria-label={t('toolbar.openTitle')} className={`${input} w-40`} value="" onChange={event => openSaved(event.target.value)} title={t('toolbar.openTitle')}>
               <option value="">{t('toolbar.openSaved')}</option>
               {comicOutputs.map(output => <option key={output.name} value={output.name}>{output.name}</option>)}
             </select>
@@ -2499,8 +2510,8 @@ export function ComicEditorPanel() {
               <HistoryIcon size={13} /> {t('toolbar.history')}
             </button>
             <button className={button} onClick={() => importRef.current?.click()}><Upload size={13} /> {tCommon('actions.import')}</button>
-            <input ref={importRef} type="file" accept=".json,.comic.json" className="hidden" onChange={event => importProject(event.target.files?.[0])} />
-            <button className={button} disabled={saving} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {tCommon('actions.save')}</button>
+            <input ref={importRef} aria-label={tCommon('actions.import')} type="file" accept=".json,.comic.json" className="hidden" onChange={event => importProject(event.target.files?.[0])} />
+            <button className={button} disabled={saving} title={controlReason(saving, 'disabled.waitForSave')} onClick={() => save(true)}>{saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />} {tCommon('actions.save')}</button>
             <button
               className={`${button} border-emerald-500/50 text-emerald-300`}
               disabled={generatingArtwork}
@@ -2510,18 +2521,18 @@ export function ComicEditorPanel() {
               {generatingArtwork ? <Loader2 size={13} className="animate-spin" /> : <ImagePlus size={13} />}
               {remainingArtworkPanels > 0 ? t('generate.remaining', { count: remainingArtworkPanels }) : totalArtworkPanels ? t('generate.done') : t('generate.action')}
             </button>
-            <button className={button} disabled={!history.past.length} onClick={undo}><Undo2 size={13} /></button>
-            <button className={button} disabled={!history.future.length} onClick={redo}><Redo2 size={13} /></button>
+            <button className={button} disabled={!history.past.length} onClick={undo} title={controlChoice(!history.past.length, 'disabled.nothingToUndo', 'a11y.undo')} aria-label={controlChoice(!history.past.length, 'disabled.nothingToUndo', 'a11y.undo')}><Undo2 size={13} /></button>
+            <button className={button} disabled={!history.future.length} onClick={redo} title={controlChoice(!history.future.length, 'disabled.nothingToRedo', 'a11y.redo')} aria-label={controlChoice(!history.future.length, 'disabled.nothingToRedo', 'a11y.redo')}><Redo2 size={13} /></button>
             <button className={`${button} ${snapEnabled ? 'border-accent-blue text-accent-blue' : ''}`} onClick={() => setSnapEnabled(!snapEnabled)}>{t('toolbar.grid')}</button>
             <div className="ml-auto flex items-center gap-1">
               <button className={button} onClick={exportComicJson}><FileJson size={13} /> {t('toolbar.json')}</button>
-              <button className={button} disabled={!!exporting} onClick={() => runExport('png')}>{t('toolbar.png')}</button>
-              <button className={button} disabled={!!exporting} onClick={() => runExport('cbz')}>{t('toolbar.cbz')}</button>
-              <button className={`${button} border-accent-blue/50`} disabled={!!exporting} onClick={() => runExport('pdf')}>
+              <button className={button} disabled={!!exporting} title={controlReason(!!exporting, 'disabled.exporting')} onClick={() => runExport('png')}>{t('toolbar.png')}</button>
+              <button className={button} disabled={!!exporting} title={controlReason(!!exporting, 'disabled.exporting')} onClick={() => runExport('cbz')}>{t('toolbar.cbz')}</button>
+              <button className={`${button} border-accent-blue/50`} disabled={!!exporting} title={controlReason(!!exporting, 'disabled.exporting')} onClick={() => runExport('pdf')}>
                 {exporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />} {exporting || t('toolbar.pdf')}
               </button>
               <TranslatedPdfExport notify={notify} />
-              <button className={button} onClick={() => setToolbarCollapsed(true)} title={t('toolbar.collapse')}>
+              <button className={button} onClick={() => setToolbarCollapsed(true)} title={t('toolbar.collapse')} aria-label={t('toolbar.collapse')}>
                 <ChevronUp size={13} />
               </button>
             </div>
@@ -2542,7 +2553,7 @@ export function ComicEditorPanel() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
-                <button className={button} disabled={historyLoading} onClick={() => void refreshComicHistory()}>
+                <button className={button} disabled={historyLoading} title={controlReason(historyLoading, 'disabled.historyLoading')} onClick={() => void refreshComicHistory()}>
                   {historyLoading ? <Loader2 size={13} className="animate-spin" /> : <HistoryIcon size={13} />} {tCommon('actions.refresh')}
                 </button>
                 <button className={button} onClick={() => setHistoryOpen(false)} aria-label={t('history.closeAria')}>
@@ -2591,7 +2602,7 @@ export function ComicEditorPanel() {
                       </div>
                       <button
                         className={button}
-                        disabled={historyLoading}
+                        disabled={historyLoading} title={controlReason(historyLoading, 'disabled.historyLoading')}
                         onClick={() => void restoreComicHistory(entry)}
                       >
                         {t('history.restore')}
@@ -2633,7 +2644,7 @@ export function ComicEditorPanel() {
                   className={button}
                   disabled={currentPageIndex === 0}
                   onClick={() => goToPage(currentPageIndex - 1)}
-                  title={t('pages.previous')}
+                  title={t('pages.previous')} aria-label={t('pages.previous')}
                 >
                   <ChevronLeft size={12} />
                 </button>
@@ -2651,7 +2662,7 @@ export function ComicEditorPanel() {
                   className={button}
                   disabled={currentPageIndex >= project.pages.length - 1}
                   onClick={() => goToPage(currentPageIndex + 1)}
-                  title={t('pages.next')}
+                  title={t('pages.next')} aria-label={t('pages.next')}
                 >
                   <ChevronRight size={12} />
                 </button>
@@ -2713,7 +2724,7 @@ export function ComicEditorPanel() {
                 <button
                   className="w-9 border-l border-border text-text-muted hover:text-accent-blue"
                   onClick={() => setSidePanelCollapsed(true)}
-                  title={t('side.collapse')}
+                  title={t('side.collapse')} aria-label={t('side.collapse')}
                 >
                   <ChevronRight size={15} className="mx-auto" />
                 </button>
@@ -2738,8 +2749,8 @@ export function ComicEditorPanel() {
             <span className="font-medium text-white">{t('preview.title')}</span>
             <span>{t('pages.pageOf', { current: currentPageIndex + 1, total: project.pages.length })}</span>
             <div className="ml-auto flex items-center gap-1.5">
-              <button className={button} disabled={currentPageIndex === 0} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> {t('preview.previous')}</button>
-              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} onClick={() => goToPage(currentPageIndex + 1)}>{t('preview.next')} <ChevronRight size={13} /></button>
+              <button className={button} disabled={currentPageIndex === 0} title={controlReason(currentPageIndex === 0, 'disabled.alreadyFirst')} onClick={() => goToPage(currentPageIndex - 1)}><ChevronLeft size={13} /> {t('preview.previous')}</button>
+              <button className={button} disabled={currentPageIndex >= project.pages.length - 1} title={controlReason(currentPageIndex >= project.pages.length - 1, 'disabled.alreadyLast')} onClick={() => goToPage(currentPageIndex + 1)}>{t('preview.next')} <ChevronRight size={13} /></button>
               <button className={button} onClick={() => setPreviewOpen(false)}><X size={13} /> {tCommon('actions.close')}</button>
             </div>
           </div>
