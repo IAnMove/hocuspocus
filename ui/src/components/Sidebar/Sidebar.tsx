@@ -31,6 +31,7 @@ import { BlendControls } from './BlendControls'
 import { AnchorReturnBanner } from './AnchorReturnBanner'
 import { VoiceRefSection } from './VoiceRefSection'
 import { Hunyuan3DPanel } from './Hunyuan3DPanel'
+import { BlobBodyPanel } from './BlobBodyPanel'
 import { HardwareStatusBar } from './HardwareStatusBar'
 import { H3PromptControls } from './H3PromptControls'
 import { MiniMaxH3TurboToggle } from './MiniMaxH3TurboToggle'
@@ -158,7 +159,10 @@ export function DirectGenerationWorkspace() {
             existing clip. Renders in place of the generation controls. */}
         {isTools ? <Suspense fallback={<div role="status">{tCommon('status.loading')}</div>}>
           <ToolsPanel />
-        </Suspense> : isModel3d ? <Hunyuan3DPanel /> : (
+        </Suspense> : isModel3d ? <>
+          <BlobBodyPanel />
+          <Hunyuan3DPanel />
+        </> : (
         <>
         <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{tStudio('groups.input')}</h3>
         {/* Edit mode: sub-mode toggle + sub-controls */}

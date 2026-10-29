@@ -110,3 +110,26 @@ def test_models_without_shared_planes_are_unchanged_and_hidden_faces_stay_put():
 def test_the_same_pieces_always_give_the_same_file():
     pieces = [{"type": "box", "scale": [1, 1, 0.5], "color": "#203040"}, {"type": "box", "position": [0, 0, 0.2], "scale": [0.7, 0.6, 0.1], "color": "#80D0C0"}]
     assert compose_glb(pieces) == compose_glb(pieces)
+
+
+# SHA-256 of compose_glb on fixtures/blob2_pieces.json with no segments, computed on origin/development
+# d9fc09859 before segments existed. Omitting segments must stay byte-identical.
+BLOB2_GOLD_SHA256 = "d003d1c9c2c077946ef94b5b4825ba87a9dce925ad337db97f7c008fab414aa8"
+
+
+def test_blob2_pieces_without_segments_match_the_gold_hash():
+    import hashlib
+    from pathlib import Path
+    pieces = json.loads((Path(__file__).parent / "fixtures" / "blob2_pieces.json").read_text())["pieces"]
+    assert hashlib.sha256(compose_glb(pieces, "blob2")).hexdigest() == BLOB2_GOLD_SHA256
+
+
+def test_segments_smooth_a_sphere_and_reject_anything_outside_6_to_48():
+    coarse = compose_glb([{"type": "sphere"}])
+    fine = compose_glb([{"type": "sphere", "segments": 24}])
+    assert fine != coarse and len(fine) > len(coarse)
+    report = inspect_glb_bytes(fine)
+    assert report.status == "valid" and report.total_triangles == 24 * (24 // 2 - 1) * 2
+    for bad in (5, 49, 8.0, True):
+        with pytest.raises(ValueError, match="segments"):
+            compose_glb([{"type": "cylinder", "segments": bad}])

@@ -10,11 +10,16 @@ from urllib.parse import urlencode
 from fastapi import APIRouter, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
+from routers.model3d_blob import (
+    command_catalog as blob_command_catalog,
+    command_handlers as blob_command_handlers,
+    create_model3d_blob_router,
+)
 from routers.wangp_mcp import RequestJournal
+from services.agent_activity import trusted_tool as agent_trusted_tool
 from services.asset_manifest import publish_generation_sidecar
 from services.mcp_intent import check_intent_id, intent_digest
 from services.procedural_3d.compose import KINDS, MAX_PIECES, compose_glb
-from services.agent_activity import trusted_tool as agent_trusted_tool
 
 OPERATION = "model3d.compose"
 
@@ -24,10 +29,15 @@ def command_catalog():
     piece = {"type": "object", "additionalProperties": False, "required": ["type"], "properties": {
         "type": {"enum": list(KINDS)}, "position": transform, "scale": transform, "rotation": transform,
         "color": {"type": "string", "pattern": "^#[0-9a-fA-F]{6}$"},
+        "segments": {"type": "integer", "minimum": 6, "maximum": 48,
+                     "description": "Radial segments. Omit it for the original 8 (a sphere keeps 6 rings). "
+                                    "A sphere then uses segments//2 rings."},
     }}
     return [{"name": OPERATION, "version": 1, "domain": "model3d", "mutation": True,
              "description": "Build a low-poly GLB from 1..128 box/sphere/cylinder/cone pieces on CPU. "
                             "Metres, Y-up, Euler radians, positive scales, #RRGGBB colors. "
+                            "Optional segments (integer 6..48) smooth rounds; omit it and the mesh is byte-identical "
+                            "to the 8-segment, 6-ring sphere. "
                             "Flat triangle normals and linear vertex colors; no AI or GPU. Returns file and workspace URL.",
              "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                              "properties": {"version": {"const": 1, "type": "integer"},
@@ -36,7 +46,8 @@ def command_catalog():
                                                       "required": ["workspace", "name", "pieces"], "properties": {
                                                           "workspace": {"type": "string", "minLength": 1, "maxLength": 120},
                                                           "name": {"type": "string", "minLength": 1, "maxLength": 64},
-                                                          "pieces": {"type": "array", "items": piece, "minItems": 1, "maxItems": MAX_PIECES}}}}}}]
+                                                          "pieces": {"type": "array", "items": piece, "minItems": 1, "maxItems": MAX_PIECES}}}}}},
+            *blob_command_catalog()]
 
 
 def _input(arguments):
@@ -90,7 +101,7 @@ def command_handlers(workspace_dir, journal_path):
     async def handle(arguments):
         return await run_in_threadpool(compose, arguments)
 
-    return {OPERATION: handle}
+    return {OPERATION: handle, **blob_command_handlers(workspace_dir, journal)}
 
 
 def create_model3d_compose_router(handlers):
@@ -103,4 +114,5 @@ def create_model3d_compose_router(handlers):
         except ValueError as error:
             raise HTTPException(422, {"code": "invalid_command", "message": str(error), "retryable": False}) from error
 
+    router.include_router(create_model3d_blob_router(handlers))
     return router

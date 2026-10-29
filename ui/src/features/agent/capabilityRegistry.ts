@@ -64,6 +64,7 @@ import { registerEditorAuxCapabilities } from './editorAuxCapabilities'
 import { registerToolCapabilities } from './toolCapabilities'
 import { registerProgrammaticVideoCapability } from './programmaticVideo'
 import { registerSpeechAnalysisCapability } from './speechAnalysisCapability'
+import { registerBlobBodyCapability } from './blobBodyCapability'
 export { reconcileProgrammaticVideoRequest, type AgentPrepareProgrammaticVideoAction } from './programmaticVideo'
 import type { GenerationSubmissionContext } from '../studio/generationProvenance'
 import {
@@ -1230,6 +1231,7 @@ registerEditorAuxCapabilities(defineCapability)
 registerToolCapabilities(defineCapability)
 registerProgrammaticVideoCapability(defineCapability)
 registerSpeechAnalysisCapability(defineCapability)
+registerBlobBodyCapability(defineCapability)
 
 export function getCapability(name: string): CapabilityDefinition | undefined {
   return definitions.get(name)

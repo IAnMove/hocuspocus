@@ -12,6 +12,7 @@ _EXTERNAL = {
     "jobs.wait", "jobs.leftovers", "jobs.resume", "jobs.discard", "jobs.cancel",
     "characters.list", "characters.get", "characters.save", "characters.rig.check",
     "model3d.generate", "model3d.status", "model3d.rig", "model3d.rig.status", "model3d.animate", "model3d.meshy.animations",
+    "model3d.blob.make", "model3d.blob.presets",
     "media.options", "scenes.assets.inspect",
 }
 

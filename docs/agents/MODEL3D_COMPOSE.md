@@ -28,7 +28,14 @@ Primitives fit the unit cube centred at the origin; sphere/cylinder/cone
 radius is 0.5 and their height/diameter is 1. Coordinates are metres, Y-up.
 Rotations are Euler radians applied X, Y, Z. Transforms are baked in. Scales
 must be positive, and every component must be finite and within ±1000.
-Round primitives have eight radial segments; the sphere has six rings.
+Round primitives have eight radial segments; the sphere has six rings. An optional
+integer `segments` from 6 to 48 replaces that. A sphere then has `segments // 2`
+rings (24 segments is 12 rings and 528 triangles; 48 segments is 24 rings and
+2208). A cylinder or cone has four triangles per segment. Leaving `segments`
+out is byte for byte the eight-segment mesh, including the six-ring sphere:
+passing `8` is not the same, because a sphere would then have four rings.
+`MAX_PIECES` stays 128. There is no separate triangle cap. 128 spheres at 48
+segments are about 30 MB, under the 64 MB inspector limit.
 
 The GLB uses split triangle vertices, flat normals, linear vertex colors
 converted from the input sRGB hex values, and a matte white material. It
