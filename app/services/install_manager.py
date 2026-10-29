@@ -56,6 +56,12 @@ def _engine_in_use(engine: str) -> bool:
         if engine == "rigging":
             from services import rig_service
             return rig_service.has_active_unirig_jobs()
+        if engine == "mia":
+            from services import rig_service
+            return rig_service.has_active_jobs("mia")
+        if engine == "see_through":
+            from services import see_through_layers
+            return see_through_layers.is_running()
     except ImportError:
         return False  # the core runtime ships without some of these, and runs no sidecar
     return False
