@@ -25,7 +25,7 @@ from services.procedural_3d.compose import linear_color
 RING = 16
 _JAW = 0.35
 FACE_BOX, BACK_BOX = 2.7, 2.2
-OUTFITS = ("school", "casual", "sport")
+OUTFITS = ("school", "casual", "sport", "plain")
 
 
 class Mesh:
@@ -315,11 +315,14 @@ def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
     _emit(mesh, grid, colors, centers, True, None)
     _cap(mesh, grid[0], colors[0], centers[0], (0.0, -1.0, 0.0))   # the chin is a flat plate, not a point: a man's chin is square
     rx, ry, rz = L["sx"] / 2, L["sy"] / 2, L["sz"] / 2
-    # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
-    base = skull_point(L, 0, -36, 1.0)
-    nose = [_st((0, base[1] + ry * 0.03, base[2] - rz * 0.01), rx * 0.03, ry * 0.04, skin), _st((0, base[1] - ry * 0.01, base[2] + rz * 0.03), rx * 0.025, ry * 0.025, skin),
-            _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
-    _tube(mesh, nose, "z", ring=8)
+    if L.get("real"):
+        _real_nose(mesh, L, skin)
+    else:
+        # a small nose ridge at the drawn nose's height (NOSE_Y of the head face), not a second nose above it
+        base = skull_point(L, 0, -36, 1.0)
+        nose = [_st((0, base[1] + ry * 0.03, base[2] - rz * 0.01), rx * 0.03, ry * 0.04, skin), _st((0, base[1] - ry * 0.01, base[2] + rz * 0.03), rx * 0.025, ry * 0.025, skin),
+                _st((0, base[1] - ry * 0.03, base[2] + rz * 0.04), rx * 0.015, ry * 0.015, skin)]
+        _tube(mesh, nose, "z", ring=8)
     # ears at the eye line, as tall as a fifth of the head
     for sign in ((-1, 1) if ears else ()):
         at = skull_point(L, sign * 90, -16, 1.0)
@@ -329,11 +332,24 @@ def _head(mesh: Mesh, L: dict, skin: str, ears: bool = True) -> None:
         _tube(mesh, ear, "x", ring=8)
 
 
+def _real_nose(mesh: Mesh, L: dict, skin: str) -> None:
+    """A realistic nose: a bridge from between the eyes, a tip that stands out of the face by about a twentieth of the head's height
+    (the side tile's profile has one), nostril wings at the base. Rings along Y, so the side tile sees it as it was painted."""
+    sy = L["sy"]
+    surface = lambda v: skull_point(L, 0, math.degrees(math.asin(2 * v - 1)), 1.0)
+    rows = [(0.47, 0.012, 0.010, 0.000), (0.40, 0.016, 0.022, 0.012), (0.33, 0.020, 0.034, 0.030), (0.29, 0.030, 0.036, 0.034), (0.25, 0.028, 0.026, 0.016)]
+    mesh_stations = []
+    for v, half, depth, out in rows:
+        at = surface(v)
+        mesh_stations.append(_st((0, at[1], at[2] - depth * sy * 0.35 + out * sy), half * sy, depth * sy, skin))
+    _tube(mesh, mesh_stations, "y", ring=10)
+
+
 FACE_YAWS = [-100 + 200.0 * j / 24 for j in range(25)]
 FACE_LATS = [-86 + (48 + 86) * k / 16 for k in range(17)]
 
 
-def face_patch(L: dict, fit) -> tuple[Mesh, list]:
+def face_patch(L: dict, fit, half_angle: float = 100.0) -> tuple[Mesh, list]:
     """The face as its own surface: the skull's front between the chin and the hairline, a hair's breadth outside it,
     white vertex colours (the picture multiplies them) and UVs that project the kit picture from the front: ``fit`` is
     ``[cu, cv, ru, rv]``, the drawn skull's centre and half-size as fractions of the picture."""
@@ -341,15 +357,16 @@ def face_patch(L: dict, fit) -> tuple[Mesh, list]:
     cu, cv, ru, rv = fit
     rx, ry = L["sx"] / 2, L["sy"] / 2
     grid, colors, uvs = [], [], []
+    yaws = FACE_YAWS if half_angle >= 100 else [-half_angle + 2 * half_angle * j / 24 for j in range(25)]
     for lat in FACE_LATS:
-        ring = _skull_ring(L, lat, 1.012, FACE_YAWS)
+        ring = _skull_ring(L, lat, 1.012, yaws)
         grid.append(ring)
         colors.append([(1.0, 1.0, 1.0)] * len(ring))
         uvs.append([(cu + (p[0] / ry) * rv, 1.0 - (cv - ((p[1] - L["head_y"]) / ry) * rv)) for p in ring])
     centers = [(0.0, L["head_y"] + ry * math.sin(math.radians(lat)), 0.0) for lat in FACE_LATS]
     _emit(mesh, grid, colors, centers, False, None)
     out = []
-    count = len(FACE_YAWS)
+    count = len(yaws)
     for i in range(len(grid) - 1):
         for j in range(count - 1):
             k = j + 1
@@ -368,7 +385,7 @@ def face_patch(L: dict, fit) -> tuple[Mesh, list]:
 
 def shoulder_top(L: dict) -> float:
     """Where the torso closes round the neck: a short neck under the chin. The primitives' torso_top reaches into the head."""
-    return L["head_y"] - L["sy"] / 2 - 0.035 * L["h"]
+    return L["head_y"] - L["sy"] / 2 - (0.022 if L.get("real") else 0.035) * L["h"]
 
 
 NECK_SHARE = {"fem": 0.42, "boy": 0.46, "man": 0.58}   # a man's neck is as wide as most of his head
@@ -555,6 +572,9 @@ def wear_of(spec: dict, L: dict) -> dict:
         found.update({"sleeves_len": "short", "legs": "skirt" if skirt else "shorts" if "shorts" in kinds else "trousers",
                       "legs_color": kinds.get("skirt") or kinds.get("shorts") or colors["bottom"], "shoe_style": "sneaker",
                       "socks": "#F7F4EF" if (skirt or "shorts" in kinds) else None})
+    elif outfit == "plain":   # a realistic mould: no collar, tie or lapels, the clothes are the texture
+        found.update({"legs": "skirt" if skirt else "shorts" if "shorts" in kinds else "trousers", "shoe_style": "sneaker",
+                      "legs_color": kinds.get("skirt") or kinds.get("shorts") or colors["bottom"], "socks": None})
     else:  # sport: a tracksuit, long sleeves and trousers, sneakers
         found.update({"sleeves_len": "long", "legs": "trousers", "legs_color": colors["bottom"], "shoe_style": "sneaker", "socks": None})
     return found
@@ -578,9 +598,17 @@ def loft_parts(spec: dict, layout: dict, fit=None) -> list[tuple[Mesh, str, list
         _skirt(mesh, layout, wear["legs_color"])
     _collar_and_ribbon(mesh, layout, wear)
     _head(mesh, layout, spec["colors"]["head"], spec["hair"]["style"] not in EARS_HIDDEN)
-    face, uvs = face_patch(layout, fit or DEFAULT_FIT)
+    atlas = bool(spec.get("atlas"))
+    face, uvs = face_patch(layout, fit or DEFAULT_FIT, 52.0 if atlas else 100.0)
     hair = hair_mesh(layout, spec["hair"])
-    parts = [(mesh, "body", None), (face, "face", uvs)]
+    body_uvs = None
+    if spec.get("atlas"):
+        from services.blob_texture import atlas_frame, atlas_uv, atlas_uvs
+        frame = atlas_frame([mesh], layout)
+        body_uvs = atlas_uvs(mesh, frame)
+        # without a kit the face patch shows the atlas too: the front tile whole (the patch is only the face, 52 degrees each way), not a white mask
+        uvs = [atlas_uv(p, False, frame, True, 0) for p in face.vertices]
+    parts = [(mesh, "body", body_uvs), (face, "face", uvs)]
     if hair.vertices:
         parts.append((hair, "hair", hair.uvs))
     return parts

@@ -21,9 +21,11 @@ MAKE = "model3d.anime.make"
 HAIR_STYLES = ("none", "short", "bangs", "bob", "long", "twin_tails", "spiky", "ponytail", "bun")
 OUTFITS = ("school", "casual", "sport")
 BODIES = {"slim": ("slim", 1.0), "average": ("average", 1.0), "tall": ("slim", 1.08)}
-GENDERS = ("girl", "boy", "man")
+GENDERS = ("girl", "boy", "man", "woman")
+STYLES = ("anime", "real")
+BOTTOMS = ("trousers", "skirt", "shorts")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
-           "face_source", "face_image", "face_style", "face_shape"}
+           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom"}
 FACE_SOURCES = ("program", "qwen")
 FACE_STYLES = ("anime", "cute")
 _OUTFIT_COLORS = {"top", "bottom", "shoes", "accent", "socks"}
@@ -37,10 +39,12 @@ _DEFAULT_COLORS = {
 }
 for _palette in _DEFAULT_COLORS.values():
     _palette["man"] = _palette["boy"]
+    _palette["woman"] = _palette["girl"]
 # Measured on Qwen bald sheets: width over height 0.82 (girl), 0.71 (boy), 0.69 (man); depth about 0.9 of the height.
 _HEAD = {"girl": {"width": 0.12, "height": 0.146, "depth": 0.128, "shape": "anime", "kind": "fem"},
          "boy": {"width": 0.108, "height": 0.152, "depth": 0.136, "shape": "anime", "kind": "boy"},
          "man": {"width": 0.105, "height": 0.152, "depth": 0.138, "shape": "anime", "kind": "man"}}
+_HEAD["woman"] = _HEAD["girl"]
 
 
 def _fail(code: str, message: str):
@@ -76,10 +80,10 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     gender = _choice(raw.get("gender", "girl"), GENDERS, "invalid_gender", "gender")
     outfit = _choice(raw.get("outfit", "school"), OUTFITS, "invalid_outfit", "outfit")
     build, tall = BODIES[_choice(raw.get("body", "slim"), tuple(BODIES), "invalid_body", "body")]
-    height = raw.get("height", {"girl": 1.62, "boy": 1.76, "man": 1.82}[gender] * tall)
+    height = raw.get("height", {"girl": 1.62, "woman": 1.66, "boy": 1.76, "man": 1.82}[gender] * tall)
     if isinstance(height, bool) or not isinstance(height, (int, float)) or not 1.2 <= float(height) <= 2.2:
         _fail("invalid_height", "height must be from 1.2 to 2.2 metres")
-    hair_style = _choice(raw.get("hair_style", "long" if gender == "girl" else "short"), HAIR_STYLES, "invalid_hair", "hair_style")
+    hair_style = _choice(raw.get("hair_style", "long" if gender in ("girl", "woman") else "short"), HAIR_STYLES, "invalid_hair", "hair_style")
     hair_color = _color(raw.get("hair_color"), "hair_color", "#2A211C")
     skin = _color(raw.get("skin"), "skin", "#F3CBA4")
     given = raw.get("outfit_colors") or {}
@@ -93,6 +97,15 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
         "colors": {"head": skin, "hands": skin, "top": colors["top"], "sleeves": colors["top"], "bottom": colors["bottom"], "shoes": colors["shoes"]},
         "accessories": accessories,
     }
+    look = _choice(raw.get("style", "anime"), STYLES, "invalid_style", "style")
+    if look == "real":
+        body = _real_body(body, gender, raw, skin)
+    texture, texture_head = raw.get("texture"), raw.get("texture_head")
+    for given in (texture, texture_head):
+        if given is not None and (not isinstance(given, str) or not given.strip() or look != "real"):
+            _fail("invalid_traits", "texture and texture_head are workspace picture file names, for style real")
+    if texture_head and not texture:
+        _fail("invalid_traits", "texture_head goes with texture (the body picture)")
     face_extra = raw.get("face") or {}
     if not isinstance(face_extra, dict):
         _fail("invalid_traits", "face must be an object of face traits")
@@ -106,21 +119,39 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
     face = {"style": "cute" if style == "cute" else "anime_head", "skin": skin, "eyeColor": _color(raw.get("eye_color"), "eye_color", "#3B6FC4"),
             "lashColor": _color(raw.get("lash_color"), "lash_color", darker(hair_color, 0.75)),
             "faceShape": _choice(raw.get("face_shape", "sharp" if gender == "man" else "soft"), ("soft", "sharp"), "invalid_face_shape", "face_shape"),
-            "blush": raw.get("blush", gender == "girl") is True, **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
+            "blush": raw.get("blush", gender in ("girl", "woman")) is True, **{k: v for k, v in face_extra.items() if k not in ("style", "skin")}}
     clips = raw.get("clips")
     public = {"gender": gender, "outfit": outfit, "body": raw.get("body", "slim"), "height": float(height), "skin": skin, "eye_color": face["eyeColor"],
               "lash_color": face["lashColor"], "hair_style": hair_style, "hair_color": hair_color, "outfit_colors": colors, "blush": face["blush"],
-              "face_source": source, "face_style": style, "face_shape": face["faceShape"], **({"face_image": face_image} if face_image else {})}
-    return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None}
+              "face_source": source, "face_style": style, "face_shape": face["faceShape"], "style": look, **({"texture": texture} if texture else {}), **({"texture_head": texture_head} if texture_head else {}), **({"face_image": face_image} if face_image else {})}
+    return {"body": body, "face": face, "clips": clips, "public": public, "face_source": source, "face_image": face_image if source == "qwen" else None,
+            "texture": texture, "texture_head": texture_head, "style": look}
+
+
+def _real_body(body: dict, gender: str, raw: dict, skin: str) -> dict:
+    """The mould of a realistic person: proportions of a PS2-era game, a plain body (no collar, tie or lapels: the clothes are
+    the texture), UVs into the front/back atlas. Colours are a grey mannequin with a skin head and hands until a texture is given."""
+    man = gender in ("man", "boy")
+    bottom = _choice(raw.get("bottom", "trousers"), BOTTOMS, "invalid_bottom", "bottom")
+    grey = "#B9B9BE"
+    return {
+        **body, "realism": "real", "atlas": True, "outfit": "plain", "build": "average" if man else "slim",
+        "head": ({"width": 0.090, "height": 0.130, "depth": 0.117, "shape": "anime", "kind": "man"} if man
+                 else {"width": 0.088, "height": 0.125, "depth": 0.112, "shape": "anime", "kind": "boy"}),
+        "arms": {"length": 0.44, "thickness": 0.052 if man else 0.042},
+        "legs": {"length": 0.50, "thickness": 0.086 if man else 0.074},
+        "colors": {"head": skin, "hands": skin, "top": grey, "sleeves": grey, "bottom": "#8E8E94", "shoes": "#2A2A2E"},
+        "accessories": [{"kind": bottom, "color": "#8E8E94"}] if bottom != "trousers" else [],
+    }
 
 
 def _accessories(outfit: str, gender: str, colors: dict) -> list[dict]:
     if outfit == "school":
-        if gender == "girl":
+        if gender in ("girl", "woman"):
             return [{"kind": "skirt", "color": colors["bottom"]}, {"kind": "school_collar", "color": "#FFFFFF"}, {"kind": "tie", "color": colors["accent"]}]
         return [{"kind": "jacket", "color": colors["top"]}, {"kind": "school_collar", "color": "#F7F4EF"}, {"kind": "tie", "color": colors["accent"]}]
     if outfit == "casual":
-        return [{"kind": "skirt", "color": colors["bottom"]}] if gender == "girl" else [{"kind": "shorts", "color": colors["bottom"]}]
+        return [{"kind": "skirt", "color": colors["bottom"]}] if gender in ("girl", "woman") else [{"kind": "shorts", "color": colors["bottom"]}]
     return []
 
 
@@ -146,9 +177,47 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
         resolved["body"]["colors"].update({"head": painted.upper(), "hands": painted.upper()})
         resolved["public"]["skin"] = painted.upper()
     body = build_body(resolved["body"], clips)
+    extra = _texture_files(workspace_dir, workspace, name, resolved, body) if resolved["style"] == "real" else {}
     written = write_body(workspace_dir, workspace, name, intent, body)
-    return {**written, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
+    return {**written, **extra, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
             "character": resolved["public"], "faceTraits": resolved["face"]}
+
+
+def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:
+    """A realistic mould: write the two guides (the body views and the head tiles, the pictures to repaint) and, when ``texture``
+    names a picture of this workspace (with ``texture_head`` for the face), write the atlas into the GLBs. Painting other pictures
+    over the same guides and calling make again dresses the same body anew."""
+    from services.blob_builder import blob_pieces
+    from services.blob_loft import loft_parts
+    from services.blob_texture import ATLAS, atlas_frame, attach_texture, guide_png, stack_atlas
+
+    lofted = blob_pieces({**resolved["body"], "mesh": "loft"})
+    parts = loft_parts(lofted["traits"], lofted["layout"])
+    base = f"anime-{slug(name)}"
+    guides = {part: guide_png(parts, lofted["layout"], part) for part in ("body", "head")}
+    for part, data in guides.items():
+        (Path(workspace_dir) / f"{base}-guide-{part}.png").write_bytes(data)
+    out = {"guide_body_file": f"{base}-guide-body.png", "guide_head_file": f"{base}-guide-head.png",
+           "atlas": {"width": ATLAS[0], "height": ATLAS[1], "layout": "body views (front left, back right) over three head tiles (front, side, back; 3x the scale)"}}
+    if resolved["texture"]:
+        painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
+        head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
+        png = stack_atlas(painted, head, (guides["body"], guides["head"]))
+        frame = atlas_frame([parts[0][0]], lofted["layout"])
+        body["glb"] = attach_texture(body["glb"], png, frame=frame)
+        body["rigged"] = attach_texture(body["rigged"], png, frame=frame)
+        out["texture_file"] = Path(resolved["texture"]).name
+    return out
+
+
+def _picture_of(workspace_dir: Path, workspace: str, given: str, label: str):
+    from PIL import Image
+
+    name = given.split("/api/v1/file/")[-1].split("?")[0]
+    path = Path(workspace_dir) / name
+    if "/" in name or ".." in name or not path.is_file():
+        _fail("texture_missing", f"{label} {name} is not a picture of workspace {workspace}")
+    return Image.open(path)
 
 
 def _picture(workspace_dir: Path, workspace: str, face_image: str):

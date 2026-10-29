@@ -151,6 +151,8 @@ def _fringe(mesh: Mesh, head: _Head, color: str, count: int = 11, length: float 
     """Pointed locks from a root on the dome's hairline (outside the face patch) down over the forehead to the brows, in three lengths so
     the tips stagger, flaring a little to the sides."""
     levels = (1.0, 0.85, 0.92)
+    if head.L.get("real"):
+        length *= 0.78   # a real fringe ends at the brow, it does not cover the eyes
     for i in range(count):
         u = (i - (count - 1) / 2) / max(1, (count - 1) / 2)
         yaw = u * 48
