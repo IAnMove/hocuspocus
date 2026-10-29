@@ -35,7 +35,10 @@ test('portrait preview fits, paused resizes repaint, and covered image objects r
     await page.setViewportSize({ width, height: 900 })
     await expect.poll(opaqueRatio).toBeGreaterThan(.95)
     const box = (await picture.boundingBox())!, outer = (await matte.boundingBox())!
-    expect(box.height).toBeLessThan(530)
+    // The picture fills the free matte and keeps the portrait ratio, with room on both sides.
+    expect(box.height).toBeGreaterThan(360)
+    expect(box.height).toBeLessThanOrEqual(outer.height + 1)
+    expect(box.width).toBeLessThanOrEqual(outer.width + 1)
     expect(Math.abs(box.width / box.height - 9 / 16)).toBeLessThan(.01)
     expect(outer.width - box.width).toBeGreaterThan(20)
   }

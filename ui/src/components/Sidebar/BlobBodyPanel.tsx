@@ -44,7 +44,7 @@ export function BlobBodyPanel() {
     fetchBlobPresets().then(setCatalog).catch(err => {
       setError(err instanceof Error ? err.message : t('makers.blobPresetsFailed'))
     })
-  }, [])
+  }, [t])
 
   const choosePreset = (next: string) => {
     setPreset(next)

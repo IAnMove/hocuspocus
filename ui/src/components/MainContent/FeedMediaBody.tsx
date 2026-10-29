@@ -133,12 +133,12 @@ function renderFeedMedia({
   }
   if (file.type === 'audio') {
     return (
-      <div className="flex w-full min-w-0 flex-col items-center gap-4 px-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active">
-          <Play size={24} className="text-text-muted" />
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center gap-2 overflow-hidden px-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-bg-active">
+          <Play size={22} className="text-text-muted" />
         </div>
-        <p className="mb-2 max-w-full truncate text-xs text-text-muted" title={file.name}>{file.name}</p>
-        <audio key={file.url} src={file.url} controls className="w-64 max-w-full" />
+        <p className="max-w-full truncate text-xs text-text-muted" title={file.name}>{file.name}</p>
+        <audio key={file.url} src={file.url} controls className="m-0 w-64 max-w-full shrink-0" />
       </div>
     )
   }
