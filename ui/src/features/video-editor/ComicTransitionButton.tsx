@@ -3,6 +3,7 @@ import { BASE } from '../../api/http'
 import { useUiTranslation } from '../../i18n'
 import { controlReason } from '../../i18n/controlLabel'
 import { comicMontageBody, type ComicMontageMode } from '../scene3d/comicTransition'
+import { applyComicMontageTransition } from './comicMontageRun'
 import { loadMontageIntoEditor } from './montageLoader'
 
 type LoadedMontage = Awaited<ReturnType<typeof loadMontageIntoEditor>>
@@ -28,6 +29,7 @@ export function ComicTransitionButton({
   between,
   onOpened,
   onError,
+  prepare,
   run = postComicTransition,
   load = loadMontageIntoEditor,
 }: {
@@ -36,6 +38,7 @@ export function ComicTransitionButton({
   between: number
   onOpened: (loaded: LoadedMontage) => void
   onError: (message: string) => void
+  prepare?: () => Promise<string>
   run?: typeof postComicTransition
   load?: typeof loadMontageIntoEditor
 }) {
@@ -45,9 +48,9 @@ export function ComicTransitionButton({
   const go = () => {
     if (!file) return
     setBusy(true)
-    const body = comicMontageBody({ workspace, file, between, mode, intentId: `comic-ui-${Date.now()}` })
-    run(body)
-      .then(result => load(workspace, result.montage?.file || file))
+    applyComicMontageTransition({
+      workspace, file, between, mode, intentId: `comic-ui-${Date.now()}`, prepare, run, load,
+    })
       .then(onOpened)
       .catch(reason => onError(reason instanceof Error ? reason.message : String(reason)))
       .finally(() => setBusy(false))

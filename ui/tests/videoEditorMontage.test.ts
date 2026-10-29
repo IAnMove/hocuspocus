@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { MontageDocument } from '../src/api/montages.ts'
-import { editorFromMontage, exportLayerFields, montageFromEditor, playableUrl, resolutionFor } from '../src/features/video-editor/montage.ts'
+import { editorFromMontage, exportLayerFields, montageFromEditor, persistOpenMontage, playableUrl, resolutionFor } from '../src/features/video-editor/montage.ts'
 
 const montage: MontageDocument = {
   version: 1, name: 'Bird', width: 1920, height: 1080, fps: 24,
@@ -69,6 +69,34 @@ test('a lyric and a comic choice survive save and reload', async () => {
   assert.deepEqual(again.extras.c1, opened.extras.c1)
   const plain = await editorFromMontage(montage, probe, async () => ({ duration: 171 }), source => `thumb:${source}`)
   assert.equal(plain.extras.c1, undefined)
+})
+
+test('persistOpenMontage writes the editor order onto the open file', async () => {
+  const seen: Array<{ file?: string; ids: string[] }> = []
+  const ref = await persistOpenMontage({
+    workspace: 'studio',
+    state: {
+      projectName: 'Bird',
+      resolution: resolutionFor(1920, 1080),
+      fps: 24,
+      clips: [
+        { id: 'b', name: 'second', source: 'b.mp4', trimStart: 0, trimEnd: 2, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5, transitionText: '', transitionTextSize: 100 } as never,
+        { id: 'a', name: 'first', source: 'a.mp4', trimStart: 0, trimEnd: 3, volume: 1, muted: false, fit: 'fit', transition: 'none', transitionDuration: 0.5, transitionText: '', transitionTextSize: 100 } as never,
+      ],
+      soundtrack: null,
+    },
+    layers: { overlays: [], audioCues: [], duck: 0 },
+    ref: { file: 'song.montage.json', revision: 4, origins: {}, extras: { b: { lyric: 'keep' } } },
+  }, async payload => {
+    seen.push({ file: payload.file, ids: payload.montage.clips.map(clip => clip.id) })
+    assert.equal(payload.workspace, 'studio')
+    assert.equal(payload.expected_revision, 4)
+    assert.equal(payload.montage.clips[0].lyric, 'keep')
+    return { file: 'song.montage.json', revision: 5, url: '/song.montage.json' }
+  })
+  assert.deepEqual(seen, [{ file: 'song.montage.json', ids: ['b', 'a'] }])
+  assert.equal(ref.revision, 5)
+  assert.equal(ref.file, 'song.montage.json')
 })
 
 test('a bare montage source plays from the workspace; URLs and paths stay as they are', () => {
