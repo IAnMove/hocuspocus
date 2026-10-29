@@ -190,6 +190,35 @@ def test_layers_on_windows_are_refused_even_when_the_files_exist(tmp_path, monke
     assert _names(folder) == before
 
 
+def test_prepare_marks_see_through_in_use_and_clears_it(monkeypatch):
+    seen = []
+
+    def fake_decompose(*_args, **_kwargs):
+        seen.append(see_through_layers.is_running())
+        return {}, {}
+
+    monkeypatch.setattr(see_through_layers, "ensure_available", lambda: None)
+    monkeypatch.setattr(see_through_layers, "_pose_list", lambda *_args, **_kwargs: ["base"])
+    monkeypatch.setattr(see_through_layers, "_decompose_all", fake_decompose)
+    assert see_through_layers.is_running() is False
+    see_through_layers.prepare_face_layers({"id": "k"}, {"faceSource": "layers"}, "cast", "/tmp", None, {})
+    assert seen == [True]
+    assert see_through_layers.is_running() is False
+    assert see_through_layers.prepare_face_layers({"id": "k"}, {}, "cast", "/tmp", None, {"keep": 1}) == ({"keep": 1}, {})
+    assert see_through_layers.is_running() is False
+
+
+def test_prepare_clears_in_use_when_the_component_is_missing(monkeypatch):
+    def refuse():
+        raise FlatRigError("see_through_not_installed", "missing")
+
+    monkeypatch.setattr(see_through_layers, "ensure_available", refuse)
+    with pytest.raises(FlatRigError) as error:
+        see_through_layers.prepare_face_layers({}, {"faceSource": "layers"}, "cast", "/tmp", None, {})
+    assert error.value.code == "see_through_not_installed"
+    assert see_through_layers.is_running() is False
+
+
 def test_face_source_is_layers_or_absent():
     with pytest.raises(FlatRigError) as error:
         rig_style({"faceSource": "nope"})
