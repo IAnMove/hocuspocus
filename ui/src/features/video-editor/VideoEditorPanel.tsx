@@ -29,6 +29,7 @@ import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './M
 import { loadMontageIntoEditor } from './montageLoader'
 import { useOpenProductionMontage } from '../music-productions/useOpenProductionMontage'
 import { DeriveVerticalButton } from './DeriveVerticalButton'
+import { ComicTransitionButton } from './ComicTransitionButton'
 import { ShortenSongPanel } from './ShortenSongPanel'
 import { PublishPresetBar } from './PublishPresetBar'
 import { EditorPreflightNotices } from './EditorPreflightNotices'
@@ -2303,6 +2304,13 @@ export function VideoEditorPanel() {
                   <X size={12} />
                 </button>
               </div>
+              <ComicTransitionButton
+                workspace={activeWorkspace}
+                file={montage.ref?.file ?? null}
+                between={selectedTransitionIndex}
+                onOpened={loaded => applyMontage(loaded.state, loaded.layers, loaded.ref)}
+                onError={setError}
+              />
 
               <div className="grid grid-cols-2 gap-2">
                 {TRANSITIONS.map(option => {
