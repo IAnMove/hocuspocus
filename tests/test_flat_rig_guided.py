@@ -300,11 +300,20 @@ def test_a_gorthak_tick_does_not_replace_the_painted_mouth():
     assert abs(_mouth_y(face, rig) - MOUTH_Y) <= 12
 
 
+def test_a_landmark_mouth_is_not_reported_as_missing():
+    """Landmarks placed the mouth. That is not the same as finding no mouth at all."""
+    face = _face()
+    rig = rig_pose(face, INK, anime={"keypoints": _anime_points(mouth_y=520)})
+    assert rig["mouthSource"] == "landmarks"
+    assert "mouth_not_found" not in rig["warnings"]
+    assert "mouth_disagree" in rig["warnings"]
+
+
 def test_a_disagreeing_mouth_is_placed_on_the_landmark_line_without_a_wipe():
     face = _face()
     rig = rig_pose(face, INK, anime={"keypoints": _anime_points(mouth_y=520)})
     assert rig["mouthSource"] == "landmarks" and rig["wiped"] is False and rig["seeds"]["point"] is None
-    assert "mouth_disagree" in rig["warnings"] and "mouth_not_found" in rig["warnings"]
+    assert "mouth_disagree" in rig["warnings"] and "mouth_not_found" not in rig["warnings"]
     assert abs(_mouth_y(face, rig) - 520) <= 30
     assert lips_line(rig["seeds"]["lips"]).source == "landmarks"
     assert rig["seeds"]["lips"].shape == (12, 2)

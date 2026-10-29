@@ -310,7 +310,8 @@ export function lockFaceRigMouthPlacement(
     ...kit,
     anchors: {
       ...kit.anchors,
-      [normalizedPoseId]: { ...kept, mouth: nextAnchor, mouthStates, eyes: current.eyes },
+      // The mouth was just placed by hand. Keeping mouthSource "landmarks" told the next edit the detector still owned it.
+      [normalizedPoseId]: { ...kept, mouth: nextAnchor, mouthStates, eyes: current.eyes, mouthSource: 'hint' },
     },
     ...(record ? {
       provenance: [...kit.provenance, {

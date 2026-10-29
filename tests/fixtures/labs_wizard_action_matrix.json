@@ -3732,7 +3732,7 @@
       "persistence": "A new take beside the original; the selected clip and any series approval stay",
       "presentation": "videos",
       "test": "ui/tests/lipsyncRedo.test.tsx",
-      "notes": "Same handler as MCP shot.lipsync.redo. Engines infinitetalk (Apache-2.0) and longcat_avatar (MIT). Missing weights return their size on disk and do not download until download_model is confirmed.",
+      "notes": "Same handler as MCP shot.lipsync.redo. The redo engine is infinitetalk (Apache-2.0). longcat_avatar stays in the model catalog and is not offered: it does not read the shot video. Missing weights return their size on disk and do not download until download_model is confirmed.",
       "prompt_fixture": "",
       "blocking_defect": ""
     },
