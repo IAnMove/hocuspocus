@@ -69,6 +69,9 @@ same file, so a new component is one catalog entry plus its `<id>_install.js`, w
 
 ## Installation tab
 
+Operator workflow, reclaimable space, HTTP examples and pitfalls:
+[Settings > Installation](../install/HOWUSEIT.md).
+
 Settings > Installation (`ui/src/components/Installation`) lists the same components with their
 state, measured or estimated size and the free disk space, and installs, updates or removes each
 one. The server side is `services/install_manager.py` behind `GET /api/v1/system/install`,
@@ -250,9 +253,11 @@ Pinokio itself through successful preflight, successful child completion, and a
 silent failed child whose parent must not publish completion.
 
 Remaining work: full Windows/Linux installation and model smoke on the final
-branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today); a UI for optional components; transactional
-environment replacement with automatic rollback. Current Update repairs in
-place and stops on failure; it does not promise rollback to the previous stack.
+branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today);
+transactional environment replacement with automatic rollback. Current Update
+repairs in place and stops on failure; it does not promise rollback to the
+previous stack. The optional-component UI is Settings > Installation
+([operator guide](../install/HOWUSEIT.md)).
 
 References: [Python venv](https://docs.python.org/3/library/venv.html),
 [NVIDIA CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html),

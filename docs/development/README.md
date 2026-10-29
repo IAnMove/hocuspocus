@@ -33,6 +33,7 @@ decisión; no se actualiza). El estado general está en [`CHANGELOG.md`](../../C
 - [ASSET_PICKER_MIGRATION.md](ASSET_PICKER_MIGRATION.md) — histórico · inventario y contrato del selector universal de recursos (septiembre de 2026).
 - [INTERNATIONALIZATION.md](INTERNATIONALIZATION.md) — contrato · i18n: `en` es la fuente, `es` el segundo catálogo.
 - [RUNTIME_PROFILES.md](RUNTIME_PROFILES.md) — contrato · recetas por plataforma, runtimes aislados y recuperación.
+- [../install/HOWUSEIT.md](../install/HOWUSEIT.md) — guía · pestaña Ajustes → Installation (extras, quitar, API).
 - [MACOS_COMPATIBILITY.md](MACOS_COMPATIBILITY.md) — contrato · core/remoto en Apple Silicon.
 - [REACT_INSTALLATION.md](REACT_INSTALLATION.md) — guía · instalación, reparación e identidad de build de la UI.
 - [STORAGE_CLEANUP.md](STORAGE_CLEANUP.md) — contrato · liberación de ficheros intermedios al terminar y al arrancar.

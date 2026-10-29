@@ -61,7 +61,7 @@
   },
   "settings": {
     "title": "Settings, language and models",
-    "body": "ES/EN in the top-right changes labels only. Prompts and filenames stay as you wrote them.\n\nSettings → Performance is VRAM and profiles. Integrations is LLM keys and providers. Enable the models you actually have installed. Developer mode shows internal tools; leave it off for normal use."
+    "body": "ES/EN in the top-right changes labels only. Prompts and filenames stay as you wrote them.\n\nSettings → Performance is VRAM and profiles. Integrations is LLM keys and providers. Installation lists optional engines (FLUX 3 / Drama 3, Hunyuan, TRELLIS.2, SAM, UniRig, H3 Legacy): install, update or remove one at a time; Remove frees the environment, not the downloaded weights (those stay in the Storage Manager). Enable the models you actually have installed. Developer mode shows internal tools; leave it off for normal use."
   },
   "examples": {
     "title": "Example outputs from this machine",

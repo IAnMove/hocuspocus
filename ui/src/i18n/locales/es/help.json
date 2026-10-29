@@ -61,7 +61,7 @@
   },
   "settings": {
     "title": "Ajustes, idioma y modelos",
-    "body": "ES/EN arriba a la derecha cambia solo las etiquetas. Prompts y nombres de archivo se quedan como los escribiste.\n\nAjustes → Rendimiento es VRAM y perfiles. Integraciones es claves LLM y proveedores. Activa los modelos que tengas instalados. El modo desarrollador enseña herramientas internas; déjalo apagado en uso normal."
+    "body": "ES/EN arriba a la derecha cambia solo las etiquetas. Prompts y nombres de archivo se quedan como los escribiste.\n\nAjustes → Rendimiento es VRAM y perfiles. Integraciones es claves LLM y proveedores. Installation lista los motores opcionales (FLUX 3 / Drama 3, Hunyuan, TRELLIS.2, SAM, UniRig, H3 Legacy): instala, actualiza o quita de uno en uno; Quitar libera el entorno, no los pesos descargados (esos siguen en el Gestor de almacenamiento). Activa los modelos que tengas instalados. El modo desarrollador enseña herramientas internas; déjalo apagado en uso normal."
   },
   "examples": {
     "title": "Salidas reales de esta máquina",
