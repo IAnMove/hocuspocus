@@ -12,7 +12,7 @@ export interface AgentLipsyncRedoAction {
 }
 
 function engineOf(value: unknown): LipsyncEngine | null {
-  return value === 'infinitetalk' || value === 'longcat_avatar' ? value : null
+  return value === 'infinitetalk' ? value : null
 }
 
 function objectOf(value: unknown): Record<string, unknown> | null {
@@ -51,7 +51,7 @@ export function registerLipsyncRedoCapabilities(register: typeof defineCapabilit
   const definition: CapabilityDefinition<AgentLipsyncRedoAction> = {
     name: 'lipsync_redo',
     title: 'Redo the lips of a finished shot',
-    description: 'Redo the lips of one finished shot as a new take. The original clip and any series approval stay. engine is infinitetalk (follow the source camera, Apache-2.0) or longcat_avatar (anime and stylized, MIT). input names one target: production_id and shot, or series_id, episode_id and shot, or clip plus audio. Optional audio, source, span [start, end] seconds and offset. If the reply says the weights are missing, tell the user the disk size in bytes and call download_model with that model_type and confirm true. Do not put confirm_download in this action.',
+    description: 'Redo the lips of one finished shot as a new take. The original clip and any series approval stay. engine is infinitetalk (follow the source camera, Apache-2.0). longcat_avatar is a catalog model and is not a redo engine: it does not read the shot video. input names one target: production_id and shot, or series_id, episode_id and shot, or clip plus audio. Pass source as the file of the take to redo. Optional audio, span [start, end] seconds and offset. If the reply says the weights are missing, tell the user the disk size in bytes and call download_model with that model_type and confirm true. Do not put confirm_download in this action.',
     useWhen: 'The user asks to redo, fix or resync the lips or mouth of a finished video shot or clip, including an anime or stylized character.',
     parameters: ['engine', 'input', 'confirm'],
     inputSchema: {
@@ -59,7 +59,7 @@ export function registerLipsyncRedoCapabilities(register: typeof defineCapabilit
       properties: {
         type: { const: 'lipsync_redo' },
         confirm: { const: true },
-        engine: { enum: ['infinitetalk', 'longcat_avatar'] },
+        engine: { enum: ['infinitetalk'] },
         input: { type: 'object' },
       },
       required: ['type', 'confirm', 'engine', 'input'],
@@ -72,7 +72,7 @@ export function registerLipsyncRedoCapabilities(register: typeof defineCapabilit
       return { type: 'lipsync_redo', engine, confirm: true, input }
     },
     validate(action) {
-      return action.confirm === true && engineOf(action.engine) ? [] : ['Confirm the lip redo and name infinitetalk or longcat_avatar.']
+      return action.confirm === true && engineOf(action.engine) ? [] : ['Confirm the lip redo and name infinitetalk.']
     },
     async prepare(action) { return action },
     async execute(action, context) { return context.adapters.lipsyncRedo.command(action, context) },

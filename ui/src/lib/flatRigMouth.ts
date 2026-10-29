@@ -128,9 +128,11 @@ export function mouthLineRigRequest(kit: CharacterKit, poseId: string, draft: Mo
   const clean = cleanMouthLine(draft)
   const saved = rig?.hints?.[poseId]
   const eyes = saved?.eyes
+  const style: Record<string, number | boolean | string> = { ...(rig?.style ?? {}), mouthStyle: 'warp' }
+  delete style.faceSource
   return {
     ...(isWarpRigged(kit) ? { poses: [...new Set(['base', poseId])] } : {}),
-    style: { ...(rig?.style ?? {}), mouthStyle: 'warp' },
+    style,
     // Placed by a person on the image: the rig keeps it there (exact) instead of snapping it or trusting the landmarks.
     hints: { [poseId]: { ...(eyes ? { eyes } : {}), ...(saved?.blink === false ? { blink: false } : {}), mouth: clean.mouth,
       mouthWidth: clean.mouthWidth, exact: true } } as Record<string, FlatRigHint>,

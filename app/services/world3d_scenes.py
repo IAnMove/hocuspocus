@@ -361,7 +361,8 @@ def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
     except TalkError as error:
         raise World3DSceneError(error.code, str(error), error.status) from error
     record["revision"] += 1
-    record["warnings"] = []
+    # No cue means the mouth never moves; usually audio.mouth_cues failed (Rhubarb missing) and its caller passed nothing on.
+    record["warnings"] = [] if talked["cues"] else ["talk_no_cues"]
     _write(workspace, scene_id, record, workspace_dir)
     viewed = _view(scene_id, record, workspace, workspace_dir)
     viewed["talk"] = {key: value for key, value in talked.items() if key != "talk"}

@@ -659,6 +659,7 @@
     "ready": "Ready to talk. Check the mouths and the blink below.",
     "reviewAlt": "Mouth and blink review",
     "unwiped": "No painted mouth was found on: {{poses}}. A mouth was placed under the eyes.",
+    "modelsMissing": "The DWPose model files are missing on this machine: the mouths were placed by the painted-mark search only and may come out small or off. Install them from Settings > Installation.",
     "warpReview": "These mouths are the drawing's own: the upper lip stays and the lower lip and chin move. In the review, check that each pose opens between the lips, not at the nose or a moustache.",
     "mouthLine": "Check the mouth line of {{poses}}: the rig was not sure where the lips meet. Open Prepare 2D speech below, pick {{name}} and, in Mouth line, drag the dot onto the line between the lips.",
     "checkPoses": "Look at {{poses}} in the review before using {{name}}: the eyes or a mark may have been found in the wrong place.",

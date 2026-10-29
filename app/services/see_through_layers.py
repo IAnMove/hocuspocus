@@ -18,11 +18,16 @@ from PIL import Image
 
 from services.flat_rig_base import SPRITE, FlatRigError, _anchor
 from services.flat_rig_eyes import _blink_box, _eye_skin, blink_sprite
+from services.flat_rig_ink import _ink_sprite_width
 from services.runtime_environment import engine_python
 from services.runtime_profiles import APP_DIR, managed_ready
 from services.see_through.worker import REQUIRED
 
 EYE_CLASSES = ("eyewhite", "irides", "eyelash")
+# The smaller eye must be at least this share of the larger. A profile speck is far under it; a turned eye is not.
+EYE_PAIR_RATIO = 0.4
+# One component is two eyes only when it is this wide compared with its height (eyes joined by a lash). A round eye is not cut in half.
+EYE_PAIR_ASPECT = 1.6
 MARKER = Path("app/services/see_through/env/.maestro_see_through_v1.installed")
 VENDOR_SCRIPT = Path("app/services/see_through/vendor/see-through/inference/scripts/inference_psd_quantized.py")
 ALPHA_MIN = 16
@@ -135,7 +140,8 @@ def _one_pose(kit, workspace: str, workspace_dir: str, pose: str, hint: dict) ->
     missing = _required_missing(images, layer.get("missing") or [])
     if box is None and "mouth" not in missing:
         missing = sorted({*missing, "mouth"})
-    return (_merge_mouth(hint, box, width, height) if box else hint), {"images": images, "missing": missing, "mouth_box": box}
+    merged, derived = _merge_mouth(hint, box, width, height) if box else (hint, set())
+    return merged, {"images": images, "missing": missing, "mouth_box": box, "derived": derived}
 
 
 def _required_missing(images: dict, missing) -> list[str]:
@@ -163,16 +169,35 @@ def _mouth_box(image: Image.Image | None):
     return None if image is None else _bbox(_alpha(image))
 
 
-def _merge_mouth(hint: dict, box, width: int, height: int) -> dict:
-    """Fill mouth keys the caller did not set. A point the user gave stays where they put it."""
+def _merge_mouth(hint: dict, box, width: int, height: int) -> tuple[dict, set[str]]:
+    """Fill mouth keys the caller did not set, and name the keys this call filled.
+
+    A point the user gave stays. The filled keys place this rig only. They are not an ``exact`` user hint:
+    a later rig, a new pose and the anime landmarks may move the mouth.
+    """
     merged = dict(hint)
+    derived: set[str] = set()
     x0, y0, x1, y1 = box
     if "mouth" not in merged:
         merged["mouth"] = [round((x0 + x1) / 2 / width * 100, 3), round((y0 + y1) / 2 / height * 100, 3)]
-        merged.setdefault("exact", True)
+        derived.add("mouth")
     if "mouthWidth" not in merged:
         merged["mouthWidth"] = round(min(100.0, max(0.5, (x1 - x0) / width * 100)), 3)
-    return merged
+        derived.add("mouthWidth")
+    return merged, derived
+
+
+def drop_derived_hints(placed: dict, pack: dict) -> dict:
+    """The hints to save: a mouth See-through filled is left out. A hint the caller sent stays."""
+    cleaned = {}
+    for pose, hint in placed.items():
+        if not isinstance(hint, dict):
+            continue
+        drop = set((pack.get(pose) or {}).get("derived") or ())
+        kept = {key: value for key, value in hint.items() if key not in drop}
+        if kept:
+            cleaned[pose] = kept
+    return cleaned
 
 
 def apply_face_layers(rigs: dict, pack: dict, look: dict, hints: dict) -> None:
@@ -191,10 +216,10 @@ def _apply_one(rig: dict, layer: dict, look: dict, hint: dict) -> None:
     for name in layer.get("missing") or []:
         _warn(rig, f"layer_missing_{name.replace(' ', '_')}")
     labelled = _eye_labels(layer.get("images") or {}, rig)
-    if labelled is not None:
+    if labelled is not None and labelled.any():
         _place_blink(rig, labelled, look, hint.get("blink") is not False)
     if look.get("mouthStyle") != "warp" and layer.get("mouth_box"):
-        _set_mouth(rig, layer["mouth_box"])
+        _set_mouth(rig, layer["mouth_box"], (layer.get("images") or {}).get("mouth"), ink=look.get("mouthStyle") == "ink")
 
 
 def _eye_labels(images: dict, rig: dict):
@@ -227,21 +252,35 @@ def _figure_alpha(image: Image.Image | None, rig: dict):
     return mask[y0:y0 + rig["height"], x0:x0 + rig["width"]]
 
 
-def _label_pair(mask: np.ndarray) -> np.ndarray:
+def _label_pair(mask: np.ndarray) -> np.ndarray | None:
+    """Two eyes, or nothing. One round component stays one eye. A wide one is a pair joined by a lash."""
     count, labels, stats, centroids = cv2.connectedComponentsWithStats(mask.astype(np.uint8), 8)
     parts = _largest(stats, centroids, count)
-    if len(parts) == 1:
+    if len(parts) >= 2:
+        return _paint_two(labels, parts)
+    if len(parts) == 1 and _wide_pair(labels, parts[0][1]):
         return _split_one(labels, parts[0][1])
-    return _paint_two(labels, parts)
+    return None
+
+
+def _wide_pair(labels: np.ndarray, label: int) -> bool:
+    region = labels == label
+    ys, xs = np.nonzero(region)
+    if not len(xs):
+        return False
+    return int(xs.max() - xs.min() + 1) >= int(ys.max() - ys.min() + 1) * EYE_PAIR_ASPECT
 
 
 def _largest(stats, centroids, count: int) -> list:
+    """The two largest components when the smaller is a real eye, else the one large component."""
     found = []
     for label in range(1, count):
         area = int(stats[label, cv2.CC_STAT_AREA])
         if area > 0:
             found.append((area, label, float(centroids[label][0])))
     found.sort(reverse=True)
+    if len(found) >= 2 and found[1][0] < found[0][0] * EYE_PAIR_RATIO:
+        return found[:1]
     return found[:2]
 
 
@@ -278,16 +317,27 @@ def _place_blink(rig: dict, labelled: np.ndarray, look: dict, blink_ok: bool) ->
         rgb[by0:by1, bx0:bx1], labelled[by0:by1, bx0:bx1], lids, look.get("screen") is True, alpha[by0:by1, bx0:bx1])
     rig["eyes"] = _anchor((bx0 + bx1) / 2, (by0 + by1) / 2, by1 - by0, rig["width"], rig["height"])
     rig["eyes_box"] = [ox0, oy0, ox1, oy1]
-    if blink_ok:
+    # ``eyes_covered`` (glasses, fringe) already set ``blinks`` false. Layers must not turn it back on.
+    if blink_ok and rig.get("blinks") is not False:
         rig["blinks"] = True
 
 
-def _set_mouth(rig: dict, box) -> None:
+def _set_mouth(rig: dict, box, mouth: Image.Image | None = None, *, ink: bool = False) -> None:
+    """Place the mouth. Ink hangs from the median painted row and uses ``_ink_sprite_width`` (the line is ``INK_SPAN`` of the sprite). Paper keeps the box."""
     x0, y0, x1, y1 = box
     left, top = int(rig["frame"][0]), int(rig["frame"][1])
-    sprite = max(1.0, float(x1 - x0))
-    rig["mouth"] = _anchor((x0 + x1) / 2 - left, (y0 + y1) / 2 - top, sprite * SPRITE[1] / SPRITE[0], rig["width"], rig["height"])
-    rig["mouth_box"] = [x0 - left, y0 - top, x1 - left, y1 - top]
+    row = (y0 + y1) / 2
+    local = [x0 - left, y0 - top, x1 - left, y1 - top]
+    if ink:
+        if mouth is not None:
+            rows = np.nonzero(_alpha(mouth))[0]
+            if len(rows):
+                row = float(np.median(rows))
+        sprite = _ink_sprite_width(local, {}, rig.get("eyes_box") or (0, 0, max(1, x1 - x0), 1))
+    else:
+        sprite = max(1.0, float(x1 - x0))
+    rig["mouth"] = _anchor((x0 + x1) / 2 - left, row - top, sprite * SPRITE[1] / SPRITE[0], rig["width"], rig["height"])
+    rig["mouth_box"] = local
 
 
 def save_layers(pack: dict, kit_id: str, workspace_dir: str, workspace: str) -> tuple[dict, dict]:

@@ -8,6 +8,48 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: the puppet walk no longer keys to an opaque black rectangle.** `studio.key` reads colour only, and the puppet frames were transparent with black under the alpha. The frames now lie on the screen colour of the job before they are keyed; a test runs the real keyer on a stored frame.
 
+**Fixed: a lip redo takes the series library lock without importing the router.** The save used to import `routers.series_library` to reach that lock. The series library bind now hands the same lock to the save.
+
+**Fixed: a puppet does not reuse a half-written layer folder.** The cache is read only when `.complete` is present. That marker is written after the layer files.
+
+**Fixed: a puppet's See-through pass takes the GPU lane.** Cutting the clothes used to run the worker with no lane. It now takes `local_gpu:0`, the same lane as the flat-rig layers.
+
+**Fixed: a landmark mouth is not reported missing, and a hand-placed mouth is a hint.** `mouth_not_found` was added whenever the painted mouth was absent, including when the anime landmarks had placed one. Locking a mouth by hand used to leave `mouthSource` as `landmarks`.
+
+**Fixed: a Video 3D face pack does not also paint estimated lips.** A model with a Head bone and a face pack used to draw both. The Head-bone estimate is skipped while the pack is on. A face someone calibrated still wins.
+
+**Fixed: See-through accepts two eyes only when they are a real pair.** A speck next to one eye, or one blob cut in half, is no longer two eyes. A pose whose eyes are covered still does not blink.
+
+**Fixed: an ink mouth from See-through layers hangs from the painted line.** The openings used the box centre and the raw width. They now use the median ink row and `_ink_sprite_width`, the same measurement as the other ink mouths.
+
+**Fixed: a mouth measured from See-through layers is not saved as the user's hint.** The point places that rig. It is not stored with `exact: true`, so a later rig and the anime landmarks can move it. A mouth the caller placed stays.
+
+**Fixed: a flat rig does not keep `faceSource: layers`.** Asking for See-through layers runs it for that call. A later rig that leaves `faceSource` out keeps the mouth style and does not run See-through again. A missing install or a machine that is not Linux still refuses the call and leaves the kit unchanged.
+
+**Fixed: an InfiniteTalk lip redo uses guidance 5 and audio guidance 4.** The Wan handler sets those defaults and does not ask for a distillation LoRA. Guidance 1 forced the audio term off.
+
+**Fixed: a lip-sync QA failure names the exception, and DWPose stays on CPU.** `score_take` used to hide every error as `qa_unavailable`. It now returns `qa_error:<class>`. The pose session asks only for `CPUExecutionProvider`.
+
+**Fixed: a lip redo deletes the temporary audio it cut.** The span cut and the placed series line (`lipsync-audio*.wav`) are removed when the call ends.
+
+**Fixed: a lip redo saves with the same locks as the other writers.** A production take now holds the music/Director edit slot, bumps `shots.json` revision, and refuses a stale `expected_revision`. A series take uses the series library lock, and it checks that the shot exists before copying the file.
+
+**Fixed: a second lip redo of the same take does not queue another job.** While that redo is still waiting on the generation job (same workspace, production or series and episode, shot, take and engine), the server returns `already_running`. No fixed `intent_id` is sent: it would replay the stored result on every later redo of the take. The media handler has no queued reply, so the first call still waits until the job finishes.
+
+**Fixed: the lip redo button sends the take it sits on.** A production take row and the series inspector sent only the shot id, so the server redid the current clip. They now send `source` as that take's file. The Wizard is told to pass the same field.
+
+**Fixed: a series lip redo uses the recorded line, not the score.** The score cue is background music and was read from the start of the cue. The redo now places each `ln-<episode>-<beat>-<key>.wav` at the line's start. A shot with no recorded line asks for `audio` instead of guessing.
+
+**Fixed: a series or clip lip redo without a span lasts as long as the source take.** `video_length` used the 81-frame window whenever `span` was omitted. Series and clip now take the source duration from ffprobe and count it at 25 fps. A production shot with no start and end still uses the window.
+
+**Fixed: lip-sync QA scores a spanned take from the span start.** A clip that begins at 45 s was measured with offset 0, so the window held no frames and the verdict was unreliable. `offset` is now described on `shot.lipsync.redo` and `qa.lipsync`.
+
+**Fixed: a lip redo counts frames at InfiniteTalk's 25 fps and sends `force_fps`.** `generate_video` drops a `fps` argument. A 5 s span counted at 16 fps was clamped to the 81-frame window, about 3.2 s at the model's 25 fps.
+
+**Fixed: a lip redo no longer offers LongCat Avatar.** `longcat_avatar` stays in the model catalog. Its generator declares `input_frames` and `image_start` and never reads them, so a control video does not keep the person in the shot. The redo engine is InfiniteTalk.
+
+**Fixed: a lip redo sends the shot's video and audio as absolute paths.** InfiniteTalk and LongCat are not `wangp_1272` models, so a workspace-relative name was looked up in the process directory and dropped, and the job failed as "Generation failed." The queue now gets the resolved file, and a failed job reports `error`.
+
 **Added: a catalog walk can be cut from one drawing (`method: "puppet"`).** Characters › Animaciones (Marioneta), MCP `characters.animation.make` and the Wizard share it. The front walk uses `idle` / `rest`; the other directions use `contact-a`. A missing reference is drawn in the same job and is not saved as a second animation. See-through layers are optional (`puppet_no_layers`). The gait check still runs. See [WALK_PUPPET.md](docs/generation/WALK_PUPPET.md).
 
 **Added: Meshy can rig a textured humanoid in the cloud (`engine: "meshy"`).** The user's own key spends 5 credits to rig and 3 per library animation; walking and running clips are free. The model must face +Z. Make-It-Animatable stays the local engine for a pose the standard rig refuses.
@@ -19,6 +61,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 **Añadido: los modelos cuya licencia no rige en la UE, el Reino Unido o Corea del Sur lo dicen al elegirlos o instalarlos.** Hunyuan Video (Avatar y Custom incluidos), Hunyuan Video 1.5, Hunyuan3D y MiniMax H3 (también Estados Unidos) muestran una línea y un enlace en el selector de modelo, Ajustes, el selector del Director, la pestaña Instalación, el texto de modelos del Asistente y el listado MCP. No se bloquea nada.
 
 **Added: optional multilingual template search on CPU.** When the Template semantic search extra is installed (`intfloat/multilingual-e5-small`, MIT, about 0.5 GB, via the existing Installation catalog), Video 3D and Video 2D search, suggest and the Wizard share one hybrid score: the lexical points plus up to 24 from the cosine, which breaks ties. A query whose words no card knows is filled only when a few cards stand clearly above the rest; a flat neighbourhood stays empty. The report gains `semantic: true`. Without the weights the scores, order, unknown words and partial flag stay as they were (`semantic: false`; a Video 2D response that was not a text search does not grow the field). Card vectors are cached by catalogue fingerprint and model id.
+
+**Fixed: a machine without the DWPose model files says so.** Without `ckpts/pose` the flat rig kept working but placed mouths by the painted-mark search alone (a Lucky mouth came out less than half the size) and nothing said why. The first use logs the missing files once, and `characters.rig.flat` returns `notices: [{code: landmark_models_missing, files}]` that the Character Creator shows next to the rig review. `world3d.scene.talk` with no usable cue (usually `audio.mouth_cues` failing because Rhubarb is missing) answers with the `talk_no_cues` warning instead of a talk that never moves.
 
 **Fixed: a directional 2D figure that walks is drawn by the larger part of its movement, not by a three-quarter sheet.** The sheet came from the angle between the way the figure goes and the line to the camera in equal sectors of 45°, so a walk only 25° off the camera's line already used the front three-quarter sheet (a near-profile stride) and a crossing near the edge of a wide room used the three-quarter sheets at its ends. While a figure walks, or stands facing where it went, front, side and back now take what the larger part of the movement says and the three-quarter sheets only a really diagonal walk (`walkDiagonalDeg` 12 in `app/shared/directional_sprites.json`: 33° to 57° and the same from the back; 22.5 gives the old sectors, 0 turns them off; `walkHysteresisDeg` 4 keeps a straight walk from flickering). A kit with no three-quarter sheet for the motion splits that band at 45° and 135° instead of always giving the tie to the front (before, 50° off the camera's line drew the front sheet and 140° the side one); this holds for a figure that stands too, so a heading of 50° with no three-quarter idle sheet now draws the side sheet where it drew the front one. A standing figure whose kit has all five directions, turned by its heading or by the camera orbiting it, keeps the equal sectors; the server check (`direction_sheet_missing`) reads the same numbers and the same kit directions, so a crossing no longer asks for sheets it will not draw and a missing three-quarter sheet is a split band, not a gap.
 

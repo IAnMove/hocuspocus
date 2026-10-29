@@ -36,7 +36,7 @@ export function InspectorMedia({ series, shot, takes, selected, onSelect, kits, 
         aria-label={t('inspector.media.take', { number: take.number })} />
       : <div className="relative"><PlanSketch series={series} shot={shot} kits={kits} className={frame} />
         <span className="absolute left-2 top-2 rounded-full bg-black/70 px-2 py-0.5 text-[10px] text-white">{t('inspector.media.planOnly')}</span></div>}
-    {workspace && episodeId && takes.length > 0 ? <LipsyncRedoButton workspace={workspace} namespace="seriesLab" labelKey="inspector.media.redoLips" engineKey="inspector.media.lipsEngine" target={{ series_id: series.id, episode_id: episodeId, shot: shot.id }} /> : null}
+    {workspace && episodeId && take ? <LipsyncRedoButton workspace={workspace} namespace="seriesLab" labelKey="inspector.media.redoLips" engineKey="inspector.media.lipsEngine" target={{ series_id: series.id, episode_id: episodeId, shot: shot.id, ...(take.asset?.uri ? { source: take.asset.uri.replace(/^outputs\//, '') } : {}) }} /> : null}
     {takes.length > 1 && <div role="radiogroup" aria-label={t('inspector.media.takes')} className="flex gap-1.5 overflow-x-auto pb-1">
       {takes.map(item => {
         const approved = item.attempt.id === shot.approvedAttemptId

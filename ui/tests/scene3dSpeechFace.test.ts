@@ -19,6 +19,12 @@ test('speech without a face uses the humanoid estimate of the model', () => {
   assert.equal(speechFace(model(face(2)), speech({}))?.meshIndex, 2)
 })
 
+test('a face pack does not also paint the estimated head', () => {
+  const pack = { workspaceId: 'cast', filename: 'pack.png', url: '/pack.png' }
+  assert.equal(speechFace(model(face(2)), speech({ facePack: pack })), undefined)
+  assert.equal(speechFace(model(face(1)), speech({ face: face(0), facePack: pack }))?.meshIndex, 0)
+})
+
 test('a model without an estimate or speech that is off has no face', () => {
   assert.equal(speechFace(model(), speech({})), undefined)
   assert.equal(speechFace(model(face(2)), speech({ enabled: false })), undefined)

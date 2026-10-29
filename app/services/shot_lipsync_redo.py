@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -22,7 +23,7 @@ from services.shot_lipsync_save import save_clip, save_production, save_series
 OPERATION = "shot.lipsync.redo"
 _KEYS = frozenset({
     "workspace", "engine", "series_id", "episode_id", "shot", "production_id",
-    "clip", "source", "audio", "span", "offset", "confirm_download",
+    "clip", "source", "audio", "span", "offset", "confirm_download", "expected_revision",
 })
 _ID_MAX = 80
 
@@ -33,16 +34,19 @@ worker: Callable[[dict, str], str] | None = None
 def catalog() -> dict[str, Any]:
     return operation_schema(OPERATION, (
         "Redo the lips of one finished shot as a new take, keeping the original. engine is infinitetalk "
-        "(video-to-video, Apache-2.0) or longcat_avatar (anime and stylized, MIT). Name one target: "
+        "(video-to-video, Apache-2.0). longcat_avatar stays in the model catalog and is not offered: "
+        "it does not read the shot video. Name one target: "
         "production_id + shot, series_id + episode_id + shot, or clip. audio is the driving sound "
-        "(a production uses its song when audio is omitted; a series uses the score cue that covers the shot). "
+        "(a production uses its song when audio is omitted; a series uses its recorded line, "
+        "placed at the line's start, and does not use the score cue). "
         "span is [start, end] seconds of that sound. The result is a new take; the selected clip and any "
-        "series approval stay. When the int8 weights are missing the call returns their disk size and does "
+        "series approval stay. The call waits until the job finishes; a second call for the same take while "
+        "that one is running returns already_running and does not queue another. When the int8 weights are missing the call returns their disk size and does "
         "not download; confirm_download true starts the existing model download and does not wait for it. "
         "Returns file, kept_original, verdict (qa.lipsync: ok, retake or unreliable) and qa."
     ), {
         "workspace": WORKSPACE,
-        "engine": {"type": "string", "enum": ["infinitetalk", "longcat_avatar"]},
+        "engine": {"type": "string", "enum": ["infinitetalk"]},
         "production_id": {"type": "string", "minLength": 1, "maxLength": _ID_MAX},
         "series_id": {"type": "string", "minLength": 1, "maxLength": 120},
         "episode_id": {"type": "string", "minLength": 1, "maxLength": 120},
@@ -53,8 +57,11 @@ def catalog() -> dict[str, Any]:
         "audio": {"type": "string", "minLength": 1, "maxLength": 2000},
         "span": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"type": "number"},
                  "description": "Seconds [start, end] of the audio to drive and to score."},
-        "offset": {"type": "number", "minimum": 0, "maximum": 36000},
+        "offset": {"type": "number", "minimum": 0, "maximum": 36000,
+                   "description": "Seconds into the audio where the clip starts. When span is set, the take starts at span start and the score uses that offset."},
         "confirm_download": {"type": "boolean"},
+        "expected_revision": {"type": "integer", "minimum": 0,
+                              "description": "The shots.json revision this edit was read from. Omit it to write anyway. A mismatch is stale_revision."},
     }, ["workspace", "engine"])
 
 
@@ -73,10 +80,25 @@ def run(arguments: Any, *, workspace_dir, uploads_dir) -> dict[str, Any]:
     if gap:
         return _weights(payload, target["engine"], gap)
     guides = prepare_guides(target, folder)
-    video = _adopt(folder, enqueue(_body(target, workspace, guides, folder), folder))
-    qa = score_take(video, guides["audio_path"], guides["offset"], guides["span"])
-    saved = _save(folder, workspace, target, video, qa)
-    return {**saved, "engine": target["engine"], "verdict": qa.get("verdict"), "qa": qa}
+    try:
+        video = _adopt(folder, enqueue(_body(target, workspace, guides, folder), folder))
+        qa = score_take(video, guides["audio_path"], _score_offset(guides), guides["span"])
+        saved = _save(folder, workspace, target, video, qa)
+        return {**saved, "engine": target["engine"], "verdict": qa.get("verdict"), "qa": qa}
+    finally:
+        _drop_owned(guides)
+
+
+def _drop_owned(guides: dict) -> None:
+    """Delete the span cut and the placed line. A caller's own file is not ``lipsync-audio*``."""
+    for path in guides.get("owned") or []:
+        if not isinstance(path, str) or not os.path.basename(path).startswith("lipsync-audio"):
+            continue
+        if os.path.isfile(path):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
 
 
 def resolve_target(payload: dict, folder: str, uploads: str, workspace: str) -> dict[str, Any]:
@@ -93,11 +115,19 @@ def resolve_target(payload: dict, folder: str, uploads: str, workspace: str) -> 
 
 
 def prepare_guides(target: dict, folder: str) -> dict[str, Any]:
+    """Absolute paths. InfiniteTalk and LongCat are not ``wangp_1272``, so the queue
+    never resolves a workspace-relative name and drops the file."""
     span = target["span"]
+    owned: list[str] = []
+    if target.get("placed"):
+        owned.append(os.path.abspath(target["audio"]))
     audio = trim_span(target["audio"], folder, span[0], span[1]) if span else target["audio"]
+    if span:
+        owned.append(os.path.abspath(audio))
     return {
-        "video": _relative(folder, target["video"]), "audio": _relative(folder, audio),
+        "video": os.path.abspath(target["video"]), "audio": os.path.abspath(audio),
         "audio_path": target["audio"], "span": span, "offset": target["offset"],
+        "trimmed": owned[-1] if owned else None, "owned": owned,
     }
 
 
@@ -107,11 +137,19 @@ def enqueue(body: dict, folder: str) -> str:
     return _server_queue(body, folder)
 
 
+def _score_offset(guides: dict) -> float:
+    """The take starts at the span, so frame 0 is ``span[0]`` of the original audio."""
+    span = guides.get("span")
+    if span:
+        return float(span[0])
+    return float(guides.get("offset") or 0.0)
+
+
 def score_take(video: str, audio: str, offset: float, span: tuple[float, float] | None) -> dict[str, Any]:
     try:
         result = measure_lips(video, audio, offset, span)
-    except Exception:
-        return {"verdict": "unreliable", "reason": "qa_unavailable"}
+    except Exception as exc:
+        return {"verdict": "unreliable", "reason": f"qa_error:{type(exc).__name__}"}
     if not isinstance(result, dict) or not result.get("verdict"):
         return {"verdict": "unreliable", "reason": "qa_unavailable"}
     return result
@@ -165,18 +203,37 @@ def _weights(payload: dict, engine: str, gap: list[dict]) -> dict[str, Any]:
     )
 
 
+def source_seconds(path: str) -> float:
+    """Duration of a source take. The error stays a short sentence: ffprobe's text is not included."""
+    import json
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", path],
+            capture_output=True, check=False, text=True,
+        )
+        duration = float((json.loads(result.stdout or "{}").get("format") or {}).get("duration"))
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        duration, result = 0.0, None
+    if result is None or result.returncode != 0 or duration <= 0 or duration > 36000:
+        raise MediaToolError("duration_unreadable", "The source video duration could not be read.")
+    return duration
+
+
 def _body(target: dict, workspace: str, guides: dict, folder: str) -> dict[str, Any]:
     from services.production_media_common import available_name
     spec = ENGINES[target["engine"]]
     token = _safe_token(target.get("shot") or Path(target["original_name"]).stem)
+    span = guides["span"]
+    seconds = source_seconds(guides["video"]) if span is None and target["kind"] in {"series", "clip"} else None
     body = {
         "workspace": workspace, "model_type": spec["model_type"], "prompt": PROMPT,
         "resolution": spec["resolution"], "num_inference_steps": spec["steps"],
         "guidance_scale": spec["guidance_scale"], "audio_guidance_scale": spec["audio_guidance_scale"],
         "video_prompt_type": spec["video_prompt_type"], "audio_prompt_type": "A",
         "video_guide": guides["video"], "audio_guide": guides["audio"],
-        "sliding_window_size": spec["sliding_window_size"], "fps": spec["fps"],
-        "video_length": video_length(target["engine"], guides["span"]),
+        "sliding_window_size": spec["sliding_window_size"], "force_fps": str(int(spec["fps"])),
+        "video_length": video_length(target["engine"], span, seconds=seconds),
         "output_name": available_name(folder, f"lipsync-{token}-{target['engine']}.mp4"),
     }
     if "denoising_strength" in spec:
@@ -202,7 +259,8 @@ def _server_queue(body: dict, folder: str) -> str:
         raise MediaToolError("generation_failed", "The generation server did not queue a job.", 502)
     job = _wait_job(studio._jobs, job_id)
     if job.get("status") != "completed":
-        raise MediaToolError("generation_failed", f"Generation {job.get('status')}.", 502)
+        reason = job.get("error") or job.get("status") or "failed"
+        raise MediaToolError("generation_failed", f"Generation failed: {reason}.", 502)
     files = job.get("output_files") or []
     if not files:
         raise MediaToolError("generation_failed", "Generation finished without a video.", 502)
@@ -211,6 +269,8 @@ def _server_queue(body: dict, folder: str) -> str:
 
 
 def _wait_job(jobs: dict, job_id: str) -> dict:
+    """Blocks until the job ends. The media handler cannot reply ``queued``, so the request stays open.
+    A second redo of the same take is refused before this wait."""
     while True:
         job = jobs.get(job_id) if isinstance(jobs, dict) else None
         if not isinstance(job, dict):
@@ -274,12 +334,13 @@ def _series_target(payload, folder, uploads, workspace, engine, span, offset) ->
     episode_id = _text(payload.get("episode_id"), "episode_id")
     shot_id = _token(payload.get("shot"), "shot")
     library = read_series_library(folder, workspace)
-    _series, episode, _index, shot = _series_shot(library, series_id, episode_id, shot_id)
+    _series, _episode, _index, shot = _series_shot(library, series_id, episode_id, shot_id)
     video = _video_file(payload, _series_clip(library, shot, series_id), workspace, folder, uploads)
-    audio = _named_audio(payload, workspace, folder, uploads) or _score_file(episode, shot_id, workspace, folder, uploads)
+    audio = _named_audio(payload, workspace, folder, uploads)
+    placed = False
     if audio is None:
-        raise MediaToolError("audio_required", "Name the audio file for this shot.")
-    return _target("series", engine, video, audio, span, offset, payload, shot.get("locked") is True)
+        audio, placed = _line_drive(episode_id, shot, folder), True
+    return _target("series", engine, video, audio, span, offset, payload, shot.get("locked") is True, placed)
 
 
 def _dict_rows(value: Any) -> list[dict]:
@@ -315,25 +376,87 @@ def _series_clip(library: dict, shot: dict, series_id: str) -> str | None:
     return None
 
 
-def _score_file(episode: dict, shot_id: str, workspace: str, folder: str, uploads: str) -> str | None:
-    ids = [item.get("id") for item in episode.get("shots") or [] if isinstance(item, dict)]
-    if shot_id not in ids:
+def _spoken(shot: dict) -> list[dict]:
+    beats = shot.get("dialogueBeats")
+    if not isinstance(beats, list):
+        return []
+    return [beat for beat in beats if isinstance(beat, dict) and str(beat.get("text") or "").strip()]
+
+
+def _recorded_line(folder: str, episode_id: str, beat_id: str) -> str | None:
+    """The dry ``ln-<episode>-<beat>-<key>.wav``. A room copy is what the mix plays; the mouth uses the dry take.
+    Several keys means the line was re-recorded: the newest file is the one the shot would reuse."""
+    if not beat_id or "/" in beat_id or "\\" in beat_id:
         return None
-    index = ids.index(shot_id)
-    for cue in episode.get("score") or []:
-        if not isinstance(cue, dict) or not isinstance(cue.get("file"), str):
+    prefix = f"ln-{episode_id}-{beat_id}-"
+    found: list[str] = []
+    try:
+        names = os.listdir(folder)
+    except OSError:
+        return None
+    for name in names:
+        if not name.startswith(prefix) or not name.endswith(".wav"):
             continue
-        if _cue_covers(ids, cue, index):
-            return resolve_source(cue["file"], workspace, folder, uploads, ("audio",), "audio")
-    return None
+        if ".room-" in name or "-raw" in name or ".best." in name or "-take" in name:
+            continue
+        found.append(os.path.join(folder, name))
+    if not found:
+        return None
+    return max(found, key=lambda path: os.path.getmtime(path) if os.path.isfile(path) else 0)
 
 
-def _cue_covers(ids: list, cue: dict, index: int) -> bool:
-    start, end = cue.get("fromShotId"), cue.get("toShotId")
-    if start not in ids or end not in ids:
-        return False
-    low, high = sorted((ids.index(start), ids.index(end)))
-    return low <= index <= high
+def _line_drive(episode_id: str, shot: dict, folder: str) -> str:
+    """The shot's recorded lines, each delayed to the start ``plan_timing`` gives them. The score cue is music."""
+    beats = _spoken(shot)
+    if not beats:
+        raise MediaToolError("audio_required", "This shot has no recorded line. Name the audio file.")
+    files, missing = [], []
+    for number, beat in enumerate(beats, start=1):
+        path = _recorded_line(folder, episode_id, str(beat.get("id") or ""))
+        (files if path else missing).append(path or str(number))
+    if missing:
+        verb = "is" if len(missing) == 1 else "are"
+        raise MediaToolError(
+            "audio_required",
+            f"Line {', '.join(missing)} of the shot {verb} not recorded. Name the audio file or record the line.",
+        )
+    from services.series_shot_extras import pauses, timing_args
+    from services.series_shot_plan import plan_timing
+    layout = shot.get("layout2d") if isinstance(shot.get("layout2d"), dict) else {}
+    timing, _length = plan_timing([source_seconds(path) for path in files], **timing_args(layout), pauses=pauses(beats))
+    return _place_lines(folder, [(start, path) for (start, _end), path in zip(timing, files)])
+
+
+def _place_graph(starts: list[float]) -> str:
+    parts, labels = [], []
+    for index, start in enumerate(starts):
+        delay = max(0, int(round(float(start) * 1000)))
+        label = "out" if len(starts) == 1 else f"a{index}"
+        parts.append(f"[{index}]adelay={delay}:all=1[{label}]")
+        labels.append(f"[{label}]")
+    if len(starts) == 1:
+        return parts[0]
+    return ";".join(parts) + f";{''.join(labels)}amix=inputs={len(starts)}:normalize=0:duration=longest[out]"
+
+
+def _place_lines(folder: str, lines: list[tuple[float, str]]) -> str:
+    import subprocess
+    from services.production_media_common import available_name
+    dest = os.path.join(folder, available_name(folder, "lipsync-audio.wav"))
+    command = ["ffmpeg", "-v", "error", "-nostdin", "-y"]
+    for _start, path in lines:
+        command.extend(["-i", path])
+    command.extend([
+        "-filter_complex", _place_graph([start for start, _path in lines]),
+        "-map", "[out]", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", dest,
+    ])
+    try:
+        result = subprocess.run(command, capture_output=True, check=False)
+    except OSError as exc:
+        raise MediaToolError("audio_trim_failed", "ffmpeg could not place the line audio.") from exc
+    if result.returncode != 0 or not os.path.isfile(dest):
+        raise MediaToolError("audio_trim_failed", "ffmpeg could not place the line audio.")
+    return dest
 
 
 def _song_file(folder: str, production_id: str, workspace: str, uploads: str) -> str | None:
@@ -360,12 +483,13 @@ def _named_audio(payload, workspace, folder, uploads) -> str | None:
     return resolve_source(payload["audio"], workspace, folder, uploads, ("audio",), "audio")
 
 
-def _target(kind, engine, video, audio, span, offset, payload, locked) -> dict[str, Any]:
+def _target(kind, engine, video, audio, span, offset, payload, locked, placed=False) -> dict[str, Any]:
     return {
         "kind": kind, "engine": engine, "video": video, "audio": audio, "span": span, "offset": offset,
-        "locked": locked, "original_name": os.path.basename(video),
+        "locked": locked, "placed": placed, "original_name": os.path.basename(video),
         "shot": payload.get("shot"), "production_id": payload.get("production_id"),
         "series_id": payload.get("series_id"), "episode_id": payload.get("episode_id"),
+        "expected_revision": payload.get("expected_revision"),
     }
 
 
@@ -415,7 +539,11 @@ def _one_target(payload: dict) -> None:
 
 def _engine(value: Any) -> str:
     if value not in ENGINES:
-        raise MediaToolError("invalid_command", "engine must be infinitetalk or longcat_avatar.")
+        raise MediaToolError(
+            "invalid_command",
+            "engine must be infinitetalk. longcat_avatar does not read the shot video "
+            "(input_frames and image_start are unused), so it is not a lip redo engine.",
+        )
     return str(value)
 
 
@@ -461,11 +589,37 @@ def _safe_token(value: str) -> str:
     return (safe or "shot")[:60]
 
 
-def _relative(folder: str, path: str) -> str:
-    try:
-        return Path(path).resolve().relative_to(Path(folder).resolve()).as_posix()
-    except ValueError as exc:
-        raise MediaToolError("path_not_allowed", "Media path is not allowed.") from exc
+_FLIGHT: set[str] = set()
+_FLIGHT_GUARD = threading.Lock()
+
+
+def flight_key(arguments: Any) -> str | None:
+    """One redo in flight per workspace, shot (or clip), take and engine."""
+    if not isinstance(arguments, dict):
+        return None
+    payload = arguments.get("input")
+    if not isinstance(payload, dict):
+        return None
+    engine, workspace = payload.get("engine"), payload.get("workspace")
+    shot = payload.get("shot") or payload.get("clip")
+    if not isinstance(engine, str) or not isinstance(workspace, str) or not isinstance(shot, str):
+        return None
+    source = payload.get("source") if isinstance(payload.get("source"), str) else ""
+    owner = "\0".join(str(payload.get(key) or "") for key in ("production_id", "series_id", "episode_id"))
+    return f"{workspace}\0{owner}\0{shot}\0{source}\0{engine}"
+
+
+def claim_flight(key: str) -> bool:
+    with _FLIGHT_GUARD:
+        if key in _FLIGHT:
+            return False
+        _FLIGHT.add(key)
+        return True
+
+
+def release_flight(key: str) -> None:
+    with _FLIGHT_GUARD:
+        _FLIGHT.discard(key)
 
 
 class _Request:

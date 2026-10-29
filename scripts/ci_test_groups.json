@@ -368,6 +368,7 @@
         "tests/test_flat_rig_hints.py",
         "tests/test_flat_rig_warp.py",
         "tests/test_flat_rig_small.py",
+        "tests/test_landmark_models_notice.py",
         "tests/test_see_through_layers.py",
         "tests/test_acceptance_runner.py",
         "tests/test_alternative_songs.py",

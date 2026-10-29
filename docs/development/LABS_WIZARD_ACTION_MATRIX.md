@@ -1409,7 +1409,7 @@ result is a workspace file with a provenance sidecar. Coverage is in
 `lipsyncRedo.command`, registered by `registerLipsyncRedoCapabilities` in
 `ui/src/features/agent/lipsyncRedoCapabilities.ts`. It posts `shot.lipsync.redo` to
 `/api/v1/media/commands`, the handler the MCP tool of the same name runs. The original clip and any
-series approval stay. Engines are `infinitetalk` (Apache-2.0) and `longcat_avatar` (MIT). Missing weights
+series approval stay. The redo engine is `infinitetalk` (Apache-2.0). `longcat_avatar` stays in the model catalog and is not offered: it does not read the shot video. Missing weights
 return their size on disk and wait for the existing model download. Coverage is in
 `ui/tests/lipsyncRedo.test.tsx` and `tests/test_shot_lipsync_redo.py`.
 

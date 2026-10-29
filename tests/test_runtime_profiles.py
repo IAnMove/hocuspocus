@@ -63,6 +63,108 @@ def test_verification_rejects_accelerator_import_failure(monkeypatch, engine, mo
     assert imported == ["torch", module]
 
 
+def test_xformers_flash_probe_is_safe_through_hopper():
+    module_spec = importlib.util.spec_from_file_location(
+        "runtime_verify_capability", ROOT / "scripts/runtime_verify.py")
+    helper = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(helper)
+    assert [helper.xformers_flash_probe_supported(capability) for capability in (
+        None, (7, 5), (8, 6), (8, 9), (9, 0), (9, 1), (10, 0), (12, 0),
+    )] == [True, True, True, True, True, False, False, False]
+
+
+class _ProbeValue:
+    def __init__(self, value):
+        self.value = value
+
+    def item(self):
+        return self.value
+
+    def all(self):
+        return self
+
+
+class _ProbeSum:
+    def __add__(self, _other):
+        return _ProbeValue(2)
+
+
+def _verification_double(monkeypatch, *, capability, finite=True):
+    from types import SimpleNamespace
+
+    module_spec = importlib.util.spec_from_file_location(
+        f"runtime_verify_probe_{capability[0]}_{capability[1]}", ROOT / "scripts/runtime_verify.py")
+    helper = importlib.util.module_from_spec(module_spec)
+    module_spec.loader.exec_module(helper)
+    launched = []
+    imported = []
+
+    class Cuda:
+        def is_available(self):
+            return True
+
+        def get_device_capability(self):
+            return capability
+
+    class Torch:
+        version = SimpleNamespace(cuda="12.8")
+        float16 = "float16"
+        cuda = Cuda()
+
+        def ones(self, *_args, **_kwargs):
+            return _ProbeSum()
+
+        def isfinite(self, _value):
+            return _ProbeValue(finite)
+
+    def attention(*_args, **_kwargs):
+        launched.append(True)
+        return object()
+
+    def importing(name):
+        imported.append(name)
+        if name == "torch":
+            return Torch()
+        if name == "xformers.ops":
+            return SimpleNamespace(memory_efficient_attention=attention)
+        raise AssertionError(name)
+
+    monkeypatch.setattr(helper, "recipe", lambda *_args: {
+        "id": "win32-x64-nvidia-wangp", "python": "3.10", "env": "app/env",
+        "cuda": "12.8", "verificationImports": ["xformers.ops"],
+    })
+    monkeypatch.setattr(helper, "sources_current", lambda *_args: True)
+    monkeypatch.setattr(helper, "inspect_environment", lambda *_args: {"xformers": "0.0.31.post1"})
+    monkeypatch.setattr(helper, "dependency_fingerprint", lambda *_args: "fingerprint")
+    monkeypatch.setattr(helper.importlib, "import_module", importing)
+    return helper, launched, imported
+
+
+@pytest.mark.parametrize("capability,probe", [
+    ((7, 5), "passed"), ((8, 9), "passed"), ((9, 0), "passed"),
+    ((10, 0), "skipped"), ((12, 0), "skipped"),
+])
+def test_xformers_attention_probe_follows_compute_capability(monkeypatch, capsys, capability, probe):
+    helper, launched, imported = _verification_double(monkeypatch, capability=capability)
+    result = helper.verify("wangp", cuda=True)
+    assert result["cudaCalculation"] is True
+    assert result["xformersAttentionProbe"] == probe
+    assert imported[0] == "torch" and "xformers.ops" in imported
+    if probe == "skipped":
+        assert launched == []
+        assert f"{capability[0]}.{capability[1]}" in capsys.readouterr().out
+    else:
+        assert launched == [True]
+        assert "Skipping xFormers attention probe" not in capsys.readouterr().out
+
+
+def test_xformers_attention_probe_still_rejects_a_bad_result_on_ada(monkeypatch):
+    helper, launched, _imported = _verification_double(monkeypatch, capability=(8, 9), finite=False)
+    with pytest.raises(RuntimeError, match="xFormers CUDA calculation failed"):
+        helper.verify("wangp", cuda=True)
+    assert launched == [True]
+
+
 def test_metadata_inspection_rejects_leftover_incompatible_accelerator(monkeypatch):
     from types import SimpleNamespace
 
