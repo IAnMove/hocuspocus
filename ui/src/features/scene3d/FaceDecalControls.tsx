@@ -3,7 +3,7 @@ import { fetchCharacterKitLibrary } from '../../api/characters'
 import { useUiTranslation } from '../../i18n'
 import { controlReason } from '../../i18n/controlLabel'
 import type { CharacterKit } from '../../lib/characterKit'
-import { artFromKit, type Scene3DFaceDecal } from './faceDecal'
+import { faceDecalFromKitChoice, type Scene3DFaceDecal } from './faceDecal'
 import type { Scene3DSlot } from './types'
 
 /** Kit and expression for the 2D face on the selected model. Placement stays whatever the scene already stored. */
@@ -38,17 +38,9 @@ export function FaceDecalControls({
   function choose(kitId: string, pose: string) {
     const kit = kits?.find(item => item.id === kitId)
     if (!kit) return
-    const art = artFromKit(kit)
-    if (!art) { setError(t('faceDecal.mouths')); return }
-    const poseName = art.poses[pose] ? pose : (art.poses.neutral ? 'neutral' : Object.keys(art.poses)[0])
-    onChange({
-      kitId: kit.id, pose: poseName, bone: decal?.bone || 'Head',
-      ...(decal?.center ? { center: decal.center } : {}),
-      ...(decal?.radii ? { radii: decal.radii } : {}),
-      ...(decal?.size ? { size: decal.size } : {}),
-      ...(decal?.expressions ? { expressions: decal.expressions } : {}),
-      art: { ...art, ...(decal?.art?.cues ? { cues: decal.art.cues } : {}), ...(decal?.art?.blinks ? { blinks: decal.art.blinks } : {}) },
-    })
+    const next = faceDecalFromKitChoice(decal, kit, pose)
+    if (!next) { setError(t('faceDecal.mouths')); return }
+    onChange(next)
     setError('')
     setNote(decal?.center ? '' : t('faceDecal.place'))
   }
