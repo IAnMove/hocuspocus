@@ -136,6 +136,30 @@ export function artFromKit(kit: Pick<CharacterKit, 'base' | 'poses' | 'mouth' | 
   return { poses, mouths, rest: mapped && mouths[mapped] ? mapped : 'closed' }
 }
 
+/** Kit or expression change from the inspector: keep the scene's placement and
+ *  projection (`shape`/`span`/`taper`/`fit`/`skin`). Only the pictures and pose
+ *  come from the kit. Talk cues stay. Undefined when the kit cannot be painted. */
+export function faceDecalFromKitChoice(
+  decal: Scene3DFaceDecal | undefined,
+  kit: Pick<CharacterKit, 'id' | 'base' | 'poses' | 'mouth' | 'eyes' | 'anchors' | 'mouthMapping'>,
+  pose: string,
+): Scene3DFaceDecal | undefined {
+  const art = artFromKit(kit)
+  if (!art) return undefined
+  const poseName = art.poses[pose] ? pose : (art.poses.neutral ? 'neutral' : Object.keys(art.poses)[0])
+  return {
+    ...decal,
+    kitId: kit.id,
+    pose: poseName,
+    bone: decal?.bone || 'Head',
+    art: {
+      ...art,
+      ...(decal?.art?.cues ? { cues: decal.art.cues } : {}),
+      ...(decal?.art?.blinks ? { blinks: decal.art.blinks } : {}),
+    },
+  }
+}
+
 /** The span a projected (`fit`) cap covers: past the ears and from the crown to under the chin. */
 export const FACE_FIT_SPAN: readonly [number, number] = [200, 180]
 /** A transparent pixel of a keyed head picture: its top-left corner. */
