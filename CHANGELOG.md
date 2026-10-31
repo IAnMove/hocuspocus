@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: changing a 2D face expression in Video 3D no longer drops a mesh or plane head.** The inspector rebuilt the face from the kit and forgot the projection the scene already stored. Lofted anime and voxel heads went back to a cap. Placement, span, taper and talk cues stay.
+
 **Fixed: the puppet walk no longer keys to an opaque black rectangle.** `studio.key` reads colour only, and the puppet frames were transparent with black under the alpha. The frames now lie on the screen colour of the job before they are keyed; a test runs the real keyer on a stored frame.
 
 **Fixed: a lip redo takes the series library lock without importing the router.** The save used to import `routers.series_library` to reach that lock. The series library bind now hands the same lock to the save.

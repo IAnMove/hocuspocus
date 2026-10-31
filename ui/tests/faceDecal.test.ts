@@ -3,8 +3,9 @@ import test from 'node:test'
 import { Bone, Matrix4, Mesh, MeshBasicMaterial, Object3D, Vector3 } from 'three'
 import { ToonLook } from '../src/features/scene3d/toonLook.ts'
 import { talkStateAt } from '../src/features/scene3d/talkingCutout.ts'
+import { CHARACTER_MOUTH_STATES } from '../src/lib/characterMouthStates.ts'
 import {
-  bindInverse, boneMatches, cutoutOf, faceCapGeometry, facePlaneGeometry, findBone, isFaceDecal, markFaceDecal,
+  bindInverse, boneMatches, cutoutOf, faceCapGeometry, faceDecalFromKitChoice, facePlaneGeometry, findBone, isFaceDecal, markFaceDecal,
   parseFaceDecal, placeFaceCap, placeFacePlane, poseAt, FACE_PLANE_DEFAULT, eggScale,
 } from '../src/features/scene3d/faceDecal.ts'
 
@@ -183,4 +184,45 @@ test('a fitted cap projects the picture from the front, keeps rows under the chi
   let maxR = 0
   for (let index = 0; index < plainPos.count; index += 1) maxR = Math.max(maxR, Math.hypot(plainPos.getX(index), plainPos.getY(index), plainPos.getZ(index)))
   assert.ok(Math.abs(maxR - 1) < 1e-6 && plainUv.count === plainPos.count)
+})
+
+test('choosing a kit or expression keeps the scene mesh, plane, span and talk cues', () => {
+  const asset = (id: string, kind: 'image' | 'overlay' = 'image') => ({
+    id, name: id, source: `/api/v1/file/${id}.png?workspace=w`, kind, alphaStatus: 'transparent' as const, reviewState: 'approved' as const,
+  })
+  const mouths = Object.fromEntries(CHARACTER_MOUTH_STATES.map(state => [state, asset(`mouth-${state}`, 'overlay')]))
+  const kit = {
+    id: 'anime-head',
+    base: asset('neutral'),
+    poses: { neutral: asset('neutral'), happy: asset('happy') },
+    mouth: mouths,
+    eyes: { blink: asset('blink', 'overlay') },
+    anchors: { base: { mouth, eyes } },
+  }
+  const decal = parseFaceDecal({
+    kitId: 'old', pose: 'neutral', bone: 'Head',
+    center: [0, 1.4, 0], radii: [0.12, 0.11, 0.1], size: 1.05,
+    shape: 'mesh', skin: '#C48A6A', span: [96, 116], taper: 0.35, fit: [0.5, 0.35, 0.3, 0.33],
+    expressions: [{ start: 1, pose: 'happy' }],
+    art: { poses: { neutral: { base: '/old.png', mouth, eyes } }, mouths: { closed: '/c.png' }, rest: 'closed', cues: [{ start: 0.1, end: 0.3, state: 'wide' }], blinks: [0.4] },
+  })!
+  const next = faceDecalFromKitChoice(decal, kit, 'happy')
+  assert.equal(next?.kitId, 'anime-head')
+  assert.equal(next?.pose, 'happy')
+  assert.equal(next?.shape, 'mesh')
+  assert.equal(next?.skin, '#C48A6A')
+  assert.deepEqual(next?.span, [96, 116])
+  assert.equal(next?.taper, 0.35)
+  assert.deepEqual(next?.fit, [0.5, 0.35, 0.3, 0.33])
+  assert.deepEqual(next?.center, [0, 1.4, 0])
+  assert.deepEqual(next?.radii, [0.12, 0.11, 0.1])
+  assert.equal(next?.size, 1.05)
+  assert.deepEqual(next?.expressions, [{ start: 1, pose: 'happy' }])
+  assert.equal(next?.art?.poses.happy?.base, '/api/v1/file/happy.png?workspace=w')
+  assert.deepEqual(next?.art?.cues, [{ start: 0.1, end: 0.3, state: 'wide' }])
+  assert.deepEqual(next?.art?.blinks, [0.4])
+  const plane = faceDecalFromKitChoice({ ...decal, shape: 'plane', plane: [3, 4, -0.5] }, kit, 'missing')
+  assert.equal(plane?.pose, 'neutral')
+  assert.equal(plane?.shape, 'plane')
+  assert.deepEqual(plane?.plane, [3, 4, -0.5])
 })
