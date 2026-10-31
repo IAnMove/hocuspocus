@@ -6,8 +6,10 @@ import io
 
 from PIL import Image
 
-from services.blob_face import POSES, composite_mouth, face_kit, paste_anchor, save_face_kit
-from services.flat_rig import MAPPING, STATES
+import pytest
+
+from services.blob_face import BlobFaceError, POSES, composite_mouth, face_kit, paste_anchor, save_face_kit
+from services.flat_rig import MAPPING, STATES, _save
 from services.flat_rig_base import INK, _anchor
 
 
@@ -92,6 +94,28 @@ def test_anchors_are_the_drawn_mouth_and_wide_and_medium_open_at_least_40px():
     blank = Image.new("RGBA", (1024, 1024), (0, 0, 0, 0))
     paste_anchor(blank, kit["mouths"]["closed"], neutral)
     assert _ink_near(blank, neutral)
+
+
+def test_flat_rig_save_refuses_a_stem_that_leaves_the_directory(tmp_path):
+    image = Image.new("RGBA", (2, 2), (0, 0, 0, 0))
+    with pytest.raises(ValueError, match="inside the workspace"):
+        _save(image, str(tmp_path), "kit-../outside-neutral")
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_face_kit_rejects_a_kit_id_that_would_escape_the_workspace(tmp_path):
+    workspace = tmp_path / "studio"
+    workspace.mkdir()
+    before = list(workspace.iterdir())
+    with pytest.raises(BlobFaceError) as error:
+        save_face_kit(str(workspace), "studio", {"eyes": "dot"}, kit_id="../outside")
+    assert error.value.code == "invalid_kit"
+    with pytest.raises(BlobFaceError):
+        save_face_kit(str(workspace), "studio", {"eyes": "dot"}, kit_id="hero/blob")
+    assert list(workspace.iterdir()) == before
+    assert [path.name for path in tmp_path.iterdir()] == ["studio"]
+    saved = save_face_kit(str(workspace), "studio", {"eyes": "dot"}, kit_id="hero.blob")
+    assert saved["kit_id"] == "hero.blob"
 
 
 def test_save_face_kit_is_a_library_kit_with_eight_poses_and_a_blink(tmp_path):
