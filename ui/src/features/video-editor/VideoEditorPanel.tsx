@@ -36,9 +36,10 @@ import { PublishPresetBar } from './PublishPresetBar'
 import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
 import { ComicView } from './ComicView'
-import { duplicateClipState, moveClip, patchClipExtra, type ComicExtraPatch } from './comicEdits'
+import { getMontage } from '../../api/montages'
+import { duplicateClipState, mergeComicShotUpdate, moveClip, patchClipExtra, type ComicExtraPatch } from './comicEdits'
 import { handOffClip, reusableMetadata, useComicOpen, type ClipRemake } from './comicRemake'
-import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, type MontageLayers, type MontageRef } from './montage'
+import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, playableUrl, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { videoEditorClipFromOutput } from './videoEditorCatalogPick'
@@ -1188,6 +1189,39 @@ export function VideoEditorPanel() {
     applyMontage(loaded.state, loaded.layers, loaded.ref)
   }
 
+  /** Regenerar / Usar take writes the saved montage. Keep the editor's unsaved clips. */
+  const applyComicShotChange = async (adoptedClipId?: string) => {
+    if (!montage.ref) return
+    const { montage: saved } = await getMontage(activeWorkspace, montage.ref.file)
+    let adopted: (Partial<EditorClip> & { id: string }) | undefined
+    const savedClip = adoptedClipId ? saved.clips.find(clip => clip.id === adoptedClipId) : undefined
+    if (savedClip) {
+      const source = playableUrl(savedClip.source, activeWorkspace)
+      const facts = await api.probeVideoEditorClip(source, activeWorkspace)
+      const trimEnd = savedClip.trimEnd > savedClip.trimStart
+        ? Math.min(savedClip.trimEnd, facts.duration || savedClip.trimEnd)
+        : facts.duration
+      adopted = {
+        ...facts, id: savedClip.id, name: savedClip.name, source, previewUrl: source,
+        thumbnailUrl: api.getVideoEditorThumbnailUrl(source), trimStart: savedClip.trimStart, trimEnd,
+      }
+    }
+    const merged = mergeComicShotUpdate(clips, montage.ref.extras ?? {}, saved.clips, adopted)
+    persistEditorDraft(merged.clips, projectName, resolution, fps, draftWorkspaceRef.current, soundtrack)
+    setClips(merged.clips)
+    setMontage(current => {
+      if (!current.ref) return current
+      const origins = { ...current.ref.origins }
+      if (adoptedClipId) {
+        if (savedClip?.origin) origins[adoptedClipId] = savedClip.origin
+        else delete origins[adoptedClipId]
+      }
+      const ref = { ...current.ref, revision: saved.revision ?? current.ref.revision, extras: merged.extras, origins }
+      persistMontageState(activeWorkspace, current.layers, ref)
+      return { ...current, ref }
+    })
+  }
+
   const stopTimelineDragScroll = () => {
     if (dragScrollFrameRef.current !== null) {
       cancelAnimationFrame(dragScrollFrameRef.current)
@@ -2209,7 +2243,7 @@ export function VideoEditorPanel() {
               soundtrack={soundtrack} extras={montage.ref?.extras ?? {}} selectedId={selectedId}
               onSelect={selectTimelineClip} onMove={dropAtIndex}
               onDelete={removeClip} onDuplicate={duplicateComicClip} onExtra={patchComicExtra}
-              onRemake={remakeClip} onChanged={reloadOpenMontage} onError={setError} />
+              onRemake={remakeClip} onChanged={applyComicShotChange} onError={setError} />
           </div>
 
           <div className="px-3 py-3 border-t border-border bg-bg-tertiary/30">
