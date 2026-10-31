@@ -642,7 +642,7 @@ export function VideoEditorPanel() {
 
   useEffect(() => {
     if (draftWorkspaceRef.current === activeWorkspace) return
-    persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
+    persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current, soundtrack)
     const next = loadEditorDraft(activeWorkspace)
     draftWorkspaceRef.current = activeWorkspace
     setClips(next.clips)
@@ -684,10 +684,10 @@ export function VideoEditorPanel() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
+      persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current, soundtrack)
     }, 600)
     return () => window.clearTimeout(timer)
-  }, [clips, projectName, resolution, fps])
+  }, [clips, projectName, resolution, fps, soundtrack])
 
   useEffect(() => {
     if (!selectedId && clips[0]) setSelectedId(clips[0].id)
@@ -2626,6 +2626,8 @@ export function VideoEditorPanel() {
               setSoundtrack(next.soundtrack)
               setClips(next.clips)
               setMontage(current => ({ ...current, layers: next.layers }))
+              persistEditorDraft(next.clips, projectName, resolution, fps, draftWorkspaceRef.current, next.soundtrack)
+              persistMontageState(activeWorkspace, next.layers, montage.ref)
               if (next.report) setError(next.report)
             }}
             onError={setError}
