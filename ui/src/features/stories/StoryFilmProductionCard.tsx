@@ -25,7 +25,7 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
       <p className="text-xs text-text-muted">{project.projectType === 'quick_video' ? t('productions.quickHint') : t('productions.filmHint')}</p>
       <textarea className={input} rows={4} value={filmDirection} onChange={event => setFilmDirection(event.target.value)} aria-label={t('productions.filmDirectionAria')} />
       <label className="block text-[10px] text-text-muted">{t('productions.targetDuration')}
-        <input className={`${input} mt-1`} type="number" min={10} max={1800} step={5} value={filmDuration}
+        <input aria-label={t('productions.targetDuration')} className={`${input} mt-1`} type="number" min={10} max={1800} step={5} value={filmDuration}
           onChange={event => setFilmDuration(Math.max(10, Math.min(1800, Number(event.target.value) || 45)))} />
       </label>
       <div className="rounded-md border border-violet-500/25 bg-violet-500/5 p-2.5 space-y-2">
@@ -63,7 +63,7 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
         )}
       </div>
       <label className="block text-[10px] text-text-muted">{t('productions.imageModel')}
-        <select className={`${input} mt-1`} value={filmImageModel} disabled={directReferenceVideo || directVideo}
+        <select aria-label={t('productions.imageModel')} className={`${input} mt-1`} value={filmImageModel} disabled={directReferenceVideo || directVideo}
           onChange={event => selectDirectorImageModel(event.target.value)}>
           {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && (
             <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>
@@ -90,7 +90,7 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
         </span>
       </label>
       <label className="block text-[10px] text-text-muted">{t('productions.videoModel')}
-        <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} />
+        <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} label={t('productions.videoModel')} />
         <span className="mt-1 block text-[9px] leading-relaxed text-text-muted">
           {!storyVideoOptionsReady
             ? t('productions.checkingFormats')
@@ -114,7 +114,7 @@ export function StoryFilmProductionCard(props: StoryProductionsTabProps) {
         onChange={setStoryVideoFormat}
       />
       <label className="flex items-start gap-2 rounded-md border border-purple-500/30 bg-purple-500/10 p-2 cursor-pointer">
-        <input type="checkbox" checked={filmPreserveVisualStyle} onChange={event => setFilmPreserveVisualStyle(event.target.checked)} className="mt-0.5 accent-purple-400" />
+        <input aria-label={t('productions.preserveStyle')} type="checkbox" checked={filmPreserveVisualStyle} onChange={event => setFilmPreserveVisualStyle(event.target.checked)} className="mt-0.5 accent-purple-400" />
         <span>
           <span className="block text-[10px] font-medium text-purple-200">{t('productions.preserveStyle')}</span>
           <span className="block text-[9px] leading-relaxed text-text-muted">{t('productions.preserveStyleHint')}</span>

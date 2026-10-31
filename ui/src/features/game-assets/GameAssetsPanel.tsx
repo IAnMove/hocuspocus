@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { useUiTranslation } from '../../i18n'
+import { controlReason } from '../../i18n/controlLabel'
 import { useStore } from '../../stores/useStore'
 import { GameCastPanel } from './GameCastPanel'
 import { GameListPanel } from './GameListPanel'
@@ -52,9 +53,9 @@ function GameLibrary() {
   return (
     <aside className="w-full shrink-0 space-y-2 md:w-56">
       <div className="flex flex-wrap gap-2">
-        <button type="button" className={buttonClass} disabled={!ready} onClick={() => { void createGame() }}>{t('new')}</button>
-        <button type="button" className={buttonClass} disabled={!game} onClick={() => { void duplicateGame() }}>{t('duplicate')}</button>
-        <button type="button" className={buttonClass} disabled={!game} onClick={() => { if (window.confirm(t('confirmDelete'))) void deleteGame() }}>{t('delete')}</button>
+        <button type="button" className={buttonClass} disabled={!ready} title={controlReason(!ready, 'disabled.gamesLoading')} onClick={() => { void createGame() }}>{t('new')}</button>
+        <button type="button" className={buttonClass} disabled={!game} title={controlReason(!game, 'disabled.createGameFirst')} onClick={() => { void duplicateGame() }}>{t('duplicate')}</button>
+        <button type="button" className={buttonClass} disabled={!game} title={controlReason(!game, 'disabled.createGameFirst')} onClick={() => { if (window.confirm(t('confirmDelete'))) void deleteGame() }}>{t('delete')}</button>
       </div>
       <ul className="max-h-48 space-y-1 overflow-y-auto md:max-h-none">
         {games.map(item => (
@@ -117,9 +118,20 @@ function SectionPanel({ section }: { section: GameSection }) {
 
 function GameSectionBody() {
   const { t } = useUiTranslation('gameAssets')
+  const ready = useGameAssetsStore(state => state.ready)
   const hasGame = useGameAssetsStore(state => Boolean(state.game))
   const section = useGameAssetsStore(state => state.section)
-  if (!hasGame) return null
+  const createGame = useGameAssetsStore(state => state.createGame)
+  if (!hasGame) {
+    if (!ready) return null
+    return (
+      <div className="max-w-lg space-y-3">
+        <p className="text-sm text-muted-foreground">{t('empty')}</p>
+        <p className="text-sm">{t('emptyExplain')}</p>
+        <button type="button" className={buttonClass} onClick={() => { void createGame() }}>{t('new')}</button>
+      </div>
+    )
+  }
   if (LATER_SECTIONS.includes(section)) return <p className="text-sm text-muted-foreground">{t('soon')}</p>
   return <div role="tabpanel"><SectionPanel section={section} /></div>
 }

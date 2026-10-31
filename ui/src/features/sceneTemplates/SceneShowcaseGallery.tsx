@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Scene } from '../../types'
 import i18n, { useUiTranslation } from '../../i18n'
@@ -117,7 +118,7 @@ function MediaCard({
   return <div className="relative aspect-video overflow-hidden rounded-lg border border-border bg-black">
     {active
       ? <video controls preload="metadata" playsInline src={item.video.url} aria-label={t('templateErrors.fullVideoAria', { title: item.title })} onError={onMediaError} className="h-full w-full object-contain" />
-      : <button type="button" onClick={onPlay} disabled={busy} className="group relative h-full w-full text-left disabled:cursor-wait disabled:opacity-70" aria-label={t('templateErrors.watchFullVideoAria', { title: item.title })}>
+      : <button type="button" onClick={onPlay} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="group relative h-full w-full text-left disabled:cursor-wait disabled:opacity-70" aria-label={t('templateErrors.watchFullVideoAria', { title: item.title })}>
         <Preview item={item} failed={posterFailed} onError={onPosterError} />
         <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap rounded-xl bg-cyan-300 px-5 py-4 text-center text-sm font-bold text-slate-950 shadow-xl group-hover:bg-cyan-200">{t('templateErrors.watchFullVideo')}</span>
       </button>}

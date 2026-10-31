@@ -1,6 +1,7 @@
 import React, { useState, type ReactNode, type RefObject } from 'react'
 import { BookOpen, Box, Film, Play } from 'lucide-react'
 import type { OutputFile } from '../../types'
+import { useUiTranslation } from '../../i18n'
 import { outputMediaUrl } from '../../lib/storedImageFiles'
 import { ImagePreview } from '../common/ImagePreview'
 
@@ -61,6 +62,7 @@ function FeedModel3dPreview({
   activeClip: string | null
   setActiveClip: (clip: string) => void
 }) {
+  const { t } = useUiTranslation('activity')
   const mediaUrl = outputMediaUrl(file.name, workspace || '')
   let preview: ReactNode
   if (canPreviewModel3d && isActive) {
@@ -86,8 +88,8 @@ function FeedModel3dPreview({
       <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-4 text-center">
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active"><Box size={26} className="text-accent-blue" /></div>
         <div>
-          <p className="text-sm text-text-secondary">3D model asset</p>
-          <p className="mt-1 text-[11px] text-text-muted">{canPreviewModel3d ? 'Select this card to open the interactive GLB preview.' : 'Interactive preview is available for GLB exports.'}</p>
+          <p className="text-sm text-text-secondary">{t('actions.model3dAsset')}</p>
+          <p className="mt-1 text-[11px] text-text-muted">{canPreviewModel3d ? t('actions.model3dSelect') : t('actions.model3dGlb')}</p>
         </div>
       </div>
     )
@@ -95,14 +97,19 @@ function FeedModel3dPreview({
   return (
     <div className="relative h-full w-full">
       {preview}
-      <a href={mediaUrl} download={file.name} className="absolute right-2 top-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-[10px] text-white transition-colors hover:bg-black/80">Download</a>
+      <a href={mediaUrl} download={file.name} className="absolute right-2 top-2 rounded-lg border border-white/20 bg-black/60 px-2.5 py-1.5 text-[10px] text-white transition-colors hover:bg-black/80">{t('actions.download')}</a>
       {isRigged && riggedClips.length > 0 && (
-        <select value={activeClip ?? riggedClips[0]} onChange={event => setActiveClip(event.target.value)} className="absolute bottom-2 left-2 rounded-lg border border-white/20 bg-black/60 px-2 py-1 text-[10px] text-white" title="Animation clip">
+        <select aria-label={t('actions.animationClip')} value={activeClip ?? riggedClips[0]} onChange={event => setActiveClip(event.target.value)} className="absolute bottom-2 left-2 rounded-lg border border-white/20 bg-black/60 px-2 py-1 text-[10px] text-white" title={t('actions.animationClip')}>
           {riggedClips.map(clip => <option key={clip} value={clip}>{clip}</option>)}
         </select>
       )}
     </div>
   )
+}
+
+function SavedKindLabel({ kind }: { kind: 'scene' | 'comic' }) {
+  const { t } = useUiTranslation('activity')
+  return <span className="text-xs">{kind === 'scene' ? t('actions.savedScene') : t('actions.savedComic')}</span>
 }
 
 /** Paints the output's average colour until its preview has decoded. */
@@ -126,24 +133,24 @@ function renderFeedMedia({
   }
   if (file.type === 'audio') {
     return (
-      <div className="flex w-full min-w-0 flex-col items-center gap-4 px-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-active">
-          <Play size={24} className="text-text-muted" />
+      <div className="flex h-full min-h-0 w-full min-w-0 flex-col items-center justify-center gap-2 overflow-hidden px-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-bg-active">
+          <Play size={22} className="text-text-muted" />
         </div>
-        <p className="mb-2 max-w-full truncate text-xs text-text-muted" title={file.name}>{file.name}</p>
-        <audio key={file.url} src={file.url} controls className="w-64 max-w-full" />
+        <p className="max-w-full truncate text-xs text-text-muted" title={file.name}>{file.name}</p>
+        <audio key={file.url} src={file.url} controls className="m-0 w-64 max-w-full shrink-0" />
       </div>
     )
   }
   if (isScene) {
     return file.thumbnail_url
       ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} loading="lazy" decoding="async" />
-      : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><span className="text-xs">Saved scene</span></div>
+      : <div className="flex flex-col items-center gap-2 text-text-muted"><Film size={28} /><SavedKindLabel kind="scene" /></div>
   }
   if (isComic) {
     return file.thumbnail_url
       ? <img src={file.thumbnail_url} alt={file.name} className={MEDIA_FIT} loading="lazy" decoding="async" />
-      : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><span className="text-xs">Saved comic</span></div>
+      : <div className="flex flex-col items-center gap-2 text-text-muted"><BookOpen size={28} /><SavedKindLabel kind="comic" /></div>
   }
   if (isModel3d) {
     return (

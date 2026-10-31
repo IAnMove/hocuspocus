@@ -138,14 +138,17 @@ def anime_mouth(figure, rgb, alpha, eyes_box, face_eyes, style, ink, hinted, gui
 
 
 def pose_warnings(height, ey0, found, guide, wiped, rigged, alpha, face_eyes, mouth_box,
-                  eye_warnings, mouth_warnings, anime_failed, stray_marks) -> list[str]:
-    """The pose's warnings, including a landmark disagreement and a failed detector."""
+                  eye_warnings, mouth_warnings, anime_failed, stray_marks, mouth_source=None) -> list[str]:
+    """The pose's warnings, including a landmark disagreement and a failed detector.
+
+    A mouth placed from landmarks is not ``mouth_not_found``: the painted mark was absent, and the landmarks supplied one.
+    """
     warnings = ["eyes_low"] if ey0 / height > 0.4 else []
     warnings.extend(eye_warnings)
     warnings.extend(mouth_warnings)
     if anime_failed:
         warnings.append("anime_landmarks_failed")
-    if not found:
+    if not found and mouth_source != "landmarks":
         warnings.append("mouth_not_found")
     if (guide.get("hint_ignored") or {}).get("far"):
         warnings.append("mouth_hint_ignored")

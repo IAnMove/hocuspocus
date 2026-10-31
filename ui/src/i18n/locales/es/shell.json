@@ -17,8 +17,20 @@
     "tokenLabel": "Token de acceso LAN",
     "unlock": "Desbloquear esta sesión"
   },
+  "notices": {
+    "bell": "Avisos",
+    "bellCount_one": "{{count}} aviso",
+    "bellCount_other": "{{count}} avisos",
+    "empty": "No hay avisos"
+  },
   "preflight": {
-    "dismiss": "Descartar"
+    "dismiss": "Descartar",
+    "ffmpeg": "No se encontró ffmpeg en PATH. La exportación de vídeo y audio fallará. Instala ffmpeg y reinicia HocusPocus Lab.",
+    "cuda": "No se detectó una GPU CUDA. La generación de HocusPocus Lab necesita una GPU NVIDIA; en este equipo no va a funcionar.",
+    "torch": "PyTorch no se pudo importar: la instalación puede estar incompleta. Prueba Restablecer y luego Instalar en Pinokio.",
+    "diskError": "Solo quedan {{gb}} GB libres en el disco de salida. La generación escribe archivos grandes y fallará pronto. Libera espacio.",
+    "diskWarn": "Quedan {{gb}} GB libres en el disco de salida. Las descargas de modelos y los trabajos largos pueden agotarlo: vigila el espacio libre.",
+    "diskUnknown": "Queda poco espacio libre en el disco de salida."
   },
   "capabilities": {
     "macosCoreRemote": "macOS · modo edición y proveedores remotos",

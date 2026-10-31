@@ -69,6 +69,9 @@ same file, so a new component is one catalog entry plus its `<id>_install.js`, w
 
 ## Installation tab
 
+Operator workflow, reclaimable space, HTTP examples and pitfalls:
+[Settings > Installation](../install/HOWUSEIT.md).
+
 Settings > Installation (`ui/src/components/Installation`) lists the same components with their
 state, measured or estimated size and the free disk space, and installs, updates or removes each
 one. The server side is `services/install_manager.py` behind `GET /api/v1/system/install`,
@@ -115,7 +118,16 @@ so it does not change install fingerprints.
 Hunyuan and UniRig still need a compatible CUDA compiler; Hunyuan on Windows
 needs Visual Studio Build Tools. The installer actually imports Torch and runs
 a small CUDA calculation before accepting each environment. It does not execute
-models as part of this check.
+models as part of this check. Windows WanGP also runs one xFormers attention
+call when the recipe lists `xformers.ops`. The pinned xFormers build treats
+FlashAttention-3 as usable on every GPU of compute capability 9.0 or newer, but
+that kernel is Hopper-only. On Blackwell (compute capability 10.0 and 12.0,
+including the RTX 5090) the launch aborts the process, so the probe runs only
+through compute capability 9.0. A newer GPU still imports `xformers.ops` and
+still runs the plain CUDA calculation. WanGP uses SageAttention or SDPA there.
+`scripts/runtime_verify.py` is part of every engine's install fingerprint, so
+the next Update reinstalls the main studio, and any optional engine whose
+environment is already present, once.
 
 UniRig pins Blender's Python module to `bpy==4.2.22`, within the 4.2 LTS
 API. The 4.2 Linux wheels name CPython 3.11 but their embedded `WHEEL` metadata
@@ -241,9 +253,11 @@ Pinokio itself through successful preflight, successful child completion, and a
 silent failed child whose parent must not publish completion.
 
 Remaining work: full Windows/Linux installation and model smoke on the final
-branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today); a UI for optional components; transactional
-environment replacement with automatic rollback. Current Update repairs in
-place and stops on failure; it does not promise rollback to the previous stack.
+branch; local AMD ROCm/Intel/MPS/CPU recipes (core covers those machines today);
+transactional environment replacement with automatic rollback. Current Update
+repairs in place and stops on failure; it does not promise rollback to the
+previous stack. The optional-component UI is Settings > Installation
+([operator guide](../install/HOWUSEIT.md)).
 
 References: [Python venv](https://docs.python.org/3/library/venv.html),
 [NVIDIA CUDA release notes](https://docs.nvidia.com/cuda/cuda-toolkit-release-notes/index.html),

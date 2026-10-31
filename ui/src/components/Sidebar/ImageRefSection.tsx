@@ -1,3 +1,4 @@
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -128,7 +129,7 @@ export function ImageRefSection() {
             <button
               onClick={() => removeImageRef(i)}
               className="absolute top-0.5 right-0.5 bg-bg-primary/80 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-bg-hover"
-            >
+             title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}>
               <X size={10} />
             </button>
           </div>
@@ -195,7 +196,7 @@ export function ImageRefSection() {
       {/* Background removal toggle */}
       {imageRefs.length > 0 && bgLabel && (
         <label className="flex items-start gap-2 cursor-pointer">
-          <input
+          <input aria-label={bgLabel}
             type="checkbox"
             checked={removeBackgroundRefs}
             onChange={e => setRemoveBackgroundRefs(e.target.checked)}

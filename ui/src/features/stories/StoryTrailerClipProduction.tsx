@@ -40,7 +40,7 @@ export function StoryTrailerClipProduction(props: StoryTrailerTabProps) {
             <p className="text-[10px] font-medium text-fuchsia-200">{t('trailer.t2vTitle')}</p>
             <p className="text-[9px] leading-relaxed text-text-muted">{t('trailer.t2vHint')}</p>
             <label className="block text-[9px] text-violet-200">{t('trailer.masterPrompt')}<span className="ml-1 text-violet-300" title={t('chrome.required')}>●</span>
-              <textarea className={`${input} ${requiredInput} mt-1 min-h-32 resize-y leading-relaxed`} value={project.directVideoMasterPrompt}
+              <textarea aria-label={t('trailer.masterPrompt')} className={`${input} ${requiredInput} mt-1 min-h-32 resize-y leading-relaxed`} value={project.directVideoMasterPrompt}
                 onChange={event => patch({ directVideoMasterPromptMode: 'custom', directVideoMasterPrompt: event.target.value })}
                 placeholder={t('trailer.masterPlaceholder')} required aria-required="true" />
             </label>
@@ -48,18 +48,18 @@ export function StoryTrailerClipProduction(props: StoryTrailerTabProps) {
               {directVideoMasterReady ? t('trailer.t2vReady') : t('trailer.completeMaster')}
             </span>
           </div>}
-          <label className={`flex items-start gap-2 pt-1 ${directVideo ? 'opacity-45' : ''}`}><input type="checkbox" disabled={directVideo} checked={trailerPreserveVisualStyle} onChange={event => { markTrailerTouched(); setTrailerPreserveVisualStyle(event.target.checked) }} className="mt-0.5 accent-purple-400" /><span><span className="block text-[10px] text-text-primary">{t('trailer.keepStoryStyle')}</span><span className="block text-[9px] text-text-muted">{directVideo ? t('trailer.styleFromMaster') : t('trailer.styleKeepsMedium')}</span></span></label>
+          <label className={`flex items-start gap-2 pt-1 ${directVideo ? 'opacity-45' : ''}`}><input aria-label={t('trailer.keepStoryStyle')} type="checkbox" disabled={directVideo} checked={trailerPreserveVisualStyle} onChange={event => { markTrailerTouched(); setTrailerPreserveVisualStyle(event.target.checked) }} className="mt-0.5 accent-purple-400" /><span><span className="block text-[10px] text-text-primary">{t('trailer.keepStoryStyle')}</span><span className="block text-[9px] text-text-muted">{directVideo ? t('trailer.styleFromMaster') : t('trailer.styleKeepsMedium')}</span></span></label>
         </div>
         <div className="rounded-lg border border-border bg-bg-primary/30 p-3 space-y-2">
           <label className="block text-[10px] text-text-muted">{t('trailer.imageModel')}
-            <select className={`${input} mt-1`} value={filmImageModel} disabled={directVideo || directReferenceVideo} onChange={event => selectDirectorImageModel(event.target.value)}>
+            <select aria-label={t('trailer.imageModel')} className={`${input} mt-1`} value={filmImageModel} disabled={directVideo || directReferenceVideo} onChange={event => selectDirectorImageModel(event.target.value)}>
               {filmImageModel !== MINIMAX_IMAGE_API_MODEL && !selectableImageModels.some(model => model.model_type === filmImageModel) && <option value={filmImageModel}>{selectedFilmImageModel?.name || filmImageModel}</option>}
               <optgroup label={t('trailer.externalApi')}><option value={MINIMAX_IMAGE_API_MODEL}>{MINIMAX_IMAGE_API_LABEL}</option></optgroup>
               <optgroup label={t('trailer.localModels')}>{selectableImageModels.map(model => <option key={model.model_type} value={model.model_type}>{model.name}{model.is_downloaded === false ? t('trailer.downloadsOnFirstUse') : ''}</option>)}</optgroup>
             </select>
           </label>
           <label className="block text-[10px] text-text-muted">{t('trailer.videoModel')}
-            <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} />
+            <DirectorModelPicker mode="video" value={filmVideoModel} onChange={selectStoryVideoModel} pipeline="short_film_story" allowSeamless={false} preserveSelection showModeLabel={false} label={t('trailer.videoModel')} />
           </label>
         </div>
       </div>

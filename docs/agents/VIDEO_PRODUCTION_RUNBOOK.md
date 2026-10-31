@@ -184,6 +184,8 @@ in place of the scene phrase; `dry_run.windows` shows every trailer window's `be
 | scenes | `scenes.video2d.edit` + `scenes.video2d.export` | one scene per shot, lyric captions timed to the words, clip trimmed to stay in sync, instrumental gaps longer than a clip filled from `fill` on bar lines |
 | montage | `montages.save` + `montages.export` | song as soundtrack, scenes in order |
 
+see a montage as a comic with `montages.comic.panels`; edits are `montages.save`.
+
 A start frame that does not arrive is asked for again (a new job, and a smaller picture after an out-of-memory) twice per run; if it still fails the run stops as `failed` with `frames_incomplete` and `production.status` lists `frame_failures`. A cast entry may set `count` (how many distinct subjects that reference image shows, default 1); the frame prompt then says "Exactly N distinct subjects, no duplicated characters", because a sheet with several views makes the model draw the character several times. Each cast member also gets a second portrait, one full-body subject on a plain background (`single_prompt`, or that phrase derived from `sheet_prompt`). Start frames use the portrait instead of the sheet. A group reference is composed from those portraits, not from the sheets. The six-seed check that a one-person frame no longer duplicates the character still needs a GPU pass. After the frames and again after the clips, that declared count is compared with the people in the picture. A group of 4 that comes out as 1 is `subject_count` on `production.status` (`subject_counts`, with the shot, the stage, the expected count and the detected count). The comparison uses the same CPU weights as `qa.people` (`pose/yolox_l.onnx`). When those weights are absent no count is invented. `qa.people` itself returns retake when `max_people` is above or below `expected`. A group reference (several characters in one image) is the way to keep three references under the image model's memory limit.
 
 Packet times of each clip, each exported scene, and the final video are compared on `production.status` as `smoothness`. A held frame, a cadence hitch, or a stretch at another speed is blamed on the clip, the retime, or the export. A file that cannot be read is left out, and the animatic preview is not measured. A steady cadence, even a slow one, is the clip's own rate.
@@ -442,9 +444,9 @@ factory and document parser; it does not build a separate renderer.
 
 Overrides include `camera`, `atmos`, `environment`, `light`, `dressing`,
 `pixelWorld`, `rhythm`, `width`, `height` and `fps`. `subject` also accepts `clip` (an authored
-GLB animation name, or null), `motion`, `position`, `scale`, `rotationY` and
+GLB animation name, or null), `motion`, `position`, `scale`, `rotationX`, `rotationY`, `rotationZ` and
 `grounded`. Explicit `slots` use the native Video 3D slot fields. A rigid GLB can
-turn, bob or slide without a skeleton. `rotationY` and `motion.turnTo` are radians (6.283 is one full turn). `sing: true` is rejected for these shots;
+turn, bob or slide without a skeleton. `rotationX`, `rotationY`, `rotationZ` and `motion.turnTo` are radians (6.283 is one full turn). Omitted `rotationX` and `rotationZ` leave the stored tilt. `sing: true` is rejected for these shots;
 no H3 lip-sync is implied.
 
 **Template + cast + painted set.** Prefer this over writing a `document`: ask
@@ -851,12 +853,14 @@ Set `scene3d.renderLook: "toon"` (or `document.renderLook`, or `renderLook` in
 `world3d.scene.patch`) to draw 3D model slots as cels: flat light bands and an
 ink outline, so GLB characters, vehicles and props match flat anime cutouts and
 painted backgrounds. Image slots and cutouts are not changed. Optional
-`toon: {"steps": 2-4, "outline": 0-8, "ink": "#rrggbb"}` sets the number of
+`toon: {"steps": 2-4, "outline": 0-8, "ink": "#rrggbb", "shade": "classic"|"anime"}` sets the number of
 light bands (default 3), the ink width in pixels of a 1080p frame (default 3;
 0 draws no line) and the ink colour (default `#141018`). Rigged models keep
 their clips: the outline follows the skeleton. Transparent and alpha-cut
 materials get no ink, and a materializing model gets its ink once it has
-arrived. Preview and export match. `renderLook: "none"` in a patch returns to
+arrived. `shade: "anime"` keeps the shadow band close to the lit colour with a cool tint, drops the smooth
+ambient gradient that blurs the bands and adds a thin hard rim of light on the edge turned to the key light.
+Preview and export match. `renderLook: "none"` in a patch returns to
 the authored materials and keeps the `toon` settings. An unknown look or an
 out-of-range toon value is refused (`invalid_render_look`).
 

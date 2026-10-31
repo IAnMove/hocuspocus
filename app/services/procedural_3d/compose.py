@@ -1,7 +1,8 @@
-"""Bounded CPU primitive composition into a self-contained, flat shaded GLB.
+"""Bounded CPU primitive composition into a self-contained GLB.
 
 Metres, Y-up, radians; rotations apply X then Y then Z. Vertices are split
-per triangle so normals never interpolate across faces. No model downloads.
+per triangle. Normals are flat unless ``smooth`` is set, so the default mesh
+stays byte for byte what it was. No model downloads.
 """
 from __future__ import annotations
 
@@ -12,7 +13,9 @@ import struct
 
 from services.procedural_3d.coplanar import separate_coplanar
 
-KINDS = ("box", "sphere", "cylinder", "cone")
+KINDS = ("box", "sphere", "cylinder", "cone", "capsule", "frustum")
+_LEGACY = ("box", "sphere", "cylinder", "cone")
+_FIELDS = {"type", "position", "scale", "rotation", "color", "segments", "smooth"}
 MAX_PIECES = 128
 SEGMENTS = 8
 
@@ -41,16 +44,47 @@ def normalized_pieces(pieces):
     normalized = []
     for piece in pieces:
         if not isinstance(piece, dict) or piece.get("type") not in KINDS:
-            raise ValueError("Each piece needs type box|sphere|cylinder|cone")
-        if set(piece) - {"type", "position", "scale", "rotation", "color"}:
+            raise ValueError("Each piece needs type box|sphere|cylinder|cone|capsule|frustum")
+        extra = set(piece) - _FIELDS
+        if piece.get("type") == "frustum":
+            extra.discard("taper")
+        if extra:
             raise ValueError("Unknown piece field")
         normalized.append({
             "type": piece["type"], "position": vector(piece.get("position"), [0, 0, 0]),
             "scale": vector(piece.get("scale"), [1, 1, 1], positive=True),
             "rotation": vector(piece.get("rotation"), [0, 0, 0]),
             "color": linear_color(piece.get("color", "#FFFFFF")),
+            "segments": _segments(piece.get("segments")),
+            "smooth": _flag(piece.get("smooth"), "smooth"),
+            "taper": _taper(piece) if piece.get("type") == "frustum" else None,
         })
     return normalized
+
+
+def _segments(value):
+    """Optional radial count. ``None`` keeps today's 8 segments and, for a sphere, 6 rings."""
+    if value is None:
+        return None
+    if type(value) is not int or isinstance(value, bool) or not 6 <= value <= 48:
+        raise ValueError("segments must be an integer from 6 to 48")
+    return value
+
+
+def _flag(value, label):
+    """``None`` inherits the call. A real boolean is that piece's own choice."""
+    if value is None:
+        return None
+    if type(value) is not bool:
+        raise ValueError(f"{label} must be true or false")
+    return value
+
+
+def _taper(piece):
+    value = piece.get("taper", 1.0)
+    if type(value) is bool or not isinstance(value, (int, float)) or not math.isfinite(float(value)) or not 0.2 <= float(value) <= 1.0:
+        raise ValueError("taper must be a number from 0.2 to 1.0")
+    return float(value)
 
 
 def _box():
@@ -89,6 +123,48 @@ def _sphere():
                 yield b, d, c
 
 
+def _radial_n(kind, segments):
+    for i in range(segments):
+        angles = [i * math.tau / segments, (i + 1) * math.tau / segments]
+        a, b = [(math.cos(t) * .5, -.5, math.sin(t) * .5) for t in angles]
+        yield (0, -.5, 0), a, b
+        if kind == "cone":
+            yield a, (0, .5, 0), b
+        else:
+            c, d = [(v[0], .5, v[2]) for v in (a, b)]
+            yield a, c, d
+            yield a, d, b
+            yield (0, .5, 0), d, c
+
+
+def _sphere_n(segments):
+    rings = segments // 2
+
+    def point(lat, lon):
+        theta, phi = lat * math.pi / rings, lon * math.tau / segments
+        return .5 * math.sin(theta) * math.cos(phi), .5 * math.cos(theta), .5 * math.sin(theta) * math.sin(phi)
+
+    for lat in range(rings):
+        for lon in range(segments):
+            a, b, c, d = point(lat, lon), point(lat, lon + 1), point(lat + 1, lon), point(lat + 1, lon + 1)
+            if lat > 0:
+                yield a, b, c
+            if lat < rings - 1:
+                yield b, d, c
+
+
+def _faces(piece):
+    kind, segments = piece["type"], piece["segments"]
+    if kind in ("capsule", "frustum"):
+        from services.procedural_3d.shapes import local_faces
+        return local_faces(piece)
+    if kind == "box":
+        return _box()
+    if segments is None:
+        return _sphere() if kind == "sphere" else _radial(kind)
+    return _sphere_n(segments) if kind == "sphere" else _radial_n(kind, segments)
+
+
 def _transform(v, piece):
     x, y, z = [v[i] * piece["scale"][i] for i in range(3)]
     rx, ry, rz = piece["rotation"]
@@ -107,18 +183,96 @@ def _normal(a, b, c):
     return tuple(n / length for n in cross)
 
 
-def compose_glb(pieces, name="Composed model") -> bytes:
+def compose_glb(pieces, name="Composed model", *, smooth=False) -> bytes:
+    """Flat normals unless ``smooth`` is true on the call or on a piece. A box stays flat."""
+    if type(smooth) is not bool:
+        raise ValueError("smooth must be true or false")
     vertices, normals, colors = [], [], []
     for piece in normalized_pieces(pieces):
-        kind = piece["type"]
-        faces = _box() if kind == "box" else _sphere() if kind == "sphere" else _radial(kind)
-        for face in faces:
-            points = [_transform(p, piece) for p in face]
-            normal = _normal(*points)
-            vertices.extend(points)
-            normals.extend([normal] * 3)
-            colors.extend([piece["color"]] * 3)
+        use_smooth = smooth if piece["smooth"] is None else piece["smooth"]
+        if piece["type"] == "box" or (piece["type"] in _LEGACY and not use_smooth):
+            for face in _faces(piece):
+                points = [_transform(p, piece) for p in face]
+                normal = _normal(*points)
+                vertices.extend(points)
+                normals.extend([normal] * 3)
+                colors.extend([piece["color"]] * 3)
+        else:
+            _extend_shaped(vertices, normals, colors, piece, use_smooth)
     return _pack(name, separate_coplanar(vertices, normals, colors), normals, colors)
+
+
+def _extend_shaped(vertices, normals, colors, piece, smooth):
+    from services.procedural_3d.shapes import iter_triangles
+    for tri, local_normals in iter_triangles(piece, smooth):
+        points = [_transform(p, piece) for p in tri]
+        if local_normals is None:
+            found = (_normal(*points),) * 3
+        else:
+            found = tuple(_rotate(normal, piece) for normal in local_normals)
+        vertices.extend(points)
+        normals.extend(found)
+        colors.extend([piece["color"]] * 3)
+
+
+def _rotate(vector, piece):
+    """Rotate a normal the same way ``_transform`` rotates a point, then re-unit it."""
+    x, y, z = vector
+    rx, ry, rz = piece["rotation"]
+    y, z = y * math.cos(rx) - z * math.sin(rx), y * math.sin(rx) + z * math.cos(rx)
+    x, z = x * math.cos(ry) + z * math.sin(ry), -x * math.sin(ry) + z * math.cos(ry)
+    x, y = x * math.cos(rz) - y * math.sin(rz), x * math.sin(rz) + y * math.cos(rz)
+    length = math.sqrt(x * x + y * y + z * z)
+    if length <= 1e-12:
+        return (0.0, 1.0, 0.0)
+    return (x / length, y / length, z / length)
+
+
+def pack_mesh(name, vertices, normals, colors) -> bytes:
+    """A GLB from ready triangles (three vertices each, with normals and linear colours), for a lofted body."""
+    return _pack(name, vertices, normals, colors)
+
+
+def pack_parts(name, parts) -> bytes:
+    """One mesh with a primitive per part ``(vertices, normals, colors, material_name)``: the body and its hair."""
+    blobs, accessors, views, primitives, materials = [], [], [], [], []
+    offset = 0
+    for index, part in enumerate(parts):
+        vertices, normals, colors, material = part[:4]
+        uvs = part[4] if len(part) > 4 else None
+        count = len(vertices)
+        first = len(accessors)
+        for array in (vertices, normals, colors):
+            packed = struct.pack(f"<{count * 3}f", *(v for row in array for v in row))
+            views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(packed), "target": 34962})
+            accessors.append({"bufferView": len(views) - 1, "componentType": 5126, "count": count, "type": "VEC3"})
+            blobs.append(packed)
+            offset += len(packed)
+        attributes = {"POSITION": first, "NORMAL": first + 1, "COLOR_0": first + 2}
+        if uvs is not None:
+            if len(uvs) != count:
+                raise ValueError("uvs must give one (u, v) per vertex")
+            packed = struct.pack(f"<{count * 2}f", *(v for row in uvs for v in row))
+            views.append({"buffer": 0, "byteOffset": offset, "byteLength": len(packed), "target": 34962})
+            accessors.append({"bufferView": len(views) - 1, "componentType": 5126, "count": count, "type": "VEC2"})
+            attributes["TEXCOORD_0"] = len(accessors) - 1
+            blobs.append(packed)
+            offset += len(packed)
+        accessors[first].update(min=[min(v[i] for v in vertices) for i in range(3)], max=[max(v[i] for v in vertices) for i in range(3)])
+        materials.append({"name": material, "pbrMetallicRoughness": {"baseColorFactor": [1, 1, 1, 1], "metallicFactor": 0, "roughnessFactor": 1}})
+        primitives.append({"attributes": attributes, "material": index, "mode": 4})
+    doc = {
+        "asset": {"version": "2.0", "generator": "HocusPocus model3d.compose"},
+        "scene": 0, "scenes": [{"nodes": [0]}], "nodes": [{"name": name, "mesh": 0}],
+        "meshes": [{"name": name, "primitives": primitives}], "materials": materials,
+        "buffers": [{"byteLength": offset}], "bufferViews": views, "accessors": accessors,
+    }
+    encoded = json.dumps(doc, separators=(",", ":"), ensure_ascii=False, allow_nan=False).encode()
+    encoded += b" " * (-len(encoded) % 4)
+    binary = b"".join(blobs)
+    return (struct.pack("<III", 0x46546C67, 2, 28 + len(encoded) + len(binary))
+            + struct.pack("<II", len(encoded), 0x4E4F534A) + encoded
+            + struct.pack("<II", len(binary), 0x004E4942) + binary)
 
 
 def _pack(name, vertices, normals, colors):

@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { LabsLibraryPick } from '../../lib/LabsLibraryPick'
 import { useUiTranslation } from '../../i18n'
@@ -119,7 +120,7 @@ function SpeechDraftEditor({ kit: draft, workspace, controller, faceBusy, onBusy
       </ul>
       <p className="text-xs text-text-secondary">{t(readiness.previewReady ? 'speechWorkshop.previewReady' : 'speechWorkshop.previewNotReady')}</p>
       <div ref={faceRigRef} data-testid="speech-face-rig" className="mx-auto w-full max-w-5xl rounded border border-border p-4">
-        <CharacterKitFaceRigPanel key={`${draft.id}:${currentPoseId}`} kit={draft} poseId={currentPoseId} workspace={workspace} disabled={busy} onBusyChange={onBusyChange} onChange={controller.change} onStatus={controller.setStatus}
+        <CharacterKitFaceRigPanel key={`${draft.id}:${currentPoseId}`} kit={draft} poseId={currentPoseId} workspace={workspace} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} onBusyChange={onBusyChange} onChange={controller.change} onStatus={controller.setStatus}
           onRigged={controller.reload} />
       </div>
     </>

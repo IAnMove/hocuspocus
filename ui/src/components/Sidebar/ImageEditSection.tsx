@@ -67,7 +67,7 @@ export function ImageEditSection() {
       {capabilities.outpaint && source && !batch ? (
         <label className="block text-[11px] text-text-secondary">
           {t('imageEdit.outpaintMargins')}
-          <input
+          <input aria-label={t('imageEdit.outpaintMargins')}
             className="mt-1 w-full rounded border border-border bg-bg-tertiary px-2 py-1.5 text-xs text-text-primary"
             placeholder="0 0 0 0"
             value={String(params.video_guide_outpainting || '')}
@@ -79,7 +79,7 @@ export function ImageEditSection() {
       {mask ? (
         <label className="block text-[11px] text-text-secondary">
           {t('imageEdit.denoising')}
-          <input
+          <input aria-label={t('imageEdit.denoising')}
             type="range"
             min="0"
             max="1"

@@ -10,6 +10,11 @@ import type {
   ComicVideoOverrideField,
 } from './types'
 import { normalizeLanguageIntent } from '../../lib/languageIntent'
+import i18n from 'i18next'
+
+function untitledComic(): string {
+  return i18n.t('untitled', { ns: 'comics', defaultValue: 'Untitled comic' })
+}
 
 const COMIC_VIDEO_OVERRIDE_FIELDS: readonly ComicVideoOverrideField[] = [
   'included',
@@ -164,7 +169,7 @@ export function normalizeComicPlan(
     ...repaired,
     version: 1,
     id: String(repaired.id || comicId('comic-plan')),
-    title: String(repaired.title || 'Untitled comic'),
+    title: String(repaired.title || untitledComic()),
     logline: String(repaired.logline || ''),
     synopsis: String(repaired.synopsis || ''),
     language: String(repaired.language || 'English'),
@@ -323,7 +328,7 @@ export function createComicProject(): ComicProject {
   return {
     version: 2,
     id: comicId('comic'),
-    title: 'Untitled comic',
+    title: untitledComic(),
     synopsis: '',
     language: 'English',
     languageIntent: normalizeLanguageIntent(null, {

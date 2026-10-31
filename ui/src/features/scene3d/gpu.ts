@@ -8,6 +8,7 @@ import { framingFov, framingPose } from './framing'
 import { shakeCamera } from './cameraShake.ts'
 import { SpeechFaceRuntime, speechFace } from './speech/runtime'
 import { FACE_PACK_SCREEN_ERROR, FacePackRuntime } from './speech/facePack'
+import { FaceDecalRuntime } from './faceDecal'
 import { screenGeometry } from './screenGeometry'
 import type { ScreenMediaRuntime } from './screenMediaRuntime'
 import { framingAnchor, markRestPose } from './framingAnchor'
@@ -72,6 +73,8 @@ import { DirectionMemory } from './directionalSprite.ts'
 import { awaitsView, cameraPass, walkedSlot } from './directionalPaint.ts'
 import { tintSprite } from './directionalLight.ts'
 import { createSplatMount, poseSplatMount, releaseSpark, studioFloorHiddenForSplat } from './splatItem.ts'
+import { paintImageFades } from './imageFade.ts'
+import { applySlotTilt } from './slotTilt'
 
 export const CYLINDER_RADIUS = 12
 export const CYLINDER_HEIGHT = 18
@@ -99,6 +102,7 @@ export type SlotGpu = {
   appearance?: MaterializationRuntime
   speechFace?: SpeechFaceRuntime
   facePack?: FacePackRuntime
+  faceDecal?: FaceDecalRuntime
   screen?: ScreenMediaRuntime
   screenAbort?: AbortController
   screenError?: Error
@@ -131,6 +135,8 @@ export type GpuWorld = {
   exportRender?: ExportRenderQuality
   /** Set while an export paints frames (any quality); the editor preview leaves it unset. */
   exporting?: boolean
+  /** The edit camera is orbiting. Preview paints leave the shot camera document alone. */
+  freeView?: boolean
   /** A template thumbnail export keeps the editor's placeholders for empty slots. */
   exportPlaceholders?: boolean
   /** Environment light of scenes that ask for it (`document.lighting`). */
@@ -306,7 +312,7 @@ export function placeholderMesh(slot: Scene3DSlot) {
   )
   mesh.position.fromArray(slot.position)
   mesh.scale.setScalar(slot.scale)
-  mesh.rotation.y = slot.rotationY
+  applySlotTilt(mesh, slot)
   return mesh
 }
 
@@ -317,7 +323,7 @@ export function fitGltf(root: Object3D, slot: Scene3DSlot) {
   const baseScale = 1.7 / Math.max(size.y, 0.001)
   root.scale.setScalar(baseScale * slot.scale)
   root.position.set(slot.position[0], slot.position[1], slot.position[2])
-  root.rotation.y = slot.rotationY
+  applySlotTilt(root, slot)
   return baseScale
 }
 
@@ -350,6 +356,7 @@ export function dropSlot(world: GpuWorld, slotId: string) {
   current.appearance?.clear()
   current.speechFace?.dispose()
   current.facePack?.dispose()
+  current.faceDecal?.dispose()
   current.screenAbort?.abort()
   current.screen?.dispose()
   world.scene.remove(current.root)
@@ -424,11 +431,20 @@ function screenAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean
   return true
 }
 
+function faceDecalAssetsReady(gpu: SlotGpu | undefined, slot: Scene3DSlot): boolean {
+  const decal = slot.faceDecal
+  if (!decal || slot.media !== 'model3d') return true
+  if (!decal.center || !decal.radii || !decal.art) throw new Error('A 2D face needs a center, radii and art before export.')
+  if (!gpu?.loaded) return false
+  if (gpu.faceDecal?.error) throw gpu.faceDecal.error
+  return Boolean(gpu.faceDecal?.ready)
+}
+
 export function worldAssetsReady(world: GpuWorld, slots: readonly Scene3DSlot[]): boolean {
   if (!world.dressingReady || (world.room && !world.room.ready)) return false
   return slots.every(slot => {
     const gpu = world.slots.get(slot.id)
-    if (!speechAssetsReady(gpu, slot) || !screenAssetsReady(gpu, slot)) return false
+    if (!speechAssetsReady(gpu, slot) || !screenAssetsReady(gpu, slot) || !faceDecalAssetsReady(gpu, slot)) return false
     if (!slot.sourceUrl) return true
     return Boolean(gpu && gpu.mountKey === slotMountKey(slot) && gpu.loaded)
   })
@@ -453,7 +469,8 @@ function groundLoadedSlot(gpu: SlotGpu, slot: Scene3DSlot) {
 }
 
 function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, sceneSeconds: number) {
-  const face = gpu.loaded && gpu.kind === 'model' ? speechFace(gpu.root, slot.speech) : undefined
+  const packed = Boolean(slot.speech?.facePack) && !slot.speech?.face
+  const face = gpu.loaded && gpu.kind === 'model' && !packed ? speechFace(gpu.root, slot.speech) : undefined
   if (face) {
     gpu.speechFace ??= new SpeechFaceRuntime(() => renderWorld(world))
     gpu.speechFace.sync(gpu.root, slot.speech, sceneSeconds)
@@ -463,6 +480,10 @@ function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, scene
   if (gpu.loaded && gpu.kind === 'model' && (slot.speech?.facePack || gpu.facePack)) {
     gpu.facePack ??= new FacePackRuntime(() => renderWorld(world))
     gpu.facePack.sync(gpu.root, slot.speech, slot.screen, sceneSeconds)
+  }
+  if (gpu.loaded && gpu.kind === 'model' && (slot.faceDecal || gpu.faceDecal)) {
+    gpu.faceDecal ??= new FaceDecalRuntime(() => renderWorld(world))
+    gpu.faceDecal.sync(gpu.root, slot.faceDecal, sceneSeconds)
   }
 }
 
@@ -617,6 +638,7 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const bg = document.slots.find(isCylinderBackdrop)
   paintDrive(world, sceneSeconds, bg?.loop?.speed ?? world.driveSpeed)
   for (const slot of posedSlots) paintActor(world, slot, sceneSeconds, document.duration)
+  paintImageFades(world.slots, posedSlots, sceneSeconds)
   hideEmptyCutoutsInExport(world, document.slots)
   carryHeldProps(world, posedSlots, sceneSeconds)
   stabilizeSceneSurfaces(document.slots, world.slots)
@@ -629,15 +651,17 @@ export function paintWorld(world: GpuWorld, document: Scene3DDocument, sceneSeco
   const look = shot?.look ?? cameraLookAtTime(document.camera, sceneSeconds, document.duration, posedSlots)
   const posed = poseAtmos(world, document, sceneSeconds, rhythmicCameraEye(rawEye, look, sceneSeconds, document.rhythm))
   const shaken = shakeCamera(document.camera.shake, sceneSeconds, posed, look)
-  world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
-  world.camera.position.set(...shaken.eye)
-  world.camera.lookAt(...shaken.look)
-  world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
+  if (!(world.freeView && !world.exporting)) {
+    world.camera.fov = framingFov(framing, document.camera.fov, sceneSeconds, document.duration)
+    world.camera.position.set(...shaken.eye)
+    world.camera.lookAt(...shaken.look)
+    world.camera.rotateZ((shot?.roll ?? 0) + shaken.roll)
+    applyLensShift(world.camera, document.camera.lensShift)
+  }
   cameraPass(document, posedSlots, { memory: world.directions ??= new DirectionMemory(), eye: shaken.eye, t: sceneSeconds }, (painted, tint) => {
     paintActor(world, painted, sceneSeconds, document.duration)
     tintSprite(world.slots.get(painted.id)?.root, tint)
   })
-  applyLensShift(world.camera, document.camera.lensShift)
   world.camera.updateProjectionMatrix()
   world.camera.updateMatrixWorld()
   paintWorldSfx(world, document, sceneSeconds, posedSlots)
@@ -923,7 +947,7 @@ export function poseLoadedSlot(current: SlotGpu, slot: Scene3DSlot) {
     return
   }
   current.root.position.set(slot.position[0], slot.position[1], slot.position[2])
-  current.root.rotation.y = slot.rotationY
+  applySlotTilt(current.root, slot)
   current.root.scale.setScalar(current.baseScale * slot.scale)
 }
 

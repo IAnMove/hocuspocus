@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { CheckCheck, Film, Loader2, RotateCcw, Smile, Square } from 'lucide-react'
 import { useUiTranslation } from '../../i18n'
 import { Pill } from './components'
@@ -25,7 +26,7 @@ function ModeSelector({ mode, busy, onMode }: { mode: SeriesProductionMode; busy
   const { t } = useUiTranslation('seriesLab')
   return <div role="radiogroup" aria-label={t('approval.mode.label')} className="space-y-1">
     <div className="grid grid-cols-3 gap-1">
-      {PRODUCTION_MODES.map(value => <button key={value} type="button" role="radio" aria-checked={mode === value} disabled={busy}
+      {PRODUCTION_MODES.map(value => <button key={value} type="button" role="radio" aria-checked={mode === value} disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')}
         className={`min-h-10 rounded-lg border px-2 py-1.5 text-[11px] sm:min-h-0 ${mode === value ? 'border-violet-400 bg-violet-500/20 text-violet-100' : 'border-border text-text-secondary hover:bg-bg-hover'}`}
         onClick={() => { if (value !== mode) onMode(value) }}>{t(`approval.mode.${value}.label`)}</button>)}
     </div>

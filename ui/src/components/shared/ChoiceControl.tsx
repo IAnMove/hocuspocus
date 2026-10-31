@@ -1,3 +1,4 @@
+import { useFieldIds } from '../common/fieldIds'
 import type { ChoiceConfig } from '../../types'
 
 export function ChoiceControl({ config, value, onChange, label }: {
@@ -6,6 +7,8 @@ export function ChoiceControl({ config, value, onChange, label }: {
   onChange: (val: string) => void
   label: string
 }) {
+  const fieldIds = useFieldIds()
+
   // Build items from either selection+labels or choices format
   const items: { label: string; value: string }[] = config.choices
     ? config.choices.map(([l, v]) => ({ label: l, value: v }))
@@ -18,10 +21,10 @@ export function ChoiceControl({ config, value, onChange, label }: {
 
   return (
     <div>
-      <label className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
+      <label htmlFor={fieldIds('f0')} className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
         {config.label || label}
       </label>
-      <select
+      <select aria-label={config.label || label} id={fieldIds('f0')}
         value={value}
         onChange={e => onChange(e.target.value)}
         className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-blue"

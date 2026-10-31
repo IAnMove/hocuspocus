@@ -70,6 +70,11 @@ when they need HTTP contracts, limits, or worker paths.
 `examples` has no `image` field; the component renders the two stills in a
 grid. Bodies may contain `\n\n` — the overlay splits them into paragraphs.
 
+The `settings` body now names the **Installation** tab (optional engines;
+Remove does not delete weights). The still `/help/settings.jpg` is layout-bound:
+replace it when the chrome shows that tab, or leave the still and keep the
+prose accurate. Operator guide: [Installation](../install/HOWUSEIT.md).
+
 ---
 
 ## 4. How to add or fix a section

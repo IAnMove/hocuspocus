@@ -222,7 +222,7 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
             onClick={onClose}
             disabled={generating}
             className="rounded-lg p-1.5 text-text-muted hover:bg-bg-hover hover:text-text-primary disabled:opacity-40"
-            title={generating ? t('waitForGeneration') : tCommon('actions.close')}
+            title={generating ? t('waitForGeneration') : tCommon('actions.close')} aria-label={generating ? t('waitForGeneration') : tCommon('actions.close')}
           >
             <X size={16} />
           </button>
@@ -231,7 +231,7 @@ export function VideoExtraInfoDialog({ name, onClose }: { name: string; onClose:
         <div className="flex items-center gap-3 border-b border-border px-5 py-3">
           <Languages size={14} className="shrink-0 text-text-muted" />
           <label htmlFor="extra-info-language" className="text-xs text-text-secondary">{t('language')}</label>
-          <select
+          <select aria-label={t('language')}
             id="extra-info-language"
             value={language}
             onChange={event => setLanguage(event.target.value)}

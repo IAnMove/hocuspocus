@@ -3,6 +3,7 @@ import { DARK_FANTASY_IDS } from './darkFantasyIds'
 import { CREATIVE_TEMPLATE_IDS } from './creativeTemplateIds'
 import { SPEECH_TEMPLATE_IDS } from './speech/templateIds'
 import type { Scene3DSpeech, Scene3DSoundtrack } from './speech/types'
+import type { Scene3DFaceDecal } from './faceDecal'
 import { MEDIA_TEMPLATE_IDS } from './mediaTemplateIds'
 import { PIXEL_TEMPLATE_IDS } from './pixel/pixelTemplateIds'
 import { ATMOS_TEMPLATE_IDS } from './atmos/registryIds.ts'
@@ -206,6 +207,9 @@ export type Scene3DSlot = {
   slot: Scene3DSlotId
   position: Vec3
   rotationY: number
+  /** Optional tilt. Absent on older scenes, which stay a yaw around Y. */
+  rotationX?: number
+  rotationZ?: number
   scale: number
   sourceUrl: string
   sourceRef?: Scene3DSourceRef
@@ -234,6 +238,8 @@ export type Scene3DSlot = {
   loop?: Scene3DLoop
   /** Floor of a Gaussian-splat set, in metres. The invisible plane the cast stands on. */
   splat?: { floorY: number }
+  /** A 2D Character Kit painted on the head. The slot stays a model. */
+  faceDecal?: Scene3DFaceDecal
 }
 
 export type Scene3DCamera = {
@@ -274,6 +280,8 @@ export type Scene3DFraming = {
   moveEnd?: number
   /** `smooth` (default) eases in and out; `snap` leaves at full speed, like a crash zoom. */
   ease?: 'smooth' | 'snap'
+  /** Extra yaw in degrees. Zero at both ends of the move and largest in the middle, so the endpoints stay put. */
+  yawArc?: number
   /** `rest` (default) frames the point measured when the model mounted and follows only where the slot places it;
    * `pose` re-reads the head bone or the live bounding box every frame. */
   track?: 'rest' | 'pose'
@@ -298,6 +306,8 @@ export type Scene3DToon = {
   outline?: number
   /** Ink colour, `#rrggbb`. */
   ink?: string
+  /** `classic` bands of one hue, or `anime`: tinted shadows, no smooth ambient gradient and a thin rim of light. */
+  shade?: 'classic' | 'anime'
 }
 
 export type Scene3DDocument = {

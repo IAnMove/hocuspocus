@@ -184,6 +184,17 @@ any up axis, facing or unit works, rig prefixes such as `Bip01`,
 and the hips' forward drift is removed so the clip plays in place. Bones the
 rig does not have (fingers, props) are skipped and listed.
 
+Names that match: Mixamo with or without the `mixamorig:` prefix; Meshy
+(`Hips`, `Spine`, `Spine01`, `Spine02`, `neck`, `Head`, and the usual limbs —
+the spine is matched by position, so that reversed order still maps); VRM
+(`hips`, `spine`, `chest`, `upperChest`, `neck`, `head`, `leftUpperArm`,
+`leftLowerArm`, `leftHand`, `leftUpperLeg`, `leftLowerLeg`, `leftFoot`,
+`leftToes`, and the right side). `LeftHandIndex1`, `LeftHandThumb1`, `jaw` and
+`eyes` are not used. `HeadTop_End` is a tip and is skipped quietly. A file of
+`Bone` / `Bone.001` names, with no humanoid joint, is `no humanoid skeleton`.
+A hollow skirt leaves the gap between the legs, so the rig reports
+`covered_legs` when the feet show under the hem.
+
 Rigs made by the first humanoid release (identity rest rotations, no `extras`
 marker) still accept new clips: each bone is corrected to the canonical frame.
 

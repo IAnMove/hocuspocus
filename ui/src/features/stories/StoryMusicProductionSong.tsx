@@ -13,7 +13,7 @@ export function StoryMusicProductionSong(props: StoryProductionsTabProps) {
   return (
     <>
       <label className="block text-[10px] text-text-muted">{t('productions.song')}
-        <select className={`${input} mt-1`} value={musicProductionCandidateId} onChange={event => setMusicProductionCandidateId(event.target.value)}>
+        <select aria-label={t('productions.song')} className={`${input} mt-1`} value={musicProductionCandidateId} onChange={event => setMusicProductionCandidateId(event.target.value)}>
           {musicCandidateOptions.map(option => (
             <option key={option.candidate.id} value={option.candidate.id}>
               {option.label} · {option.candidate.durationSeconds

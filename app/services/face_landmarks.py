@@ -16,6 +16,7 @@ enlarged (Lanczos) when they are smaller than the model's input, and the points 
 """
 from __future__ import annotations
 
+import logging
 import math
 import os
 import threading
@@ -47,12 +48,21 @@ MODEL_WIDTH, PADDING = 288, 1.25
 
 _lock = threading.Lock()
 _model: Any = None
+_log = logging.getLogger(__name__)
 
 
 def _paths() -> tuple[str, str] | None:
     from shared.utils import files_locator
     paths = tuple(files_locator.locate_file(name, error_if_none=False) for name in MODELS)
     return paths if all(paths) else None
+
+
+def models_missing() -> list[str]:
+    """The DWPose files the rig reads and cannot find. Empty when they are installed or the pass is switched off."""
+    if os.environ.get("HOCUS_FACE_LANDMARKS") == "0":
+        return []
+    from shared.utils import files_locator
+    return [name for name in MODELS if not files_locator.locate_file(name, error_if_none=False)]
 
 
 def _wholebody():
@@ -65,6 +75,9 @@ def _wholebody():
             paths = _paths()
             if paths is None:
                 _model = False
+                _log.warning("DWPose model files not found (%s): the flat rig places eyes and mouth without landmarks, "
+                             "and mouths come out smaller and less exact. Install them from Settings > Installation.",
+                             ", ".join(models_missing()))
             else:
                 from preprocessing.dwpose.wholebody import Wholebody
                 _model = Wholebody(*paths, device="cpu")

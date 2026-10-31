@@ -298,13 +298,23 @@ def test_sam_is_runtime_running_follows_the_sidecar_process(monkeypatch):
 
 
 def test_engine_in_use_sees_every_live_sidecar_and_worker(monkeypatch):
-    from services import creation_model_service, inpaint_service, install_manager, minimax_h3_service, model3d_service, rig_service
+    from services import (
+        creation_model_service,
+        inpaint_service,
+        install_manager,
+        minimax_h3_service,
+        model3d_service,
+        rig_service,
+        see_through_layers,
+    )
 
     monkeypatch.setattr(minimax_h3_service, "is_runtime_running", lambda: True)
     monkeypatch.setattr(creation_model_service, "runtime_status", lambda: {"warm": True})
     monkeypatch.setattr(inpaint_service, "is_runtime_running", lambda: True)
     monkeypatch.setattr(model3d_service, "has_active_jobs", lambda model_id=None: model_id is None)
     monkeypatch.setattr(rig_service, "has_active_unirig_jobs", lambda: True)
+    monkeypatch.setattr(rig_service, "has_active_jobs", lambda engine=None: engine == "mia")
+    monkeypatch.setattr(see_through_layers, "is_running", lambda: True)
 
     assert install_manager._engine_in_use("minimax_h3") is True
     assert install_manager._engine_in_use("creation_models") is True
@@ -312,6 +322,8 @@ def test_engine_in_use_sees_every_live_sidecar_and_worker(monkeypatch):
     assert install_manager._engine_in_use("hunyuan3d") is True
     assert install_manager._engine_in_use("trellis2") is False
     assert install_manager._engine_in_use("rigging") is True
+    assert install_manager._engine_in_use("mia") is True
+    assert install_manager._engine_in_use("see_through") is True
 
     monkeypatch.setattr(model3d_service, "has_active_jobs", lambda model_id=None: model_id == "trellis2")
     assert install_manager._engine_in_use("hunyuan3d") is False
@@ -321,8 +333,25 @@ def test_engine_in_use_sees_every_live_sidecar_and_worker(monkeypatch):
     monkeypatch.setattr(inpaint_service, "is_runtime_running", lambda: False)
     monkeypatch.setattr(minimax_h3_service, "is_runtime_running", lambda: False)
     monkeypatch.setattr(rig_service, "has_active_unirig_jobs", lambda: False)
+    monkeypatch.setattr(rig_service, "has_active_jobs", lambda engine=None: False)
     monkeypatch.setattr(model3d_service, "has_active_jobs", lambda model_id=None: False)
+    monkeypatch.setattr(see_through_layers, "is_running", lambda: False)
     assert install_manager._engine_in_use("creation_models") is False
     assert install_manager._engine_in_use("sam") is False
     assert install_manager._engine_in_use("minimax_h3") is False
     assert install_manager._engine_in_use("rigging") is False
+    assert install_manager._engine_in_use("mia") is False
+    assert install_manager._engine_in_use("see_through") is False
+
+
+def test_engine_in_use_sees_a_live_mia_job():
+    from services import install_manager, rig_service
+
+    with rig_service._lock:
+        rig_service._jobs["install-probe"] = {"status": "running", "engine": "mia"}
+    try:
+        assert install_manager._engine_in_use("mia") is True
+        assert install_manager._engine_in_use("rigging") is False
+    finally:
+        with rig_service._lock:
+            rig_service._jobs.pop("install-probe", None)

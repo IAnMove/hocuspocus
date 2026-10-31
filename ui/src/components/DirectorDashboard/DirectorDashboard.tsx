@@ -337,6 +337,7 @@ function H3SegmentCard({ segment, shotIndex, onRerun }: {
       </div>
       {editing && (
         <textarea
+          aria-label={t('dashboard.segment', { n: segment.index + 1 })}
           value={prompt}
           onChange={event => setPrompt(event.target.value)}
           rows={5}
@@ -406,13 +407,13 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
           <button onClick={() => onTag(clip.tag === 'good' ? null : 'good')}
             disabled={busy}
             className={`ml-2 p-0.5 rounded disabled:opacity-40 ${clip.tag === 'good' ? 'bg-green-500 text-white' : 'text-text-muted hover:text-indicator-success'}`}
-            title={t('dashboard.markGood')}>
+            title={t('dashboard.markGood')} aria-label={t('dashboard.markGood')}>
             <Check size={12} />
           </button>
           <button onClick={() => onTag(clip.tag === 'needs_work' ? null : 'needs_work')}
             disabled={busy}
             className={`p-0.5 rounded disabled:opacity-40 ${clip.tag === 'needs_work' ? 'bg-amber-500 text-white' : 'text-text-muted hover:text-indicator-warning'}`}
-            title={t('dashboard.needsWork')}>
+            title={t('dashboard.needsWork')} aria-label={t('dashboard.needsWork')}>
             <AlertTriangle size={12} />
           </button>
         </div>
@@ -451,19 +452,20 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
               {requiresShotImage && <div className="flex items-center gap-1">
                 <button onClick={() => { setEditingImage(!editingImage); setEditImagePrompt(clip.image_prompt || '') }}
                   className={`p-0.5 rounded transition-colors ${editingImage ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
-                  title={t('dashboard.editPrompt')}>
+                  title={t('dashboard.editPrompt')} aria-label={t('dashboard.editPrompt')}>
                   <Pencil size={9} />
                 </button>
                 <button onClick={() => onRerunImage(clip.index, editingImage ? editImagePrompt : undefined)}
                   disabled={busy}
                   className="p-0.5 rounded text-text-muted hover:text-accent-blue transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  title={t('dashboard.regenStartImage')}>
+                  title={t('dashboard.regenStartImage')} aria-label={t('dashboard.regenStartImage')}>
                   <Camera size={10} />
                 </button>
               </div>}
             </div>
             {editingImage ? (
               <textarea
+                aria-label={requiresShotImage ? t('dashboard.imagePrompt') : t('dashboard.plannedVisual')}
                 value={editImagePrompt}
                 onChange={e => setEditImagePrompt(e.target.value)}
                 className="w-full bg-bg-tertiary border border-accent-blue rounded px-1.5 py-1 text-[10px] text-text-primary resize-none focus:outline-none"
@@ -587,7 +589,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                 setEditWindowPrompts(clip.window_prompts || [])
               }}
                 className={`p-0.5 rounded transition-colors ${editingVideo ? 'text-accent-blue' : 'text-text-muted hover:text-text-secondary'}`}
-                title={t('dashboard.editPrompt')}>
+                title={t('dashboard.editPrompt')} aria-label={t('dashboard.editPrompt')}>
                 <Pencil size={9} />
               </button>
               <button onClick={() => {
@@ -603,6 +605,10 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                   ? t('dashboard.waitRepair')
                   : requiresShotImage && !clip.start_image_filename
                     ? t('dashboard.generateStartFirst')
+                    : t('dashboard.regenVideo')} aria-label={busy
+                  ? t('dashboard.waitRepair')
+                  : requiresShotImage && !clip.start_image_filename
+                    ? t('dashboard.generateStartFirst')
                     : t('dashboard.regenVideo')}>
                 <Film size={10} />
               </button>
@@ -615,6 +621,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
                   <div key={wi}>
                     <div className="text-[8px] text-text-muted mb-0.5">{t('dashboard.windowN', { n: wi + 1 })}</div>
                     <textarea
+                      aria-label={t('dashboard.windowN', { n: wi + 1 })}
                       value={wp}
                       onChange={e => {
                         const updated = [...editWindowPrompts]
@@ -629,6 +636,7 @@ function ClipCard({ clip, pipeline, busy = false, onTag, onRerunImage, onRerunVi
               </div>
             ) : (
               <textarea
+                aria-label={t('dashboard.videoPrompt')}
                 value={editVideoPrompt}
                 onChange={e => setEditVideoPrompt(e.target.value)}
                 className="w-full bg-bg-tertiary border border-accent-blue rounded px-1.5 py-1 text-[10px] text-text-primary resize-none focus:outline-none"
@@ -894,6 +902,7 @@ function DirectorDashboardInner() {
 
         {/* Pipeline selector */}
         <select
+          aria-label={t('dashboard.selectCreation')}
           value={selectedPipeline?.pipeline_id || ''}
           onChange={e => { if (e.target.value) loadPipeline(e.target.value) }}
           className="flex-1 min-w-0 max-w-md bg-bg-tertiary border border-border rounded-lg px-3 py-1.5 text-xs text-text-primary focus:outline-none focus:border-accent-blue truncate"

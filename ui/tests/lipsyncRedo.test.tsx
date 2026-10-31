@@ -56,11 +56,26 @@ test('a video take offers the lip redo and a still does not', async () => {
   assert.match(html, /data-action="lipsync-redo"/)
   assert.match(html, /data-action="lipsync-engine"/)
   assert.match(html, /infinitetalk/)
-  assert.match(html, /longcat_avatar/)
+  assert.doesNotMatch(html, /longcat_avatar/)
   assert.equal(html.match(/data-action="lipsync-redo"/g)?.length, 1)
   await setUiLanguage('es')
   const spanish = renderToStaticMarkup(<ProductionShotsPanel view={view()} workspace="film" onClose={() => {}} />)
   assert.match(spanish, /Rehacer los labios/)
+})
+
+test('the lip redo button names the take it sits on', async () => {
+  await setUiLanguage('en')
+  const html = renderToStaticMarkup(<ProductionShotsPanel view={view()} workspace="film" onClose={() => {}} />)
+  assert.match(html, /data-lipsync-source="take-b.mp4"/)
+  assert.doesNotMatch(html, /data-lipsync-source="still.png"/)
+  const series = { id: 'show', locations: [] } as unknown as SeriesProject
+  const shot = { id: 'o05', productionMethod: 'generated_video' } as SeriesShot
+  const takes = [{
+    url: '/v.mp4', thumbnail: '', number: 2, attempt: { id: 'a2' },
+    asset: { uri: 'outputs/shown.mp4', kind: 'video' },
+  }] as TakeEntry[]
+  const shown = renderToStaticMarkup(<InspectorMedia series={series} shot={shot} takes={takes} selected="a2" onSelect={() => {}} kits={null} workspace="film" episodeId="ep1" />)
+  assert.match(shown, /data-lipsync-source="shown.mp4"/)
 })
 
 test('the series inspector shows the same control only when the shot has a take', async () => {
@@ -82,11 +97,15 @@ test('the Wizard calls shot.lipsync.redo and shows the disk size without downloa
   assert.match(HOCUSPOCUS_AGENT_SYSTEM_PROMPT, /lipsync_redo/)
   const capability = getCapability('lipsync_redo')!
   assert.equal(capability.resolve({ type: 'lipsync_redo', engine: 'infinitetalk', input: { shot: 'o05' } }), null)
-  const action = capability.resolve({
+  assert.equal(capability.resolve({
     type: 'lipsync_redo', confirm: true, engine: 'longcat_avatar',
+    input: { production_id: 'mv', shot: 'o05' },
+  }), null)
+  const action = capability.resolve({
+    type: 'lipsync_redo', confirm: true, engine: 'infinitetalk',
     input: { production_id: 'mv', shot: 'o05', extra: 'no' },
   })
-  assert.equal(action?.engine, 'longcat_avatar')
+  assert.equal(action?.engine, 'infinitetalk')
   const sent: Array<{ url: string, body: Record<string, unknown>, headers?: Record<string, string> }> = []
   const previous = globalThis.fetch
   globalThis.fetch = (async (url: string, init?: { body?: string, headers?: Record<string, string> }) => {
@@ -102,11 +121,30 @@ test('the Wizard calls shot.lipsync.redo and shows the disk size without downloa
     assert.equal(sent.length, 1)
     assert.equal(sent[0].headers?.['X-Hocus-UI-Surface'], 'wizard')
     assert.deepEqual(sent[0].body.input, {
-      workspace: 'orcos-libres', engine: 'longcat_avatar', production_id: 'mv', shot: 'o05',
+      workspace: 'orcos-libres', engine: 'infinitetalk', production_id: 'mv', shot: 'o05',
     })
     await assert.rejects(capability.execute({
       type: 'lipsync_redo', engine: 'infinitetalk', confirm: true, input: { workspace: 'other', clip: 'a.mp4' },
     }, { adapters, workspace: 'film' }), /active workspace/)
+  } finally {
+    globalThis.fetch = previous
+  }
+})
+
+test('a second redo of the same take is sent as a new request, not an old intent', async () => {
+  const previous = globalThis.fetch
+  const sent: Array<Record<string, unknown>> = []
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    sent.push(JSON.parse(init?.body || '{}'))
+    return { ok: true, status: 200, json: async () => ({ result: { file: 'lipsync.mp4', verdict: 'retake' } }) }
+  }) as typeof fetch
+  try {
+    const input = { workspace: 'film', engine: 'infinitetalk' as const, production_id: 'mv', shot: 'o05', source: 'take-b.mp4' }
+    await runLipsyncRedo(input, () => 'ok')
+    await runLipsyncRedo(input, () => 'ok')
+    // run_once replays a stored result for the same intent_id: a retake of the same take must not carry one.
+    assert.equal(sent[0].intent_id, undefined)
+    assert.equal(sent[1].intent_id, undefined)
   } finally {
     globalThis.fetch = previous
   }

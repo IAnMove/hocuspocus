@@ -1,3 +1,4 @@
+import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { LipsyncRedoButton } from '../lipsync-redo/LipsyncRedoButton'
@@ -188,7 +189,7 @@ function TakeRow({ file, id, selected, workspace, productionId, shotId, selectab
     <span>{file ?? id}</span>
     {selected ? <span>{t('selected')}</span> : null}
     {!selected && selectable ? <button type="button" data-action="select" onClick={() => onAction?.({ action: 'select', take: id })}>{t('actions.select')}</button> : null}
-    {isVideo(file) ? <LipsyncRedoButton workspace={workspace} namespace="productionShots" labelKey="actions.redoLips" engineKey="actions.lipsEngine" target={{ production_id: productionId, shot: shotId }} /> : null}
+    {isVideo(file) && file ? <LipsyncRedoButton workspace={workspace} namespace="productionShots" labelKey="actions.redoLips" engineKey="actions.lipsEngine" target={{ production_id: productionId, shot: shotId, source: file }} /> : null}
   </li>
 }
 
@@ -279,7 +280,7 @@ export function ShotLoader({ workspace, productionId, onClose }: {
   return <>
     {busy ? <p role="status">{t('working')}</p> : null}
     {actionFailed ? <p role="alert">{t('actionFailed')}</p> : null}
-    <fieldset disabled={busy} className="h-full min-h-0 w-full border-0 p-0">
+    <fieldset disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="h-full min-h-0 w-full border-0 p-0">
     <ProductionShotsPanel view={view} workspace={workspace} onClose={onClose} onAction={body => {
     if (busy) return
     setBusy(true)

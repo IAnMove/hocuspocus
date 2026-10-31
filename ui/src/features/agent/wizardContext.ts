@@ -12,6 +12,14 @@ import { useStoryStore } from '../stories/store'
 import { rememberedCharacterKitLibrary, rememberedVideo3dScene } from './wizardLabSession'
 import { projectWizardContextCapabilities } from './wizardCapabilityAvailability'
 import type { MediaFilter } from '../../types'
+import i18n from 'i18next'
+
+function isUntitledStory(title: string | undefined): boolean {
+  const trimmed = (title || '').trim()
+  if (!trimmed || trimmed === 'Untitled story') return true
+  const spanish = i18n.t('untitled', { ns: 'storyLab', lng: 'es', defaultValue: 'Historia sin título' })
+  return trimmed === spanish
+}
 
 /**
  * Version of the context sent to the Wizard.  This is deliberately separate
@@ -748,7 +756,7 @@ function storySnapshot(): WizardLabSnapshots['story'] {
     selected_song_name: candidate?.displayName || candidate?.title || candidate?.name || '',
     selected_song_id: candidate?.id || '',
     selected_music_model: project.music?.model || '',
-    state: running ? 'running' : project.title && project.title !== 'Untitled story' ? 'ready' : 'empty',
+    state: running ? 'running' : project.title && !isUntitledStory(project.title) ? 'ready' : 'empty',
   }
 }
 

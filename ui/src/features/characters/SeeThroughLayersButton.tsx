@@ -8,6 +8,7 @@ type Props = {
   kit: CharacterKit
   workspace: string
   disabled?: boolean
+  title?: string
   /** Other Face Rig work is running: this button waits. */
   busy?: boolean
   onRigged?: (result: FlatRigResult) => void | Promise<void>

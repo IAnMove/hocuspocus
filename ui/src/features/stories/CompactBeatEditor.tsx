@@ -20,9 +20,9 @@ export function CompactBeatEditor({ beat, index, total, update }: {
       <div className="flex items-center gap-2">
         <span className="w-5 shrink-0 text-sm font-bold text-text-muted/60">{index + 1}</span>
         <input className={input} value={beat.title} onChange={event => set({ title: event.target.value })} placeholder={t('compact.momentName')} aria-label={t('compact.momentAria', { index: index + 1 })} />
-        <button className={button} disabled={index === 0} title={t('compact.moveUp')} onClick={() => update(current => { moveItem(current.beats, index, index - 1); return current })}><ChevronUp size={12} /></button>
-        <button className={button} disabled={index === total - 1} title={t('compact.moveDown')} onClick={() => update(current => { moveItem(current.beats, index, index + 1); return current })}><ChevronDown size={12} /></button>
-        <button className="p-1 text-red-400" title={t('compact.remove')} onClick={() => update(current => { current.beats = current.beats.filter(item => item.id !== beat.id); return current })}><Trash2 size={12} /></button>
+        <button className={button} disabled={index === 0} title={t('compact.moveUp')} aria-label={t('compact.moveUp')} onClick={() => update(current => { moveItem(current.beats, index, index - 1); return current })}><ChevronUp size={12} /></button>
+        <button className={button} disabled={index === total - 1} title={t('compact.moveDown')} aria-label={t('compact.moveDown')} onClick={() => update(current => { moveItem(current.beats, index, index + 1); return current })}><ChevronDown size={12} /></button>
+        <button className="p-1 text-red-400" title={t('compact.remove')} aria-label={t('compact.remove')} onClick={() => update(current => { current.beats = current.beats.filter(item => item.id !== beat.id); return current })}><Trash2 size={12} /></button>
       </div>
       <Field label={t('compact.whatWeSee')} value={beat.summary} onChange={summary => set({ summary })} rows={3} />
       <div className="grid sm:grid-cols-2 gap-2">

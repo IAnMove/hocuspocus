@@ -255,7 +255,7 @@ export function QuickVideoBatchPanel({
         <span>{t('batch.durationEach', { seconds: durationSeconds })}</span>
         <span>· {generationMode === 'direct_video' ? t('batch.modeT2v') : generationMode === 'direct_references' ? t('batch.modeDirectRefs') : t('batch.modeStartImages')}</span>
         <label className="ml-auto flex items-center gap-1.5">
-          <input type="checkbox" checked={continueOnError} onChange={event => setContinueOnError(event.target.checked)} />
+          <input aria-label={t('batch.continueOnError')} type="checkbox" checked={continueOnError} onChange={event => setContinueOnError(event.target.checked)} />
           {t('batch.continueOnError')}
         </label>
       </div>

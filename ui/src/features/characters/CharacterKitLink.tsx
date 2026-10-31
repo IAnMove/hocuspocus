@@ -6,12 +6,13 @@ import { useCharacterKitLibrary } from './useCharacterKitLibrary'
 
 /** Stores an id, not a display-name match or a duplicate character definition. */
 export function CharacterKitLink({
-  value, onChange, workspace: scope, disabled, requireSpeech3d = false, kits: kitsOverride, error: errorOverride,
+  value, onChange, workspace: scope, disabled, title, requireSpeech3d = false, kits: kitsOverride, error: errorOverride,
 }: {
   value?: CharacterKitRef
   onChange: (ref: CharacterKitRef | undefined) => void
   workspace?: string
   disabled?: boolean
+  title?: string
   /** Video 3D talkers need a GLB. Story/Series cast lists 2D cutouts too. */
   requireSpeech3d?: boolean
   kits?: CharacterKit[]
@@ -27,9 +28,10 @@ export function CharacterKitLink({
   return (
     <label className="block space-y-1 text-xs">
       {t('speech.savedCharacter')}
-      <select
+      <select aria-label={t('speech.savedCharacter')}
         data-testid="character-kit-link"
         disabled={disabled}
+        title={disabled ? title : undefined}
         className="min-h-10 w-full rounded border border-border bg-bg-primary px-2"
         value={selected}
         onChange={event => onChange(event.target.value ? { id: event.target.value, workspace } : undefined)}

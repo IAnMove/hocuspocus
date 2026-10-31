@@ -12,7 +12,7 @@ type Patch = (value: Partial<SeriesProject>) => void
 export function SeriesEpisodeFormatField({ series, t, patch }: { series: SeriesProject; t: TFunction<'seriesLab'>; patch: Patch }) {
   return (
     <SeriesField label={t('setup.episodeFormat')} hint={t('setup.episodeFormatHint')}>
-      <textarea className={textareaClass} maxLength={2000} value={series.episodeFormat || ''} placeholder={t('setup.episodeFormatDefault')}
+      <textarea aria-label={t('setup.episodeFormat')} className={textareaClass} maxLength={2000} value={series.episodeFormat || ''} placeholder={t('setup.episodeFormatDefault')}
         onChange={event => patch({ episodeFormat: event.target.value })} />
     </SeriesField>
   )
@@ -31,7 +31,7 @@ export function SeriesFinishField({ series, t, patch }: { series: SeriesProject;
   }
   return (
     <SeriesField label={t('setup.finish')} hint={t('setup.finishHint')}>
-      <select className={selectClass} value={current} onChange={event => choose(event.target.value)}>
+      <select aria-label={t('setup.finish')} className={selectClass} value={current} onChange={event => choose(event.target.value)}>
         {finishOptions(t, names, current).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
       </select>
     </SeriesField>

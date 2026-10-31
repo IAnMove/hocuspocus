@@ -2,6 +2,7 @@ import { NearestFilter, Vector2, type MeshBasicMaterial, type MeshStandardMateri
 import { parseImageWindows, type ImageWindow } from './imageWindows'
 import { parseImageColorKey, type ImageColorKey } from './imageColorKey'
 import { parseSettleLook, type SettleLook } from './imageSettle'
+import { parseImageFade, type ImageFade } from './imageFade'
 
 export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded?: boolean; shadow?: number; roll?: number; windows?: ImageWindow[]; colorKey?: ImageColorKey;
   /** Sample the picture with linear filtering and no mipmaps, so a 1:1 fill keeps the source texels. */
@@ -10,7 +11,9 @@ export type ImageLook = { tint?: string; unlit?: boolean; psx?: number; grounded
   tiles?: number
   /** Bring the floor up to every painted piece that stands just above the floor line (a share of the picture's height
    * from its bottom), in the floor's colour and grain, so the pieces stand on the ground (imageSettle.ts). */
-  settle?: SettleLook }
+  settle?: SettleLook
+  /** Opacity over the shot (imageFade.ts). */
+  fade?: ImageFade }
 
 function isPositiveFinite(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
@@ -34,6 +37,8 @@ export function parseImageLook(raw: unknown): ImageLook | undefined {
   if (isPositiveFinite(value.tiles) && value.tiles >= 2) look.tiles = Math.min(9, Math.round(value.tiles))
   const settle = parseSettleLook(value.settle)
   if (settle) look.settle = settle
+  const fade = parseImageFade(value.fade)
+  if (fade) look.fade = fade
   return Object.keys(look).length ? look : undefined
 }
 

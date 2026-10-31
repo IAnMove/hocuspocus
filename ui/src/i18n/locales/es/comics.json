@@ -1,4 +1,5 @@
 {
+  "untitled": "Cómic sin título",
   "canvas": {
     "missingAsset": "Recurso ausente",
     "repositionHint": "Arrastra para reposicionar dentro de la viñeta · Mayús-arrastrar para precisión · Ctrl-rueda para zoom",
@@ -36,7 +37,8 @@
     "openTitle": "Abrir un cómic guardado",
     "historyTitle": "Explorar versiones recuperables del cómic",
     "generateTitle": "Generar en cola cada imagen de viñeta pendiente",
-    "generateNeedPlan": "Abre Comic Director para crear un plan"
+    "generateNeedPlan": "Abre Comic Director para crear un plan",
+    "projectTitle": "Título del cómic"
   },
   "pages": {
     "add": "Añadir página",
@@ -175,6 +177,9 @@
     "logline": "Logline",
     "synopsis": "Sinopsis",
     "pageBeats": "Beats de página",
+    "beatStage": "Etapa",
+    "beatGoal": "Objetivo",
+    "beatTurningPoint": "Giro",
     "improve": "Mejorar la historia con el LLM",
     "improvePlaceholder": "Dirección opcional: aclara el objetivo del protagonista, que el punto medio invierta el plan, cierra la imagen inicial…",
     "revise": "Revisar historia completa",
@@ -596,6 +601,8 @@
     "loraHint": "Las LoRA de transición no son LoRA de estilo cómic/anime. Usa solo una LoRA entrenada para el modelo de vídeo seleccionado y pruébala en PRE.",
     "animatic": "Animatic FFmpeg · sin vídeo generativo",
     "animaticHint": "Útil solo para el timing. El movimiento de cámara aquí es programático y no llama al modelo de vídeo seleccionado.",
+    "motion": "Movimiento de las viñetas",
+    "transition": "Transición",
     "staticPanels": "Viñetas estáticas · recomendado",
     "usePanZoom": "Usar ajustes programados de paneo/zoom",
     "hardCuts": "Cortes secos · recomendado",

@@ -18,7 +18,7 @@ export function Scene3DPoseSequenceControls({ screen, baseUrl, items, disabled, 
     const next = [...poses!]; [next[index], next[index + offset]] = [next[index + offset], next[index]]; update(next)
   }
   return <div className="space-y-3" data-testid="scene3d-pose-controls">
-    <label className="flex min-h-10 items-center gap-2"><input type="checkbox" disabled={disabled || (!poses && !baseUrl && !screen.sourceUrl)} checked={Boolean(poses)}
+    <label className="flex min-h-10 items-center gap-2"><input aria-label={t('poses.enable')} type="checkbox" disabled={disabled || (!poses && !baseUrl && !screen.sourceUrl)} checked={Boolean(poses)}
       onChange={event => event.target.checked ? update([create(baseUrl || screen.sourceUrl)]) : onChange({ ...screen, poseSequence: undefined })} />{t('poses.enable')}</label>
     {poses && <>
       <p className="text-xs text-text-muted">{t('poses.help')}</p>

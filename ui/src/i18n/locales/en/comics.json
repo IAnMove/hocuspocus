@@ -1,4 +1,5 @@
 {
+  "untitled": "Untitled comic",
   "canvas": {
     "missingAsset": "Missing asset",
     "repositionHint": "Drag to reposition inside the panel · Shift-drag for precision · Ctrl-wheel to zoom",
@@ -36,7 +37,8 @@
     "openTitle": "Open a saved comic",
     "historyTitle": "Browse recoverable comic versions",
     "generateTitle": "Generate every unfinished panel image sequentially",
-    "generateNeedPlan": "Open Comic Director to create a plan"
+    "generateNeedPlan": "Open Comic Director to create a plan",
+    "projectTitle": "Comic title"
   },
   "pages": {
     "add": "Add page",
@@ -175,6 +177,9 @@
     "logline": "Logline",
     "synopsis": "Synopsis",
     "pageBeats": "Page beats",
+    "beatStage": "Stage",
+    "beatGoal": "Goal",
+    "beatTurningPoint": "Turning point",
     "improve": "Improve story with the LLM",
     "improvePlaceholder": "Optional direction: clarify the protagonist's goal, make the midpoint reverse the plan, pay off the opening image…",
     "revise": "Revise full story",
@@ -596,6 +601,8 @@
     "loraHint": "Transition LoRAs are not comic/anime style LoRAs. Use only a LoRA trained for the selected video model and test it in PRE.",
     "animatic": "FFmpeg animatic · no generative video",
     "animaticHint": "Useful for timing only. Camera movement here is programmatic and does not call the selected video model.",
+    "motion": "Panel motion",
+    "transition": "Transition",
     "staticPanels": "Static panels · recommended",
     "usePanZoom": "Use programmed pan/zoom settings",
     "hardCuts": "Hard cuts · recommended",

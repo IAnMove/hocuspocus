@@ -1,0 +1,12 @@
+{
+  "outline": "Outline",
+  "inspector": "Inspector",
+  "viewport": "Viewport",
+  "transport": "Transport",
+  "collapseOutline": "Hide outline",
+  "expandOutline": "Show outline",
+  "collapseInspector": "Hide inspector",
+  "expandInspector": "Show inspector",
+  "openInspector": "Open inspector",
+  "closeInspector": "Close inspector"
+}

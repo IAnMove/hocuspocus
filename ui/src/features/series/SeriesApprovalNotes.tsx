@@ -54,7 +54,7 @@ export function SeriesApprovalNotes({ draftKey, shotId, entry, stage, onSave }: 
     <label className="block text-[10px] font-semibold uppercase tracking-wide text-text-muted" htmlFor={`series-approval-note-${shotId}`}>
       {t('approval.notes.label', { stage: t(`approval.stage.${stage}`) })}
     </label>
-    <textarea id={`series-approval-note-${shotId}`} className={`${textareaClass} min-h-16 text-sm sm:text-xs`} value={text} maxLength={2000}
+    <textarea aria-label={t('approval.notes.label', { stage: t(`approval.stage.${stage}`) })} id={`series-approval-note-${shotId}`} className={`${textareaClass} min-h-16 text-sm sm:text-xs`} value={text} maxLength={2000}
       placeholder={t('approval.notes.placeholder')} onChange={event => change(event.target.value)} />
     <p role="status" className={`text-[10px] ${state === 'failed' ? 'text-red-300' : 'text-text-muted'}`}>{state === 'idle' ? '' : t(`approval.notes.${state}`)}</p>
     {(state === 'failed' || state === 'pending') && <button type="button" className="text-xs underline" onClick={() => void flush()}>{t('approval.notes.retry')}</button>}

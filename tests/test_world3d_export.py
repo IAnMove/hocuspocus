@@ -165,6 +165,17 @@ def test_preflight_rejects_blob_urls_and_unknown_media():
     assert error.value.detail["code"] == "unsupported_capability"
 
 
+def test_export_keeps_slot_tilt_and_a_yaw_only_document_omits_it():
+    tilted = _document()
+    tilted["slots"][0]["rotationX"] = 0.4
+    tilted["slots"][0]["rotationZ"] = -0.15
+    frozen = freeze_export_command(_command(intent_id="tilt", document=tilted))
+    slot = frozen["effective"]["input"]["snapshot"]["document"]["slots"][0]
+    assert slot["rotationX"] == 0.4 and slot["rotationZ"] == -0.15 and slot["rotationY"] == 0
+    bare = freeze_export_command(_command(intent_id="yaw"))["effective"]["input"]["snapshot"]["document"]["slots"][0]
+    assert "rotationX" not in bare and "rotationZ" not in bare and bare["rotationY"] == 0
+
+
 def test_voiced_duration_is_an_explicit_preflight_reject():
     document = _document(duration=181, sfx=[{"id": "spark", "kind": "sparks", "start": 0, "end": 1,
                                             "sound": True, "volume": 0.4}])

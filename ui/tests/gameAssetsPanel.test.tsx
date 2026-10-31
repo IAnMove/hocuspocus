@@ -92,6 +92,44 @@ test('the panel asks for style approval, shows who assets are waiting on and mar
   }
 })
 
+test('with no game the studio explains itself and duplicate and delete say why', { concurrency: false }, async () => {
+  const { render, screen, cleanup, fireEvent } = await import('@testing-library/react')
+  const { GameAssetsPanel } = await import('../src/features/game-assets/GameAssetsPanel.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  useStore.setState({ activeWorkspace: 'lab' })
+  const created: string[] = []
+  const createGame = useGameAssetsStore.getState().createGame
+  useGameAssetsStore.setState({
+    workspace: 'lab', ready: true, games: [], game: null, error: null, problems: [],
+    createGame: async () => { created.push('new'); return true },
+  })
+  try {
+    render(<GameAssetsPanel />)
+    assert.ok(screen.getByText('This studio turns a style, a cast and an asset list into a game you can review, play and export.'))
+    const aside = document.querySelector('aside')
+    const open = screen.getAllByRole('button', { name: 'New game' }).find(button => aside && !aside.contains(button))
+    assert.ok(open)
+    fireEvent.click(open)
+    assert.deepEqual(created, ['new'])
+    const duplicate = screen.getByRole('button', { name: 'Duplicate' }) as HTMLButtonElement
+    const remove = screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement
+    assert.equal(duplicate.disabled, true)
+    assert.equal(remove.disabled, true)
+    assert.equal(duplicate.title, 'Create a game first')
+    assert.equal(remove.title, 'Create a game first')
+    cleanup()
+    setGameFetch(() => new Promise<Response>(() => undefined))
+    useGameAssetsStore.setState({ ready: false, games: [], game: null, createGame })
+    render(<GameAssetsPanel />)
+    assert.equal(screen.queryByText('This studio turns a style, a cast and an asset list into a game you can review, play and export.'), null)
+    assert.equal((screen.getByRole('button', { name: 'New game' }) as HTMLButtonElement).title, 'Wait until the game list loads')
+  } finally {
+    cleanup()
+    useGameAssetsStore.setState({ createGame })
+    reset()
+  }
+})
+
 test('the library shows a loading state instead of the empty message', { concurrency: false }, async () => {
   const { render, screen, cleanup } = await import('@testing-library/react')
   const { GameAssetsPanel } = await import('../src/features/game-assets/GameAssetsPanel.tsx')

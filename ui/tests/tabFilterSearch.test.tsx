@@ -187,8 +187,11 @@ test('navigation destinations map to visible categories', async () => {
   assert.equal(categoryForNavigationDestination('video_editor'), 'production')
   assert.equal(categoryForNavigationDestination('images'), 'media')
   assert.equal(categoryForNavigationDestination('settings'), null)
-  assert.equal(categoryForMediaFilter('character-replacement'), 'studios')
+  assert.equal(categoryForMediaFilter('character-replacement'), 'direct-generation')
+  assert.equal(categoryForNavigationDestination('character_replacement'), 'direct-generation')
+  assert.equal(categoryForNavigationDestination('character-replacement'), 'direct-generation')
   const { hidesDirectGenerationSidebar, revealDirectorWorkspace, visibleWorkspaceSurface } = await import('../src/lib/navigationCategories.ts')
+  assert.equal(hidesDirectGenerationSidebar('character-replacement', 'studio'), false)
   assert.equal(hidesDirectGenerationSidebar('scene3d', 'studio'), true)
   assert.equal(hidesDirectGenerationSidebar('stories', 'studio'), true)
   assert.equal(hidesDirectGenerationSidebar('characters', 'studio'), true)
@@ -221,43 +224,79 @@ test('navigation destinations map to visible categories', async () => {
   assert.equal(visibleWorkspaceSurface({ mediaFilter: 'videos', sidebarMode: 'studio', sidebarOpen: true, dashboardOpen: true }), 'section')
 })
 
-test('character replacement is a featured studio beside the video editors in both languages', { concurrency: false }, async () => {
-  const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
+test('character replacement is an Edit mode, and the old id redirects there', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup, waitFor } = await import('@testing-library/react')
   const { ensureUiI18n, setUiLanguage } = await import('../src/i18n/index.ts')
   const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { EditSubModeToggle } = await import('../src/components/Sidebar/EditSubModeToggle.tsx')
   const { useStore } = await import('../src/stores/useStore.ts')
   ensureUiI18n()
-  for (const language of ['en', 'es'] as const) {
-    await setUiLanguage(language)
+  const original = {
+    setGenerationMode: useStore.getState().setGenerationMode,
+    setEditSubMode: useStore.getState().setEditSubMode,
+    setMediaFilter: useStore.getState().setMediaFilter,
+  }
+  const stubNavigation = () => {
     useStore.setState({
-      mediaFilter: 'all', outputSearchQuery: '', generationMode: 'avatar',
-      sidebarMode: 'studio', sidebarOpen: true, settingsOpen: true, dashboardOpen: true,
-      activeWorkspace: 'default', loadOutputs: async () => undefined,
+      setGenerationMode: mode => { useStore.setState({ generationMode: mode }) },
+      setEditSubMode: mode => { useStore.setState({ editSubMode: mode }) },
+      setMediaFilter: filter => { useStore.setState({ mediaFilter: filter }) },
+      loadOutputs: async () => undefined,
     })
-    try {
-      render(<TabFilter />)
-      const studios = screen.getByRole('button', { name: language === 'en' ? 'Studios' : 'Estudios' })
-      fireEvent.click(studios)
-      const replacement = screen.getByRole('tab', { name: language === 'en' ? 'Replace character' : 'Reemplazar personaje' })
-      assert.equal(replacement.getAttribute('data-navigation-featured'), 'true')
-      assert.equal(replacement.previousElementSibling?.textContent, language === 'en' ? 'Video 3D' : 'Vídeo 3D')
-      fireEvent.click(screen.getByRole('tab', { name: language === 'en' ? 'Video 2.5D' : 'Vídeo 2,5D' }))
-      assert.equal(useStore.getState().mediaFilter, 'scene3d')
-      assert.equal(useStore.getState().sidebarOpen, false)
-      fireEvent.click(replacement)
-      assert.equal(useStore.getState().mediaFilter, 'character-replacement')
-      assert.equal(useStore.getState().sidebarOpen, false)
-      assert.equal(useStore.getState().settingsOpen, false)
-      assert.equal(useStore.getState().dashboardOpen, false)
-      assert.equal(replacement.getAttribute('aria-selected'), 'true')
-      assert.equal(studios.getAttribute('data-navigation-active'), 'true')
+  }
+  try {
+    for (const language of ['en', 'es'] as const) {
+      await setUiLanguage(language)
+      const modeName = language === 'en' ? 'Replace character' : 'Cambiar personaje'
+      stubNavigation()
+      useStore.setState({
+        mediaFilter: 'all', outputSearchQuery: '', generationMode: 'avatar', editSubMode: 'retake',
+        sidebarMode: 'studio', sidebarOpen: true, settingsOpen: false, dashboardOpen: false,
+        activeWorkspace: 'default',
+      })
+      render(<><TabFilter /><EditSubModeToggle /></>)
+      fireEvent.click(screen.getByRole('button', { name: language === 'en' ? 'Studios' : 'Estudios' }))
+      assert.equal(screen.queryByRole('tab', { name: 'Replace character' }), null)
+      assert.equal(screen.queryByRole('tab', { name: 'Reemplazar personaje' }), null)
+      assert.equal(screen.queryByRole('tab', { name: 'Cambiar personaje' }), null)
+      assert.equal(document.querySelector('[data-navigation-featured="true"]'), null)
       assert.equal(document.querySelectorAll('.hp-navigation-primary[data-navigation-category]').length, 4)
-      assert.equal(document.querySelectorAll('.hp-navigation-children').length, 1)
-    } finally {
+      cleanup()
+
+      stubNavigation()
+      useStore.setState({
+        mediaFilter: 'character-replacement', generationMode: 'video', editSubMode: 'retake',
+        sidebarMode: 'director', sidebarOpen: false, settingsOpen: true, dashboardOpen: true,
+      })
+      render(<><TabFilter /><EditSubModeToggle /></>)
+      await waitFor(() => {
+        const state = useStore.getState()
+        assert.equal(state.generationMode, 'avatar')
+        assert.equal(state.editSubMode, 'replace_character')
+        assert.equal(state.mediaFilter, 'character-replacement')
+        assert.equal(state.sidebarMode, 'studio')
+        assert.equal(state.sidebarOpen, true)
+        assert.equal(state.settingsOpen, false)
+        assert.equal(state.dashboardOpen, false)
+      })
+      const mode = screen.getByRole('button', { name: modeName })
+      assert.equal(mode.getAttribute('aria-pressed'), 'true')
+      const direct = screen.getByRole('button', { name: language === 'en' ? 'Direct generation' : 'Generación directa' })
+      assert.equal(direct.getAttribute('aria-pressed'), 'true')
+      fireEvent.click(screen.getByRole('button', { name: language === 'en' ? 'Retake' : 'Retoma' }))
+      assert.equal(useStore.getState().editSubMode, 'retake')
+      assert.equal(useStore.getState().mediaFilter, 'avatars')
       cleanup()
     }
+  } finally {
+    cleanup()
+    useStore.setState({
+      ...original,
+      mediaFilter: 'all', generationMode: 'image', editSubMode: 'retake',
+      sidebarOpen: false, settingsOpen: false, dashboardOpen: false, sidebarMode: 'studio',
+    })
+    await setUiLanguage('en')
   }
-  await setUiLanguage('en')
 })
 
 test('opening Director from a studio leaves the studio so the sidebar can mount', { concurrency: false }, async () => {
@@ -492,5 +531,36 @@ test('closing or unmounting search cancels its hidden debounce', { concurrency: 
     cleanup()
     window.setTimeout = originalSetTimeout
     window.clearTimeout = originalClearTimeout
+  }
+})
+
+test('media filters wrap in order instead of being cut off', { concurrency: false }, async () => {
+  const { render, screen, fireEvent, cleanup, within } = await import('@testing-library/react')
+  const { TabFilter } = await import('../src/components/MainContent/TabFilter.tsx')
+  const { useStore } = await import('../src/stores/useStore.ts')
+  const labels = [
+    'Projects', 'Assets', 'All', 'Images', 'Videos', 'Videoclips', 'Trailers', 'Episodes',
+    'Audio', '3D', 'Scenes', 'Style sheet', 'Edits', 'Multi-clip', 'Favorites', 'Made by agents',
+  ]
+  useStore.setState({ mediaFilter: 'all', outputSearchQuery: '', developerMode: false, loadOutputs: async () => undefined })
+  try {
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Media' }))
+    const bar = screen.getByRole('tablist', { name: 'Browse projects and generated assets' })
+    assert.equal(bar.className.includes('flex-wrap'), true)
+    assert.equal(bar.className.includes('overflow-x-auto'), false)
+    assert.equal(bar.firstElementChild?.className.includes('flex-wrap'), true)
+    assert.equal(bar.firstElementChild?.className.includes('min-w-max'), false)
+    const tabs = within(bar).getAllByRole('tab').map(tab => tab.getAttribute('aria-label'))
+    assert.deepEqual(tabs, labels)
+    cleanup()
+    useStore.setState({ mediaFilter: 'stories' })
+    render(<TabFilter />)
+    fireEvent.click(screen.getByRole('button', { name: 'Studios' }))
+    const studios = screen.getByRole('tablist', { name: 'Develop guided creative projects' })
+    assert.equal(studios.className.includes('overflow-x-auto'), true)
+    assert.equal(studios.className.includes('flex-wrap'), false)
+  } finally {
+    cleanup()
   }
 })

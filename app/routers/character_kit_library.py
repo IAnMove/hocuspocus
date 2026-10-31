@@ -73,6 +73,27 @@ def create_character_kit_library_router() -> APIRouter:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @router.post("/api/v1/character-kits/face")
+    def make_blob_face(body: dict):
+        """Draw a parametric 2D face and save it as a Character Kit. The panel, MCP and Wizard share this route."""
+        from services.blob_face import BlobFaceError, save_face_kit
+
+        workspace = str(body.get("workspace") or "")
+        try:
+            saved = save_face_kit(
+                _workspace_dir(workspace), workspace, body.get("traits") or {},
+                name=body.get("name"), kit_id=body.get("kit_id"),
+                base_revision=body.get("baseRevision", body.get("base_revision")),
+            )
+        except BlobFaceError as exc:
+            raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from exc
+        except CharacterKitRevisionConflict as exc:
+            raise _conflict(exc) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return {"kit_id": saved["kit_id"], "poses": saved["poses"], "preview": saved["preview"],
+                "revision": saved["revision"], "character": saved["character"]}
+
     @router.post("/api/v1/character-kits/library/kits/{kit_id}/flat-rig")
     def rig_flat_character_kit(kit_id: str, body: dict):
         """Wipe the painted mouths, draw nine paper (or ink, or per-pose warp) mouths and a blink, and save the anchors."""

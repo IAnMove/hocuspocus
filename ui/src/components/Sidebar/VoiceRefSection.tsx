@@ -82,6 +82,7 @@ export function VoiceRefSection() {
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-text-muted whitespace-nowrap">{t('inputs.identityScale')}</span>
             <input
+              aria-label={t('inputs.identityScale')}
               type="range"
               min={0}
               max={10}

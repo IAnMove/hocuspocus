@@ -61,6 +61,9 @@ def _bind_series_library_runtime(
         _workspace_dir = workspace_dir
     if safe_join is not None:
         _safe_join = safe_join
+    # Same lock the lip-sync save holds. The service must not import this router.
+    import services.shot_lipsync_save as lipsync_save
+    lipsync_save._library_lock = library_lock
 
 
 def create_series_library_router() -> APIRouter:

@@ -1,3 +1,5 @@
+import { useFieldIds } from '../../components/common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import {
   ArrowDown,
   ArrowUp,
@@ -6,6 +8,7 @@ import {
   ChevronsRight,
   Copy,
   Download,
+  BookOpen,
   Film,
   FolderOpen,
   GripVertical,
@@ -29,11 +32,17 @@ import { MontageLayersPanel, MontageToolbar, type MontageEditorState } from './M
 import { loadMontageIntoEditor } from './montageLoader'
 import { useOpenProductionMontage } from '../music-productions/useOpenProductionMontage'
 import { DeriveVerticalButton } from './DeriveVerticalButton'
+import { ComicTransitionButton } from './ComicTransitionButton'
 import { ShortenSongPanel } from './ShortenSongPanel'
 import { PublishPresetBar } from './PublishPresetBar'
 import { EditorPreflightNotices } from './EditorPreflightNotices'
 import { ShotBoard } from './ShotBoard'
-import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, type MontageLayers, type MontageRef } from './montage'
+import { ComicView } from './ComicView'
+import { LaterCard } from './laterCard'
+import { getMontage } from '../../api/montages'
+import { duplicateClipState, mergeComicShotUpdate, moveClip, patchClipExtra, type ComicExtraPatch } from './comicEdits'
+import { handOffClip, reusableMetadata, useComicOpen, type ClipRemake } from './comicRemake'
+import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, playableUrl, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { videoEditorClipFromOutput } from './videoEditorCatalogPick'
@@ -208,177 +217,11 @@ function sequenceStyle(patch: Partial<SequenceStyle> = {}): SequenceStyle {
   return { ...DEFAULT_SEQUENCE_STYLE, ...patch }
 }
 
-function FittedCardText({
-  text,
-  textSize,
-  baseSize,
-  boxClassName,
-  className,
-}: {
-  text: string
-  textSize: number
-  baseSize: number
-  boxClassName: string
-  className: string
-}) {
-  const boxRef = useRef<HTMLDivElement>(null)
-  const textRef = useRef<HTMLParagraphElement>(null)
-
-  useLayoutEffect(() => {
-    const box = boxRef.current
-    const textElement = textRef.current
-    if (!box || !textElement) return
-
-    const fit = () => {
-      const availableWidth = box.clientWidth
-      const availableHeight = box.clientHeight
-      if (!availableWidth || !availableHeight) return
-
-      const scale = Math.max(50, Math.min(160, textSize)) / 100
-      const target = Math.max(7, Math.min(availableWidth, availableHeight) * baseSize * scale)
-      let low = 6
-      let high = target
-      let fitted = low
-
-      for (let attempt = 0; attempt < 10; attempt++) {
-        const candidate = (low + high) / 2
-        textElement.style.fontSize = `${candidate}px`
-        const fits = textElement.scrollWidth <= availableWidth + 1
-          && textElement.scrollHeight <= availableHeight + 1
-        if (fits) {
-          fitted = candidate
-          low = candidate
-        } else {
-          high = candidate
-        }
-      }
-      textElement.style.fontSize = `${fitted}px`
-    }
-
-    fit()
-    const observer = new ResizeObserver(fit)
-    observer.observe(box)
-    return () => observer.disconnect()
-  }, [baseSize, text, textSize])
-
-  return (
-    <div ref={boxRef} className={`flex min-h-0 items-center justify-center ${boxClassName}`}>
-      <p
-        ref={textRef}
-        className={`w-full whitespace-pre-line break-words text-center [overflow-wrap:anywhere] ${className}`}
-      >
-        {text}
-      </p>
-    </div>
-  )
-}
-
-function LaterCard({
-  transition,
-  text,
-  textSize = 100,
-  progress = 0,
-  compact = false,
-}: {
-  transition: InterstitialTransition
-  text: string
-  textSize?: number
-  progress?: number
-  compact?: boolean
-}) {
-  const { t } = useUiTranslation('videoEditor')
-  const safeText = text.trim() || t('timeCard.default')
-  if (transition === 'later-clock') {
-    return (
-      <div
-        className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#07111f] text-white"
-        style={{ backgroundImage: 'radial-gradient(circle at 18% 20%, #224a6b 0, transparent 42%), linear-gradient(145deg, #101f34, #020617 78%)' }}
-      >
-        <div className={`flex items-center justify-center ${compact ? 'gap-1.5' : 'h-full w-full gap-[clamp(1rem,6vw,5rem)] px-[8%]'}`}>
-          <div
-            className={`relative shrink-0 rounded-full border-[#fbbf24] shadow-2xl ${compact ? 'h-6 w-6 border-2' : 'h-[clamp(5rem,27vw,17rem)] w-[clamp(5rem,27vw,17rem)] border-[clamp(4px,.8vw,10px)]'}`}
-            style={{ backgroundImage: 'radial-gradient(circle, #f8fafc 0 67%, transparent 68%), repeating-conic-gradient(#172554 0deg 1.5deg, #f8fafc 1.5deg 30deg)' }}
-          >
-            <span
-              className={`absolute left-1/2 top-1/2 origin-bottom rounded-full bg-slate-900 ${compact ? 'h-2 w-[2px]' : 'h-[29%] w-[4%]'}`}
-              style={{ transform: 'translate(-50%, -100%) rotate(-48deg)' }}
-            />
-            <span
-              className={`absolute left-1/2 top-1/2 origin-bottom rounded-full bg-slate-900 ${compact ? 'h-2.5 w-[1px]' : 'h-[39%] w-[3%]'}`}
-              style={{ transform: 'translate(-50%, -100%) rotate(28deg)' }}
-            />
-            <span
-              className={`absolute left-1/2 top-1/2 origin-bottom rounded-full bg-red-500 ${compact ? 'h-2.5 w-px' : 'h-[42%] w-[1.5%]'}`}
-              style={{ transform: `translate(-50%, -100%) rotate(${132 + progress * 720}deg)` }}
-            />
-            <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-amber-400 ${compact ? 'h-1 w-1' : 'h-[8%] w-[8%]'}`} />
-          </div>
-          {compact ? (
-            <p className="max-w-16 whitespace-pre-line break-words text-center text-[6px] font-semibold leading-tight [overflow-wrap:anywhere]">
-              {safeText}
-            </p>
-          ) : (
-            <FittedCardText
-              text={safeText}
-              textSize={textSize}
-              baseSize={0.17}
-              boxClassName="h-[64%] w-[42%]"
-              className="font-semibold leading-tight drop-shadow-lg"
-            />
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  if (transition === 'later-tropical') {
-    return (
-      <div
-        className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#087f8c]"
-        style={{
-          backgroundImage: 'radial-gradient(circle at 12% 18%, #f4d35e 0 5%, transparent 5.5%), radial-gradient(circle at 82% 22%, #f95738 0 7%, transparent 7.5%), radial-gradient(circle at 22% 84%, #74c69d 0 8%, transparent 8.5%), radial-gradient(circle at 91% 78%, #ee964b 0 6%, transparent 6.5%), repeating-linear-gradient(42deg, transparent 0 34px, rgba(7,59,76,.2) 35px 38px)'
-        }}
-      >
-        <div className={`${compact ? 'inset-1 rounded' : 'inset-[9%] rounded-[clamp(1rem,4vw,3rem)] border-[clamp(2px,.5vw,7px)]'} absolute border border-[#f6f7d7]/85 bg-[#043b44]/75 shadow-2xl`} />
-        {compact ? (
-          <p className="relative max-w-[76%] -rotate-1 whitespace-pre-line break-words text-center text-[6px] font-black uppercase leading-[.95] text-[#f6f7d7] [overflow-wrap:anywhere]" style={{ textShadow: '1px 1px #073b4c' }}>
-            {safeText}
-          </p>
-        ) : (
-          <FittedCardText
-            text={safeText}
-            textSize={textSize}
-            baseSize={0.21}
-            boxClassName="relative h-[48%] w-[72%]"
-            className="-rotate-1 font-black uppercase leading-[.95] text-[#f6f7d7] [text-shadow:clamp(2px,.5vw,8px)_clamp(2px,.5vw,8px)_#073b4c]"
-          />
-        )}
-      </div>
-    )
-  }
-
-  return (
-    <div
-      className="absolute inset-0 z-30 flex items-center justify-center overflow-hidden bg-[#170f0a] text-[#f4e8ce]"
-      style={{ backgroundImage: 'radial-gradient(ellipse at center, #382517 0, #170f0a 60%, #090604 100%)' }}
-    >
-      <div className={`absolute border border-[#c9a96e] ${compact ? 'inset-1' : 'inset-[7%]'}`} />
-      <div className={`absolute border border-[#685238] ${compact ? 'inset-1.5' : 'inset-[10%]'}`} />
-      {compact ? (
-        <p className="relative max-w-[72%] whitespace-pre-line break-words text-center text-[5px] font-serif font-semibold uppercase leading-tight tracking-[.12em] [overflow-wrap:anywhere]">
-          {safeText}
-        </p>
-      ) : (
-        <FittedCardText
-          text={safeText}
-          textSize={textSize}
-          baseSize={0.21}
-          boxClassName="relative h-[38%] w-[68%]"
-          className="font-serif font-semibold uppercase leading-tight tracking-[.12em]"
-        />
-      )}
-    </div>
-  )
+function exportJobFrameClass(status: string): string {
+  if (status === 'failed') return 'border-red-500/30 bg-red-500/5'
+  if (status === 'completed') return 'border-green-500/30 bg-green-500/5'
+  if (status === 'cancelled') return 'border-border bg-bg-secondary'
+  return 'border-accent-blue/30 bg-accent-blue/5'
 }
 
 function formatTime(value: number): string {
@@ -692,7 +535,14 @@ function wait(ms: number): Promise<void> {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function viewToggleClass(open: boolean): string {
+  const tone = open ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'
+  return `flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${tone}`
+}
+
 export function VideoEditorPanel() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('videoEditor')
   const { t: tCommon } = useUiTranslation('common')
   const tRef = useRef(t)
@@ -739,6 +589,8 @@ export function VideoEditorPanel() {
   const [soundtrack, setSoundtrack] = useState<EditorSoundtrack | null>(draft.soundtrack)
   const [montage, setMontage] = useState<{ layers: MontageLayers; ref: MontageRef | null }>(() => loadMontageState(activeWorkspace))
   const [shotBoardOpen, setShotBoardOpen] = useState(false)
+  const [comicOpen, setComicOpen] = useComicOpen()
+  const setMediaFilter = useStore(state => state.setMediaFilter)
   const applyMontage = (state: MontageEditorState, layers: MontageLayers, ref: MontageRef) => {
     setClips(state.clips); setProjectName(state.projectName); setResolution(state.resolution); setFps(state.fps); setSoundtrack(state.soundtrack)
     persistEditorDraft(state.clips, state.projectName, state.resolution, state.fps, draftWorkspaceRef.current, state.soundtrack)
@@ -1038,17 +890,17 @@ export function VideoEditorPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const openSelectedInVideoCreation = async () => {
-    if (!selected || selectedIndex < 0 || preparingReplacement) return
+  const openSelectedInVideoCreation = async (clip = selected, index = selectedIndex, candidates: string[] = []) => {
+    if (!clip || index < 0 || preparingReplacement) return
     setPreparingReplacement(true)
     setError(null)
     setSequencePlaying(false)
     videoRef.current?.pause()
 
-    const outputName = outputNameFromEditorClip(selected.source, selected.name)
+    const outputName = outputNameFromEditorClip(clip.source, clip.name)
     try {
-      const metadata = await api.fetchOutputMetadata(outputName, activeWorkspace)
-      if (!metadata.params) throw new Error(t('remake.noReusable'))
+      const metadata = await reusableMetadata([...candidates, outputName], activeWorkspace)
+      if (!metadata?.params) throw new Error(t('remake.noReusable'))
 
       const store = useStore.getState()
       store.setSidebarMode('studio')
@@ -1060,9 +912,9 @@ export function VideoEditorPanel() {
 
       persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
       writeVideoEditorReplacementTarget({
-        clipId: selected.id,
-        clipIndex: selectedIndex,
-        originalName: selected.name,
+        clipId: clip.id,
+        clipIndex: index,
+        originalName: clip.name,
         outputName,
         requestedAt: Date.now(),
       })
@@ -1128,18 +980,85 @@ export function VideoEditorPanel() {
   const dropAtIndex = (insertionIndex: number, transferId?: string) => {
     const movingId = transferId || draggedId
     if (!movingId) return
-    setClips(current => {
-      const sourceIndex = current.findIndex(clip => clip.id === movingId)
-      if (sourceIndex < 0) return current
-      const moving = current[sourceIndex]
-      const without = current.filter(clip => clip.id !== movingId)
-      const adjustedIndex = insertionIndex > sourceIndex ? insertionIndex - 1 : insertionIndex
-      without.splice(Math.max(0, Math.min(without.length, adjustedIndex)), 0, moving)
-      return without
-    })
+    setClips(current => moveClip(current, movingId, insertionIndex))
     setDraggedId(null)
     setDropIndex(null)
     stopTimelineDragScroll()
+  }
+
+  const patchComicExtra = (id: string, patch: ComicExtraPatch) => {
+    setMontage(current => {
+      if (!current.ref) return current
+      const extras = { ...current.ref.extras }
+      const next = patchClipExtra(extras[id], patch)
+      if (next) extras[id] = next
+      else delete extras[id]
+      const ref = { ...current.ref, extras }
+      persistMontageState(activeWorkspace, current.layers, ref)
+      return { ...current, ref }
+    })
+  }
+
+  const duplicateComicClip = (id: string) => {
+    const source = clips.find(clip => clip.id === id)
+    if (!source) return
+    const copied = duplicateClipState(source, montage.ref?.extras?.[id], clipId())
+    setClips(current => {
+      const index = current.findIndex(clip => clip.id === id)
+      const next = [...current]
+      next.splice(index < 0 ? next.length : index + 1, 0, copied.clip)
+      return next
+    })
+    if (copied.extra) patchComicExtra(copied.clip.id, { lyric: copied.extra.lyric ?? null, comic: copied.extra.comic ?? { text: null, frame: null } })
+    setSelectedId(copied.clip.id)
+  }
+
+  const remakeClip = (id: string, request: ClipRemake) => {
+    const index = clips.findIndex(clip => clip.id === id)
+    if (index < 0) return
+    if (request.kind === 'creation') return void openSelectedInVideoCreation(clips[index], index, request.outputs)
+    persistEditorDraft(clips, projectName, resolution, fps, draftWorkspaceRef.current)
+    void handOffClip(clips[index], index, request, activeWorkspace, () => setMediaFilter('videos'))
+      .catch(reason => setError(t('remake.openFailed', { message: (reason as Error).message })))
+  }
+
+  const reloadOpenMontage = async () => {
+    if (!montage.ref) return
+    const loaded = await loadMontageIntoEditor(activeWorkspace, montage.ref.file)
+    applyMontage(loaded.state, loaded.layers, loaded.ref)
+  }
+
+  /** Regenerar / Usar take writes the saved montage. Keep the editor's unsaved clips. */
+  const applyComicShotChange = async (adoptedClipId?: string) => {
+    if (!montage.ref) return
+    const { montage: saved } = await getMontage(activeWorkspace, montage.ref.file)
+    let adopted: (Partial<EditorClip> & { id: string }) | undefined
+    const savedClip = adoptedClipId ? saved.clips.find(clip => clip.id === adoptedClipId) : undefined
+    if (savedClip) {
+      const source = playableUrl(savedClip.source, activeWorkspace)
+      const facts = await api.probeVideoEditorClip(source, activeWorkspace)
+      const trimEnd = savedClip.trimEnd > savedClip.trimStart
+        ? Math.min(savedClip.trimEnd, facts.duration || savedClip.trimEnd)
+        : facts.duration
+      adopted = {
+        ...facts, id: savedClip.id, name: savedClip.name, source, previewUrl: source,
+        thumbnailUrl: api.getVideoEditorThumbnailUrl(source), trimStart: savedClip.trimStart, trimEnd,
+      }
+    }
+    const merged = mergeComicShotUpdate(clips, montage.ref.extras ?? {}, saved.clips, adopted)
+    persistEditorDraft(merged.clips, projectName, resolution, fps, draftWorkspaceRef.current, soundtrack)
+    setClips(merged.clips)
+    setMontage(current => {
+      if (!current.ref) return current
+      const origins = { ...current.ref.origins }
+      if (adoptedClipId) {
+        if (savedClip?.origin) origins[adoptedClipId] = savedClip.origin
+        else delete origins[adoptedClipId]
+      }
+      const ref = { ...current.ref, revision: saved.revision ?? current.ref.revision, extras: merged.extras, origins }
+      persistMontageState(activeWorkspace, current.layers, ref)
+      return { ...current, ref }
+    })
   }
 
   const stopTimelineDragScroll = () => {
@@ -1961,6 +1880,7 @@ export function VideoEditorPanel() {
     >
       <input
         ref={fileInputRef}
+        aria-label={t('toolbar.import')}
         type="file"
         accept={VIDEO_ACCEPT}
         multiple
@@ -1976,10 +1896,10 @@ export function VideoEditorPanel() {
         <input
           value={projectName}
           onChange={event => setProjectName(event.target.value)}
-          className="min-w-0 w-32 sm:w-40 md:w-56 bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
+          className="min-w-0 flex-1 basis-40 truncate bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-accent-blue"
           aria-label={t('toolbar.projectName')}
+          title={projectName || undefined}
         />
-        <div className="hidden flex-1 sm:block" />
         <button
           onClick={() => fileInputRef.current?.click()}
           disabled={adding}
@@ -2012,11 +1932,17 @@ export function VideoEditorPanel() {
           onError={setError}
         />
         {montage.ref && (
-          <button type="button" onClick={() => setShotBoardOpen(open => !open)} aria-pressed={shotBoardOpen}
-            className={`flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${shotBoardOpen ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'}`}
-            title={t('shots.toggleTitle')}>
-            <Film size={13} /> {t('shots.toggle')}
-          </button>
+          <>
+            <button type="button" onClick={() => { const next = !shotBoardOpen; setShotBoardOpen(next); if (next) setComicOpen(() => false) }} aria-pressed={shotBoardOpen}
+              className={viewToggleClass(shotBoardOpen)}
+              title={t('shots.toggleTitle')}>
+              <Film size={13} /> {t('shots.toggle')}
+            </button>
+            <button type="button" data-testid="comic-toggle" onClick={() => { const next = !comicOpen; setComicOpen(() => next); if (next) setShotBoardOpen(false); setSequencePlaying(false) }}
+              aria-pressed={comicOpen} className={viewToggleClass(comicOpen)} title={t('comic.toggleTitle')}>
+              <BookOpen size={13} /> {t('comic.toggle')}
+            </button>
+          </>
         )}
         <PublishPresetBar
           width={resolution.width}
@@ -2057,11 +1983,7 @@ export function VideoEditorPanel() {
         onChange={layers => { setMontage(current => ({ ...current, layers })); persistMontageState(activeWorkspace, layers, montage.ref) }}
       />
       {shotBoardOpen && montage.ref && (
-        <ShotBoard workspace={activeWorkspace} file={montage.ref.file} onError={setError}
-          onChanged={async () => {
-            const loaded = await loadMontageIntoEditor(activeWorkspace, montage.ref!.file)
-            applyMontage(loaded.state, loaded.layers, loaded.ref)
-          }} />
+        <ShotBoard workspace={activeWorkspace} file={montage.ref.file} onError={setError} onChanged={reloadOpenMontage} />
       )}
 
       <div className="flex-1 min-h-0 overflow-y-auto lg:overflow-hidden grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -2157,6 +2079,11 @@ export function VideoEditorPanel() {
                 )}
               />
             )}
+            <ComicView open={comicOpen} workspace={activeWorkspace} file={montage.ref?.file} clips={clips}
+              soundtrack={soundtrack} extras={montage.ref?.extras ?? {}} selectedId={selectedId}
+              onSelect={selectTimelineClip} onMove={dropAtIndex}
+              onDelete={removeClip} onDuplicate={duplicateComicClip} onExtra={patchComicExtra}
+              onRemake={remakeClip} onChanged={applyComicShotChange} onError={setError} />
           </div>
 
           <div className="px-3 py-3 border-t border-border bg-bg-tertiary/30">
@@ -2174,7 +2101,7 @@ export function VideoEditorPanel() {
                 onClick={() => startSequenceAt(0, undefined, false)}
                 disabled={!clips.length}
                 className="p-1.5 rounded-md hover:bg-bg-hover disabled:opacity-40"
-                title={t('playback.restartTitle')}
+                title={t('playback.restartTitle')} aria-label={t('playback.restartTitle')}
               >
                 <RotateCcw size={13} />
               </button>
@@ -2257,8 +2184,8 @@ export function VideoEditorPanel() {
 
         <aside aria-label={t('inspector.aria')} className="min-h-0 overflow-y-auto p-3 space-y-4 bg-bg-secondary">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
-            <select
+            <label htmlFor={fieldIds('f0')} className="block text-[10px] uppercase tracking-wider text-text-muted mb-1.5">{t('inspector.output')}</label>
+            <select aria-label={t('inspector.output')} id={fieldIds('f0')}
               value={`${resolution.width}x${resolution.height}`}
               onChange={event => {
                 const next = RESOLUTIONS.find(option => `${option.width}x${option.height}` === event.target.value)
@@ -2275,7 +2202,7 @@ export function VideoEditorPanel() {
             <div className="mt-2">
               <label className="text-[10px] text-text-muted">
                 {t('inspector.frameRate')}
-                <select
+                <select aria-label={t('inspector.frameRate')}
                   value={fps}
                   onChange={event => setFps(Number(event.target.value))}
                   className="block w-full mt-1 bg-bg-tertiary border border-border rounded px-2 py-1.5 text-xs text-text-primary"
@@ -2299,10 +2226,17 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => setSelectedTransitionIndex(null)}
                   className="ml-auto p-0.5 text-text-muted hover:text-text-primary"
-                >
+                 title={controlLabel('a11y.close')} aria-label={controlLabel('a11y.close')}>
                   <X size={12} />
                 </button>
               </div>
+              <ComicTransitionButton
+                workspace={activeWorkspace}
+                file={montage.ref?.file ?? null}
+                between={selectedTransitionIndex}
+                onOpened={loaded => applyMontage(loaded.state, loaded.layers, loaded.ref)}
+                onError={setError}
+              />
 
               <div className="grid grid-cols-2 gap-2">
                 {TRANSITIONS.map(option => {
@@ -2386,7 +2320,7 @@ export function VideoEditorPanel() {
                     <div className="space-y-3">
                       <label className="block text-[10px] text-text-muted">
                         {t('timeCard.label')}
-                        <textarea
+                        <textarea aria-label={t('timeCard.label')}
                           rows={3}
                           maxLength={240}
                           value={clips[selectedTransitionIndex].transitionText}
@@ -2402,7 +2336,7 @@ export function VideoEditorPanel() {
                       </label>
                       <label className="block text-[10px] text-text-muted">
                         {t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
-                        <input
+                        <input aria-label={t('timeCard.size', { size: Math.round(clips[selectedTransitionIndex].transitionTextSize) })}
                           type="range"
                           min={50}
                           max={160}
@@ -2418,7 +2352,7 @@ export function VideoEditorPanel() {
                   )}
                   <label className="block text-[10px] text-text-muted">
                     {t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
-                    <input
+                    <input aria-label={t('inspector.duration', { value: clips[selectedTransitionIndex].transitionDuration.toFixed(1) })}
                       type="range"
                       min={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 0.5 : 0.1}
                       max={isInterstitialTransition(clips[selectedTransitionIndex].transition) ? 5 : 2}
@@ -2505,7 +2439,7 @@ export function VideoEditorPanel() {
               <div className="mt-2 grid grid-cols-2 gap-2">
                 <label className="text-[10px] text-text-muted">
                   {t('trim.exactIn')}
-                  <input
+                  <input aria-label={t('trim.exactIn')}
                     type="number"
                     min={0}
                     max={selected.trimEnd - 0.05}
@@ -2519,7 +2453,7 @@ export function VideoEditorPanel() {
                 </label>
                 <label className="text-[10px] text-text-muted">
                   {t('trim.exactOut')}
-                  <input
+                  <input aria-label={t('trim.exactOut')}
                     type="number"
                     min={selected.trimStart + 0.05}
                     max={selected.duration}
@@ -2546,11 +2480,12 @@ export function VideoEditorPanel() {
                 <button
                   onClick={() => patchClip(selected.id, { muted: !selected.muted })}
                   className={`p-1.5 rounded border ${selected.muted ? 'border-red-500/40 text-red-400' : 'border-border text-text-secondary'}`}
-                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
+                  title={selected.muted ? t('inspector.unmute') : t('inspector.mute')} aria-label={selected.muted ? t('inspector.unmute') : t('inspector.mute')}
                 >
                   {selected.muted ? <VolumeX size={13} /> : <Volume2 size={13} />}
                 </button>
                 <input
+                  aria-label={t('inspector.volume')}
                   type="range"
                   min={0}
                   max={2}
@@ -2595,7 +2530,7 @@ export function VideoEditorPanel() {
                     setSelectedId(duplicate.id)
                   }}
                   className="p-1.5 border border-border rounded hover:bg-bg-hover"
-                  title={t('actions.duplicate')}
+                  title={t('actions.duplicate')} aria-label={t('actions.duplicate')}
                 >
                   <Copy size={11} />
                 </button>
@@ -2611,15 +2546,7 @@ export function VideoEditorPanel() {
                 </div>
               )}
               {exportJob && (
-                <div className={`rounded border p-2 ${
-                  exportJob.status === 'failed'
-                    ? 'border-red-500/30 bg-red-500/5'
-                    : exportJob.status === 'completed'
-                      ? 'border-green-500/30 bg-green-500/5'
-                      : exportJob.status === 'cancelled'
-                        ? 'border-border bg-bg-secondary'
-                      : 'border-accent-blue/30 bg-accent-blue/5'
-                }`}>
+                <div className={`rounded border p-2 ${exportJobFrameClass(exportJob.status)}`}>
                   <div className="flex items-center gap-1.5 text-[10px]">
                     {exportJob.status === 'completed'
                       ? <Check size={12} className="text-green-400" />

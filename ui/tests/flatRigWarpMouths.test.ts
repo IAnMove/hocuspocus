@@ -82,6 +82,14 @@ test('a layer face style keeps the last look and asks for layers', () => {
   assert.deepEqual(layerFaceStyle(undefined), { faceSource: 'layers' })
 })
 
+test('a mouth-line re-rig does not ask for layers again', () => {
+  const kit = warpKit()
+  kit.provenance = [{ ...kit.provenance[0], style: { mouthStyle: 'warp', smile: 0.15, faceSource: 'layers' } }]
+  const request = mouthLineRigRequest(kit, 'busto', { mouth: [41, 33], mouthWidth: 6 })
+  assert.equal(request.style.faceSource, undefined)
+  assert.equal(request.style.mouthStyle, 'warp')
+})
+
 test('the mouth line editor reads the rigged original, the saved line and re-rigs with the hint', () => {
   const kit = warpKit()
   assert.equal(flatRigPoseSource(kit, 'busto'), file('hero-busto-key'), 'the original, not the rig output')

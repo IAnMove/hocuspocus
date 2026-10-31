@@ -103,3 +103,16 @@ def test_the_mcp_operation_talks_by_object_id_with_a_revision(tmp_path):
         execute_command("world3d.scene.talk", {**arguments, "intent_id": "talk-3",
                                                "input": {**arguments["input"], "base_revision": 2, "kit_id": "nobody"}}, root)
     assert missing.value.status_code == 404 and missing.value.detail["code"] == "unknown_kit"
+
+
+def test_a_talk_with_no_cues_says_so(tmp_path):
+    """A mouth that never moves is usually audio.mouth_cues having failed upstream; the reply must not look fine."""
+    root = lambda workspace: str(tmp_path / workspace)
+    (tmp_path / "studio").mkdir()
+    write_character_kit_library(root("studio"), {"version": 1, "activeId": "lola", "kits": {"lola": kit()}}, base_revision=0)
+    _write("studio", "w3d-talk00000001", {"revision": 1, "templateId": "t", "warnings": [], "document": {
+        "duration": 6, "camera": {}, "slots": [{"id": "hero", "slot": "subject_1", "media": "image", "sourceUrl": ""}]}}, root)
+    arguments = {"version": 1, "intent_id": "talk-empty", "input": {"workspace": "studio", "scene_id": "w3d-talk00000001", "base_revision": 1,
+                                                                    "object_id": "hero", "kit_id": "lola", "lines": [{"start": 0, "cues": []}]}}
+    scene = execute_command("world3d.scene.talk", arguments, root)["result"]["scene"]
+    assert scene["talk"]["cues"] == 0 and "talk_no_cues" in scene["warnings"]

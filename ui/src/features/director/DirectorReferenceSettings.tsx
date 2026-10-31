@@ -17,7 +17,7 @@ export function DirectorReferenceSettings({ config, onChange }: {
         <label htmlFor="director-reference-anchor" className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
           {t('services.referenceAnchor')}
         </label>
-        <select
+        <select aria-label={t('services.referenceAnchor')}
           id="director-reference-anchor"
           value={config.director_reference_anchor || 'always'}
           onChange={event => onChange({ director_reference_anchor: event.target.value as DirectorReferenceAnchorMode })}
@@ -34,7 +34,7 @@ export function DirectorReferenceSettings({ config, onChange }: {
         <label htmlFor="director-lighting-continuity" className="text-[11px] text-text-muted uppercase tracking-wider mb-1.5 block">
           {t('services.lightingContinuity')}
         </label>
-        <select
+        <select aria-label={t('services.lightingContinuity')}
           id="director-lighting-continuity"
           value={config.director_lighting_continuity || 'auto'}
           onChange={event => onChange({ director_lighting_continuity: event.target.value as DirectorLightingContinuity })}

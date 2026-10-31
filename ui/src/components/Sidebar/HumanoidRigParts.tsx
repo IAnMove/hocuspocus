@@ -17,7 +17,7 @@ export function HumanoidOptions({ bpm, onBpm }: { bpm: number; onBpm: (bpm: numb
     <div className="space-y-2.5 rounded-lg border border-border bg-bg-tertiary p-2.5">
       <label className="block text-[10px] uppercase tracking-wider text-text-muted">
         <span className="flex items-center justify-between"><span>{t('rig.bpm')}</span><span className="text-text-primary">{bpm}</span></span>
-        <input type="range" min={60} max={180} step={1} value={bpm} onChange={event => onBpm(clampBpm(Number(event.target.value)))} className="mt-1.5 w-full" />
+        <input aria-label={t('rig.bpm')} type="range" min={60} max={180} step={1} value={bpm} onChange={event => onBpm(clampBpm(Number(event.target.value)))} className="mt-1.5 w-full" />
         <span className="mt-0.5 block normal-case tracking-normal text-[9px] text-text-muted/80">{t('rig.bpmHelp')}</span>
       </label>
       <div className="rounded border border-accent-blue/20 bg-accent-blue/5 p-2">

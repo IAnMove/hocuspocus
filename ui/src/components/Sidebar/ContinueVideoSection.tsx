@@ -1,3 +1,5 @@
+import { useFieldIds } from '../common/fieldIds'
+import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useRef, useCallback } from 'react'
 import { X, Film } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
@@ -5,6 +7,8 @@ import { useUiTranslation } from '../../i18n'
 import * as api from '../../api/client'
 
 export function ContinueVideoSection() {
+  const fieldIds = useFieldIds()
+
   const { t } = useUiTranslation('studio')
   const continueVideo = useStore(s => s.continueVideo)
   const continueVideoUrl = useStore(s => s.continueVideoUrl)
@@ -53,7 +57,7 @@ export function ContinueVideoSection() {
 
   return (
     <div className="space-y-2">
-      <label className="text-[11px] text-text-muted uppercase tracking-wider block">
+      <label htmlFor={fieldIds('continue')} className="text-[11px] text-text-muted uppercase tracking-wider block">
         {t('continue.title')}
       </label>
 
@@ -73,6 +77,8 @@ export function ContinueVideoSection() {
           <p className="text-[10px] text-text-muted mt-0.5">{t('chrome.orBrowse')}</p>
           <input
             ref={fileRef}
+            id={fieldIds('continue')}
+            aria-label={t('continue.title')}
             type="file"
             accept="video/*"
             className="hidden"
@@ -91,7 +97,7 @@ export function ContinueVideoSection() {
           <button
             onClick={clearContinueVideo}
             className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white hover:bg-red-600 transition-colors"
-          >
+           title={controlLabel('a11y.clearVideo')} aria-label={controlLabel('a11y.clearVideo')}>
             <X size={12} />
           </button>
           <div className="absolute bottom-1 left-1 flex gap-1.5">
@@ -110,10 +116,10 @@ export function ContinueVideoSection() {
       {continueVideo && (
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-[10px] text-text-muted">{t('continue.strength')}</label>
+            <label htmlFor={fieldIds('f0')} className="text-[10px] text-text-muted">{t('continue.strength')}</label>
             <span className="text-[10px] text-text-secondary">{(inputVideoStrength as number).toFixed(2)}</span>
           </div>
-          <input
+          <input aria-label={t('continue.strength')} id={fieldIds('f0')}
             type="range"
             min={0} max={1} step={0.05}
             value={inputVideoStrength as number}

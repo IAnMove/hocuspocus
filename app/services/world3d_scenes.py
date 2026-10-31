@@ -37,7 +37,7 @@ from services.world3d_template_catalog import World3DTemplateError, require_card
 _ROOT = Path(__file__).resolve().parents[2]
 _EDITS = "world3d-edits"
 _COMPILED: dict[str, dict] = {}
-_SLOT_FIELDS = {"setItem", "imageLook", "billboard", "sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationY", "scale", "motion", "grounded", "media", "splat"}
+_SLOT_FIELDS = {"setItem", "imageLook", "billboard", "sourceUrl", "sourceRef", "clip", "clipPlayback", "position", "rotationX", "rotationY", "rotationZ", "scale", "motion", "grounded", "media", "splat"}
 _MAX_SLOTS = 24
 _ADDED_MEDIA = ("model3d", "image", "splat")
 _SCREEN_SOURCE_FIELDS = {"sourceUrl", "sourceRef"}
@@ -343,6 +343,20 @@ def _check_shake(shake) -> None:
                                     "frequency 0-60 Hz, and optional integer seed and decay 0-60")
 
 
+def face_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
+    """Paint a 2D Character Kit on a model slot (``slot.faceDecal``)."""
+    from services.blob_face_scene import bind_face
+    return bind_face(workspace, scene_id, workspace_dir, changes, base_revision)
+
+
+def _talk_pose(slot, changes) -> str:
+    pose = changes.get("pose")
+    if not isinstance(pose, str) or not pose:
+        face = slot.get("faceDecal") if isinstance(slot.get("faceDecal"), dict) else {}
+        pose = face.get("pose") or "base"
+    return str(pose)
+
+
 def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base_revision: int) -> dict:
     """Make an image object talk with a Character Kit: pose, mouths by cue, blink, and each line's audio."""
     from services.world3d_talk import TalkError, apply_talk
@@ -355,13 +369,15 @@ def talk_scene(workspace: str, scene_id: str, workspace_dir, changes: dict, base
         raise World3DSceneError("unknown_kit", f"unknown_kit:{kit_id}", 404)
     document = record["document"]
     slot = _target(document["slots"], changes)
+    pose = _talk_pose(slot, changes)
     try:
         talked = apply_talk(document, slot, kit, changes.get("lines") or [], workspace=workspace,
-                            pose=str(changes.get("pose") or "base"), blink=changes.get("blink") is not False)
+                            pose=str(pose), blink=changes.get("blink") is not False)
     except TalkError as error:
         raise World3DSceneError(error.code, str(error), error.status) from error
     record["revision"] += 1
-    record["warnings"] = []
+    # No cue means the mouth never moves; usually audio.mouth_cues failed (Rhubarb missing) and its caller passed nothing on.
+    record["warnings"] = [] if talked["cues"] else ["talk_no_cues"]
     _write(workspace, scene_id, record, workspace_dir)
     viewed = _view(scene_id, record, workspace, workspace_dir)
     viewed["talk"] = {key: value for key, value in talked.items() if key != "talk"}
@@ -805,10 +821,20 @@ def _view(scene_id: str, record: dict, workspace: str | None = None, workspace_d
         "document": document, "objects": _objects(document), "pending": _pending(document), "worldFx": world_fx_view(document),
         "warnings": [*(record.get("warnings") or []), *editor_warnings(document), *passes["warnings"]], "traits": _traits(document),
         **shown,
-        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationY", "scale",
+        "editable": ["sourceUrl", "sourceRef", "clip", "clipPlayback", "clips", "hold", "appearance", "directional", "position", "rotationX", "rotationY", "rotationZ", "scale",
                      "motion", "collide", "grounded", "camera", "playbackSpeed", "worldFx", "motionStep", "stopMotionJitter", "duration", "dressing", "light",
                      "renderLook", "toon", "motionLab", "grade", "lens", "camera_template", "look"],
     }
+
+
+def _shown_tilt(slot: dict) -> dict:
+    """Pitch and roll only when the document stored a finite angle. A yaw-only slot stays without the keys."""
+    shown = {}
+    for key in ("rotationX", "rotationZ"):
+        value = slot.get(key)
+        if type(value) in (int, float) and math.isfinite(value):
+            shown[key] = value
+    return shown
 
 
 def _objects(document: dict) -> list[dict]:
@@ -818,7 +844,7 @@ def _objects(document: dict) -> list[dict]:
         objects.append({
             "id": slot.get("id"), "role": slot.get("slot"), "media": slot.get("media"), "sourceUrl": source,
             "marker": not source, "finished": bool(source), "clip": slot.get("clip"), "position": slot.get("position"),
-            "rotationY": slot.get("rotationY"), "scale": slot.get("scale"), "motion": slot.get("motion"),
+            "rotationY": slot.get("rotationY"), **_shown_tilt(slot), "scale": slot.get("scale"), "motion": slot.get("motion"),
             "accepted": [slot.get("media") or "model3d"], **({"collide": False} if slot.get("collide") is False else {}),
             **{key: slot[key] for key in _CHECKED_FIELDS if slot.get(key) is not None},
         })

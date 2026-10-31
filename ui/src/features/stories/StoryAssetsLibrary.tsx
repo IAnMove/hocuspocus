@@ -56,7 +56,7 @@ export function StoryAssetsLibrary({
               <div className="relative">
                 <img src={asset.source} alt={asset.name} className="h-44 w-full rounded-md border border-border object-cover" />
                 <label className="absolute left-2 top-2 flex items-center gap-1.5 rounded bg-black/75 px-2 py-1 text-[9px] text-white">
-                  <input type="checkbox" checked={styleAssetIds.includes(asset.id)} onChange={() => toggleStyleAsset(asset.id)} />
+                  <input aria-label={t('assets.select')} type="checkbox" checked={styleAssetIds.includes(asset.id)} onChange={() => toggleStyleAsset(asset.id)} />
                   {t('assets.select')}
                 </label>
                 <span className={`absolute right-2 top-2 rounded border px-1.5 py-0.5 text-[9px] ${asset.approval === 'approved'

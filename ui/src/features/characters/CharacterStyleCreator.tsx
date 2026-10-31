@@ -30,6 +30,7 @@ function RigReview({ workspace, kit, rig, blocked, onUseVoice }: {
     <img src={rig.review} alt={t('styleCreator.reviewAlt')} className="max-h-72 rounded-lg border border-border bg-white object-contain" />
     {warp && <p className="text-xs text-text-muted">{t('styleCreator.warpReview')}</p>}
     {!warp && rig.unwipedPoses.length > 0 && <p className={note}>{t('styleCreator.unwiped', { poses: rig.unwipedPoses.join(', ') })}</p>}
+    {rig.notices?.some(notice => notice.code === 'landmark_models_missing') && <p className={note} data-testid="character-rig-models-missing">{t('styleCreator.modelsMissing')}</p>}
     {flagged.mouthLine.length > 0 && <p className={note} data-testid="character-rig-mouth-line">{t('styleCreator.mouthLine', { poses: flagged.mouthLine.join(', '), name: kit.name })}</p>}
     {flagged.other.length > 0 && <p className={note}>{t('styleCreator.checkPoses', { poses: flagged.other.join(', '), name: kit.name })}</p>}
     <button type="button" disabled={blocked} aria-expanded={designing} onClick={() => setDesigning(open => !open)} className={`${control} inline-flex items-center gap-2`}><Mic size={15} />{t('styleCreator.designVoice')}</button>
@@ -43,7 +44,7 @@ function NewPose({ pose, onPose, candidates, picked, pickedReady, onPick, blocke
 }) {
   const { t } = useUiTranslation('characters')
   return <div className="space-y-2 rounded-lg border border-border p-3" data-testid="character-new-pose">
-    <label className="block text-xs text-text-secondary">{t('styleCreator.newPose')}<input value={pose} maxLength={200} disabled={blocked} onChange={event => onPose(event.target.value)} placeholder={t('styleCreator.posePlaceholder')} className={`${control} mt-1 w-full`} /></label>
+    <label className="block text-xs text-text-secondary">{t('styleCreator.newPose')}<input aria-label={t('styleCreator.newPose')} value={pose} maxLength={200} disabled={blocked} onChange={event => onPose(event.target.value)} placeholder={t('styleCreator.posePlaceholder')} className={`${control} mt-1 w-full`} /></label>
     <div className="flex flex-wrap gap-2">
       <button type="button" disabled={blocked || !pose.trim()} onClick={onCreate} className={`${control} inline-flex items-center gap-2`}><Plus size={15} />{t('styleCreator.createPose')}</button>
       {picked && <button type="button" disabled={blocked || !pickedReady} onClick={onAdd} className={`${control} text-emerald-200`}>{t('styleCreator.addPose')}</button>}
@@ -97,8 +98,8 @@ function OptionsForm({ session, view, context, blocked, disabled }: { session: S
   const { t } = useUiTranslation('characters')
   const frozen = blocked || Boolean(view.kit)
   return <div className="max-w-xl space-y-3">
-    <label className="block text-xs text-text-secondary">{t('imageCreator.name')}<input value={view.name} maxLength={80} disabled={frozen} onChange={event => session.edit({ name: event.target.value })} className={`${control} mt-1 w-full`} /></label>
-    <label className="block text-xs text-text-secondary">{t('imageCreator.description')}<textarea value={view.description} maxLength={2000} rows={3} disabled={frozen} onChange={event => session.edit({ description: event.target.value })} placeholder={t('styleCreator.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-3 text-sm" /></label>
+    <label className="block text-xs text-text-secondary">{t('imageCreator.name')}<input aria-label={t('imageCreator.name')} value={view.name} maxLength={80} disabled={frozen} onChange={event => session.edit({ name: event.target.value })} className={`${control} mt-1 w-full`} /></label>
+    <label className="block text-xs text-text-secondary">{t('imageCreator.description')}<textarea aria-label={t('imageCreator.description')} value={view.description} maxLength={2000} rows={3} disabled={frozen} onChange={event => session.edit({ description: event.target.value })} placeholder={t('styleCreator.placeholder')} className="mt-1 w-full rounded-lg border border-border bg-bg-primary p-3 text-sm" /></label>
     <CountPicker count={view.count} disabled={frozen} onChange={count => session.edit({ count })} />
     <OptionsButtons session={session} view={view} context={context} blocked={blocked} disabled={disabled} />
   </div>

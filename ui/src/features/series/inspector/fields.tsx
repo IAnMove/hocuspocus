@@ -12,7 +12,7 @@ export function NumberInput({ title, value, onChange, min, max, step = 0.05, pla
 }) {
   const shown = typeof value === 'number' && Number.isFinite(value) ? value : ''
   return <label className={label}>{title}
-    <input className={control} type="number" inputMode="decimal" min={min} max={max} step={step} value={shown} placeholder={placeholder}
+    <input aria-label={title} className={control} type="number" inputMode="decimal" min={min} max={max} step={step} value={shown} placeholder={placeholder}
       onChange={event => {
         if (event.target.value === '') { onChange(undefined); return }
         const next = Number(event.target.value)
@@ -27,8 +27,8 @@ export function TextInput({ title, value, onChange, placeholder, multiline }: {
   const text = typeof value === 'string' ? value : ''
   return <label className={label}>{title}
     {multiline
-      ? <textarea className={`${control} min-h-16 resize-y text-sm sm:text-xs`} value={text} placeholder={placeholder} onChange={event => onChange(event.target.value)} />
-      : <input className={control} value={text} placeholder={placeholder} onChange={event => onChange(event.target.value)} />}
+      ? <textarea aria-label={title} className={`${control} min-h-16 resize-y text-sm sm:text-xs`} value={text} placeholder={placeholder} onChange={event => onChange(event.target.value)} />
+      : <input aria-label={title} className={control} value={text} placeholder={placeholder} onChange={event => onChange(event.target.value)} />}
   </label>
 }
 
@@ -39,7 +39,7 @@ export function SelectInput({ title, value, onChange, options, empty }: {
   const current = value === undefined || value === null ? '' : String(value)
   const known = options.some(option => option.value === current)
   return <label className={label}>{title}
-    <select className={`${selectClass} mt-0.5 min-h-10 sm:min-h-0 sm:py-1.5`} value={current} onChange={event => onChange(event.target.value)}>
+    <select aria-label={title} className={`${selectClass} mt-0.5 min-h-10 sm:min-h-0 sm:py-1.5`} value={current} onChange={event => onChange(event.target.value)}>
       {empty !== undefined && <option value="">{empty}</option>}
       {current && !known && <option value={current}>{current}</option>}
       {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -51,7 +51,7 @@ export function SelectInput({ title, value, onChange, options, empty }: {
 export function FileInput({ title, value, onChange, files }: { title: string; value: unknown; onChange: (value: string) => void; files: string[] }) {
   const id = useId()
   return <label className={label}>{title}
-    <input className={`${control} font-mono`} list={id} value={typeof value === 'string' ? value : ''} spellCheck={false}
+    <input aria-label={title} className={`${control} font-mono`} list={id} value={typeof value === 'string' ? value : ''} spellCheck={false}
       onChange={event => onChange(event.target.value.trim())} />
     <datalist id={id}>{files.map(name => <option key={name} value={name} />)}</datalist>
   </label>
@@ -59,7 +59,7 @@ export function FileInput({ title, value, onChange, files }: { title: string; va
 
 export function CheckInput({ title, value, onChange }: { title: string; value: unknown; onChange: (value: boolean) => void }) {
   return <label className="flex min-h-10 items-center gap-2 text-[11px] text-text-secondary sm:min-h-0">
-    <input type="checkbox" className="h-4 w-4" checked={value === true} onChange={event => onChange(event.target.checked)} />{title}
+    <input aria-label={title} type="checkbox" className="h-4 w-4" checked={value === true} onChange={event => onChange(event.target.checked)} />{title}
   </label>
 }
 
