@@ -6,6 +6,14 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the comic view finds an uploaded clip the same way the Video Editor does.** A bare file name is looked up in uploads first, then in the workspace, so an imported clip gets a panel.
+
+**Fixed: placing a 2D face again keeps the expression line already on the model.** A later edit that omits pose, expressions, centre or radii leaves those as they were. An empty expression list clears the line. A kit id with a slash is refused before any file is written.
+
+**Fixed: a comic insert no longer silences the shots that follow it.**
+
+**Fixed: a comic chapter change saves the editor draft first.** The transition no longer replaces the unsaved montage with the last saved one.
+
 **Fixed: changing a 2D face expression in Video 3D no longer drops a mesh or plane head.** The inspector rebuilt the face from the kit and forgot the projection the scene already stored. Lofted anime and voxel heads went back to a cap. Placement, span, taper and talk cues stay.
 
 **Fixed: the puppet walk no longer keys to an opaque black rectangle.** `studio.key` reads colour only, and the puppet frames were transparent with black under the alpha. The frames now lie on the screen colour of the job before they are keyed; a test runs the real keyer on a stored frame.
@@ -67,7 +75,6 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 **Added: one call builds a round-headed person and rigs it (`model3d.blob.make`).** Traits or a preset (`sailor`, `cashier`, `boss`, `kid`, `big`, `lanky`) become an overlapped body on CPU. The same call rigs the humanoid clips (`idle`, `walk`, `talk`, `nod`, `wave`, `shrug`, `point`, `run` by default). MCP, the Wizard action `blob_make` and the Studio 3D panel share that call. A refusal keeps the rig's reason (`hands_stuck` and the rest). The face and set textures are not part of this body. See [MODEL3D_BLOB.md](docs/agents/MODEL3D_BLOB.md).
 
 **Added: a parametric 2D face for a round 3D head.** `characters.face.make` (Characters › Crear cara, and the Wizard's `make_character_face`) draws eyes, brows, nose, moustache and nine mouths into a Character Kit. `world3d.scene.face` paints that kit as a cap on a model's Head bone; `world3d.scene.talk` then drives the same cues, blink and soundtrack and leaves the slot a model. `traits.style: "anime"` gives the same kit big shaded eyes, a blush and small mouths. See [BLOB_FACE.md](docs/agents/BLOB_FACE.md).
-
 **Changed: every form field is tied to its visible label.** The name is the same Spanish and English text as the label on screen (`aria-label`, and `htmlFor` when the label is a sibling). Clicking the label focuses the field. Hunyuan3D quality presets are named by preset id, so Spanish no longer shows the server's English description. The Story Lab language field asks "Elige o escribe cualquier idioma". A source budget fails when a new `<input>`, `<select>` or `<textarea>` has no label.
 
 **Changed: more of the app speaks the active language, and the busiest disabled controls say why.** The literal-string and silent-disabled guards now cover Video 3D and the workbench, and they also count catalogue fields named label, title, description, placeholder, tooltip, hint and name. A line marked `i18n-ok` may keep a brand, a model id, a unit or a prompt that is sent to a model. Resolution presets, workflow types and workflow states map to a key and fall back to the server's own text. Scene-template cards, media, LoRA, diagnostics, story writing, the panorama comparison, the Director chat, the theme picker and narrative slot names follow Spanish or English. A prompt that is also a scene name stays the stored text. The face workshop, comic panels, scene animator and template library name the first missing condition on a disabled control. Workspace, Workspaces, Animate, Edits and the wizard's Video 3D suggestion use the active language. A job state on the wizard uses the shared status names and keeps an unknown word as the server sent it.

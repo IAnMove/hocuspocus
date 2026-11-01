@@ -42,7 +42,7 @@ import { LaterCard } from './laterCard'
 import { getMontage } from '../../api/montages'
 import { duplicateClipState, mergeComicShotUpdate, moveClip, patchClipExtra, type ComicExtraPatch } from './comicEdits'
 import { handOffClip, reusableMetadata, useComicOpen, type ClipRemake } from './comicRemake'
-import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, playableUrl, type MontageLayers, type MontageRef } from './montage'
+import { exportLayerFields, loadMontageState, MONTAGE_REF_EVENT, persistMontageState, persistOpenMontage, playableUrl, type MontageLayers, type MontageRef } from './montage'
 import * as api from '../../api/client'
 import { useStore } from '../../stores/useStore'
 import { videoEditorClipFromOutput } from './videoEditorCatalogPick'
@@ -538,6 +538,19 @@ function wait(ms: number): Promise<void> {
 function viewToggleClass(open: boolean): string {
   const tone = open ? 'bg-bg-hover text-text-primary' : 'bg-bg-secondary'
   return `flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-lg border border-border hover:bg-bg-hover ${tone}`
+}
+
+async function prepareComicTransition(
+  workspace: string,
+  state: MontageEditorState,
+  layers: MontageLayers,
+  ref: MontageRef | null,
+  adopt: (ref: MontageRef) => void,
+): Promise<string> {
+  const saved = await persistOpenMontage({ workspace, state, layers, ref })
+  adopt(saved)
+  persistMontageState(workspace, layers, saved)
+  return saved.file
 }
 
 export function VideoEditorPanel() {
@@ -2234,6 +2247,13 @@ export function VideoEditorPanel() {
                 workspace={activeWorkspace}
                 file={montage.ref?.file ?? null}
                 between={selectedTransitionIndex}
+                prepare={() => prepareComicTransition(
+                  activeWorkspace,
+                  { projectName, resolution, fps, clips, soundtrack },
+                  montage.layers,
+                  montage.ref,
+                  ref => setMontage(current => ({ ...current, ref })),
+                )}
                 onOpened={loaded => applyMontage(loaded.state, loaded.layers, loaded.ref)}
                 onError={setError}
               />

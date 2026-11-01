@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { Layers, Loader2, Save, Trash2 } from 'lucide-react'
-import { listMontages, saveMontage, type MontageSummary } from '../../api/montages'
+import { listMontages, type MontageSummary } from '../../api/montages'
 import { loadMontageIntoEditor } from './montageLoader'
 import { useUiTranslation } from '../../i18n'
 import type { EditorSoundtrack, ResolutionOption } from './editorDraft'
 import type { EditorClip } from './editorClipNormalization'
-import { montageFromEditor, type MontageLayers, type MontageRef } from './montage'
+import { persistOpenMontage, type MontageLayers, type MontageRef } from './montage'
 
 export interface MontageEditorState {
   projectName: string
@@ -56,9 +56,7 @@ export function MontageToolbar({ workspace, disabled, current, layers, montageRe
     setBusy(true)
     onError(null)
     try {
-      const montage = montageFromEditor({ ...state, layers, origins: montageRef?.origins, extras: montageRef?.extras, notes: montageRef?.notes })
-      const saved = await saveMontage({ workspace, montage, ...(montageRef ? { file: montageRef.file, expected_revision: montageRef.revision } : {}) })
-      onSaved({ ...montageRef, file: saved.file, revision: saved.revision, origins: montageRef?.origins ?? {} })
+      onSaved(await persistOpenMontage({ workspace, state, layers, ref: montageRef }))
     } catch (error) { onError((error as Error).message) } finally { setBusy(false) }
   }
 

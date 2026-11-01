@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from typing import Any
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -398,9 +399,16 @@ def face_kit(traits: Any, picture: Any = None) -> dict[str, Any]:
             "layout": layout, "mouthMapping": dict(MAPPING), "preview": _sheet(poses, mouths, anchors)}
 
 
+# Same id alphabet as character_kit_library._token: a slash or `..` in kit_id would write PNGs outside the workspace.
+_KIT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,119}$")
+
+
 def _kit_token(look: dict[str, Any], kit_id: str | None) -> str:
     if kit_id:
-        return str(kit_id)
+        token = str(kit_id).strip()
+        if not _KIT_ID.fullmatch(token):
+            raise BlobFaceError("invalid_kit", "kit_id must be letters, numbers, dot, underscore or hyphen")
+        return token
     payload = json.dumps(public_traits(look), sort_keys=True, separators=(",", ":"))
     return "blob-" + hashlib.sha256(payload.encode()).hexdigest()[:12]
 

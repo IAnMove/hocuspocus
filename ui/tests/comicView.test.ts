@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
+import { applyComicMontageTransition } from '../src/features/video-editor/comicMontageRun.ts'
 import { creationOutputs, duplicateClipState, frameOffset, mergeComicShotUpdate, moveClip, patchClipExtra } from '../src/features/video-editor/comicEdits.ts'
 import { outputNameFromEditorClip } from '../src/features/video-editor/replacementHandoff.ts'
 import { comicPanelKey } from '../src/features/video-editor/useComicPanels.ts'
@@ -140,6 +141,58 @@ test('remake finds the settings of a copied clip under the original name, then t
   assert.deepEqual(creationOutputs({ kind: 'generation', canRegenerate: true, sidecar: 'shot.meta.json', generatedFrom: 'shot.mp4' }), ['shot.mp4'])
   assert.deepEqual(creationOutputs({ kind: 'upload', canRegenerate: false }), [])
   assert.equal(outputNameFromEditorClip('ol-o01.mp4', 'o01'), 'ol-o01.mp4')
+})
+
+test('a comic transition writes the editor draft before the server cut', async () => {
+  const order: string[] = []
+  const loaded = await applyComicMontageTransition({
+    workspace: 'studio',
+    file: 'song.montage.json',
+    between: 1,
+    mode: 'insert',
+    intentId: 'comic-ui-1',
+    prepare: async () => {
+      order.push('prepare')
+      return 'song.montage.json'
+    },
+    run: async body => {
+      order.push('run')
+      assert.equal(body.input.montage, 'song.montage.json')
+      assert.equal(body.input.between, 1)
+      return { montage: { file: 'song.montage.json' } }
+    },
+    load: async (workspace, file) => {
+      order.push(`load:${workspace}:${file}`)
+      return { state: { clips: [] }, layers: {}, ref: { file, revision: 3, origins: {} } } as never
+    },
+  })
+  assert.deepEqual(order, ['prepare', 'run', 'load:studio:song.montage.json'])
+  assert.equal(loaded.ref.revision, 3)
+})
+
+test('a failed persist does not post the comic transition', async () => {
+  let ran = false
+  await assert.rejects(
+    () => applyComicMontageTransition({
+      workspace: 'studio',
+      file: 'song.montage.json',
+      between: 0,
+      mode: 'insert',
+      intentId: 'comic-ui-2',
+      prepare: async () => {
+        throw new Error('stale revision')
+      },
+      run: async () => {
+        ran = true
+        return {}
+      },
+      load: async () => {
+        throw new Error('should not reload')
+      },
+    }),
+    /stale revision/,
+  )
+  assert.equal(ran, false)
 })
 
 test('a comic remake keeps unsaved clips and only adopts the selected take', () => {

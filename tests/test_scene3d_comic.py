@@ -480,8 +480,9 @@ def test_insert_at_a_clip_index_keeps_the_first_clip_and_grows(tmp_path):
     assert clips[3]["trimStart"] == pytest.approx(2)
     assert _span(clips) == pytest.approx(7.6)
     assert saved["revision"] == 2
-    assert saved["soundtrack"]["source"] == "clip.mp4"
-    assert all(clip["muted"] for clip in clips)
+    assert saved.get("soundtrack") is None
+    assert not clips[0].get("muted") and not clips[3].get("muted")
+    assert clips[1]["muted"] and clips[2]["muted"]
     backup = json.loads((tmp_path / "studio" / "cuts.r1.montage.json").read_text())
     assert backup["revision"] == 1 and len(backup["clips"]) == 2
     assert reply["result"]["montage"] == {"file": "cuts.montage.json", "revision": 2, "backup": "cuts.r1.montage.json"}

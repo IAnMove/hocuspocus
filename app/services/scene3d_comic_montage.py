@@ -56,7 +56,9 @@ def _place(data: dict, workspace_dir, transition) -> dict:
             inner[key] = data[key]
     built = transition(inner, workspace_dir)
     edited = _assemble(clips, anchor, split, from_source, to_source, built, exit_d, enter_d)
-    _audio(loaded, edited, clips, spans, anchor, _duration(clips, spans), root, cache)
+    # insert grows the timeline; lifting clip audio into a soundtrack of the old
+    # length mutes the remaining shots and leaves their picture silent.
+    _audio(loaded, edited, clips, spans, anchor, _duration(clips, spans), root, cache, lift=mode == "replace")
     saved = _keep(store, root, workspace, file, previous, revision, loaded, pristine)
     warnings = _repeats(list(built.get("warnings") or []), samples)
     return {**built, "warnings": warnings, "montage": saved}
@@ -333,10 +335,13 @@ def _assemble(clips, anchor, split, from_source, to_source, built, exit_d, enter
     return [*clips[:anchor], left, exit_clip, enter_clip, right, *tail]
 
 
-def _audio(document, edited, original, spans, anchor, duration, root, cache) -> None:
+def _audio(document, edited, original, spans, anchor, duration, root, cache, lift=True) -> None:
+    """On replace, lift clip audio onto a soundtrack so the song stays one piece
+    through the cut. Insert keeps each clip's own audio: a soundtrack of the old
+    duration would mute the later shots and leave their picture silent."""
     source = str(original[anchor].get("source") or "")
     document["clips"] = edited
-    if document.get("soundtrack") or not _probe(source, root, cache).get("has_audio"):
+    if not lift or document.get("soundtrack") or not _probe(source, root, cache).get("has_audio"):
         return
     for clip in edited:
         clip["muted"] = True

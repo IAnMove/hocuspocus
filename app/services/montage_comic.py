@@ -53,16 +53,19 @@ def laplacian_variance(path: Path) -> float:
 def comic_panels(store: MontageStore, workspace: str, file: str, *, clip_ids: list | None = None,
                  frames: dict | None = None, clips: list | None = None, extract: Callable | None = None,
                  score: Callable | None = None, printer: Callable | None = None,
-                 duration_of: Callable | None = None) -> dict[str, Any]:
+                 duration_of: Callable | None = None,
+                 resolve_source: Callable | None = None) -> dict[str, Any]:
     """One raw frame and one print per clip. At most 24 clips. A second call is a cache hit.
 
     ``clips`` are the editor's unsaved clips (id, source, trims, comic): a duplicated or replaced clip has
-    its panel before the montage is saved. A clip whose media cannot be read gets ``error``, not a failed batch."""
+    its panel before the montage is saved. A clip whose media cannot be read gets ``error``, not a failed batch.
+    A bare source name is found the same way as the Video Editor: uploads first, then the workspace.
+    """
     saved = store.get(workspace, file)
     chosen = _drafted(clips) if clips is not None else _selected(saved["montage"]["clips"], clip_ids)
     offsets = _offsets(frames, {clip["id"] for clip in chosen})
     root = Path(store.workspace_dir(workspace))
-    tools = _tools(extract, score, printer, duration_of)
+    tools = _tools(extract, score, printer, duration_of, resolve_source, root, workspace)
     with _LOCK:
         panels = [_safe_panel(clip, root, workspace, offsets, tools) for clip in chosen]
     return {"file": saved["file"], "panels": panels}
@@ -97,7 +100,7 @@ def _drafted(clips: Any) -> list[dict]:
     return drafted
 
 
-def _tools(extract, score, printer, duration_of) -> dict[str, Callable]:
+def _tools(extract, score, printer, duration_of, resolve_source, root: Path, workspace: str) -> dict[str, Callable]:
     if extract is None:
         from services.video_editor import extract_frame
         extract = extract_frame
@@ -109,7 +112,10 @@ def _tools(extract, score, printer, duration_of) -> dict[str, Callable]:
     if duration_of is None:
         from services.montage_shots import media_duration
         duration_of = media_duration
-    return {"extract": extract, "score": score, "printer": printer, "duration_of": duration_of}
+    if resolve_source is None:
+        resolve_source = _default_resolve(root, workspace)
+    return {"extract": extract, "score": score, "printer": printer, "duration_of": duration_of,
+            "resolve_source": resolve_source}
 
 
 def _selected(clips: list[dict], clip_ids: list | None) -> list[dict]:
@@ -149,7 +155,7 @@ def _seconds(value: Any, label: str) -> float:
 
 
 def _panel(clip: dict, root: Path, workspace: str, offsets: dict[str, float], tools: dict) -> dict[str, Any]:
-    source = _source_file(root, str(clip.get("source") or ""))
+    source = _source_file(str(clip.get("source") or ""), tools["resolve_source"])
     start, end = _bounds(clip, float(tools["duration_of"](source)))
     override = offsets.get(clip["id"])
     if override is None:
@@ -169,10 +175,24 @@ def _panel(clip: dict, root: Path, workspace: str, offsets: dict[str, float], to
             "width": width, "height": height}
 
 
-def _source_file(root: Path, source: str) -> Path:
-    name = Path(source.split("?", 1)[0]).name
-    path = root / name
-    if not name or not path.is_file():
+def _default_resolve(root: Path, workspace: str) -> Callable[[str], str | None]:
+    """Same lookup as the Video Editor: uploads first for a bare name, else the workspace."""
+    from services.kernel.paths import safe_join
+    from services.model3d_input_path import resolve_model3d_input_path
+
+    def resolve(source: str) -> str | None:
+        return resolve_model3d_input_path(
+            source, workspace, safe_join=safe_join,
+            workspace_dir=lambda _name: str(root), save_path=lambda: str(root),
+        )
+    return resolve
+
+
+def _source_file(source: str, resolve: Callable[[str], str | None]) -> Path:
+    found = resolve(source)
+    path = Path(found) if found else None
+    if path is None or not path.is_file():
+        name = Path(source.split("?", 1)[0]).name
         raise MontageError(f"Clip media {name or 'file'} is not in the workspace", status=404, code="not_found")
     return path
 
