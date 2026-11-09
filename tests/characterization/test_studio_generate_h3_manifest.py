@@ -36,3 +36,18 @@ def test_a_name_that_is_nowhere_is_still_refused_by_name(rig, monkeypatch) -> No
 
     assert response.status_code == 400
     assert "Reference 1 file was not found: missing.png" in response.text
+
+
+def test_library_names_in_any_media_field_reach_the_job_as_real_files(rig) -> None:  # noqa: F811
+    workspace = Path(rig.launch._workspace_dir("default"))
+    for name in ("guide clip.mp4", "voice take.wav", "key frame.png"):
+        (workspace / name).write_bytes(b"x")
+
+    job = rig.run({**BODY, "video_guide": "guide clip.mp4", "audio_guide": "voice take.wav",
+                   "image_refs": ["key frame.png"], "per_clip_keyframes": [["key frame.png"]]})
+
+    params = _params(rig, job)
+    assert Path(params["video_guide"]) == workspace / "guide clip.mp4"
+    assert Path(params["audio_guide"]) == workspace / "voice take.wav"
+    assert [Path(value) for value in params["image_refs"]] == [workspace / "key frame.png"]
+    assert [[Path(value) for value in clip] for clip in params["per_clip_keyframes"]] == [[workspace / "key frame.png"]]

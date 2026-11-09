@@ -103,6 +103,14 @@ async def generate(request: Request):
                                                    or getattr(request, "prepared_studio_audio", False) is True))
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    # Library picks arrive as bare workspace file names; open them where they live.
+    # The workspace name was checked by the call above.
+    roots = {
+        "uploads_dir": os.path.join(os.getcwd(), "uploads"),
+        "workspace_dir": _workspace_dir(requested_workspace),
+    }
+    from services.library_media_paths import resolve_library_names
+    resolve_library_names(body, requested_workspace, **roots)
     try:
         from services.h3_runtime_policy import normalize_optional_conditioning
         normalize_optional_conditioning(body, _generation_model_def)
@@ -181,11 +189,6 @@ async def generate(request: Request):
         from models.minimax_h3.ref2va import validate_reference_manifest
         from services.h3_reference_paths import resolve_h3_reference_paths
 
-        # Library picks arrive as bare workspace file names; open them where they live.
-        roots = {
-            "uploads_dir": os.path.join(os.getcwd(), "uploads"),
-            "workspace_dir": _workspace_dir(requested_workspace),
-        }
         try:
             per_clip_references = body.get("per_clip_minimax_h3_references")
             if per_clip_references is not None:

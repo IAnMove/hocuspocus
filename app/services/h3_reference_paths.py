@@ -14,24 +14,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from services.wangp_submission import resolve_wangp_media
+from services.library_media_paths import resolve_library_name
 
 # A reference names its media in ``path``; a video may also carry its own
 # soundtrack in ``audio_path``.
 _PATH_KEYS = ("path", "audio_path")
-
-
-def _resolve_name(value: Any, workspace: str, *, uploads_dir: str, workspace_dir: str) -> Any:
-    if not isinstance(value, str) or not value.strip():
-        return value
-    try:
-        return resolve_wangp_media(
-            value.strip(), workspace, uploads_dir=uploads_dir, workspace_dir=workspace_dir,
-        )
-    except ValueError:
-        # Not in the uploads or this workspace (an absolute path elsewhere,
-        # a missing file): the manifest check decides what to say about it.
-        return value
 
 
 def resolve_h3_reference_paths(
@@ -48,7 +35,7 @@ def resolve_h3_reference_paths(
         item = dict(entry)
         for key in _PATH_KEYS:
             if key in item:
-                item[key] = _resolve_name(
+                item[key] = resolve_library_name(
                     item[key], workspace, uploads_dir=uploads_dir, workspace_dir=workspace_dir,
                 )
         resolved.append(item)
