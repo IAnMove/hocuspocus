@@ -1,6 +1,6 @@
 import type { AssetKind } from '../../api/assets'
 
-export const ASSET_PICKER_PAGE_SIZE = 24
+export const ASSET_PICKER_PAGE_SIZE = 60
 
 export type CatalogSort = 'created_desc' | 'created_asc' | 'name_asc' | 'name_desc'
 

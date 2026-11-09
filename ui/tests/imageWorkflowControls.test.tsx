@@ -72,7 +72,8 @@ test('Qwen Edit Plus exposes source, mask, method and extra references in the sa
     video_prompt_type: 'VAG', masking_strength: .6 })
   const view = render(<ImageStudioPanel />)
   await act(async () => {})
-  assert.equal(view.container.querySelectorAll('input[type="file"]').length, 3)
+  // source, mask, the reference add slot and the hidden Replace input of the reference rows
+  assert.equal(view.container.querySelectorAll('input[type="file"]').length, 4)
   assert.ok(view.getByLabelText('Inpainting method'))
   assert.ok(view.getByLabelText(/Outpaint margins/))
   fireEvent.change(view.getByLabelText('Inpainting method'), { target: { value: '3' } })

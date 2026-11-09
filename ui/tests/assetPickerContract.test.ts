@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { AssetCatalogItem } from '../src/api/assets.ts'
+import { ASSET_PICKER_PAGE_SIZE } from '../src/features/asset-picker/types.ts'
 import type { ApiOutput } from '../src/api/outputs.ts'
 import {
   catalogItemToOutput,
@@ -394,7 +395,7 @@ test('confirm refuses a live item that is gone or incompatible', () => {
   assert.deepEqual(chosen, [])
 })
 
-test('picker catalog queries default to created_desc and 24 items', async () => {
+test('picker catalog queries default to created_desc and one picker page of items', async () => {
   const originalFetch = globalThis.fetch
   const calls: string[] = []
   globalThis.fetch = (async (url: RequestInfo | URL) => {
@@ -405,7 +406,7 @@ test('picker catalog queries default to created_desc and 24 items', async () => 
     await queryAssetCatalog({ workspace: 'default' })
     const url = new URL(calls[0], 'http://localhost')
     assert.equal(url.searchParams.get('sort'), 'created_desc')
-    assert.equal(url.searchParams.get('limit'), '24')
+    assert.equal(url.searchParams.get('limit'), String(ASSET_PICKER_PAGE_SIZE))
     assert.equal(url.searchParams.get('workspace'), 'default')
   } finally {
     globalThis.fetch = originalFetch

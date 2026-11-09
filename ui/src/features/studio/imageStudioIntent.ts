@@ -27,6 +27,7 @@ export type ImageStudioDraft = {
   imageBatch?: import('./imageBatch').ImageBatchSettings
   params: Record<string, unknown>
   imageRefs: File[]
+  imageRefRows: File[][]
   imageRefType: string
   removeBackgroundRefs: boolean
   startImage: File | null
@@ -44,7 +45,7 @@ export function emptyImageStudioDraft(options?: Partial<ModelOptions> | null): I
       ...imageSamplingDefaults(options),
       sample_solver: options?.sample_solvers?.[0]?.[1] ?? '', model_mode: options?.image_edit_modes?.default ?? 0,
       batch_size: options?.image_layer_count?.default ?? 1, activated_loras: [], loras_multipliers: '', guidance_phases: 1,
-    }, imageRefs: [], imageRefType: '', removeBackgroundRefs: false,
+    }, imageRefs: [], imageRefRows: [], imageRefType: '', removeBackgroundRefs: false,
     startImage: null, endImage: null, imageSourceSize: null,
     resolutionPreset: 'auto', aspectRatio: 'auto', loraWeights: {}, outputCount: 1, imageBatch: undefined,
   }
@@ -65,7 +66,9 @@ export function imageStudioDraft(state: Omit<ImageStudioDraft, 'params'> & { par
   return {
     imageBatch: state.imageBatch ? { ...state.imageBatch, sources: state.imageBatch.sources.map(item => ({ ...item })) } : undefined,
     params: Object.fromEntries(IMAGE_INTENT_PARAMS.map(key => [key, (state.params as Record<string, unknown>)[key]])),
-    imageRefs: [...state.imageRefs], imageRefType: state.imageRefType,
+    imageRefs: [...state.imageRefs],
+    imageRefRows: (state.imageRefRows || []).map(row => [...row]),
+    imageRefType: state.imageRefType,
     removeBackgroundRefs: state.removeBackgroundRefs,
     startImage: state.startImage, endImage: state.endImage,
     resolutionPreset: state.resolutionPreset, aspectRatio: state.aspectRatio,

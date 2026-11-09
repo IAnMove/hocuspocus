@@ -43,11 +43,23 @@ export interface StudioConfigurationSlice {
   setStartImage: (file: File | null) => void
   setEndImage: (file: File | null) => void
   imageRefs: File[]
+  /** Extra generations. Each row is its own ordered reference list. */
+  imageRefRows: File[][]
   imageRefType: string
   removeBackgroundRefs: boolean
   addImageRef: (file: File) => void
   removeImageRef: (index: number) => void
   reorderImageRefs: (from: number, to: number) => void
+  cloneImageRef: (index: number) => void
+  replaceImageRef: (index: number, file: File) => void
+  addImageRefRow: () => void
+  removeImageRefRow: (row: number) => void
+  addImageRefToRow: (row: number, file: File) => void
+  removeImageRefFromRow: (row: number, index: number) => void
+  reorderImageRefInRow: (row: number, from: number, to: number) => void
+  cloneImageRefInRow: (row: number, index: number) => void
+  replaceImageRefInRow: (row: number, index: number, file: File) => void
+  splitImageRefsIntoRows: () => void
   setImageRefType: (type: string) => void
   setRemoveBackgroundRefs: (enabled: boolean) => void
   voiceCloneEnabled: boolean
@@ -114,6 +126,37 @@ interface StudioConfigurationDependencies {
     preset: ResolutionPreset,
     ratio: AspectRatio,
   ) => string
+}
+
+function updateImageRefRow(rows: File[][], row: number, update: (files: File[]) => File[]): File[][] {
+  if (!rows[row]) return rows
+  const next = rows.slice()
+  next[row] = update(rows[row].slice())
+  return next
+}
+
+function moveImageRef(files: File[], from: number, to: number): File[] {
+  if (!files[from] || to < 0 || to >= files.length) return files
+  const next = files.slice()
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved)
+  return next
+}
+
+function cloneImageRefAt(files: File[], index: number): File[] {
+  const file = files[index]
+  if (!file) return files
+  const copy = new File([file], file.name, { type: file.type, lastModified: Date.now() })
+  const next = files.slice()
+  next.splice(index + 1, 0, copy)
+  return next
+}
+
+function replaceImageRefAt(files: File[], index: number, file: File): File[] {
+  if (!files[index]) return files
+  const next = files.slice()
+  next[index] = file
+  return next
 }
 
 export function createStudioConfigurationSlice(
@@ -245,6 +288,7 @@ export function createStudioConfigurationSlice(
       h3WindowPlan: null,
     })),
     imageRefs: [],
+    imageRefRows: [],
     imageRefType: '',
     removeBackgroundRefs: false,
     addImageRef: file => set(state => ({ imageRefs: [...state.imageRefs, file] })),
@@ -260,6 +304,44 @@ export function createStudioConfigurationSlice(
       const [moved] = imageRefs.splice(from, 1)
       imageRefs.splice(to, 0, moved)
       return { imageRefs }
+    }),
+    cloneImageRef: index => set(state => {
+      const file = state.imageRefs[index]
+      if (!file) return {}
+      const copy = new File([file], file.name, { type: file.type, lastModified: Date.now() })
+      const imageRefs = state.imageRefs.slice()
+      imageRefs.splice(index + 1, 0, copy)
+      return { imageRefs }
+    }),
+    replaceImageRef: (index, file) => set(state => {
+      if (!state.imageRefs[index]) return {}
+      const imageRefs = state.imageRefs.slice()
+      imageRefs[index] = file
+      return { imageRefs }
+    }),
+    addImageRefRow: () => set(state => ({ imageRefRows: [...state.imageRefRows, []] })),
+    removeImageRefRow: row => set(state => ({
+      imageRefRows: state.imageRefRows.filter((_, index) => index !== row),
+    })),
+    addImageRefToRow: (row, file) => set(state => ({
+      imageRefRows: updateImageRefRow(state.imageRefRows, row, files => [...files, file]),
+    })),
+    removeImageRefFromRow: (row, index) => set(state => ({
+      imageRefRows: updateImageRefRow(state.imageRefRows, row, files => files.filter((_, item) => item !== index)),
+    })),
+    reorderImageRefInRow: (row, from, to) => set(state => ({
+      imageRefRows: updateImageRefRow(state.imageRefRows, row, files => moveImageRef(files, from, to)),
+    })),
+    cloneImageRefInRow: (row, index) => set(state => ({
+      imageRefRows: updateImageRefRow(state.imageRefRows, row, files => cloneImageRefAt(files, index)),
+    })),
+    replaceImageRefInRow: (row, index, file) => set(state => ({
+      imageRefRows: updateImageRefRow(state.imageRefRows, row, files => replaceImageRefAt(files, index, file)),
+    })),
+    splitImageRefsIntoRows: () => set(state => {
+      const all = [...state.imageRefs, ...state.imageRefRows.flat()]
+      if (all.length <= 1) return {}
+      return { imageRefs: [all[0]], imageRefRows: all.slice(1).map(file => [file]) }
     }),
     setImageRefType: imageRefType => set({ imageRefType }),
     setRemoveBackgroundRefs: removeBackgroundRefs => set({ removeBackgroundRefs }),

@@ -1,14 +1,19 @@
-import { controlLabel } from '../../i18n/controlLabel'
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { X } from 'lucide-react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { fileFromStudioOutput } from '../../lib/studioInputsPick.ts'
 import { useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
-import { EditableImageReference } from './EditableImageReference'
+import { ExtraReferenceRows, ReferenceItem, ReferenceLibraryDialog, ReferenceRowButtons, ReferenceRowHints } from './ImageRefRows'
+import { hasReferenceFiles, referenceDragProps } from './imageRefRowHelpers'
 import { forgetLocalImage, localEditFile } from '../../lib/localEditImages'
+
+type RefState = { imageRefs: File[]; imageRefRows: File[][] }
+type FormKey = { activeWorkspace: string; imageStudioIntent: string; generationMode: string }
+
+const sameForm = (a: FormKey, b: FormKey) => a.activeWorkspace === b.activeWorkspace
+  && a.imageStudioIntent === b.imageStudioIntent && a.generationMode === b.generationMode
 
 export function ImageRefSection() {
   const { t } = useUiTranslation('studio')
@@ -16,14 +21,22 @@ export function ImageRefSection() {
   const modelOptions = useStore(s => s.modelOptions)
   const imageMode = useStore(s => Number(s.params.image_mode ?? 1))
   const imageRefs = useStore(s => s.imageRefs)
+  const imageRefRows = useStore(s => s.imageRefRows)
   const imageRefType = useStore(s => s.imageRefType)
   const removeBackgroundRefs = useStore(s => s.removeBackgroundRefs)
   const addImageRef = useStore(s => s.addImageRef)
+  const addImageRefToRow = useStore(s => s.addImageRefToRow)
   const removeImageRef = useStore(s => s.removeImageRef)
   const reorderImageRefs = useStore(s => s.reorderImageRefs)
+  const cloneImageRef = useStore(s => s.cloneImageRef)
+  const replaceImageRef = useStore(s => s.replaceImageRef)
+  const replaceImageRefInRow = useStore(s => s.replaceImageRefInRow)
   const setImageRefType = useStore(s => s.setImageRefType)
   const setRemoveBackgroundRefs = useStore(s => s.setRemoveBackgroundRefs)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [libraryTarget, setLibraryTarget] = useState<{ row: number; index: number } | null>(null)
+  const replaceAt = useRef<{ row: number; index: number } | null>(null)
+  const replaceFile = useRef<HTMLInputElement>(null)
   const activeWorkspace = useStore(s => s.activeWorkspace)
   const imageItems = useWorkspaceOutputs(activeWorkspace, 'image')
   const mounted = useRef(true)
@@ -39,6 +52,7 @@ export function ImageRefSection() {
   const usesEditSource = Boolean(imageGuide) || imageMode === 2
   const maxRefs = configuredMaxRefs == null ? null : Math.max(0, configuredMaxRefs - (usesEditSource ? 1 : 0))
   const canAddMore = maxRefs == null || imageRefs.length < maxRefs
+  const hasRefs = hasReferenceFiles(imageRefs, imageRefRows)
 
   const addFiles = useCallback((files: File[]) => {
     const room = maxRefs == null ? files.length : Math.max(0, maxRefs - imageRefs.length)
@@ -53,12 +67,12 @@ export function ImageRefSection() {
   // Auto-set ref type when images are added/removed
   useEffect(() => {
     if (!config) return
-    if (imageRefs.length > 0 && imageRefType === '') {
+    if (hasRefs && imageRefType === '') {
       setImageRefType(defaultRefType)
-    } else if (imageRefs.length === 0 && imageRefType !== '') {
+    } else if (!hasRefs && imageRefType !== '') {
       setImageRefType('')
     }
-  }, [config, defaultRefType, imageRefs.length, imageRefType, setImageRefType])
+  }, [config, defaultRefType, hasRefs, imageRefType, setImageRefType])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
@@ -68,18 +82,35 @@ export function ImageRefSection() {
     addFiles(files)
   }, [addFiles])
 
-  const chooseImage = useCallback((item: ApiOutput) => {
-    const before = useStore.getState()
+  const fileFromItem = useCallback((item: ApiOutput) => {
     const local = localEditFile(item.url)
-    setError('')
-    void (local ? Promise.resolve(local) : fileFromStudioOutput(item)).then(file => {
+    return (local ? Promise.resolve(local) : fileFromStudioOutput(item)).then(file => {
       if (local) forgetLocalImage(item.url)
-      const state = useStore.getState()
-      if (!mounted.current || state.activeWorkspace !== before.activeWorkspace
-        || state.imageStudioIntent !== before.imageStudioIntent || state.generationMode !== before.generationMode) return
-      if (maxRefs == null || state.imageRefs.length < maxRefs) state.addImageRef(file)
+      return file
+    })
+  }, [])
+
+  // Read the picture, then apply it only if the form is still the one the user picked for.
+  const withPickedFile = useCallback((item: ApiOutput, apply: (file: File, now: RefState) => void) => {
+    const before = useStore.getState()
+    setError('')
+    void fileFromItem(item).then(file => {
+      const now = useStore.getState()
+      if (mounted.current && sameForm(before, now)) apply(file, now)
     }).catch(() => { if (mounted.current) setError(tCommon('picker.uploadFailed')) })
-  }, [maxRefs, tCommon])
+  }, [fileFromItem, tCommon])
+
+  const chooseImage = useCallback((row: number, item: ApiOutput) => withPickedFile(item, (file, now) => {
+    const files = row < 0 ? now.imageRefs : now.imageRefRows[row] || []
+    if (maxRefs != null && files.length >= maxRefs) return
+    if (row < 0) addImageRef(file)
+    else addImageRefToRow(row, file)
+  }), [addImageRef, addImageRefToRow, maxRefs, withPickedFile])
+
+  const replaceFromLibrary = useCallback((row: number, index: number, item: ApiOutput) => withPickedFile(item, file => {
+    if (row < 0) replaceImageRef(index, file)
+    else replaceImageRefInRow(row, index, file)
+  }), [replaceImageRef, replaceImageRefInRow, withPickedFile])
 
   if (!config) return null
 
@@ -88,69 +119,70 @@ export function ImageRefSection() {
       <label className="text-[11px] text-text-muted uppercase tracking-wider block">
         {t('imageRef.title')}
       </label>
+      <p className="text-xs text-text-primary">{t('imageRef.row', { count: 1 })}</p>
 
-      {/* Thumbnails + add button in a unified row */}
-      <div className="flex flex-wrap gap-1.5">
+      <ul className="space-y-2">
         {imageRefs.map((file, i) => (
-          <div
-            key={`${i}-${file.name}`}
-            draggable
-            onDragStart={e => {
-              e.dataTransfer.setData('ref-index', String(i))
-              e.dataTransfer.effectAllowed = 'move'
-            }}
-            onDragOver={e => {
-              e.preventDefault()
-              e.dataTransfer.dropEffect = 'move'
-              setDragOverIndex(i)
-            }}
-            onDragLeave={() => setDragOverIndex(null)}
-            onDrop={e => {
-              e.preventDefault()
-              e.stopPropagation()
-              setDragOverIndex(null)
-              const from = parseInt(e.dataTransfer.getData('ref-index'), 10)
-              if (!isNaN(from) && from !== i) reorderImageRefs(from, i)
-            }}
-            className={`relative w-[90px] h-[90px] rounded-lg overflow-hidden border group cursor-grab active:cursor-grabbing transition-colors ${
-              dragOverIndex === i ? 'border-accent-blue border-2' : 'border-border'
-            }`}
-          >
-            <EditableImageReference key={`${activeWorkspace}:${file.name}:${file.lastModified}`} file={file} />
-            {i === 0 && imageRefs.length > 1 && hasLandscapeMode && imageRefType === 'KI' && (
-              <div className="pointer-events-none absolute top-4 left-0 right-0 bg-black/60 text-[8px] text-white text-center py-0.5">
-                {t('imageRef.main')}
-              </div>
-            )}
-            {/* Position number */}
-            <span className="absolute top-0.5 left-0.5 bg-black/60 text-white text-[8px] px-1 rounded pointer-events-none">
-              {i + 1}
-            </span>
-            <button
-              onClick={() => removeImageRef(i)}
-              className="absolute top-0.5 right-0.5 bg-bg-primary/80 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity hover:bg-bg-hover"
-             title={controlLabel('a11y.removeImage')} aria-label={controlLabel('a11y.removeImage')}>
-              <X size={10} />
-            </button>
-          </div>
+          <ReferenceItem
+            key={`${i}-${file.name}-${file.lastModified}`}
+            file={file} index={i} count={imageRefs.length}
+            badge={i === 0 && imageRefs.length > 1 && hasLandscapeMode && imageRefType === 'KI' ? t('imageRef.main') : undefined}
+            workspace={activeWorkspace} canClone={canAddMore} highlighted={dragOverIndex === i}
+            liProps={referenceDragProps(i, setDragOverIndex, reorderImageRefs)}
+            onMove={to => reorderImageRefs(i, to)}
+            onClone={() => cloneImageRef(i)}
+            onReplace={() => { replaceAt.current = { row: -1, index: i }; replaceFile.current?.click() }}
+            onLibrary={() => setLibraryTarget({ row: -1, index: i })}
+            onRemove={() => removeImageRef(i)}
+          />
         ))}
+      </ul>
 
-        {/* Add button / drop zone */}
-        {canAddMore && (
-          <div className="min-w-[10rem]" onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
-            <AssetInput
-              label={tCommon('actions.add')}
-              placeholder={tCommon('actions.add')}
-              items={imageItems}
-              accept=".png,.jpg,.jpeg,.webp,.bmp,image/*"
-              workspaceId={activeWorkspace}
-              keepLocal
-              constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
-              onChoose={item => { if (item) chooseImage(item) }}
-            />
-          </div>
-        )}
-      </div>
+      <input
+        ref={replaceFile}
+        aria-label={t('imageRef.replace')}
+        type="file"
+        accept=".png,.jpg,.jpeg,.webp,.bmp,image/*"
+        className="hidden"
+        onChange={event => {
+          const file = event.target.files?.[0]
+          const target = replaceAt.current
+          if (file && target) {
+            if (target.row < 0) replaceImageRef(target.index, file)
+            else replaceImageRefInRow(target.row, target.index, file)
+          }
+          event.target.value = ''
+        }}
+      />
+      <ReferenceLibraryDialog
+        open={libraryTarget != null} items={imageItems} workspace={activeWorkspace}
+        onChoose={item => { if (libraryTarget) replaceFromLibrary(libraryTarget.row, libraryTarget.index, item) }}
+        onClose={() => setLibraryTarget(null)}
+      />
+
+      {canAddMore && (
+        <div onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
+          <p className="mb-1 text-xs text-text-primary">{t('imageRef.add')}</p>
+          <AssetInput
+            label={t('imageRef.add')}
+            placeholder={t('imageRef.add')}
+            items={imageItems}
+            accept=".png,.jpg,.jpeg,.webp,.bmp,image/*"
+            workspaceId={activeWorkspace}
+            keepLocal
+            constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
+            onChoose={item => { if (item) chooseImage(-1, item) }}
+          />
+        </div>
+      )}
+
+      <ExtraReferenceRows
+        maxRefs={maxRefs} workspace={activeWorkspace} items={imageItems}
+        onChoose={chooseImage}
+        onReplace={(row, index) => { replaceAt.current = { row, index }; replaceFile.current?.click() }}
+        onLibrary={(row, index) => setLibraryTarget({ row, index })}
+      />
+      <ReferenceRowButtons />
 
       {error && <p role="alert" className="text-[10px] text-red-300">{error}</p>}
 
@@ -161,7 +193,7 @@ export function ImageRefSection() {
       )}
 
       {/* Focus mode toggle — only when images present and model supports both modes */}
-      {imageRefs.length > 0 && hasLandscapeMode && hasPeopleMode && (
+      {hasRefs && hasLandscapeMode && hasPeopleMode && (
         <div className="flex bg-bg-tertiary rounded-lg p-0.5 border border-border">
           <button
             onClick={() => setImageRefType('KI')}
@@ -186,15 +218,10 @@ export function ImageRefSection() {
         </div>
       )}
 
-      {/* Hint text */}
-      {imageRefs.length > 0 && hasLandscapeMode && imageRefType === 'KI' && (
-        <p className="text-[10px] text-text-muted">
-          {t('imageRef.hint')}
-        </p>
-      )}
+      <ReferenceRowHints />
 
       {/* Background removal toggle */}
-      {imageRefs.length > 0 && bgLabel && (
+      {hasRefs && bgLabel && (
         <label className="flex items-start gap-2 cursor-pointer">
           <input aria-label={bgLabel}
             type="checkbox"
