@@ -150,6 +150,7 @@ export type StudioEditSlice = {
      *  slot for the round-trip — restored on return so we don't nuke
      *  their existing image-mode workflow state. */
     savedImageRefs: File[]
+    savedImageRefRows?: File[][]
     savedImageRefType: string
     /** Isolated Character form from before this trip. Leaving Image persists
      *  the extract over that draft; apply/skip/cancel put it back. */
@@ -293,7 +294,7 @@ export type StudioEditSlice = {
 }
 
 /** Anchor round-trips read the gallery and the image-studio fields listed here. setEditSubMode stays on the store. */
-export type StudioEditSliceHost = StudioEditSlice & Pick<GallerySlice, 'activeWorkspace' | 'browsingUploads' | 'outputs'> & Pick<StudioConfigurationSlice, 'startImage' | 'imageRefs' | 'imageRefType'> & {
+export type StudioEditSliceHost = StudioEditSlice & Pick<GallerySlice, 'activeWorkspace' | 'browsingUploads' | 'outputs'> & Pick<StudioConfigurationSlice, 'startImage' | 'imageRefs' | 'imageRefRows' | 'imageRefType'> & {
   editSubMode: EditSubMode
   params: GenerateParams
   imageStudioDrafts: Partial<Record<ImageStudioIntent, ImageStudioDraft>>
@@ -397,6 +398,7 @@ export const createStudioEditSlice: SliceCreator<StudioEditSlice, StudioEditSlic
     // hijack so we can restore it on return / skip / cancel and not
     // disturb their non-Edit-Anything Image-mode workflow.
     const savedImageRefs = state.imageRefs
+    const savedImageRefRows = (state.imageRefRows || []).map(row => [...row])
     const savedImageRefType = state.imageRefType
 
     // Decide which timestamp to grab. End frame is one frame INSIDE the
@@ -454,6 +456,7 @@ export const createStudioEditSlice: SliceCreator<StudioEditSlice, StudioEditSlic
         // for the duration of the round-trip. Restored from the
         // editReturnTarget snapshot when we return.
         imageRefs: [file],
+        imageRefRows: [],
         imageRefType: '',  // let ImageRefSection re-set the default for the new model
         // Make sure no stale i2v fields are populated — those would land
         // in video mode's i2v slot, which isn't what we want here.
@@ -469,6 +472,7 @@ export const createStudioEditSlice: SliceCreator<StudioEditSlice, StudioEditSlic
           startTime,
           endTime,
           savedImageRefs,
+          savedImageRefRows,
           savedImageRefType,
           savedCharacterDraft,
           modelType: state.params.model_type,
@@ -540,6 +544,7 @@ export const createStudioEditSlice: SliceCreator<StudioEditSlice, StudioEditSlic
           : 'edit_anything',
       editReturnTarget: null,
       imageRefs: target.savedImageRefs,
+      imageRefRows: target.savedImageRefRows || [],
       imageRefType: target.savedImageRefType,
       imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
@@ -557,7 +562,7 @@ export const createStudioEditSlice: SliceCreator<StudioEditSlice, StudioEditSlic
           ? 'restyle'
           : 'edit_anything',
       editReturnTarget: null,
-      ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
+      ...(target ? { imageRefs: target.savedImageRefs, imageRefRows: target.savedImageRefRows || [], imageRefType: target.savedImageRefType } : {}),
       imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },
@@ -571,7 +576,7 @@ export const createStudioEditSlice: SliceCreator<StudioEditSlice, StudioEditSlic
           ? 'restyle'
           : 'edit_anything',
       editReturnTarget: null,
-      ...(target ? { imageRefs: target.savedImageRefs, imageRefType: target.savedImageRefType } : {}),
+      ...(target ? { imageRefs: target.savedImageRefs, imageRefRows: target.savedImageRefRows || [], imageRefType: target.savedImageRefType } : {}),
       imageStudioDrafts: restoreCharacterDraft(get().imageStudioDrafts, target),
     })
   },

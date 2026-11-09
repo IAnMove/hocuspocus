@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 import { JSDOM } from 'jsdom'
+import { ASSET_PICKER_PAGE_SIZE } from '../src/features/asset-picker/types.ts'
 
 Object.assign(globalThis, { React })
 
@@ -23,7 +24,7 @@ Object.defineProperty(globalThis, 'navigator', { configurable: true, value: dom.
 test('multiple selection is independent from preview and retained across pages', async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { AssetExplorerDialog } = await import('../src/components/common/AssetExplorerDialog.tsx')
-  const items = Array.from({ length: 25 }, (_, index) => ({ name: `${index}.png`, type: 'image' as const,
+  const items = Array.from({ length: ASSET_PICKER_PAGE_SIZE + 1 }, (_, index) => ({ name: `${index}.png`, type: 'image' as const,
     mode: null, size: 1000, created_at: 1000 - index, url: `/api/v1/file/${index}.png?workspace=default`, workspace_id: 'default' }))
   let chosen: typeof items = []
   try {
@@ -32,9 +33,9 @@ test('multiple selection is independent from preview and retained across pages',
     assert.equal((screen.getByRole('button', { name: 'Choose' }) as HTMLButtonElement).disabled, true)
     fireEvent.click(screen.getByRole('checkbox', { name: '0.png' }))
     fireEvent.click(screen.getByRole('button', { name: /Next page/ }))
-    fireEvent.click(screen.getByRole('checkbox', { name: '24.png' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: `${ASSET_PICKER_PAGE_SIZE}.png` }))
     fireEvent.click(screen.getByRole('button', { name: 'Choose' }))
-    assert.deepEqual(chosen.map(item => item.name), ['0.png', '24.png'])
+    assert.deepEqual(chosen.map(item => item.name), ['0.png', `${ASSET_PICKER_PAGE_SIZE}.png`])
     assert.ok(chosen.every(item => item.url.includes('/file/') && item.thumbnail_url?.includes('/thumbnail/')))
   } finally { cleanup() }
 })
@@ -174,8 +175,8 @@ test('None confirms empty while Cancel does not, and search does not remount the
 test('sort applies to the whole list before paging', { concurrency: false }, async () => {
   const { render, screen, fireEvent, cleanup } = await import('@testing-library/react')
   const { AssetExplorerDialog } = await import('../src/components/common/AssetExplorerDialog.tsx')
-  const items = Array.from({ length: 25 }, (_, index) => glb(
-    `${String.fromCharCode(97 + (index % 26))}-${String(index).padStart(2, '0')}.glb`,
+  const items = Array.from({ length: ASSET_PICKER_PAGE_SIZE + 1 }, (_, index) => glb(
+    `${String(index).padStart(3, '0')}.glb`,
     1_700_000_000 + index,
   ))
   try {
@@ -188,7 +189,7 @@ test('sort applies to the whole list before paging', { concurrency: false }, asy
         onChoose={() => undefined}
       />,
     )
-    const newest = items[24].name
+    const newest = items[ASSET_PICKER_PAGE_SIZE].name
     assert.ok(screen.getByTitle(newest))
     fireEvent.change(screen.getByLabelText('Sort'), { target: { value: 'name_asc' } })
     assert.ok(screen.getByTitle(items[0].name))

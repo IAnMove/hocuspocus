@@ -2,7 +2,7 @@ import { lazy, Suspense, useRef, useState } from 'react'
 import type { ApiOutput } from '../../api/outputs'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
-import { imageBatchPairs, MAX_IMAGE_BATCH_JOBS } from '../../features/studio/imageBatch'
+import { imageBatchStatus, MAX_IMAGE_BATCH_JOBS } from '../../features/studio/imageBatch'
 import { forgetLocalImage, rememberLocalImage } from '../../lib/localEditImages'
 import { setStudioImageMask } from '../../features/studio/imageInputActions'
 import { ImageCropButton } from '../common/ImageCropButton'
@@ -16,8 +16,11 @@ export function ImageBatchControls() {
   const settings = useStore(state => state.imageBatch)
   const workspace = useStore(state => state.activeWorkspace)
   const edit = useStore(state => state.imageStudioIntent === 'edit')
+  const intent = useStore(state => state.imageStudioIntent)
   const prompt = useStore(state => String(state.params.prompt || ''))
   const mask = useStore(state => state.params.image_mask)
+  const imageRefs = useStore(state => state.imageRefs)
+  const imageRefRows = useStore(state => state.imageRefRows)
   const [open, setOpen] = useState(false)
   const input = useRef<HTMLInputElement>(null)
   const sources = settings?.sources ?? []
@@ -30,7 +33,7 @@ export function ImageBatchControls() {
     for (const item of items) if (!next.some(other => other.url === item.url)) next.push(item)
     patch({ sources: next })
   }
-  const count = imageBatchPairs(prompt, settings, edit).length
+  const count = imageBatchStatus('image', intent, prompt, mask, settings, { primary: imageRefs, rows: imageRefRows }).count
   return <section className="space-y-2 rounded border border-border p-2" aria-label={t('imageBatch.title')}>
     <label className="flex items-center justify-between gap-2 text-xs">
       {t('imageBatch.promptMode')}

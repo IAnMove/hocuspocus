@@ -97,17 +97,14 @@ def configured_lan_token(environ: Mapping[str, str] | None = None) -> str:
 
 
 def lan_auth_enabled(environ: Mapping[str, str] | None = None) -> bool:
-    """Return whether the LAN token gate is on: explicitly, or by default whenever the app is shared beyond loopback.
+    """Return whether the LAN token gate is on.
 
-    Sharing used to be credential-free unless LOREFRAME_LAN_AUTH was set, so any device on the Wi-Fi could read the
-    stored API keys and change settings. Set LOREFRAME_LAN_AUTH=0 to opt out knowingly.
+    The gate starts off. Set ``LOREFRAME_LAN_AUTH`` to ``1``, ``true``, ``yes``
+    or ``on`` to require a token from devices that are not this machine.
+    Loopback stays open either way.
     """
     value = str(_environment(environ).get(LAN_AUTH_ENABLED_ENV) or "").strip().casefold()
-    if value in _TRUE_VALUES:
-        return True
-    if value in _FALSE_VALUES:
-        return False
-    return lan_share_enabled(environ)
+    return value in _TRUE_VALUES
 
 
 def get_lan_token(environ: Mapping[str, str] | None = None) -> str:

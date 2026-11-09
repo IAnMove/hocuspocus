@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { useStore } from '../src/stores/useStore.ts'
+import { galleryRefreshRetryDelays } from '../src/stores/gallerySlice.ts'
 import { galleryThumbnailUrl } from '../src/components/MainContent/galleryThumbnail.ts'
 
 const originalFetch = globalThis.fetch
@@ -72,6 +73,51 @@ test('returning to the top after a deferred refresh keeps the loaded window', as
   assert.equal(useStore.getState().outputs[0].name, 'new.png')
   assert.equal(useStore.getState().outputs[useStore.getState().selectedOutput].name, 'old-050.png')
   assert.equal(useStore.getState().galleryRefreshPending, false)
+})
+
+test('a new image is inserted while the reader is scrolled down', async () => {
+  useStore.setState({
+    activeWorkspace: 'default', browsingUploads: false, mediaFilter: 'images',
+    outputSearchQuery: '', galleryOrder: 'newest', galleryFeedAtTop: false,
+    galleryRefreshPending: false, galleryToast: null, galleryFocusName: null,
+    outputs: [file('old.png')], outputsTotal: 1, selectedOutput: 0,
+  })
+  globalThis.fetch = async (input) => {
+    if (String(input).includes('/metadata')) return Response.json({ params: null })
+    return Response.json({ outputs: [file('new.png'), file('old.png')], total: 2 })
+  }
+  await useStore.getState().refreshOutputs()
+  assert.deepEqual(useStore.getState().outputs.map(item => item.name), ['new.png', 'old.png'])
+  assert.equal(useStore.getState().galleryToast?.message, '1 new item ready')
+  assert.deepEqual(useStore.getState().galleryToast?.names, ['new.png'])
+  useStore.getState().revealGalleryToast()
+  assert.equal(useStore.getState().galleryToast, null)
+  assert.equal(useStore.getState().galleryFocusName, 'new.png')
+})
+
+test('completion refresh tries again when the new file is not listed yet', async () => {
+  const previous = [...galleryRefreshRetryDelays]
+  galleryRefreshRetryDelays.splice(0, galleryRefreshRetryDelays.length, 20)
+  useStore.setState({
+    activeWorkspace: 'default', browsingUploads: false, mediaFilter: 'images',
+    outputSearchQuery: '', galleryOrder: 'newest', galleryFeedAtTop: true,
+    outputs: [file('old.png')], outputsTotal: 1, selectedOutput: 0, galleryToast: null,
+  })
+  let calls = 0
+  globalThis.fetch = async (input) => {
+    if (String(input).includes('/metadata')) return Response.json({ params: null })
+    calls += 1
+    const outputs = calls < 2 ? [file('old.png')] : [file('new.png'), file('old.png')]
+    return Response.json({ outputs, total: outputs.length })
+  }
+  try {
+    await useStore.getState().maybeRefreshGallery({ message: 'New output ready' })
+    assert.equal(calls, 2)
+    assert.equal(useStore.getState().outputs[0].name, 'new.png')
+    assert.deepEqual(useStore.getState().galleryToast?.names, ['new.png'])
+  } finally {
+    galleryRefreshRetryDelays.splice(0, galleryRefreshRetryDelays.length, ...previous)
+  }
 })
 
 test('legacy original-file thumbnail URLs cannot load full images in the gallery', () => {

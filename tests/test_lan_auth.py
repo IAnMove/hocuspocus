@@ -167,16 +167,16 @@ def test_loopback_only_mode_remains_credential_free(monkeypatch) -> None:
     assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
 
 
-def test_lan_sharing_requires_the_token_by_default_and_can_opt_out(monkeypatch) -> None:
+def test_lan_sharing_stays_open_until_the_token_gate_is_turned_on(monkeypatch) -> None:
     monkeypatch.setenv("PINOKIO_SHARE_LOCAL", "true")
     monkeypatch.delenv("LOREFRAME_LAN_AUTH", raising=False)
     monkeypatch.delenv("LOREFRAME_LAN_TOKEN", raising=False)
-    assert _middleware_status(_request("/api/v1/probe"))[0] == 401, "a device on the Wi-Fi needs the token"
-    assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 401
-    assert any("session token" in line for line in describe_lan_auth_startup())
-    monkeypatch.setenv("LOREFRAME_LAN_AUTH", "0")
-    assert _middleware_status(_request("/api/v1/probe"))[0] == 200, "opting out is explicit"
+    assert _middleware_status(_request("/api/v1/probe"))[0] == 200
+    assert _middleware_status(_request("/api/v1/probe", method="POST"))[0] == 200
     assert describe_lan_auth_startup() == []
+    monkeypatch.setenv("LOREFRAME_LAN_AUTH", "1")
+    assert _middleware_status(_request("/api/v1/probe"))[0] == 401, "turning the gate on asks other devices for the token"
+    assert any("session token" in line for line in describe_lan_auth_startup())
 
 
 def test_local_loopback_client_is_exempt_even_while_sharing(monkeypatch) -> None:

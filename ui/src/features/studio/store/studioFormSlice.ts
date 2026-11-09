@@ -129,7 +129,7 @@ export const createStudioFormSlice: SliceCreator<StudioFormSlice, StudioFormSlic
       }
     })
     state.setImageStudioIntent('chooser')
-    set({ imageStudioDrafts: {}, imageBatch: undefined })
+    set({ imageStudioDrafts: {}, imageBatch: undefined, imageRefRows: [] })
   },
   editSubMode: 'retake' as import('../../../types').EditSubMode,
   setEditSubMode: (mode: import('../../../types').EditSubMode, recastEngine?: 'scail' | 'viggle') => {
@@ -425,6 +425,7 @@ export const createStudioFormSlice: SliceCreator<StudioFormSlice, StudioFormSlic
             continueVideoDuration: saved.continueVideoDuration,
             audioGuideFilename: saved.audioGuideFilename,
             imageRefs: saved.imageRefs,
+            imageRefRows: [],
             imageRefType: saved.imageRefType,
             removeBackgroundRefs: saved.removeBackgroundRefs,
             durationSeconds: saved.durationSeconds,
@@ -446,6 +447,7 @@ export const createStudioFormSlice: SliceCreator<StudioFormSlice, StudioFormSlic
             continueVideoDuration: 0,
             audioGuideFilename: null,
             imageRefs: [],
+            imageRefRows: [],
             imageRefType: '',
             removeBackgroundRefs: false,
             // durationSeconds + sliding window intentionally carry over:

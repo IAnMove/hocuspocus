@@ -1,7 +1,10 @@
 """Pinokio launcher regressions that do not require the application runtime."""
 from __future__ import annotations
 
+import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import unittest
 
@@ -80,6 +83,44 @@ class TestInstallWindowsAndUltralyticsPins(unittest.TestCase):
         self.assertNotIn("-fPIC", compile_args)
         linux_compile, _linux_link = extra_args("Linux", "linux")
         self.assertIn("-fPIC", linux_compile)
+
+
+class TestUnfinishedFirstInstall(unittest.TestCase):
+    """A first install that stopped leaves app/env behind: the menu offers Install, not Start."""
+
+    def _node(self, script: str, present: tuple[str, ...] = ()):
+        done = subprocess.run(["node", "-e", script], cwd=_ROOT, check=True, capture_output=True, text=True,
+                              env={**os.environ, "PRESENT": ",".join(present)})
+        return json.loads(done.stdout.strip().splitlines()[-1])
+
+    def _menu_texts(self, present: tuple[str, ...]) -> list[str]:
+        return self._node(
+            "const launcher = require('./pinokio.js');"
+            "const have = new Set((process.env.PRESENT || '').split(',').filter(Boolean));"
+            "const info = {exists: p => have.has(p), running: () => false, local: () => ({})};"
+            "launcher.menu({platform: 'linux', arch: 'x64', gpu: 'nvidia'}, info)"
+            ".then(items => console.log(JSON.stringify(items.map(item => item.text))));",
+            present)
+
+    def test_the_menu_offers_install_until_a_first_install_finishes(self):
+        self.assertEqual(self._menu_texts(()), ["Install"])
+        self.assertEqual(self._menu_texts(("app/env", "app/.install.incomplete")), ["Install"])
+        installed = self._menu_texts(("app/env",))
+        self.assertEqual(installed[:2], ["Start", "Update"])
+        self.assertNotIn("Install", installed)
+
+    def test_install_marks_only_a_first_install_and_clears_it_after_the_setup(self):
+        steps = self._node("console.log(JSON.stringify(require('./install.js').run.map("
+                           "s => [s.method, s.when || '', (s.params && (s.params.path || s.params.uri)) || ''])))")
+        marker = "app/.install.incomplete"
+        write = steps.index(["fs.write", "{{!exists('app/env')}}", marker])
+        setup = steps.index(["script.start", "", "runtime_setup.js"])
+        clear = steps.index(["fs.rm", "{{exists('app/.install.incomplete')}}", marker])
+        self.assertLess(write, setup)
+        self.assertLess(setup, clear)
+        # runtime.call stops the script when the setup did not succeed, before the marker is cleared.
+        self.assertEqual(steps[setup + 1][0], "notify")
+        self.assertEqual(clear, setup + 2)
 
 
 if __name__ == "__main__":
