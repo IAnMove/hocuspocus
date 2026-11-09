@@ -6,6 +6,10 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: reference photos can stay together in one image, or each row can be its own generation.** Pictures in the same row keep their order. Add row starts another generation, and one prompt per line combines every line with every row. A finished image shows up in the image gallery without a reload. The HocusPocus picker remembers sidecars it has already read and shows 60 at a time.
+
+**Changed: sharing the studio on the local network no longer asks for a token.** The gate starts off. Set `LOREFRAME_LAN_AUTH=1` to require the startup token from other devices. This machine at `127.0.0.1` stays open either way.
+
 **Fixed: the comic view finds an uploaded clip the same way the Video Editor does.** A bare file name is looked up in uploads first, then in the workspace, so an imported clip gets a panel.
 
 **Fixed: placing a 2D face again keeps the expression line already on the model.** A later edit that omits pose, expressions, centre or radii leaves those as they were. An empty expression list clears the line. A kit id with a slash is refused before any file is written.
