@@ -441,3 +441,19 @@ def test_audio_upload_trim_mix_and_analysis_cheap_reads(server, golden) -> None:
     }
     server.check(golden, "suggest clips from a stored analysis", "POST", suggest, json={"analysis": fake, "clip_duration": 5.0, "total_duration": 10.0})
     server.check(golden, "plan structure from a stored analysis", "POST", plan, json={"analysis": fake, "pacing_profile": "balanced", "total_duration": 10.0})
+
+
+def test_audio_mix_opens_the_library_names_the_picker_sends(server) -> None:
+    media.sound(server.outputs / "base take.wav")
+    media.sound(server.outputs / "overlay take.wav")
+
+    answer = server.client.post("/api/v1/audio/mix", json={"tracks": [
+        {"path": "base take.wav", "volume": 1.0},
+        {"path": "overlay take.wav", "start_time": 0, "volume": 0.5},
+    ]})
+
+    assert answer.status_code == 200, answer.text
+    assert (server.outputs / answer.json()["filename"]).is_file()
+    refused = server.client.post("/api/v1/audio/mix", json={"tracks": [
+        {"path": "base take.wav"}, {"path": "no such take.wav"}]})
+    assert refused.status_code == 400 and "no such take.wav" in refused.text
