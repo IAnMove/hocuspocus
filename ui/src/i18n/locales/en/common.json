@@ -11,7 +11,14 @@
     "save": "Save crop",
     "saving": "Saving copy…",
     "loadFailed": "Could not load this image. Close and try again.",
-    "saveFailed": "Could not save the crop. Your original input is unchanged. Try again."
+    "saveFailed": "Could not save the crop. Your original input is unchanged. Try again.",
+    "transformGroup": "Rotate and flip",
+    "rotateLeft": "Rotate left",
+    "rotateRight": "Rotate right",
+    "flipHorizontal": "Flip horizontally",
+    "flipVertical": "Flip vertically",
+    "restore": "Undo rotate and flip",
+    "transformFailed": "Could not change the image. Close and try again."
   },
   "language": {
     "name": "English",
