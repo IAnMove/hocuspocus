@@ -45,9 +45,9 @@ export function ReferenceItem(props: ReferenceItemProps) {
         </span>
       </div>
       <div className="mt-2 flex flex-wrap gap-1">
-        <button type="button" className={rowButton} disabled={index === 0} aria-label={label(t('imageRef.up'))} onClick={() => props.onMove(index - 1)}>{t('imageRef.up')}</button>
-        <button type="button" className={rowButton} disabled={index === count - 1} aria-label={label(t('imageRef.down'))} onClick={() => props.onMove(index + 1)}>{t('imageRef.down')}</button>
-        <button type="button" className={rowButton} disabled={!canClone} aria-label={label(t('imageRef.clone'))} onClick={props.onClone}>{t('imageRef.clone')}</button>
+        <button type="button" className={rowButton} disabled={index === 0} title={index === 0 ? t('imageRef.firstReason') : undefined} aria-label={label(t('imageRef.up'))} onClick={() => props.onMove(index - 1)}>{t('imageRef.up')}</button>
+        <button type="button" className={rowButton} disabled={index === count - 1} title={index === count - 1 ? t('imageRef.lastReason') : undefined} aria-label={label(t('imageRef.down'))} onClick={() => props.onMove(index + 1)}>{t('imageRef.down')}</button>
+        <button type="button" className={rowButton} disabled={!canClone} title={canClone ? undefined : t('imageRef.cloneReason')} aria-label={label(t('imageRef.clone'))} onClick={props.onClone}>{t('imageRef.clone')}</button>
         <button type="button" className={rowButton} aria-label={label(t('imageRef.replace'))} onClick={props.onReplace}>{t('imageRef.replace')}</button>
         <button type="button" className={rowButton} aria-label={label(t('imageRef.library'))} onClick={props.onLibrary}>{t('imageRef.library')}</button>
         <button type="button" className={rowButton} aria-label={label(tCommon('picker.remove'))} onClick={props.onRemove}>{tCommon('picker.remove')}</button>

@@ -9,6 +9,12 @@ import { ExtraReferenceRows, ReferenceItem, ReferenceLibraryDialog, ReferenceRow
 import { hasReferenceFiles, referenceDragProps } from './imageRefRowHelpers'
 import { forgetLocalImage, localEditFile } from '../../lib/localEditImages'
 
+type RefState = { imageRefs: File[]; imageRefRows: File[][] }
+type FormKey = { activeWorkspace: string; imageStudioIntent: string; generationMode: string }
+
+const sameForm = (a: FormKey, b: FormKey) => a.activeWorkspace === b.activeWorkspace
+  && a.imageStudioIntent === b.imageStudioIntent && a.generationMode === b.generationMode
+
 export function ImageRefSection() {
   const { t } = useUiTranslation('studio')
   const { t: tCommon } = useUiTranslation('common')
@@ -19,6 +25,7 @@ export function ImageRefSection() {
   const imageRefType = useStore(s => s.imageRefType)
   const removeBackgroundRefs = useStore(s => s.removeBackgroundRefs)
   const addImageRef = useStore(s => s.addImageRef)
+  const addImageRefToRow = useStore(s => s.addImageRefToRow)
   const removeImageRef = useStore(s => s.removeImageRef)
   const reorderImageRefs = useStore(s => s.reorderImageRefs)
   const cloneImageRef = useStore(s => s.cloneImageRef)
@@ -83,35 +90,27 @@ export function ImageRefSection() {
     })
   }, [])
 
-  const stillSameForm = (before: ReturnType<typeof useStore.getState>) => {
-    const state = useStore.getState()
-    return mounted.current && state.activeWorkspace === before.activeWorkspace
-      && state.imageStudioIntent === before.imageStudioIntent && state.generationMode === before.generationMode
-  }
-
-  const chooseImage = useCallback((row: number, item: ApiOutput) => {
+  // Read the picture, then apply it only if the form is still the one the user picked for.
+  const withPickedFile = useCallback((item: ApiOutput, apply: (file: File, now: RefState) => void) => {
     const before = useStore.getState()
     setError('')
     void fileFromItem(item).then(file => {
-      if (!stillSameForm(before)) return
-      const state = useStore.getState()
-      const files = row < 0 ? state.imageRefs : state.imageRefRows[row] || []
-      if (maxRefs != null && files.length >= maxRefs) return
-      if (row < 0) state.addImageRef(file)
-      else state.addImageRefToRow(row, file)
-    }).catch(() => { if (mounted.current) setError(tCommon('picker.uploadFailed')) })
-  }, [fileFromItem, maxRefs, tCommon])
-
-  const replaceFromLibrary = useCallback((row: number, index: number, item: ApiOutput) => {
-    const before = useStore.getState()
-    setError('')
-    void fileFromItem(item).then(file => {
-      if (!stillSameForm(before)) return
-      const state = useStore.getState()
-      if (row < 0) state.replaceImageRef(index, file)
-      else state.replaceImageRefInRow(row, index, file)
+      const now = useStore.getState()
+      if (mounted.current && sameForm(before, now)) apply(file, now)
     }).catch(() => { if (mounted.current) setError(tCommon('picker.uploadFailed')) })
   }, [fileFromItem, tCommon])
+
+  const chooseImage = useCallback((row: number, item: ApiOutput) => withPickedFile(item, (file, now) => {
+    const files = row < 0 ? now.imageRefs : now.imageRefRows[row] || []
+    if (maxRefs != null && files.length >= maxRefs) return
+    if (row < 0) addImageRef(file)
+    else addImageRefToRow(row, file)
+  }), [addImageRef, addImageRefToRow, maxRefs, withPickedFile])
+
+  const replaceFromLibrary = useCallback((row: number, index: number, item: ApiOutput) => withPickedFile(item, file => {
+    if (row < 0) replaceImageRef(index, file)
+    else replaceImageRefInRow(row, index, file)
+  }), [replaceImageRef, replaceImageRefInRow, withPickedFile])
 
   if (!config) return null
 

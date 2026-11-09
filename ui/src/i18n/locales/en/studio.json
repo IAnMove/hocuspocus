@@ -555,7 +555,10 @@
     "replace": "Replace",
     "library": "Library",
     "up": "Move up",
-    "down": "Move down"
+    "down": "Move down",
+    "firstReason": "Already first",
+    "lastReason": "Already last",
+    "cloneReason": "No room: the model's reference limit is reached"
   },
   "imageIntent": {
     "title": "What do you want to do?",

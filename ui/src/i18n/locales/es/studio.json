@@ -555,7 +555,10 @@
     "replace": "Cambiar",
     "library": "Biblioteca",
     "up": "Subir",
-    "down": "Bajar"
+    "down": "Bajar",
+    "firstReason": "Ya es la primera",
+    "lastReason": "Ya es la última",
+    "cloneReason": "Sin hueco: se alcanzó el límite de referencias del modelo"
   },
   "imageIntent": {
     "title": "¿Qué quieres hacer?",
