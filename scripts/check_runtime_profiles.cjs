@@ -225,7 +225,8 @@ async function checkUiLaunchers() {
   }
   const menu = require('../pinokio').menu
   const flatten = items => items.flatMap(item => [item, ...flatten(item.menu || [])])
-  const info = {exists: () => true, running: () => false, local: () => ({})}
+  // An installed app has app/env and no install.js marker (app/.install.incomplete marks an unfinished first install).
+  const info = {exists: name => name !== 'app/.install.incomplete', running: () => false, local: () => ({})}
   const repair = (await menu({}, info)).find(item => item.href === 'ui_build.js')
   assert.equal(repair.params.force, true)
   const busy = await menu({}, {...info, running: name => name === 'ui_build.js'})
@@ -252,7 +253,7 @@ async function checkUiLaunchers() {
   const amd = flatten(await menu({platform: 'linux', gpu: 'amd'}, info))
   assert(!amd.some(item => item.href === 'rigging_install.js'))
   // A core install hides WanGP-only entries and CUDA installers, even before GPU inventory loads.
-  const coreInfo = {...info, exists: name => name !== 'app/.runtime/wangp.managed'}
+  const coreInfo = {...info, exists: name => name !== 'app/.runtime/wangp.managed' && name !== 'app/.install.incomplete'}
   const core = flatten(await menu({}, coreInfo))
   assert(core.some(item => item.href === 'start.js' && !item.params), 'Core must keep Start')
   assert(!core.some(item => item.text === 'LoRAs' || item.params?.compile), 'Core has no WanGP models')

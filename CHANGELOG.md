@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: a first install that failed or was stopped no longer offers Start and Update.** The menu treated the app as installed as soon as `app/env` existed, which happens at the start of an install, so a failed or cancelled first install looked finished and its only way out was Advanced > Reinstall. `install.js` now writes `app/.install.incomplete` before anything else when `app/env` does not exist yet and removes it after the setup succeeds; `pinokio.js` offers Install while that file is there. Working installs, including the ones made before this change, have no marker and look the same, and adding extras to a working install never writes it.
+
 **Fixed: the comic view finds an uploaded clip the same way the Video Editor does.** A bare file name is looked up in uploads first, then in the workspace, so an imported clip gets a panel.
 
 **Fixed: placing a 2D face again keeps the expression line already on the model.** A later edit that omits pose, expressions, centre or radii leaves those as they were. An empty expression list clears the line. A kit id with a slash is refused before any file is written.
