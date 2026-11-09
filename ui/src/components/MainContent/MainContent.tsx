@@ -721,6 +721,16 @@ export function MainContent() {
     }))
   }, [])
 
+  const galleryFocusName = useStore(s => s.galleryFocusName)
+  useEffect(() => {
+    if (!galleryFocusName) return
+    const index = outputs.findIndex(file => file.name === galleryFocusName)
+    useStore.setState({ galleryFocusName: null })
+    if (index < 0) return
+    setSelectedOutput(index)
+    revealIndex(index, layoutRef.current.view === 'feed' ? 'start' : 'nearest')
+  }, [galleryFocusName, outputs, revealIndex, setSelectedOutput])
+
   const handleThumbnailClick = useCallback((index: number) => {
     const file = outputs[index]
     if (file?.type === 'scene') {

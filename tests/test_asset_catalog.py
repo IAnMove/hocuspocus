@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from app.services import asset_catalog
 from app.services.asset_catalog import find_asset, scan_asset_catalog
 from app.services.asset_manifest import build_asset_manifest, write_asset_manifest
 
@@ -159,6 +160,41 @@ def test_name_desc_keeps_prefix_order_and_stable_ids(tmp_path: Path):
 
     result = scan_asset_catalog([root], sort="name_desc")
     assert [item["filename"] for item in result["assets"]] == ["b.png", "ab.png", "a.png"]
+
+
+def test_catalog_reparses_only_a_changed_sidecar(tmp_path: Path, monkeypatch):
+    root = _root(tmp_path / "outputs", "default")
+    output = Path(root["path"]) / "still.png"
+    output.write_bytes(b"image")
+    write_asset_manifest(
+        output,
+        build_asset_manifest(output, asset_id="asset_still", tool="studio", prompts={"effective": "first"}),
+    )
+    reads: list[str] = []
+    original = asset_catalog.json.loads
+
+    def counting(text, *args, **kwargs):
+        reads.append(text)
+        return original(text, *args, **kwargs)
+
+    monkeypatch.setattr(asset_catalog.json, "loads", counting)
+    first = scan_asset_catalog([root], sort="created_desc")
+    assert first["assets"][0]["prompt_preview"] == "first"
+    assert len(reads) == 1
+    reads.clear()
+
+    second = scan_asset_catalog([root], sort="created_desc")
+    assert second["assets"][0]["prompt_preview"] == "first"
+    assert reads == []
+
+    write_asset_manifest(
+        output,
+        build_asset_manifest(output, asset_id="asset_still", tool="studio", prompts={"effective": "second look"}),
+    )
+    before = len(reads)
+    third = scan_asset_catalog([root], sort="created_desc")
+    assert third["assets"][0]["prompt_preview"] == "second look"
+    assert len(reads) == before + 1
 
 
 def test_catalog_accepts_multiple_kinds(tmp_path: Path):

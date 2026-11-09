@@ -441,6 +441,7 @@ export const createOutputRestoreSlice: SliceCreator<OutputRestoreSlice, OutputRe
       startImage: null,
       endImage: null,
       imageRefs: [],  // Clear — will repopulate below if image_refs exist
+      imageRefRows: [],
       outputCount: 1,
       ...(restoredDuration > 0 ? { durationSeconds: restoredDuration } : {}),
       spatialUpsampling: restoredSpatialUpsampling,
@@ -479,7 +480,7 @@ export const createOutputRestoreSlice: SliceCreator<OutputRestoreSlice, OutputRe
       })
       Promise.all(refPromises).then(files => {
         const ordered = files.filter((f): f is File => f !== null)
-        set({ imageRefs: ordered })
+        set({ imageRefs: ordered, imageRefRows: [] })
       })
     }
 

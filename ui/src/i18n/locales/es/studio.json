@@ -543,7 +543,19 @@
     "main": "Principal",
     "max_one": "Hasta {{count}} imagen de referencia.",
     "max_other": "Hasta {{count}} imágenes de referencia.",
-    "hint": "La primera imagen es el sujeto/paisaje principal. Las demás son personas/objetos a inyectar. Arrastra para reordenar."
+    "hint": "Las fotos de una misma fila van juntas, en este orden, y salen en una sola imagen.",
+    "rowsHint": "Añadir fila crea otra generación. Si el prompt va por líneas, cada línea se combina con cada fila.",
+    "row": "Fila {{count}}",
+    "addRow": "Añadir fila",
+    "removeRow": "Quitar fila",
+    "split": "Cada imagen en su fila",
+    "jobs": "{{count}} generaciones.",
+    "add": "Añadir referencia",
+    "clone": "Clonar",
+    "replace": "Cambiar",
+    "library": "Biblioteca",
+    "up": "Subir",
+    "down": "Bajar"
   },
   "imageIntent": {
     "title": "¿Qué quieres hacer?",

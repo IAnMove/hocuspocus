@@ -233,20 +233,29 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             if info["highest_index"] >= info["total"] - 1:
                 info["has_final"] = True
 
-        with _output_scan_cache_lock:
-            if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
-                oldest = min(
-                    _output_scan_cache,
-                    key=lambda key: float(_output_scan_cache[key].get("created_at", 0)),
-                )
-                _output_scan_cache.pop(oldest, None)
-            _output_scan_cache[out_dir] = {
-                "signature": directory_signature,
-                "created_at": now,
-                "raw_entries": raw_entries,
-                "sidecar_cache": sidecar_cache,
-                "clip_groups": clip_groups,
-            }
+        # A file published while this scan was reading would be missing from
+        # raw_entries, but the directory mtime captured at the start would
+        # still match until the TTL. Skip that snapshot so the next poll
+        # reads the directory again.
+        try:
+            signature_after = os.stat(out_dir).st_mtime_ns
+        except OSError:
+            signature_after = None
+        if signature_after == directory_signature:
+            with _output_scan_cache_lock:
+                if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
+                    oldest = min(
+                        _output_scan_cache,
+                        key=lambda key: float(_output_scan_cache[key].get("created_at", 0)),
+                    )
+                    _output_scan_cache.pop(oldest, None)
+                _output_scan_cache[out_dir] = {
+                    "signature": directory_signature,
+                    "created_at": now,
+                    "raw_entries": raw_entries,
+                    "sidecar_cache": sidecar_cache,
+                    "clip_groups": clip_groups,
+                }
 
     # Second pass: build the file list using the cached sidecar data.
     from services.media_dimensions import listing_fields as media_listing_fields

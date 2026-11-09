@@ -40,6 +40,9 @@ function readStoredGalleryView(): GalleryView {
   }
 }
 
+/** Extra polls after a completion whose file was not in the listing yet. */
+export const galleryRefreshRetryDelays = [1500, 4000]
+
 export type GallerySlice = {
   workspaces: Array<{ name: string; path: string; file_count?: number }>
   activeWorkspace: string
@@ -73,17 +76,20 @@ export type GallerySlice = {
   outputSearchQuery: string
   galleryFeedAtTop: boolean
   galleryRefreshPending: boolean
-  galleryToast: { id: number; message: string } | null
+  galleryToast: { id: number; message: string; names?: string[] } | null
+  /** Set when the reader asks to scroll a just-finished file into view. */
+  galleryFocusName: string | null
   setMediaFilter: (f: MediaFilter) => void
   setOutputSearchQuery: (q: string) => void
   setGalleryFeedAtTop: (atTop: boolean) => void
   clearGalleryToast: () => void
-  maybeRefreshGallery: (opts?: { message?: string; force?: boolean }) => Promise<void>
+  revealGalleryToast: () => void
+  maybeRefreshGallery: (opts?: { message?: string; force?: boolean; attempt?: number }) => Promise<boolean>
   filteredOutputs: () => OutputFile[]
   outputsLoading: boolean
   loadOutputs: () => Promise<void>
   loadMoreOutputs: () => Promise<void>
-  refreshOutputs: () => Promise<void>
+  refreshOutputs: () => Promise<boolean>
   toggleFavorite: (name: string) => Promise<void>
   /** Fold late sizes and colours into listed outputs. Returns how many changed. */
   mergeOutputFacts: (facts: api.OutputFacts) => number
@@ -402,6 +408,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
   galleryFeedAtTop: true,
   galleryRefreshPending: false,
   galleryToast: null,
+  galleryFocusName: null,
   setMediaFilter: (f) => {
     const prevFilter = get().mediaFilter
     set({ mediaFilter: f, selectedOutput: 0, galleryFeedAtTop: true })
@@ -427,21 +434,30 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     }
   },
   clearGalleryToast: () => set({ galleryToast: null }),
+  revealGalleryToast: () => {
+    const name = get().galleryToast?.names?.[0] || null
+    set({ galleryToast: null, galleryFocusName: name })
+  },
   maybeRefreshGallery: async (opts) => {
     const filter = get().mediaFilter
-    if (opts?.message) {
+    if (opts?.message && !opts.attempt) {
       set({ galleryToast: { id: Date.now(), message: opts.message } })
     }
     if (!GALLERY_LIST_FILTERS.has(filter)) {
       set({ galleryRefreshPending: true })
-      return
+      return false
     }
-    if (!get().galleryFeedAtTop && !opts?.force) {
-      set({ galleryRefreshPending: true })
-      return
-    }
+    // The feed anchor keeps the item the reader is looking at. A gallery
+    // list still receives the new file when they are scrolled down.
     set({ galleryRefreshPending: false })
-    await get().refreshOutputs()
+    const sawNew = await get().refreshOutputs()
+    const attempt = opts?.attempt ?? 0
+    if (opts?.message && !sawNew && attempt < galleryRefreshRetryDelays.length) {
+      await new Promise(resolve => setTimeout(resolve, galleryRefreshRetryDelays[attempt]))
+      if (get().mediaFilter !== filter) return false
+      return get().maybeRefreshGallery({ ...opts, attempt: attempt + 1 })
+    }
+    return sawNew
   },
   setOutputSearchQuery: (q) => {
     const previous = get().outputSearchQuery.trim()
@@ -539,7 +555,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
     // Heartbeats must not abort initial loading, paging or another refresh.
     // Coalesce concurrent heartbeats into one trailing refresh, including a
     // completion that arrives during the initial request.
-    if (_outputAbortController) { _refreshAfterOutputRequest = true; return }
+    if (_outputAbortController) { _refreshAfterOutputRequest = true; return false }
     const workspace = _workspaceName(get())
     const request = _beginOutputRequest(workspace)
     const query = galleryListQuery(get().mediaFilter, get().outputSearchQuery)
@@ -558,25 +574,41 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
         search: query.search,
         signal: request.controller.signal,
       })
-      if (!_isCurrentOutputRequest(get, request)) return
+      if (!_isCurrentOutputRequest(get, request)) return false
       const current = get().outputs
       const { merged, newItems, existingChanged } = mergeRefreshedOutputs(current, apiOutputs.map(toOutputFile))
       if (newItems.length > 0 || existingChanged || total !== get().outputsTotal) {
         const watchingGallery = GALLERY_LIST_FILTERS.has(get().mediaFilter)
-        if (!watchingGallery || !get().galleryFeedAtTop) {
+        if (!watchingGallery) {
           set({ galleryRefreshPending: true })
           if (newItems.length > 0 && !get().galleryToast) {
             const noun = newItems.length === 1 ? 'item' : 'items'
-            set({ galleryToast: { id: Date.now(), message: `${newItems.length} new ${noun} ready` } })
+            set({ galleryToast: { id: Date.now(), message: `${newItems.length} new ${noun} ready`, names: newItems.map(item => item.name) } })
           }
-          return
+          return newItems.length > 0
         }
         const selectedName = get().filteredOutputs()[get().selectedOutput]?.name
         const selected = computeFilteredOutputs(merged, get().mediaFilter).findIndex(file => file.name === selectedName)
-        set({ outputs: merged, outputsTotal: total, selectedOutput: Math.max(0, selected) })
+        const toast = get().galleryToast
+        const names = newItems.map(item => item.name)
+        set({
+          outputs: merged,
+          outputsTotal: total,
+          selectedOutput: Math.max(0, selected),
+          ...(newItems.length > 0 && (!get().galleryFeedAtTop || toast) ? { galleryToast: {
+            id: toast?.id ?? Date.now(),
+            message: get().galleryFeedAtTop && toast?.message
+              ? toast.message
+              : `${newItems.length} new ${newItems.length === 1 ? 'item' : 'items'} ready`,
+            names,
+          } } : {}),
+        })
+        return newItems.length > 0
       }
+      return false
     } catch {
       // Silent fail for background refresh
+      return false
     } finally {
       if (_isCurrentOutputRequest(get, request)) set({ outputsLoading: false })
       _finishOutputRequest(request, () => { void get().maybeRefreshGallery() })

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import os
+import threading
+import time
 import uuid
 from collections.abc import Iterable, Mapping
 from datetime import datetime
@@ -19,6 +21,15 @@ from .asset_manifest import (
     validate_asset_manifest,
 )
 
+
+# Sidecar JSON is the slow part of Desde HocusPocus. Keep one parsed
+# manifest per file, keyed by the media file and its sidecar, and reread
+# only the files that changed. Directory listing still happens every time
+# so a new or deleted file shows up immediately.
+_catalog_cache_lock = threading.Lock()
+_catalog_cache: dict[str, dict[str, dict[str, Any]]] = {}
+_catalog_cache_seen: dict[str, float] = {}
+_CATALOG_CACHE_ROOTS = 8
 
 MEDIA_EXTENSIONS = frozenset({
     ".aac", ".avi", ".flac", ".gif", ".glb", ".gltf", ".jpeg", ".jpg",
@@ -178,6 +189,48 @@ def _created_sort_parts(item: Mapping[str, Any]) -> tuple[bool, float, str]:
     return missing, stamp, str(item.get("id") or "")
 
 
+def _file_identity(path: str) -> tuple[int, int] | None:
+    try:
+        stat = os.stat(path, follow_symlinks=False)
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
+def _remember_catalog_root(root: str, files: dict[str, dict[str, Any]]) -> None:
+    now = time.monotonic()
+    with _catalog_cache_lock:
+        _catalog_cache[root] = files
+        _catalog_cache_seen[root] = now
+        while len(_catalog_cache) > _CATALOG_CACHE_ROOTS:
+            oldest = min(_catalog_cache_seen, key=lambda key: _catalog_cache_seen[key])
+            if oldest == root:
+                others = [key for key in _catalog_cache_seen if key != root]
+                if not others:
+                    break
+                oldest = min(others, key=lambda key: _catalog_cache_seen[key])
+            _catalog_cache.pop(oldest, None)
+            _catalog_cache_seen.pop(oldest, None)
+
+
+def _manifest_cached(
+    root: str,
+    filename: str,
+    media_path: Path,
+    workspace_id: str,
+    stat: os.stat_result,
+    previous: dict[str, dict[str, Any]],
+) -> tuple[dict[str, Any], str, dict[str, Any]]:
+    sidecar = str(media_path.with_suffix(".meta.json"))
+    identity = (stat.st_mtime_ns, stat.st_size, _file_identity(sidecar))
+    cached = previous.get(filename)
+    if cached and cached.get("identity") == identity:
+        return cached["manifest"], cached["status"], cached
+    manifest, status = _manifest_for(media_path, workspace_id, stat.st_mtime)
+    record = {"identity": identity, "manifest": manifest, "status": status}
+    return manifest, status, record
+
+
 def _sort_catalog(values: list[dict[str, Any]], sort: str) -> None:
     mode = str(sort or "").strip().casefold()
     if mode in {"", "completed_desc"}:
@@ -235,6 +288,9 @@ def scan_asset_catalog(
             entries = list(os.scandir(resolved_root))
         except OSError:
             continue
+        with _catalog_cache_lock:
+            previous = dict(_catalog_cache.get(resolved_root) or {})
+        fresh: dict[str, dict[str, Any]] = {}
         for entry in entries:
             if not _is_asset_file(entry.name) or not entry.is_file(follow_symlinks=False):
                 continue
@@ -243,7 +299,10 @@ def scan_asset_catalog(
             except OSError:
                 continue
             media_path = Path(entry.path)
-            manifest, metadata_status = _manifest_for(media_path, scope, stat.st_mtime)
+            manifest, metadata_status, record = _manifest_cached(
+                resolved_root, entry.name, media_path, scope, stat, previous,
+            )
+            fresh[entry.name] = record
             item = _summary(
                 manifest,
                 workspace_id=scope,
@@ -268,6 +327,7 @@ def scan_asset_catalog(
                     key: value for key, value in item.items()
                     if key not in {"locations", "workspace_ids"}
                 })
+        _remember_catalog_root(resolved_root, fresh)
 
     values = list(records.values())
     wanted_kinds = {

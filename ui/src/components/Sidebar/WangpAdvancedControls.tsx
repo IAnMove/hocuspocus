@@ -34,7 +34,7 @@ export function WangpAdvancedControls() {
     {phases === 2 && <p className="text-[11px] text-text-muted">{t('wangp.phaseHint')}</p>}
     {isFl && <>
       <label className="flex items-center gap-2 text-xs"><input aria-label={t('wangp.injectedFrame')} type="checkbox" checked={flags.includes('KFI')} onChange={event => {
-        useStore.setState({ imageRefs: [] })
+        useStore.setState({ imageRefs: [], imageRefRows: [] })
         setParams({ video_guide: '', video_mask: '', image_refs: [], frames_positions: '0', video_prompt_type: (event.target.checked ? 'KFI' : '') + (flags.includes('~') ? '~' : '') })
       }} />{t('wangp.injectedFrame')}</label>
       {flags.includes('KFI') ? <WangpInjectedFrame /> : <>
