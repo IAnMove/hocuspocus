@@ -25,7 +25,9 @@ module.exports = {
     // before its hardware inventory has populated that property, which would
     // hide Start from supported systems. install.js checks the hardware when it
     // runs and installs only the engines this machine supports.
-    let installed = info.exists("app/env")
+    // install.js leaves app/.install.incomplete behind until its last step, so a first install that
+    // failed or was stopped (app/env already exists) offers Install again instead of Start.
+    let installed = info.exists("app/env") && !info.exists("app/.install.incomplete")
     // Install selected the core/remote runtime: no WanGP models or compiler.
     let coreOnly = info.exists("app/.runtime/core.managed") && !info.exists("app/.runtime/wangp.managed")
     let running = {
