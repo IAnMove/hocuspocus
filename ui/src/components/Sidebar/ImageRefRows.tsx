@@ -1,11 +1,13 @@
-import type { ComponentProps, LiHTMLAttributes } from 'react'
+import { lazy, Suspense, type ComponentProps, type LiHTMLAttributes } from 'react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
+import { imageReferenceJobs } from '../../features/studio/imageBatch'
 import { EditableImageReference } from './EditableImageReference'
+import { referenceRowButton as rowButton } from './imageRefRowHelpers'
 
-const rowButton = 'min-h-11 rounded border border-border px-3 text-xs text-text-secondary'
+const AssetExplorerDialog = lazy(() => import('../common/AssetExplorerDialog').then(module => ({ default: module.AssetExplorerDialog })))
 
 type ReferenceItemProps = {
   file: File
@@ -71,6 +73,8 @@ export function ExtraReferenceRows({ maxRefs, workspace, items, onChoose, onRepl
   const removeFromRow = useStore(s => s.removeImageRefFromRow)
   const reorderInRow = useStore(s => s.reorderImageRefInRow)
   const cloneInRow = useStore(s => s.cloneImageRefInRow)
+  const separateEdits = useStore(s => s.imageStudioIntent === 'edit' && Boolean(s.imageBatch?.enabled))
+  if (separateEdits) return null
   return <>
     {rows.map((files, row) => {
       const room = maxRefs == null || files.length < maxRefs
@@ -109,5 +113,66 @@ export function ExtraReferenceRows({ maxRefs, workspace, items, onChoose, onRepl
         </section>
       )
     })}
+  </>
+}
+
+type LibraryDialogProps = {
+  open: boolean
+  items: ComponentProps<typeof AssetInput>['items']
+  workspace: string
+  onChoose: (item: ApiOutput) => void
+  onClose: () => void
+}
+
+/** Pick a replacement picture from the library. Loaded only when asked for. */
+export function ReferenceLibraryDialog({ open, items, workspace, onChoose, onClose }: LibraryDialogProps) {
+  const { t } = useUiTranslation('studio')
+  return (
+    <Suspense fallback={null}>
+      {open && (
+        <AssetExplorerDialog
+          open
+          title={t('imageRef.replace')}
+          items={items}
+          workspaceId={workspace}
+          remote
+          constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
+          onChoose={item => { if (item) onChoose(item); onClose() }}
+          onClose={onClose}
+        />
+      )}
+    </Suspense>
+  )
+}
+
+/** Add-row and split buttons. Not shown while each edit source is its own job. */
+export function ReferenceRowButtons() {
+  const { t } = useUiTranslation('studio')
+  const separateEdits = useStore(s => s.imageStudioIntent === 'edit' && Boolean(s.imageBatch?.enabled))
+  const splittable = useStore(s => s.imageRefs.length > 1 || (s.imageRefRows || []).some(files => files.length > 1))
+  const addRow = useStore(s => s.addImageRefRow)
+  const split = useStore(s => s.splitImageRefsIntoRows)
+  if (separateEdits) return null
+  return (
+    <div className="flex flex-wrap gap-1">
+      <button type="button" className={rowButton} onClick={() => addRow()}>{t('imageRef.addRow')}</button>
+      {splittable && <button type="button" className={rowButton} onClick={() => split()}>{t('imageRef.split')}</button>}
+    </div>
+  )
+}
+
+/** What the rows do, and how many generations the form would start. */
+export function ReferenceRowHints() {
+  const { t } = useUiTranslation('studio')
+  const separateEdits = useStore(s => s.imageStudioIntent === 'edit' && Boolean(s.imageBatch?.enabled))
+  const perLine = useStore(s => Boolean(s.imageBatch?.perLine))
+  const prompt = useStore(s => String(s.params.prompt || ''))
+  const imageRefs = useStore(s => s.imageRefs)
+  const rows = useStore(s => s.imageRefRows)
+  const jobs = separateEdits ? 0 : imageReferenceJobs(prompt, perLine, { primary: imageRefs, rows }).length
+  return <>
+    <p className="text-[10px] text-text-muted">{t('imageRef.hint')}</p>
+    {!separateEdits && <p className="text-[10px] text-text-muted">{t('imageRef.rowsHint')}</p>}
+    {jobs > 1 && <p role="status" className="text-xs text-text-secondary">{t('imageRef.jobs', { count: jobs })}</p>}
   </>
 }

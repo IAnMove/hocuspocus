@@ -1,18 +1,13 @@
-import { lazy, Suspense, useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useStore } from '../../stores/useStore'
 import { useUiTranslation } from '../../i18n'
 import type { ApiOutput } from '../../api/outputs'
 import { AssetInput } from '../../features/asset-picker/AssetInput.tsx'
 import { fileFromStudioOutput } from '../../lib/studioInputsPick.ts'
 import { useWorkspaceOutputs } from '../../lib/studioAssetPick.ts'
-import { imageReferenceJobs } from '../../features/studio/imageBatch'
-import { ExtraReferenceRows, ReferenceItem } from './ImageRefRows'
+import { ExtraReferenceRows, ReferenceItem, ReferenceLibraryDialog, ReferenceRowButtons, ReferenceRowHints } from './ImageRefRows'
 import { hasReferenceFiles, referenceDragProps } from './imageRefRowHelpers'
 import { forgetLocalImage, localEditFile } from '../../lib/localEditImages'
-
-const AssetExplorerDialog = lazy(() => import('../common/AssetExplorerDialog').then(module => ({ default: module.AssetExplorerDialog })))
-
-const rowButton = 'min-h-11 rounded border border-border px-3 text-xs text-text-secondary'
 
 export function ImageRefSection() {
   const { t } = useUiTranslation('studio')
@@ -28,12 +23,7 @@ export function ImageRefSection() {
   const reorderImageRefs = useStore(s => s.reorderImageRefs)
   const cloneImageRef = useStore(s => s.cloneImageRef)
   const replaceImageRef = useStore(s => s.replaceImageRef)
-  const addImageRefRow = useStore(s => s.addImageRefRow)
   const replaceImageRefInRow = useStore(s => s.replaceImageRefInRow)
-  const splitImageRefsIntoRows = useStore(s => s.splitImageRefsIntoRows)
-  const separateEdits = useStore(s => s.imageStudioIntent === 'edit' && Boolean(s.imageBatch?.enabled))
-  const perLine = useStore(s => Boolean(s.imageBatch?.perLine))
-  const prompt = useStore(s => String(s.params.prompt || ''))
   const setImageRefType = useStore(s => s.setImageRefType)
   const setRemoveBackgroundRefs = useStore(s => s.setRemoveBackgroundRefs)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
@@ -123,8 +113,6 @@ export function ImageRefSection() {
     }).catch(() => { if (mounted.current) setError(tCommon('picker.uploadFailed')) })
   }, [fileFromItem, tCommon])
 
-  const referenceJobCount = separateEdits ? 0 : imageReferenceJobs(prompt, perLine, { primary: imageRefs, rows: imageRefRows }).length
-
   if (!config) return null
 
   return (
@@ -167,23 +155,11 @@ export function ImageRefSection() {
           event.target.value = ''
         }}
       />
-      <Suspense fallback={null}>
-        {libraryTarget != null && (
-          <AssetExplorerDialog
-            open
-            title={t('imageRef.replace')}
-            items={imageItems}
-            workspaceId={activeWorkspace}
-            remote
-            constraints={{ kinds: ['image'], maxCount: 1, optional: false }}
-            onChoose={item => {
-              if (item && libraryTarget) replaceFromLibrary(libraryTarget.row, libraryTarget.index, item)
-              setLibraryTarget(null)
-            }}
-            onClose={() => setLibraryTarget(null)}
-          />
-        )}
-      </Suspense>
+      <ReferenceLibraryDialog
+        open={libraryTarget != null} items={imageItems} workspace={activeWorkspace}
+        onChoose={item => { if (libraryTarget) replaceFromLibrary(libraryTarget.row, libraryTarget.index, item) }}
+        onClose={() => setLibraryTarget(null)}
+      />
 
       {canAddMore && (
         <div onDrop={handleDrop} onDragOver={e => e.preventDefault()}>
@@ -201,23 +177,13 @@ export function ImageRefSection() {
         </div>
       )}
 
-      {!separateEdits && (
-        <ExtraReferenceRows
-          maxRefs={maxRefs} workspace={activeWorkspace} items={imageItems}
-          onChoose={chooseImage}
-          onReplace={(row, index) => { replaceAt.current = { row, index }; replaceFile.current?.click() }}
-          onLibrary={(row, index) => setLibraryTarget({ row, index })}
-        />
-      )}
-
-      {!separateEdits && (
-        <div className="flex flex-wrap gap-1">
-          <button type="button" className={rowButton} onClick={() => addImageRefRow()}>{t('imageRef.addRow')}</button>
-          {(imageRefs.length > 1 || (imageRefRows || []).some(files => files.length > 1)) && (
-            <button type="button" className={rowButton} onClick={() => splitImageRefsIntoRows()}>{t('imageRef.split')}</button>
-          )}
-        </div>
-      )}
+      <ExtraReferenceRows
+        maxRefs={maxRefs} workspace={activeWorkspace} items={imageItems}
+        onChoose={chooseImage}
+        onReplace={(row, index) => { replaceAt.current = { row, index }; replaceFile.current?.click() }}
+        onLibrary={(row, index) => setLibraryTarget({ row, index })}
+      />
+      <ReferenceRowButtons />
 
       {error && <p role="alert" className="text-[10px] text-red-300">{error}</p>}
 
@@ -253,13 +219,7 @@ export function ImageRefSection() {
         </div>
       )}
 
-      <p className="text-[10px] text-text-muted">{t('imageRef.hint')}</p>
-      {!separateEdits && <p className="text-[10px] text-text-muted">{t('imageRef.rowsHint')}</p>}
-      {referenceJobCount > 1 && (
-        <p role="status" className="text-xs text-text-secondary">
-          {t('imageRef.jobs', { count: referenceJobCount })}
-        </p>
-      )}
+      <ReferenceRowHints />
 
       {/* Background removal toggle */}
       {hasRefs && bgLabel && (

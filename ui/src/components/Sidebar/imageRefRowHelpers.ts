@@ -1,5 +1,7 @@
 import type { DragEvent, LiHTMLAttributes } from 'react'
 
+export const referenceRowButton = 'min-h-11 rounded border border-border px-3 text-xs text-text-secondary'
+
 export function hasReferenceFiles(primary: readonly File[], rows?: readonly (readonly File[])[]): boolean {
   return primary.length > 0 || (rows || []).some(row => row.length > 0)
 }
