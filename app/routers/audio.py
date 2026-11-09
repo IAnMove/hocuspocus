@@ -286,8 +286,12 @@ async def mix_audio(request: Request):
         real_n, root_n = os.path.normcase(real), os.path.normcase(root)
         return real_n == root_n or real_n.startswith(root_n + os.sep)
 
+    from services.library_media_paths import resolve_library_name
+
+    track_roots = {"uploads_dir": uploads_root, "workspace_dir": _workspace_dir(body.get("workspace"))}
     for i, t in enumerate(tracks):
-        path = t.get("path", "")
+        # A track picked from the library is a bare workspace file name.
+        path = resolve_library_name(t.get("path", ""), body.get("workspace") or "", **track_roots)
         real = os.path.realpath(path) if path else ""
         if not real or not (_contained(real, uploads_root) or _contained(real, outputs_root)):
             raise HTTPException(status_code=400, detail=f"Track {i+1}: path not allowed: {path}")
