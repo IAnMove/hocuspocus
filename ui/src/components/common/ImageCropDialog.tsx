@@ -84,7 +84,7 @@ export default function ImageCropDialog({ source, name, onSave, onClose }: {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <ImageTransformBar image={image} rect={rect} disabled={busy} onResult={showTransformed} onError={() => setError(t('crop.transformFailed'))} />
+          <ImageTransformBar image={image} rect={rect} busy={busy} onResult={showTransformed} onError={() => setError(t('crop.transformFailed'))} />
           {shown !== source && <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="text-xs underline" onClick={restore}>{t('crop.restore')}</button>}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
