@@ -9,7 +9,7 @@
       "id": "python-a",
       "job": "python-tests-a",
       "name": "Python tests A",
-      "weight": 4794,
+      "weight": 4825,
       "paths": [
         "tests/characterization/test_jobs_and_tasks.py",
         "tests/characterization/test_outpaint_blend.py",
@@ -19,6 +19,9 @@
         "tests/characterization/test_launch_misc_bind.py",
         "tests/characterization/test_studio_generate.py",
         "tests/characterization/test_workspaces.py",
+        "tests/characterization/test_studio_generate_h3_manifest.py",
+        "tests/test_h3_reference_paths.py",
+        "tests/test_library_media_paths.py",
         "tests/test_recast_helpers.py",
         "tests/test_recast_shots.py",
         "tests/test_about.py",
