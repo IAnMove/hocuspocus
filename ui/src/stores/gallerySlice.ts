@@ -583,7 +583,7 @@ export const createGallerySlice: SliceCreator<GallerySlice> = (set, get) => ({
           set({ galleryRefreshPending: true })
           if (newItems.length > 0 && !get().galleryToast) {
             const noun = newItems.length === 1 ? 'item' : 'items'
-            set({ galleryToast: { id: Date.now(), message: `${newItems.length} new ${noun} ready`, names: newItems.map(item => item.name) } })
+            set({ galleryToast: { id: Date.now(), message: `${newItems.length} new ${noun} ready` } })
           }
           return newItems.length > 0
         }

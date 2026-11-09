@@ -20,6 +20,7 @@ from fastapi import HTTPException, Response
 _output_scan_cache_lock = threading.Lock()
 _output_scan_cache: dict[str, dict] = {}
 _OUTPUT_SCAN_CACHE_MAX_AGE_SECONDS = 5.0
+_OUTPUT_SCAN_QUIET_NS = 1_000_000_000
 
 _workspace_dir = None
 _safe_join = None
@@ -233,15 +234,12 @@ def list_outputs(response: Response, limit: int = 0, offset: int = 0, favorites_
             if info["highest_index"] >= info["total"] - 1:
                 info["has_final"] = True
 
-        # A file published while this scan was reading would be missing from
-        # raw_entries, but the directory mtime captured at the start would
-        # still match until the TTL. Skip that snapshot so the next poll
-        # reads the directory again.
-        try:
-            signature_after = os.stat(out_dir).st_mtime_ns
-        except OSError:
-            signature_after = None
-        if signature_after == directory_signature:
+        # Directory timestamps are coarse: a file published in the same clock
+        # tick as the one this scan started from leaves the signature
+        # unchanged, so a snapshot of a directory touched a moment ago could
+        # hide it until the TTL. Cache only directories that were quiet first.
+        quiet = time.time_ns() - directory_signature >= _OUTPUT_SCAN_QUIET_NS
+        if quiet:
             with _output_scan_cache_lock:
                 if len(_output_scan_cache) >= 16 and out_dir not in _output_scan_cache:
                     oldest = min(

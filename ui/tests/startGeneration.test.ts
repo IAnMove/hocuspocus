@@ -538,6 +538,34 @@ test('reference rows stay ordered inside one image and each row is its own gener
   ])
 })
 
+test('one filled extra row with an empty first row still sends its pictures', async () => {
+  const sofia = new File(['sofia'], 'sofia.png', { type: 'image/png' })
+  const only = imageSource({ imageStudioIntent: 'character', imageRefType: 'I', imageRefs: [], imageRefRows: [[sofia]], params: { prompt: 'solo' } })
+  const { ports, sent } = recordingPorts()
+  const upload = async (file: File) => ({ path: `/api/v1/uploads/${file.name}`, url: `/api/v1/uploads/${file.name}` })
+  await startStudioImageGenerationFromStore({ get: () => only, set: () => {} }, undefined, { actor: 'user', commandId: 'only-row' }, {
+    ...ports, startPolling: () => {}, uploadImage: upload,
+  })
+  assert.equal(sent.length, 1)
+  assert.deepEqual(sent[0].input.params.image_refs, ['/api/v1/uploads/sofia.png'])
+})
+
+test('a picture shared by several reference jobs is uploaded once', async () => {
+  const ana = new File(['ana'], 'ana.png', { type: 'image/png' })
+  const rows = imageSource({
+    imageStudioIntent: 'character', imageRefType: 'I', imageRefs: [ana], imageRefRows: [[ana]],
+    imageBatch: { enabled: false, perLine: true, sources: [] }, params: { prompt: 'red\nblue' },
+  })
+  const { ports, sent } = recordingPorts()
+  const uploaded: string[] = []
+  const upload = async (file: File) => { uploaded.push(file.name); return { path: `/api/v1/uploads/${file.name}`, url: `/api/v1/uploads/${file.name}` } }
+  await startStudioImageGenerationFromStore({ get: () => rows, set: () => {} }, undefined, { actor: 'user', commandId: 'shared' }, {
+    ...ports, startPolling: () => {}, uploadImage: upload,
+  })
+  assert.equal(sent.length, 4)
+  assert.deepEqual(uploaded, ['ana.png'])
+})
+
 for (const selector of ['', 'V', 'VAG']) {
   test(`Qwen batch enables source conditioning and clears mask flags from ${selector || 'empty'}`, async () => {
     const state = imageSource({ imageStudioIntent: 'edit',

@@ -17,13 +17,13 @@ export function GalleryReadyToast() {
   if (!toast) return null
   const readyMatch = /^(\d+) new items? ready$/.exec(toast.message)
   const message = readyMatch ? t('gallery.ready', { count: Number(readyMatch[1]) }) : toast.message
+  const box = 'rounded-lg border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-primary shadow-lg'
+  // Only a toast that names files can jump to one: those files are already in the list.
   return (
-    <button
-      type="button"
-      onClick={() => revealGalleryToast()}
-      className="fixed bottom-16 left-1/2 z-[70] max-w-[min(90vw,28rem)] -translate-x-1/2 rounded-lg border border-border bg-bg-secondary/95 px-3 py-2 text-xs text-text-primary shadow-lg"
-    >
-      {message}
-    </button>
+    <div role="status" className="pointer-events-none fixed bottom-16 left-1/2 z-[70] max-w-[min(90vw,28rem)] -translate-x-1/2">
+      {toast.names?.length
+        ? <button type="button" onClick={() => revealGalleryToast()} className={`pointer-events-auto ${box}`}>{message}</button>
+        : <div className={box}>{message}</div>}
+    </div>
   )
 }

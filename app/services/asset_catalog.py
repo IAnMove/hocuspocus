@@ -29,7 +29,10 @@ from .asset_manifest import (
 _catalog_cache_lock = threading.Lock()
 _catalog_cache: dict[str, dict[str, dict[str, Any]]] = {}
 _catalog_cache_seen: dict[str, float] = {}
-_CATALOG_CACHE_ROOTS = 8
+# One entry per workspace folder. The catalog scans every workspace on each
+# request, so a cap below the workspace count would evict each folder just
+# before it is needed again and the cache would never hit.
+_CATALOG_CACHE_ROOTS = 256
 
 MEDIA_EXTENSIONS = frozenset({
     ".aac", ".avi", ".flac", ".gif", ".glb", ".gltf", ".jpeg", ".jpg",
@@ -222,7 +225,8 @@ def _manifest_cached(
     previous: dict[str, dict[str, Any]],
 ) -> tuple[dict[str, Any], str, dict[str, Any]]:
     sidecar = str(media_path.with_suffix(".meta.json"))
-    identity = (stat.st_mtime_ns, stat.st_size, _file_identity(sidecar))
+    # The manifest embeds the workspace id (unmanaged ids are scoped by it).
+    identity = (stat.st_mtime_ns, stat.st_size, _file_identity(sidecar), workspace_id)
     cached = previous.get(filename)
     if cached and cached.get("identity") == identity:
         return cached["manifest"], cached["status"], cached
