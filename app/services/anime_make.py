@@ -25,7 +25,7 @@ GENDERS = ("girl", "boy", "man", "woman")
 STYLES = ("anime", "real", "voxel", "roblox")
 BOTTOMS = ("trousers", "skirt", "shorts")
 _FIELDS = {"skin", "eye_color", "lash_color", "hair_style", "hair_color", "outfit", "outfit_colors", "body", "height", "gender", "blush", "face", "clips",
-           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom", "hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands"}
+           "face_source", "face_image", "face_style", "face_shape", "style", "texture", "texture_head", "bottom", "hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands", "head_join"}
 FACE_SOURCES = ("program", "qwen")
 FACE_STYLES = ("anime", "cute")
 _OUTFIT_COLORS = {"top", "bottom", "shoes", "accent", "socks"}
@@ -108,7 +108,7 @@ def _anime_body(raw: dict) -> dict:
 
 
 def _reject_real_only(raw: dict, look: str) -> None:
-    if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands")) and look != "real":
+    if any(key in raw for key in ("hair_texture", "hair_edge", "hair_fit", "upper_hold", "face_span", "face_feather", "face_depth", "lighting", "head_match", "head_fit", "head_bands", "head_join")) and look != "real":
         _fail("invalid_traits", "hair_texture, hair_edge, upper_hold, face_span and face_feather are for style real")
 
 
@@ -137,8 +137,14 @@ def _head_bands_value(raw: dict):
     return head_bands
 
 
-def _face_ranges(raw: dict) -> tuple[float, float, float]:
-    span, feather = raw.get("face_span", 40.0), raw.get("face_feather", 0.0)   # tests H, I, M, O, P: 40 degrees with a hard border read best; a feathered border ghosts a second face at three quarters
+HEAD_JOINS = ("map", "blend")   # map: the portraits joined into one head map when the atlas is made (blob_head_map); blend: the viewer blends the three tiles by angle
+MAP_FEATHER = 8.0               # with the head map the patch fades over its last degrees into a skull that shows the same cheek
+
+
+def _face_ranges(raw: dict, join: str = "blend") -> tuple[float, float, float]:
+    # tests H, I, M, O, P (the tiles blended by the viewer): 40 degrees with a hard border read best, a feathered border ghosted a second
+    # face at three quarters because the skull under it showed another picture; over the head map it shows the same one
+    span, feather = raw.get("face_span", 40.0), raw.get("face_feather", MAP_FEATHER if join == "map" else 0.0)
     depth = raw.get("face_depth", 0.06)   # tests H, R, S: 0.10 ridges the cheek at three quarters, 0.035 flattens the profile nose
     for label, value, low, high in (("face_span", span, 30.0, 58.0), ("face_feather", feather, 0.0, 30.0), ("face_depth", depth, 0.0, 0.16)):
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not low <= float(value) <= high:
@@ -174,12 +180,13 @@ def _photo_options(raw: dict, chosen: dict) -> dict:
     head_bands = _head_bands_value(raw)
     head_match = _bool_flag(raw, "head_match", False, "invalid_head_match", "head_match is true or false: move the side and back portraits to the front one's tones")
     lighting = _choice(raw.get("lighting", "lit"), ("lit", "baked"), "invalid_lighting", "lighting")
-    span, feather, depth = _face_ranges(raw)
+    join = _choice(raw.get("head_join", "map"), HEAD_JOINS, "invalid_head_join", "head_join")
+    span, feather, depth = _face_ranges(raw, join)
     _hair_fit(raw, body)
     hold = _upper_hold(raw)
     body = _apply_look(body, look, chosen["gender"], raw, chosen["skin"], chosen["hair_color"], chosen["colors"])
     return {"body": body, "span": span, "feather": feather, "depth": depth, "hold": hold, "lighting": lighting,
-            "head_match": head_match, "head_fit": head_fit, "head_bands": head_bands}
+            "head_match": head_match, "head_fit": head_fit, "head_bands": head_bands, "head_join": join}
 
 
 def _texture_names(raw: dict, look: str):
@@ -244,7 +251,8 @@ def resolve_traits(raw: Any) -> dict[str, Any]:
             "face_source": source, "face_image": face_image if source == "qwen" else None,
             "texture": texture, "texture_head": texture_head, "style": chosen["look"], "upper_hold": photo["hold"],
             "face_span": photo["span"], "face_feather": photo["feather"], "face_depth": photo["depth"], "lighting": photo["lighting"],
-            "head_match": photo["head_match"], "head_fit": photo["head_fit"], "head_bands": None if head_bands is None else float(head_bands)}
+            "head_match": photo["head_match"], "head_fit": photo["head_fit"], "head_bands": None if head_bands is None else float(head_bands),
+            "head_join": photo["head_join"]}
 
 
 def _blocky_body(body: dict, look: str, raw: dict, skin: str, hair_color: str, colors: dict) -> dict:
@@ -317,6 +325,8 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     if resolved["style"] == "real" and resolved["texture_head"] and resolved["head_fit"]:
         resolved["body"]["skull_fit"] = _head_fit(workspace_dir, workspace, resolved)
     relief = _face_relief(workspace_dir, workspace, resolved) if resolved["style"] == "real" and resolved["texture_head"] else None
+    if _joins_head(resolved):
+        resolved["body"]["atlas"] = "map"   # the head's own UVs point into the joined head map (a viewer without the drape reads them)
     _photo_hair_color(workspace_dir, workspace, resolved, traits, relief)
     body = build_body(resolved["body"], clips, relief=relief)
     if resolved["style"] in ("voxel", "roblox"):
@@ -326,6 +336,20 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     written = write_body(workspace_dir, workspace, name, intent, body)
     return {**written, **extra, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
             "character": resolved["public"], "faceTraits": resolved["face"]}
+
+
+def _joins_head(resolved: dict) -> bool:
+    return resolved["style"] == "real" and bool(resolved["texture"]) and bool(resolved["texture_head"]) and resolved["head_join"] == "map"
+
+
+def _head_join(resolved: dict, parts, frame: dict) -> dict | None:
+    """What ``stack_atlas`` needs to join the head's portraits into one map: the mould's radius round the head, the frame, and how
+    far the face patch reaches and fades."""
+    if not _joins_head(resolved):
+        return None
+    from services.blob_head_map import head_triangles, radius_map
+
+    return {"radius": radius_map(head_triangles(parts[0][0], frame), frame), "frame": frame, "face_yaw": resolved["face_span"], "blend": resolved["face_feather"] + 2.0}
 
 
 def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:
@@ -347,12 +371,17 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     if resolved["texture"]:
         painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
-        png = stack_atlas(painted, head, (guides["body"], guides["head"]), resolved["head_match"])
         frame = atlas_frame([parts[0][0]], lofted["layout"])
+        join = _head_join(resolved, parts, frame) if head is not None else None
+        png = stack_atlas(painted, head, (guides["body"], guides["head"]), resolved["head_match"], join)
         skin = neck_skin(head) if head is not None else None
         photo_hair = ("body", "face", "hair") if resolved["body"]["hair"].get("texture") == "photo" else ("body", "face")
-        body["glb"] = attach_texture(body["glb"], png, photo_hair, frame=frame, skin=skin, hold=resolved["upper_hold"], face=(resolved["face_span"], resolved["face_feather"]), unlit=resolved["lighting"] == "baked", split=not resolved["head_fit"], bands=resolved["head_bands"])
-        body["rigged"] = attach_texture(body["rigged"], png, photo_hair, frame=frame, skin=skin, hold=resolved["upper_hold"], face=(resolved["face_span"], resolved["face_feather"]), unlit=resolved["lighting"] == "baked", split=not resolved["head_fit"], bands=resolved["head_bands"])
+        options = {"frame": frame, "skin": skin, "hold": resolved["upper_hold"], "face": (resolved["face_span"], resolved["face_feather"]), "unlit": resolved["lighting"] == "baked",
+                   "split": not resolved["head_fit"], "bands": resolved["head_bands"], "head_map": join is not None}
+        body["glb"] = attach_texture(body["glb"], png, photo_hair, **options)
+        body["rigged"] = attach_texture(body["rigged"], png, photo_hair, **options)
+        if join is not None:
+            out["atlas"]["layout"] = "body views (front left, back right) over the head's front tile and the joined head map (yaw by height; 3x the scale)"
         out["texture_file"] = Path(resolved["texture"]).name
         if head is not None:
             out["face_pose_file"] = _face_pose(workspace_dir, base, head)
