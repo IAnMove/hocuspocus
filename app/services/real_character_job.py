@@ -25,6 +25,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -163,12 +164,8 @@ class RealCharacterJobs:
         if isinstance(base_revision, bool) or not isinstance(base_revision, int) or base_revision != current:
             raise RealJobError("revision_conflict", f"The character library is at revision {current}, not {base_revision}", 409)
 
-    def start(self, workspace: str, payload: dict, intent_id: str | None = None) -> dict:
-        """Make (or remake) one realistic character. Returns the job; a make of a name that is being made returns that job."""
-        digest = intent_digest({"workspace": workspace, **payload})
-        replayed = self._replay(workspace, intent_id, digest)
-        if replayed:
-            return replayed
+    def _prepare(self, workspace: str, payload: dict) -> tuple[str, dict]:
+        """The name and the input the job runs with, or why it cannot run: nothing is asked of the model before this passes."""
         name = str(payload.get("name") or "").strip()
         if not name or len(name) > 64:
             raise RealJobError("invalid_name", "name must be a nonempty string (max 64)")
@@ -178,6 +175,15 @@ class RealCharacterJobs:
         for field in ("texture", "texture_head"):
             if field in effective and not (root / effective[field]).is_file():
                 raise RealJobError("texture_missing", f"{field} {effective[field]} is not a picture of workspace {workspace}", 404)
+        return name, effective
+
+    def start(self, workspace: str, payload: dict, intent_id: str | None = None) -> dict:
+        """Make (or remake) one realistic character. Returns the job; a make of a name that is being made returns that job."""
+        digest = intent_digest({"workspace": workspace, **payload})
+        replayed = self._replay(workspace, intent_id, digest)
+        if replayed:
+            return replayed
+        name, effective = self._prepare(workspace, payload)
         with self._guard:
             running = next((job for job in self.jobs(workspace) if job.get("slug") == name_slug(name) and job.get("status") in ACTIVE), None)
             if running:
@@ -390,7 +396,7 @@ class RealCharacterJobs:
         if kit and kit.get("face"):
             pictures["face"] = {"file": kit["face"], "key": work["keys"]["head"]}
         return {"version": 1, "operation": OPERATION, "name": job["name"], "slug": job["slug"], "workspace": job["workspace"], "jobId": job["jobId"],
-                "madeAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "input": effective, "traits": resolved_traits(effective),
+                "madeAt": datetime.now(timezone.utc).isoformat(timespec="microseconds"), "input": effective, "traits": resolved_traits(effective),
                 "prompts": {"outfit": effective.get("outfit_prompt"), "face": effective.get("face_prompt"), **work["prompts"]},
                 "seed": effective["seed"], "image_model": effective["image_model"],
                 "guides": {"body": work["files"]["guide_body_file"], "head": work["files"]["guide_head_file"]}, "pictures": pictures,
