@@ -391,7 +391,7 @@ With 3D provider `meshy` and a Settings key, `model3d.generate` publishes the GL
 Cards are chosen on axes: `uses` (dialogue, talk, reaction, figure, establishing, action, speed, impact, reveal,
 product, music, drive, transition, title, look, plate), `kind`, `place`, `shot`, `moves`, `still`, `subjects`,
 `travel`. `world3d.templates.plan` first, once for all the 3D shots (`shots: [{key, text, speakers, place}]`, `format: "portrait"`
-for a vertical series): a primary and two alternates per shot with variety (no card twice in a row, one place keeps one stage with
+for a vertical series, which gives people talking the `vertical-dialogue-*` and `vertical-talk-*` cards): a primary and two alternates per shot with variety (no card twice in a row, one place keeps one stage with
 another `roomCamera` each time) and the `scene3d` keys to copy; a Series shot reads `template` and `roomCamera`. To replace one shot,
 `world3d.templates.suggest` (`line`, `speakers`, `place`, `mood`, `beat`…): up to three cards with a `reason`, the filters it derived
 and `unknown_words`; `compact: true` shortens its cards and `world3d.templates.catalog`'s. Then `world3d.templates.list` with

@@ -468,7 +468,11 @@ no H3 lip-sync is implied.
 `world3d.templates.plan` once with every 3D shot of the plan (`shots: [{key, text,
 speakers, place}]`, `format: "portrait"` for a vertical video): it chooses a card
 for each with variety and returns the `scene3d` keys to copy (`template`,
-`roomCamera`, `world`, and `width`/`height` for a portrait frame). Then ask
+`roomCamera`, `world`, and `width`/`height` for a portrait frame). In a portrait
+plan, people talking get the vertical pack (`vertical-dialogue-*` for two or three,
+`vertical-talk-*` for one), drawn for 9:16 with the faces on the upper third and
+the lower third free for captions; without `format` the plan takes landscape cards
+for the 16:9 production. Then ask
 `world3d.templates.suggest` only to replace one shot (line, speakers, place, mood,
 beat), or pick a template whose roles fit (`world3d.templates.list`
 with `roles: ["subject_1", "background"]`, a `setting` such as `sea` or `city`,
@@ -706,6 +710,8 @@ A shot whose `width` and `height` are portrait (1080×1920) gets the template's
 landscape camera adapted to the tall frame (a wider lens, the eye nearer, the
 lateral moves narrowed), the same adaptation the editor applies when a scene
 is switched to portrait; `camera_template` and `lens` are applied before it.
+A card drawn portrait (`format: "portrait"`, such as the `vertical-*` pack)
+keeps its own camera: it is framed for 9:16 already.
 
 **Diorama sets.** A painted set is a flat picture: a camera that turns or climbs
 sees its edge. `{"kind": "diorama"}` builds the set in 3D instead, from pictures
