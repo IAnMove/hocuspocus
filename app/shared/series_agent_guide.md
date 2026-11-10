@@ -405,8 +405,10 @@ size and place in metres); a model is drawn 1.7 m × `scale` tall whatever its l
 (`{"heightM"|"widthM"|"depthM"|"longestM": metres}` or `"native"`) instead of guessing `scale`. A scene from nothing starts from a blank
 personal template (`docs/3d-video-compositor/HOWUSEIT.md`, "Agent-built scenes"). Time a move with `motion.start`/`motion.end` (scene seconds); `world3d.scene.beats` (`beats: [{t, who, verb}]`, verbs `appear`, `go`, `face`, `do`, `fx`) says who does what when and resolves into the object's own fields, a patch's `worldFx` places 3D effects (explosion, shockwave, sparks, smoke, fire) at a point, on an object or at a collision, and the replies list `layout.collisions` where a moving model passes through another (`collide: false` exempts a ghost). What the production dry run warns ruins a series shot too: `template_still` (a `still` card
 with no clip, motion, camera or world), `stage_unskinned` (a stage in its mold colours: give the location a set
-skin), `looks_samey` (one template and place in more than four shots in a row), `template_reused` (one card in
-more than four shots).
+skin), `looks_samey` (one template, place and camera in more than four shots in a row), `template_repeated` (one template with
+one camera in two shots in a row), `template_reused` (one card in more than four shots) and `template_format` (a card drawn
+portrait for a landscape frame, or the reverse). Name only template ids that `world3d.templates.list` or `world3d.templates.suggest`
+returned: an unknown id fails the shot at render time.
 
 ## Edit one shot ("the fifth shot")
 

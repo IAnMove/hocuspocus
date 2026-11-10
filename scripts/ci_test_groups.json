@@ -2023,6 +2023,14 @@
       ]
     },
     {
+      "prefix": "app/services/production_template_fit.py",
+      "paths": [
+        "tests/test_production_quality_gate.py",
+        "tests/test_production_scene3d.py",
+        "tests/test_production_thin_plan.py"
+      ]
+    },
+    {
       "prefix": "app/services/world3d_template_vocabulary.py",
       "paths": [
         "tests/test_world3d_template_traits.py",

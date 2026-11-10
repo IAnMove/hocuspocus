@@ -7,7 +7,7 @@ from fastapi import HTTPException
 
 from services.music_production import command_handlers
 from services.production_dry_run import dry_run
-from services.production_quality_gate import _brought, blocking_problems, plan_warnings
+from services.production_quality_gate import _brought, blocking_problems, gate, plan_warnings, refusal_message
 
 SONG = {"lyrics": "[Verse]\nla luz se queda", "caption": "lullaby", "duration": 40, "bpm": 96}
 
@@ -184,12 +184,14 @@ def test_a_stage_in_its_mold_colours_is_warned_once_per_set_or_template(tmp_path
     assert "sets" in hint and "skin" in hint
 
 
-def test_the_same_template_and_place_in_more_than_four_shots_in_a_row_looks_samey(tmp_path):
+def test_the_same_template_place_and_camera_in_more_than_four_shots_in_a_row_looks_samey(tmp_path):
     spec = {"song": SONG, "cast": [{"id": "hero", "sheet_prompt": "x"}], "models": {"hero": {"from": "hero"}},
-            "shots": [stage(f"s{i}", roomCamera=("ots_a", "ots_b")[i % 2]) for i in range(5)]}
+            "shots": [stage(f"s{i}", roomCamera="ots_a") for i in range(5)]}
     samey = [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"]
     assert len(samey) == 1 and samey[0]["template"] == "stage-sala" and samey[0]["background"] is None
+    assert samey[0]["camera"][0] == "ots_a"
     assert samey[0]["shots"] == ["s0", "s1", "s2", "s3", "s4"] and "roomCamera" in samey[0]["hint"]
+    assert not [item for item in plan_warnings(spec, tmp_path) if item["code"] == "template_repeated"], "said once, as looks_samey"
     spec["shots"][2] = h3("cut", 8)
     assert not [item for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"], "a cut away ends the run"
     spec["shots"] = [stage(f"o{i}", "two-shot", background="office") for i in range(4)] + [stage("p", "two-shot", background="park")]
@@ -197,3 +199,105 @@ def test_the_same_template_and_place_in_more_than_four_shots_in_a_row_looks_same
     spec["shots"].append(stage("q", "two-shot", background="park"))
     spec["shots"] += [stage(f"r{i}", "two-shot", background="park") for i in range(4)]
     assert [item["shots"] for item in plan_warnings(spec, tmp_path) if item["code"] == "looks_samey"] == [["p", "q", "r0", "r1", "r2", "r3"]]
+
+
+def codes_of(items, code):
+    return [item for item in items if item["code"] == code]
+
+
+def test_alternating_cameras_over_one_set_are_not_samey_and_a_camera_change_ends_the_run(tmp_path):
+    cameras = [{"roomCamera": ("ots_a", "ots_b")[i % 2]} for i in range(6)]
+    spec = {"song": SONG, "shots": [stage(f"s{i}", **more) for i, more in enumerate(cameras)]}
+    found = plan_warnings(spec, tmp_path)
+    assert not codes_of(found, "looks_samey") and not codes_of(found, "template_repeated")
+    still = [stage(f"s{i}") for i in range(3)]
+    for key, more in (("frame", {"frame": "wide"}), ("camera_template", {"camera_template": "cine-dolly-in"}), ("lens", {"lens": "85mm"})):
+        spec["shots"] = still + [stage(f"t_{key}", **more)] + [stage(f"u{i}", **more) for i in range(3)]
+        assert not codes_of(plan_warnings(spec, tmp_path), "looks_samey"), f"{key} is part of the run's camera"
+    spec["shots"] = [stage("a"), stage("b", roomCamera="two_shot")]
+    assert [item["shots"] for item in codes_of(plan_warnings(spec, tmp_path), "template_repeated")] == [["a", "b"]], "two_shot is the default"
+
+
+def test_one_template_with_one_camera_in_two_shots_in_a_row_is_repeated_whatever_the_place(tmp_path):
+    spec = {"song": SONG, "shots": [stage("a", "two-shot", background="office"), stage("b", "two-shot", background="park"),
+                                    stage("c", "two-shot", background="park", roomCamera="ots_a"), h3("cut", 8),
+                                    stage("d", "two-shot", background="park", roomCamera="ots_a")]}
+    found = codes_of(plan_warnings(spec, tmp_path), "template_repeated")
+    assert [(item["template"], item["shots"]) for item in found] == [("two-shot", ["a", "b"])]
+    assert found[0]["camera"][0] == "two_shot" and "roomCamera" in found[0]["hint"]
+    assert not codes_of(plan_warnings(spec, tmp_path), "looks_samey"), "a warning, and not the samey run"
+    assert blocking_problems(spec) == [], "a repeat is only a warning"
+
+
+def fit(key, template, **config):
+    return {"key": key, "kind": "scene3d", "t0": 0, "scene3d": {"template": template, **config}}
+
+
+def test_an_unknown_template_is_refused_before_any_gpu_work_with_the_closest_ids():
+    shots = [fit("a", "speech-portriat", cast={"subject_1": "x.glb"}), fit("b", "speech-portriat", cast={"subject_1": "x.glb"}),
+             fit("c", "qqq-zzz", cast={"subject_1": "x.glb"}), fit("d", "speech-portrait", cast={"subject_1": "x.glb"}),
+             fit("e", "stage-sala", cast={"subject_1": "x.glb"}), fit("f", "stage-salas", cast={"subject_1": "x.glb"}),
+             fit("g", "speech-portrait", world="stage-sala", cast={"subject_1": "x.glb"})]
+    spec = {"song": SONG, "shots": shots, "fill": [fit("", "speech-portriat", cast={"subject_1": "x.glb"})]}
+    found = {(item["field"], item["template"]): item for item in blocking_problems(spec) if item["code"] == "unknown_template"}
+    assert set(found) == {("template", "speech-portriat"), ("template", "qqq-zzz"), ("template", "stage-salas"), ("world", "stage-sala")}
+    typo = found[("template", "speech-portriat")]
+    assert typo["shots"] == ["a", "b", "fill[0]"] and typo["suggestions"][0] == "speech-portrait"
+    assert 'Did you mean "speech-portrait"' in typo["message"] and "after the GPU work" in typo["message"] and typo["hint"]
+    assert found[("template", "stage-salas")]["suggestions"][0] == "stage-sala"
+    assert found[("template", "qqq-zzz")]["suggestions"] == [] and "Did you mean" not in found[("template", "qqq-zzz")]["message"]
+    assert "stage-sala" not in found[("world", "stage-sala")]["suggestions"], "a stage is a template, never a world"
+
+
+def test_an_unknown_template_is_not_a_thin_check_so_allow_thin_never_skips_it():
+    spec = {"song": SONG, "shots": [fit("a", "nope-nope", cast={"subject_1": "x.glb"})]}
+    refused, allowed = gate(spec, allow_thin=True)
+    assert [item["code"] for item in refused] == ["unknown_template"] and allowed == []
+    assert "allow_thin does not skip them" in refusal_message(refused) and '"nope-nope"' in refusal_message(refused)
+    assert [item["code"] for item in dry_run(spec)["blocking"]] == ["unknown_template"]
+
+
+def test_a_cast_role_the_card_does_not_have_is_refused_and_names_the_roles_it_has():
+    cast = {"subject_1": "x.glb", "subject_2": "y.glb"}
+    spec = {"song": SONG, "shots": [fit("a", "speech-portrait", cast=cast), fit("b", "speech-portrait", cast=cast),
+                                    fit("c", "speech-dialogue", cast=cast)]}
+    found = codes_of(blocking_problems(spec), "cast_role_not_on_card")
+    assert [(item["template"], item["role"], item["shots"], item["roles"]) for item in found] == [
+        ("speech-portrait", "subject_2", ["a", "b"], ["subject_1"])]
+    assert 'only has the roles "subject_1"' in found[0]["message"] and '"subject_2"' in found[0]["message"]
+    assert "add: true" in found[0]["message"]
+
+
+def test_only_a_role_the_card_proves_missing_is_refused():
+    ok = {"subject_1": "x.glb"}
+    shots = [fit("obj", "speech-portrait", cast={**ok, "rival": "y.glb"}),
+             fit("add", "speech-portrait", cast={**ok, "subject_2": {"source": "y.glb", "add": True}}),
+             fit("group", "speech-portrait", cast={**ok, "subject_2": {"sources": ["y.glb", "z.glb"]}}),
+             fit("slots", "speech-portrait", slots=[{"sourceUrl": "a.glb"}, {"sourceUrl": "b.glb"}], cast={"subject_2": "y.glb"}),
+             fit("stage", "stage-sala", cast={**ok, "subject_2": "y.glb"}),
+             fit("document", "speech-portrait", cast=ok)]
+    shots[-1]["scene3d"] = {"document": {"slots": []}, "cast": {"subject_2": "y.glb"}}
+    assert codes_of(blocking_problems({"song": SONG, "shots": shots}), "cast_role_not_on_card") == []
+    bad = [fit("prop", "stage-sala", cast={**ok, "prop": "y.glb"}), fit("subject", "establishing", subject="x.glb"),
+           fit("back", "speech-portrait", cast={**ok, "background": "plate.png"})]
+    found = {(item["template"], item["role"]): item for item in codes_of(blocking_problems({"song": SONG, "shots": bad}), "cast_role_not_on_card")}
+    assert set(found) == {("stage-sala", "prop"), ("establishing", "subject_1"), ("speech-portrait", "background")}
+    assert found[("stage-sala", "prop")]["roles"] == ["subject_1", "subject_2", "background"], "a stage binds on two-shot"
+
+
+def test_a_frame_the_card_is_not_drawn_for_is_a_warning_with_a_hint_not_a_refusal():
+    cast = {"subject_1": "x.glb"}
+    spec = {"song": SONG, "shots": [fit("a", "speech-portrait", width=720, height=1280, cast=cast),
+                                    fit("b", "speech-portrait", height=1600, cast=cast),
+                                    fit("c", "speech-portrait", width=1920, height=1080, cast=cast),
+                                    fit("d", "topdown-dragon-portals", cast=cast),
+                                    fit("e", "topdown-dragon-portals", width=720, height=1280, cast=cast),
+                                    fit("f", "topdown-dragon-portals", width=1920, height=1080, cast=cast)]}
+    found = {tuple(item["shots"]): item for item in codes_of(plan_warnings(spec), "template_format")}
+    assert set(found) == {("a", "b"), ("d",), ("f",)}
+    assert (found[("a", "b")]["card_format"], found[("a", "b")]["shot_format"]) == ("landscape", "portrait")
+    assert "portrait card frames better" in found[("a", "b")]["hint"] and "format: portrait" in found[("a", "b")]["hint"]
+    assert (found[("d",)]["card_format"], found[("d",)]["shot_format"]) == ("portrait", "landscape")
+    assert "cropped" in found[("d",)]["hint"], "no width or height: the production frame is 16:9"
+    assert "adapts its camera" in found[("f",)]["hint"]
+    assert blocking_problems(spec) == [], "the compiler adapts the camera"

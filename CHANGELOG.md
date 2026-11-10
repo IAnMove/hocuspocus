@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: a production plan with an unknown 3D template or a cast role the template lacks is refused before any GPU work.** The compiler used to find out after the song, the cast and the models had been made. `production.run` and its dry run now refuse `unknown_template` (with the closest ids) and `cast_role_not_on_card` (naming the roles the card has); `allow_thin` never skips them. The dry run also warns `template_format` (a card drawn portrait for a landscape frame, or the reverse) and `template_repeated` (one template with one camera in two shots in a row), and `looks_samey` now counts the camera, so alternating `roomCamera` no longer trips it.
+
 **Added: reference photos can stay together in one image, or each row can be its own generation.** Pictures in the same row keep their order. Add row starts another generation, and one prompt per line combines every line with every row. A finished image shows up in the image gallery without a reload. The HocusPocus picker remembers sidecars it has already read and shows 60 at a time.
 
 **Changed: sharing the studio on the local network no longer asks for a token.** The gate starts off. Set `LOREFRAME_LAN_AUTH=1` to require the startup token from other devices. This machine at `127.0.0.1` stays open either way.
