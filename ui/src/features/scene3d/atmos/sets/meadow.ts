@@ -123,6 +123,7 @@ const MEADOW_TIMES = {
   spring: { sun: [0.38, -0.74, -0.5], sunColor: '#fff6d8' },
   overcast: { sun: [0.1, -0.96, -0.22], sunColor: '#d7e0ea' },
   night: { sun: [0.3, -0.34, 0.9], sunColor: '#9fb4ff' },
+  dawn: { sun: [0.78, -0.22, -0.42], sunColor: '#ffc9a8' },
 } as const
 
 const WIDE_EYE = [0.1, 1.7, 6.2] as const
@@ -154,17 +155,20 @@ function bendOf(variant: number | undefined): number {
 
 function horizonHex(palette: string, time: string): string {
   if (palette === 'night') return NIGHT.horizon
+  if (time === 'dawn') return '#f2b693'
   if (time === 'overcast') return '#c5ced6'
   return swatch(HORIZON, palette)
 }
 
 function zenithHex(palette: string, time: string): string {
   if (palette === 'night') return NIGHT.zenith
+  if (time === 'dawn') return '#5f7db3'
   if (time === 'overcast') return palette === 'hay' ? '#a39e94' : '#8e99a6'
   return palette === 'hay' ? '#b7c6d6' : '#6eafdf'
 }
 
 function cloudHex(palette: string, time: string): string {
+  if (time === 'dawn' && palette !== 'night') return '#f6cdb8'
   if (time === 'overcast') return swatch(CLOUD_GREY, palette)
   return swatch(CLOUD, palette)
 }
@@ -341,7 +345,8 @@ function placeClouds(mesh: InstancedMesh | undefined, seconds: number, bend: num
 }
 
 function addClouds(root: Group, resolved: ResolvedAtmos, kept: Kept) {
-  const spots = CLOUD_SPOTS.slice(0, resolved.moteCount)
+  // the `motes` setting thins the clouds out (0 = a clear sky); its default (0.3) keeps the full count
+  const spots = CLOUD_SPOTS.slice(0, Math.round(resolved.moteCount * Math.min(1, resolved.motes / 0.3)))
   if (spots.length < 1) return
   const tint = cloudHex(resolved.palette, resolved.timeOfDay)
   const geo = new IcosahedronGeometry(1, 1)

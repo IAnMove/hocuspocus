@@ -50,3 +50,19 @@ test('the night grass is dark and the clearing forest drops its self-glow', () =
   dayClearing.handle.dispose()
   nightClearing.handle.dispose()
 })
+
+test('the meadow has a dawn, thins its clouds with the motes setting and the night clearing drops the falling leaf', () => {
+  const dawn = resolved('atmos-meadow', { palette: 'hay', timeOfDay: 'dawn' })
+  assert.equal(dawn.timeOfDay, 'dawn')
+  assert.equal(dawn.palette, 'hay')
+  const clouds = patch => { const built = buildMeadow(resolved('atmos-meadow', { palette: 'clover', timeOfDay: 'spring', ...patch }), true); const mesh = built.root.getObjectByName('atmos-cloud'); const count = mesh ? mesh.count : 0; built.handle.dispose(); return count }
+  assert.ok(clouds({}) > 0, 'the default keeps its clouds')
+  assert.equal(clouds({ motes: 0 }), 0, 'motes 0 is a clear sky')
+  assert.ok(clouds({ motes: 0.1 }) < clouds({}), 'fewer motes, fewer clouds')
+  const nightClearing = buildClearing(resolved('atmos-clearing', { palette: 'green', timeOfDay: 'night' }), true)
+  const dayClearing = buildClearing(resolved('atmos-clearing', { palette: 'green', timeOfDay: 'golden' }), true)
+  assert.equal(nightClearing.root.getObjectByName('atmos-fall'), undefined)
+  assert.ok(dayClearing.root.getObjectByName('atmos-fall'))
+  nightClearing.handle.dispose()
+  dayClearing.handle.dispose()
+})

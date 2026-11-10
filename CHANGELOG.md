@@ -6,7 +6,7 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
-**Added: a real night for the meadow and clearing worlds.** `atmos.timeOfDay: "night"` paints a dark palette (grass, ground, fog, clouds, hills), a night sky gradient, stars and a lit moon with a halo, and dims the forest's self-glow; before, a night scene was a day world at very low exposure (lime grass, bright fog, a grey sphere for a moon).
+**Added: a real night for the meadow and clearing worlds.** `atmos.timeOfDay: "night"` paints a dark palette (grass, ground, fog, clouds, hills), a night sky gradient, stars and a lit moon with a halo, and dims the forest's self-glow; before, a night scene was a day world at very low exposure (lime grass, bright fog, a grey sphere for a moon). The meadow also gains `timeOfDay: "dawn"` and its clouds follow the `motes` setting (0 = clear sky); the clearing drops its falling leaf at night.
 
 **Fixed: a repainted texture or re-rendered clip showed the old picture.** `/api/v1/file/` answers `Cache-Control: no-cache` (the browser revalidates on the ETag; a URL pinned with `sha256` stays cacheable), so a file rewritten under the same name is picked up.
 

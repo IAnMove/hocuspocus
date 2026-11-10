@@ -289,9 +289,9 @@ function addFallingLeaf(root: Group, kept: Kept) {
   kept.materials.push(mat)
 }
 
-function addProps(root: Group, kept: Kept, figure: boolean) {
+function addProps(root: Group, kept: Kept, figure: boolean, night = false) {
   addLitter(root, kept)
-  addFallingLeaf(root, kept)
+  if (!night) addFallingLeaf(root, kept)          // an orange leaf drifting down reads as a stray rectangle in the dark
   if (!figure) return
   const bodyGeo = new CylinderGeometry(0.22, 0.26, 1.15, 10)
   const bodyMat = new MeshStandardMaterial({ color: 0xc4b59a, roughness: 0.7 })
@@ -341,7 +341,7 @@ export function buildClearing(resolved: ResolvedAtmos, webgl2: boolean): { root:
     addNightSky(root, kept, resolved.sun, 70, resolved.seed)
     dimEmissives(root, 0.12)
   }
-  addProps(root, kept, resolved.previewFigure === true)
+  addProps(root, kept, resolved.previewFigure === true, isNight(resolved.timeOfDay))
   const cookie = keepTexture(kept, leafCookie(resolved.seed))
   const spot = new SpotLight(resolved.sunColor, isNight(resolved.timeOfDay) ? 0.5 : 2.4, 46, 1.05, 0.85, 1)
   spot.map = cookie
