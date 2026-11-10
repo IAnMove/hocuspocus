@@ -143,6 +143,8 @@ vec4 atlasLow( vec2 uv, float tile ) {
 	float neckV = 0.9; // the row at 0.8 of the head tile's height: under the chin of a head picture, on the neck (as neck_skin reads it)
 	vec4 neckTile = texture2D( map, vec2( ( 0.5 + clamp( atlasP.x, - tileW * 0.18, tileW * 0.18 ) / tileW ) / 3.0, neckV ) );
 	float underside = smoothstep( -0.45, -0.8, atlasN.y ) * atlasHasSkin;
+	// only under the jaw: the base of the skull behind the ears faces down too, and there the neck's skin was a bare band across the hair of the nape
+	underside *= mix( 1.0, 1.0 - smoothstep( 1.3, 1.8, faceYaw ), atlasHeadMap );
 	headColor.rgb = mix( headColor.rgb, neckTile.rgb, underside );
 	float inHead = smoothstep( atlasHead.z - 0.008, atlasHead.z + 0.008, atlasP.y ) * ( 1.0 - smoothstep( tileW * 0.42, tileW * 0.49, max( abs( atlasP.x ), abs( atlasP.z ) ) ) );
 	vec4 sampledDiffuseColor = mix( bodyColor, headColor, inHead );

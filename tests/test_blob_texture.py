@@ -373,3 +373,22 @@ def test_head_join_is_the_map_by_default_with_its_own_patch_fade_and_is_validate
     for bad in ({"style": "real", "head_join": "cube"}, {"style": "anime", "head_join": "map"}):
         with pytest.raises(BlobTraitsError):
             resolve_traits(bad)
+
+
+def test_making_a_real_character_with_a_head_picture_writes_the_head_map_into_both_glbs(tmp_path, monkeypatch):
+    from services import anime_make
+
+    lofted, parts = _real()
+    picture, _frame, _radius = _painted_head(parts, lofted["layout"])
+    Image.fromarray(picture).save(tmp_path / "head.png")
+    Image.new("RGB", HALF_SIZE, (90, 90, 90)).save(tmp_path / "body.png")
+    monkeypatch.setattr(anime_make, "_face_relief", lambda *args, **kwargs: None)   # no depth model in a test
+    made = anime_make.make_character(tmp_path, "w", "Join", "intent-join", {"style": "real", "gender": "man", "texture": "body.png", "texture_head": "head.png"})
+    assert "joined head map" in made["atlas"]["layout"]
+    for key in ("file", "rigged_file"):
+        document = _json((tmp_path / made[key]).read_bytes())
+        extras = {m["name"]: m.get("extras", {}).get("atlas", {}) for m in document["materials"]}
+        assert extras["body"]["headMap"] == 1 and extras["face"]["headMap"] == 1 and extras["face"]["faceFeather"] == 18.0
+    old = anime_make.make_character(tmp_path, "w", "Blend", "intent-blend", {"style": "real", "gender": "man", "texture": "body.png", "texture_head": "head.png", "head_join": "blend"})
+    document = _json((tmp_path / old["rigged_file"]).read_bytes())
+    assert all("headMap" not in m.get("extras", {}).get("atlas", {}) for m in document["materials"])
