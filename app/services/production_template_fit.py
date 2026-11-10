@@ -32,7 +32,8 @@ ROOM_CAMERA = "two_shot"  # world3d_stage_cards.DEFAULT_CAMERA: a room shot with
 
 def template_id(config: dict) -> str | None:
     """The template a shot plays: a shipped card, or the card a full document was made from."""
-    value = config.get("template") or (config.get("document") or {}).get("templateId")
+    document = config.get("document")
+    value = config.get("template") or (document.get("templateId") if isinstance(document, dict) else None)
     return str(value) if value else None
 
 
