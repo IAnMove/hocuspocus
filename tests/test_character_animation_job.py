@@ -1387,3 +1387,22 @@ def test_the_remake_settings_come_from_the_catalog_and_only_a_catalog_walk_with_
     assert not remake.applies({**job, "remake": "lift-a"}), "one pose made again on request"
     assert not remake.applies({"definition": animation_def("walk"), "takes": []}), "the four-pose walk asks for no gait check"
     assert not remake.applies({"definition": animation_def("wave"), "takes": []})
+
+
+def _trunk_model(page):
+    """A pose model that finds the neck and the hips on the stub figure (its mustard trunk), at any size."""
+    mask = (np.asarray(page)[..., :3] == (230, 180, 30)).all(axis=2)
+    rows, middle = np.nonzero(mask.any(axis=1))[0], float(np.nonzero(mask.any(axis=0))[0].mean())
+    body = [[0.0, 0.0, 0.0] for _ in range(18)]
+    body[1], body[8], body[11] = [middle, float(rows[0]), 0.9], [middle - 6, float(rows[-1]), 0.9], [middle + 6, float(rows[-1]), 0.9]
+    return {"body": body}
+
+
+def test_a_walk_drawn_pose_by_pose_is_joined_with_every_pose_scaled_by_its_torso_and_a_gesture_is_not(world, monkeypatch):
+    monkeypatch.setattr("services.face_landmarks.detect", _trunk_model)
+    root, server, jobs = world
+    walk = jobs.start(WS, "hero", "walk-12")
+    assert walk["status"] == "completed" and walk["result"]["normalised"] == "torso"
+    assert "normalised" not in jobs.start(WS, "hero", "wave")["result"], "a gesture keeps its own scale"
+    monkeypatch.setattr("services.face_landmarks.detect", lambda page: None)
+    assert "normalised" not in jobs.start(WS, "hero", "walk-12")["result"], "without the pose model the sheet keeps its shared scale, as before"

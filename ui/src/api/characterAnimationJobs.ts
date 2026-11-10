@@ -20,6 +20,8 @@ export type AnimationJob = {
     animation: string; reviewState: string; sheet: string; count: number; frames: string[]; scaleBy: string; autoApproved?: boolean; checks?: AnimationCheck[]
     verdict?: { ok: boolean; failed: string[] }; gait?: { checked: number; missed: string[] }; warnings?: AnimationWarning[]
     autoRemake?: AnimationRemake
+    /** `torso` when every pose of a walk was scaled by its torso instead of one scale for all (services/walk_scale.py). */
+    normalised?: 'torso'
   }
   /** The poses of a walk the job drew again after the first pass, with every drawing it tried (services/character_animation_remake.py). */
   autoRemake?: AnimationRemake

@@ -43,6 +43,7 @@ from services.character_animation_cycle_checks import sibling_sheets
 from services.character_animation_directions import contract_of
 from services.character_animation_guides import gait_of, guide_for, guided_prompt, tries
 from services import character_animation_remake as remake
+from services import walk_scale
 from services.character_animation_review import AnimationReviewError, review_kit_animation
 from services.character_animation_verdict import CHECKS_UNAVAILABLE, report_of
 from services.character_animations import (MAX_ANIMATIONS, CharacterAnimationError, animation_def, build_sheet, normalize_kit_animations,
@@ -564,7 +565,7 @@ class CharacterAnimationJobs:
         root = self.deps.workspace_dir(workspace)
         sheet = build_sheet([take["keyed"] for take in job["takes"]], uploads_root=self.deps.uploads_root(), workspace_root=root,
                             workspace=workspace, name=f"{job['kitId']}-{definition['id']}", scale_by=definition["scaleBy"], output_dir=root,
-                            columns=definition.get("columns"))
+                            columns=definition.get("columns"), normalise=walk_scale.applies(job))
         entry: dict[str, Any] = {
             "sheet": {key: sheet[key] for key in ("source", "width", "height", "count", "columns", "rows", "cell")},
             # What the author wrote for a pose stays with it, so that pose can be made again alone.
@@ -583,7 +584,7 @@ class CharacterAnimationJobs:
         result = {"animation": definition["id"], "reviewState": approval.get("reviewState", "pending"), "sheet": sheet["source"], "count": sheet["count"],
                   "frames": [take["keyed"] for take in job["takes"]], "scaleBy": sheet["scaleBy"], **clip_fields(job),
                   **report_of(checks, definition, job), **({"autoApproved": approval["autoApproved"]} if approval else {}),
-                  **({"autoRemake": job["autoRemake"]} if job.get("autoRemake") else {}),
+                  **({"autoRemake": job["autoRemake"]} if job.get("autoRemake") else {}), **({"normalised": sheet["normalised"]} if sheet.get("normalised") else {}),
                   **({"provenance": job["puppet"]} if job.get("puppet") else {})}
         self._update(store, job, status="completed", finishedAt=_now(), generationJob=None, result=result,
                      **{key: approval[key] for key in ("autoApproved", "checks", "reviewNote") if key in approval})
