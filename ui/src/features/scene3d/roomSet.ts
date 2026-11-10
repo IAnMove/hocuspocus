@@ -2,13 +2,14 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import presets from '../../../../app/shared/set_lights.json' with { type: 'json' }
 import type { WorldSfx } from '../sceneFx/world'
-import { isWallView } from './roomViews'
+import { isWallView, type SkyLight } from './roomViews'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
 /** `image` stretches one painting over a face; `texture` repeats a tile every `tile_m` metres. `sideColor` colours the ends of a block whose front carries an image (else the mold's own colour).
  *  `pattern` (leather, fabric, plastic, quilt, carpet, metal, wood, plaster, tile; see roomPatterns.ts) is a tile the room paints itself, tinted by `color`.
- *  `view` (road_night, road_day, road_dawn, space; see roomViews.ts) is an animated window picture at `speed_mps` (default 15) that needs no clip. */
-export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number; sideColor?: string; pattern?: string; seed?: number; view?: string; speed_mps?: number }
+ *  `view` (road_night, road_day, road_dawn, space, night_window, day_window; see roomViews.ts) is an animated window picture at `speed_mps` (default 15) that needs no clip;
+ *  `lights` put bright things in its sky (a planet, a beacon, a craft that hops and grows). */
+export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number; sideColor?: string; pattern?: string; seed?: number; view?: string; speed_mps?: number; lights?: SkyLight[] }
 export type RoomOpening = { wall: string; kind: string; x: number; width: number; height: number; sill?: number; surface?: string }
 export type RoomKind = 'interior' | 'exterior'
 export type RoomMold = {

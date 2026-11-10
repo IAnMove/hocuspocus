@@ -47,54 +47,6 @@
   ],
   "blocks": [
     {
-      "id": "shelf",
-      "kind": "shelf",
-      "box": [
-        0.0,
-        0.0,
-        -2.31,
-        3.0,
-        2.2,
-        0.34
-      ],
-      "surfaces": [
-        "shelf_front",
-        "shelf_top"
-      ]
-    },
-    {
-      "id": "shelf_books",
-      "kind": "shelf",
-      "box": [
-        0.0,
-        0.12,
-        -2.135,
-        2.76,
-        1.96,
-        0.01
-      ],
-      "surfaces": [
-        "books_front",
-        "books_top"
-      ]
-    },
-    {
-      "id": "shelf_cornice",
-      "kind": "shelf",
-      "box": [
-        0.0,
-        2.2,
-        -2.3,
-        3.1,
-        0.1,
-        0.38
-      ],
-      "surfaces": [
-        "shelf_front",
-        "shelf_top"
-      ]
-    },
-    {
       "id": "desk",
       "kind": "desk",
       "box": [
@@ -204,6 +156,54 @@
       "surfaces": [
         "trim_front",
         "trim_top"
+      ]
+    },
+    {
+      "id": "shelf",
+      "kind": "shelf",
+      "box": [
+        0.0,
+        0.0,
+        -2.31,
+        3.0,
+        2.2,
+        0.34
+      ],
+      "surfaces": [
+        "shelf_front",
+        "shelf_top"
+      ]
+    },
+    {
+      "id": "shelf_books",
+      "kind": "shelf",
+      "box": [
+        0.0,
+        0.12,
+        -2.135,
+        2.76,
+        1.96,
+        0.01
+      ],
+      "surfaces": [
+        "books_front",
+        "books_top"
+      ]
+    },
+    {
+      "id": "shelf_cornice",
+      "kind": "shelf",
+      "box": [
+        0.0,
+        2.2,
+        -2.3,
+        3.1,
+        0.1,
+        0.38
+      ],
+      "surfaces": [
+        "shelf_front",
+        "shelf_top"
       ]
     },
     {
@@ -902,7 +902,7 @@
       "on": "desk_top",
       "position": [
         -0.6,
-        0.76,
+        0.75,
         -0.8
       ],
       "maxHeight": 0.5
@@ -912,7 +912,7 @@
       "on": "desk_top",
       "position": [
         0.6,
-        0.76,
+        0.75,
         -0.8
       ],
       "maxHeight": 0.5

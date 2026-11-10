@@ -220,8 +220,39 @@ function houseWindow(ctx: CanvasRenderingContext2D, w: number, h: number, t: num
   }
 }
 
+/** Something bright in the sky of a view: a planet, a beacon, a craft. Positions are fractions of the view (x across the wall, y down it), `r` a fraction of its height.
+ *  `to` is where it is after `over` scene seconds (default 10; position moves linearly, the size grows with its 1.6th power), `hop` makes it jump to a new spot every
+ *  `every` seconds (within `dx` and `dy`), `colors` cycles its colour six times a second, `blink` shows it for `on` seconds of every `period`. Everything is a function of `t`. */
+export type SkyLight = {
+  x: number; y: number; r: number; color?: string; colors?: string[]
+  to?: { x?: number; y?: number; r?: number }; over?: number
+  hop?: { every: number; dx: number; dy: number; seed?: number }
+  blink?: { period: number; on: number }
+}
+export const MAX_SKY_LIGHTS = 8
+
+export function skyLight(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, light: SkyLight, seed: number) {
+  const u = Math.min(1, Math.max(0, t / (light.over || 10)))
+  let x = light.x + ((light.to?.x ?? light.x) - light.x) * u, y = light.y + ((light.to?.y ?? light.y) - light.y) * u
+  const r = (light.r + ((light.to?.r ?? light.r) - light.r) * Math.pow(u, 1.6)) * h
+  if (light.blink && mod(t, light.blink.period) >= light.blink.on) return
+  if (light.hop) {
+    const n = Math.floor(t / light.hop.every)
+    x += (hash2(n, 1, (light.hop.seed ?? 0) + seed) - 0.5) * 2 * light.hop.dx + 0.004 * Math.sin(t * 7)
+    y += (hash2(n, 2, (light.hop.seed ?? 0) + seed) - 0.5) * 2 * light.hop.dy + 0.002 * Math.sin(t * 9)
+  }
+  const colour = light.colors?.length ? light.colors[Math.floor(t * 6) % light.colors.length] : light.color ?? '#fffaeb'
+  const cx = x * w, cy = y * h
+  for (const [radius, alpha, tint] of [[r * 1.8, 0.55, colour], [r, 1, '#fffcf0']] as const) {
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(1, radius * 3))
+    glow.addColorStop(0, tint); glow.addColorStop(0.33, tint + (alpha < 1 ? '88' : 'ff')); glow.addColorStop(1, tint + '00')
+    ctx.globalAlpha = alpha; ctx.fillStyle = glow; ctx.fillRect(cx - radius * 3, cy - radius * 3, radius * 6, radius * 6)
+  }
+  ctx.globalAlpha = 1
+}
+
 /** Paint the view for scene second `t` over the whole canvas. */
-export function drawRoomView(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, view: RoomView, role: ViewRole, speed = DEFAULT_SPEED_MPS, seed = 5) {
+export function drawRoomView(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, view: RoomView, role: ViewRole, speed = DEFAULT_SPEED_MPS, seed = 5, lights: readonly SkyLight[] = []) {
   ctx.save(); ctx.clearRect(0, 0, w, h)
   if (view === 'space') space(ctx, w, h, t, role, speed, seed)
   else if (view === 'night_window' || view === 'day_window') houseWindow(ctx, w, h, t, view === 'night_window', seed)
@@ -231,5 +262,6 @@ export function drawRoomView(ctx: CanvasRenderingContext2D, w: number, h: number
     if (role === 'left' || role === 'right') roadside(ctx, w, h, t, p, role, speed, night, seed)
     else { ridge(ctx, w, h * HORIZON, 55 * (h / 512), 0.7, 0, p.hill); ridge(ctx, w, h * HORIZON + 10, 85 * (h / 512), 2.1, 0, p.near); roadAhead(ctx, w, h, t, p, role, speed, night) }
   }
+  for (const light of lights.slice(0, MAX_SKY_LIGHTS)) skyLight(ctx, w, h, t, light, seed)
   ctx.restore()
 }

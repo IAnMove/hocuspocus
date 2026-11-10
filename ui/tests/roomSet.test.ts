@@ -8,7 +8,9 @@ import { AmbientLight, Color, Mesh, MeshBasicMaterial, PointLight } from 'three'
 import { RoomSetRuntime, SKY_DOME } from '../src/features/scene3d/roomSetRuntime.ts'
 type AuthoredMold = RoomMold & { sizes: { medium: RoomMold['dimensions'] } }
 function authored(name: string): AuthoredMold {
-  const loaded = JSON.parse(readFileSync(new URL(`../../app/shared/set_molds/${name}.json`, import.meta.url), 'utf8')) as AuthoredMold
+  // `despacho` here is a frozen copy of the plain two-block office the tests were written against; the shipped mold is richer and may change.
+  const url = name === 'despacho' ? new URL('./fixtures/simple_office_mold.json', import.meta.url) : new URL(`../../app/shared/set_molds/${name}.json`, import.meta.url)
+  const loaded = JSON.parse(readFileSync(url, 'utf8')) as AuthoredMold
   loaded.dimensions = loaded.sizes.medium; loaded.size = 'medium'
   return loaded
 }

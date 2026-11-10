@@ -4,9 +4,9 @@ import { hasAmbientLife, isExterior, keyLightBreath, roomLightPreset, roomPanels
 import { defaultMediaScreen, type MediaScreen } from './mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from './screenMediaRuntime'
 import { isFacePattern, isRoomPattern, patternTexture, PATTERN_TILE_M } from './roomPatterns'
-import { DEFAULT_SPEED_MPS, drawRoomView, isRoomView, isWallView, viewRole, viewSize, type RoomView, type ViewRole } from './roomViews'
+import { DEFAULT_SPEED_MPS, drawRoomView, isRoomView, isWallView, viewRole, viewSize, type RoomView, type SkyLight, type ViewRole } from './roomViews'
 
-type LiveView = { ctx: CanvasRenderingContext2D; texture: CanvasTexture; width: number; height: number; view: RoomView; role: ViewRole; speed: number }
+type LiveView = { ctx: CanvasRenderingContext2D; texture: CanvasTexture; width: number; height: number; view: RoomView; role: ViewRole; speed: number; seed: number; lights: readonly SkyLight[] }
 
 export class RoomSetRuntime {
   readonly root = new Group()
@@ -48,7 +48,7 @@ export class RoomSetRuntime {
     mesh.name = panel.id; mesh.position.fromArray(panel.position); mesh.rotation.set(...panel.rotation)
     mesh.receiveShadow = true; mesh.castShadow = true; this.root.add(mesh)
     const media = panel.material
-    if (isRoomView(media.view) && panel.wall) { mesh.material = this.windowView(geometry, panel, media.view, media.speed_mps, media.seed); material.dispose(); return }
+    if (isRoomView(media.view) && panel.wall) { mesh.material = this.windowView(geometry, panel, media.view, media.speed_mps, media.seed, media.lights); material.dispose(); return }
     if (isRoomPattern(media.pattern)) {
       const texture = this.pattern(media.pattern, media.seed)
       const repeat: [number, number] = isFacePattern(media.pattern) ? [1, 1] : [panel.fullSize[0] / (media.tile_m ?? PATTERN_TILE_M[media.pattern]), panel.fullSize[1] / (media.tile_m ?? PATTERN_TILE_M[media.pattern])]
@@ -81,7 +81,7 @@ export class RoomSetRuntime {
     return this.patterns.get(key) ?? null
   }
   /** A window onto a moving world. One canvas per wall and view paints the whole wall, so the windows of one side share it and show their own parts. */
-  private windowView(geometry: PlaneGeometry, panel: RoomPanel, view: RoomView, speed = DEFAULT_SPEED_MPS, seed = 5): MeshBasicMaterial {
+  private windowView(geometry: PlaneGeometry, panel: RoomPanel, view: RoomView, speed = DEFAULT_SPEED_MPS, seed = 5, lights: readonly SkyLight[] = []): MeshBasicMaterial {
     const key = isWallView(view) ? `${panel.wall}:${panel.surface}` : panel.id
     let live = this.views.get(key)
     if (!live && typeof document !== 'undefined') {
@@ -89,9 +89,9 @@ export class RoomSetRuntime {
       canvas.width = width; canvas.height = height
       if (ctx) {
         const texture = new CanvasTexture(canvas); texture.colorSpace = SRGBColorSpace
-        live = { ctx, texture, width, height, view, role: viewRole(panel.wall ?? 'back'), speed }
+        live = { ctx, texture, width, height, view, role: viewRole(panel.wall ?? 'back'), speed, seed, lights }
         this.views.set(key, live)
-        drawRoomView(ctx, width, height, 0, view, live.role, speed, seed)
+        drawRoomView(ctx, width, height, 0, view, live.role, speed, seed, lights)
       }
     }
     remapUv(geometry, panel.uv)
@@ -104,7 +104,7 @@ export class RoomSetRuntime {
   /** Every painted frame, preview or export: the lamp at this second, then the video skins at theirs. */
   async seek(seconds: number) {
     if (this.key) this.key.intensity = this.keyIntensity * this.breath(seconds)
-    for (const live of this.views.values()) { drawRoomView(live.ctx, live.width, live.height, seconds, live.view, live.role, live.speed); live.texture.needsUpdate = true }
+    for (const live of this.views.values()) { drawRoomView(live.ctx, live.width, live.height, seconds, live.view, live.role, live.speed, live.seed, live.lights); live.texture.needsUpdate = true }
     await Promise.all(this.screens.map(({ runtime, screen }) => runtime.seek(seconds, screen)))
   }
   dispose() {

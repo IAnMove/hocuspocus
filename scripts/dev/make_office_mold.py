@@ -26,11 +26,6 @@ def block(id_: str, kind: str, surfaces: tuple[str, str], x: float, y: float, z:
     blocks.append(entry)
 
 
-# --- the bookcase on the back wall: a carcass (id `shelf`), a face of painted books, a cornice -------------------------------------
-block("shelf", "shelf", ("shelf_front", "shelf_top"), 0.0, 0.0, -2.31, 3.0, 2.2, 0.34)
-block("shelf_books", "shelf", ("books_front", "books_top"), 0.0, 0.12, -2.135, 2.76, 1.96, 0.01)
-block("shelf_cornice", "shelf", ("shelf_front", "shelf_top"), 0.0, 2.2, -2.3, 3.1, 0.1, 0.38)
-
 # --- the desk (id `desk`: the body, its top is 0.75 m), a leather inlay, drawer fronts, knobs ------------------------------------
 block("desk", "desk", WOOD, 0.0, 0.0, -0.8, 1.8, 0.75, 0.8)
 block("desk_inlay", "desk", ("inlay_front", "inlay_top"), 0.0, 0.75, -0.8, 1.56, 0.012, 0.6)
@@ -38,6 +33,11 @@ for name, x in (("a", -0.55), ("b", 0.55)):
     block(f"desk_drawer_{name}", "desk", ("desk_front", "desk_top"), x, 0.1, -0.395, 0.58, 0.5, 0.02)
     block(f"desk_knob_{name}", "trim", TRIM, x, 0.33, -0.375, 0.07, 0.04, 0.02)
 block("desk_plinth", "desk", TRIM, 0.0, 0.0, -0.395, 1.74, 0.07, 0.02)
+
+# --- the bookcase on the back wall: a carcass (id `shelf`), a face of painted books, a cornice -------------------------------------
+block("shelf", "shelf", ("shelf_front", "shelf_top"), 0.0, 0.0, -2.31, 3.0, 2.2, 0.34)
+block("shelf_books", "shelf", ("books_front", "books_top"), 0.0, 0.12, -2.135, 2.76, 1.96, 0.01)
+block("shelf_cornice", "shelf", ("shelf_front", "shelf_top"), 0.0, 2.2, -2.3, 3.1, 0.1, 0.38)
 
 # --- the chair behind the desk (the `behind_desk` mark sits on it), an armchair and a side table with a lamp for the visitor -------
 block("chair_seat", "chair", LEATHER, 0.0, 0.0, -1.5, 0.54, 0.45, 0.52)
@@ -124,8 +124,8 @@ mold = {
     ],
     "lights": "office_day",
     "propAnchors": [
-        {"id": "desk_left", "on": "desk_top", "position": [-0.6, 0.76, -0.8], "maxHeight": 0.5},
-        {"id": "desk_right", "on": "desk_top", "position": [0.6, 0.76, -0.8], "maxHeight": 0.5},
+        {"id": "desk_left", "on": "desk_top", "position": [-0.6, 0.75, -0.8], "maxHeight": 0.5},
+        {"id": "desk_right", "on": "desk_top", "position": [0.6, 0.75, -0.8], "maxHeight": 0.5},
         {"id": "corner", "on": "floor", "position": [-2.6, 0, -2.1], "maxHeight": 2},
         {"id": "wall_picture", "on": "wall_back", "position": [2.2, 1.3, -2.48], "maxHeight": 0.9},
     ],

@@ -47,3 +47,32 @@ test('every cabin mold skins its four windows with a moving view and paints each
     for (const surface of Object.values(cabin.defaultSkin)) assert(!surface.pattern || isRoomPattern(surface.pattern))
   }
 })
+
+import { skyLight, MAX_SKY_LIGHTS } from '../src/features/scene3d/roomViews.ts'
+
+function recorder() {
+  const calls: { gradient: number[]; rects: number } = { gradient: [], rects: 0 }
+  const ctx = {
+    globalAlpha: 1, fillStyle: '' as unknown,
+    createRadialGradient: (...args: number[]) => { calls.gradient.push(args[0], args[1], args[5]); return { addColorStop() {} } },
+    fillRect: () => { calls.rects++ },
+  }
+  return { ctx: ctx as unknown as CanvasRenderingContext2D, calls }
+}
+
+test('a sky light blinks, grows and hops as a function of the scene second alone', () => {
+  const blinking = { x: 0.4, y: 0.3, r: 0.01, blink: { period: 2.4, on: 1 } }
+  const on = recorder(); skyLight(on.ctx, 1000, 500, 0.5, blinking, 5)
+  const off = recorder(); skyLight(off.ctx, 1000, 500, 1.5, blinking, 5)
+  assert(on.calls.rects > 0 && off.calls.rects === 0)
+  const growing = { x: 0.5, y: 0.2, r: 0.01, to: { r: 0.1, y: 0.4 }, over: 10 }
+  const early = recorder(); skyLight(early.ctx, 1000, 500, 0, growing, 5)
+  const late = recorder(); skyLight(late.ctx, 1000, 500, 10, growing, 5)
+  assert(late.calls.gradient[2] > early.calls.gradient[2] * 5 && late.calls.gradient[1] > early.calls.gradient[1])
+  const hopping = { x: 0.5, y: 0.2, r: 0.02, hop: { every: 1, dx: 0.1, dy: 0.05 } }
+  const a = recorder(), b = recorder(), c = recorder()
+  skyLight(a.ctx, 1000, 500, 0.3, hopping, 5); skyLight(b.ctx, 1000, 500, 0.3, hopping, 5); skyLight(c.ctx, 1000, 500, 1.3, hopping, 5)
+  assert.deepEqual(a.calls.gradient, b.calls.gradient)
+  assert.notDeepEqual(a.calls.gradient, c.calls.gradient)
+  assert(MAX_SKY_LIGHTS >= 4)
+})
