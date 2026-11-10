@@ -335,6 +335,54 @@ def test_inside_the_face_the_map_is_the_flat_projection_of_the_front_picture():
     assert len(white) and expected[0] - 2.5 <= yaws.min() and yaws.max() <= expected[1] + 2.5, "the mark is where the face patch shows it"
 
 
+def _long_hair(picture):
+    """The front tile of ``_painted_head`` repainted as a narrow face inside long dark hair that hangs to the shoulders."""
+    third = HALF_SIZE[0] // 3
+    front = picture[:, :third]
+    painted = (front != (30, 32, 40)).any(axis=2)
+    front[painted] = (60, 40, 30)
+    front[250:840, third // 2 - 300: third // 2 + 300] = (60, 40, 30)      # the hair beside the jaw and the neck, outside the mould
+    front[300:640, third // 2 - 120: third // 2 + 120] = (205, 160, 130)   # the face
+    front[640:840, third // 2 - 70: third // 2 + 70] = (205, 160, 130)     # the neck
+    return picture
+
+
+def test_beside_long_hair_the_front_picture_is_kept_until_the_hair_and_a_short_haired_head_is_joined_as_before():
+    import numpy as np
+
+    from services.blob_head_map import head_map
+
+    lofted, parts = _real("woman")
+    picture, frame, radius = _painted_head(parts, lofted["layout"])
+    short = head_map(picture, radius, frame, 40.0, 18.0).astype(int)
+    long = head_map(_long_hair(picture.copy()), radius, frame, 40.0, 18.0).astype(int)
+    width = short.shape[1]
+    column = lambda yaw: int((yaw + 180) / 360 * width)
+    profile, hair = (200, 155, 125), (60, 40, 30)
+    for yaw in (52, -52):
+        assert np.abs(short[430, column(yaw)] - profile).max() < 25, "a head without long hair has the profile there"
+        assert np.abs(long[430, column(yaw)] - hair).max() < 25, "long hair: the front picture's hair, not the profile's cheek beside the face"
+    for yaw in (10, -10):
+        assert np.abs(long[430, column(yaw)] - (205, 160, 130)).max() < 12, "the face is the front picture"
+    green = (long[..., 1] > 150) & (long[..., 0] < 110) & (long[..., 2] < 110)
+    assert green[:, : width // 2].any() and green[:, width // 2:].any(), "the ear is still the side picture's, on both sides"
+
+
+def test_an_ear_through_long_hair_is_not_kept_from_the_front_picture():
+    import numpy as np
+
+    from services.blob_head_map import face_outline
+
+    lofted, parts = _real("woman")
+    picture, frame, _radius = _painted_head(parts, lofted["layout"])
+    picture = _long_hair(picture)
+    third = HALF_SIZE[0] // 3
+    picture[400:500, third // 2 + 150: third // 2 + 200] = (205, 160, 130)   # an ear through the hair, on the picture's right
+    face = face_outline(picture[:, :third], 1.0)
+    assert np.isfinite(face["ear_high"][420:480]).all() and not np.isfinite(face["ear_low"]).any()
+    assert abs(face["high"][450] * third - 120) < 12, "the ear is not the face's edge"
+
+
 def test_the_atlas_holds_the_front_tile_and_the_head_map_and_says_so():
     import numpy as np
 
