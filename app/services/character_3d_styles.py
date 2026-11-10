@@ -6,6 +6,8 @@ Each style is a mould (geometry, one rig) plus a way to dress it (vertex colours
 from __future__ import annotations
 
 STATUS = ("stable", "experimental", "planned")
+# A planned style keeps its ``make`` recipe as the design, but the operation refuses it today (``invalid_style``): do not call it.
+PLANNED_LIMIT = "PLANNED, not callable: model3d.anime.make refuses this style (invalid_style) until it is built"
 
 STYLES: dict[str, dict] = {
     "blob": {
@@ -28,17 +30,17 @@ STYLES: dict[str, dict] = {
         "look": "toon shade anime (outline 3) or retro (steps 4, outline 0, classic)",
         "strengths": ["talking faces with lipsync", "a generator from traits", "head shapes by gender"],
         "limits": ["still reads cartoon-3D, not anime", "hair is cards without motion", "open mouths look like lipstick"],
-        "next": ["a photo-like or painted face kit for the real style", "hair motion"], "doc": "docs/agents/ANIME_CHARACTERS.md",
+        "next": ["hair motion"], "doc": "docs/agents/ANIME_CHARACTERS.md",
     },
     "real": {
         "label": "Realistic PS2-era (textured)", "status": "experimental", "operation": "model3d.anime.make",
         "make": {"style": "real", "gender": "man|woman", "bottom": "trousers|skirt|shorts", "texture": "<body picture>", "texture_head": "<head picture>"},
         "mould": "lofted body with real proportions, man/boy skull, real nose, a texture atlas (body front|back, head front|side|back)",
         "dress": "two pictures painted by Qwen over the guides (guide_body_file, guide_head_file); the viewer drapes them per pixel",
-        "face": "the head picture (a photo-like portrait); no expressions yet", "look": "toon steps 4, outline 0, classic; look.exposure about 1.5",
+        "face": "the head picture (a photo-like portrait); it talks through a photo face kit with warped mouths (face_pose_file, characters.rig.flat mouthStyle warp)", "look": "toon steps 4, outline 0, classic; look.exposure about 1.5",
         "strengths": ["change the clothes by repainting one guide", "same mould for any outfit", "reads as a PS2/PS3 game character"],
-        "limits": ["a face is a picture: no expressions or lipsync mouths yet", "the face relief comes from one depth estimate (a profile nose is stretched skin tones)", "a thin seam where the front and side portraits meet (46 to 58 degrees)", "hands and shoes are blocks"],
-        "next": ["a photo face kit with warped mouths and blink (the relief makes mouth warps possible)", "relief for the ears and the hands", "woman mould tuning", "UI and Wizard doors for style and texture"],
+        "limits": ["the photo face kit moves only the mouth: no drawn expressions, and the rig's blink is unusable on a photograph", "the face relief comes from one depth estimate (a profile nose is stretched skin tones)", "the front and side portraits are joined into one head map (head_join), but long hair still disagrees between the front and the profile (the face reads wider than painted)", "hands and shoes are blocks"],
+        "next": ["photo face expressions and a blink that works on a photograph (only the mouth moves today)", "relief for the ears and the hands", "woman mould tuning", "UI and Wizard doors for style and texture"],
         "doc": "docs/agents/ANIME_CHARACTERS.md",
     },
     "voxel": {
@@ -63,20 +65,20 @@ STYLES: dict[str, dict] = {
         "label": "Toon-realistic (Wind Waker-like)", "status": "planned", "operation": "model3d.anime.make",
         "make": {"style": "toon_real"}, "mould": "the real mould (broad proportions, face relief) with a slightly exaggerated head and hands", "dress": "the same atlas, painted by Qwen in a flat cel style with a thin outline (prompt: hand-painted cel shading, two tones, soft colours), no photographic detail",
         "face": "big simple eyes with swappable pupil and lid pieces (a face kit with a moving gaze, the Wind Waker trick), a small mouth", "look": "toon steps 2, outline 2, ink a darker version of the colour, rim light, warm key",
-        "strengths": ["warm and readable", "forgiving: painted detail hides the mould"], "limits": ["the eyes must move on their own (a gaze) to carry the character"],
+        "strengths": ["warm and readable", "forgiving: painted detail hides the mould"], "limits": [PLANNED_LIMIT, "the eyes must move on their own (a gaze) to carry the character"],
         "next": ["a cel-style atlas prompt and a test render", "a gaze kit"], "doc": "docs/agents/CHARACTER_STYLES.md",
     },
     "ps1": {
         "label": "PS1 / low-poly retro", "status": "planned", "operation": "model3d.anime.make",
         "make": {"style": "ps1"}, "mould": "the real mould decimated to a few hundred triangles", "dress": "a 128x128 atlas with nearest filtering, vertex jitter",
         "face": "a tiny painted face", "look": "renderLook n64 or a PS1 shader (affine textures, snapped vertices)", "strengths": ["a strong, cheap retro look"],
-        "limits": [], "next": ["decimate the mould", "a nearest-filter atlas"], "doc": "docs/agents/CHARACTER_STYLES.md",
+        "limits": [PLANNED_LIMIT], "next": ["decimate the mould", "a nearest-filter atlas"], "doc": "docs/agents/CHARACTER_STYLES.md",
     },
     "clay": {
         "label": "Clay / stop-motion", "status": "planned", "operation": "model3d.anime.make",
         "make": {"style": "clay"}, "mould": "the chibi or blob mould with soft proportions", "dress": "a clay texture with fingerprints, painted by Qwen",
         "face": "swappable mouth and eye pieces like a stop-motion puppet", "look": "lit, soft shadows, 12 fps motion", "strengths": ["distinct and charming"],
-        "limits": [], "next": ["a clay atlas prompt", "a stepped-motion option"], "doc": "docs/agents/CHARACTER_STYLES.md",
+        "limits": [PLANNED_LIMIT], "next": ["a clay atlas prompt", "a stepped-motion option"], "doc": "docs/agents/CHARACTER_STYLES.md",
     },
 }
 

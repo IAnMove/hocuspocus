@@ -80,10 +80,11 @@ is still the old 8-segment mesh; these bodies always pass a count.
 
 The reply is `{version:1, operation:"model3d.blob.make", status:"completed",
 result:{file, url, rigged_file, rigged_url, clips:[{index, id, name, duration, loop}],
-faceAnchor, traits, name, workspace}}`. `faceAnchor` is the head centre, the
+humanoid:{warnings, confidence}, faceAnchor, traits, name, workspace}}`. `faceAnchor` is the head centre, the
 radii (half the head scale) and `front` (the centre plus the depth radius on
 +Z), for whoever draws the face later. Both GLBs are in the workspace gallery.
-The rigged file has a `.humanoid.json` beside it. The same `intent_id` and
+The rigged file has a `.humanoid.json` beside it; `humanoid` repeats its `warnings`
+(`neck_not_found`, `arms_steep`, `short_legs`, `short_arms`) and `confidence`. The same `intent_id` and
 body replay the stored result.
 
 A mesh the rig refuses is `not_humanoid` with the rig's own `reason`
