@@ -32,7 +32,60 @@
     "blobReady": "Blob ready",
     "animeFailed": "Could not build the anime character",
     "blobFailed": "Could not build the blob",
-    "blobPresetsFailed": "Could not read blob presets"
+    "blobPresetsFailed": "Could not read blob presets",
+    "real": {
+      "title": "Realistic (PS2)",
+      "hint": "A realistic PS2-style person: Qwen paints the clothes and the face from two English texts, then the character is made with a talking face. It takes a few minutes of GPU.",
+      "defaultName": "Person",
+      "genders": {
+        "man": "Man",
+        "woman": "Woman"
+      },
+      "outfitPick": "Quick outfit",
+      "facePick": "Quick face",
+      "pick": "Choose…",
+      "outfit": "Clothes (English)",
+      "face": "Face and hair (English)",
+      "seed": "Seed",
+      "seedRandom": "random (kept)",
+      "make": "Make or remake",
+      "cancel": "Stop",
+      "progress": "Progress",
+      "ready": "Realistic character ready",
+      "failed": "The realistic character could not be made",
+      "job": {
+        "queued": "Queued",
+        "running": "Being made…",
+        "cancelling": "Stopping…",
+        "completed": "Done",
+        "failed": "Failed",
+        "cancelled": "Stopped",
+        "interrupted": "Cut by a restart: make it again and what was made is kept"
+      },
+      "steps": {
+        "guides": "Guides",
+        "body": "Clothes (Qwen)",
+        "head": "Face (Qwen)",
+        "character": "Character",
+        "kit": "Talking face"
+      },
+      "status": {
+        "waiting": "waiting",
+        "running": "running",
+        "done": "done",
+        "reused": "reused",
+        "given": "picture given",
+        "skipped": "skipped",
+        "failed": "failed"
+      },
+      "made": "{{file}} · face {{kit}}",
+      "facePicture": "The character's face",
+      "warnings": "Warnings",
+      "saved": "Saved realistic characters",
+      "none": "None in this workspace yet.",
+      "open": "Open",
+      "missing": "GLB missing"
+    }
   },
   "drama": {
     "reference": "Reference recording",
