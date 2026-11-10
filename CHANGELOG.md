@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Fixed: the faces of one scene no longer blink at the same frame.** The first blink of every talking face fell at 0.9 s, and each shot starts at 0, so three hosts closed their eyes together in every shot. It now falls 0.9-2.5 s in, chosen by the kit's seed (still deterministic).
+
 **Fixed: the comic view finds an uploaded clip the same way the Video Editor does.** A bare file name is looked up in uploads first, then in the workspace, so an imported clip gets a panel.
 
 **Fixed: placing a 2D face again keeps the expression line already on the model.** A later edit that omits pose, expressions, centre or radii leaves those as they were. An empty expression list clears the line. A kit id with a slash is refused before any file is written.
