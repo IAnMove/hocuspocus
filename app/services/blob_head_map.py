@@ -30,6 +30,16 @@ BACK_FROM, BACK_FULL = 112.0, 136.0   # the back picture comes in over this band
 LEVELS = 5
 NEAR_MOULD = (0.76, 1.12)    # a measure of the painted head is kept within these shares of the mould's
 TONE_RANGE = (0.85, 1.2)     # how far a picture's tones may be moved to meet its neighbour's
+EAR_GAP = 0.012              # of the tile's width: an ear starts this far outside the face's edge
+EAR_PEEK = 0.13              # of the tile's height: an ear through long hair is a bump of the skin's edge shorter than this
+EAR_AREA = 0.0012            # of the tile: a piece of skin outside the face's edge smaller than this is not an ear
+SKIN_LIGHT, SKIN_HUE = 70.0, 22.0   # how far from the cheeks' colour (Lab lightness, and hue) a pixel of the face's skin may be
+LONG_HAIR = (1.3, 0.25)      # long hair hangs beside the face: the painted outline beside the jaw is this many times the mould's, and this share of it is not skin
+JAW_FROM, JAW_ROWS = 0.8, 0.1   # the rows where that is measured: from where the mould's half width is under this share of its widest, this share of the height down
+HAIR_GAP = 0.93              # a row has hair beside the face when the skin ends before this share of the painted head's edge
+HAIR_SHARE = 0.7             # how far into that hair (from the skin's edge to the head's) the front picture is kept
+HAIR_UNTIL = 66.0            # the front picture is never kept past this yaw: edge on, it is a few stretched pixels
+HAIR_TONE = 12.0             # degrees of that delay over which the side picture stops taking the front picture's tones
 EAR_ROWS = 0.2               # of the tile's height: bumps of the outline shorter than this are ears, not head
 
 
@@ -85,6 +95,89 @@ def silhouettes(tiles: list[np.ndarray], tile_w: float) -> dict[str, np.ndarray]
             low, high = (ndimage.grey_opening(side, size=max(3, int(height * EAR_ROWS)), mode="nearest") for side in (low, high))
         sigma = height / 120
         out[name + "_low"], out[name + "_high"] = _smooth(np.maximum(low, 1e-4), sigma), _smooth(np.maximum(high, 1e-4), sigma)
+    return out
+
+
+def face_outline(tile: np.ndarray, tile_w: float) -> dict[str, np.ndarray]:
+    """Per row of the front tile, in metres from the head's axis: where the face's skin ends on the picture's left and on its right
+    (``low``, ``high``), whether the row has skin at all (``rows``), and where an ear that shows through the hair starts
+    (``ear_low``, ``ear_high``; infinite in the rows without one). Long hair that hangs beside the face is inside the painted
+    head's outline and is not the face: the skin is what has the cheeks' colour (eyes, brows and lips are holes of it and are
+    filled). An ear is a bump of that skin, shorter than the face: it is taken off the edge, as in ``silhouettes``."""
+    import cv2
+    from scipy import ndimage
+
+    height, width = tile.shape[:2]
+    lab = cv2.cvtColor(np.ascontiguousarray(tile[..., :3]).astype(np.uint8), cv2.COLOR_RGB2LAB).astype(np.float32)
+    cheeks = lab[int(height * 0.40):int(height * 0.52), width // 2 - width // 10:width // 2 + width // 10].reshape(-1, 3)
+    tone = np.median(cheeks, axis=0)
+    loose = (np.abs(lab[..., 0] - tone[0]) < SKIN_LIGHT) & (np.hypot(lab[..., 1] - tone[1], lab[..., 2] - tone[2]) < SKIN_HUE) & _mask(tile)
+    loose = ndimage.binary_opening(loose, iterations=2)
+    skin = ndimage.binary_fill_holes(ndimage.binary_closing(loose, iterations=max(2, height // 40)))
+    labels, _count = ndimage.label(skin)
+    centre = labels[int(height * 0.46), width // 2]
+    skin = (labels == centre) if centre else np.zeros_like(skin)
+    any_row = skin.any(axis=1)
+    per_px = tile_w / width
+    first = np.where(any_row, skin.argmax(axis=1), 0).astype(np.float64)
+    last = np.where(any_row, width - 1 - skin[:, ::-1].argmax(axis=1), 0).astype(np.float64)
+    size = max(3, int(height * EAR_PEEK))
+    low, high = (ndimage.grey_opening(_fill(side, any_row), size=size, mode="nearest") for side in ((width / 2 - first) * per_px, (last - width / 2) * per_px))
+    sigma = height / 120
+    out = {"low": _smooth(np.maximum(low, 1e-4), sigma), "high": _smooth(np.maximum(high, 1e-4), sigma), "rows": any_row}
+    # the ear: the thickest piece of skin outside that edge
+    columns = (np.arange(width) + 0.5 - width / 2) * per_px
+    thick = max(2, width // 90)
+    for name, side in (("ear_low", -1.0), ("ear_high", 1.0)):
+        outside = columns[None, :] * side
+        beyond = ndimage.binary_opening(skin & (outside > out["low" if side < 0 else "high"][:, None] + EAR_GAP * tile_w), iterations=thick)
+        labels, count = ndimage.label(beyond)
+        start = np.full(height, np.inf)
+        if count:
+            ear = ndimage.binary_dilation(labels == 1 + int(np.argmax(ndimage.sum(beyond, labels, range(1, count + 1)))), iterations=2 * thick)
+            if ear.sum() > EAR_AREA * height * width:
+                start = np.where(ear, outside, np.inf).min(axis=1)
+        out[name] = start
+    return out
+
+
+def hair_hold(front: np.ndarray, shape: dict, tile_w: float, mould_edge: np.ndarray, edge: np.ndarray, right: np.ndarray, hold: float) -> np.ndarray:
+    """How many degrees later than ``hold`` the front picture gives way to the side picture, for every pixel of the map: 0 for a
+    head whose hair is short or tied back, and on a side where long hair hangs beside the face, the angle where the front picture is
+    well into that hair. The two portraits of such a head disagree: the front one has a curtain of hair where the profile has a bare
+    cheek, and the face is much narrower than the head. Joined at the face's border, the profile's cheek shows beside the painted
+    face, which then reads wider than it was painted, with its outline drawn on the cheek. So the front picture is kept as it is,
+    face and hair, until the head's edge is near, and the side picture brings the ear and what is behind it.
+    ``mould_edge`` and ``edge`` are the mould's and the painted head's half width per pixel of the map, ``right`` its right half."""
+    from scipy import ndimage
+
+    height = mould_edge.shape[0]
+    face = face_outline(front, tile_w)
+    rows = lambda values: np.interp((np.arange(height) + 0.5) / height * len(values) - 0.5, np.arange(len(values)), np.asarray(values, np.float64))
+    nearest = lambda values: np.asarray(values)[np.clip(((np.arange(height) + 0.5) / height * len(values)).astype(int), 0, len(values) - 1)]
+    out = np.zeros(mould_edge.shape)
+    for half, key, outline in ((~right, "low", shape["front_low"]), (right, "high", shape["front_high"])):
+        column = int(np.argmax(half.any(axis=0)))
+        mould_row, edge_row, skin_row, outline_row = mould_edge[:, column], edge[:, column], rows(face[key]), rows(outline)
+        # long hair: beside the jaw (the rows under where the mould starts to narrow) the painted outline is far outside the
+        # mould, and a good share of it is not skin (a bare neck and shoulders are outside the mould too)
+        widest = int(np.argmax(mould_row))
+        below = np.nonzero((np.arange(height) > widest) & (mould_row < mould_row[widest] * JAW_FROM))[0]
+        if not len(below):
+            continue
+        jaw = slice(int(below[0]), int(below[0] + height * JAW_ROWS))
+        wide, hair = np.median(outline_row[jaw] / mould_row[jaw]), np.median(1 - np.minimum(skin_row[jaw] / outline_row[jaw], 1.0))
+        if wide < LONG_HAIR[0] or hair < LONG_HAIR[1]:
+            continue
+        # an ear that shows through the hair: the hair is behind it, the two portraits agree, and the front picture kept on would
+        # draw a second ear, stretched along the head's edge. That side is joined as a short-haired head is
+        if np.isfinite(nearest(face["ear_" + key])[:int(below[0])]).any():
+            continue
+        curtain = (rows(face["rows"]) > 0.5) & (skin_row < edge_row * HAIR_GAP)
+        far = skin_row + HAIR_SHARE * (np.minimum(edge_row, mould_row) - skin_row)
+        later = np.where(curtain, np.clip(np.degrees(np.arcsin(np.clip(far / mould_row, 0.0, 1.0))), hold + 1.0, HAIR_UNTIL) - hold - 1.0, 0.0)
+        later = ndimage.gaussian_filter1d(later, height / 50, mode="nearest")
+        out[half] = np.repeat(later[:, None], mould_edge.shape[1], axis=1)[half]
     return out
 
 
@@ -181,7 +274,7 @@ def head_map(head: np.ndarray, radius: np.ndarray, frame: dict, face_yaw: float 
 
     hold = face_yaw - blend
     column = lambda degrees: np.clip(((np.where(right, degrees, -degrees) + 180) / 360 * width).astype(int), 0, width - 1)
-    at = lambda degrees: np.take_along_axis(mould, column(np.full_like(yaw, degrees)), axis=1)
+    at = lambda degrees: np.take_along_axis(mould, column(np.broadcast_to(np.asarray(degrees, np.float64), yaw.shape)), axis=1)
 
     def per_row(name: str, degrees: float) -> np.ndarray:
         """A measure of the painted head, kept near the mould's own at that yaw: a painted head follows its guide, and a measure far
@@ -189,9 +282,13 @@ def head_map(head: np.ndarray, radius: np.ndarray, frame: dict, face_yaw: float 
         measure = np.repeat(cv2.resize(shape[name].astype(np.float32)[:, None], (1, height), interpolation=cv2.INTER_LINEAR), width, axis=1)
         return np.clip(measure, at(degrees) * NEAR_MOULD[0], at(degrees) * NEAR_MOULD[1])
     sign = np.where(right, 1.0, -1.0)
-    # the front picture: flat inside the face, then on to the painted head's edge while it fades out
+    # the front picture: flat inside the face, then on to the painted head's edge while it fades out. Where long hair hangs beside
+    # the face it is flat for longer (``later`` degrees, see ``hair_hold``), and every angle of its join is counted from there
     edge_front = np.where(right, per_row("front_high", 90.0), per_row("front_low", 90.0))
-    across_front = _reach(mould * np.sin(np.radians(np.minimum(around, 90))), at(hold) * math.sin(math.radians(hold)), edge_front, (around - hold) / (2 * FRONT_OUT))
+    later = hair_hold(measured[:, :third], shape, tile_w, at(90.0), edge_front, right, hold)
+    joined_at = around - later
+    held = hold + later
+    across_front = _reach(mould * np.sin(np.radians(np.minimum(around, 90))), at(held) * np.sin(np.radians(held)), edge_front, (joined_at - hold) / (2 * FRONT_OUT))
     front = cv2.remap(tiles[0], ((0.5 + sign * across_front / tile_w) * third - 0.5).astype(np.float32), rows.astype(np.float32), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
     # the side picture: before the ear by its length along the head (from behind the eye's corner at the face to the axis at 90
     # degrees), behind the ear by its flat projection, at the painted head's depth
@@ -205,10 +302,12 @@ def head_map(head: np.ndarray, radius: np.ndarray, frame: dict, face_yaw: float 
     edge_back = np.where(right, per_row("back_low", 90.0), per_row("back_high", 90.0))
     across_back = _reach(mould * np.sin(np.radians(np.minimum(behind, 90))), at(180 - BACK_HOLD) * math.sin(math.radians(BACK_HOLD)), edge_back, (behind - BACK_HOLD) / (EDGE_YAW - BACK_HOLD))
     back = cv2.remap(tiles[2], ((0.5 - sign * across_back / tile_w) * third - 0.5).astype(np.float32), rows.astype(np.float32), cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
-    to_side = _ease((around - hold - 1.0) / FRONT_OUT)
+    to_side = _ease((joined_at - hold - 1.0) / FRONT_OUT)
     # the portraits are lit each in its own way: the side picture takes the front picture's tones where they meet and goes back to
     # its own by the ear, and the back picture takes the side picture's the same way, so no step of tone marks the join
-    side = _meet(side, front, around, (hold + 2.0, hold + FRONT_OUT), (hold - 10.0, hold), 84.0)
+    # (beside long hair the two pictures do not show the same thing where they meet, hair and a cheek: no tones are moved there)
+    own = np.clip(later / HAIR_TONE, 0.0, 1.0)[..., None]
+    side = side * own + _meet(side, front, joined_at, (hold + 2.0, hold + FRONT_OUT), (hold - 10.0, hold), 84.0) * (1 - own)
     band = (180 - BACK_FULL, 180 - BACK_FROM)
     back = _meet(back, side, 180 - around, band, band, 14.0)
     to_back = _ease((around - BACK_FROM) / (BACK_FULL - BACK_FROM))
