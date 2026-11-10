@@ -105,10 +105,21 @@ def search_report(query: str = "", *, category: str | None = None, language: str
     """The bounded search with what it could not read: ``templates``, ``unknown_words`` and ``partial``."""
     _require_language(language)
     bounded = _limit(limit)
+    pool = search_pool(query, category=category, workspace_dir=workspace_dir, workspace=workspace, roles=roles,
+                       setting=setting, **filters)
+    cards = [_public_card(card, score, match) for score, match, card in pool["rows"][:bounded]]
+    return {"templates": cards, "unknown_words": pool["unknown_words"],
+            "partial": bool(cards) and cards[0]["match"] == "partial", "semantic": pool["semantic"]}
+
+
+def search_pool(query: str = "", *, category: str | None = None, workspace_dir=None, workspace: str | None = None,
+                roles: list[str] | None = None, setting: str | None = None, **filters) -> dict:
+    """Every card the search matches, best first and uncut: ``rows`` of ``(score, match, card)`` (the shipped card
+    itself, not a copy), the ``unknown_words`` and ``semantic``. ``search_report`` is its first ``limit`` rows;
+    ``world3d.templates.plan`` reads them all and ranks them again across a list of shots."""
     library = _cards(workspace_dir, workspace)
     ranked, unknown, semantic = _ranked(query, library, _fitting(library, roles, setting, filters), category)
-    cards = [_public_card(card, score, match) for score, match, _index, card in ranked[:bounded]]
-    return {"templates": cards, "unknown_words": unknown, "partial": bool(cards) and cards[0]["match"] == "partial",
+    return {"rows": [(score, match, card) for score, match, _index, card in ranked], "unknown_words": unknown,
             "semantic": semantic}
 
 

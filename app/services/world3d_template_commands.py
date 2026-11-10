@@ -28,6 +28,9 @@ from services.world3d_template_catalog import (
     CATALOG_OPERATION, SUGGEST_BEATS, SUGGEST_MAX_LIMIT, World3DTemplateError, page_templates, require_card,
     search_report, suggest_templates, thumbnail_url, user_template_document,
 )
+from services.world3d_template_compact import compact_report
+from services.world3d_template_plan import OPERATION as PLAN_OPERATION, plan_templates
+from services.world3d_template_plan_input import MAX_AVOID, MAX_SHOTS, MAX_TEXT
 from services.world3d_template_vocabulary import FORMATS, KINDS, MOVES, SHOT_SIZES, USES
 
 _LOCK = threading.RLock()
@@ -77,13 +80,27 @@ _FILTERS = {"shot": {"enum": list(SHOT_SIZES)}, "use": {"enum": list(USES)}, "mo
             "subjects": {"type": "integer", "minimum": 0, "maximum": 2}, "format": {"enum": list(FORMATS)},
             "kind": {"enum": list(KINDS)}, "place": {"type": "string", "maxLength": 120}, "travel": {"type": "boolean"}}
 _FILTER_NAMES = tuple(_FILTERS)
+_COMPACT = {"type": "boolean", "description": "true: every card is {id, title, shot, moves, format, why} (a few hundred bytes) instead of the full card. Default false."}
+_PLAN_SHOT = {"type": "object", "additionalProperties": False, "required": ["key"], "properties": {
+    "key": {"type": "string", "minLength": 1, "maxLength": 80, "description": "Your name for the shot (s1, e3s04); the plan answers under it."},
+    "text": {"type": "string", "maxLength": MAX_TEXT, "description": "The shot as a writer phrases it, in Spanish or English. May be empty: the plan then chooses by variety."},
+    "speakers": {"type": "integer", "minimum": 0, "maximum": 4, "description": "Who talks: 0 an establishing shot, 1 a talk shot, 2 or more a dialogue."},
+    "subjects": {"type": "integer", "minimum": 0, "maximum": 2, "description": "Subject slots the cast needs (the card must have that many); defaults to what speakers imply."},
+    "place": {"type": "string", "maxLength": 120, "description": "Where, in plain words (cocina, rooftop). Shots that say the same place keep one family."},
+    "shot": {"enum": list(SHOT_SIZES), "description": "The shot size you would like; a card of that size scores higher."},
+    "moving": {"type": "boolean", "description": "true: prefer a card that moves; false: prefer a fixed one."}}}
+_PLAN = {"shots": {"type": "array", "minItems": 1, "maxItems": MAX_SHOTS, "items": _PLAN_SHOT},
+         "format": {"enum": list(FORMATS)}, "avoid": {"type": "array", "maxItems": MAX_AVOID, "items": _ID, "description": "Template ids never to take."},
+         "per_shot": {"type": "integer", "minimum": 1, "maximum": 3, "description": "Cards per shot: the primary and its alternates (default 3)."},
+         "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647, "description": "Another seed gives another valid plan; the same input and seed give the same one."},
+         "language": {"enum": ["es", "en"], "description": "Language of the titles (default en)."}}
 _SUGGEST = {"line": {"type": "string", "maxLength": 400, "description": "The shot as a writer phrases it: what happens, in Spanish or English."},
             "speakers": {"type": "integer", "minimum": 0, "maximum": 4, "description": "Who talks: 0 asks an establishing shot, 1 a talk shot, 2 or more a dialogue with that many subject slots."},
             "place": {"type": "string", "maxLength": 120, "description": "Where, in plain words (cocina, rooftop, bosque)."},
             "mood": {"type": "string", "maxLength": 120, "description": "The feeling, in plain words (triste, tense, laugh)."},
             "beat": {"enum": list(SUGGEST_BEATS), "description": "The use the shot serves; wins over the one speakers implies."},
             "format": {"enum": list(FORMATS)}, "kind": {"enum": list(KINDS)},
-            "limit": {"type": "integer", "minimum": 1, "maximum": SUGGEST_MAX_LIMIT}}
+            "limit": {"type": "integer", "minimum": 1, "maximum": SUGGEST_MAX_LIMIT}, "compact": _COMPACT}
 _BEATS = {"type": "array", "minItems": 1, "maxItems": 64, "items": {
     "type": "object", "additionalProperties": False, "required": ["t", "who", "verb"], "properties": {
         "t": {"type": "number", "minimum": 0, "description": "Scene seconds, from 0 to the end of the scene"}, "who": _ID, "verb": {"enum": list(BEAT_VERBS)},
@@ -95,9 +112,10 @@ _BEATS = {"type": "array", "minItems": 1, "maxItems": 64, "items": {
         "color": {"type": "string"}, "intensity": {"type": "number"}, "sound": {"type": "boolean"}, "volume": {"type": "number"}}}}
 _OPERATIONS = {
     "world3d.templates.list": (False, "Search or list Video 3D shots. With a query, limit defaults to 8 and is at most 24. With no query, cards stay in id order and limit defaults to 50, the maximum. offset pages either; the reply includes total. roles keeps templates that have every listed role (for a cast and a painted set: [\"subject_1\", \"background\"]); setting keeps one place (studio, city, sea, stage, space...); category is a category (cinema, action, product, music, space, drive) or a tag (anime, pixel, psx, dark-fantasy, creative, perspective, animated). workspace is required. " + _CARD_TRAITS, {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 50}, "offset": {"type": "integer", "minimum": 0}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
-    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles, setting, category and the trait filters (shot, use, move, kind, place, travel, subjects, format) work as in list, and every card carries the same traits and match; the reply lists unknown_words.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, **_FILTERS}, []),
+    CATALOG_OPERATION: (False, "Bounded Video 3D template search shared with list. Does not dump every description. roles, setting, category and the trait filters (shot, use, move, kind, place, travel, subjects, format) work as in list, and every card carries the same traits and match; the reply lists unknown_words.", {"query": {"type": "string"}, "category": {"type": "string"}, "language": {"enum": ["es", "en"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 24}, "roles": _ROLES, "setting": {"type": "string"}, "compact": _COMPACT, **_FILTERS}, []),
     "world3d.templates.get": (False, "Return one exact Video 3D template card, its editable document and previewUrl, the URL of our own render of the shot at mid-shot (GET it to see the shot; null on personal templates). The card's reference is a film still, for inspiration only. Unknown ids fail and never fall back to another shot.", {"template_id": _ID}, ["template_id"]),
     "world3d.templates.suggest": (False, "Suggest up to limit (default 3, at most 8) Video 3D cards for a shot described as a writer would: line, speakers, place, mood, beat, format, kind. Each card adds a reason in plain words (subjects, shot, moves, uses, place); the reply carries unknown_words and the filters it derived. Read-only: it never instantiates. Same cards and match rule as list.", _SUGGEST, []),
+    PLAN_OPERATION: (False, "Choose the Video 3D cards of a whole list of shots in ONE call, with variety: call it once for all the shots, then world3d.templates.suggest only to replace one. shots: [{key, text, speakers?, subjects?, place?, shot?, moving?}] (speakers as in suggest; subjects the subject slots the cast needs; shot the size you want; moving true asks a card that moves). Every shot is ranked with the catalog search, then the list is chosen in order: no template twice in a row, none more than twice (four when its place comes up again), shot sizes and camera moves alternating, avoid ids never taken, a still card only when nothing else fits. A place word (cocina and kitchen are one place) weighs more than the free words of a long line, and shots that name the same place keep one family: a stage-<mold> card with another roomCamera each time, or one scene and the cards played in its world. format portrait takes portrait cards and, when too few fit, landscape cards marked adapted (width 1080 and height 1920 in their scene3d, the export reframes the camera). per_shot (1-3, default 3) is the primary and its alternates; seed gives another valid plan, the same input and seed the same one. Each entry is {id, title, shot, moves, format, why, scene3d}: scene3d holds the keys to copy into a production scene3d shot (a Series kind 3d shot reads template and roomCamera). The reply is {plan: [{key, primary, alternates, warnings}], summary: {templates_used, repeats, formats}}. Shipped cards only (a personal template is not one the production compiler reads). Read-only: it never instantiates.", _PLAN, ["shots"]),
     "world3d.templates.user.put": (True, "Register a personal Video 3D template in the workspace. Browser localStorage is left untouched. Ids must start with user-. " + WARNING_DOC, {"id": _ID, "title": {"type": "string"}, "description": {"type": "string"}, "document": {"type": "object"}}, ["id", "title", "document"]),
     "world3d.scene.instantiate": (True, "Create an editable scene from an exact template id.", {"template_id": _ID}, ["template_id"]),
     "world3d.scene.inspect": (False, "List object ids, markers, traits and the current revision. " + LAYOUT_DOC + " " + WARNING_DOC, {"scene_id": _ID}, ["scene_id"]),
@@ -187,6 +205,8 @@ def _effect(name, data, workspace_dir):
         return _get(data, workspace_dir)
     if name == "world3d.templates.suggest":
         return _suggest(data, workspace_dir)
+    if name == PLAN_OPERATION:
+        return {"status": "completed", **plan_templates(data)}
     if name == "world3d.scene.inspect":
         return {"status": "completed", "scene": inspect_scene(data["workspace"], data["scene_id"], workspace_dir)}
     if name == "world3d.scene.preview":
@@ -228,8 +248,16 @@ def _search_report(data, workspace_dir):
                          roles=data.get("roles"), setting=data.get("setting"), **_filters(data))
 
 
+def _compact(data, report):
+    """``compact: true`` shortens every card of a reply (see ``world3d_template_compact``)."""
+    flag = data.get("compact")
+    if flag is not None and not isinstance(flag, bool):
+        raise World3DTemplateError("invalid_compact", "compact must be true or false")
+    return compact_report(report, data.get("language")) if flag else report
+
+
 def _search(data, workspace_dir):
-    return {"status": "completed", **_search_report(data, workspace_dir)}
+    return {"status": "completed", **_compact(data, _search_report(data, workspace_dir))}
 
 
 def _suggest(data, workspace_dir):
@@ -237,7 +265,7 @@ def _suggest(data, workspace_dir):
                               mood=str(data.get("mood") or ""), beat=data.get("beat"), format=data.get("format"),
                               kind=data.get("kind"), limit=data.get("limit"), workspace_dir=workspace_dir,
                               workspace=data["workspace"])
-    return {"status": "completed", **found}
+    return {"status": "completed", **_compact(data, found)}
 
 
 def _list_page(data, workspace_dir):
