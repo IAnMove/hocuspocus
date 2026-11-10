@@ -64,3 +64,19 @@ def test_dialogue_camera_rays_end_on_authored_room_surfaces(id_):
             assert surface in mold['surfaces'], (id_, size, camera['id'], surface)
             if surface.startswith('wall_'):
                 assert surface.removeprefix('wall_') in mold['walls']
+
+
+@pytest.mark.parametrize('id_', sorted(EXPECTED))
+def test_no_furniture_hides_a_window_or_a_door(id_):
+    from services.set_molds import mold_problems
+    for size in ('small', 'medium', 'large'):
+        assert mold_problems(resolve_mold(id_, size)) == [], (id_, size)
+
+
+def test_the_check_names_the_wardrobe_that_stood_in_front_of_the_bedroom_window():
+    from services.set_molds import mold_problems
+    mold = {'dimensions': [6, 6, 3], 'openings': [{'wall': 'left', 'kind': 'window', 'x': 0.45, 'width': 1.5, 'height': 1.3, 'sill': 0.96}],
+            'blocks': [{'id': 'wardrobe', 'kind': 'wardrobe', 'box': [-2.55, 0, -1, 0.7, 2.2, 1.6]}, {'id': 'curtain', 'kind': 'curtain', 'box': [-2.9, 0, -0.3, 0.1, 2.4, 1.0]}]}
+    assert mold_problems(mold) == ['hidden_opening: wardrobe covers 57% of the width of the left window (and all its height)']
+    mold['blocks'][0]['box'][2] = -2.2           # moved along the wall, clear of the glass
+    assert mold_problems(mold) == []
