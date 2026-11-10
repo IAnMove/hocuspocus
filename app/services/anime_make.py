@@ -16,6 +16,7 @@ from typing import Any
 
 from services.blob_builder import BlobTraitsError, _hex
 from services.blob_make import build_body, write_body
+from services.make_gates import pictures_gate, relief_gate, with_gates
 
 MAKE = "model3d.anime.make"
 HAIR_STYLES = ("none", "short", "bangs", "bob", "long", "twin_tails", "spiky", "ponytail", "bun")
@@ -324,8 +325,9 @@ def make_character(workspace_dir: Path, workspace: str, name: str, intent: str, 
     else:
         extra = _texture_files(workspace_dir, workspace, name, resolved, body) if resolved["style"] == "real" else {}
     written = write_body(workspace_dir, workspace, name, intent, body)
-    return {**written, **extra, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
-            "character": resolved["public"], "faceTraits": resolved["face"]}
+    reply = {**written, **extra, "kit_id": kit["kit_id"], "poses": kit["poses"], "preview": kit["preview"], "face": kit.get("face"),
+             "character": resolved["public"], "faceTraits": resolved["face"]}
+    return with_gates(reply, relief_gate(resolved, relief))
 
 
 def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:
@@ -347,6 +349,7 @@ def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dic
     if resolved["texture"]:
         painted = _picture_of(workspace_dir, workspace, resolved["texture"], "texture")
         head = _picture_of(workspace_dir, workspace, resolved["texture_head"], "texture_head") if resolved["texture_head"] else None
+        out["warnings"] = pictures_gate(resolved, painted, head)
         png = stack_atlas(painted, head, (guides["body"], guides["head"]), resolved["head_match"])
         frame = atlas_frame([parts[0][0]], lofted["layout"])
         skin = neck_skin(head) if head is not None else None

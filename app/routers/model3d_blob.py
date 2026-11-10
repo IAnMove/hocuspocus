@@ -27,6 +27,7 @@ def command_catalog():
                         "ponytail, twin_tails or bun. Synchronous: the reply is the finished GLB, so model3d.rig.status is not used. "
                         "Omit clips for idle, walk, talk, nod, wave, shrug, point and run. "
                         "A mesh the rig refuses returns not_humanoid and the rig's reason (hands_stuck, single_leg, …). "
+                        "The reply has humanoid {warnings, confidence}: the rig's notes (neck_not_found, arms_steep, short_legs, short_arms). "
                         "No GPU. The face, visemes and set textures are not part of this body.",
          "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                           "properties": {"version": {"const": 1, "type": "integer"},
@@ -50,7 +51,7 @@ def command_catalog():
                         "face_source (program, or qwen: a painted bald face given as face_image, a keyed workspace picture from image.remove_background, with the expressions as overlays), "
                         "face {nose, brows, line, ink}, clips. A PS2-era REALISTIC person instead: style real (gender man|woman, body, height, bottom trousers|skirt|shorts, skin, hair_style): "
                         "real proportions, a plain body and head with UVs into a texture atlas, no clothes: the answer gives guide_body_file and guide_head_file (grey pictures of the body and the head tiles in the same layout); paint them with generation.image (image_refs the guide, Qwen) and pass the results as texture (the body picture) and texture_head (the head picture) in a second call to dress the same body, as many times as you like. "
-                        "Returns rigged_file, faceAnchor, kit_id, poses, preview, face {fit, taper}, and for style real guide_body_file, guide_head_file, texture_file. Bind the rigged file to a model slot, then "
+                        "Returns rigged_file, faceAnchor, kit_id, poses, preview, face {fit, taper}, humanoid {warnings, confidence} (the rig's notes), warnings [{code, message}] (read them: relief_skipped, picture_not_2_to_1, picture_flat), and for style real guide_body_file, guide_head_file, texture_file and relief (applied|skipped, with texture_head). Bind the rigged file to a model slot, then "
                         "world3d.scene.face {kit_id, center, radii} and world3d.scene.talk. No GPU.",
          "inputSchema": {"type": "object", "additionalProperties": False, "required": ["version", "intent_id", "input"],
                           "properties": {"version": {"const": 1, "type": "integer"},
