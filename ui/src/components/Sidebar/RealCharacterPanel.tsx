@@ -91,7 +91,6 @@ export function RealCharacterPanel() {
     </label>
   )
   const blocked = active(job) || !workspace
-  const result = job?.status === 'completed' ? job.result : undefined
   return (
     <section className="rounded-lg border border-border p-3 flex flex-col gap-2" data-testid="real-character-panel">
       <h3 className="text-[11px] font-semibold uppercase tracking-wide text-text-muted">{t('makers.real.title')}</h3>
@@ -121,27 +120,7 @@ export function RealCharacterPanel() {
       </button>
       {active(job) && <button type="button" onClick={() => void stop()} className="text-[10px] underline text-text-secondary self-start">{t('makers.real.cancel')}</button>}
       {error && <p className="text-[10px] text-red-300">{error}</p>}
-      {job && (
-        <ol className="text-[10px] text-text-secondary" aria-label={t('makers.real.progress')}>
-          <li>{t(`makers.real.job.${job.status}`, { defaultValue: job.status })}</li>
-          {REAL_STEPS.map(id => {
-            const step = job.steps.find(item => item.id === id)
-            return <li key={id} data-testid={`real-step-${id}`}>{t(`makers.real.steps.${id}`)}: {t(`makers.real.status.${step?.status ?? 'waiting'}`, { defaultValue: step?.status ?? '' })}</li>
-          })}
-          {job.error && <li className="text-red-300">{job.error}</li>}
-        </ol>
-      )}
-      {result && (
-        <div className="flex flex-col gap-1" data-testid="real-result">
-          {result.preview && <img src={result.preview} alt={t('makers.real.facePicture')} className="w-24 rounded border border-border" />}
-          <p className="text-[10px] text-text-secondary">{t('makers.real.made', { file: result.rigged_file, kit: result.kit_id ?? '—' })}</p>
-          {result.warnings.length > 0 && (
-            <ul className="text-[10px] text-amber-300" aria-label={t('makers.real.warnings')}>
-              {result.warnings.map((item, index) => <li key={`${item.code}-${index}`}>{item.code}: {item.message}</li>)}
-            </ul>
-          )}
-        </div>
-      )}
+      {job && <RealJobView job={job} />}
       <h4 className="text-[10px] font-semibold uppercase text-text-muted">{t('makers.real.saved')}</h4>
       {saved.length === 0 && <p className="text-[10px] text-text-muted">{t('makers.real.none')}</p>}
       <ul className="flex flex-col gap-1">
@@ -154,5 +133,34 @@ export function RealCharacterPanel() {
         ))}
       </ul>
     </section>
+  )
+}
+
+/** The job's steps, then the made character with its warnings. */
+function RealJobView({ job }: { job: RealJob }) {
+  const { t } = useUiTranslation('studio')
+  const result = job.status === 'completed' ? job.result : undefined
+  return (
+    <>
+      <ol className="text-[10px] text-text-secondary" aria-label={t('makers.real.progress')}>
+        <li>{t(`makers.real.job.${job.status}`, { defaultValue: job.status })}</li>
+        {REAL_STEPS.map(id => {
+          const step = job.steps.find(item => item.id === id)
+          return <li key={id} data-testid={`real-step-${id}`}>{t(`makers.real.steps.${id}`)}: {t(`makers.real.status.${step?.status ?? 'waiting'}`, { defaultValue: step?.status ?? '' })}</li>
+        })}
+        {job.error && <li className="text-red-300">{job.error}</li>}
+      </ol>
+      {result && (
+        <div className="flex flex-col gap-1" data-testid="real-result">
+          {result.preview && <img src={result.preview} alt={t('makers.real.facePicture')} className="w-24 rounded border border-border" />}
+          <p className="text-[10px] text-text-secondary">{t('makers.real.made', { file: result.rigged_file, kit: result.kit_id ?? '—' })}</p>
+          {result.warnings.length > 0 && (
+            <ul className="text-[10px] text-amber-300" aria-label={t('makers.real.warnings')}>
+              {result.warnings.map((item, index) => <li key={`${item.code}-${index}`}>{item.code}: {item.message}</li>)}
+            </ul>
+          )}
+        </div>
+      )}
+    </>
   )
 }
