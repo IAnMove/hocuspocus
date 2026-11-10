@@ -566,7 +566,7 @@ export class FaceDecalRuntime {
       this.originalMap = face.map
       applyMapUv(face, true)
       face.map = this.texture
-      face.transparent = Boolean(face.userData.atlas?.faceFeather)   // a feathered border needs the blend
+      face.transparent = Boolean(face.userData.atlas?.faceFeather) && !face.userData.atlas?.headMap   // a feathered border needs the blend; over a head map the patch reads the map there instead
       face.needsUpdate = true
     }
   }

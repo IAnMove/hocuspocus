@@ -656,7 +656,8 @@ def loft_parts(spec: dict, layout: dict, fit=None, relief=None) -> list[tuple[Me
     if spec.get("atlas"):
         from services.blob_texture import atlas_frame, atlas_uv, atlas_uvs
         frame = atlas_frame([mesh], layout)
-        body_uvs = atlas_uvs(mesh, frame)
+        head_map = spec.get("atlas") == "map"
+        body_uvs = atlas_uvs(mesh, frame, head_map)
         # without a kit the face patch shows the atlas too: the front tile whole (the patch is only the face, 52 degrees each way), not a white mask
         if relief is not None:
             face, uvs = face_relief_patch(layout, relief, frame)
@@ -666,7 +667,7 @@ def loft_parts(spec: dict, layout: dict, fit=None, relief=None) -> list[tuple[Me
     if hair.vertices:
         hair_uvs = hair.uvs
         if atlas and spec["hair"].get("texture") == "photo":
-            hair_uvs = atlas_uvs(hair, frame)   # the cap takes the head picture's own hair, draped like the skull
+            hair_uvs = atlas_uvs(hair, frame, spec.get("atlas") == "map")   # the cap takes the head picture's own hair, draped like the skull
         parts.append((hair, "hair", hair_uvs))
     return parts
 

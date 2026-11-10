@@ -277,7 +277,7 @@ def _normalize(traits: dict) -> dict:
         **({"mesh": mesh} if "mesh" in traits else {}),
         **({"outfit": outfit} if "outfit" in traits else {}),
         **({"realism": _choice(traits["realism"], _REALISMS, "invalid_realism", "realism")} if "realism" in traits else {}),
-        **({"atlas": True} if traits.get("atlas") is True and mesh == "loft" else {}),
+        **({"atlas": traits["atlas"]} if (traits.get("atlas") is True or traits.get("atlas") == "map") and mesh == "loft" else {}),   # "map": the head's UVs point into the joined head map
         **({"skull_fit": _skull_fit(traits["skull_fit"])} if traits.get("skull_fit") else {}),
         **(_blocky_fields(traits) if mesh == "blocky" else {}),
         "height": _height(traits.get("height", 1.8)),
