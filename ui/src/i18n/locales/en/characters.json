@@ -826,7 +826,11 @@
         "figure_height": "uneven height",
         "repeated_poses": "repeated poses",
         "direction_mirror": "a copy of another direction",
-        "walk_gait": "legs at the wrong moment of the step"
+        "walk_gait": "legs at the wrong moment of the step",
+        "walk_foot_order": "the poses are not in the order of the walk",
+        "walk_foot_alternation": "the lower foot does not alternate",
+        "walk_loop_seam": "the cycle does not close",
+        "walk_facing": "a pose looks the other way"
       }
     },
     "make": "Make",

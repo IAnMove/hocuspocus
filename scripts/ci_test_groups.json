@@ -522,6 +522,7 @@
         "tests/test_speech_qa.py",
         "tests/test_character_animations.py",
         "tests/test_walk_guides.py",
+        "tests/test_walk_gait_metrics.py",
         "tests/test_character_styles.py",
         "tests/test_character_tools.py",
         "tests/test_series_jobs.py",
@@ -1101,6 +1102,14 @@
       "prefix": "app/services/walk_guides.py",
       "paths": [
         "tests/test_walk_guides.py",
+        "tests/test_character_animation_job.py",
+        "tests/test_character_animations.py"
+      ]
+    },
+    {
+      "prefix": "app/services/walk_gait_metrics.py",
+      "paths": [
+        "tests/test_walk_gait_metrics.py",
         "tests/test_character_animation_job.py",
         "tests/test_character_animations.py"
       ]

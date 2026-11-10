@@ -110,7 +110,7 @@ export const reviewedByAgent = (animation: Pick<KitAnimation, 'reviewState' | 'r
 
 /** The automatic checks of the sheet, by the id the server reports them with (services/character_animation_checks.py). */
 export const SHEET_CHECK_IDS = ['cell_count', 'cell_size', 'filled_cells', 'clean_alpha', 'silhouette', 'ground_line', 'scale_spread', 'scale_measure',
-  'figure_height', 'repeated_poses', 'direction_mirror', 'walk_gait'] as const
+  'figure_height', 'repeated_poses', 'direction_mirror', 'walk_gait', 'walk_foot_order', 'walk_foot_alternation', 'walk_loop_seam', 'walk_facing'] as const
 export type SheetCheckId = typeof SHEET_CHECK_IDS[number]
 export const isSheetCheckId = (id: string): id is SheetCheckId => (SHEET_CHECK_IDS as readonly string[]).includes(id)
 

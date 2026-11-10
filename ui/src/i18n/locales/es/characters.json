@@ -826,7 +826,11 @@
         "figure_height": "altura irregular",
         "repeated_poses": "poses repetidas",
         "direction_mirror": "copia de otra dirección",
-        "walk_gait": "piernas en otro momento del paso"
+        "walk_gait": "piernas en otro momento del paso",
+        "walk_foot_order": "las poses no siguen el orden del paso",
+        "walk_foot_alternation": "el pie más bajo no se alterna",
+        "walk_loop_seam": "el ciclo no cierra",
+        "walk_facing": "una pose mira al otro lado"
       }
     },
     "make": "Crear",

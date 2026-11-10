@@ -853,7 +853,7 @@ def test_the_set_asks_for_the_agents_approval_only_in_one_shot_and_leaves_a_copi
     kit = _kit(root)["animations"]
     assert kit["walk-front34"]["reviewState"] == "approved" and by_name["walk-front34"]["autoApproved"] is True
     copied = by_name["walk-front"]
-    assert copied["autoApproved"] is False and copied["failed"] == ["walk_gait", "direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
+    assert copied["autoApproved"] is False and copied["failed"] == ["walk_gait", "walk_foot_alternation", "direction_mirror"] and kit["walk-front"]["reviewState"] == "pending"
     assert jobs.status(WS, copied["jobId"])["reviewNote"].startswith("Automatic checks failed: walk_gait 0."), \
         "a profile copied into the front has the strides of a profile too"
     assert kit["walk-back34"]["reviewState"] == "approved", "a sheet that fails the checks does not stop the next one"

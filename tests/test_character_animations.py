@@ -543,6 +543,8 @@ def test_a_twelve_pose_walk_passes_the_cycle_checks_when_the_figures_are_one_siz
     assert {"figure_height", "repeated_poses", "ground_line", "cell_count"} <= set(checks)
     assert checks["figure_height"]["limit"] == 0.03 and checks["repeated_poses"]["value"] == 1 and checks["repeated_poses"]["limit"] == 2
     assert "direction_mirror" in checks and checks["direction_mirror"]["ok"], "a kit with no other direction has nothing to repeat"
+    assert {"walk_foot_order", "walk_loop_seam", "walk_facing"} <= set(checks) and "walk_foot_alternation" not in checks, "a profile walk lists the readings it can make"
+    assert all(isinstance(check.get("cells"), list) for check in checks.values() if check["id"].startswith("walk_") and check["id"] != "walk_gait")
 
 
 def test_a_pose_drawn_a_tenth_smaller_fails_the_same_height_check_and_a_hair_of_difference_does_not(folder):
@@ -590,8 +592,9 @@ def test_the_cycle_checks_run_only_on_the_animations_that_ask_for_them(folder):
     four = [_figure(folder / f"p{index}.png", legs=(30 + index, 100 - index)) for index in range(4)]
     built = _sheet_of(folder, four)
     ids = set(_checks(built, "walk"))
-    assert {"figure_height", "repeated_poses"} <= ids and not ids & {"direction_mirror", "walk_gait"}, "the four-pose walk asks for two of the four"
-    assert not set(_checks(built, "wave")) & {"figure_height", "repeated_poses", "direction_mirror", "walk_gait"}, "a gesture is checked as it always was"
+    asked = {"direction_mirror", "walk_gait", "walk_foot_order", "walk_foot_alternation", "walk_loop_seam", "walk_facing"}
+    assert {"figure_height", "repeated_poses"} <= ids and not ids & asked, "the four-pose walk asks for two of the four"
+    assert not set(_checks(built, "wave")) & ({"figure_height", "repeated_poses"} | asked), "a gesture is checked as it always was"
 
 
 def _four_pose_walk(folder: Path, name: str, *, heights: dict[int, int] | None = None, same: dict[int, int] | None = None) -> dict:
