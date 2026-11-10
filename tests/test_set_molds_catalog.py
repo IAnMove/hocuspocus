@@ -5,7 +5,7 @@ from services.set_molds import catalog, resolve_mold, CAMERAS, surface_sizes
 RECIPES={'despacho','salon','cocina','dormitorio','bar','aula','hemiciclo','plato_tv','sala_prensa','hospital','cabina_avion','vagon','coche_interior','cabina','cabina_nave','juzgado','oficina_diafana'}
 SHAPES={'sala','sala_ventana','mostrador','filas','pasillo','umbral','escalera','calle','plaza','orilla','escenario_publico','vehiculo','azotea'}
 EXPECTED=RECIPES|SHAPES
-CABINS={'cabina','coche_interior','cabina_nave'}      # a seated mark sits in the seat's own cushion: the occupant is lowered into it
+CABINS={'cabina','coche_interior','cabina_nave','despacho'}      # a seated mark sits in the seat's own cushion: the occupant is lowered into it
 
 
 def test_every_mold_has_complete_metadata():
@@ -37,7 +37,7 @@ def test_seven_cameras_see_a_character_and_seated_marks_clear_boxes(id_):
             if mark['pose']!='sit': continue
             x,y,z=mark['position']
             for block in mold['blocks']:
-                if block['kind'] in ('seat','bench') and block.get('rot') is not None or block['kind']=='seat' and id_ in CABINS: continue   # a seated mark IS on its seat
+                if block['kind'] in ('seat','bench') and block.get('rot') is not None or block['kind'] in ('seat','chair') and id_ in CABINS: continue   # a seated mark IS on its seat
                 bx,by,bz,w,h,d=block['box']
                 overlaps=abs(x-bx)<w/2+.2 and abs(z-bz)<d/2+.2 and y<by+h and y+1.7>by
                 assert not overlaps,(id_,size,mark['id'],block['id'])

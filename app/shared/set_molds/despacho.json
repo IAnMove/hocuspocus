@@ -1,4 +1,9 @@
 {
+  "id": "despacho",
+  "title": {
+    "es": "Despacho",
+    "en": "Office"
+  },
   "kind": "interior",
   "sizes": {
     "small": [
@@ -7,9 +12,9 @@
       2.8
     ],
     "medium": [
-      6,
-      5,
-      3
+      6.0,
+      5.0,
+      3.0
     ],
     "large": [
       9,
@@ -42,11 +47,59 @@
   ],
   "blocks": [
     {
+      "id": "shelf",
+      "kind": "shelf",
+      "box": [
+        0.0,
+        0.0,
+        -2.31,
+        3.0,
+        2.2,
+        0.34
+      ],
+      "surfaces": [
+        "shelf_front",
+        "shelf_top"
+      ]
+    },
+    {
+      "id": "shelf_books",
+      "kind": "shelf",
+      "box": [
+        0.0,
+        0.12,
+        -2.135,
+        2.76,
+        1.96,
+        0.01
+      ],
+      "surfaces": [
+        "books_front",
+        "books_top"
+      ]
+    },
+    {
+      "id": "shelf_cornice",
+      "kind": "shelf",
+      "box": [
+        0.0,
+        2.2,
+        -2.3,
+        3.1,
+        0.1,
+        0.38
+      ],
+      "surfaces": [
+        "shelf_front",
+        "shelf_top"
+      ]
+    },
+    {
       "id": "desk",
       "kind": "desk",
       "box": [
-        0,
-        0,
+        0.0,
+        0.0,
         -0.8,
         1.8,
         0.75,
@@ -58,18 +111,621 @@
       ]
     },
     {
-      "id": "shelf",
-      "kind": "shelf",
+      "id": "desk_inlay",
+      "kind": "desk",
       "box": [
-        0,
-        0,
-        -2.25,
-        3,
-        2.2,
-        0.4
+        0.0,
+        0.75,
+        -0.8,
+        1.56,
+        0.012,
+        0.6
       ],
       "surfaces": [
-        "shelf_front"
+        "inlay_front",
+        "inlay_top"
+      ]
+    },
+    {
+      "id": "desk_drawer_a",
+      "kind": "desk",
+      "box": [
+        -0.55,
+        0.1,
+        -0.395,
+        0.58,
+        0.5,
+        0.02
+      ],
+      "surfaces": [
+        "desk_front",
+        "desk_top"
+      ]
+    },
+    {
+      "id": "desk_knob_a",
+      "kind": "trim",
+      "box": [
+        -0.55,
+        0.33,
+        -0.375,
+        0.07,
+        0.04,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "desk_drawer_b",
+      "kind": "desk",
+      "box": [
+        0.55,
+        0.1,
+        -0.395,
+        0.58,
+        0.5,
+        0.02
+      ],
+      "surfaces": [
+        "desk_front",
+        "desk_top"
+      ]
+    },
+    {
+      "id": "desk_knob_b",
+      "kind": "trim",
+      "box": [
+        0.55,
+        0.33,
+        -0.375,
+        0.07,
+        0.04,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "desk_plinth",
+      "kind": "desk",
+      "box": [
+        0.0,
+        0.0,
+        -0.395,
+        1.74,
+        0.07,
+        0.02
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "chair_seat",
+      "kind": "chair",
+      "box": [
+        0.0,
+        0.0,
+        -1.5,
+        0.54,
+        0.45,
+        0.52
+      ],
+      "surfaces": [
+        "chair_front",
+        "chair_top"
+      ]
+    },
+    {
+      "id": "chair_back",
+      "kind": "chair",
+      "box": [
+        0.0,
+        0.45,
+        -1.78,
+        0.54,
+        0.58,
+        0.08
+      ],
+      "surfaces": [
+        "chair_front",
+        "chair_top"
+      ],
+      "rot": [
+        0.1,
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armchair",
+      "kind": "chair",
+      "box": [
+        -1.9,
+        0.0,
+        0.3,
+        0.8,
+        0.42,
+        0.8
+      ],
+      "surfaces": [
+        "chair_front",
+        "chair_top"
+      ]
+    },
+    {
+      "id": "armchair_back",
+      "kind": "chair",
+      "box": [
+        -2.3,
+        0.42,
+        0.3,
+        0.12,
+        0.5,
+        0.8
+      ],
+      "surfaces": [
+        "chair_front",
+        "chair_top"
+      ],
+      "rot": [
+        0,
+        0,
+        0.12
+      ]
+    },
+    {
+      "id": "armchair_arm_a",
+      "kind": "chair",
+      "box": [
+        -1.9,
+        0.42,
+        -0.06,
+        0.8,
+        0.14,
+        0.1
+      ],
+      "surfaces": [
+        "chair_front",
+        "chair_top"
+      ]
+    },
+    {
+      "id": "armchair_arm_b",
+      "kind": "chair",
+      "box": [
+        -1.9,
+        0.42,
+        0.66,
+        0.8,
+        0.14,
+        0.1
+      ],
+      "surfaces": [
+        "chair_front",
+        "chair_top"
+      ]
+    },
+    {
+      "id": "side_table",
+      "kind": "desk",
+      "box": [
+        -1.9,
+        0.0,
+        1.35,
+        0.45,
+        0.55,
+        0.45
+      ],
+      "surfaces": [
+        "desk_front",
+        "desk_top"
+      ]
+    },
+    {
+      "id": "side_lamp_base",
+      "kind": "lamp",
+      "box": [
+        -1.9,
+        0.55,
+        1.35,
+        0.1,
+        0.18,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "side_lamp_shade",
+      "kind": "lamp",
+      "box": [
+        -1.9,
+        0.71,
+        1.35,
+        0.28,
+        0.22,
+        0.28
+      ],
+      "surfaces": [
+        "lamp_front",
+        "lamp_top"
+      ]
+    },
+    {
+      "id": "window_sill",
+      "kind": "trim",
+      "box": [
+        -2.9,
+        0.86,
+        0.0,
+        0.2,
+        0.04,
+        1.9
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_frame_top",
+      "kind": "trim",
+      "box": [
+        -2.97,
+        2.3,
+        0.0,
+        0.06,
+        0.05,
+        1.8
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_frame_a",
+      "kind": "trim",
+      "box": [
+        -2.97,
+        0.9,
+        -0.85,
+        0.06,
+        1.4,
+        0.05
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_frame_b",
+      "kind": "trim",
+      "box": [
+        -2.97,
+        0.9,
+        0.85,
+        0.06,
+        1.4,
+        0.05
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "window_mullion",
+      "kind": "trim",
+      "box": [
+        -2.975,
+        0.9,
+        0.0,
+        0.03,
+        1.4,
+        0.04
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "curtain_rod",
+      "kind": "trim",
+      "box": [
+        -2.9,
+        2.55,
+        0.0,
+        0.05,
+        0.04,
+        2.6
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "curtain_a",
+      "kind": "curtain",
+      "box": [
+        -2.9,
+        0.1,
+        -1.15,
+        0.12,
+        2.5,
+        0.46
+      ],
+      "surfaces": [
+        "curtain_front",
+        "curtain_top"
+      ]
+    },
+    {
+      "id": "curtain_b",
+      "kind": "curtain",
+      "box": [
+        -2.9,
+        0.1,
+        1.15,
+        0.12,
+        2.5,
+        0.46
+      ],
+      "surfaces": [
+        "curtain_front",
+        "curtain_top"
+      ]
+    },
+    {
+      "id": "door_frame_a",
+      "kind": "trim",
+      "box": [
+        2.97,
+        0.0,
+        0.5,
+        0.06,
+        2.15,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "door_frame_b",
+      "kind": "trim",
+      "box": [
+        2.97,
+        0.0,
+        1.5,
+        0.06,
+        2.15,
+        0.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "door_frame_top",
+      "kind": "trim",
+      "box": [
+        2.97,
+        2.1,
+        1.0,
+        0.06,
+        0.08,
+        1.1
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "door_handle",
+      "kind": "trim",
+      "box": [
+        2.94,
+        1.0,
+        0.65,
+        0.05,
+        0.04,
+        0.14
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "rug",
+      "kind": "rug",
+      "box": [
+        0.2,
+        0.0,
+        0.3,
+        3.2,
+        0.012,
+        2.4
+      ],
+      "surfaces": [
+        "rug_front",
+        "rug_top"
+      ]
+    },
+    {
+      "id": "plant_pot",
+      "kind": "trim",
+      "box": [
+        2.45,
+        0.0,
+        -2.0,
+        0.34,
+        0.34,
+        0.34
+      ],
+      "surfaces": [
+        "plant_front",
+        "plant_top"
+      ]
+    },
+    {
+      "id": "plant_leaves",
+      "kind": "plant",
+      "box": [
+        2.45,
+        0.34,
+        -2.0,
+        0.55,
+        0.95,
+        0.55
+      ],
+      "surfaces": [
+        "leaf_front",
+        "leaf_top"
+      ]
+    },
+    {
+      "id": "diploma_a",
+      "kind": "art",
+      "box": [
+        -2.975,
+        1.5,
+        -1.9,
+        0.03,
+        0.5,
+        0.38
+      ],
+      "surfaces": [
+        "art_front",
+        "art_top"
+      ]
+    },
+    {
+      "id": "diploma_b",
+      "kind": "art",
+      "box": [
+        -2.975,
+        1.5,
+        -1.3,
+        0.03,
+        0.5,
+        0.38
+      ],
+      "surfaces": [
+        "art_front",
+        "art_top"
+      ]
+    },
+    {
+      "id": "diploma_c",
+      "kind": "art",
+      "box": [
+        -2.975,
+        1.5,
+        -0.7,
+        0.03,
+        0.5,
+        0.38
+      ],
+      "surfaces": [
+        "art_front",
+        "art_top"
+      ]
+    },
+    {
+      "id": "skirting_left",
+      "kind": "trim",
+      "box": [
+        -2.985,
+        0.0,
+        0.0,
+        0.03,
+        0.12,
+        4.9
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_right_a",
+      "kind": "trim",
+      "box": [
+        2.985,
+        0.0,
+        -1.0,
+        0.03,
+        0.12,
+        3.0
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_right_b",
+      "kind": "trim",
+      "box": [
+        2.985,
+        0.0,
+        2.0,
+        0.03,
+        0.12,
+        1.0
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "skirting_front",
+      "kind": "trim",
+      "box": [
+        0.0,
+        0.0,
+        2.485,
+        5.9,
+        0.12,
+        0.03
+      ],
+      "surfaces": [
+        "trim_front",
+        "trim_top"
+      ]
+    },
+    {
+      "id": "ceiling_lamp",
+      "kind": "lamp",
+      "box": [
+        0.0,
+        2.9,
+        0.0,
+        0.46,
+        0.1,
+        0.46
+      ],
+      "surfaces": [
+        "lamp_front",
+        "lamp_top"
       ]
     }
   ],
@@ -84,7 +740,28 @@
     "door",
     "desk_front",
     "desk_top",
-    "shelf_front"
+    "shelf_front",
+    "shelf_top",
+    "books_front",
+    "books_top",
+    "inlay_front",
+    "inlay_top",
+    "chair_front",
+    "chair_top",
+    "trim_front",
+    "trim_top",
+    "curtain_front",
+    "curtain_top",
+    "rug_front",
+    "rug_top",
+    "lamp_front",
+    "lamp_top",
+    "plant_front",
+    "plant_top",
+    "leaf_front",
+    "leaf_top",
+    "art_front",
+    "art_top"
   ],
   "marks": [
     {
@@ -225,7 +902,7 @@
       "on": "desk_top",
       "position": [
         -0.6,
-        0.75,
+        0.76,
         -0.8
       ],
       "maxHeight": 0.5
@@ -235,7 +912,7 @@
       "on": "desk_top",
       "position": [
         0.6,
-        0.75,
+        0.76,
         -0.8
       ],
       "maxHeight": 0.5
@@ -254,7 +931,7 @@
       "id": "wall_picture",
       "on": "wall_back",
       "position": [
-        1.9,
+        2.2,
         1.3,
         -2.48
       ],
@@ -263,42 +940,122 @@
   ],
   "defaultSkin": {
     "floor": {
-      "color": "#8a6f55"
+      "pattern": "wood",
+      "color": "#8a6a46"
     },
     "ceiling": {
-      "color": "#eee9df"
+      "pattern": "plaster",
+      "color": "#ece6da"
     },
     "wall_back": {
-      "color": "#d8d2c4"
+      "pattern": "plaster",
+      "color": "#a9b3a0"
+    },
+    "wall_left": {
+      "pattern": "plaster",
+      "color": "#a9b3a0"
+    },
+    "wall_right": {
+      "pattern": "plaster",
+      "color": "#a9b3a0"
+    },
+    "wall_front": {
+      "pattern": "plaster",
+      "color": "#a9b3a0"
+    },
+    "window_view": {
+      "view": "day_window"
+    },
+    "door": {
+      "pattern": "wood",
+      "color": "#6e4d33"
     },
     "desk_front": {
+      "pattern": "wood",
       "color": "#71513a"
     },
     "desk_top": {
-      "color": "#a0815b"
+      "pattern": "wood",
+      "color": "#7a5a40"
     },
     "shelf_front": {
+      "pattern": "wood",
       "color": "#523f32"
     },
-    "wall_front": {
-      "color": "#d8d2c4"
+    "shelf_top": {
+      "pattern": "wood",
+      "color": "#523f32"
     },
-    "wall_left": {
-      "color": "#d8d2c4"
+    "books_front": {
+      "pattern": "books",
+      "color": "#ffffff"
     },
-    "wall_right": {
-      "color": "#d8d2c4"
+    "books_top": {
+      "color": "#2a2018"
     },
-    "window_view": {
-      "color": "#385872"
+    "inlay_front": {
+      "pattern": "leather",
+      "color": "#2f4a3a"
     },
-    "door": {
-      "color": "#b89f80"
+    "inlay_top": {
+      "pattern": "leather",
+      "color": "#2f4a3a"
+    },
+    "chair_front": {
+      "pattern": "leather",
+      "color": "#4a2f22"
+    },
+    "chair_top": {
+      "pattern": "leather",
+      "color": "#55392a"
+    },
+    "trim_front": {
+      "pattern": "plastic",
+      "color": "#e6dfd1"
+    },
+    "trim_top": {
+      "pattern": "plastic",
+      "color": "#eee8da"
+    },
+    "curtain_front": {
+      "pattern": "fabric",
+      "color": "#7a4a2a"
+    },
+    "curtain_top": {
+      "pattern": "fabric",
+      "color": "#7a4a2a"
+    },
+    "rug_front": {
+      "pattern": "carpet",
+      "color": "#6a3f36"
+    },
+    "rug_top": {
+      "pattern": "carpet",
+      "color": "#6a3f36"
+    },
+    "lamp_front": {
+      "color": "#fff1cf"
+    },
+    "lamp_top": {
+      "color": "#fff6dc"
+    },
+    "plant_front": {
+      "color": "#a0562f"
+    },
+    "plant_top": {
+      "color": "#3b2a1e"
+    },
+    "leaf_front": {
+      "color": "#3f7a3e"
+    },
+    "leaf_top": {
+      "color": "#4c8c48"
+    },
+    "art_front": {
+      "color": "#e8e1cf"
+    },
+    "art_top": {
+      "color": "#d9d0b8"
     }
-  },
-  "id": "despacho",
-  "title": {
-    "es": "Despacho",
-    "en": "Office"
   }
 }

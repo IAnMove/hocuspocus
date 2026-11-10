@@ -7,7 +7,7 @@ import { canvasTexture } from './atmos/textures.ts'
 /** Tiles repeat every `tile_m` metres. */
 export const TILE_PATTERNS = ['leather', 'fabric', 'plastic', 'quilt', 'carpet', 'metal', 'wood', 'plaster', 'tile'] as const
 /** Faces are painted once over the whole face they skin (an instrument cluster, a radio), so they ignore `tile_m`. */
-export const FACE_PATTERNS = ['dials', 'radio'] as const
+export const FACE_PATTERNS = ['dials', 'radio', 'books'] as const
 export const ROOM_PATTERNS = [...TILE_PATTERNS, ...FACE_PATTERNS] as const
 export type TilePattern = (typeof TILE_PATTERNS)[number]
 export type RoomPattern = (typeof ROOM_PATTERNS)[number]
@@ -79,15 +79,38 @@ function gauge(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number,
   ctx.fillStyle = '#2a2d33'; ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI * 2); ctx.fill()
 }
 
-/** An instrument cluster (two gauges and a small display, 0.52 x 0.2 m) or a radio (display, two knobs, presets, a tape slot, 0.34 x 0.3 m). */
+const BOOK_COLOURS = ['#7a2f2f', '#2f4a6b', '#3d5a3a', '#8a6a2f', '#5a3b5e', '#2b2b30', '#9a8b6a', '#4a6a70', '#6b3f2a', '#a05a3a']
+
+/** Five shelves of book spines (a 3 x 2 m bookcase): widths, heights, colours and the odd leaning book come from a hash, so the same shelf is always the same. */
+function paintBooks(ctx: CanvasRenderingContext2D, w: number, h: number) {
+  ctx.fillStyle = '#1c1511'; ctx.fillRect(0, 0, w, h)
+  const rows = 5, rowH = h / rows
+  for (let r = 0; r < rows; r++) {
+    let x = 6
+    const floor = (r + 1) * rowH - 6
+    for (let i = 0; x < w - 10; i++) {
+      const bw = 9 + hash2(r, i, 41) * 16, bh = rowH * (0.55 + hash2(r, i, 42) * 0.38), colour = BOOK_COLOURS[Math.floor(hash2(r, i, 43) * BOOK_COLOURS.length)]
+      if (hash2(r, i, 44) > 0.93) { x += 18 + hash2(r, i, 45) * 40; continue }                       // a gap
+      ctx.fillStyle = colour; ctx.fillRect(x, floor - bh, bw, bh)
+      ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fillRect(x + 1, floor - bh, 2, bh)
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(x + bw - 2, floor - bh, 2, bh)
+      ctx.fillStyle = 'rgba(230,210,150,0.55)'; ctx.fillRect(x + 2, floor - bh + bh * 0.2, Math.max(2, bw - 4), 2); ctx.fillRect(x + 2, floor - bh * 0.3, Math.max(2, bw - 4), 2)
+      x += bw + 1
+    }
+    ctx.fillStyle = '#4a3626'; ctx.fillRect(0, floor, w, 6)                                       // the board each row stands on
+  }
+}
+
+/** An instrument cluster (two gauges and a small display, 0.52 x 0.2 m), a radio (display, two knobs, presets, a tape slot, 0.34 x 0.3 m) or a bookcase (3 x 2 m). */
 export function faceTexture(name: (typeof FACE_PATTERNS)[number]): Texture | null {
   if (typeof document === 'undefined') return null
-  const [w, h] = name === 'dials' ? [520, 200] : [340, 300]
+  const [w, h] = name === 'dials' ? [520, 200] : name === 'books' ? [600, 440] : [340, 300]
   const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d')
   if (!ctx) return null
   canvas.width = w; canvas.height = h
   ctx.fillStyle = '#0d0f13'; ctx.fillRect(0, 0, w, h)
-  if (name === 'dials') {
+  if (name === 'books') paintBooks(ctx, w, h)
+  else if (name === 'dials') {
     gauge(ctx, 130, 102, 78, 0.42); gauge(ctx, 390, 102, 78, 0.28)
     ctx.fillStyle = '#10251a'; ctx.fillRect(222, 62, 76, 56); ctx.fillStyle = '#6dff9a'
     for (let i = 0; i < 4; i++) ctx.fillRect(230 + i * 16, 74, 10, 14 + (i % 2) * 6)
