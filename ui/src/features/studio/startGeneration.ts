@@ -26,6 +26,9 @@ import {
 import type { GenerationSubmissionContext } from './generationProvenance'
 import i18n from '../../i18n'
 import { imageBatchPairs, MAX_IMAGE_BATCH_JOBS } from './imageBatch'
+import {
+  batchJobParams, referenceJobsOf, referenceRowIntents, usesSeparateEdits, withSingleReferenceJob,
+} from './referenceRowJobs'
 import { mergeVideoPromptLetters } from '../../lib/studioImageEdit'
 
 export type { ScheduledPromptSubmission, StudioImageIntent, StudioImageIntentSource }
@@ -352,6 +355,64 @@ export function createStoreImagePorts(host: StudioImageStoreHost): StudioImagePo
   }
 }
 
+/** One upload per picture for the whole batch: rows often repeat the same file. */
+function shareUploads(upload: StudioImagePorts['uploadImage']): StudioImagePorts['uploadImage'] {
+  const uploads = new Map<File, ReturnType<typeof upload>>()
+  return file => {
+    const known = uploads.get(file)
+    if (known) return known
+    const pending = upload(file)
+    uploads.set(file, pending)
+    pending.catch(() => uploads.delete(file))
+    return pending
+  }
+}
+
+function enqueueImageBatch(
+  intents: StudioImageIntent[],
+  ports: StudioImagePorts,
+  batchId: string,
+  context?: GenerationSubmissionContext,
+): Promise<GenerationReceiptLike | void> {
+  const pending = inFlight.get(batchId)
+  if (pending) return pending
+  const batchPorts = { ...ports, uploadImage: shareUploads(ports.uploadImage) }
+  const work = (async () => {
+    let result: GenerationReceiptLike | void = undefined
+    let failed = 0
+    for (let index = 0; index < intents.length; index++) {
+      result = await startStudioImageGeneration(intents[index], batchPorts, undefined, {
+        ...context, actor: context?.actor ?? 'user', commandId: `${batchId}-${index + 1}`,
+      })
+      if (!result) failed++
+    }
+    if (failed) throw new Error(i18n.t('studio:imageBatch.failed', { count: failed, total: intents.length }))
+    return result
+  })()
+  inFlight.set(batchId, work)
+  void work.then(() => inFlight.delete(batchId), () => inFlight.delete(batchId))
+  return work
+}
+
+function startSeparateImageJobs(
+  source: StudioImageIntentSource,
+  ports: StudioImagePorts,
+  context?: GenerationSubmissionContext,
+): Promise<GenerationReceiptLike | void> {
+  const pairs = imageBatchPairs(String(source.params?.prompt || ''), source.imageBatch, source.imageStudioIntent === 'edit')
+  if (!pairs.length || pairs.length > MAX_IMAGE_BATCH_JOBS) throw new Error(i18n.t('studio:imageBatch.limit', { count: MAX_IMAGE_BATCH_JOBS }))
+  if (pairs.some(pair => pair.source) && source.params?.image_mask) throw new Error(i18n.t('studio:imageBatch.noMask'))
+  // Freeze every combination before the first await: later form/workspace
+  // edits must not alter the rest of an already submitted batch.
+  const intents = pairs.map(pair => snapshotStudioImageIntent({ ...source, params: {
+    ...batchJobParams(source, pair.prompt),
+    ...(pair.source ? { image_guide: pair.source.url, image_mask: undefined,
+      video_prompt_type: mergeVideoPromptLetters(String(source.params?.video_prompt_type || ''), 'V', 'VAG'),
+    } : {}),
+  } }))
+  return enqueueImageBatch(intents, ports, context?.commandId || ports.newIntentId(), context)
+}
+
 /**
  * Compatible store entry for the Studio image family. Snapshots get() once
  * before any await so later UI edits cannot contaminate the sent request.
@@ -364,41 +425,14 @@ export function startStudioImageGenerationFromStore(
 ): Promise<GenerationReceiptLike | void> {
   const source = host.get()
   const ports = { ...createStoreImagePorts(host), ...portOverrides }
-  const batch = !scheduledPrompt && (source.imageBatch?.perLine || (source.imageStudioIntent === 'edit' && source.imageBatch?.enabled))
-  if (batch) {
-    const pairs = imageBatchPairs(String(source.params?.prompt || ''), source.imageBatch, source.imageStudioIntent === 'edit')
-    if (!pairs.length || pairs.length > MAX_IMAGE_BATCH_JOBS) throw new Error(i18n.t('studio:imageBatch.limit', { count: MAX_IMAGE_BATCH_JOBS }))
-    if (pairs.some(pair => pair.source) && source.params?.image_mask) throw new Error(i18n.t('studio:imageBatch.noMask'))
-    // Freeze every combination before the first await: later form/workspace
-    // edits must not alter the rest of an already submitted batch.
-    const intents = pairs.map(pair => snapshotStudioImageIntent({ ...source, params: {
-      ...source.params, prompt: pair.prompt, repeat_generation: 1, multi_prompts_gen_type: 2,
-      // Layer count lives in batch_size for Qwen Layered. Only pin it to 1
-      // when the model uses that field as extra images per prompt.
-      ...(source.modelOptions?.image_layer_count ? {} : { batch_size: 1 }),
-      ...(pair.source ? { image_guide: pair.source.url, image_mask: undefined,
-        video_prompt_type: mergeVideoPromptLetters(String(source.params?.video_prompt_type || ''), 'V', 'VAG'),
-      } : {}),
-    } }))
-    const batchId = context?.commandId || ports.newIntentId()
-    const pending = inFlight.get(batchId)
-    if (pending) return pending
-    const work = (async () => {
-      let result: GenerationReceiptLike | void = undefined
-      let failed = 0
-      for (let index = 0; index < intents.length; index++) {
-        result = await startStudioImageGeneration(intents[index], ports, undefined, {
-          ...context, actor: context?.actor ?? 'user', commandId: `${batchId}-${index + 1}`,
-        })
-        if (!result) failed++
-      }
-      if (failed) throw new Error(i18n.t('studio:imageBatch.failed', { count: failed, total: intents.length }))
-      return result
-    })()
-    inFlight.set(batchId, work)
-    void work.then(() => inFlight.delete(batchId), () => inFlight.delete(batchId))
-    return work
+  const referenceJobs = referenceJobsOf(source)
+  if (!scheduledPrompt && referenceJobs.length > 1) {
+    if (referenceJobs.length > MAX_IMAGE_BATCH_JOBS) throw new Error(i18n.t('studio:imageBatch.limit', { count: MAX_IMAGE_BATCH_JOBS }))
+    return enqueueImageBatch(referenceRowIntents(source, referenceJobs), ports, context?.commandId || ports.newIntentId(), context)
   }
-  const intent = snapshotStudioImageIntent(source)
+  if (!scheduledPrompt && (source.imageBatch?.perLine || usesSeparateEdits(source))) {
+    return startSeparateImageJobs(source, ports, context)
+  }
+  const intent = snapshotStudioImageIntent(withSingleReferenceJob(source, referenceJobs))
   return startStudioImageGeneration(intent, ports, scheduledPrompt, context)
 }

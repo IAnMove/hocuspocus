@@ -5,12 +5,11 @@
 [Core server](#core-server-has-no-lan-gate) before you rely on anything below
 when running core.
 
-Loopback stays open. When the full server is reachable beyond loopback, remote
-`/api/` and `/classic` requests need the LAN token. Sharing used to be
-credential-free unless `LOREFRAME_LAN_AUTH` was set; any device on the Wi-Fi
-could read stored API keys and change settings. On the full server the gate is
-now **on by default** whenever the app is shared. Set `LOREFRAME_LAN_AUTH=0` to
-opt out knowingly.
+Loopback stays open. Sharing the full server on the local network also stays
+open: remote `/api/` and `/classic` requests do not need a token until you
+turn the gate on with `LOREFRAME_LAN_AUTH=1` (`true`, `yes` or `on` work too).
+`LOREFRAME_LAN_AUTH=0` leaves it off. While it is off, a device on the Wi-Fi
+can open the studio and read stored API keys.
 
 Code: `app/services/lan_auth.py`, `app/routers/lan_auth.py`,
 `ui/src/components/LanAuthGate.tsx`. Tests: `tests/test_lan_auth.py`,
@@ -54,17 +53,17 @@ Do not share the core server on a network you do not trust. Closing this gap
 That is the gate's view. What the socket actually binds is decided separately
 in `services/server_entry.py`: `PINOKIO_SHARE_LOCAL=true` binds `0.0.0.0`,
 `false` binds `127.0.0.1`, anything else uses `SERVER_NAME` (default
-`127.0.0.1`). So `PINOKIO_SHARE_LOCAL=1` turns the gate on but does not by
-itself open the port; use `true`.
+`127.0.0.1`). So `PINOKIO_SHARE_LOCAL=1` marks the process as shared but does
+not by itself open the port; use `true`. Sharing does not turn the token gate on.
 
 `lan_auth_enabled` then follows `LOREFRAME_LAN_AUTH` (an unrecognised value
 counts as unset):
 
 | `LOREFRAME_LAN_AUTH` | Shared beyond loopback | Remote requests |
 |---|---|---|
-| unset | yes | token required |
+| unset | yes | open |
+| `0` / `false` / `no` / `off` | yes | open |
 | `1` / `true` / `yes` / `on` | yes | token required |
-| `0` / `false` / `no` / `off` | yes | open (opt-out) |
 | any | no (loopback only) | gate inactive: it needs sharing as well as auth |
 
 `remote_lan_auth_required` is the gate used by the middleware: sharing on, auth
@@ -106,19 +105,19 @@ and classic UI do not.
 ## Operator workflow (full server)
 
 1. Share the server (`PINOKIO_SHARE_LOCAL=true`, or a non-loopback
-   `SERVER_NAME`). Restart.
-2. Read the startup lines. If you did not set `LOREFRAME_LAN_TOKEN`, copy the
-   printed session token.
-3. On the phone or another machine, open `http://<host>:<port>/`. Enter the
-   token once. The cookie lasts 30 days on that browser.
+   `SERVER_NAME`). Restart. Other devices can open `http://<host>:<port>/`
+   with no token.
+2. To require a token, set `LOREFRAME_LAN_AUTH=1` and restart. If you did not
+   set `LOREFRAME_LAN_TOKEN`, copy the session token printed at startup.
+3. On the phone or another machine, open the same URL and enter the token
+   once. The cookie lasts 30 days on that browser.
 4. For a stable token, set `LOREFRAME_LAN_TOKEN` (24+ characters) and restart.
 
 ## Pitfalls
 
-- **“Optional auth” is stale.** README and the August 2026 audit said
-  `LOREFRAME_LAN_AUTH=true` was opt-in and QR/LAN was free. On the full server
-  the default flipped: sharing turns the gate on; `LOREFRAME_LAN_AUTH=0` is the
-  opt-out.
+- **The gate starts off.** Sharing does not ask for a token. Set
+  `LOREFRAME_LAN_AUTH=1` when other devices on the network should not open
+  the studio freely.
 - **Core is not covered.** See [Core server](#core-server-has-no-lan-gate).
 - **Loopback stays free.** `http://127.0.0.1:<port>/` on the same machine does
   not ask for the token.

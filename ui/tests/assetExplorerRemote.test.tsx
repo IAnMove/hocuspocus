@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import React from 'react'
 import { JSDOM } from 'jsdom'
+import { ASSET_PICKER_PAGE_SIZE } from '../src/features/asset-picker/types.ts'
 
 Object.assign(globalThis, { React })
 
@@ -39,7 +40,7 @@ function catalogAsset(index: number, filename = `hit-${index}.png`) {
   }
 }
 
-test('remote explorer pages the catalog at 24 and can find a hit past the first 100', { concurrency: false }, async () => {
+test('remote explorer pages the catalog by the picker page size and can find a hit past the first 100', { concurrency: false }, async () => {
   const { render, screen, fireEvent, waitFor, cleanup } = await import('@testing-library/react')
   const { AssetExplorerDialog } = await import('../src/components/common/AssetExplorerDialog.tsx')
   const all = Array.from({ length: 120 }, (_, index) => catalogAsset(index, index === 110 ? 'wanted.png' : `hit-${index}.png`))
@@ -49,7 +50,7 @@ test('remote explorer pages the catalog at 24 and can find a hit past the first 
     const url = new URL(String(input), 'http://localhost')
     calls.push(url)
     const offset = Number(url.searchParams.get('offset') || '0')
-    const limit = Number(url.searchParams.get('limit') || '24')
+    const limit = Number(url.searchParams.get('limit') || String(ASSET_PICKER_PAGE_SIZE))
     const search = url.searchParams.get('search') || ''
     const pool = search ? all.filter(item => item.filename.includes(search)) : all
     return new Response(JSON.stringify({
@@ -71,11 +72,11 @@ test('remote explorer pages the catalog at 24 and can find a hit past the first 
       />,
     )
     await waitFor(() => assert.ok(screen.getByTitle('hit-0.png')))
-    assert.equal(calls[0].searchParams.get('limit'), '24')
+    assert.equal(calls[0].searchParams.get('limit'), String(ASSET_PICKER_PAGE_SIZE))
     assert.equal(calls[0].searchParams.get('offset'), '0')
     assert.equal(calls[0].searchParams.get('workspace'), 'film')
     fireEvent.click(screen.getByRole('button', { name: 'Next page' }))
-    await waitFor(() => assert.ok(calls.some(url => url.searchParams.get('offset') === '24')))
+    await waitFor(() => assert.ok(calls.some(url => url.searchParams.get('offset') === String(ASSET_PICKER_PAGE_SIZE))))
     fireEvent.change(screen.getByPlaceholderText('Search by name'), { target: { value: 'wanted' } })
     await waitFor(() => assert.ok(calls.some(url => url.searchParams.get('search') === 'wanted')))
     await waitFor(() => assert.ok(screen.getByTitle('wanted.png')))

@@ -543,7 +543,22 @@
     "main": "Main",
     "max_one": "Up to {{count}} reference image.",
     "max_other": "Up to {{count}} reference images.",
-    "hint": "First image is the main subject/landscape. Additional images are people/objects to inject. Drag to reorder."
+    "hint": "Pictures in the same row stay together, in this order, and make one image.",
+    "rowsHint": "Add row starts another generation. With one prompt per line, every line is combined with every row.",
+    "row": "Row {{count}}",
+    "addRow": "Add row",
+    "removeRow": "Remove row",
+    "split": "Each picture in its own row",
+    "jobs": "{{count}} generations.",
+    "add": "Add reference",
+    "clone": "Clone",
+    "replace": "Replace",
+    "library": "Library",
+    "up": "Move up",
+    "down": "Move down",
+    "firstReason": "Already first",
+    "lastReason": "Already last",
+    "cloneReason": "No room: the model's reference limit is reached"
   },
   "imageIntent": {
     "title": "What do you want to do?",

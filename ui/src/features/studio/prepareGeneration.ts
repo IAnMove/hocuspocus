@@ -98,6 +98,7 @@ export type StudioImageIntentSource = {
   models?: Array<{ model_type: string; name: string }>
   llmStatus?: { loaded?: boolean } | null
   imageRefs?: File[]
+  imageRefRows?: File[][]
   imageRefType?: string
   removeBackgroundRefs?: boolean
   startImage?: File | null

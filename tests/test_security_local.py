@@ -29,10 +29,10 @@ def test_served_files_are_never_sniffed_and_active_types_download(tmp_path):
     assert drawing.headers["content-disposition"] == "attachment"
 
 
-def test_sharing_on_the_lan_turns_the_token_gate_on_unless_opted_out(monkeypatch):
+def test_sharing_on_the_lan_leaves_the_token_gate_off_until_asked(monkeypatch):
     monkeypatch.setenv("PINOKIO_SHARE_LOCAL", "true")
     monkeypatch.delenv("LOREFRAME_LAN_AUTH", raising=False)
-    assert lan_auth_enabled() is True
+    assert lan_auth_enabled() is False
     monkeypatch.setenv("LOREFRAME_LAN_AUTH", "0")
     assert lan_auth_enabled() is False
     monkeypatch.setenv("LOREFRAME_LAN_AUTH", "1")

@@ -11,7 +11,14 @@
     "save": "Guardar recorte",
     "saving": "Guardando copia…",
     "loadFailed": "No se pudo cargar la imagen. Cierra y vuelve a intentarlo.",
-    "saveFailed": "No se pudo guardar el recorte. La entrada original no ha cambiado. Vuelve a intentarlo."
+    "saveFailed": "No se pudo guardar el recorte. La entrada original no ha cambiado. Vuelve a intentarlo.",
+    "transformGroup": "Girar e invertir",
+    "rotateLeft": "Girar a la izquierda",
+    "rotateRight": "Girar a la derecha",
+    "flipHorizontal": "Invertir horizontalmente",
+    "flipVertical": "Invertir verticalmente",
+    "restore": "Deshacer giros e inversiones",
+    "transformFailed": "No se pudo cambiar la imagen. Cierra y vuelve a intentarlo."
   },
   "language": {
     "name": "Spanish",

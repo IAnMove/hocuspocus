@@ -34,7 +34,11 @@ export function GenerateButton() {
   )
   const hasStartImage = useStore(s => !!(s.startImage || s.params.image_start))
   const imageRequirement = useStore(s => s.generationMode === 'image'
-    ? imageStudioInputRequirement(s.imageStudioIntent, imageBatchHasSources(s.imageStudioIntent, s.imageBatch) ? s.imageBatch?.sources[0]?.url : s.params.image_guide, s.imageRefs.length || s.params.image_refs?.length || 0)
+    ? imageStudioInputRequirement(
+      s.imageStudioIntent,
+      imageBatchHasSources(s.imageStudioIntent, s.imageBatch) ? s.imageBatch?.sources[0]?.url : s.params.image_guide,
+      (s.imageRefs.length || (s.imageRefRows || []).some(row => row.length) || s.params.image_refs?.length) ? 1 : 0,
+    )
     : null)
   const incompatibleImage = useStore(s => s.generationMode === 'image' && !supportsImageIntent(s.imageStudioIntent, s.modelOptions))
   const needsImage = (generationMode === 'video' && isI2vOnly && !isOmniReference && !hasStartImage)
@@ -53,8 +57,11 @@ export function GenerateButton() {
   const imageBatch = useStore(s => s.imageBatch)
   const imageIntent = useStore(s => s.imageStudioIntent)
   const imageMask = useStore(s => s.params.image_mask)
+  const imageRefs = useStore(s => s.imageRefs)
+  const imageRefRows = useStore(s => s.imageRefRows)
   const { batching, count: batchCount, invalid: invalidBatch } = imageBatchStatus(
     generationMode, imageIntent, String(prompt || ''), imageMask, imageBatch,
+    { primary: imageRefs, rows: imageRefRows },
   )
   const schedulerApplies = promptSchedulerEnabled && generationMode === 'video' && imageMode === 0
   const scheduledVideoCount = schedulerApplies ? splitPromptSchedule(prompt).length : 0

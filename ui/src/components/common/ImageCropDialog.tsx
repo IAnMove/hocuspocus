@@ -1,6 +1,7 @@
 import { controlReason } from '../../i18n/controlLabel'
 import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { ModalShell } from './ModalShell'
+import ImageTransformBar, { type TransformedView } from './ImageTransformBar'
 import { useUiTranslation } from '../../i18n'
 import { loadFitImage } from '../../lib/imageFit'
 import { clampCrop, cropFromPoints, cropImageFile, type CropRect } from '../../lib/imageCrop'
@@ -15,16 +16,37 @@ export default function ImageCropDialog({ source, name, onSave, onClose }: {
   const [busy, setBusy] = useState(false)
   const active = useRef(false), saving = useRef(false)
   const drag = useRef<{ x: number; y: number } | null>(null)
+  // What is on screen: the source, or the picture after the rotate and flip buttons (a temporary address, revoked when replaced).
+  const [shown, setShown] = useState(source)
+  const original = useRef<HTMLImageElement | null>(null), owned = useRef('')
+  useEffect(() => () => { if (owned.current) URL.revokeObjectURL(owned.current) }, [])
   useEffect(() => {
     active.current = true
     void loadFitImage(source).then(loaded => {
       if (!active.current) return
+      original.current = loaded
+      setShown(source)
       setImage(loaded)
       setRect({ x: 0, y: 0, width: loaded.naturalWidth, height: loaded.naturalHeight })
     }).catch(() => { if (active.current) setError(t('crop.loadFailed')) })
     return () => { active.current = false }
   }, [source, t])
   const close = () => { if (!saving.current) onClose() }
+  const showTransformed = (view: TransformedView) => {
+    if (!active.current) { URL.revokeObjectURL(view.url); return }
+    const previous = owned.current
+    owned.current = view.url
+    setShown(view.url); setImage(view.image); setRect(view.rect); setError('')
+    if (previous) URL.revokeObjectURL(previous)
+  }
+  const restore = () => {
+    if (!original.current) return
+    const previous = owned.current
+    owned.current = ''
+    setShown(source); setImage(original.current); setError('')
+    setRect({ x: 0, y: 0, width: original.current.naturalWidth, height: original.current.naturalHeight })
+    if (previous) URL.revokeObjectURL(previous)
+  }
   const point = (event: PointerEvent<HTMLDivElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect()
     return { x: (event.clientX - bounds.left) / bounds.width * image!.naturalWidth,
@@ -53,13 +75,17 @@ export default function ImageCropDialog({ source, name, onSave, onClose }: {
           <div data-testid="crop-surface" className="relative touch-none select-none" style={{ pointerEvents: busy ? 'none' : 'auto' }}
             onPointerDown={event => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); drag.current = point(event) }}
             onPointerMove={move} onPointerUp={event => { move(event); drag.current = null }} onPointerCancel={() => { drag.current = null }}>
-            <img src={source} alt={name} draggable={false} className="block max-h-[50dvh] max-w-full object-contain" />
+            <img src={shown} alt={name} draggable={false} className="block max-h-[50dvh] max-w-full object-contain" />
             <div className="pointer-events-none absolute border-2 border-white bg-transparent" style={{
               left: `${rect.x / image.naturalWidth * 100}%`, top: `${rect.y / image.naturalHeight * 100}%`,
               width: `${rect.width / image.naturalWidth * 100}%`, height: `${rect.height / image.naturalHeight * 100}%`,
               boxShadow: '0 0 0 9999px rgba(0,0,0,.55)',
             }} />
           </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ImageTransformBar image={image} rect={rect} busy={busy} onResult={showTransformed} onError={() => setError(t('crop.transformFailed'))} />
+          {shown !== source && <button type="button" disabled={busy} title={controlReason(busy, 'disabled.actionInProgress')} className="text-xs underline" onClick={restore}>{t('crop.restore')}</button>}
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {(['x', 'y', 'width', 'height'] as const).map(field => <label key={field} className="text-xs">{t(`crop.${field}`)}
