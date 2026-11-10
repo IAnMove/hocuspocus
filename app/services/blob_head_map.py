@@ -22,14 +22,14 @@ import numpy as np
 
 MAP_SIZE = (1364, 1024)      # 360 degrees by the head tile's height: the two thirds of the head half that the side and back tiles used
 FACE_BLEND = 10.0            # degrees inside the face patch's border where the front picture starts to give way (the patch fades over the last of them)
-FRONT_OUT = 16.0             # degrees over which the front picture fades into the side picture, from where the patch starts to fade
+FRONT_OUT = 20.0             # degrees over which the front picture fades into the side picture, from where the patch starts to fade
 EDGE_YAW = 90.0              # where the painted head's outline lands
 EYE_DEPTH = 0.6              # of the profile's depth before the axis: just behind the corner of the eye, where the flank starts
 BACK_HOLD = 32.0             # degrees from the nape where the back picture is still its flat projection
 BACK_FROM, BACK_FULL = 112.0, 136.0   # the back picture comes in over this band of yaw
 LEVELS = 5
 NEAR_MOULD = (0.76, 1.12)    # a measure of the painted head is kept within these shares of the mould's
-TONE_RANGE = (0.8, 1.25)     # how far a picture's tones may be moved to meet its neighbour's
+TONE_RANGE = (0.85, 1.2)     # how far a picture's tones may be moved to meet its neighbour's
 EAR_ROWS = 0.2               # of the tile's height: bumps of the outline shorter than this are ears, not head
 
 
@@ -228,7 +228,7 @@ def _meet(picture: np.ndarray, neighbour: np.ndarray, angle: np.ndarray, ours: t
 
     width = picture.shape[1]
     out = picture.copy()
-    sigma = picture.shape[0] / 30
+    sigma = picture.shape[0] / 10
 
     def tone(image: np.ndarray, band: tuple[float, float], half: slice) -> np.ndarray:
         inside = ((angle[:, half] >= band[0]) & (angle[:, half] <= band[1])).astype(np.float32)

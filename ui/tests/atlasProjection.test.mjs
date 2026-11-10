@@ -78,8 +78,9 @@ test('a joined head map is read by yaw, with no blend of the tiles, and old char
   }
   const joined = patched({ body: [0, 0.9, 2], head: [1.7, 0.4, 1.5], headMap: true })
   assert.equal(joined.uniforms.atlasHeadMap.value, 1)
-  assert.ok(joined.fragmentShader.includes('uniform float atlasHeadMap;') && joined.fragmentShader.includes('textureGrad( map, headUv'), 'the map is sampled with its own footprint, so the nape shows no line')
+  assert.ok(joined.fragmentShader.includes('uniform float atlasHeadMap;') && joined.fragmentShader.includes('textureGrad( atlasSheet, headUv'), 'the map is sampled with its own footprint, so the nape shows no line')
   assert.ok(joined.fragmentShader.indexOf('atlasHeadMap > 0.5') < joined.fragmentShader.indexOf('if ( atlasFaceOnly > 0.5 ) headColor = frontTile;'), 'the face patch keeps the front tile')
+  assert.ok(joined.fragmentShader.includes('mix( sampledDiffuseColor, joinedColor,') && joined.fragmentShader.includes('atlasHeadMap < 0.5 ) diffuseColor.a *='), 'near its border the patch reads the map, and is not faded by alpha')
   assert.equal(patched({ body: [0, 0.9, 2], head: [1.7, 0.4, 1.5] }).uniforms.atlasHeadMap.value, 0)
-  assert.equal(ATLAS_KEY, 'atlas-drape-11')
+  assert.equal(ATLAS_KEY, 'atlas-drape-12')
 })

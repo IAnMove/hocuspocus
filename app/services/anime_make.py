@@ -138,7 +138,7 @@ def _head_bands_value(raw: dict):
 
 
 HEAD_JOINS = ("map", "blend")   # map: the portraits joined into one head map when the atlas is made (blob_head_map); blend: the viewer blends the three tiles by angle
-MAP_FEATHER = 8.0               # with the head map the patch fades over its last degrees into a skull that shows the same cheek
+MAP_FEATHER = 18.0              # with the head map the patch reads the map itself over its last degrees: the front picture gives way just past the eye
 
 
 def _face_ranges(raw: dict, join: str = "blend") -> tuple[float, float, float]:
@@ -349,7 +349,7 @@ def _head_join(resolved: dict, parts, frame: dict) -> dict | None:
         return None
     from services.blob_head_map import head_triangles, radius_map
 
-    return {"radius": radius_map(head_triangles(parts[0][0], frame), frame), "frame": frame, "face_yaw": resolved["face_span"], "blend": resolved["face_feather"] + 2.0}
+    return {"radius": radius_map(head_triangles(parts[0][0], frame), frame), "frame": frame, "face_yaw": resolved["face_span"], "blend": resolved["face_feather"]}
 
 
 def _texture_files(workspace_dir: Path, workspace: str, name: str, resolved: dict, body: dict) -> dict:

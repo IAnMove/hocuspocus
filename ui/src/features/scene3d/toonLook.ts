@@ -128,6 +128,8 @@ const MIRRORED = [
 function mirror(source: LitMaterial, toon: MeshToonMaterial) {
   const from = source as unknown as Record<string, unknown>
   const to = toon as unknown as Record<string, unknown>
+  // a material that turns transparent after its first draw needs a new program: the compiled one forces its alpha to 1
+  if (toon.transparent !== source.transparent) toon.needsUpdate = true
   for (const key of MIRRORED) if (key in from && to[key] !== from[key]) to[key] = from[key] ?? null
   toon.color.copy(source.color)
   toon.emissive.copy(source.emissive)

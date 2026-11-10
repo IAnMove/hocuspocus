@@ -10,29 +10,46 @@ import { Color, SRGBColorSpace, Vector3 } from 'three'
 
 export type AtlasFrame = { body: [number, number, number]; head?: [number, number, number]; skin?: [number, number, number]; hold?: number; faceYaw?: number; faceFeather?: number; noUpperSplit?: boolean; bandDetail?: number; headMap?: boolean }
 
-export const ATLAS_KEY = 'atlas-drape-11'
+export const ATLAS_KEY = 'atlas-drape-12'
+
+type RawAtlas = Partial<Record<keyof AtlasFrame, unknown>>
+
+function triple(value: unknown): [number, number, number] | undefined {
+  return Array.isArray(value) && value.length === 3 && value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [value[0], value[1], value[2]] : undefined
+}
+
+function within(value: unknown, low: number, high: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high ? value : undefined
+}
+
+/** The optional numbers and switches of the frame; one that is missing or out of its range is left out. */
+function frameOptions(raw: RawAtlas): Partial<AtlasFrame> {
+  const head = triple(raw.head)
+  const skin = triple(raw.skin)
+  const options: Partial<AtlasFrame> = {
+    headMap: raw.headMap === 1 || raw.headMap === true || undefined,
+    bandDetail: within(raw.bandDetail, 0, 1),
+    noUpperSplit: raw.noUpperSplit === true || undefined,
+    hold: within(raw.hold, -0.5, 1.2),
+    faceYaw: within(raw.faceYaw, 30, 58),
+    faceFeather: within(raw.faceFeather, 0, 30) || undefined,
+    head: head && head[1] > 0 ? head : undefined,
+    skin: skin && skin.every(value => value >= 0 && value <= 1) ? skin : undefined,
+  }
+  return Object.fromEntries(Object.entries(options).filter(([, value]) => value !== undefined))
+}
 
 export function readAtlasFrame(userData: unknown): AtlasFrame | undefined {
-  const raw = (userData as { atlas?: { body?: unknown; head?: unknown; skin?: unknown; hold?: unknown; faceYaw?: unknown; faceFeather?: unknown; noUpperSplit?: unknown; bandDetail?: unknown; headMap?: unknown } } | undefined)?.atlas
-  const triple = (value: unknown): [number, number, number] | undefined =>
-    Array.isArray(value) && value.length === 3 && value.every(item => typeof item === 'number' && Number.isFinite(item)) ? [value[0], value[1], value[2]] : undefined
+  const raw = (userData as { atlas?: RawAtlas } | undefined)?.atlas
   const body = triple(raw?.body)
-  if (!body || body[2] <= 0) return undefined
-  const head = triple(raw?.head)
-  const skin = triple(raw?.skin)
-  const hold = typeof raw?.hold === 'number' && Number.isFinite(raw.hold) && raw.hold >= -0.5 && raw.hold <= 1.2 ? raw.hold : undefined
-  const degrees = (value: unknown, low: number, high: number) => typeof value === 'number' && Number.isFinite(value) && value >= low && value <= high ? value : undefined
-  const faceYaw = degrees(raw?.faceYaw, 30, 58)
-  const faceFeather = degrees(raw?.faceFeather, 0, 30)
-  const bandDetail = degrees(raw?.bandDetail, 0, 1)
-  const headMap = raw?.headMap === 1 || raw?.headMap === true
-  return { body, ...(headMap ? { headMap } : {}), ...(bandDetail !== undefined ? { bandDetail } : {}), ...(raw?.noUpperSplit === true ? { noUpperSplit: true } : {}), ...(hold !== undefined ? { hold } : {}), ...(faceYaw !== undefined ? { faceYaw } : {}), ...(faceFeather ? { faceFeather } : {}), ...(head && head[1] > 0 ? { head } : {}), ...(skin && skin.every(value => value >= 0 && value <= 1) ? { skin } : {}) }
+  if (!raw || !body || body[2] <= 0) return undefined
+  return { body, ...frameOptions(raw) }
 }
 
 type Shader = { uniforms: Record<string, { value: unknown }>; vertexShader: string; fragmentShader: string }
 
 /** The body and head tiles sampled from the bind pose and blended by the normal. Pure string work, so it is testable. */
-export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = false, useUv = false): void {
+export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = false, useUv = false, sheet: unknown = null): void {
   shader.uniforms.atlasBody = { value: new Vector3(...frame.body) }
   shader.uniforms.atlasHead = { value: new Vector3(...(frame.head ?? [0, 1, 1e9])) }
   shader.uniforms.atlasFaceOnly = { value: faceOnly ? 1 : 0 }
@@ -44,6 +61,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
   shader.uniforms.atlasBand = { value: frame.bandDetail === undefined ? 0 : 1 }
   shader.uniforms.atlasDetail = { value: frame.bandDetail ?? 1 }
   shader.uniforms.atlasHeadMap = { value: frame.headMap ? 1 : 0 }   // the head half is the front tile and one joined map of yaw by height: nothing to blend
+  shader.uniforms.atlasSheet = { value: sheet }   // the atlas itself: a face kit paints the face material's own map, and the patch still reads the head map
   const patch = ((frame.faceYaw ?? 53) * Math.PI) / 180
   shader.uniforms.atlasPatchYaw = { value: patch }
   shader.uniforms.atlasFeather = { value: ((frame.faceFeather ?? 0) * Math.PI) / 180 }
@@ -52,7 +70,7 @@ export function patchAtlasShader(shader: Shader, frame: AtlasFrame, faceOnly = f
     .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;')
     .replace('#include <begin_vertex>', '#include <begin_vertex>\n\tvAtlasPos = position;\n\tvAtlasNormal = normal;')
   shader.fragmentShader = shader.fragmentShader
-    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;\nuniform float atlasHold;\nuniform float atlasSplit;\nuniform float atlasBand;\nuniform float atlasDetail;\nuniform float atlasHeadMap;\nuniform float atlasPatchYaw;\nuniform float atlasFeather;')
+    .replace('#include <common>', '#include <common>\nvarying vec3 vAtlasPos;\nvarying vec3 vAtlasNormal;\nuniform vec3 atlasBody;\nuniform vec3 atlasHead;\nuniform float atlasFaceOnly;\nuniform float atlasUseUv;\nuniform vec3 atlasSkin;\nuniform float atlasHasSkin;\nuniform float atlasHold;\nuniform float atlasSplit;\nuniform float atlasBand;\nuniform float atlasDetail;\nuniform float atlasHeadMap;\nuniform sampler2D atlasSheet;\nuniform float atlasPatchYaw;\nuniform float atlasFeather;')
     .replace('#include <map_pars_fragment>', `#include <map_pars_fragment>
 #ifdef USE_MAP
 // the tile's tones without its fine texture: a mip level of the picture, its sample point kept inside the tile so the blur does not pull in the next one
@@ -102,20 +120,22 @@ vec4 atlasLow( vec2 uv, float tile ) {
 		vec4 fineColor = mix( mix( frontTile - frontLow, sideTile - sideLow, cut ), backTile - backLow, step( 2.2, faceYaw ) * ( 1.0 - crownK ) );
 		headColor = lowColor + fineColor * atlasDetail;
 	}
+	vec4 joinedColor = vec4( 0.0 );
 	if ( atlasHeadMap > 0.5 ) {
 		// the portraits were joined into one picture round the head when the atlas was made (blob_head_map): the yaw from the face across
 		// the two thirds after the front tile. The yaw jumps at the nape, so the filter's footprint comes from whichever of the two
-		// ways of measuring it is smooth there, and the sample stays half a texel inside the map
+		// ways of measuring it is smooth there, and the sample stays inside the map
 		float turn = atan( atlasP.x, atlasP.z ) / 6.2831853;
 		float turnBack = atan( - atlasP.x, - atlasP.z ) / 6.2831853;
 		vec2 turnDx = vec2( dFdx( turn ), dFdx( turnBack ) );
 		vec2 turnDy = vec2( dFdy( turn ), dFdy( turnBack ) );
 		float stepX = abs( turnDx.x ) < abs( turnDx.y ) ? turnDx.x : turnDx.y;
 		float stepY = abs( turnDy.x ) < abs( turnDy.y ) ? turnDy.x : turnDy.y;
-		vec2 mapSize = vec2( textureSize( map, 0 ) );
-		float inset = 0.75 / ( mapSize.x * 2.0 / 3.0 );
-		vec2 headUv = vec2( ( 1.0 + 2.0 * clamp( turn + 0.5, inset, 1.0 - inset ) ) / 3.0, clamp( headV, 0.5 + 0.75 / mapSize.y, 1.0 - 0.75 / mapSize.y ) );
-		headColor = textureGrad( map, headUv, vec2( stepX * 2.0 / 3.0, dFdx( headV ) ), vec2( stepY * 2.0 / 3.0, dFdy( headV ) ) );
+		vec2 sheetSize = vec2( textureSize( atlasSheet, 0 ) );
+		float inset = 0.75 / ( sheetSize.x * 2.0 / 3.0 );
+		vec2 headUv = vec2( ( 1.0 + 2.0 * clamp( turn + 0.5, inset, 1.0 - inset ) ) / 3.0, clamp( headV, 0.5 + 0.75 / sheetSize.y, 1.0 - 0.75 / sheetSize.y ) );
+		joinedColor = textureGrad( atlasSheet, headUv, vec2( stepX * 2.0 / 3.0, dFdx( headV ) ), vec2( stepY * 2.0 / 3.0, dFdy( headV ) ) );
+		headColor = joinedColor;
 	}
 	if ( atlasFaceOnly > 0.5 ) headColor = frontTile;
 	// what faces down (the underside of the jaw and the chin) takes the skin of the neck under the same x, not the row of the beard
@@ -127,9 +147,12 @@ vec4 atlasLow( vec2 uv, float tile ) {
 	float inHead = smoothstep( atlasHead.z - 0.008, atlasHead.z + 0.008, atlasP.y ) * ( 1.0 - smoothstep( tileW * 0.42, tileW * 0.49, max( abs( atlasP.x ), abs( atlasP.z ) ) ) );
 	vec4 sampledDiffuseColor = mix( bodyColor, headColor, inHead );
 	if ( atlasUseUv > 0.5 ) sampledDiffuseColor = texture2D( map, vMapUv );
+	// over the head map the face patch is not cut out of the head: near its border it reads the same map as the skull under it, so the
+	// two are one picture there and no line can show (a kit's mouth and eyes are well inside)
+	if ( atlasHeadMap > 0.5 && atlasFaceOnly > 0.5 ) sampledDiffuseColor = mix( sampledDiffuseColor, joinedColor, smoothstep( atlasPatchYaw - atlasFeather, atlasPatchYaw - 0.5 * atlasFeather, faceYaw ) );
 	diffuseColor *= sampledDiffuseColor;
 	// the face patch fades into the skull over its last degrees, instead of ending on a ruled line
-	if ( atlasFaceOnly > 0.5 && atlasFeather > 0.0 ) diffuseColor.a *= 1.0 - smoothstep( atlasPatchYaw - atlasFeather, atlasPatchYaw, faceYaw );
+	if ( atlasFaceOnly > 0.5 && atlasFeather > 0.0 && atlasHeadMap < 0.5 ) diffuseColor.a *= 1.0 - smoothstep( atlasPatchYaw - atlasFeather, atlasPatchYaw, faceYaw );
 #endif`)
 }
 
@@ -145,9 +168,10 @@ export function applyAtlasProjection(root: Object3D): void {
       if (!frame) continue
       material.userData.atlasDrape = true
       const faceOnly = material.name === 'face'
-      if (faceOnly && frame.faceFeather) material.transparent = true
+      if (faceOnly && frame.faceFeather && !frame.headMap) material.transparent = true
+      const sheet = material.map   // the atlas, before a face kit paints the material's map
       material.onBeforeCompile = shader => {
-        patchAtlasShader(shader as unknown as Shader, frame, faceOnly, material.userData.atlasUseUv === true)
+        patchAtlasShader(shader as unknown as Shader, frame, faceOnly, material.userData.atlasUseUv === true, sheet)
         material.userData.atlasUniforms = shader.uniforms
       }
       material.customProgramCacheKey = () => (faceOnly ? `${ATLAS_KEY}-face` : ATLAS_KEY)
