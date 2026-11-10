@@ -324,58 +324,58 @@
   ],
   "defaultSkin": {
     "floor": {
-      "color": "#85715b"
+      "color": "#1f232b"
     },
     "ceiling": {
-      "color": "#eee9df"
+      "color": "#0b101b"
     },
     "wall_back": {
-      "color": "#d8d2c4"
+      "color": "#2d4468"
     },
     "wall_left": {
-      "color": "#d8d2c4"
+      "color": "#1b2640"
     },
     "wall_right": {
-      "color": "#d8d2c4"
+      "color": "#1b2640"
     },
     "window_view": {
-      "color": "#385872"
+      "color": "#1b2640"
     },
     "door": {
-      "color": "#b89f80"
+      "color": "#222a3a"
     },
     "desk_0_front": {
-      "color": "#7b6754"
+      "color": "#2a303b"
     },
     "desk_0_top": {
-      "color": "#7b6754"
+      "color": "#6b4a32"
     },
     "desk_1_front": {
-      "color": "#7b6754"
+      "color": "#2a303b"
     },
     "desk_1_top": {
-      "color": "#7b6754"
+      "color": "#6b4a32"
     },
     "desk_2_front": {
-      "color": "#7b6754"
+      "color": "#2a303b"
     },
     "desk_2_top": {
-      "color": "#7b6754"
+      "color": "#6b4a32"
     },
     "desk_3_front": {
-      "color": "#7b6754"
+      "color": "#2a303b"
     },
     "desk_3_top": {
-      "color": "#7b6754"
+      "color": "#6b4a32"
     },
     "video_screen_front": {
-      "color": "#385872"
+      "color": "#0b0f18"
     },
     "video_screen_top": {
-      "color": "#385872"
+      "color": "#1d222c"
     },
     "wall_front": {
-      "color": "#d8d2c4"
+      "color": "#1b2640"
     }
   }
 }

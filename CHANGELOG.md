@@ -6,6 +6,12 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Added: a real night for the meadow and clearing worlds.** `atmos.timeOfDay: "night"` paints a dark palette (grass, ground, fog, clouds, hills), a night sky gradient, stars and a lit moon with a halo, and dims the forest's self-glow; before, a night scene was a day world at very low exposure (lime grass, bright fog, a grey sphere for a moon).
+
+**Fixed: a repainted texture or re-rendered clip showed the old picture.** `/api/v1/file/` answers `Cache-Control: no-cache` (the browser revalidates on the ETag; a URL pinned with `sha256` stays cacheable), so a file rewritten under the same name is picked up.
+
+**Changed: the TV studio set (plato_tv) defaults to a lit blue studio with walnut desks instead of the generic beige room.**
+
 **Fixed: the faces of one scene no longer blink at the same frame.** The first blink of every talking face fell at 0.9 s, and each shot starts at 0, so three hosts closed their eyes together in every shot. It now falls 0.9-2.5 s in, chosen by the kit's seed (still deterministic).
 
 **Fixed: the comic view finds an uploaded clip the same way the Video Editor does.** A bare file name is looked up in uploads first, then in the workspace, so an imported clip gets a panel.
