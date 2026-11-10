@@ -45,10 +45,12 @@ export type KitAnimationSheet = {
   source: string; width: number; height: number; count: number; columns: number; rows: number
   cell: { width: number; height: number }
 }
+/** How wide the legs of a walk pose came out against the guide it was drawn over (share of the figure's height); `ok` is false when they are far off. */
+export type AnimationGait = { expected: number; measured: number; ok: boolean }
 export type KitAnimation = {
   sheet: KitAnimationSheet
   /** The keyed pose pictures the sheet was joined from, in order: one can be made again without the others. */
-  frames: Array<{ id: string; source: string; prompt?: string; label?: string }>
+  frames: Array<{ id: string; source: string; prompt?: string; label?: string; guide?: string; gait?: AnimationGait }>
   fps: number; loop: AnimationLoop; facing: AnimationFacing; reviewState: CharacterKitReviewState
   view?: string; title?: string; scaleBy?: AnimationScaleBy; group?: AnimationGroupId; prompt?: string; model?: string; createdAt?: string
   /** What the sheet does and which way the character faces in it (the data contract; missing on older data: `contractOf` deduces it). */
@@ -105,6 +107,23 @@ export function reviewKitAnimation(kit: CharacterKit, id: string, reviewState: C
 /** The animation was reviewed by an agent (approved or rejected), so the person can audit it and change it. */
 export const reviewedByAgent = (animation: Pick<KitAnimation, 'reviewState' | 'reviewedBy'>): boolean =>
   animation.reviewedBy === 'agent' && animation.reviewState !== 'pending'
+
+/** The automatic checks of the sheet, by the id the server reports them with (services/character_animation_checks.py). */
+export const SHEET_CHECK_IDS = ['cell_count', 'cell_size', 'filled_cells', 'clean_alpha', 'silhouette', 'ground_line', 'scale_spread', 'scale_measure',
+  'figure_height', 'repeated_poses', 'direction_mirror', 'walk_gait'] as const
+export type SheetCheckId = typeof SHEET_CHECK_IDS[number]
+export const isSheetCheckId = (id: string): id is SheetCheckId => (SHEET_CHECK_IDS as readonly string[]).includes(id)
+
+/** What is wrong with a finished sheet: the checks it failed and the poses whose legs missed their guide. */
+export type AnimationNotes = { checks: string[]; poses: string[] }
+
+/** The notes to show on a made animation. The checks come from the job that made this very sheet (`finished`, matched on the sheet's picture, so
+ * an older job never judges a newer sheet); the poses come from the measure each frame keeps. Null when there is nothing to warn about. */
+export function animationNotes(made: Pick<KitAnimation, 'sheet' | 'frames'>, finished?: { result?: { sheet?: string; verdict?: { failed?: string[] } } }): AnimationNotes | null {
+  const checks = finished?.result?.sheet === made.sheet.source ? finished.result.verdict?.failed ?? [] : []
+  const poses = made.frames.filter(frame => frame.gait?.ok === false).map(frame => frame.id)
+  return checks.length || poses.length ? { checks, poses } : null
+}
 
 export function withoutKitAnimation(kit: CharacterKit, id: string, now = new Date()): CharacterKit {
   const rest = Object.fromEntries(Object.entries(kit.animations ?? {}).filter(([key]) => key !== id))

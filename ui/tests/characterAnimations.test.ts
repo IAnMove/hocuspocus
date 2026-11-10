@@ -3,7 +3,7 @@ import test from 'node:test'
 import {
   animationSets, animationSlug, canAddAnimation, customAnimationDef, customViews, freeAnimationId, kitCustomDefs, MAX_ANIMATIONS, MAX_CUSTOM_POSES,
   controlsForCard, findKitAnimationBySheet,
-  ANIMATION_SHEET, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
+  ANIMATION_SHEET, animationNotes, isSheetCheckId, SHEET_CHECK_IDS, animationDef, animationDefs, animationFrame, animationGroups, animationReference, animationState, animationsOf,
   kitStyleId, localized, reviewedByAgent, reviewKitAnimation, sheetCellStyle, templateControls, withKitAnimation, withoutKitAnimation, type KitAnimation,
 } from '../src/lib/characterAnimations.ts'
 import { createCharacterKit } from '../src/lib/characterKit.ts'
@@ -188,4 +188,22 @@ test('the catalog has five directions, a twelve-pose walk for each and the sets 
   assert.deepEqual(Object.keys(animationSets), ['walk-12', 'walk-directions', 'idle-directions'])
   assert.deepEqual(templateControls({ ...made({ fps: 12, facing: 'right' }), reviewState: 'approved', sheet: { ...made().sheet, count: 12, columns: 6, rows: 2 } }, 'walk-cycle-sheet'),
     { frames: 12, columns: 6, facing: 'right', step: 0.5 }, 'twelve cells at twelve a second are one cycle in a second: two steps of half a second')
+})
+
+test('a finished sheet is judged by the job that made it and by the gait each pose kept, and says nothing when all is well', async () => {
+  const { finishedOf } = await import('../src/features/characters/useCharacterAnimations.ts')
+  const entry = { ...made({ frames: [{ id: 'contact', source: '/api/v1/file/c.png', gait: { expected: 0.3, measured: 0.31, ok: true } },
+    { id: 'passing', source: '/api/v1/file/p.png', gait: { expected: 0.05, measured: 0.4, ok: false } }, { id: 'contact-b', source: '/api/v1/file/d.png' }] }), reviewState: 'pending' as const }
+  const job = (sheet: string, failed: string[]) => ({ result: { sheet, verdict: { ok: !failed.length, failed } } })
+  assert.deepEqual(animationNotes(entry, job(entry.sheet.source, ['scale_spread'])), { checks: ['scale_spread'], poses: ['passing'] })
+  assert.deepEqual(animationNotes(entry, job('/api/v1/file/older-sheet.png', ['scale_spread'])), { checks: [], poses: ['passing'] }, 'an older sheet\'s job never judges this one')
+  assert.deepEqual(animationNotes(entry, undefined), { checks: [], poses: ['passing'] }, 'the poses are on the character itself, whatever the jobs say')
+  const fine = { ...entry, frames: entry.frames.filter(frame => frame.gait?.ok !== false) }
+  assert.equal(animationNotes(fine, job(entry.sheet.source, [])), null)
+  assert.equal(animationNotes(fine, { result: { sheet: entry.sheet.source } }), null, 'a job from before the verdict says nothing')
+  assert.ok(SHEET_CHECK_IDS.every(isSheetCheckId) && !isSheetCheckId('made_up'))
+  const done = (jobId: string, animationId: string, status: string, createdAt: number) => ({ jobId, animationId, status, createdAt, takes: [] }) as never
+  const found = finishedOf([done('a', 'walk', 'completed', 1), done('b', 'walk', 'completed', 3), done('c', 'walk', 'failed', 4), done('d', 'wave', 'running', 5), done('e', 'nod', 'completed', 2)])
+  assert.deepEqual(Object.keys(found).sort(), ['nod', 'walk'])
+  assert.equal(found.walk.jobId, 'b', 'the latest job that completed is the one that made the sheet on the card')
 })

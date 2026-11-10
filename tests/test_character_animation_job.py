@@ -1185,6 +1185,7 @@ def test_a_job_in_review_mode_carries_the_checks_the_verdict_and_the_gait_and_is
     assert "checks" not in job and "autoApproved" not in job, "the job record keeps what only an approval request adds"
     assert _kit(root)["animations"]["walk"]["reviewState"] == "pending" and "reviewedBy" not in _kit(root)["animations"]["walk"]
     assert jobs.status(WS, job["jobId"])["result"]["verdict"] == result["verdict"], "the job store reports them too"
+    assert result["sheet"] == _kit(root)["animations"]["walk"]["sheet"]["source"], "the panel matches the verdict to the sheet on the card by this picture"
     gesture = jobs.start(WS, "hero", "wave")["result"]
     assert gesture["verdict"]["ok"] and "gait" not in gesture, "a gesture has no guide to be measured against"
 

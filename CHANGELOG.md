@@ -6,6 +6,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 ## [Unreleased]
 
+**Changed: every animation job now says whether its sheet is good, in every approval mode.** The automatic checks that only ran in one-shot mode, and the gait each walk pose measured against its guide, are reported in the `result` of every finished job (`checks`, `verdict`, `gait` and `warnings`, each warning with the way out: make only the poses that are off again with `pose`, or a catalog walk with `method: "puppet"`). Approval is unchanged: only `autoApprove` approves. The Characters › Animaciones card names the failed checks and marks the poses whose legs missed the guide, and a set lists each sheet's failed checks in review mode too. The four-pose `walk` is now read for `figure_height` and `repeated_poses`, so its one-shot approval is stricter. Making one pose again keeps the gait the other poses measured, and the Wizard's knowledge names `method puppet` beside `video`.
+
 **Added: reference photos can stay together in one image, or each row can be its own generation.** Pictures in the same row keep their order. Add row starts another generation, and one prompt per line combines every line with every row. A finished image shows up in the image gallery without a reload. The HocusPocus picker remembers sidecars it has already read and shows 60 at a time.
 
 **Changed: sharing the studio on the local network no longer asks for a token.** The gate starts off. Set `LOREFRAME_LAN_AUTH=1` to require the startup token from other devices. This machine at `127.0.0.1` stays open either way.

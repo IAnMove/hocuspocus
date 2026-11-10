@@ -808,6 +808,27 @@
       "approved": "aprobada por el agente",
       "rejected": "rechazada por el agente"
     },
+    "notes": {
+      "checks": "Las comprobaciones automáticas señalan esta hoja: {{checks}}.",
+      "poses": "Las piernas se alejan de la guía del paso en: {{poses}}.",
+      "remedy": "Usa Rehacer bajo las poses que se ven mal.",
+      "remedyWalk": "Usa Rehacer bajo las poses que se ven mal, o elige «Marioneta» y Rehacer todo.",
+      "poseMissed": "Las piernas de esta pose se alejan de la guía",
+      "check": {
+        "cell_count": "número de poses",
+        "cell_size": "tamaño de la hoja",
+        "filled_cells": "una figura vacía",
+        "clean_alpha": "residuos del recorte",
+        "silhouette": "recorte en rectángulo",
+        "ground_line": "pies fuera de la línea del suelo",
+        "scale_spread": "figuras de distinto tamaño",
+        "scale_measure": "escala sin medir",
+        "figure_height": "altura irregular",
+        "repeated_poses": "poses repetidas",
+        "direction_mirror": "copia de otra dirección",
+        "walk_gait": "piernas en otro momento del paso"
+      }
+    },
     "make": "Crear",
     "methodLabel": "Cómo hacer este andar",
     "methodPoses": "Pose a pose",
