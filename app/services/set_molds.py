@@ -70,13 +70,27 @@ def _openings(mold, dims):
             raise ValueError("opening: unknown surface")
 
 
+def _turned_half(rot, half) -> tuple[float, float, float]:
+    """The half-size of the axis box that holds a block turned by Euler XYZ (radians) about its own centre."""
+    ax, ay, az = rot
+    sx, sy, sz = (math.sin(a) for a in rot)
+    cx, cy, cz = (math.cos(a) for a in rot)
+    matrix = ((cy * cz, -cy * sz, sy), (cx * sz + sx * sy * cz, cx * cz - sx * sy * sz, -sx * cy), (sx * sz - cx * sy * cz, sx * cz + cx * sy * sz, cx * cy))
+    return tuple(sum(abs(row[i]) * half[i] for i in range(3)) for row in matrix)
+
+
 def _blocks(mold, dims):
     for block in _entries(mold, "blocks"):
         box = block.get("box")
         if not _vector(box, 6) or not all(n > 0 for n in box[3:]):
             raise ValueError("block: invalid box")
         x, y, z, w, h, d = box
-        if not all(_inside(point, dims) for point in ([x-w/2, y, z-d/2], [x+w/2, y+h, z+d/2])):
+        if "rot" in block and _vector(block["rot"], 3):
+            hx, hy, hz = _turned_half(block["rot"], (w / 2, h / 2, d / 2))
+            low, high = [x - hx, y + h / 2 - hy, z - hz], [x + hx, y + h / 2 + hy, z + hz]
+        else:
+            low, high = [x-w/2, y, z-d/2], [x+w/2, y+h, z+d/2]
+        if not all(_inside(point, dims) for point in (low, high)):
             raise ValueError("block outside room")
         if not set(block.get("surfaces", [])) <= set(mold["surfaces"]):
             raise ValueError("block: unknown surface")

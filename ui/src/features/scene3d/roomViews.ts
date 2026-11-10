@@ -4,12 +4,14 @@
  *  wall, so the two side windows of a car show one continuous roadside with the pillar between them. */
 import { hash2 } from './atmos/noise.ts'
 
-export const ROOM_VIEWS = ['road_night', 'road_day', 'road_dawn', 'space'] as const
+export const ROOM_VIEWS = ['road_night', 'road_day', 'road_dawn', 'space', 'night_window', 'day_window'] as const
 export type RoomView = (typeof ROOM_VIEWS)[number]
 /** `front` looks along the way (the road comes toward us), `rear` back along it; `left` and `right` are the side walls seen from inside. */
 export type ViewRole = 'front' | 'rear' | 'left' | 'right'
 
 export const isRoomView = (value: unknown): value is RoomView => typeof value === 'string' && (ROOM_VIEWS as readonly string[]).includes(value)
+/** A road or space view is one picture along the whole wall (the windows of a side share it); a house window is its own picture inside each opening. */
+export const isWallView = (view: string): boolean => view !== 'night_window' && view !== 'day_window'
 export const DEFAULT_SPEED_MPS = 15
 export const VIEW_WIDTH = 1024
 /** The horizon sits this far down the wall (the eye of a seated person, 1.05 m of a 1.45 m cabin). */
@@ -21,7 +23,7 @@ export const viewSize = (span: number, height: number): [number, number] => [VIE
 export const viewRole = (wall: string): ViewRole => (wall === 'left' || wall === 'right' ? wall : wall === 'front' ? 'rear' : 'front')
 
 type Palette = { top: string; horizon: string; ground: string; hill: string; near: string; road: string; line: string; dash: string; stars: number; moon: boolean; lamp: string; sky: string }
-const PALETTES: Record<Exclude<RoomView, 'space'>, Palette> = {
+const PALETTES: Record<Exclude<RoomView, 'space' | 'night_window' | 'day_window'>, Palette> = {
   road_night: { top: '#02050e', horizon: '#18233f', ground: '#07090e', hill: '#0b1322', near: '#04060b', road: '#14161c', line: '#a9aea9', dash: '#dcc25a', stars: 170, moon: true, lamp: '#ffcf7a', sky: '#8fb0ff' },
   road_day: { top: '#4f8fdb', horizon: '#d4e8fb', ground: '#46563a', hill: '#6c8e78', near: '#3e5a42', road: '#595c62', line: '#e8e8e4', dash: '#f0d060', stars: 0, moon: false, lamp: '#fff4d0', sky: '#ffffff' },
   road_dawn: { top: '#26376a', horizon: '#f2a977', ground: '#26283a', hill: '#4a4a68', near: '#2a2a40', road: '#3a3945', line: '#d9cfc2', dash: '#ead08a', stars: 36, moon: false, lamp: '#ffd9a0', sky: '#ffd7b0' },
@@ -171,10 +173,58 @@ function space(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, r
   if (role === 'front' || role === 'rear') { ctx.fillStyle = planet; ctx.beginPath(); ctx.arc(w * 0.74, h * 0.7, h * 0.34, 0, Math.PI * 2); ctx.fill() }
 }
 
+/** A window of a house: the sky (moon and twinkling stars, or sun and drifting clouds), a ridge, a row of swaying trees, a few houses with lit windows and a street lamp. It is a quiet view: it moves a little, never travels. */
+function houseWindow(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, night: boolean, seed: number) {
+  const p = PALETTES[night ? 'road_night' : 'road_day'], yH = h * 0.62, unit = h / 512
+  sky(ctx, w, yH, { ...p, stars: 0, moon: false }, seed)
+  if (night) {
+    for (let i = 0; i < 140; i++) {
+      const b = hash2(i, 3, seed) * (0.6 + 0.4 * Math.sin(t * (0.8 + hash2(i, 4, seed)) + i))
+      ctx.fillStyle = `rgba(255,255,255,${0.2 + 0.7 * Math.max(0, b)})`; ctx.fillRect(Math.floor(hash2(i, 1, seed) * w), Math.floor(hash2(i, 2, seed) * yH * 0.85), 2, 2)
+    }
+    const mx = w * 0.7, my = h * 0.26, glow = ctx.createRadialGradient(mx, my, 6, mx, my, h * 0.42)
+    glow.addColorStop(0, 'rgba(215,228,255,0.55)'); glow.addColorStop(1, 'rgba(215,228,255,0)')
+    ctx.fillStyle = glow; ctx.fillRect(mx - h * 0.5, my - h * 0.5, h, h)
+    ctx.fillStyle = '#f1f4ff'; ctx.beginPath(); ctx.arc(mx, my, h * 0.085, 0, Math.PI * 2); ctx.fill()
+  } else {
+    const sx = w * 0.72, sy = h * 0.22, glow = ctx.createRadialGradient(sx, sy, 4, sx, sy, h * 0.5)
+    glow.addColorStop(0, 'rgba(255,248,220,0.9)'); glow.addColorStop(1, 'rgba(255,248,220,0)')
+    ctx.fillStyle = glow; ctx.fillRect(sx - h * 0.6, sy - h * 0.6, h * 1.2, h * 1.2)
+  }
+  for (let i = 0; i < 5; i++) {                                                         // clouds drift at a walking pace of the sky
+    const x = mod(hash2(i, 7, seed) * (w + 400) + 7 * t, w + 400) - 200, y = h * (0.1 + 0.28 * hash2(i, 8, seed)), r = (50 + 60 * hash2(i, 9, seed)) * unit
+    ctx.fillStyle = night ? 'rgba(150,172,214,0.16)' : 'rgba(255,255,255,0.75)'
+    for (const [dx, dy, k] of [[0, 0, 1], [r * 0.9, r * 0.1, 0.8], [-r * 0.9, r * 0.15, 0.7]]) { ctx.beginPath(); ctx.ellipse(x + dx, y + dy, r * k * 1.4, r * k * 0.55, 0, 0, Math.PI * 2); ctx.fill() }
+  }
+  ridge(ctx, w, yH, 70 * unit, 1.3, 0, night ? '#0e1830' : '#7d9c88')
+  ctx.fillStyle = night ? '#09101f' : '#4c6e50'; ctx.fillRect(0, yH, w, h - yH)
+  for (let i = 0; i < 4; i++) {                                                          // houses on the far side of the street
+    const x = 60 + i * (w / 4) + hash2(i, 12, seed) * 60, bw = (120 + 60 * hash2(i, 13, seed)) * unit, bh = (70 + 50 * hash2(i, 14, seed)) * unit
+    ctx.fillStyle = night ? '#0b1224' : '#c9b8a2'; ctx.fillRect(x, yH - bh + 18 * unit, bw, bh)
+    ctx.fillStyle = night ? '#0b1224' : '#8d6b55'; ctx.beginPath(); ctx.moveTo(x - 8 * unit, yH - bh + 18 * unit); ctx.lineTo(x + bw / 2, yH - bh - 22 * unit); ctx.lineTo(x + bw + 8 * unit, yH - bh + 18 * unit); ctx.fill()
+    for (let k = 0; k < 3; k++) {
+      const lit = night && hash2(i, 20 + k, seed) > 0.45 && Math.sin(t * 0.3 + i * 2 + k) > -0.9
+      ctx.fillStyle = lit ? '#ffd27a' : night ? '#111a30' : '#6d86a0'; ctx.fillRect(x + 14 * unit + k * (bw / 3), yH - bh + 40 * unit, 20 * unit, 26 * unit)
+    }
+  }
+  for (let i = 0; i < 9; i++) {                                                          // trees that sway
+    const x = (i + 0.5) * (w / 9) + hash2(i, 5, seed) * 30 + 4 * Math.sin(t * 0.9 + i), tall = (80 + 70 * hash2(i, 6, seed)) * unit
+    ctx.fillStyle = night ? '#050b18' : '#2f5a3a'; ctx.fillRect(x - 4 * unit, yH - tall * 0.35, 8 * unit, tall * 0.4 + 30 * unit)
+    ctx.beginPath(); ctx.ellipse(x, yH - tall * 0.6, 34 * unit, tall * 0.5, 0, 0, Math.PI * 2); ctx.fill()
+  }
+  if (night) {                                                                           // a street lamp with its pool of light
+    const x = w * 0.14, top = h * 0.4, glow = ctx.createRadialGradient(x, top, 0, x, top, h * 0.32)
+    glow.addColorStop(0, 'rgba(255,207,122,0.6)'); glow.addColorStop(1, 'rgba(255,207,122,0)')
+    ctx.fillStyle = glow; ctx.fillRect(x - h * 0.4, top - h * 0.4, h * 0.8, h * 0.8)
+    ctx.fillStyle = '#05080f'; ctx.fillRect(x - 2 * unit, top, 4 * unit, h - top); ctx.fillStyle = '#ffe2a8'; ctx.fillRect(x - 10 * unit, top - 3 * unit, 20 * unit, 6 * unit)
+  }
+}
+
 /** Paint the view for scene second `t` over the whole canvas. */
 export function drawRoomView(ctx: CanvasRenderingContext2D, w: number, h: number, t: number, view: RoomView, role: ViewRole, speed = DEFAULT_SPEED_MPS, seed = 5) {
   ctx.save(); ctx.clearRect(0, 0, w, h)
   if (view === 'space') space(ctx, w, h, t, role, speed, seed)
+  else if (view === 'night_window' || view === 'day_window') houseWindow(ctx, w, h, t, view === 'night_window', seed)
   else {
     const p = PALETTES[view], night = view !== 'road_day'
     sky(ctx, w, h * HORIZON, p, seed)

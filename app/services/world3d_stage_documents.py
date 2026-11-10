@@ -64,12 +64,29 @@ def stage(document: dict, room: dict) -> dict:
     return dress_room(document)
 
 
+SEAT_KINDS = ("seat", "bench", "sofa", "stool", "chair")
+HIP = 0.53 * 1.7          # the pelvis of the default 1.7 m figure above its soles: a seated one is lowered by this much from the cushion
+
+
+def seat_top(mold: dict, mark: dict):
+    """The cushion top under a sit mark (the lowest seat-like block above 0.2 m whose plan holds the mark), or None when nothing is under it."""
+    x, _y, z = mark["position"]
+    tops = [block["box"][1] + block["box"][4] for block in mold["blocks"]
+            if block.get("kind") in SEAT_KINDS and abs(x - block["box"][0]) <= block["box"][3] / 2 + 0.05 and abs(z - block["box"][2]) <= block["box"][5] / 2 + 0.05]
+    tops = [top for top in tops if top >= 0.2]
+    return min(tops) if tops else None
+
+
 def place_subjects(document: dict, mold: dict) -> None:
-    """The subject markers on the first speaking marks, as the Series room templates place them."""
+    """The subject markers on the first speaking marks, as the Series room templates place them. A `sit` mark over a seat puts the pelvis on the cushion (the
+    legs go into the seat block), so a card instantiated with plain models already sits them; other heights: y = cushion top - 0.53 x height."""
     subjects = [slot for slot in document["slots"] if slot.get("slot") in SUBJECT_ROLES]
     for slot, mark in zip(subjects, speaking_marks(mold)):
         slot["position"] = list(mark["position"])
         slot["rotationY"] = mark["facing"] * math.pi / 180
+        top = seat_top(mold, mark) if mark["pose"] == "sit" else None
+        if top is not None:
+            slot["position"][1] = round(mark["position"][1] + top - HIP, 3)
 
 
 def stage_document(template_id: str, base: dict, *, size: str = "medium", camera: str = DEFAULT_CAMERA) -> dict:

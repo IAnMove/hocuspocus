@@ -2,6 +2,7 @@
 import { Euler, Matrix4, Quaternion, Vector3 } from 'three'
 import presets from '../../../../app/shared/set_lights.json' with { type: 'json' }
 import type { WorldSfx } from '../sceneFx/world'
+import { isWallView } from './roomViews'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
 /** `image` stretches one painting over a face; `texture` repeats a tile every `tile_m` metres. `sideColor` colours the ends of a block whose front carries an image (else the mold's own colour).
@@ -139,7 +140,12 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     }
     for (const o of rects) {
       const surface = o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), size: [number, number] = [o.width+2*OPENING_MARGIN, o.height+2*OPENING_MARGIN]
-      if (!skin[surface]?.view) { add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size); continue }
+      const view = skin[surface]?.view
+      if (!view || !isWallView(view)) {
+        add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size)
+        if (view) panels[panels.length - 1].wall = wall
+        continue
+      }
       const [left, right] = strip(o.a-OPENING_MARGIN, o.b+OPENING_MARGIN)
       add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size, [left, (o.low-OPENING_MARGIN)/h, right, (o.high+OPENING_MARGIN)/h], [span, h])
       panels[panels.length - 1].wall = wall

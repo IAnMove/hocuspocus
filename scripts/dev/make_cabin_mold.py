@@ -78,7 +78,7 @@ class Cabin:
             gap_b = SIDE_WINDOWS[1][0] - SIDE_WINDOWS[1][1] / 2
             self.block(f"pillar_b_{name}", "trim", pillar, x, 0.0, (gap_a + gap_b) / 2, 0.07, H, gap_b - gap_a + 0.02)
             self.block(f"pillar_c_{name}", "trim", pillar, x, 0.0, D / 2 - 0.12, 0.07, H, 0.24)
-            self.block(f"pillar_a_{name}", "trim", pillar, sign * 0.93, 0.5, -1.42, 0.13, 0.95, 0.14, (0, 0, -sign * 0.2))
+            self.block(f"pillar_a_{name}", "trim", pillar, sign * 0.88, 0.5, -1.42, 0.13, 0.93, 0.14, (0, 0, -sign * 0.2))
             self.block(f"door_pull_{name}", "trim", ("trim_front", "trim_top"), x - sign * 0.01, 0.66, -0.2, 0.05, 0.05, 0.28)
             self.block(f"armrest_{name}", "trim", pillar, sign * 0.97, 0.6, -0.2, 0.1, 0.06, 0.8)
             self.block(f"kick_{name}", "trim", pillar, x, 0.0, -0.1, 0.06, 0.3, 2.2)
@@ -203,8 +203,8 @@ def build(variant: str) -> dict:
         "walls": ["back", "left", "right", "front"],
         "openings": windows(), "blocks": cabin.blocks, "surfaces": SURFACES,
         "marks": [
-            {"id": "speaker_a", "pose": "sit", "position": [-SEAT_X, 0, -0.25], "facing": 0},
-            {"id": "speaker_b", "pose": "sit", "position": [SEAT_X, 0, -0.25], "facing": 0},
+            {"id": "speaker_a", "pose": "sit", "position": [-SEAT_X, 0, -0.25], "facing": 180},
+            {"id": "speaker_b", "pose": "sit", "position": [SEAT_X, 0, -0.25], "facing": 180},
             {"id": "entrance", "pose": "stand", "position": [0.8, 0, 0.95], "facing": 270},
         ],
         "cameras": [

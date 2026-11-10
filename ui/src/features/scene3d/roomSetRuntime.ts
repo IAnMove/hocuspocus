@@ -4,7 +4,7 @@ import { hasAmbientLife, isExterior, keyLightBreath, roomLightPreset, roomPanels
 import { defaultMediaScreen, type MediaScreen } from './mediaScreen'
 import { bindScreenMedia, type ScreenMediaRuntime } from './screenMediaRuntime'
 import { isFacePattern, isRoomPattern, patternTexture, PATTERN_TILE_M } from './roomPatterns'
-import { DEFAULT_SPEED_MPS, drawRoomView, isRoomView, viewRole, viewSize, type RoomView, type ViewRole } from './roomViews'
+import { DEFAULT_SPEED_MPS, drawRoomView, isRoomView, isWallView, viewRole, viewSize, type RoomView, type ViewRole } from './roomViews'
 
 type LiveView = { ctx: CanvasRenderingContext2D; texture: CanvasTexture; width: number; height: number; view: RoomView; role: ViewRole; speed: number }
 
@@ -82,7 +82,7 @@ export class RoomSetRuntime {
   }
   /** A window onto a moving world. One canvas per wall and view paints the whole wall, so the windows of one side share it and show their own parts. */
   private windowView(geometry: PlaneGeometry, panel: RoomPanel, view: RoomView, speed = DEFAULT_SPEED_MPS, seed = 5): MeshBasicMaterial {
-    const key = `${panel.wall}:${panel.surface}`
+    const key = isWallView(view) ? `${panel.wall}:${panel.surface}` : panel.id
     let live = this.views.get(key)
     if (!live && typeof document !== 'undefined') {
       const [width, height] = viewSize(panel.fullSize[0], panel.fullSize[1]), canvas = document.createElement('canvas'), ctx = canvas.getContext('2d')

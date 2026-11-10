@@ -29,6 +29,7 @@ TINY_BELOW = 0.08                 # of the frame height
 MAX_ISSUES = 12
 MAX_WARNINGS = 6
 SEAT_KINDS = frozenset({"seat", "bench", "sofa", "chair", "stool", "audience"})
+SOFT_KINDS = frozenset({"duvet", "pillow", "rug"})          # a figure may lie in or on these: they give way, so it is not "sunk" into them
 
 
 def scene_placement(document: dict, items: list[dict]) -> dict:
@@ -173,7 +174,7 @@ def _rest_issues(body: dict, supports: list[dict]) -> list[dict]:
             issues.append(_issue("floating", body, f"lowest point is {low:.2f} m above the floor and nothing is under it", _moved(body, [0, -low, 0])))
         return issues
     top = support["hi"][1]
-    if support["kind"] not in SEAT_KINDS and low < top - SINK_TOLERANCE:
+    if support["kind"] not in SEAT_KINDS | SOFT_KINDS and low < top - SINK_TOLERANCE:
         issues.append(_issue("sinks_into_support", body, f"lowest point {low:.2f} is {top - low:.2f} m under the top of {support['id']} ({top:.2f})", _moved(body, [0, top - low, 0]), support["id"]))
     shift = [0.0, 0.0, 0.0]
     notes = []
