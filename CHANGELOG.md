@@ -10,6 +10,8 @@ in [app/docs/CHANGELOG.md](app/docs/CHANGELOG.md).
 
 **Fixed: a repainted texture or re-rendered clip showed the old picture.** `/api/v1/file/` answers `Cache-Control: no-cache` (the browser revalidates on the ETag; a URL pinned with `sha256` stays cacheable), so a file rewritten under the same name is picked up.
 
+**Added: a painted block front can name the colour of its ends.** A room skin entry `{"image": …, "sideColor": "#rrggbb"}` colours the sides of a seat, desk or bed whose front carries a painting; before, the ends always took the mold's own colour (a tan side on a dark car seat). `texture` + `tile_m` still repeats a tile, `image` stretches one picture.
+
 **Changed: the TV studio set (plato_tv) defaults to a lit blue studio with walnut desks instead of the generic beige room.**
 
 **Fixed: the faces of one scene no longer blink at the same frame.** The first blink of every talking face fell at 0.9 s, and each shot starts at 0, so three hosts closed their eyes together in every shot. It now falls 0.9-2.5 s in, chosen by the kit's seed (still deterministic).

@@ -143,6 +143,13 @@ test('a painted furniture front leaves its ends in the mold colour', () => {
   assert(desk.every(p => p.material.color === '#112233'))
 })
 
+test('a painted furniture front can name the colour of its ends', () => {
+  const panels = roomPanels({ mold, skin: { shelf_front: { image: { asset: '/shelf.png' }, sideColor: '#223344' } } })
+  const shelf = panels.filter(p => p.surface === 'shelf_front')
+  assert.equal(shelf.filter(p => p.material.image).length, 1)
+  assert(shelf.filter(p => !p.material.image).every(p => p.material.color === '#223344'))
+})
+
 test('an exterior closes its view with a sky dome in its preset colours; an interior has none', () => {
   const plaza = authored('plaza'), roof = authored('azotea')
   assert.equal(roomSky({ mold: mold }), undefined)

@@ -3,7 +3,8 @@ import presets from '../../../../app/shared/set_lights.json' with { type: 'json'
 import type { WorldSfx } from '../sceneFx/world'
 import type { Scene3DDocument, Scene3DSlot, Vec3 } from './types'
 
-export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number }
+/** `image` stretches one painting over a face; `texture` repeats a tile every `tile_m` metres. `sideColor` colours the ends of a block whose front carries an image (else the mold's own colour). */
+export type RoomMaterial = { color?: string; image?: { asset: string }; texture?: { asset: string }; video?: { asset: string }; tile_m?: number; sideColor?: string }
 export type RoomOpening = { wall: string; kind: string; x: number; width: number; height: number; sill?: number; surface?: string }
 export type RoomKind = 'interior' | 'exterior'
 export type RoomMold = {
@@ -128,8 +129,8 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     const [x, y, z, bw, bh, bd] = block.box
     const front = block.surfaces.find(s => s.endsWith('_front')) ?? block.surfaces[0]
     const top = block.surfaces.find(s => s.endsWith('_top')) ?? front
-    // A painting drawn for the front would stretch over the ends; they keep the mold's own colour instead.
-    const faced = skin[front] ?? FALLBACK, side = faced.image ? mold.defaultSkin[front] ?? FALLBACK : faced
+    // A painting drawn for the front would stretch over the ends; they keep the skin's `sideColor`, else the mold's own colour, instead.
+    const faced = skin[front] ?? FALLBACK, side = faced.image ? (faced.sideColor ? { color: faced.sideColor } : mold.defaultSkin[front] ?? FALLBACK) : faced
     add(front, [x,y+bh/2,z+bd/2], [0,0,0], [bw,bh])
     add(front, [x,y+bh/2,z-bd/2], [0,Math.PI,0], [bw,bh], undefined, undefined, side)
     add(front, [x-bw/2,y+bh/2,z], [0,-Math.PI/2,0], [bd,bh], undefined, undefined, side)
