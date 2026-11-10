@@ -112,12 +112,38 @@ function turnAbout(centre: Vec3, rot: Vec3, offset: Vec3, rotation: Vec3): [Vec3
   return [[position.x, position.y, position.z], [euler.x, euler.y, euler.z]]
 }
 
+type AddPanel = (surface: string, position: Vec3, rotation: Vec3, size: [number, number], uv?: RoomPanel['uv'], fullSize?: [number, number], material?: RoomMaterial) => RoomPanel
+
+/** The six faces of a block (turned about its own centre when it carries `rot`): the front, the back and the two ends, the top and the bottom. */
+function addBlock(block: RoomMold['blocks'][number], mold: RoomMold, skin: Record<string, RoomMaterial>, add: AddPanel) {
+  const [x, y, z, bw, bh, bd] = block.box
+  const front = block.surfaces.find(s => s.endsWith('_front')) ?? block.surfaces[0]
+  const top = block.surfaces.find(s => s.endsWith('_top')) ?? front
+  // A painting drawn for the front would stretch over the ends; they keep the skin's `sideColor`, else the mold's own colour, instead.
+  const faced = skin[front] ?? FALLBACK, side = faced.image ? (faced.sideColor ? { color: faced.sideColor } : mold.defaultSkin[front] ?? FALLBACK) : faced
+  const faces: [string, Vec3, Vec3, [number, number], RoomMaterial | undefined][] = [
+    [front, [0, 0, bd / 2], [0, 0, 0], [bw, bh], undefined],
+    [front, [0, 0, -bd / 2], [0, Math.PI, 0], [bw, bh], side],
+    [front, [-bw / 2, 0, 0], [0, -Math.PI / 2, 0], [bd, bh], side],
+    [front, [bw / 2, 0, 0], [0, Math.PI / 2, 0], [bd, bh], side],
+    [top, [0, bh / 2, 0], [-Math.PI / 2, 0, 0], [bw, bd], top === front ? side : undefined],
+    [front, [0, -bh / 2, 0], [Math.PI / 2, 0, 0], [bw, bd], side],
+  ]
+  const centre: Vec3 = [x, y + bh / 2, z]
+  for (const [surface, offset, rotation, size, material] of faces) {
+    const [position, turned] = block.rot ? turnAbout(centre, block.rot, offset, rotation) : [[centre[0] + offset[0], centre[1] + offset[1], centre[2] + offset[2]] as Vec3, rotation]
+    add(surface, position, turned, size, undefined, undefined, material)
+  }
+}
+
 export function roomPanels(room: RoomSet): RoomPanel[] {
   const { mold } = room, [w, d, h] = mold.dimensions
   const panels: RoomPanel[] = []
   const skin = { ...mold.defaultSkin, ...room.skin }
-  const add = (surface: string, position: Vec3, rotation: Vec3, size: [number, number], uv: RoomPanel['uv'] = [0, 0, 1, 1], fullSize = size, material = skin[surface] ?? FALLBACK) => {
-    panels.push({ id: `room-${surface}-${panels.length}`, surface, position, rotation, size, uv, fullSize, material })
+  const add: AddPanel = (surface, position, rotation, size, uv = [0, 0, 1, 1], fullSize = size, material = skin[surface] ?? FALLBACK) => {
+    const panel: RoomPanel = { id: `room-${surface}-${panels.length}`, surface, position, rotation, size, uv, fullSize, material }
+    panels.push(panel)
+    return panel
   }
   add('floor', [0, 0, 0], [-Math.PI / 2, 0, 0], [w, d])
   if (!isExterior(mold)) add('ceiling', [0, h, 0], [Math.PI / 2, 0, 0], [w, d])
@@ -140,38 +166,14 @@ export function roomPanels(room: RoomSet): RoomPanel[] {
     }
     for (const o of rects) {
       const surface = o.surface ?? (o.kind === 'window' ? 'window_view' : 'door'), size: [number, number] = [o.width+2*OPENING_MARGIN, o.height+2*OPENING_MARGIN]
-      const view = skin[surface]?.view
-      if (!view || !isWallView(view)) {
-        add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size)
-        if (view) panels[panels.length - 1].wall = wall
-        continue
-      }
+      const view = skin[surface]?.view, where = at(o.x*span, o.low+o.height/2, OPENING_DEPTH)
       const [left, right] = strip(o.a-OPENING_MARGIN, o.b+OPENING_MARGIN)
-      add(surface, at(o.x*span, o.low+o.height/2, OPENING_DEPTH), [0, yaw, 0], size, [left, (o.low-OPENING_MARGIN)/h, right, (o.high+OPENING_MARGIN)/h], [span, h])
-      panels[panels.length - 1].wall = wall
+      // A road or space view is one picture along the wall, so each window takes its own part of it; any other opening is painted whole.
+      const panel = view && isWallView(view) ? add(surface, where, [0, yaw, 0], size, [left, (o.low-OPENING_MARGIN)/h, right, (o.high+OPENING_MARGIN)/h], [span, h]) : add(surface, where, [0, yaw, 0], size)
+      if (view) panel.wall = wall
     }
   }
   const replaced = new Set(Array.isArray(room.libraryBlocks) ? room.libraryBlocks : [])
-  for (const block of mold.blocks) {
-    if (replaced.has(block.id)) continue
-    const [x, y, z, bw, bh, bd] = block.box
-    const front = block.surfaces.find(s => s.endsWith('_front')) ?? block.surfaces[0]
-    const top = block.surfaces.find(s => s.endsWith('_top')) ?? front
-    // A painting drawn for the front would stretch over the ends; they keep the skin's `sideColor`, else the mold's own colour, instead.
-    const faced = skin[front] ?? FALLBACK, side = faced.image ? (faced.sideColor ? { color: faced.sideColor } : mold.defaultSkin[front] ?? FALLBACK) : faced
-    const faces: [string, Vec3, Vec3, [number, number], RoomMaterial | undefined][] = [
-      [front, [0, 0, bd / 2], [0, 0, 0], [bw, bh], undefined],
-      [front, [0, 0, -bd / 2], [0, Math.PI, 0], [bw, bh], side],
-      [front, [-bw / 2, 0, 0], [0, -Math.PI / 2, 0], [bd, bh], side],
-      [front, [bw / 2, 0, 0], [0, Math.PI / 2, 0], [bd, bh], side],
-      [top, [0, bh / 2, 0], [-Math.PI / 2, 0, 0], [bw, bd], top === front ? side : undefined],
-      [front, [0, -bh / 2, 0], [Math.PI / 2, 0, 0], [bw, bd], side],
-    ]
-    const centre: Vec3 = [x, y + bh / 2, z]
-    for (const [surface, offset, rotation, size, material] of faces) {
-      const [position, turned] = block.rot ? turnAbout(centre, block.rot, offset, rotation) : [[centre[0] + offset[0], centre[1] + offset[1], centre[2] + offset[2]] as Vec3, rotation]
-      add(surface, position, turned, size, undefined, undefined, material)
-    }
-  }
+  for (const block of mold.blocks) if (!replaced.has(block.id)) addBlock(block, mold, skin, add)
   return panels
 }

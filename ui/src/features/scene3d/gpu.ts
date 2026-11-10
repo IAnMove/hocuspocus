@@ -487,11 +487,15 @@ function syncActorSpeech(world: GpuWorld, gpu: SlotGpu, slot: Scene3DSlot, scene
     gpu.faceDecal ??= new FaceDecalRuntime(() => renderWorld(world))
     gpu.faceDecal.sync(gpu.root, slot.faceDecal, sceneSeconds)
   }
-  if (gpu.loaded && gpu.kind === 'model') {
-    const painted = Boolean(slot.faceDecal || gpu.faceDecal || slot.speech?.facePack || gpu.facePack)
-    if (!painted && !gpu.blankFace) gpu.blankFace = setBlankFaceHidden(gpu.root, true) ? 'hidden' : 'none'
-    else if (painted && gpu.blankFace === 'hidden') { setBlankFaceHidden(gpu.root, false); gpu.blankFace = undefined }
-  }
+  syncBlankFace(gpu, slot)
+}
+
+/** A face patch nothing paints (no decal, no face pack) is hidden; the moment something paints it, it shows again. */
+function syncBlankFace(gpu: SlotGpu, slot: Scene3DSlot) {
+  if (!gpu.loaded || gpu.kind !== 'model') return
+  const painted = Boolean(slot.faceDecal || gpu.faceDecal || slot.speech?.facePack || gpu.facePack)
+  if (!painted && !gpu.blankFace) gpu.blankFace = setBlankFaceHidden(gpu.root, true) ? 'hidden' : 'none'
+  else if (painted && gpu.blankFace === 'hidden') { setBlankFaceHidden(gpu.root, false); gpu.blankFace = undefined }
 }
 
 /** One action per distinct clip of the sequence, rebuilt only when the clips change. */
