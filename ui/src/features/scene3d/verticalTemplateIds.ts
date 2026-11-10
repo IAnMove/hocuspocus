@@ -3,10 +3,25 @@
 export const VERTICAL_DIALOGUE_IDS = [
   'vertical-dialogue-stack',
   'vertical-dialogue-ots-a',
+  'vertical-dialogue-ots-b',
+  'vertical-dialogue-single-a',
+  'vertical-dialogue-single-b',
+  'vertical-dialogue-walk',
+  'vertical-dialogue-seated',
+  'vertical-dialogue-trio',
+  'vertical-dialogue-listener',
+  'vertical-dialogue-low',
+  'vertical-dialogue-high',
+  'vertical-dialogue-locked',
 ] as const
 
 export const VERTICAL_TALK_IDS = [
   'vertical-talk-bust',
+  'vertical-talk-caption',
+  'vertical-talk-three-quarter',
+  'vertical-talk-low',
+  'vertical-talk-push',
+  'vertical-talk-side',
 ] as const
 
 export const VERTICAL_TEMPLATE_IDS = [...VERTICAL_DIALOGUE_IDS, ...VERTICAL_TALK_IDS] as const

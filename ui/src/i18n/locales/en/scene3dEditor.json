@@ -3679,7 +3679,7 @@
     },
     "vertical-dialogue-stack": {
       "title": "Portrait two-shot, near and far",
-      "description": "A 9:16 portrait two-shot in depth: subject_1 near on the left in profile, subject_2 behind on the right facing the camera, one face above the other. A slow push; the lower third stays free for captions."
+      "description": "A 9:16 portrait two-shot in depth: subject_1 near on the left, three-quarter, subject_2 behind on the right facing the camera, one face above the other. A slow push; the lower third stays free for captions."
     },
     "vertical-dialogue-ots-a": {
       "title": "Portrait over the shoulder A",
@@ -3688,6 +3688,66 @@
     "vertical-talk-bust": {
       "title": "Portrait bust to camera",
       "description": "One figure talks straight to the lens in a 9:16 portrait bust: the eyes on the upper third, a little air over the head and the chest in the lower third for captions, with a slow push."
+    },
+    "vertical-dialogue-ots-b": {
+      "title": "Portrait over the shoulder B",
+      "description": "The reverse of A in 9:16 portrait: subject_2’s shoulder fills the right edge and subject_1’s face sits high on the left, at the same distance and with the same push, so cutting A and B keeps the eyelines."
+    },
+    "vertical-dialogue-single-a": {
+      "title": "Portrait single A",
+      "description": "A clean 9:16 portrait single of subject_1, medium-close, looking screen right toward subject_2 just out of frame, with a slow push. Cut with single B and the over-the-shoulders: the same side, the same eyelines."
+    },
+    "vertical-dialogue-single-b": {
+      "title": "Portrait single B",
+      "description": "The reverse single in 9:16 portrait: subject_2, medium-close, looking screen left toward subject_1 just out of frame, at the same distance and push as single A."
+    },
+    "vertical-dialogue-walk": {
+      "title": "Portrait walk and talk",
+      "description": "Two figures walk toward the camera side by side, subject_2 half a step behind, and the 9:16 portrait frame backs away with them at a stroll, both faces on the upper third. Bind a walk clip to both."
+    },
+    "vertical-dialogue-seated": {
+      "title": "Portrait seated across a table",
+      "description": "Two figures seated across a small table in 9:16 portrait: subject_1 near on the left, three-quarter from behind, subject_2 beyond the table facing the camera. A slow push at seated eye height; the cast needs a seated clip (sit_down held) or seated cutouts."
+    },
+    "vertical-dialogue-trio": {
+      "title": "Portrait group of three",
+      "description": "Three figures in a 9:16 portrait triangle: subject_1 near in the middle, seen from behind, subject_2 and a third figure beyond on either side facing the camera. A slow push with a slight arc. The third figure is the prop slot person_3."
+    },
+    "vertical-dialogue-listener": {
+      "title": "Portrait speaker and listener",
+      "description": "A 9:16 portrait reaction two-shot: the listener (subject_2) near on the right facing the camera, the speaker (subject_1) behind on the left talking to them. A slow push on the listener’s face."
+    },
+    "vertical-dialogue-low": {
+      "title": "Portrait low-angle two-shot",
+      "description": "Two figures face each other, seen from below in 9:16 portrait: a low lens at hip height looks up at both faces with the ceiling or the sky behind, and creeps in. Power, a challenge, a confession."
+    },
+    "vertical-dialogue-high": {
+      "title": "Portrait high-angle two-shot",
+      "description": "Two figures face each other, seen from above in 9:16 portrait: the floor is the background, subject_1 near at the bottom with the back to the camera and subject_2 beyond at the top looking up. The camera sinks slowly."
+    },
+    "vertical-dialogue-locked": {
+      "title": "Portrait locked two-shot",
+      "description": "Two figures face each other in a 9:16 portrait two-shot on a locked tripod, from the knees up, both faces on the upper third. The camera never moves; dust drifts in the air and the cast’s clips carry the shot."
+    },
+    "vertical-talk-caption": {
+      "title": "Portrait medium with room for captions",
+      "description": "One figure talks to camera from the waist up in 9:16 portrait, the face high in the frame and the whole lower third free for captions or a title, while the camera slides a little sideways."
+    },
+    "vertical-talk-three-quarter": {
+      "title": "Portrait three-quarter talk",
+      "description": "One figure turned three-quarter to the lens talks in a 9:16 portrait medium-close, the eyes on the upper third; the camera arcs slowly toward the face."
+    },
+    "vertical-talk-low": {
+      "title": "Portrait low-angle talk",
+      "description": "One figure talks seen from below in 9:16 portrait: a low lens at chest height looks up at the face and rises a little as it creeps in. Authority, a speech, a threat."
+    },
+    "vertical-talk-push": {
+      "title": "Portrait slow push to the face",
+      "description": "One figure talks to camera while the 9:16 portrait frame pushes slowly from the waist to the face, keeping the eyes on the upper third the whole way."
+    },
+    "vertical-talk-side": {
+      "title": "Portrait side look",
+      "description": "One figure talks to someone off frame, as in an interview: in 9:16 portrait the face sits left with room to look into on the right, and the camera slides slowly the same way."
     }
   },
   "atmos": {
